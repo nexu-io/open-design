@@ -44,9 +44,17 @@ import { dirname, join } from 'node:path';
  */
 export interface InstallationFile {
   installationId?: string;
-  // Future fields (privacy decision timestamp, telemetry flags) can join
-  // this list as soon as we have a use case for "they must outlive a
-  // namespace reset". Today, only installationId carries that contract.
+  pendingAttribution?: PendingAttribution;
+  attributionClaimedAt?: string;
+  attributionClaimResultAt?: string;
+}
+
+export interface PendingAttribution {
+  token: string;
+  source: string;
+  capturedAt: string;
+  rawUrl?: string;
+  platform?: string;
 }
 
 export function resolveInstallationDir(dataDir: string): string {
@@ -69,7 +77,31 @@ function parseInstallationFile(raw: string): InstallationFile {
   if (typeof obj.installationId === 'string' && obj.installationId.length > 0) {
     out.installationId = obj.installationId;
   }
+  const pending = parsePendingAttribution(obj.pendingAttribution);
+  if (pending) out.pendingAttribution = pending;
+  if (typeof obj.attributionClaimedAt === 'string' && obj.attributionClaimedAt.length > 0) {
+    out.attributionClaimedAt = obj.attributionClaimedAt;
+  }
+  if (typeof obj.attributionClaimResultAt === 'string' && obj.attributionClaimResultAt.length > 0) {
+    out.attributionClaimResultAt = obj.attributionClaimResultAt;
+  }
   return out;
+}
+
+function parsePendingAttribution(raw: unknown): PendingAttribution | null {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.token !== 'string' || obj.token.length === 0) return null;
+  if (typeof obj.source !== 'string' || obj.source.length === 0) return null;
+  if (typeof obj.capturedAt !== 'string' || obj.capturedAt.length === 0) return null;
+  const pending: PendingAttribution = {
+    token: obj.token,
+    source: obj.source,
+    capturedAt: obj.capturedAt,
+  };
+  if (typeof obj.rawUrl === 'string' && obj.rawUrl.length > 0) pending.rawUrl = obj.rawUrl;
+  if (typeof obj.platform === 'string' && obj.platform.length > 0) pending.platform = obj.platform;
+  return pending;
 }
 
 export async function readInstallationFile(
@@ -118,6 +150,9 @@ const writeLocks = new Map<string, Promise<unknown>>();
  */
 export type InstallationFilePatch = {
   installationId?: string | null;
+  pendingAttribution?: PendingAttribution | null;
+  attributionClaimedAt?: string | null;
+  attributionClaimResultAt?: string | null;
 };
 
 export async function writeInstallationFile(
@@ -145,6 +180,27 @@ async function doWrite(
       next.installationId = patch.installationId;
     } else {
       delete next.installationId;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'pendingAttribution')) {
+    if (patch.pendingAttribution) {
+      next.pendingAttribution = patch.pendingAttribution;
+    } else {
+      delete next.pendingAttribution;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'attributionClaimedAt')) {
+    if (typeof patch.attributionClaimedAt === 'string' && patch.attributionClaimedAt.length > 0) {
+      next.attributionClaimedAt = patch.attributionClaimedAt;
+    } else {
+      delete next.attributionClaimedAt;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'attributionClaimResultAt')) {
+    if (typeof patch.attributionClaimResultAt === 'string' && patch.attributionClaimResultAt.length > 0) {
+      next.attributionClaimResultAt = patch.attributionClaimResultAt;
+    } else {
+      delete next.attributionClaimResultAt;
     }
   }
   await mkdir(dirname(installationFilePath(installationDir)), { recursive: true });

@@ -21,7 +21,7 @@ export const TR_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     description:
-      'AI ajanları için tarayıcı otomasyonu CLI\'ı. Kullanıcının tarayıcı davranışını\nincelemesi, test etmesi veya otomatikleştirmesi gerektiğinde kullanın: sayfalarda\ngezinme, form doldurma, düğmelere tıklama, ekran görüntüsü alma, sayfa verisi\nçıkarma, seçili Open Design tarayıcı sekmesi bağlamını okuma, web uygulamalarını\ntest etme, Open Design önizlemelerini dogfooding yapma, QA, hata avı veya uygulama\nkalitesini gözden geçirme. Kullanıcı açıkça harici tarama istemediği sürece yerel\nOpen Design önizleme URL\'lerini tercih edin.',
+      'AI ajanları için tarayıcı otomasyonu CLI\'ı. Kullanıcının tarayıcı davranışını\nincelemesi, test etmesi veya otomatikleştirmesi gerektiğinde kullanın: sayfalarda\ngezinme, form doldurma, düğmelere tıklama, ekran görüntüsü alma, sayfa verisi\nçıkarma, seçili OpenDesign tarayıcı sekmesi bağlamını okuma, web uygulamalarını\ntest etme, OpenDesign önizlemelerini dogfooding yapma, QA, hata avı veya uygulama\nkalitesini gözden geçirme. Kullanıcı açıkça harici tarama istemediği sürece yerel\nOpenDesign önizleme URL\'lerini tercih edin.',
     examplePrompt:
       'AI ajanları için tarayıcı otomasyonu CLI\'ı.',
   },
@@ -849,7 +849,7 @@ export const TR_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'ui-ux-pro-max': {
     description:
-      'Yalnızca katalog UI/UX Pro Max girişi. Tam kaynak şablonlar, veriler ve arama iş akışı Open Design\'a dahil değildir.',
+      'Yalnızca katalog UI/UX Pro Max girişi. Tam kaynak şablonlar, veriler ve arama iş akışı OpenDesign\'a dahil değildir.',
     examplePrompt:
       'Yalnızca katalog UI/UX Pro Max girişi.',
   },
@@ -959,6 +959,7 @@ export const TR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': 'Eğlenceli, kabarık öğeler ve renkli yüzeylerle, şekillendirilebilir kili andıran yumuşak, yuvarlatılmış 3D benzeri şekiller.',
   'clean': 'Görsel karmaşayı azaltmak için bol beyaz alan, okunaklı tipografi ve sınırlı renk paletiyle sadelik odaklı tasarım.',
   'clickhouse': 'Hızlı analitik veritabanı. Sarı vurgulu, teknik dokümantasyon tarzı.',
+  'cloudflare-kumo': 'Modern web uygulamaları için Cloudflare bileşen sistemi: semantik açık/koyu tema belirteçleri, kompakt Inter tipografisi, katmanlı nötr yüzeyler, erişilebilir kontroller ve grafiklere uygun renk rehberi.',
   'cohere': 'Kurumsal yapay zeka platformu. Canlı degradeler, veri zengini gösterge paneli estetiği.',
   'coinbase': 'Kripto borsası. Temiz mavi kimlik, güven odaklı, kurumsal his.',
   'colorful': 'İlgi çekici, akılda kalıcı ve modern kullanıcı deneyimleri için canlı, yüksek kontrastlı paletler ve degradeler.',

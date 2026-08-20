@@ -24,6 +24,7 @@
     "en": "Urdu Modern (Indus Script System)"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Urdu-first digital experiences with native RTL support,Nastaliq typography, and bilingual harmony.",
   "description_i18n": {
     "zh-CN": "乌尔都语优先的数字体验，提供原生 RTL 支持、波斯体排版和双语和谐设计。",

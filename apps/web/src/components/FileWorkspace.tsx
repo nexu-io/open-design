@@ -1,5 +1,7 @@
 import {
+  memo,
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -8,7 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 import { Button } from '@open-design/components';
-import type { DesignSystemEditClickProps, TrackingProjectKind } from '@open-design/contracts/analytics';
+import { createPortal } from 'react-dom';
+import type { DesignSystemEditClickProps, TrackingArtifactKind, TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackFileManagerClick,
@@ -20,12 +23,16 @@ import {
   trackSketchExportResult,
 } from '../analytics/events';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
-import { useT } from '../i18n';
+import { useI18n, useT, type Locale } from '../i18n';
+import { useStableHandler } from '../lib/use-stable-handler';
+import { useDeckPreviewScale } from '../lib/use-deck-preview-scale';
 import { isMacPlatform } from '../utils/platform';
 import {
   deleteProjectFile,
   fetchProjectFileText,
   fetchProjectFolders,
+  fetchPluginExampleHtml,
+  fetchPluginPreviewHtml,
   projectFileUrl,
   projectRawUrl,
   applyLibraryAsset,
@@ -41,8 +48,9 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import type { Dict } from '../i18n/types';
+import { STAGE_ATTACHMENT_EVENT, type StageAttachmentEventDetail } from './ChatComposer';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
-import { navigate } from '../router';
+import { navigate, registerNavigationGuard } from '../router';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
 import { finalizeBrandProject } from '../runtime/brands';
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
@@ -57,8 +65,13 @@ import {
 import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
 import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
 import { buildSrcdoc } from '../runtime/srcdoc';
+import { removeSpeakerNotesFromHtml } from '../runtime/speaker-notes';
 import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
+import {
+  appendResourceQuery,
+  workspaceIdentityCacheKey,
+} from '../collab/workspace-identity';
 import {
   DesignKitView,
   type DesignKitActionFeedbackTone,
@@ -89,9 +102,21 @@ import {
   type ProjectFile,
   type ProjectFolder,
 } from '../types';
-import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
-import { createTerminal, killTerminal } from '../state/projects';
-import type { QuestionForm } from '../artifacts/question-form';
+import {
+  resolveLocalizedText,
+  type ChatSessionMode,
+  type InstalledPluginRecord,
+  type LocalizedText,
+  type WorkspaceCollabContext,
+  type WorkspaceContextItem,
+} from '@open-design/contracts';
+import {
+  notifyTeamProjectsChanged,
+  TEAM_PROJECTS_CHANGED_EVENT,
+} from '../collab/useWorkspaceContext';
+import { useProjectCollabContext } from '../collab/collab-context';
+import { createTerminal, killTerminal, listPlugins, moveWorkspaceProject } from '../state/projects';
+import { MoveToTeamConfirmDialog, moveConfirmSkipped } from './MoveToTeamConfirmDialog';
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
 import {
   DesignBrowserPanel,
@@ -104,19 +129,35 @@ import type { PluginFolderAgentAction } from './design-files/pluginFolderActions
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
+import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
 import { Icon, type IconName } from './Icon';
+import { projectIsSharedWithWorkspace } from '../collab/project-shared-status';
+import { FileSyncBadge, type FileSyncBadgeState } from '../collab/FileSyncBadge';
 import { Toast } from './Toast';
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
 import { TerminalViewer } from './workspace/TerminalViewer';
+import { CURATED_PLUGIN_IDS_BY_CHIP, curatedPluginPriority } from './plugins-home/curatedPriority';
+import {
+  extractCategories,
+  extractSubcategories,
+  buildSubcategoryCatalog,
+  type FacetOption,
+} from './plugins-home/facets';
+import { pluginCategoryLabel } from './plugins-home/categoryLabel';
+import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
+import { pluginPresetQuery, renderPluginPresetQuery } from './plugins-home/presetSeedPrompt';
+import { inferPluginPreview, type PluginPreviewSpec } from './plugins-home/preview';
+import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
+import { useInView } from './plugins-home/useInView';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { LibraryPicker } from './LibraryPicker';
-import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import { SketchEnginePrewarm } from './SketchEnginePrewarm';
+import { useWorkspaceTabsDockRef } from './workspaceTabsDock';
 import {
   emptySketchScene,
   isSketchJsonFileName,
@@ -127,12 +168,44 @@ import {
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
+import type { CommentSendResult } from './comment-send-result';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
+
+function syncInertAttribute(element: HTMLElement | null, inert: boolean): void {
+  if (!element) return;
+  // React 18 treats `inert` as an unknown string attribute while React 19
+  // treats it as boolean. Updating the standard DOM attribute directly keeps
+  // retained viewers accessible in both runtimes without either warning.
+  element.toggleAttribute('inert', inert);
+}
+
+export interface FileRefreshResult {
+  acceptedGeneration: number | null;
+}
+
+export async function settleManualEditExit(
+  exit: () => Promise<boolean>,
+): Promise<boolean> {
+  try {
+    return await exit();
+  } catch {
+    return false;
+  }
+}
+
+export async function settleManualEditFiles(
+  fileNames: Iterable<string>,
+  settle: (fileName: string) => Promise<boolean>,
+): Promise<boolean> {
+  const results = await Promise.all([...new Set(fileNames)].map((fileName) => settle(fileName)));
+  return results.every(Boolean);
+}
 
 interface Props {
   projectId: string;
   projectKind: TrackingProjectKind;
+  projectName?: string;
   // Basename of the project's chosen working directory (e.g. "openclaw").
   // Threaded to DesignFilesPanel as the breadcrumb root label. Undefined for
   // default-storage projects.
@@ -145,7 +218,10 @@ interface Props {
   files: ProjectFile[];
   liveArtifacts: LiveArtifactSummary[];
   filesRefreshKey?: number;
-  onRefreshFiles: () => Promise<void> | void;
+  filesGeneration?: number;
+  onRefreshFiles: (
+    options?: { fresh?: boolean },
+  ) => Promise<FileRefreshResult | void> | FileRefreshResult | void;
   isDeck: boolean;
   streaming?: boolean;
   commentQueueOnSend?: boolean;
@@ -175,9 +251,10 @@ interface Props {
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
   previewComments?: PreviewComment[];
-  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[]) => Promise<PreviewComment | null>;
-  onRemovePreviewComment?: (commentId: string) => Promise<void>;
-  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[], commentId?: string) => Promise<PreviewComment | null>;
+  onRemovePreviewComment?: (commentId: string) => Promise<boolean>;
+  onReorderPreviewComment?: (commentId: string, sortKey: number) => Promise<void>;
+  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<CommentSendResult> | CommentSendResult;
   onBrandExtractionStopRequest?: () => void;
   onRequestBrowserUsePrompt?: (prompt: string) => void;
   onPluginFolderAgentAction?: (
@@ -186,14 +263,25 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  preferredPreviewFile?: string | null;
-  autoPreviewDesignArtifacts?: boolean;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
   designSystemProject?: DesignSystemSummary | null;
   designSystemBrandId?: string | null;
-  /** False while a brand-extraction design system is still running. */
+  /**
+   * False while a brand-extraction design system is still running, OR
+   * (recvqb6mfyqXLD) the caller may not manage a team-synced design system
+   * (`designSystemProject.canMutate === false`) — gates the Publish toggle,
+   * DESIGN.md save, delete, and asset edit affordances below.
+   */
   designSystemEditable?: boolean;
+  /**
+   * True only while a brand extraction is genuinely still generating —
+   * distinct from `designSystemEditable` above, which also folds in
+   * ownership. Drives the "Extracting design system…" status pill, which
+   * must not read as "still extracting" over a finished, published design
+   * system just because the viewer cannot manage it.
+   */
+  designSystemExtractionInProgress?: boolean;
   defaultDesignSystemId?: string | null;
   onSetDefaultDesignSystem?: (id: string | null) => Promise<void> | void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
@@ -229,6 +317,11 @@ interface Props {
   // are restored.
   chatConfig?: AppConfig;
   chatAgentsById?: Map<string, AgentInfo>;
+  handoffAgents?: AgentInfo[];
+  handoffArtifactId?: string;
+  handoffArtifactKind?: TrackingArtifactKind;
+  metricsConsent?: boolean;
+  installationId?: string | null;
   chatLocale?: string;
   conversations?: Conversation[];
   /** The primary chat's active conversation. */
@@ -244,7 +337,6 @@ interface Props {
   messages?: ChatMessage[];
   artifactHtml?: string | null;
   conversationError?: string | null;
-  onRetry?: (message: ChatMessage) => void;
   // Contextual failure recovery, mirrored from the chat error card so the
   // preview surface can offer the same one-click fix (AMR authorize, terminal
   // sign-in) instead of a bare retry.
@@ -256,26 +348,33 @@ interface Props {
   // right end of the Design Files tab row. The former standalone chrome header
   // row was removed; these moved here alongside the FileViewer present/Share
   // portal that targets the same actions container.
+  fileActionsBefore?: ReactNode;
   headerActions?: ReactNode;
-  // Active discovery question form, surfaced in the right-hand Questions tab
-  // instead of inline in the chat. Owned by ProjectView (derived from the
-  // latest assistant message).
-  questionForm?: QuestionForm | null;
-  // Tolerantly-parsed form shown while the block is still streaming, so the
-  // panel renders a frame and fills questions in progressively.
-  questionFormPreview?: QuestionForm | null;
-  // Stable per-occurrence id so the panel can remember a completed reveal
-  // across the streaming→persisted remount instead of re-animating.
-  questionFormKey?: string | null;
-  questionFormInteractive?: boolean;
-  // The turn is busy (streaming/queued) — keep Continue/Skip disabled while the
-  // form itself stays editable.
-  questionFormSubmitDisabled?: boolean;
-  questionFormSubmittedAnswers?: Record<string, string | string[]>;
-  questionsGenerating?: boolean;
-  onSubmitQuestionForm?: (text: string) => void;
-  // Bumped nonce that focuses the Questions tab (banner click / new form).
-  focusQuestionsRequest?: { nonce: number } | null;
+  /**
+   * Read-only view of a team-shared project. A member who received a project
+   * shared to the team sees it single-writer/read-only (they can view and
+   * comment but not edit files or drive artifact changes through chat). When
+   * true, edit affordances are withheld and a notice explains why.
+   */
+  viewerOnly?: boolean;
+  /** First-open placeholder: do not mount cached/write-capable workspace tabs. */
+  materializationPending?: boolean;
+  /** Optional override for the read-only notice text. */
+  readonlyNotice?: string;
+  /**
+   * Team-share file-sync state for the project. It is rendered on the Design
+   * Files root tab and open design-file tabs (never terminal / side-chat /
+   * browser tabs). `downloading` — a non-owner member's local copy has not
+   * caught up to the published head. `uploading` — the owner's local edits
+   * have not yet been published. Null once caught up / not a shared project.
+   */
+  fileSyncBadge?: FileSyncBadgeState | null;
+}
+
+function noop(): void {}
+
+function rejectRenameWhileMaterializing(): null {
+  return null;
 }
 
 interface SketchState {
@@ -342,7 +441,10 @@ function shouldKeepCurrentSketchState(
 
 export const DESIGN_FILES_TAB = '__design_files__';
 export const DESIGN_SYSTEM_TAB = '__design_system__';
-const QUESTIONS_TAB = '__questions__';
+
+// Module-level default so a caller that omits `previewComments` doesn't mint
+// a fresh [] every render — that identity feeds the memoized FileViewer.
+const NO_PREVIEW_COMMENTS: PreviewComment[] = [];
 const BROWSER_TAB_PREFIX = '__browser__:';
 // Keep at most this many embedded-browser `<webview>`s mounted at once. Each is
 // a full out-of-process Chromium guest (timers, JS, network, a GPU surface), so
@@ -350,12 +452,660 @@ const BROWSER_TAB_PREFIX = '__browser__:';
 // We keep an LRU of the most-recently-activated browser tabs live and unmount
 // the rest; switching back to an evicted tab remounts (reloads) it.
 const BROWSER_KEEPALIVE_CAP = 3;
+// Keep a small LRU of already-opened HTML viewers mounted. Moving an iframe
+// between a visible host and the global parking pool makes Chromium navigate
+// it again even when `src` is byte-identical, so tab A -> tab B -> tab A used
+// to refetch both artifacts and briefly return to a blank/loading preview.
+const HTML_VIEWER_KEEPALIVE_CAP = 3;
 const QUICK_SWITCHER_DOCUMENT_CLASS = 'od-quick-switcher-open';
 const SKETCH_AUTOSAVE_DELAY_MS = 800;
 
 // Stable empty folder list so the render-phase project-switch reset is
 // idempotent (passing a fresh `[]` each render would re-trigger the reset).
 const EMPTY_PROJECT_FOLDERS: ProjectFolder[] = [];
+type ProjectPageKind =
+  | 'slides'
+  | 'prototype'
+  | 'wireframe'
+  | 'mobile'
+  | 'document'
+  | 'image'
+  | 'video'
+  | 'hyperframes'
+  | 'audio'
+  | 'liveArtifact';
+type ProjectPageCategoryId = 'recommended' | ProjectPageKind;
+type ProjectPagePresetId = string;
+type ProjectPagePresetSource = 'blank' | 'community';
+interface ProjectPagePreset {
+  id: ProjectPagePresetId;
+  category: ProjectPageKind;
+  title?: LocalizedText;
+  description?: LocalizedText;
+  titleKey?: keyof Dict;
+  descriptionKey?: keyof Dict;
+  icon: IconName;
+  fileBaseName: string;
+  source: ProjectPagePresetSource;
+  plugin?: InstalledPluginRecord;
+  pluginPreview?: PluginPreviewSpec;
+  pluginHtmlPreview?: PluginPreviewSpec;
+  featured?: boolean;
+}
+type PagePresetPreviewAvailability = Record<ProjectPagePresetId, 'ok' | 'missing'>;
+
+function pageText(en: string, zhCN?: string, zhTW?: string): LocalizedText {
+  if (!zhCN && !zhTW) return en;
+  return {
+    en,
+    'zh-CN': zhCN ?? en,
+    'zh-TW': zhTW ?? zhCN ?? en,
+  };
+}
+
+const BLANK_PAGE_PRESETS: ProjectPagePreset[] = [
+  {
+    id: 'blank-slides',
+    category: 'slides',
+    titleKey: 'homeHero.chip.deck',
+    descriptionKey: 'homeHero.chip.deckDesc',
+    icon: 'present',
+    fileBaseName: 'slides',
+    source: 'blank',
+    featured: true,
+  },
+  {
+    id: 'blank-prototype',
+    category: 'prototype',
+    titleKey: 'homeHero.chip.prototype',
+    descriptionKey: 'homeHero.chip.prototypeDesc',
+    icon: 'layout',
+    fileBaseName: 'prototype',
+    source: 'blank',
+    featured: true,
+  },
+  {
+    id: 'blank-wireframe',
+    category: 'wireframe',
+    titleKey: 'homeHero.chip.wireframe',
+    descriptionKey: 'homeHero.chip.wireframeDesc',
+    icon: 'grid',
+    fileBaseName: 'wireframe',
+    source: 'blank',
+    featured: true,
+  },
+  {
+    id: 'blank-mobile',
+    category: 'mobile',
+    titleKey: 'homeHero.chip.mobile',
+    descriptionKey: 'homeHero.chip.mobileDesc',
+    icon: 'smartphone',
+    fileBaseName: 'mobile-app',
+    source: 'blank',
+    featured: true,
+  },
+  {
+    id: 'blank-document',
+    category: 'document',
+    titleKey: 'homeHero.chip.document',
+    descriptionKey: 'homeHero.chip.documentDesc',
+    icon: 'file-text',
+    fileBaseName: 'document',
+    source: 'blank',
+    featured: true,
+  },
+  {
+    id: 'blank-image',
+    category: 'image',
+    titleKey: 'homeHero.chip.image',
+    descriptionKey: 'homeHero.chip.imageDesc',
+    icon: 'image',
+    fileBaseName: 'image-board',
+    source: 'blank',
+  },
+  {
+    id: 'blank-video',
+    category: 'video',
+    titleKey: 'homeHero.chip.video',
+    descriptionKey: 'homeHero.chip.videoDesc',
+    icon: 'play',
+    fileBaseName: 'video-storyboard',
+    source: 'blank',
+  },
+  {
+    id: 'blank-hyperframes',
+    category: 'hyperframes',
+    titleKey: 'homeHero.chip.hyperframes',
+    descriptionKey: 'homeHero.chip.hyperframesDesc',
+    icon: 'sparkles',
+    fileBaseName: 'hyperframes',
+    source: 'blank',
+  },
+  {
+    id: 'blank-audio',
+    category: 'audio',
+    titleKey: 'homeHero.chip.audio',
+    descriptionKey: 'homeHero.chip.audioDesc',
+    icon: 'volume',
+    fileBaseName: 'audio-brief',
+    source: 'blank',
+  },
+  {
+    id: 'blank-live-artifact',
+    category: 'liveArtifact',
+    titleKey: 'homeHero.chip.liveArtifact',
+    descriptionKey: 'homeHero.chip.liveArtifactDesc',
+    icon: 'kanban',
+    fileBaseName: 'live-artifact',
+    source: 'blank',
+  },
+];
+
+const COMMUNITY_PAGE_PRESETS: ProjectPagePreset[] = [
+  {
+    id: 'community-open-design-landing',
+    category: 'prototype',
+    title: pageText('OpenDesign Landing', 'OpenDesign 落地页', 'OpenDesign 落地頁'),
+    description: pageText(
+      'Editorial landing page with a strong hero, proof points, and product narrative.',
+      '带强主视觉、信任证明和产品叙事的编辑风落地页。',
+      '帶強主視覺、信任證明和產品敘事的編輯風落地頁。',
+    ),
+    icon: 'globe',
+    fileBaseName: 'open-design-landing',
+    source: 'community',
+    featured: true,
+  },
+  {
+    id: 'community-kanban-board',
+    category: 'prototype',
+    title: pageText('Kanban Board', '看板任务板', '看板任務板'),
+    description: pageText(
+      'Dense work board with lanes, tags, filters, and task cards for operational flows.',
+      '适合运营流程的密集工作看板，包含泳道、标签、筛选和任务卡片。',
+      '適合營運流程的密集工作看板，包含泳道、標籤、篩選和任務卡片。',
+    ),
+    icon: 'kanban',
+    fileBaseName: 'kanban-board',
+    source: 'community',
+    featured: true,
+  },
+  {
+    id: 'community-social-carousel',
+    category: 'prototype',
+    title: pageText('Social Carousel', '社媒轮播', '社群輪播'),
+    description: pageText(
+      'Multi-panel social story layout for campaigns, launches, and creator content.',
+      '用于活动、发布和创作者内容的多页社媒故事版。',
+      '用於活動、發布和創作者內容的多頁社群故事版。',
+    ),
+    icon: 'slides',
+    fileBaseName: 'social-carousel',
+    source: 'community',
+    featured: true,
+  },
+  {
+    id: 'community-blog-post',
+    category: 'document',
+    title: pageText('Blog Post', '博客文章', '部落格文章'),
+    description: pageText(
+      'Long-form editorial article with pull quotes, section rhythm, and readable typography.',
+      '带引用、章节节奏和高可读排版的长篇编辑文章。',
+      '帶引用、章節節奏和高可讀排版的長篇編輯文章。',
+    ),
+    icon: 'file-text',
+    fileBaseName: 'blog-post',
+    source: 'community',
+    featured: true,
+  },
+  {
+    id: 'community-wireframe-sketch',
+    category: 'wireframe',
+    title: pageText('Wireframe Sketch', '手绘线框', '手繪線框'),
+    description: pageText(
+      'Hand-sketched screen map for early structure, hierarchy, and annotation passes.',
+      '用于早期结构、层级和批注推演的手绘线框页面。',
+      '用於早期結構、層級和批註推演的手繪線框頁面。',
+    ),
+    icon: 'draw',
+    fileBaseName: 'wireframe-sketch',
+    source: 'community',
+  },
+  {
+    id: 'community-wireframe-greybox',
+    category: 'wireframe',
+    title: pageText('Wireframe Greybox', '灰盒线框', '灰盒線框'),
+    description: pageText(
+      'Crisp greybox layout for dashboards, forms, tables, and multi-panel tools.',
+      '适合仪表盘、表单、表格和多面板工具的清晰灰盒布局。',
+      '適合儀表板、表單、表格和多面板工具的清晰灰盒版面。',
+    ),
+    icon: 'grid',
+    fileBaseName: 'wireframe-greybox',
+    source: 'community',
+  },
+  {
+    id: 'community-wireframe-mobile-flow',
+    category: 'wireframe',
+    title: pageText('Mobile Flow Wireframe', '移动流程线框', '行動流程線框'),
+    description: pageText(
+      'Phone-screen flow map for onboarding, checkout, or task completion paths.',
+      '用于入门、结账或任务完成路径的手机屏流程图。',
+      '用於入門、結帳或任務完成路徑的手機螢幕流程圖。',
+    ),
+    icon: 'smartphone',
+    fileBaseName: 'wireframe-mobile-flow',
+    source: 'community',
+  },
+  {
+    id: 'community-mobile-app',
+    category: 'mobile',
+    title: pageText('Mobile App', '移动应用', '行動應用'),
+    description: pageText(
+      'Native-feeling mobile screen with product hierarchy, controls, and states.',
+      '带产品层级、控件和状态的原生感移动界面。',
+      '帶產品層級、控制元件和狀態的原生感行動介面。',
+    ),
+    icon: 'smartphone',
+    fileBaseName: 'mobile-app-screen',
+    source: 'community',
+  },
+  {
+    id: 'community-mobile-onboarding',
+    category: 'mobile',
+    title: pageText('Mobile Onboarding', '移动端引导', '行動端引導'),
+    description: pageText(
+      'First-run app flow with value props, permissions, and account setup states.',
+      '首启应用流程，包含价值点、权限请求和账号设置状态。',
+      '首次啟動應用流程，包含價值點、權限請求和帳號設定狀態。',
+    ),
+    icon: 'smartphone',
+    fileBaseName: 'mobile-onboarding',
+    source: 'community',
+  },
+  {
+    id: 'community-gamified-app',
+    category: 'mobile',
+    title: pageText('Gamified App', '游戏化应用', '遊戲化應用'),
+    description: pageText(
+      'Mobile progression screen with streaks, rewards, missions, and playful states.',
+      '带连续记录、奖励、任务和趣味状态的移动进度页面。',
+      '帶連續紀錄、獎勵、任務和趣味狀態的行動進度頁面。',
+    ),
+    icon: 'star',
+    fileBaseName: 'gamified-app',
+    source: 'community',
+  },
+  {
+    id: 'community-resume-modern',
+    category: 'document',
+    title: pageText('Modern Resume', '现代简历', '現代履歷'),
+    description: pageText(
+      'Structured resume page with professional hierarchy, highlights, and printable rhythm.',
+      '带专业层级、亮点模块和打印节奏的结构化简历页面。',
+      '帶專業層級、亮點模組和列印節奏的結構化履歷頁面。',
+    ),
+    icon: 'file-text',
+    fileBaseName: 'modern-resume',
+    source: 'community',
+  },
+  {
+    id: 'community-data-report',
+    category: 'document',
+    title: pageText('Data Report', '数据报告', '資料報告'),
+    description: pageText(
+      'Analytical report with KPI callouts, charts, commentary, and executive summary.',
+      '包含 KPI 亮点、图表、解读和管理摘要的分析报告。',
+      '包含 KPI 亮點、圖表、解讀和管理摘要的分析報告。',
+    ),
+    icon: 'file-text',
+    fileBaseName: 'data-report',
+    source: 'community',
+  },
+  {
+    id: 'community-invoice',
+    category: 'document',
+    title: pageText('Invoice', '发票', '發票'),
+    description: pageText(
+      'Clean commercial document with line items, totals, terms, and payment notes.',
+      '整洁的商务文档，包含明细、总计、条款和付款说明。',
+      '整潔的商務文件，包含明細、總計、條款和付款說明。',
+    ),
+    icon: 'file-text',
+    fileBaseName: 'invoice',
+    source: 'community',
+  },
+  {
+    id: 'community-live-dashboard',
+    category: 'liveArtifact',
+    title: pageText('Live Dashboard', '实时仪表盘', '即時儀表板'),
+    description: pageText(
+      'Refreshable operations dashboard with KPIs, charts, controls, and data states.',
+      '可刷新的运营仪表盘，包含 KPI、图表、控件和数据状态。',
+      '可重新整理的營運儀表板，包含 KPI、圖表、控制元件和資料狀態。',
+    ),
+    icon: 'kanban',
+    fileBaseName: 'live-dashboard',
+    source: 'community',
+  },
+  {
+    id: 'community-trading-analysis',
+    category: 'liveArtifact',
+    title: pageText('Trading Analysis Dashboard', '交易分析看板', '交易分析看板'),
+    description: pageText(
+      'Market analysis workspace with chart panels, positions, alerts, and watchlists.',
+      '市场分析工作台，包含图表面板、持仓、提醒和关注列表。',
+      '市場分析工作台，包含圖表面板、持倉、提醒和關注列表。',
+    ),
+    icon: 'kanban',
+    fileBaseName: 'trading-analysis-dashboard',
+    source: 'community',
+  },
+  {
+    id: 'community-social-media-matrix',
+    category: 'liveArtifact',
+    title: pageText('Social Media Matrix', '社媒矩阵追踪', '社群矩陣追蹤'),
+    description: pageText(
+      'Content operations grid for channels, campaigns, publishing status, and metrics.',
+      '内容运营矩阵，跟踪渠道、活动、发布状态和指标。',
+      '內容營運矩陣，追蹤渠道、活動、發布狀態和指標。',
+    ),
+    icon: 'grid',
+    fileBaseName: 'social-media-matrix',
+    source: 'community',
+  },
+  {
+    id: 'community-pitch-book',
+    category: 'slides',
+    title: pageText('Pitch Book', '融资路演稿', '募資簡報'),
+    description: pageText(
+      'Investor-ready narrative deck with market, product, traction, team, and ask.',
+      '面向投资人的叙事型幻灯片，覆盖市场、产品、牵引力、团队和融资诉求。',
+      '面向投資人的敘事型投影片，涵蓋市場、產品、牽引力、團隊和募資訴求。',
+    ),
+    icon: 'present',
+    fileBaseName: 'pitch-book',
+    source: 'community',
+  },
+  {
+    id: 'community-replit-deck',
+    category: 'slides',
+    title: pageText('Replit Deck', 'Replit 风格幻灯片', 'Replit 風格投影片'),
+    description: pageText(
+      'Product storytelling deck with developer energy, system diagrams, and launch rhythm.',
+      '带开发者气质、系统图和发布节奏的产品叙事幻灯片。',
+      '帶開發者氣質、系統圖和發布節奏的產品敘事投影片。',
+    ),
+    icon: 'present',
+    fileBaseName: 'replit-deck',
+    source: 'community',
+  },
+  {
+    id: 'community-guizang-ppt',
+    category: 'slides',
+    title: pageText('Guizang PPT', '归藏 PPT', '歸藏 PPT'),
+    description: pageText(
+      'Polished Chinese presentation style with strong section rhythm and dense visuals.',
+      '成熟中文演示风格，章节节奏强，视觉信息密度高。',
+      '成熟中文簡報風格，章節節奏強，視覺資訊密度高。',
+    ),
+    icon: 'present',
+    fileBaseName: 'guizang-ppt',
+    source: 'community',
+  },
+  {
+    id: 'community-frontend-slides',
+    category: 'slides',
+    title: pageText('Frontend Slides', '前端分享幻灯片', '前端分享投影片'),
+    description: pageText(
+      'Technical talk deck with code-friendly structure, diagrams, and pacing.',
+      '适合技术分享的幻灯片，包含代码友好结构、图解和节奏控制。',
+      '適合技術分享的投影片，包含程式碼友善結構、圖解和節奏控制。',
+    ),
+    icon: 'present',
+    fileBaseName: 'frontend-slides',
+    source: 'community',
+  },
+  {
+    id: 'community-ecommerce-live-stream',
+    category: 'image',
+    title: pageText('E-commerce Live Stream UI', '电商直播界面', '電商直播介面'),
+    description: pageText(
+      'Image direction board for commerce livestream overlays, offers, and product cards.',
+      '用于电商直播叠层、优惠和商品卡片的图片方向板。',
+      '用於電商直播疊層、優惠和商品卡片的圖片方向板。',
+    ),
+    icon: 'image',
+    fileBaseName: 'ecommerce-live-stream-ui',
+    source: 'community',
+  },
+  {
+    id: 'community-dance-infographic',
+    category: 'image',
+    title: pageText('Dance Infographic', '舞蹈信息图', '舞蹈資訊圖'),
+    description: pageText(
+      'Storyboard-style visual sheet for choreography, motion beats, and explainers.',
+      '用于编舞、动作节拍和解说的故事板式视觉页面。',
+      '用於編舞、動作節拍和解說的故事板式視覺頁面。',
+    ),
+    icon: 'image',
+    fileBaseName: 'dance-infographic',
+    source: 'community',
+  },
+  {
+    id: 'community-avatar-portrait',
+    category: 'image',
+    title: pageText('Avatar Portrait', '头像肖像', '頭像肖像'),
+    description: pageText(
+      'Portrait art direction page for identity, lighting, styling, and crop references.',
+      '用于身份、光线、造型和裁切参考的肖像视觉方向页。',
+      '用於身份、光線、造型和裁切參考的肖像視覺方向頁。',
+    ),
+    icon: 'image',
+    fileBaseName: 'avatar-portrait',
+    source: 'community',
+  },
+  {
+    id: 'community-showa-magazine',
+    category: 'image',
+    title: pageText('Showa Magazine Cover', '昭和杂志封面', '昭和雜誌封面'),
+    description: pageText(
+      'Retro editorial image brief for magazine covers, posters, and social graphics.',
+      '复古编辑风图片 brief，适合杂志封面、海报和社媒图形。',
+      '復古編輯風圖片 brief，適合雜誌封面、海報和社群圖形。',
+    ),
+    icon: 'image',
+    fileBaseName: 'showa-magazine-cover',
+    source: 'community',
+  },
+  {
+    id: 'community-three-kingdoms-video',
+    category: 'video',
+    title: pageText('Three Kingdoms Cinematic', '三国电影感短片', '三國電影感短片'),
+    description: pageText(
+      'Cinematic video storyboard with hero action, environment notes, timing, and negatives.',
+      '电影感视频故事板，包含英雄动作、环境说明、时间线和负面约束。',
+      '電影感影片故事板，包含英雄動作、環境說明、時間軸和負面約束。',
+    ),
+    icon: 'play',
+    fileBaseName: 'three-kingdoms-cinematic',
+    source: 'community',
+  },
+  {
+    id: 'community-romance-short-film',
+    category: 'video',
+    title: pageText('Romance Short Film', '浪漫短片', '浪漫短片'),
+    description: pageText(
+      'Short-film plan with scene beats, lighting, camera moves, dialogue, and sound.',
+      '短片策划页，包含场景节拍、光线、镜头运动、对白和声音。',
+      '短片企劃頁，包含場景節拍、光線、鏡頭運動、對白和聲音。',
+    ),
+    icon: 'play',
+    fileBaseName: 'romance-short-film',
+    source: 'community',
+  },
+  {
+    id: 'community-hand-dance-video',
+    category: 'video',
+    title: pageText('Hand Dance Video', '手势舞视频', '手勢舞影片'),
+    description: pageText(
+      'Performance video sheet for motion timing, close-ups, styling, and edit beats.',
+      '表演类视频页面，规划动作时机、特写、造型和剪辑节拍。',
+      '表演類影片頁面，規劃動作時機、特寫、造型和剪輯節拍。',
+    ),
+    icon: 'play',
+    fileBaseName: 'hand-dance-video',
+    source: 'community',
+  },
+  {
+    id: 'community-supercar-video',
+    category: 'video',
+    title: pageText('Luxury Supercar Video', '豪车宣传片', '豪車宣傳片'),
+    description: pageText(
+      'Premium product-film storyboard with hero shots, pacing, materials, and sound design.',
+      '高端产品影片故事板，覆盖主视觉镜头、节奏、材质和声音设计。',
+      '高端產品影片故事板，涵蓋主視覺鏡頭、節奏、材質和聲音設計。',
+    ),
+    icon: 'play',
+    fileBaseName: 'luxury-supercar-video',
+    source: 'community',
+  },
+  {
+    id: 'community-hf-app-showcase',
+    category: 'hyperframes',
+    title: pageText('HyperFrames App Showcase', 'HyperFrames 应用展示', 'HyperFrames 應用展示'),
+    description: pageText(
+      'HTML motion composition plan with floating devices, labels, transitions, and timing.',
+      'HTML 动效方案，包含漂浮设备、标签、转场和时间线。',
+      'HTML 動效方案，包含漂浮裝置、標籤、轉場和時間軸。',
+    ),
+    icon: 'sparkles',
+    fileBaseName: 'hyperframes-app-showcase',
+    source: 'community',
+  },
+  {
+    id: 'community-hf-brand-sizzle',
+    category: 'hyperframes',
+    title: pageText('HyperFrames Brand Sizzle', 'HyperFrames 品牌混剪', 'HyperFrames 品牌混剪'),
+    description: pageText(
+      'Motion brand reel with kinetic type, scene cuts, shader transitions, and end card.',
+      '品牌动效混剪，包含动态排版、场景剪辑、着色器转场和收尾卡。',
+      '品牌動效混剪，包含動態排版、場景剪輯、著色器轉場和收尾卡。',
+    ),
+    icon: 'sparkles',
+    fileBaseName: 'hyperframes-brand-sizzle',
+    source: 'community',
+  },
+  {
+    id: 'community-hf-social-overlay',
+    category: 'hyperframes',
+    title: pageText('HyperFrames Social Overlay', 'HyperFrames 社交叠层', 'HyperFrames 社群疊層'),
+    description: pageText(
+      'Vertical motion stack with social cards, captions, lower thirds, and CTA timing.',
+      '竖屏动效叠层，包含社交卡片、字幕、下三分之一和 CTA 时间点。',
+      '直式動效疊層，包含社群卡片、字幕、下三分之一和 CTA 時間點。',
+    ),
+    icon: 'sparkles',
+    fileBaseName: 'hyperframes-social-overlay',
+    source: 'community',
+  },
+  {
+    id: 'community-hf-flight-map',
+    category: 'hyperframes',
+    title: pageText('HyperFrames Flight Map', 'HyperFrames 航线地图', 'HyperFrames 航線地圖'),
+    description: pageText(
+      'Animated route map brief with path drawing, counters, city labels, and camera moves.',
+      '动态航线地图 brief，包含路径绘制、计数器、城市标签和镜头运动。',
+      '動態航線地圖 brief，包含路徑繪製、計數器、城市標籤和鏡頭運動。',
+    ),
+    icon: 'sparkles',
+    fileBaseName: 'hyperframes-flight-map',
+    source: 'community',
+  },
+  {
+    id: 'community-hf-website-promo',
+    category: 'hyperframes',
+    title: pageText('Website to Video Promo', '网站转宣传片', '網站轉宣傳片'),
+    description: pageText(
+      'Website capture-to-motion plan with viewport shots, transitions, and marketing pacing.',
+      '网站捕获转动效方案，包含多视口镜头、转场和营销节奏。',
+      '網站擷取轉動效方案，包含多視口鏡頭、轉場和行銷節奏。',
+    ),
+    icon: 'sparkles',
+    fileBaseName: 'website-to-video-promo',
+    source: 'community',
+  },
+  {
+    id: 'community-audio-jingle',
+    category: 'audio',
+    title: pageText('Audio Jingle', '音频 Jingle', '音訊 Jingle'),
+    description: pageText(
+      'Audio generation brief for jingles, beds, voiceovers, SFX, duration, and delivery notes.',
+      '音频生成 brief，规划 jingle、铺底音乐、旁白、音效、时长和交付说明。',
+      '音訊生成 brief，規劃 jingle、鋪底音樂、旁白、音效、時長和交付說明。',
+    ),
+    icon: 'volume',
+    fileBaseName: 'audio-jingle',
+    source: 'community',
+  },
+];
+
+const PROJECT_PAGE_PRESETS: ProjectPagePreset[] = [
+  ...BLANK_PAGE_PRESETS,
+  ...COMMUNITY_PAGE_PRESETS,
+];
+const PROJECT_PAGE_CATEGORY_ORDER: ProjectPageCategoryId[] = [
+  'prototype',
+  'liveArtifact',
+  'slides',
+  'wireframe',
+  'mobile',
+  'document',
+  'image',
+  'video',
+  'hyperframes',
+  'audio',
+];
+const COMMUNITY_PLUGIN_CHIP_TO_PAGE_KIND: Record<string, ProjectPageKind> = {
+  prototype: 'prototype',
+  wireframe: 'wireframe',
+  mobile: 'mobile',
+  document: 'document',
+  deck: 'slides',
+  image: 'image',
+  video: 'video',
+  hyperframes: 'hyperframes',
+  'live-artifact': 'liveArtifact',
+};
+const PROJECT_PAGE_CATEGORIES: Array<{
+  id: ProjectPageCategoryId;
+  icon: IconName;
+  labelKey: keyof Dict;
+}> = [
+  { id: 'slides', icon: 'present', labelKey: 'homeHero.chip.deck' },
+  { id: 'prototype', icon: 'layout', labelKey: 'homeHero.chip.prototype' },
+  { id: 'wireframe', icon: 'grid', labelKey: 'homeHero.chip.wireframe' },
+  { id: 'mobile', icon: 'smartphone', labelKey: 'homeHero.chip.mobile' },
+  { id: 'document', icon: 'file-text', labelKey: 'homeHero.chip.document' },
+  { id: 'image', icon: 'image', labelKey: 'homeHero.chip.image' },
+  { id: 'video', icon: 'play', labelKey: 'homeHero.chip.video' },
+  { id: 'hyperframes', icon: 'sparkles', labelKey: 'homeHero.chip.hyperframes' },
+  { id: 'audio', icon: 'volume', labelKey: 'homeHero.chip.audio' },
+  { id: 'liveArtifact', icon: 'kanban', labelKey: 'homeHero.chip.liveArtifact' },
+];
+const PAGE_CREATOR_HIDDEN_CATEGORIES = new Set<ProjectPageKind>(['image', 'video', 'audio']);
+const PAGE_CREATOR_CATEGORIES = PROJECT_PAGE_CATEGORIES.filter((item) =>
+  pageCreatorCategoryVisible(item.id),
+);
+// Page categories that map onto a plugins-home facet primary with a meaningful
+// sub-category taxonomy (Prototype / Slides / Image / Video). Other kinds stay
+// flat — selecting them shows no second-level filter row.
+const PAGE_KIND_TO_FACET_SLUG: Partial<Record<ProjectPageKind, string>> = {
+  slides: 'deck',
+  prototype: 'prototype',
+  image: 'image',
+  video: 'video',
+};
 type TabDropEdge = 'before' | 'after';
 type BrowserWorkspaceTab = ProjectBrowserWorkspaceTab;
 export interface BrowserOpenRequest {
@@ -531,12 +1281,14 @@ interface WorkspaceActionToast {
 export function FileWorkspace({
   projectId,
   projectKind,
+  projectName,
   rootDirName,
   reloading,
   resolvedDir,
   files,
   liveArtifacts,
   filesRefreshKey = 0,
+  filesGeneration,
   onRefreshFiles,
   isDeck,
   streaming,
@@ -552,22 +1304,22 @@ export function FileWorkspace({
   designSystemActivityEvents = [],
   tabsState,
   onTabsStateChange,
-  previewComments = [],
+  previewComments = NO_PREVIEW_COMMENTS,
   onSavePreviewComment,
   onRemovePreviewComment,
+  onReorderPreviewComment,
   onSendBoardCommentAttachments,
   onBrandExtractionStopRequest,
   onRequestBrowserUsePrompt,
   onPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
-  preferredPreviewFile = null,
-  autoPreviewDesignArtifacts = false,
   focusMode = false,
   onFocusModeChange,
   designSystemProject = null,
   designSystemBrandId = null,
   designSystemEditable = true,
+  designSystemExtractionInProgress = false,
   defaultDesignSystemId = null,
   onSetDefaultDesignSystem,
   onDesignSystemsRefresh,
@@ -587,6 +1339,11 @@ export function FileWorkspace({
   onCommentModeChange,
   chatConfig,
   chatAgentsById,
+  handoffAgents,
+  handoffArtifactId,
+  handoffArtifactKind,
+  metricsConsent,
+  installationId,
   chatLocale,
   conversations = [],
   activeConversationId = null,
@@ -600,22 +1357,19 @@ export function FileWorkspace({
   onWorkspaceContextsChange,
   messages = [],
   conversationId,
+  fileActionsBefore,
   headerActions,
-  questionForm = null,
-  questionFormPreview = null,
-  questionFormKey = null,
-  questionFormInteractive = false,
-  questionFormSubmitDisabled = false,
-  questionFormSubmittedAnswers,
-  questionsGenerating = false,
-  onSubmitQuestionForm,
-  focusQuestionsRequest = null,
+  viewerOnly = false,
+  materializationPending = false,
+  readonlyNotice,
+  fileSyncBadge = null,
 }: Props) {
-  const t = useT();
-  // The chat column only shows a compact Questions banner; the form itself
-  // lives here, including after submission when a banner click can reopen the
-  // answered preview.
-  const showQuestionsTab = Boolean(questionForm || questionFormPreview || questionsGenerating);
+  const refreshFilesWithoutResult = useCallback(async () => {
+    await onRefreshFiles();
+  }, [onRefreshFiles]);
+  const { locale, t } = useI18n();
+  const { workspaceContext } = useProjectCollabContext();
+  const iframeKeepAlivePool = useIframeKeepAlivePool();
   const analytics = useAnalytics();
   // P1 page_view page_name=file_manager — once per project the user lands
   // inside the workspace. Re-fire when the projectId changes so a
@@ -644,6 +1398,30 @@ export function FileWorkspace({
   const [activeTab, setActiveTab] = useState<string>(
     tabsState.active ?? defaultRootTab,
   );
+  // `materializationPending` can briefly become true again while the router
+  // commits a file-tab URL. Once this project has rendered real workspace
+  // content, that transient revalidation must not tear down retained viewers:
+  // doing so destroys iframe browsing contexts, edit sessions, and toolbar
+  // portals for a single frame. A genuinely new project still gets the
+  // first-materialization loading surface because its id has not been marked
+  // ready in this component instance.
+  const materializedProjectRef = useRef<string | null>(
+    materializationPending ? null : projectId,
+  );
+  if (!materializationPending) materializedProjectRef.current = projectId;
+  const initialMaterializationPending =
+    materializationPending && materializedProjectRef.current !== projectId;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const fileSyncBadgeLabel = fileSyncBadge
+    ? fileSyncBadge === 'downloading'
+      ? t('workspace.fileSyncDownloading')
+      : t('workspace.fileSyncUploading')
+    : null;
+  const designFilesTabLabel = t('workspace.designFiles');
+  const designFilesTabTitle = fileSyncBadgeLabel
+    ? `${designFilesTabLabel} · ${fileSyncBadgeLabel}`
+    : designFilesTabLabel;
 
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -690,9 +1468,22 @@ export function FileWorkspace({
   // "+" launcher (file search + registry-driven create-new actions:
   // Side Chat, Terminal, Browser).
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const [projectShareMenuOpen, setProjectShareMenuOpen] = useState(false);
+  const [projectShareAccess, setProjectShareAccess] = useState<'private' | 'workspace'>('private');
+  const [projectShareAccessMenuOpen, setProjectShareAccessMenuOpen] = useState(false);
+  const [projectShareConfirm, setProjectShareConfirm] = useState<'private' | 'workspace' | null>(null);
+  const [projectShareBusy, setProjectShareBusy] = useState(false);
+  const [pageCreatorOpen, setPageCreatorOpen] = useState(false);
+  const [pageCreatorQuery, setPageCreatorQuery] = useState('');
+  const [pageCreatorCategory, setPageCreatorCategory] =
+    useState<ProjectPageCategoryId>('slides');
+  const [pageCreatorPreviewId, setPageCreatorPreviewId] =
+    useState<ProjectPagePresetId>(() => defaultPagePresetId(projectKind));
+  const [pageCreating, setPageCreating] = useState(false);
+  const [communityPluginPresets, setCommunityPluginPresets] = useState<ProjectPagePreset[]>([]);
   // Transient feedback when a launcher "create" action (e.g. New Terminal)
   // fails on the daemon side, so the click is never a silent no-op.
-  const [launcherToast, setLauncherToast] = useState<string | null>(null);
+  const [launcherToast, setLauncherToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
   const [browserSnapshotToast, setBrowserSnapshotToast] = useState<WorkspaceActionToast | null>(null);
   const [tabsOverflowing, setTabsOverflowing] = useState(false);
   const [draggedTabName, setDraggedTabName] = useState<string | null>(null);
@@ -702,7 +1493,10 @@ export function FileWorkspace({
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const launcherBtnRef = useRef<HTMLButtonElement | null>(null);
+  const projectShareRef = useRef<HTMLDivElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
+  // Focus-mode dock host for the workspace tab strip (workspaceTabsDock.ts).
+  const focusTabsDockRef = useWorkspaceTabsDockRef();
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
   const openFileRef = useRef<(name: string) => void>(() => {});
@@ -734,6 +1528,92 @@ export function FileWorkspace({
   // first). A browser tab is mounted only after it has been activated; we cap
   // the live set at BROWSER_KEEPALIVE_CAP and unmount the rest.
   const [liveBrowserTabIds, setLiveBrowserTabIds] = useState<string[]>([]);
+  const [liveHtmlViewerFileNames, setLiveHtmlViewerFileNames] = useState<string[]>([]);
+  const [protectedHtmlViewerFileNames, setProtectedHtmlViewerFileNames] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const protectedHtmlViewerFileNamesRef = useRef(protectedHtmlViewerFileNames);
+  protectedHtmlViewerFileNamesRef.current = protectedHtmlViewerFileNames;
+  const manualEditExitHandlersRef = useRef<Map<string, () => Promise<boolean>>>(new Map());
+  const manualEditExitInFlightRef = useRef<Map<string, Promise<boolean>>>(new Map());
+  const requestedActivationSequenceRef = useRef(0);
+  const handleHtmlViewerRetainActivityChange = useCallback((fileName: string, retain: boolean) => {
+    setProtectedHtmlViewerFileNames((current) => {
+      if (current.has(fileName) === retain) return current;
+      const next = new Set(current);
+      if (retain) next.add(fileName);
+      else next.delete(fileName);
+      return next;
+    });
+  }, []);
+  const handleManualEditExitHandlerChange = useCallback((
+    fileName: string,
+    handler: (() => Promise<boolean>) | null,
+  ) => {
+    if (handler) manualEditExitHandlersRef.current.set(fileName, handler);
+    else manualEditExitHandlersRef.current.delete(fileName);
+  }, []);
+  const settleManualEdit = useCallback((fileName: string): Promise<boolean> => {
+    const exit = manualEditExitHandlersRef.current.get(fileName);
+    if (!exit) return Promise.resolve(true);
+    const existing = manualEditExitInFlightRef.current.get(fileName);
+    if (existing) return existing;
+
+    const result = settleManualEditExit(exit);
+    const pending = result.finally(() => {
+      if (manualEditExitInFlightRef.current.get(fileName) === pending) {
+        manualEditExitInFlightRef.current.delete(fileName);
+      }
+    });
+    manualEditExitInFlightRef.current.set(fileName, pending);
+    return pending;
+  }, []);
+  const settleProtectedManualEdits = useCallback((): Promise<boolean> => {
+    // A viewer can remain mounted offscreen while its async safe-exit is still
+    // pending. The active tab is therefore not an authority witness for which
+    // edit must settle before project teardown/navigation.
+    const fileNames = new Set([
+      ...protectedHtmlViewerFileNamesRef.current,
+      ...manualEditExitHandlersRef.current.keys(),
+      ...manualEditExitInFlightRef.current.keys(),
+    ]);
+    return settleManualEditFiles(fileNames, settleManualEdit);
+  }, [settleManualEdit]);
+  useEffect(() => () => {
+    void settleProtectedManualEdits();
+  }, [settleProtectedManualEdits]);
+  useEffect(() => {
+    if (protectedHtmlViewerFileNames.size === 0) return;
+
+    const unregisterNavigationGuard = registerNavigationGuard(settleProtectedManualEdits);
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => {
+      unregisterNavigationGuard();
+      window.removeEventListener('beforeunload', warnBeforeUnload);
+    };
+  }, [protectedHtmlViewerFileNames.size, settleProtectedManualEdits]);
+
+  function afterActiveManualEditSettles(action: () => void) {
+    const sourceTab = activeTabRef.current;
+    const exit = manualEditExitHandlersRef.current.get(sourceTab);
+    if (!exit) {
+      action();
+      return;
+    }
+    const sequence = ++requestedActivationSequenceRef.current;
+    const pending = settleManualEdit(sourceTab);
+    void pending.then((ok) => {
+      if (
+        ok
+        && sequence === requestedActivationSequenceRef.current
+        && activeTabRef.current === sourceTab
+      ) action();
+    });
+  }
 
   // The set actually rendered. The activation LRU governs ad-hoc browser tabs,
   // but a pinned brand-extraction tab must stay mounted even when it was never
@@ -754,10 +1634,42 @@ export function FileWorkspace({
     [files],
   );
 
+  // Known-file set for the side chat's file-link routing — same shape
+  // ProjectView feeds its primary ChatPane.
+  const sideChatFileNames = useMemo(() => new Set(files.map((file) => file.name)), [files]);
+
+  const projectPagePresets = useMemo(
+    () => [
+      ...BLANK_PAGE_PRESETS,
+      ...(communityPluginPresets.length > 0 ? communityPluginPresets : COMMUNITY_PAGE_PRESETS),
+    ],
+    [communityPluginPresets],
+  );
   const sketchFiles = useMemo(
     () => visibleFiles.filter((file) => isSketchName(file.name)),
     [visibleFiles],
   );
+
+  useEffect(() => {
+    setPageCreatorCategory('slides');
+    setPageCreatorPreviewId(defaultPagePresetId(projectKind));
+  }, [projectId, projectKind]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      void listPlugins({ workspaceContext }).then((records) => {
+        if (cancelled) return;
+        setCommunityPluginPresets(communityPluginPagePresets(records, workspaceContext));
+      });
+    };
+    load();
+    window.addEventListener('open-design:plugins-changed', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('open-design:plugins-changed', load);
+    };
+  }, [workspaceContext]);
 
   const loadSketchFile = useCallback((file: ProjectFile): Promise<boolean> => {
     const sourceKey = sketchFileSourceKey(projectId, file);
@@ -772,7 +1684,9 @@ export function FileWorkspace({
     const inFlight = { promise: null as Promise<boolean> | null };
     const promise = (async () => {
       try {
-        const text = await fetchProjectFileText(projectId, file.name);
+        const text = workspaceContext
+          ? await fetchProjectFileText(projectId, file.name, { workspaceContext })
+          : await fetchProjectFileText(projectId, file.name);
         const doc = parseSketchWorkspaceDocument(text);
         if (activeProjectIdRef.current !== projectId) return false;
         setSketches((curr) => {
@@ -801,7 +1715,7 @@ export function FileWorkspace({
     inFlight.promise = promise;
     sketchPreloadInFlightRef.current.set(sourceKey, promise);
     return promise;
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
 
   const liveArtifactEntries = useMemo(
     () => liveArtifacts.map(liveArtifactSummaryToWorkspaceEntry),
@@ -809,22 +1723,22 @@ export function FileWorkspace({
   );
 
   const refreshProjectFolders = useCallback(async (): Promise<ProjectFolder[]> => {
-    const next = await fetchProjectFolders(projectId);
+    const next = await fetchProjectFolders(projectId, workspaceContext);
     setProjectFolders(next);
     return next;
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
 
   useEffect(() => {
     let cancelled = false;
     // The synchronous clear happens during render (see projectFoldersProjectIdRef
     // above); here we only fetch the new project's folders.
-    void fetchProjectFolders(projectId).then((next) => {
+    void fetchProjectFolders(projectId, workspaceContext).then((next) => {
       if (!cancelled) setProjectFolders(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
 
   // True when the Design Files tab has nothing to attach: no files, no live
   // artifacts, no folders. Mirrors DesignFilesPanel's own empty-state gate so
@@ -840,7 +1754,12 @@ export function FileWorkspace({
   // (or on project switch). Fall back to the Design Files browser so a
   // fresh project lands in a useful place.
   useEffect(() => {
-    setActiveTab(tabsState.active ?? defaultRootTab);
+    const nextActive = tabsState.active ?? defaultRootTab;
+    if (nextActive === activeTabRef.current) return;
+    afterActiveManualEditSettles(() => setActiveTab(nextActive));
+    // afterActiveManualEditSettles reads post-commit refs and intentionally
+    // remains stable across this externally-driven hydration transition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabsState.active, defaultRootTab]);
 
   useEffect(() => {
@@ -906,11 +1825,18 @@ export function FileWorkspace({
 
   function setPersistedActive(name: string | null) {
     const nextActive = name ?? defaultRootTab;
-    setActiveTab(nextActive);
-    commitTabsState(workspaceTabsState(persistedTabs, name));
+    if (nextActive === activeTab) return;
+    afterActiveManualEditSettles(() => {
+      setActiveTab(nextActive);
+      commitTabsState(workspaceTabsState(persistedTabs, name));
+    });
   }
 
   function openRequestedBrowserTab(request: BrowserOpenRequest) {
+    afterActiveManualEditSettles(() => commitRequestedBrowserTab(request));
+  }
+
+  function commitRequestedBrowserTab(request: BrowserOpenRequest) {
     const requestedTabId = request.tabId?.trim();
     const normalizedUrl = normalizeBrowserAddress(request.url);
     const tabId =
@@ -977,19 +1903,21 @@ export function FileWorkspace({
   }
 
   function openBrowserTab() {
-    setUploadError(null);
-    const nextIndex = browserTabSequenceRef.current + 1;
-    browserTabSequenceRef.current = nextIndex;
-    const anchor = lastWorkspaceTabId(orderedWorkspaceTabs) ?? activeTab;
-    const nextTab: BrowserWorkspaceTab = {
-      id: `${BROWSER_TAB_PREFIX}${nextIndex}`,
-      insertAfter: anchor,
-      label: nextIndex === 1 ? 'Browser' : `Browser ${nextIndex}`,
-    };
-    const nextTabs = [...browserTabs, nextTab];
-    setBrowserTabs(nextTabs);
-    setActiveTab(nextTab.id);
-    commitTabsState(workspaceTabsState(persistedTabs, nextTab.id, nextTabs));
+    afterActiveManualEditSettles(() => {
+      setUploadError(null);
+      const nextIndex = browserTabSequenceRef.current + 1;
+      browserTabSequenceRef.current = nextIndex;
+      const anchor = lastWorkspaceTabId(orderedWorkspaceTabs) ?? activeTabRef.current;
+      const nextTab: BrowserWorkspaceTab = {
+        id: `${BROWSER_TAB_PREFIX}${nextIndex}`,
+        insertAfter: anchor,
+        label: nextIndex === 1 ? 'Browser' : `Browser ${nextIndex}`,
+      };
+      const nextTabs = [...browserTabs, nextTab];
+      setBrowserTabs(nextTabs);
+      setActiveTab(nextTab.id);
+      commitTabsState(workspaceTabsState(persistedTabs, nextTab.id, nextTabs));
+    });
   }
 
   function closeBrowserTab(tabId: string) {
@@ -1046,7 +1974,7 @@ export function FileWorkspace({
   function activatePending(name: string) {
     // Pending sketches are not in tabsState.tabs — flip the local
     // activeTab without round-tripping through the parent.
-    setActiveTab(name);
+    afterActiveManualEditSettles(() => setActiveTab(name));
   }
 
   // Promote the active browser tab to the front of the keep-alive LRU (and cap
@@ -1072,10 +2000,10 @@ export function FileWorkspace({
   // back to the last remaining tab. Skip transient activeTab values
   // (DESIGN_FILES_TAB, pending sketches) since those aren't in persistedTabs.
   useEffect(() => {
+    const latestPersistedTabs = tabsStateRef.current.tabs;
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
-      || activeTab === QUESTIONS_TAB
     ) return;
     if (isBrowserTabId(activeTab)) {
       if (!browserTabs.some((tab) => tab.id === activeTab)) {
@@ -1084,8 +2012,8 @@ export function FileWorkspace({
       return;
     }
     if (sketches[activeTab] && !sketches[activeTab]!.persisted) return;
-    if (!persistedTabs.includes(activeTab)) {
-      setPersistedActive(persistedTabs[persistedTabs.length - 1] ?? null);
+    if (!latestPersistedTabs.includes(activeTab)) {
+      setPersistedActive(latestPersistedTabs[latestPersistedTabs.length - 1] ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistedTabs, activeTab]);
@@ -1109,26 +2037,14 @@ export function FileWorkspace({
         name === DESIGN_SYSTEM_TAB && !designSystemProject
           ? DESIGN_FILES_TAB
           : name;
-      onTabsStateChange(workspaceTabsState(persistedTabs, nextActive));
-      setActiveTab(nextActive);
+      setPersistedActive(nextActive);
       return;
     }
     if (isBrowserTabId(name) && browserTabs.some((tab) => tab.id === name)) {
-      onTabsStateChange(workspaceTabsState(persistedTabs, name));
-      setActiveTab(name);
+      setPersistedActive(name);
       return;
     }
-    const isNewTab = !persistedTabs.includes(name);
-    const nextBrowserTabs = isNewTab
-      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
-      : browserTabs;
-    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
-    onTabsStateChange(workspaceTabsState(
-      isNewTab ? [...persistedTabs, name] : persistedTabs,
-      name,
-      nextBrowserTabs,
-    ));
-    setActiveTab(name);
+    openFile(name, { forcePersist: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
 
@@ -1144,11 +2060,14 @@ export function FileWorkspace({
     if (!shareRequest) return;
     const name = shareRequest.name;
     if (!name) return;
-    commitTabsState(workspaceTabsState(
-      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
-      name,
-    ));
-    setActiveTab(name);
+    afterActiveManualEditSettles(() => {
+      const currentTabs = tabsStateRef.current.tabs;
+      commitTabsState(workspaceTabsState(
+        currentTabs.includes(name) ? currentTabs : [...currentTabs, name],
+        name,
+      ));
+      setActiveTab(name);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shareRequest]);
 
@@ -1159,11 +2078,14 @@ export function FileWorkspace({
     if (!downloadRequest) return;
     const name = downloadRequest.name;
     if (!name) return;
-    commitTabsState(workspaceTabsState(
-      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
-      name,
-    ));
-    setActiveTab(name);
+    afterActiveManualEditSettles(() => {
+      const currentTabs = tabsStateRef.current.tabs;
+      commitTabsState(workspaceTabsState(
+        currentTabs.includes(name) ? currentTabs : [...currentTabs, name],
+        name,
+      ));
+      setActiveTab(name);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [downloadRequest]);
 
@@ -1178,57 +2100,33 @@ export function FileWorkspace({
   const [slideNavDeliverableNonce, setSlideNavDeliverableNonce] = useState<number | null>(null);
   useEffect(() => {
     if (!isSlideNavDeliverableNow(slideNavRequest, persistedTabs)) return;
-    setSlideNavDeliverableNonce(slideNavRequest!.nonce);
-    setActiveTab(slideNavRequest!.name);
+    afterActiveManualEditSettles(() => {
+      setSlideNavDeliverableNonce(slideNavRequest!.nonce);
+      setActiveTab(slideNavRequest!.name);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideNavRequest]);
 
-  // Focus the Questions tab when the parent bumps the nonce (banner click in
-  // chat, or a freshly generated form). The tab is transient — not added to
-  // the persisted tab list.
-  useEffect(() => {
-    if (!focusQuestionsRequest) return;
-    setActiveTab(QUESTIONS_TAB);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusQuestionsRequest?.nonce]);
-
-  // Submitting from the right-hand panel should close the preview once. The
-  // answered form remains available, so a later chat-banner click can reopen
-  // the same Questions tab without this effect immediately closing it again.
-  const previousQuestionFormSubmittedAnswersRef = useRef(questionFormSubmittedAnswers);
-  useEffect(() => {
-    const wasAnswered = previousQuestionFormSubmittedAnswersRef.current !== undefined;
-    const isAnswered = questionFormSubmittedAnswers !== undefined;
-    previousQuestionFormSubmittedAnswersRef.current = questionFormSubmittedAnswers;
-    if (activeTab === QUESTIONS_TAB && !wasAnswered && isAnswered) {
-      setActiveTab(defaultRootTab);
-    }
-  }, [activeTab, defaultRootTab, questionFormSubmittedAnswers]);
-
-  // If the Questions tab is active but the form is gone because a new assistant
-  // turn has no form, fall back to the default root tab.
-  useEffect(() => {
-    if (activeTab === QUESTIONS_TAB && !showQuestionsTab) {
-      setActiveTab(defaultRootTab);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, showQuestionsTab]);
-
-  function openFile(name: string) {
-    setUploadError(null);
-    // Read from the ref, not the `persistedTabs` prop closure: this path is
-    // reached asynchronously from launcher "create" actions (after the daemon
-    // resolves a new terminal/side-chat id), so the closure could be stale and
-    // clobber tabs added in the meantime.
-    const currentTabs = tabsStateRef.current.tabs;
-    const isNewTab = !currentTabs.includes(name);
-    const nextBrowserTabs = isNewTab
-      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
-      : browserTabs;
-    const nextTabs = currentTabs.includes(name) ? currentTabs : [...currentTabs, name];
-    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
-    commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
-    setActiveTab(name);
+  function openFile(name: string, options?: { forcePersist?: boolean }) {
+    if (name === activeTab) return;
+    afterActiveManualEditSettles(() => {
+      setUploadError(null);
+      // Read from the ref after the async edit flush so a concurrent tab update
+      // cannot be overwritten by the activation that was waiting on it.
+      const currentTabs = tabsStateRef.current.tabs;
+      const shouldPersistTab =
+        options?.forcePersist === true || isPrimaryWorkspaceTab(name, visibleFiles, liveArtifactEntries, sketches);
+      const isNewTab = shouldPersistTab && !currentTabs.includes(name);
+      const nextBrowserTabs = isNewTab
+        ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+        : browserTabs;
+      const nextTabs = shouldPersistTab && !currentTabs.includes(name)
+        ? [...currentTabs, name]
+        : currentTabs;
+      if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
+      commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
+      setActiveTab(name);
+    });
   }
   openFileRef.current = openFile;
 
@@ -1284,19 +2182,13 @@ export function FileWorkspace({
     }
     if (isBrowserTabId(tabId)) {
       if (!browserTabs.some((tab) => tab.id === tabId)) return;
-      commitTabsState(workspaceTabsState(persistedTabs, tabId, browserTabs));
-      setActiveTab(tabId);
+      setPersistedActive(tabId);
       return;
     }
     openFile(tabId);
   }
 
   function activateWorkspaceTab(tabId: string) {
-    if (tabId === QUESTIONS_TAB) {
-      setUploadError(null);
-      setActiveTab(tabId);
-      return;
-    }
     const sketchEntry = sketches[tabId];
     if (sketchEntry && !sketchEntry.persisted) {
       setUploadError(null);
@@ -1328,10 +2220,6 @@ export function FileWorkspace({
   function closeActiveWorkspaceTab() {
     if (!workspaceTabIds.includes(activeTab)) return;
     if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
-    if (activeTab === QUESTIONS_TAB) {
-      setActiveTab(defaultRootTab);
-      return;
-    }
     if (isBrowserTabId(activeTab)) {
       closeBrowserTab(activeTab);
       return;
@@ -1346,16 +2234,27 @@ export function FileWorkspace({
   // each read the same stale `persistedTabs` prop and the second would clobber
   // the first.
   function openFileReplacing(openName: string, closeName: string) {
-    setUploadError(null);
-    const withoutClosed = persistedTabs.filter((tabName) => tabName !== closeName);
-    const nextTabs = withoutClosed.includes(openName)
-      ? withoutClosed
-      : [...withoutClosed, openName];
-    onTabsStateChange(workspaceTabsState(nextTabs, openName));
-    setActiveTab(openName);
+    afterActiveManualEditSettles(() => {
+      setUploadError(null);
+      const currentTabs = tabsStateRef.current.tabs;
+      const withoutClosed = currentTabs.filter((tabName) => tabName !== closeName);
+      const nextTabs = withoutClosed.includes(openName)
+        ? withoutClosed
+        : [...withoutClosed, openName];
+      commitTabsState(workspaceTabsState(nextTabs, openName));
+      setActiveTab(openName);
+    });
   }
 
   function closeTab(name: string) {
+    if (activeTabRef.current === name && manualEditExitHandlersRef.current.has(name)) {
+      afterActiveManualEditSettles(() => performCloseTab(name));
+      return;
+    }
+    performCloseTab(name);
+  }
+
+  function performCloseTab(name: string) {
     // Terminal tabs own a daemon PTY that now outlives unmount (so tab switches
     // reattach cheaply). An explicit Close is the one place we terminate it —
     // kill the LIVE session (which may differ from the tab's original id after
@@ -1363,7 +2262,10 @@ export function FileWorkspace({
     if (isTerminalTabId(name)) {
       const originalId = terminalIdFromTabId(name);
       const liveId = terminalLiveSessionsRef.current.get(originalId) ?? originalId;
-      void killTerminal(projectId, liveId, { keepalive: true });
+      void killTerminal(projectId, liveId, {
+        keepalive: true,
+        workspaceContext,
+      });
       terminalLiveSessionsRef.current.delete(originalId);
     }
     const sketchEntry = sketches[name];
@@ -1439,7 +2341,7 @@ export function FileWorkspace({
     const cohort = deriveUploadCohort(picked);
     let result: UploadProjectFilesResult;
     try {
-      result = await uploadProjectFiles(projectId, picked, uploadDir);
+      result = await uploadProjectFiles(projectId, picked, uploadDir, workspaceContext);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setUploadError(`Upload failed for ${picked.length} file(s) (${detail}).`);
@@ -1456,7 +2358,7 @@ export function FileWorkspace({
     if (result.uploaded.length > 0) {
       await onRefreshFiles();
       const lastUploaded = result.uploaded[result.uploaded.length - 1];
-      if (lastUploaded?.path) openFile(lastUploaded.path);
+      if (lastUploaded?.path) openFile(lastUploaded.path, { forcePersist: true });
     }
 
     if (result.failed.length > 0) {
@@ -1526,31 +2428,12 @@ export function FileWorkspace({
   // Browser-style tab bar: when the active tab changes (open from a chat
   // file chip, switch via Cmd+P, etc.), scroll it into view so the user
   // can always see what they have selected even when the strip overflows.
-  // The Design Files entry is already sticky-pinned, so we only scroll
-  // for real workspace tabs. Issue #775.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === QUESTIONS_TAB) return;
     const tabBar = tabsBarRef.current;
     if (!tabBar) return;
     const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
     if (!el) return;
-    // The Design Files tab is sticky-pinned to the scrollport's left
-    // edge (index.css:.ws-tab.design-files-tab), so a naive scrollIntoView
-    // with inline: 'nearest' would slide a leftward-jumped active tab
-    // flush with that edge and leave it hidden underneath the sticky
-    // panel. Compute scrollLeft manually instead, treating the sticky
-    // tab's right edge as the effective visible-left boundary.
-    const tabRect = el.getBoundingClientRect();
-    const barRect = tabBar.getBoundingClientRect();
-    const stickyEl = tabBar.querySelector<HTMLElement>('.ws-tab.design-files-tab');
-    const stickyWidth = stickyEl ? stickyEl.getBoundingClientRect().width : 0;
-    const visibleLeft = barRect.left + stickyWidth;
-    const visibleRight = barRect.right;
-    if (tabRect.left < visibleLeft) {
-      tabBar.scrollLeft += tabRect.left - visibleLeft;
-    } else if (tabRect.right > visibleRight) {
-      tabBar.scrollLeft += tabRect.right - visibleRight;
-    }
+    scrollWorkspaceTabIntoView(tabBar, el);
   }, [activeTab]);
 
   // Browser-style shortcuts for the high-frequency Design Files workspace
@@ -1641,8 +2524,9 @@ export function FileWorkspace({
   }, [quickSwitcherOpen]);
 
   async function handleDelete(name: string) {
+    if (viewerOnly) return; // read-only viewer of a team-shared project
     if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
-    const ok = await deleteProjectFile(projectId, name);
+    const ok = await deleteProjectFile(projectId, name, workspaceContext);
     if (ok) {
       await onRefreshFiles();
       const nextTabs = persistedTabs.filter((n) => n !== name);
@@ -1672,12 +2556,13 @@ export function FileWorkspace({
   }
 
   async function handleDeleteMany(names: string[]) {
+    if (viewerOnly) return; // read-only viewer of a team-shared project
     if (names.length === 0) return;
     if (!confirm(t('workspace.deleteSelectedFilesConfirm', { n: names.length }))) return;
     const deleted: string[] = [];
     const failed: string[] = [];
     for (const name of names) {
-      const ok = await deleteProjectFile(projectId, name);
+      const ok = await deleteProjectFile(projectId, name, workspaceContext);
       if (ok) deleted.push(name);
       else failed.push(name);
     }
@@ -1710,6 +2595,7 @@ export function FileWorkspace({
   }
 
   async function handleRename(oldName: string, nextName: string): Promise<ProjectFile | null> {
+    if (viewerOnly) return null; // read-only viewer of a team-shared project
     const hasPendingSketchConflict = Object.entries(sketches).some(
       ([name, sketch]) => !sketch.persisted && sameFileName(name, nextName),
     );
@@ -1719,7 +2605,7 @@ export function FileWorkspace({
       );
     }
 
-    const result = await renameProjectFile(projectId, oldName, nextName);
+    const result = await renameProjectFile(projectId, oldName, nextName, workspaceContext);
     const renamed = result.file;
     await onRefreshFiles();
     await refreshProjectFolders();
@@ -1791,11 +2677,53 @@ export function FileWorkspace({
 
   async function createMarkdownDocument() {
     const target = nextMarkdownDocumentPath(files, uploadDir);
-    const file = await writeProjectTextFile(projectId, target, initialMarkdownDocument(target, projectKind, t));
+    const file = await writeProjectTextFile(
+      projectId,
+      target,
+      initialMarkdownDocument(target, projectKind, t),
+      undefined,
+      workspaceContext,
+    );
     if (!file) return;
     await onRefreshFiles();
     await refreshProjectFolders();
-    openFile(file.name);
+    openFile(file.name, { forcePersist: true });
+  }
+
+  async function createBlankPage(presetId: ProjectPagePresetId) {
+    if (pageCreating) return;
+    const preset = projectPagePresetById(presetId, projectPagePresets) ?? projectPagePresets[0] ?? PROJECT_PAGE_PRESETS[0]!;
+    const target = nextHtmlPagePath(visibleFiles, pagePresetFileBaseName(preset, t, locale));
+    setPageCreating(true);
+    try {
+      const content = await contentForPagePreset(
+        target,
+        preset,
+        t,
+        locale,
+        workspaceContext,
+      );
+      const file = await writeProjectTextFile(projectId, target, content, {
+        versionSource: 'manual',
+        versionPrompt: pagePresetVersionPrompt(preset, t, locale),
+      }, workspaceContext);
+      if (!file) {
+        // Never let a failed create read as a silent no-op click.
+        setLauncherToast({ message: t('workspace.pageCreateFailed'), tone: 'error' });
+        return;
+      }
+      setPageCreatorOpen(false);
+      setPageCreatorQuery('');
+      setPageCreatorCategory('slides');
+      await onRefreshFiles();
+      await refreshProjectFolders();
+      openFile(file.name, { forcePersist: true });
+    } catch (err) {
+      console.error('[pages] create blank page failed:', err);
+      setLauncherToast({ message: t('workspace.pageCreateFailed'), tone: 'error' });
+    } finally {
+      setPageCreating(false);
+    }
   }
 
   const activeSketchFile = useMemo(() => {
@@ -1934,7 +2862,7 @@ export function FileWorkspace({
     const startedAt = Date.now();
     let result: boolean | undefined;
     try {
-      const file = await writeProjectTextFile(projectId, name, text);
+      const file = await writeProjectTextFile(projectId, name, text, undefined, workspaceContext);
       const elapsed = Date.now() - startedAt;
       // Ensures saving UI shows so the button does not flicker
       if (showSaving && elapsed < 500) await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
@@ -2065,7 +2993,7 @@ export function FileWorkspace({
   ): Promise<{ fileName: string } | false> {
     const targetDir = parentDirForProjectFile(sketchName);
     const targetName = targetDir ? `${targetDir}/${imageFileName}` : imageFileName;
-    const file = await writeProjectBase64File(projectId, targetName, base64);
+    const file = await writeProjectBase64File(projectId, targetName, base64, workspaceContext);
     if (!file) {
       setUploadError(t('common.exportImageFailed'));
       return false;
@@ -2080,7 +3008,6 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
-      || activeTab === QUESTIONS_TAB
       || isBrowserTabId(activeTab)
     ) return null;
     const onDisk = visibleFiles.find((f) => f.name === activeTab);
@@ -2099,16 +3026,369 @@ export function FileWorkspace({
     }
     return null;
   }, [activeTab, visibleFiles, sketches]);
+  const activeViewerFile =
+    activeFile && !(activeFile.kind === 'sketch' && isSketchName(activeFile.name))
+      ? activeFile
+      : null;
+  const activeHtmlViewerFile = activeViewerFile?.kind === 'html' ? activeViewerFile : null;
+  const htmlViewerFileSnapshotsRef = useRef<{
+    projectId: string;
+    files: Map<string, ProjectFile>;
+  }>({ projectId, files: new Map() });
+  if (htmlViewerFileSnapshotsRef.current.projectId !== projectId) {
+    htmlViewerFileSnapshotsRef.current = { projectId, files: new Map() };
+  }
+  const htmlViewerFileSnapshots = htmlViewerFileSnapshotsRef.current.files;
+  for (const candidate of visibleFiles) {
+    if (candidate.kind !== 'html') continue;
+    // Hidden viewers keep the last file revision they actually rendered.
+    // Updating mtime under an inactive iframe changes its src and defeats the
+    // keep-alive. Adopt the newest revision exactly when that tab activates.
+    if (
+      candidate.name === activeHtmlViewerFile?.name
+      || !htmlViewerFileSnapshots.has(candidate.name)
+    ) {
+      htmlViewerFileSnapshots.set(candidate.name, candidate);
+    }
+  }
+  useEffect(() => {
+    setLiveHtmlViewerFileNames([]);
+    setProtectedHtmlViewerFileNames(new Set());
+  }, [projectId]);
+  useEffect(() => {
+    if (!activeHtmlViewerFile) return;
+    setLiveHtmlViewerFileNames((current) => [
+      activeHtmlViewerFile.name,
+      ...current.filter((name) => name !== activeHtmlViewerFile.name),
+    ].slice(0, HTML_VIEWER_KEEPALIVE_CAP));
+  }, [activeHtmlViewerFile?.name, projectId]);
+  useEffect(() => {
+    setLiveHtmlViewerFileNames((current) => {
+      const openHtmlNames = new Set(persistedTabs);
+      const next = current.filter((name) => openHtmlNames.has(name));
+      return next.length === current.length ? current : next;
+    });
+    setProtectedHtmlViewerFileNames((current) => {
+      const openNames = new Set(persistedTabs);
+      const next = new Set([...current].filter((name) => openNames.has(name)));
+      return next.size === current.size ? current : next;
+    });
+    for (const name of htmlViewerFileSnapshots.keys()) {
+      if (!persistedTabs.includes(name)) htmlViewerFileSnapshots.delete(name);
+    }
+  }, [persistedTabs]);
+  const committedHtmlFileNames = useMemo(
+    () => new Set(visibleFiles.filter((file) => file.kind === 'html').map((file) => file.name)),
+    [visibleFiles],
+  );
+  const effectiveFilesGeneration = filesGeneration ?? 0;
+  const pendingDeletedManualEditRef = useRef<Map<string, {
+    projectId: string;
+    witnessGeneration: number;
+    status: 'settling' | 'revalidating' | 'accepted' | 'failed';
+    acceptedGeneration?: number;
+    failedWitnessGeneration?: number;
+  }>>(new Map());
+  const effectiveFilesGenerationRef = useRef(effectiveFilesGeneration);
+  effectiveFilesGenerationRef.current = effectiveFilesGeneration;
+  const [pendingDeletedManualEditRevision, setPendingDeletedManualEditRevision] = useState(0);
+  useEffect(() => {
+    for (const name of committedHtmlFileNames) {
+      const pendingDecision = pendingDeletedManualEditRef.current.get(name);
+      // A successful manual save can trigger its ordinary (cached) file-list
+      // refresh before safeExit resolves. Do not let that intermediate response
+      // cancel the mandatory fresh R2 revalidation while R1 is still settling.
+      if (
+        !pendingDecision
+        || pendingDecision.projectId !== projectId
+        || (
+          pendingDecision.status === 'failed'
+          && pendingDecision.failedWitnessGeneration != null
+          && effectiveFilesGeneration > pendingDecision.failedWitnessGeneration
+        )
+        || (
+          pendingDecision.status === 'accepted'
+          && pendingDecision.acceptedGeneration != null
+          && effectiveFilesGeneration >= pendingDecision.acceptedGeneration
+        )
+      ) {
+        pendingDeletedManualEditRef.current.delete(name);
+      }
+    }
+
+    const missingNames = [...htmlViewerFileSnapshots.keys()].filter(
+      (name) => !committedHtmlFileNames.has(name),
+    );
+    const purgeNames = (names: string[]) => {
+      if (names.length === 0) return;
+      const removed = new Set(names);
+      setLiveHtmlViewerFileNames((current) => current.filter((name) => !removed.has(name)));
+      setProtectedHtmlViewerFileNames((current) => new Set(
+        [...current].filter((name) => !removed.has(name)),
+      ));
+      for (const name of names) {
+        htmlViewerFileSnapshots.delete(name);
+        pendingDeletedManualEditRef.current.delete(name);
+      }
+      iframeKeepAlivePool.evictMatching(
+        (entry) => entry.projectId === projectId && names.some(
+          (name) => entry.fileName === name || entry.fileName.startsWith(`${name}:`),
+        ),
+      );
+    };
+
+    for (const name of missingNames) {
+      // Some parent transitions can temporarily render an empty list without
+      // committing a new file-list observation. In that state an open tab is
+      // still the stronger witness: only a supplied, advanced generation may
+      // prove that the file is actually gone. Explicit tab removal is handled
+      // by the persisted-tabs cleanup effect above.
+      if (filesGeneration == null && persistedTabs.includes(name)) continue;
+      const pendingDecision = pendingDeletedManualEditRef.current.get(name);
+      if (pendingDecision) {
+        if (
+          pendingDecision.projectId === projectId
+          && pendingDecision.status === 'accepted'
+          && pendingDecision.acceptedGeneration != null
+          && effectiveFilesGeneration >= pendingDecision.acceptedGeneration
+        ) {
+          purgeNames([name]);
+        } else if (
+          pendingDecision.projectId === projectId
+          && pendingDecision.status === 'failed'
+          && pendingDecision.failedWitnessGeneration != null
+          && effectiveFilesGeneration > pendingDecision.failedWitnessGeneration
+        ) {
+          purgeNames([name]);
+        }
+        continue;
+      }
+      if (!protectedHtmlViewerFileNames.has(name)) {
+        purgeNames([name]);
+        continue;
+      }
+      if (!manualEditExitHandlersRef.current.has(name)) {
+        purgeNames([name]);
+        continue;
+      }
+      const decision = {
+        projectId,
+        witnessGeneration: effectiveFilesGeneration,
+        status: 'settling' as const,
+      };
+      pendingDeletedManualEditRef.current.set(name, decision);
+      void settleManualEdit(name).then((ok) => {
+        if (pendingDeletedManualEditRef.current.get(name) !== decision) return;
+        if (!ok) {
+          pendingDeletedManualEditRef.current.delete(name);
+          return;
+        }
+        const revalidatingDecision = { ...decision, status: 'revalidating' as const };
+        pendingDeletedManualEditRef.current.set(name, revalidatingDecision);
+        // The fallback witness starts when R2 starts, after safeExit has awaited
+        // any ordinary save-triggered refresh. That already-accepted response
+        // must not immediately count as the later authority after R2 fails.
+        const failedWitnessGeneration = effectiveFilesGenerationRef.current;
+        // The save may recreate a file that the R1 list observed as missing.
+        // Force an uncached R2 observation and bind the deletion decision to
+        // that exact accepted generation. An ordinary save-triggered refresh
+        // may finish first (or a later refresh may overtake R2); neither is
+        // evidence that R2 still observed the file as missing.
+        void (async () => {
+          const markRevalidationFailed = () => {
+            if (pendingDeletedManualEditRef.current.get(name) !== revalidatingDecision) return;
+            pendingDeletedManualEditRef.current.set(name, {
+              ...revalidatingDecision,
+              status: 'failed',
+              failedWitnessGeneration,
+            });
+            setPendingDeletedManualEditRevision((current) => current + 1);
+          };
+          try {
+            const result = await onRefreshFiles({ fresh: true });
+            if (pendingDeletedManualEditRef.current.get(name) !== revalidatingDecision) return;
+            const acceptedGeneration = result?.acceptedGeneration;
+            if (acceptedGeneration == null) {
+              markRevalidationFailed();
+              return;
+            }
+            pendingDeletedManualEditRef.current.set(name, {
+              ...revalidatingDecision,
+              status: 'accepted',
+              acceptedGeneration,
+            });
+            setPendingDeletedManualEditRevision((current) => current + 1);
+          } catch {
+            // A failed revalidation is not proof of deletion. Keep the viewer
+            // until a later accepted generation can decide.
+            markRevalidationFailed();
+          }
+        })();
+      });
+    }
+  }, [committedHtmlFileNames, effectiveFilesGeneration, filesGeneration, iframeKeepAlivePool, onRefreshFiles, pendingDeletedManualEditRevision, persistedTabs, projectId, protectedHtmlViewerFileNames, settleManualEdit]);
+  const mountedHtmlViewerFiles = useMemo(() => {
+    const candidates = activeHtmlViewerFile
+        ? [
+            activeHtmlViewerFile.name,
+            ...protectedHtmlViewerFileNames,
+            ...liveHtmlViewerFileNames.filter((name) => name !== activeHtmlViewerFile.name),
+          ]
+        : [...protectedHtmlViewerFileNames, ...liveHtmlViewerFileNames];
+    // Manual Edit is exited (and pending edits flushed) before activation can
+    // leave a tab. Protected viewers are prioritized but never bypass the hard
+    // cap, so a regression cannot create an unbounded iframe population.
+    const retainedNames = new Set([...new Set(candidates)].slice(0, HTML_VIEWER_KEEPALIVE_CAP));
+    // LRU order is eviction metadata, not DOM order. Reordering an iframe's
+    // connected ancestor makes Chromium navigate the frame again, so render
+    // retained viewers in the stable persisted-tab order while switching.
+    return persistedTabs
+      .filter((name) => retainedNames.has(name))
+      .map((name) => htmlViewerFileSnapshots.get(name))
+      .filter((file): file is ProjectFile => file != null);
+  }, [activeHtmlViewerFile, liveHtmlViewerFileNames, persistedTabs, protectedHtmlViewerFileNames, visibleFiles]);
+  const mountedHtmlViewerNames = mountedHtmlViewerFiles.map((file) => file.name);
+  const previousMountedHtmlViewersRef = useRef({ projectId, names: new Set<string>() });
+  useEffect(() => {
+    const next = new Set(mountedHtmlViewerNames);
+    const previous = previousMountedHtmlViewersRef.current;
+    if (previous.projectId !== projectId) {
+      iframeKeepAlivePool.evictProject(previous.projectId);
+    } else {
+      for (const name of previous.names) {
+        if (next.has(name)) continue;
+        iframeKeepAlivePool.evictMatching(
+          (entry) => entry.projectId === projectId && (
+            entry.fileName === name || entry.fileName.startsWith(`${name}:`)
+          ),
+        );
+      }
+    }
+    previousMountedHtmlViewersRef.current = { projectId, names: next };
+  }, [iframeKeepAlivePool, mountedHtmlViewerNames.join('\0'), projectId]);
+  const retainedNonHtmlViewerFileRef = useRef<{ projectId: string; fileName: string } | null>(null);
+  if (activeViewerFile && activeViewerFile.kind !== 'html') {
+    retainedNonHtmlViewerFileRef.current = { projectId, fileName: activeViewerFile.name };
+  }
+  const retainedNonHtmlViewerFile =
+    activeTab === DESIGN_FILES_TAB && retainedNonHtmlViewerFileRef.current?.projectId === projectId
+      ? visibleFiles.find((file) => file.name === retainedNonHtmlViewerFileRef.current?.fileName) ?? null
+      : null;
+  const viewerFile = activeViewerFile?.kind === 'html'
+    ? null
+    : activeViewerFile ?? retainedNonHtmlViewerFile;
+  const viewerFileActive = activeViewerFile !== null;
 
   const activeLiveArtifact = useMemo<LiveArtifactWorkspaceEntry | null>(() => {
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
-      || activeTab === QUESTIONS_TAB
       || isBrowserTabId(activeTab)
     ) return null;
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
   }, [activeTab, liveArtifactEntries]);
+
+  const activeTabHasRenderableSurface =
+    (activeTab === DESIGN_SYSTEM_TAB && Boolean(designSystemProject))
+    || (isBrowserTabId(activeTab) && browserTabs.some((tab) => tab.id === activeTab))
+    || isTerminalTabId(activeTab)
+    || (isSideChatTabId(activeTab) && Boolean(chatConfig) && Boolean(chatAgentsById))
+    || activeLiveArtifact !== null
+    || activeFile !== null;
+  // A persisted file tab can outlive its file. The tab strip hides that stale
+  // entry, so keeping it as the visual active target would leave the fixed
+  // Design Files tab as the only visible tab while the body tells the user to
+  // open Design Files. Treat the root as the display fallback without erasing
+  // persisted state: an in-flight file refresh may still restore the target.
+  const designFilesTabActive =
+    activeTab === DESIGN_FILES_TAB || !activeTabHasRenderableSurface;
+
+  // Identity-stable props for the memoized FileViewer. Without these, every
+  // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
+  // toggles) would hand FileViewer fresh object/function identities and drag
+  // the whole viewer subtree — live iframes included — through a re-render.
+  const previewCommentsByFile = useMemo(() => {
+    const byFile = new Map<string, PreviewComment[]>();
+    for (const comment of previewComments) {
+      const comments = byFile.get(comment.filePath) ?? [];
+      comments.push(comment);
+      byFile.set(comment.filePath, comments);
+    }
+    return byFile;
+  }, [previewComments]);
+  const activeFileShareRequest = useMemo(
+    () => (shareRequest ? { name: shareRequest.name, request: { nonce: shareRequest.nonce } } : null),
+    [shareRequest],
+  );
+  const activeFileDownloadRequest = useMemo(
+    () => (downloadRequest ? { name: downloadRequest.name, request: { nonce: downloadRequest.nonce } } : null),
+    [downloadRequest],
+  );
+  const activeFileSlideNavRequest = useMemo(
+    () => ({
+      name: activeViewerFile?.name ?? null,
+      request: deliverableSlideNavForActiveFile(
+        slideNavRequest,
+        activeViewerFile?.name,
+        slideNavDeliverableNonce,
+      ),
+    }),
+    [slideNavRequest, activeViewerFile?.name, slideNavDeliverableNonce],
+  );
+  const stableOpenFileReplacing = useStableHandler(openFileReplacing);
+  const renderFileViewer = (file: ProjectFile, workspaceActive: boolean) => (
+    <FileViewer
+      projectId={projectId}
+      projectKind={projectKind}
+      file={file}
+      filesRefreshKey={filesRefreshKey}
+      isDeck={isDeck}
+      streaming={streaming}
+      commentQueueOnSend={commentQueueOnSend}
+      commentSendDisabled={commentSendDisabled}
+      previewComments={previewCommentsByFile.get(file.name) ?? NO_PREVIEW_COMMENTS}
+      onSavePreviewComment={onSavePreviewComment}
+      onRemovePreviewComment={onRemovePreviewComment}
+      onReorderPreviewComment={onReorderPreviewComment}
+      onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+      onBrandExtractionStopRequest={
+        file.name === 'brand.html' ? onBrandExtractionStopRequest : undefined
+      }
+      onFileSaved={refreshFilesWithoutResult}
+      onOpenFileReplacing={stableOpenFileReplacing}
+      commentPortalId={workspaceActive ? commentPortalId : undefined}
+      onCommentModeChange={workspaceActive ? onCommentModeChange : undefined}
+      shareRequest={
+        viewerOnly || activeFileShareRequest?.name !== file.name
+          ? null
+          : activeFileShareRequest.request
+      }
+      downloadRequest={
+        viewerOnly || activeFileDownloadRequest?.name !== file.name
+          ? null
+          : activeFileDownloadRequest.request
+      }
+      viewerOnly={viewerOnly}
+      slideNavRequest={
+        activeFileSlideNavRequest.name === file.name
+          ? activeFileSlideNavRequest.request
+          : null
+      }
+      projectName={projectName}
+      projectDir={resolvedDir}
+      agents={handoffAgents}
+      artifactId={handoffArtifactId}
+      artifactKind={handoffArtifactKind}
+      metricsConsent={metricsConsent}
+      installationId={installationId}
+      workspaceActive={workspaceActive}
+      onRetainActivityChange={handleHtmlViewerRetainActivityChange}
+      onManualEditExitHandlerChange={handleManualEditExitHandlerChange}
+      manualEditEntryAllowed={
+        protectedHtmlViewerFileNames.size === 0 || protectedHtmlViewerFileNames.has(file.name)
+      }
+    />
+  );
 
   const activeWorkspaceContext = useMemo<WorkspaceContextItem | null>(() => {
     if (activeTab === DESIGN_SYSTEM_TAB && designSystemProject) {
@@ -2119,7 +3399,7 @@ export function FileWorkspace({
         tabId: activeTab,
       };
     }
-    if (activeTab === DESIGN_FILES_TAB) {
+    if (designFilesTabActive) {
       // Nothing to reference yet — don't auto-stage an empty "Design files" chip.
       if (designFilesTabIsEmpty) return null;
       const trimmedDir = uploadDir.trim();
@@ -2128,7 +3408,7 @@ export function FileWorkspace({
         id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
         kind: trimmedDir ? 'folder' : 'design-files',
         label,
-        tabId: activeTab,
+        tabId: DESIGN_FILES_TAB,
         ...(trimmedDir ? { path: trimmedDir } : {}),
         ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, trimmedDir) } : {}),
       };
@@ -2194,6 +3474,7 @@ export function FileWorkspace({
     browserTabs,
     conversations,
     designFilesTabIsEmpty,
+    designFilesTabActive,
     designSystemProject,
     resolvedDir,
     t,
@@ -2222,16 +3503,107 @@ export function FileWorkspace({
     [browserTabs, tabNames],
   );
 
+  const visibleOrderedWorkspaceTabs = useMemo(
+    () =>
+      orderedWorkspaceTabs.filter((entry) => {
+        if (entry.kind === 'browser') return true;
+        return isPrimaryWorkspaceTab(entry.name, visibleFiles, liveArtifactEntries, sketches);
+      }),
+    [liveArtifactEntries, orderedWorkspaceTabs, sketches, visibleFiles],
+  );
+
   const workspaceTabIds = useMemo(() => {
     const ids: string[] = [];
     if (designSystemProject) ids.push(DESIGN_SYSTEM_TAB);
     ids.push(DESIGN_FILES_TAB);
-    if (showQuestionsTab) ids.push(QUESTIONS_TAB);
-    for (const entry of orderedWorkspaceTabs) {
+    for (const entry of visibleOrderedWorkspaceTabs) {
       ids.push(entry.kind === 'browser' ? entry.browserTab.id : entry.name);
     }
     return ids;
-  }, [designSystemProject, orderedWorkspaceTabs, showQuestionsTab]);
+  }, [designSystemProject, visibleOrderedWorkspaceTabs]);
+
+  // Per-tab handler sets with stable identities. Tab is memoized; the inline
+  // closures the strip map used to create handed every Tab fresh props on
+  // each FileWorkspace render, turning the memo into a no-op. Handlers
+  // delegate through a post-commit ref (see useStableHandler for the timing
+  // contract) so they always execute against the latest committed state.
+  const tabItemActions = {
+    activate(key: string) {
+      if (isBrowserTabId(key)) {
+        setPersistedActive(key);
+        return;
+      }
+      const sketchEntry = sketches[key];
+      if (sketchEntry && !sketchEntry.persisted) activatePending(key);
+      else setPersistedActive(key);
+    },
+    close(key: string) {
+      if (isBrowserTabId(key)) closeBrowserTab(key);
+      else closeTab(key);
+    },
+    dragStart(key: string, event: ReactDragEvent<HTMLDivElement>) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', key);
+      draggedTabNameRef.current = key;
+      setDraggedTabName(key);
+    },
+    dragOver(key: string, event: ReactDragEvent<HTMLDivElement>) {
+      const currentDraggedName = draggedTabNameRef.current ?? draggedTabName;
+      if (!currentDraggedName || currentDraggedName === key) return;
+      if (!persistedTabs.includes(currentDraggedName)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      const edge = tabDropEdgeFromEvent(event);
+      setDragOverTab((current) =>
+        current?.name === key && current.edge === edge
+          ? current
+          : { name: key, edge },
+      );
+    },
+    dragLeave(key: string) {
+      setDragOverTab((current) => (current?.name === key ? null : current));
+    },
+    drop(key: string, event: ReactDragEvent<HTMLDivElement>) {
+      event.preventDefault();
+      const draggedName = draggedTabNameRef.current || draggedTabName;
+      if (draggedName) {
+        reorderPersistedTab(draggedName, key, tabDropEdgeFromEvent(event));
+      }
+      clearTabDragState();
+    },
+    dragEnd() {
+      clearTabDragState();
+    },
+  };
+  const tabItemActionsRef = useRef(tabItemActions);
+  useEffect(() => {
+    tabItemActionsRef.current = tabItemActions;
+  });
+  const tabHandlersByKeyRef = useRef(new Map<string, WorkspaceTabItemHandlers>());
+  function tabHandlersFor(key: string): WorkspaceTabItemHandlers {
+    const map = tabHandlersByKeyRef.current;
+    let handlers = map.get(key);
+    if (!handlers) {
+      handlers = {
+        onActivate: () => tabItemActionsRef.current.activate(key),
+        onClose: () => tabItemActionsRef.current.close(key),
+        onDragStart: (event) => tabItemActionsRef.current.dragStart(key, event),
+        onDragOver: (event) => tabItemActionsRef.current.dragOver(key, event),
+        onDragLeave: () => tabItemActionsRef.current.dragLeave(key),
+        onDrop: (event) => tabItemActionsRef.current.drop(key, event),
+        onDragEnd: () => tabItemActionsRef.current.dragEnd(),
+      };
+      map.set(key, handlers);
+    }
+    return handlers;
+  }
+  useEffect(() => {
+    const alive = new Set(workspaceTabIds);
+    const map = tabHandlersByKeyRef.current;
+    for (const key of [...map.keys()]) {
+      if (!alive.has(key)) map.delete(key);
+    }
+  }, [workspaceTabIds]);
 
   const workspaceContexts = useMemo<WorkspaceContextItem[]>(() => {
     const out: WorkspaceContextItem[] = [];
@@ -2361,15 +3733,6 @@ export function FileWorkspace({
     const measure = () => {
       frame = 0;
       setTabsOverflowing(tabBar.scrollWidth > tabBar.clientWidth + 1);
-      // Pin the sticky Design Files tab to the exact right edge of the sticky
-      // Design System tab (its real, locale-dependent width + the 2px flex gap),
-      // so the two read as adjacent instead of leaving a hardcoded-offset gap.
-      const systemTab = tabBar.querySelector<HTMLElement>('.ws-tab.design-system-tab');
-      if (systemTab) {
-        tabBar.style.setProperty('--ds-system-tab-w', `${Math.round(systemTab.offsetWidth) + 2}px`);
-      } else {
-        tabBar.style.removeProperty('--ds-system-tab-w');
-      }
     };
     const requestMeasure = () => {
       if (frame) window.cancelAnimationFrame(frame);
@@ -2390,6 +3753,42 @@ export function FileWorkspace({
     };
   }, [browserTabs.length, designSystemProject, tabNames.length]);
 
+  useEffect(() => {
+    if (!projectShareMenuOpen) return;
+    const onDocClick = (event: MouseEvent) => {
+      if (!projectShareRef.current) return;
+      if (!projectShareRef.current.contains(event.target as Node)) {
+        setProjectShareMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setProjectShareMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [projectShareMenuOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId, workspaceContext).then((shared) => {
+      if (!cancelled) setProjectShareAccess(shared ? 'workspace' : 'private');
+    });
+    refreshShareAccess();
+    window.addEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
+    };
+  }, [projectId, projectShareMenuOpen, workspaceContext]);
+
+  useEffect(() => {
+    if (!projectShareMenuOpen) setProjectShareAccessMenuOpen(false);
+  }, [projectShareMenuOpen]);
+
   const isActiveSketch = activeFile?.kind === 'sketch' && isSketchName(activeFile.name);
   const activeSketch = activeFile && isActiveSketch ? sketches[activeFile.name] : null;
   // The "+" launcher's create-new actions come from the registry. `openTab`
@@ -2407,6 +3806,10 @@ export function FileWorkspace({
     // Browser is owned by this branch's DesignBrowserPanel: spin up a browser
     // tab synchronously (no daemon round-trip) and let the launcher close.
     createBrowser: () => openBrowserTab(),
+    // "New blank page" lives in the "+" launcher: the tab strip's Design Files
+    // entry is a plain tab, so this is the only entry point to the page
+    // creator. The dialog itself still owns the actual write (createBlankPage).
+    createPage: () => setPageCreatorOpen(true),
     createSketch: () => void startNewSketch(),
     createDocument: () => void createMarkdownDocument(),
     uploadDesignFiles: () => fileInputRef.current?.click(),
@@ -2415,24 +3818,81 @@ export function FileWorkspace({
     // Surface a toast when the daemon can't start one (e.g. node-pty not
     // compiled) instead of silently no-opping the launcher action.
     createTerminal: async () => {
-      const term = await createTerminal(projectId);
+      const term = await createTerminal(projectId, undefined, workspaceContext);
       if (!term) {
-        setLauncherToast(t('workspace.terminalStartFailed'));
+        setLauncherToast({ message: t('workspace.terminalStartFailed'), tone: 'error' });
         return null;
       }
       return term.id;
     },
   };
-  const launcherActions = buildLauncherActions(launcherContext);
+  // A read-only viewer gets no launcher edit actions (new file, import, etc.).
+  const launcherActions = viewerOnly ? [] : buildLauncherActions(launcherContext);
+  // Crossing the team-space boundary routes through the shared 转入/移出
+  // 团队空间 confirmation (same dialog + 不再提示 skip key as the project
+  // grid) instead of silently moving the project.
+  function setProjectWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
+    setProjectShareAccessMenuOpen(false);
+    if (nextAccess === projectShareAccess || projectShareBusy || viewerOnly) return;
+    if (moveConfirmSkipped()) {
+      void commitProjectWorkspaceShareAccess(nextAccess);
+      return;
+    }
+    setProjectShareConfirm(nextAccess);
+  }
+
+  async function commitProjectWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
+    if (projectShareBusy) return;
+    setProjectShareBusy(true);
+    try {
+      await moveWorkspaceProject({
+        projectId,
+        visibility: nextAccess === 'workspace' ? 'team' : 'personal',
+        workspaceContext,
+      });
+      setProjectShareAccess(nextAccess);
+      notifyTeamProjectsChanged();
+      setLauncherToast({
+        message:
+          nextAccess === 'workspace'
+            ? t('fileViewer.workspaceShareSuccess')
+            : t('fileViewer.workspaceUnshareSuccess'),
+        tone: 'success',
+      });
+    } catch (error) {
+      console.warn('[FileWorkspace] failed to update workspace project sharing', error);
+      setLauncherToast({
+        message:
+          nextAccess === 'workspace'
+            ? t('fileViewer.workspaceShareFailed')
+            : t('fileViewer.workspaceUnshareFailed'),
+        tone: 'error',
+      });
+    } finally {
+      setProjectShareBusy(false);
+    }
+  }
 
   return (
     <div
       className={[
         'workspace',
         designSystemProject ? 'has-design-system-tab' : '',
+        browserSnapshotToast ? 'has-browser-snapshot-toast' : '',
       ].filter(Boolean).join(' ')}
       data-testid="file-workspace"
     >
+      {projectShareConfirm ? (
+        <MoveToTeamConfirmDialog
+          action={projectShareConfirm === 'workspace' ? 'to-team' : 'to-personal'}
+          onCancel={() => setProjectShareConfirm(null)}
+          onConfirm={() => {
+            const next = projectShareConfirm;
+            setProjectShareConfirm(null);
+            if (next) void commitProjectWorkspaceShareAccess(next);
+          }}
+        />
+      ) : null}
       <SketchEnginePrewarm />
       <div className="ws-tabs-shell">
         {onFocusModeChange && focusMode ? (
@@ -2450,11 +3910,22 @@ export function FileWorkspace({
             <Icon name="chevron-right" size={15} />
           </button>
         ) : null}
+        {/* Focus mode keeps the project tab strip on this same row (the chat
+            column — its usual dock — is collapsed): the strip portals in here,
+            between the expand-chat control and the file tabs, so the chrome
+            row above stays Home + account only. See workspaceTabsDock.ts. */}
+        {focusMode ? (
+          <div
+            className="ws-tabs-project-dock"
+            data-testid="workspace-tabs-dock-focus"
+            ref={focusTabsDockRef}
+          />
+        ) : null}
         <div
           ref={tabsBarRef}
           className={`ws-tabs-bar${tabsOverflowing ? ' is-overflowing' : ''}`}
           role="tablist"
-          aria-label={t('workspace.designFiles')}
+          aria-label={t('workspace.pages')}
           onWheel={(event) => {
             // Translate vertical wheel into horizontal tab scroll so Windows
             // mouse-wheel users (no horizontal wheel/trackpad) can reach
@@ -2474,7 +3945,7 @@ export function FileWorkspace({
             clearTabDragState();
           }}
         >
-          {designSystemProject ? (
+          {!initialMaterializationPending && designSystemProject ? (
             <button
               type="button"
               className={`ws-tab design-system-tab ${activeTab === DESIGN_SYSTEM_TAB ? 'active' : ''}`}
@@ -2493,51 +3964,40 @@ export function FileWorkspace({
           ) : null}
           <button
             type="button"
-            className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
+            className={`ws-tab design-files-tab ${initialMaterializationPending || designFilesTabActive ? 'active' : ''}`}
             role="tab"
-            aria-selected={activeTab === DESIGN_FILES_TAB}
+            aria-selected={initialMaterializationPending || designFilesTabActive}
+            aria-label={designFilesTabTitle}
             tabIndex={0}
             data-testid="design-files-tab"
             onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
-            title={t('workspace.designFiles')}
+            title={designFilesTabTitle}
           >
             <span className="tab-icon" aria-hidden>
-              <Icon name="grid" size={13} />
+              {fileSyncBadge ? (
+                <FileSyncBadge state={fileSyncBadge} size={14} />
+              ) : (
+                <Icon name="grid" size={14} />
+              )}
             </span>
-            <span className="ws-tab-label">{t('workspace.designFiles')}</span>
+            <span className="ws-tab-label">{designFilesTabLabel}</span>
           </button>
-          {showQuestionsTab ? (
-            <button
-              type="button"
-              className={`ws-tab questions-tab ${activeTab === QUESTIONS_TAB ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === QUESTIONS_TAB}
-              tabIndex={0}
-              data-testid="questions-tab"
-              onClick={() => setActiveTab(QUESTIONS_TAB)}
-              title={t('questions.tabLabel')}
-            >
-              <span className="tab-icon" aria-hidden>
-                <Icon name="help-circle" size={13} />
-              </span>
-              <span className="ws-tab-label">{t('questions.tabLabel')}</span>
-            </button>
-          ) : null}
-          {orderedWorkspaceTabs.map((entry) => {
+          {!initialMaterializationPending ? visibleOrderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
               const browserUrl = browserTab.url?.trim() ?? '';
               const browserTitle = browserUrl
                 ? browserTab.title?.trim() || labelFromUrl(browserUrl)
                 : browserTab.label;
+              const browserHandlers = tabHandlersFor(browserTab.id);
               return (
                 <Tab
                   key={browserTab.id}
                   label={browserTitle}
                   title={browserUrl ? `${browserTitle}\n${browserUrl}` : browserTitle}
                   active={activeTab === browserTab.id}
-                  onActivate={() => setPersistedActive(browserTab.id)}
-                  onClose={() => closeBrowserTab(browserTab.id)}
+                  onActivate={browserHandlers.onActivate}
+                  onClose={browserHandlers.onClose}
                   kind="browser"
                 />
               );
@@ -2546,7 +4006,6 @@ export function FileWorkspace({
             const sketchEntry = sketches[name];
             const dirtyMark =
               sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
-            const isPending = sketchEntry && !sketchEntry.persisted;
             const onDisk = visibleFiles.find((f) => f.name === name);
             const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
             const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
@@ -2575,16 +4034,24 @@ export function FileWorkspace({
               : isSideChat
                 ? 'comment'
                 : undefined;
+            const handlers = tabHandlersFor(name);
+            // The sync badge only makes sense on a real design-file tab: a
+            // terminal / side-chat tab has no on-disk content to sync, and a
+            // live artifact is baked output, not the source file being pulled
+            // or published.
+            const tabSyncBadge =
+              fileSyncBadge && !isTerminal && !isSideChat && !liveArtifact
+                ? fileSyncBadge
+                : null;
             return (
               <Tab
                 key={name}
                 label={label}
                 iconNameOverride={iconNameOverride}
+                syncBadge={tabSyncBadge}
                 active={activeTab === name}
-                onActivate={() =>
-                  isPending ? activatePending(name) : setPersistedActive(name)
-                }
-                onClose={() => closeTab(name)}
+                onActivate={handlers.onActivate}
+                onClose={handlers.onClose}
                 kind={kind}
                 liveArtifact={liveArtifact}
                 draggable={persistedTabs.includes(name)}
@@ -2594,42 +4061,16 @@ export function FileWorkspace({
                     ? dragOverTab.edge
                     : null
                 }
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = 'move';
-                  event.dataTransfer.setData('text/plain', name);
-                  draggedTabNameRef.current = name;
-                  setDraggedTabName(name);
-                }}
-                onDragOver={(event) => {
-                  const currentDraggedName = draggedTabNameRef.current ?? draggedTabName;
-                  if (!currentDraggedName || currentDraggedName === name) return;
-                  if (!persistedTabs.includes(currentDraggedName)) return;
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = 'move';
-                  const edge = tabDropEdgeFromEvent(event);
-                  setDragOverTab((current) =>
-                    current?.name === name && current.edge === edge
-                      ? current
-                      : { name, edge },
-                  );
-                }}
-                onDragLeave={() => {
-                  setDragOverTab((current) => (current?.name === name ? null : current));
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const draggedName = draggedTabNameRef.current || draggedTabName;
-                  if (draggedName) {
-                    reorderPersistedTab(draggedName, name, tabDropEdgeFromEvent(event));
-                  }
-                  clearTabDragState();
-                }}
-                onDragEnd={clearTabDragState}
+                onDragStart={handlers.onDragStart}
+                onDragOver={handlers.onDragOver}
+                onDragLeave={handlers.onDragLeave}
+                onDrop={handlers.onDrop}
+                onDragEnd={handlers.onDragEnd}
               />
             );
-          })}
+          }) : null}
         </div>
-        <div className="ws-add-tab">
+        {!initialMaterializationPending ? <div className="ws-add-tab">
           <button
             ref={launcherBtnRef}
             type="button"
@@ -2645,21 +4086,30 @@ export function FileWorkspace({
           >
             <Icon name="plus" size={15} />
           </button>
-        </div>
+        </div> : null}
         {/* Pinned to the right for project/file actions; the tab launcher sits
             next to the file tabs so its spatial relationship stays clear. */}
         <div className="ws-tabs-actions">
+          {!initialMaterializationPending && fileActionsBefore ? (
+            <div className="ws-tabs-file-actions-before">{fileActionsBefore}</div>
+          ) : null}
+          {/* Pure portal host. Whatever file is open owns these actions and
+              portals them in; with no file open there is nothing to act on, so
+              the slot stays empty rather than rendering a permanently-disabled
+              "Version history" and a project-level Share that duplicates the
+              one on the project card. */}
           <div
             id={APP_CHROME_FILE_ACTIONS_ID}
             className="ws-tabs-file-actions"
             data-app-chrome-file-actions="true"
+            hidden={!viewerFileActive}
           />
-          {headerActions ? (
+          {!initialMaterializationPending && headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
           ) : null}
         </div>
       </div>
-      {launcherOpen ? (
+      {!initialMaterializationPending && launcherOpen ? (
         <TabLauncherMenu
           anchor={launcherBtnRef.current}
           files={visibleFiles}
@@ -2680,24 +4130,40 @@ export function FileWorkspace({
           onClose={() => setLauncherOpen(false)}
         />
       ) : null}
+      {/* Workspace-owned toasts anchor to this pane's bottom-center instead of
+          the viewport's: a bare fixed .od-toast centers across the whole
+          window, drifting over the chat pane and covering the composer send
+          area in split view. */}
       {browserSnapshotToast ? (
-        <Toast
-          message={browserSnapshotToast.message}
-          details={browserSnapshotToast.details}
-          actionLabel={browserSnapshotToast.actionLabel}
-          className={browserSnapshotToast.className}
-          onAction={browserSnapshotToast.onAction}
-          role={browserSnapshotToast.role}
-          tone={browserSnapshotToast.tone}
-          ttlMs={browserSnapshotToast.ttlMs}
-          onDismiss={() => setBrowserSnapshotToast(null)}
-        />
+        <div className="workspace-toast-anchor">
+          <Toast
+            message={browserSnapshotToast.message}
+            details={browserSnapshotToast.details}
+            actionLabel={browserSnapshotToast.actionLabel}
+            className={browserSnapshotToast.className}
+            onAction={browserSnapshotToast.onAction}
+            role={browserSnapshotToast.role}
+            tone={browserSnapshotToast.tone}
+            ttlMs={browserSnapshotToast.ttlMs}
+            onDismiss={() => setBrowserSnapshotToast(null)}
+          />
+        </div>
       ) : launcherToast ? (
-        <Toast
-          message={launcherToast}
-          role="alert"
-          onDismiss={() => setLauncherToast(null)}
-        />
+        <div className="workspace-toast-anchor">
+          <Toast
+            message={launcherToast.message}
+            tone={launcherToast.tone}
+            role={launcherToast.tone === 'error' ? 'alert' : 'status'}
+            ttlMs={40000}
+            onDismiss={() => setLauncherToast(null)}
+          />
+        </div>
+      ) : null}
+      {viewerOnly && !initialMaterializationPending ? (
+        <div className="workspace-readonly-notice" role="status">
+          <Icon name="lock" size={14} />
+          <span>{readonlyNotice ?? t('workspace.readonlyNotice')}</span>
+        </div>
       ) : null}
       <div className="ws-body">
         {/* Banner moved into DesignFilesPanel for the Design Files tab so
@@ -2719,7 +4185,7 @@ export function FileWorkspace({
             </button>
           </div>
         ) : null}
-        {browserTabs.filter((browserTab) => mountedBrowserTabIds.has(browserTab.id)).map((browserTab) => (
+        {!initialMaterializationPending ? browserTabs.filter((browserTab) => mountedBrowserTabIds.has(browserTab.id)).map((browserTab) => (
           <div
             key={`${projectId}:${browserTab.id}`}
             className={`ws-browser-panel ${activeTab === browserTab.id ? 'active' : ''}`}
@@ -2741,24 +4207,40 @@ export function FileWorkspace({
               onSendBoardCommentAttachments={onSendBoardCommentAttachments}
               onRequestBrowserUsePrompt={onRequestBrowserUsePrompt}
               onPageSnapshotToast={handleBrowserPageSnapshotToast}
-              onRefreshFiles={onRefreshFiles}
+              onRefreshFiles={refreshFilesWithoutResult}
               onOpenDesignFiles={() => setPersistedActive(DESIGN_FILES_TAB)}
               onOpenFile={openFile}
               onPageInfoChange={(info) => updateBrowserTabInfo(browserTab.id, info)}
+              onAddImageToChat={(attachment) => {
+                // The panel already wrote the capture into the project; hand
+                // the ready ChatAttachment to the composer's staging listener.
+                window.dispatchEvent(
+                  new CustomEvent<StageAttachmentEventDetail>(STAGE_ATTACHMENT_EVENT, {
+                    detail: { attachments: [attachment] },
+                  }),
+                );
+              }}
             />
           </div>
-        ))}
-        {activeTab === QUESTIONS_TAB ? (
-          <QuestionsPanel
-            key={questionFormKey ?? undefined}
+        )) : null}
+        {initialMaterializationPending ? (
+          <DesignFilesPanel
             projectId={projectId}
-            formKey={questionFormKey}
-            form={questionForm ?? questionFormPreview}
-            interactive={questionFormInteractive}
-            submitDisabled={questionFormSubmitDisabled}
-            submittedAnswers={questionFormSubmittedAnswers}
-            generating={questionsGenerating}
-            onSubmit={(text) => onSubmitQuestionForm?.(text)}
+            viewerOnly
+            downloadPending
+            files={[]}
+            folders={[]}
+            liveArtifacts={[]}
+            onRefreshFiles={noop}
+            onOpenFile={noop}
+            onOpenLiveArtifact={noop}
+            onRenameFile={rejectRenameWhileMaterializing}
+            onDeleteFile={noop}
+            onDeleteFiles={noop}
+            onUpload={noop}
+            onUploadFiles={noop}
+            onPaste={noop}
+            onNewSketch={noop}
           />
         ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
           <DesignSystemProjectPanel
@@ -2766,12 +4248,13 @@ export function FileWorkspace({
             system={designSystemProject}
             brandId={designSystemBrandId}
             editable={designSystemEditable}
+            extractionInProgress={designSystemExtractionInProgress}
             files={visibleFiles}
             streaming={Boolean(streaming)}
             activityEvents={designSystemActivityEvents}
             onOpenFile={openFile}
             onUploadAssets={() => fileInputRef.current?.click()}
-            onRefreshFiles={onRefreshFiles}
+            onRefreshFiles={refreshFilesWithoutResult}
             defaultDesignSystemId={defaultDesignSystemId}
             onSetDefaultDesignSystem={onSetDefaultDesignSystem}
             onDesignSystemsRefresh={onDesignSystemsRefresh}
@@ -2784,17 +4267,20 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
-        ) : activeTab === DESIGN_FILES_TAB ? (
+        ) : designFilesTabActive ? (
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
+            filesRefreshKey={filesRefreshKey}
+            viewerOnly={viewerOnly}
+            downloadPending={fileSyncBadge === 'downloading'}
             rootDirName={rootDirName}
             reloading={reloading}
             running={Boolean(streaming)}
             files={visibleFiles}
             folders={projectFolders}
             liveArtifacts={liveArtifactEntries}
-            onRefreshFiles={onRefreshFiles}
+            onRefreshFiles={refreshFilesWithoutResult}
             onCurrentDirChange={setUploadDir}
             navState={designFilesNavRef.current}
             onNavStateChange={onDesignFilesNavStateChange}
@@ -2884,8 +4370,6 @@ export function FileWorkspace({
             }}
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
-            preferredPreviewFile={preferredPreviewFile}
-            autoPreviewDesignArtifacts={autoPreviewDesignArtifacts}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
             activePluginActionPaths={activePluginActionPaths}
             hiddenPluginActionPaths={hiddenPluginActionPaths}
@@ -2941,7 +4425,10 @@ export function FileWorkspace({
             config={chatConfig}
             agentsById={chatAgentsById}
             locale={chatLocale ?? 'en'}
+            workspaceContext={workspaceContext}
             projectFiles={visibleFiles}
+            projectFileNames={sideChatFileNames}
+            projectResolvedDir={resolvedDir}
             conversations={conversations}
             onSelectConversation={onSelectConversation ?? (() => {})}
             onDeleteConversation={onDeleteConversation ?? (() => {})}
@@ -2956,6 +4443,7 @@ export function FileWorkspace({
             key={activeTab}
             projectId={projectId}
             terminalId={terminalIdFromTabId(activeTab)}
+            workspaceContext={workspaceContext}
             onClose={() => closeTab(activeTab)}
             onSessionIdChange={handleTerminalSessionChange}
           />
@@ -2964,45 +4452,10 @@ export function FileWorkspace({
             projectId={projectId}
             liveArtifact={activeLiveArtifact}
             liveArtifactEvents={liveArtifactEvents}
-            onRefreshArtifacts={onRefreshFiles}
+            onRefreshArtifacts={refreshFilesWithoutResult}
           />
         ) : activeFile ? (
-          <FileViewer
-            projectId={projectId}
-            projectKind={projectKind}
-            file={activeFile}
-            filesRefreshKey={filesRefreshKey}
-            isDeck={isDeck}
-            streaming={streaming}
-            commentQueueOnSend={commentQueueOnSend}
-            commentSendDisabled={commentSendDisabled}
-            previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
-            onSavePreviewComment={onSavePreviewComment}
-            onRemovePreviewComment={onRemovePreviewComment}
-            onSendBoardCommentAttachments={onSendBoardCommentAttachments}
-            onBrandExtractionStopRequest={
-              activeFile.name === 'brand.html' ? onBrandExtractionStopRequest : undefined
-            }
-            onFileSaved={onRefreshFiles}
-            onOpenFileReplacing={openFileReplacing}
-            commentPortalId={commentPortalId}
-            onCommentModeChange={onCommentModeChange}
-            shareRequest={
-              shareRequest && shareRequest.name === activeFile.name
-                ? { nonce: shareRequest.nonce }
-                : null
-            }
-            downloadRequest={
-              downloadRequest && downloadRequest.name === activeFile.name
-                ? { nonce: downloadRequest.nonce }
-                : null
-            }
-            slideNavRequest={deliverableSlideNavForActiveFile(
-              slideNavRequest,
-              activeFile.name,
-              slideNavDeliverableNonce,
-            )}
-          />
+          null
         ) : (
           <div className="viewer-empty">
             {t('workspace.openFromDesignFiles')}{' '}
@@ -3014,22 +4467,102 @@ export function FileWorkspace({
                 setActiveTab(DESIGN_FILES_TAB);
               }}
             >
-              {t('workspace.designFilesLink')}
+              {t('workspace.designFiles')}
             </a>
             .
           </div>
         )}
+        {!initialMaterializationPending ? mountedHtmlViewerFiles.map((file) => {
+          const workspaceActive = activeHtmlViewerFile?.name === file.name;
+          return (
+            <div
+              key={`${projectId}:${file.name}`}
+              ref={(element) => {
+                syncInertAttribute(element, !workspaceActive);
+              }}
+              data-testid="retained-file-viewer"
+              data-file-name={file.name}
+              aria-hidden={workspaceActive ? undefined : true}
+              style={{
+                display: 'flex',
+                flex: workspaceActive ? '1 1 auto' : undefined,
+                flexDirection: 'column',
+                minHeight: 0,
+                ...(workspaceActive
+                  ? {}
+                  : {
+                      position: 'absolute',
+                      left: '-100000px',
+                      top: 0,
+                      width: 1,
+                      height: 1,
+                      overflow: 'hidden',
+                      visibility: 'hidden',
+                      pointerEvents: 'none',
+                    }),
+              }}
+            >
+              {renderFileViewer(file, workspaceActive)}
+            </div>
+          );
+        }) : null}
+        {!initialMaterializationPending && viewerFile ? (
+          <div
+            ref={(element) => {
+              syncInertAttribute(element, !viewerFileActive);
+            }}
+            data-testid="retained-file-viewer"
+            aria-hidden={viewerFileActive ? undefined : true}
+            style={{
+              display: 'flex',
+              flex: viewerFileActive ? '1 1 auto' : undefined,
+              flexDirection: 'column',
+              minHeight: 0,
+              ...(viewerFileActive
+                ? {}
+                : {
+                    position: 'absolute',
+                    left: '-100000px',
+                    top: 0,
+                    width: 1,
+                    height: 1,
+                    overflow: 'hidden',
+                    visibility: 'hidden',
+                    pointerEvents: 'none',
+                  }),
+            }}
+          >
+            {renderFileViewer(viewerFile, viewerFileActive)}
+          </div>
+        ) : null}
       </div>
-      <input
+      {!initialMaterializationPending ? <PageCreatorDialog
+        open={pageCreatorOpen}
+        t={t}
+        locale={locale}
+        presets={projectPagePresets}
+        query={pageCreatorQuery}
+        category={pageCreatorCategory}
+        previewId={pageCreatorPreviewId}
+        creating={pageCreating}
+        onQueryChange={setPageCreatorQuery}
+        onCategoryChange={setPageCreatorCategory}
+        onPreviewChange={setPageCreatorPreviewId}
+        onCreate={(presetId) => void createBlankPage(presetId)}
+        onClose={() => {
+          if (!pageCreating) setPageCreatorOpen(false);
+        }}
+      /> : null}
+      {!initialMaterializationPending ? <input
         ref={fileInputRef}
         type="file"
         multiple
         data-testid="design-files-upload-input"
         style={{ display: 'none' }}
         onChange={handleFilePicked}
-      />
+      /> : null}
       <AnimatePresence>
-        {showLibraryPicker ? (
+        {!initialMaterializationPending && showLibraryPicker ? (
           <LibraryPicker
             onClose={() => setShowLibraryPicker(false)}
             onConfirm={async (assets) => {
@@ -3042,7 +4575,13 @@ export function FileWorkspace({
               const dir = uploadDir || undefined;
               let lastRelPath: string | null = null;
               for (const asset of assets) {
-                const res = await applyLibraryAsset(asset.id, projectId, dir, { includeElement: true });
+                const res = await applyLibraryAsset(
+                  asset.id,
+                  projectId,
+                  dir,
+                  { includeElement: true },
+                  workspaceContext,
+                );
                 if (res?.relPath) lastRelPath = res.relPath;
                 if (res?.elementRelPath) lastRelPath = res.elementRelPath;
               }
@@ -3053,7 +4592,7 @@ export function FileWorkspace({
         ) : null}
       </AnimatePresence>
       <AnimatePresence>
-        {quickSwitcherOpen ? (
+        {!initialMaterializationPending && quickSwitcherOpen ? (
           <QuickSwitcher
             projectId={projectId}
             files={visibleFiles}
@@ -3079,6 +4618,7 @@ function DesignSystemProjectPanel({
   system,
   brandId,
   editable,
+  extractionInProgress,
   files,
   streaming,
   activityEvents,
@@ -3101,6 +4641,7 @@ function DesignSystemProjectPanel({
   system: DesignSystemSummary;
   brandId?: string | null;
   editable: boolean;
+  extractionInProgress?: boolean;
   files: ProjectFile[];
   streaming: boolean;
   activityEvents: AgentEvent[];
@@ -3129,6 +4670,11 @@ function DesignSystemProjectPanel({
 }) {
   const t = useT();
   const analytics = useAnalytics();
+  const { workspaceContext } = useProjectCollabContext();
+  // Match the exact fields sent by workspaceProjectHeaders. Billing-only
+  // refreshes must not blank and reload the kit, while a role, membership, or
+  // permission change must discard every prior identity's source snapshot.
+  const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, DesignSystemReviewDecision>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [feedbackSection, setFeedbackSection] = useState<string | null>(null);
@@ -3169,6 +4715,12 @@ function DesignSystemProjectPanel({
   const initialDesignMdRef = useRef<string | null>(null);
   const initialBrandJsonRef = useRef<string | null>(null);
   const initialBrandJsonLoadedRef = useRef(false);
+  useEffect(() => {
+    setDesignMdBody('');
+    initialDesignMdRef.current = null;
+    initialBrandJsonRef.current = null;
+    initialBrandJsonLoadedRef.current = false;
+  }, [projectId, workspaceIdentity]);
   function emitDesignSystemProjectEditClick(
     element: DesignSystemEditClickProps['element'],
     module: DesignSystemEditClickProps['module'],
@@ -3187,7 +4739,7 @@ function DesignSystemProjectPanel({
 
   const refreshKitDependencies = useCallback(async (options?: { finalizeBrand?: boolean }) => {
     if (options?.finalizeBrand && brandId) {
-      const outcome = await finalizeBrandProject(brandId, projectId);
+      const outcome = await finalizeBrandProject(brandId, projectId, workspaceContext);
       if (!outcome.ok) throw new Error(outcome.error);
     }
     setKitReloadKey((k) => k + 1);
@@ -3195,13 +4747,16 @@ function DesignSystemProjectPanel({
       Promise.resolve(onRefreshFiles()),
       Promise.resolve(onDesignSystemsRefresh?.()),
     ]);
-  }, [brandId, onDesignSystemsRefresh, onRefreshFiles, projectId]);
+  }, [brandId, onDesignSystemsRefresh, onRefreshFiles, projectId, workspaceContext]);
 
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      readDesignMd(projectId),
-      fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' }),
+      readDesignMd(projectId, workspaceContext),
+      fetchProjectFileText(projectId, 'brand.json', {
+        cache: 'no-store',
+        workspaceContext,
+      }),
     ]).then(([designMd, brandJson]) => {
       if (cancelled) return;
       setDesignMdBody(designMd);
@@ -3214,13 +4769,14 @@ function DesignSystemProjectPanel({
     return () => {
       cancelled = true;
     };
-  }, [projectId, kitReloadKey]);
+  }, [projectId, kitReloadKey, workspaceIdentity]);
   const kitHost = system.provenance?.sourceUrls?.[0]
     ? hostnameOf(system.provenance.sourceUrls[0])
     : undefined;
   const { uploading: kitUploading, uploadModule: kitUploadModule } = useKitModuleUpload({
     projectId,
     title: system.title,
+    workspaceContext,
     onUploaded: (module) => {
       setKitActionBusy(`upload:${module}`);
       notifyKit('loading', t('ds.uploading'));
@@ -3243,11 +4799,16 @@ function DesignSystemProjectPanel({
     editable,
     host: kitHost,
     reloadKey: kitReloadKey,
+    workspaceContext,
   });
   async function persistDesignMd(nextBody: string) {
-    const updated = await updateDesignSystemDraft(system.id, { body: nextBody });
+    const updated = await updateDesignSystemDraft(
+      system.id,
+      { body: nextBody },
+      workspaceContext,
+    );
     if (!updated) throw new Error(t('ds.actionFailed'));
-    const file = await writeProjectTextFile(projectId, 'DESIGN.md', nextBody);
+    const file = await writeProjectTextFile(projectId, 'DESIGN.md', nextBody, undefined, workspaceContext);
     if (!file) throw new Error(t('ds.actionFailed'));
     setDesignMdBody(nextBody);
     await refreshKitDependencies();
@@ -3278,7 +4839,11 @@ function DesignSystemProjectPanel({
       if (brandId) {
         await refreshKitDependencies({ finalizeBrand: true });
       } else {
-        const job = await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
+        const job = await startDesignSystemTokenContractRebuildJob(
+          system.id,
+          { force: true },
+          workspaceContext,
+        );
         if (!job) throw new Error(t('ds.actionFailed'));
         await refreshKitDependencies();
       }
@@ -3297,8 +4862,16 @@ function DesignSystemProjectPanel({
     try {
       await refreshKitDependencies({ finalizeBrand: true });
       const ok =
-        await downloadProjectArchive({ projectId, fallbackTitle: system.title }) ||
-        await downloadDesignSystemArchive({ designSystemId: system.id, fallbackTitle: system.title });
+        await downloadProjectArchive({
+          projectId,
+          fallbackTitle: system.title,
+          workspaceContext,
+        }) ||
+        await downloadDesignSystemArchive({
+          designSystemId: system.id,
+          fallbackTitle: system.title,
+          workspaceContext,
+        });
       if (!ok) throw new Error(t('ds.actionFailed'));
       notifyKit('success', t('ds.actionDone'));
     } catch {
@@ -3315,7 +4888,7 @@ function DesignSystemProjectPanel({
   // navigates home — so the panel unmounts on success and there's no busy reset
   // to do in the happy path.
   async function deleteDesignSystemProject() {
-    if (kitActionBusy || !onDeleteDesignSystemProject) return;
+    if (kitActionBusy || !onDeleteDesignSystemProject || !editable) return;
     const ok = window.confirm(
       t('ds.deleteProjectConfirm', { title: system.title }),
     );
@@ -3335,7 +4908,7 @@ function DesignSystemProjectPanel({
         setKitActionBusy(null);
         return;
       }
-      await deleteDesignSystemDraft(system.id);
+      await deleteDesignSystemDraft(system.id, workspaceContext);
       await onDesignSystemsRefresh?.();
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -3350,7 +4923,7 @@ function DesignSystemProjectPanel({
     setKitActionBusy('color');
     notifyKit('loading', t('ds.saving'));
     try {
-      const ok = await updateBrandColor(projectId, index, nextHex);
+      const ok = await updateBrandColor(projectId, index, nextHex, workspaceContext);
       if (!ok) {
         const nextBody = designMdBodyWithColor(designMdBody, kit?.colors ?? [], index, nextHex);
         await persistDesignMd(nextBody);
@@ -3382,7 +4955,7 @@ function DesignSystemProjectPanel({
     setKitActionBusy(`delete-logo:${index}`);
     notifyKitLoading(t('ds.deleteLogo'));
     try {
-      const ok = await deleteBrandLogo(projectId, index);
+      const ok = await deleteBrandLogo(projectId, index, workspaceContext);
       if (!ok) throw new Error(t('ds.actionFailed'));
       await refreshKitDependencies({ finalizeBrand: true });
       notifyKit('success', t('ds.actionDone'));
@@ -3398,7 +4971,7 @@ function DesignSystemProjectPanel({
     setKitActionBusy(`delete-image:${index}`);
     notifyKitLoading(t('ds.deleteImage', { caption: '' }).trim());
     try {
-      const ok = await deleteBrandImage(projectId, index);
+      const ok = await deleteBrandImage(projectId, index, workspaceContext);
       if (!ok) throw new Error(t('ds.actionFailed'));
       await refreshKitDependencies({ finalizeBrand: true });
       notifyKit('success', t('ds.actionDone'));
@@ -3424,6 +4997,7 @@ function DesignSystemProjectPanel({
     let cancelled = false;
     void fetchProjectFileText(projectId, manifestFileName, {
       cache: 'no-store',
+      workspaceContext,
       cacheBustKey: manifestCacheBustKey,
     }).then((text) => {
       if (cancelled) return;
@@ -3513,7 +5087,11 @@ function DesignSystemProjectPanel({
     notifyKitLoading(publishActionLabel);
     try {
       const nextStatus = nextPublished ? 'published' : 'draft';
-      const updated = await updateDesignSystemDraft(system.id, { status: nextStatus });
+      const updated = await updateDesignSystemDraft(
+        system.id,
+        { status: nextStatus },
+        workspaceContext,
+      );
       if (!updated) throw new Error(t('ds.actionFailed'));
       setStatus(updated.status ?? nextStatus);
       await onDesignSystemsRefresh?.();
@@ -3801,7 +5379,11 @@ function DesignSystemProjectPanel({
   // header's "More" dropdown so the sticky row reads as one clear action.
   const repoCopy = repoConnectCopy(t, githubConnected);
   const publishActionLabel = published ? t('ds.unpublishDesignSystem') : t('ds.publishDesignSystem');
-  const extractionRunning = !editable || streaming;
+  // recvqb6mfyqXLD: keyed off `extractionInProgress` (brand-extraction-only),
+  // NOT `!editable` — `editable` also folds in ownership now, and a
+  // non-owning member of a finished, published team-synced design system
+  // must not see this pill read "still extracting".
+  const extractionRunning = extractionInProgress || streaming;
   const actionsSlot = (
     <span
       className="ds-project-publish-trigger"
@@ -3863,6 +5445,10 @@ function DesignSystemProjectPanel({
           } satisfies HeaderMenuAction,
         ]
       : []),
+    // recvqb6mfyqXLD: deleting a design system the caller does not own must
+    // be unavailable here the same way it already is for refresh/download/
+    // default above — `editable` folds in `canMutate` (ProjectView.tsx), the
+    // daemon's own team-share ownership verdict.
     ...(onDeleteDesignSystemProject
       ? [
           {
@@ -3870,7 +5456,7 @@ function DesignSystemProjectPanel({
             label: t('ds.deleteProjectAction', { title: system.title }),
             icon: 'trash' as IconName,
             onClick: () => void deleteDesignSystemProject(),
-            disabled: Boolean(kitActionBusy) || statusBusy || defaultBusy,
+            disabled: !editable || Boolean(kitActionBusy) || statusBusy || defaultBusy,
             loading: kitActionBusy === 'delete',
           } satisfies HeaderMenuAction,
         ]
@@ -3979,7 +5565,7 @@ function DesignSystemProjectPanel({
         <Toast
           message={kitToast.message}
           tone={kitToast.tone}
-          ttlMs={kitToast.tone === 'loading' ? 60000 : 2600}
+          ttlMs={40000}
           role={kitToast.tone === 'error' ? 'alert' : 'status'}
           onDismiss={() => setKitToast(null)}
         />
@@ -3987,6 +5573,7 @@ function DesignSystemProjectPanel({
       {kit ? (
         <DesignKitView
           kit={kit}
+          workspaceContext={workspaceContext}
           actionsSlot={actionsSlot}
           headerMenuActions={headerMenuActions}
           topSlot={topSlot}
@@ -5011,6 +6598,675 @@ ${t('designFiles.documentTemplate.nextBody')}
 `;
 }
 
+function defaultPagePresetId(projectKind: TrackingProjectKind): ProjectPagePresetId {
+  switch (projectKind) {
+    case 'slide_deck':
+      return 'blank-slides';
+    case 'document':
+      return 'blank-document';
+    case 'template':
+    case 'prototype':
+    case 'wireframe':
+    case 'mobile':
+    default:
+      return 'blank-prototype';
+  }
+}
+
+function projectPagePresetById(
+  id: ProjectPagePresetId,
+  presets: ProjectPagePreset[] = PROJECT_PAGE_PRESETS,
+): ProjectPagePreset | undefined {
+  return presets.find((preset) => preset.id === id);
+}
+
+function pagePresetTitle(preset: ProjectPagePreset, t: TranslateFn, locale?: string): string {
+  if (preset.plugin) return localizePluginTitle(locale ?? 'en', preset.plugin);
+  if (preset.titleKey) return t(preset.titleKey);
+  return resolveLocalizedText(preset.title, locale) || preset.id;
+}
+
+function pagePresetDescription(preset: ProjectPagePreset, t: TranslateFn, locale?: string): string {
+  if (preset.plugin) return localizePluginDescription(locale ?? 'en', preset.plugin);
+  if (preset.descriptionKey) return t(preset.descriptionKey);
+  return resolveLocalizedText(preset.description, locale);
+}
+
+function pagePresetMatchesCategory(preset: ProjectPagePreset, category: ProjectPageCategoryId): boolean {
+  if (category === 'recommended') return preset.featured === true;
+  return preset.category === category;
+}
+
+function pageCreatorCategoryVisible(category: ProjectPageCategoryId): boolean {
+  return category !== 'recommended' && !PAGE_CREATOR_HIDDEN_CATEGORIES.has(category);
+}
+
+function pageCreatorPresetVisible(preset: ProjectPagePreset): boolean {
+  return preset.source !== 'blank' && pageCreatorCategoryVisible(preset.category);
+}
+
+function pagePresetSourceLabel(preset: ProjectPagePreset, t: TranslateFn): string {
+  return preset.source === 'blank' ? t('workspace.newBlankPage') : t('pluginsHome.title');
+}
+
+function pagePresetRemotePreviewUrl(preset: ProjectPagePreset): string | null {
+  const preview = preset.pluginPreview;
+  return preset.source !== 'blank' && preview?.kind === 'html' ? preview.src : null;
+}
+
+function pagePresetHasDisplayablePreview(
+  preset: ProjectPagePreset,
+  availability: PagePresetPreviewAvailability,
+): boolean {
+  if (preset.source === 'blank') return true;
+  const preview = preset.pluginPreview;
+  if (!preview || preview.kind === 'text') return false;
+  if (preview.kind === 'html') {
+    if (typeof fetch !== 'function') return true;
+    return availability[preset.id] === 'ok';
+  }
+  if (preview.kind === 'media') {
+    return Boolean(preview.poster || preview.videoUrl || preview.audioUrl);
+  }
+  return true;
+}
+
+function pagePresetPreviewErrorText(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  const lower = trimmed.toLocaleLowerCase();
+  return lower.includes('preview not found') || /^\{\s*"error"\s*:/i.test(trimmed);
+}
+
+async function validatePagePresetRemotePreview(url: string, signal: AbortSignal): Promise<boolean> {
+  const response = await fetch(url, {
+    signal,
+    headers: { Accept: 'text/html,*/*' },
+  });
+  if (!response.ok) return false;
+  const contentType = response.headers.get('content-type')?.toLocaleLowerCase() ?? '';
+  if (contentType.includes('text/html')) return true;
+  const text = await response.text().catch(() => '');
+  if (contentType.includes('application/json')) return !pagePresetPreviewErrorText(text);
+  return !pagePresetPreviewErrorText(text);
+}
+
+function pageCategoryLabel(kind: ProjectPageKind, t: TranslateFn): string {
+  const item = PROJECT_PAGE_CATEGORIES.find((category) => category.id === kind);
+  return item ? t(item.labelKey) : kind;
+}
+
+function projectPageKindForCommunityPlugin(record: InstalledPluginRecord): ProjectPageKind | null {
+  for (const [chipId, pageKind] of Object.entries(COMMUNITY_PLUGIN_CHIP_TO_PAGE_KIND)) {
+    const ids = (CURATED_PLUGIN_IDS_BY_CHIP as Record<string, readonly string[] | undefined>)[chipId];
+    if (ids?.includes(record.id)) return pageKind;
+  }
+  const primaryCategory = extractCategories(record)[0];
+  switch (primaryCategory) {
+    case 'prototype':
+      return 'prototype';
+    case 'live-artifact':
+      return 'liveArtifact';
+    case 'deck':
+      return 'slides';
+    case 'image':
+      return 'image';
+    case 'video':
+      return 'video';
+    case 'hyperframes':
+      return 'hyperframes';
+    case 'audio':
+      return 'audio';
+    default:
+      return null;
+  }
+}
+
+function iconForPageKind(kind: ProjectPageKind): IconName {
+  switch (kind) {
+    case 'slides':
+      return 'present';
+    case 'prototype':
+      return 'layout';
+    case 'wireframe':
+      return 'grid';
+    case 'mobile':
+      return 'smartphone';
+    case 'document':
+      return 'file-text';
+    case 'image':
+      return 'image';
+    case 'video':
+      return 'play';
+    case 'hyperframes':
+      return 'sparkles';
+    case 'audio':
+      return 'volume';
+    case 'liveArtifact':
+      return 'kanban';
+  }
+}
+
+function slugifyPageFileBaseName(value: string, fallback = 'community-page'): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}._-]+/gu, '-')
+    .replace(/-+/g, '-')
+    .replace(/(^-|-$)+/g, '')
+    || fallback;
+}
+
+function communityPluginPagePresets(
+  records: InstalledPluginRecord[],
+  workspaceContext?: WorkspaceCollabContext | null,
+): ProjectPagePreset[] {
+  return records
+    .map((record): ProjectPagePreset | null => {
+      const category = projectPageKindForCommunityPlugin(record);
+      if (!category) return null;
+      return {
+        id: `community-plugin-${record.id}`,
+        category,
+        icon: iconForPageKind(category),
+        fileBaseName: slugifyPageFileBaseName(record.title || record.manifest?.title || record.id),
+        source: 'community',
+        plugin: record,
+        pluginPreview: inferPluginPreview(record, { preferBaked: true, workspaceContext }),
+        pluginHtmlPreview: inferPluginPreview(record, { workspaceContext }),
+        featured: curatedPluginPriority(record) !== null,
+      };
+    })
+    .filter((preset): preset is ProjectPagePreset => preset !== null)
+    .sort((a, b) => {
+      const aFeatured = a.featured === true;
+      const bFeatured = b.featured === true;
+      if (aFeatured !== bFeatured) return aFeatured ? -1 : 1;
+      const aCategoryRank = PROJECT_PAGE_CATEGORY_ORDER.indexOf(a.category);
+      const bCategoryRank = PROJECT_PAGE_CATEGORY_ORDER.indexOf(b.category);
+      if (aCategoryRank !== bCategoryRank) return aCategoryRank - bCategoryRank;
+      const aPriority = a.plugin ? curatedPluginPriority(a.plugin) : null;
+      const bPriority = b.plugin ? curatedPluginPriority(b.plugin) : null;
+      if (aPriority !== null || bPriority !== null) {
+        return (aPriority ?? Number.MAX_SAFE_INTEGER) - (bPriority ?? Number.MAX_SAFE_INTEGER);
+      }
+      return a.fileBaseName.localeCompare(b.fileBaseName);
+    });
+}
+
+function pagePresetFileBaseName(
+  preset: ProjectPagePreset,
+  t: TranslateFn,
+  locale: Locale,
+): string {
+  const localized = slugifyPageFileBaseName(pagePresetTitle(preset, t, locale), '');
+  return localized || preset.fileBaseName;
+}
+
+function pagePresetVersionPrompt(
+  preset: ProjectPagePreset,
+  t: TranslateFn,
+  locale: Locale,
+): string | null {
+  if (preset.plugin) {
+    const query = pluginPresetQuery(preset.plugin, locale);
+    if (query) {
+      const rendered = renderPluginPresetQuery(preset.plugin, query).trim();
+      if (rendered) return rendered;
+      const raw = query.trim();
+      if (raw) return raw;
+    }
+  }
+  const title = pagePresetTitle(preset, t, locale).trim();
+  const description = pagePresetDescription(preset, t, locale).trim();
+  const fallbackPrompt = [title, description].filter(Boolean).join('\n\n').trim();
+  return fallbackPrompt || null;
+}
+
+async function contentForPagePreset(
+  target: string,
+  preset: ProjectPagePreset,
+  t: TranslateFn,
+  locale?: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<string> {
+  let html: string | null = null;
+  if (preset.plugin && preset.pluginHtmlPreview?.kind === 'html') {
+    const preview = preset.pluginHtmlPreview;
+    const result = preview.source === 'preview'
+      ? await fetchPluginPreviewHtml(preset.plugin.id, workspaceContext)
+      : await fetchPluginExampleHtml(
+          preset.plugin.id,
+          preview.exampleStem ?? '',
+          workspaceContext,
+        );
+    if ('html' in result && typeof result.html === 'string' && result.html.trim().length > 0) {
+      html = result.html;
+    }
+  }
+  return removeSpeakerNotesFromHtml(html ?? initialHtmlPage(target, preset, t, locale));
+}
+
+function isPrimaryWorkspaceTab(
+  name: string,
+  files: ProjectFile[],
+  liveArtifactEntries: LiveArtifactWorkspaceEntry[],
+  sketches: Record<string, SketchState>,
+): boolean {
+  if (
+    isBrowserTabId(name)
+    || isTerminalTabId(name)
+    || isSideChatTabId(name)
+    || name === DESIGN_SYSTEM_TAB
+  ) {
+    return true;
+  }
+  if (liveArtifactEntries.some((entry) => entry.tabId === name)) return true;
+  const file = files.find((candidate) => candidate.name === name);
+  if (file) {
+    return file.type !== 'dir';
+  }
+  if (/\.html?$/i.test(name)) return true;
+  return Boolean(isSketchName(name) && sketches[name]);
+}
+
+function pageDisplayName(name: string): string {
+  const basename = normalizeProjectFilePath(name).split('/').filter(Boolean).pop() ?? name;
+  return basename.replace(/\.html?$/i, '').replace(/[-_]+/g, ' ').trim() || basename;
+}
+
+function nextHtmlPagePath(files: ProjectFile[], baseName: string): string {
+  const safeBaseName = slugifyPageFileBaseName(baseName, 'page');
+  const existing = new Set(files.map((file) => normalizeProjectFilePath(file.name).toLowerCase()));
+  for (let index = 1; index < 1000; index += 1) {
+    const name = index === 1 ? `${safeBaseName}.html` : `${safeBaseName}-${index}.html`;
+    if (!existing.has(normalizeProjectFilePath(name).toLowerCase())) return name;
+  }
+  return `${safeBaseName}-${Date.now()}.html`;
+}
+
+function initialHtmlPage(path: string, preset: ProjectPagePreset, t: TranslateFn, locale?: string): string {
+  const title = pageTitleFromPath(path, pagePresetTitle(preset, t, locale));
+  const communityDescription = preset.source === 'community'
+    ? pagePresetDescription(preset, t, locale)
+    : undefined;
+  switch (preset.category) {
+    case 'slides':
+      return initialSlidesPage(title, communityDescription);
+    case 'document':
+      return initialDocumentPage(title, communityDescription);
+    case 'wireframe':
+      return initialWireframePage(title, communityDescription);
+    case 'mobile':
+      return initialMobilePage(title, communityDescription);
+    case 'image':
+      return initialImagePage(title, communityDescription);
+    case 'video':
+      return initialVideoPage(title, communityDescription);
+    case 'hyperframes':
+      return initialHyperframesPage(title, communityDescription);
+    case 'audio':
+      return initialAudioPage(title, communityDescription);
+    case 'liveArtifact':
+      return initialLiveArtifactPage(title, communityDescription);
+    case 'prototype':
+    default:
+      return initialPrototypePage(title, communityDescription);
+  }
+}
+
+function pageTitleFromPath(path: string, fallback: string): string {
+  const title = pageDisplayName(path)
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .trim();
+  return title || fallback;
+}
+
+const DEFAULT_PROTOTYPE_PAGE_BODY =
+  'Turn product intent, references, and iteration notes into a polished page that can be reviewed, remixed, and shipped.';
+const DEFAULT_DOCUMENT_PAGE_BODY =
+  'Use this page for a brief, memo, case study, or structured design note that should read well in preview.';
+const DEFAULT_SLIDES_PAGE_BODY =
+  'A focused starter for narrative, critique, speaker notes, and live presentation.';
+
+function initialPrototypePage(title: string, body = DEFAULT_PROTOTYPE_PAGE_BODY): string {
+  const safeTitle = escapeHtmlText(title);
+  const safeBody = escapeHtmlText(body);
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f5f7; color: #17202a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 32px; }
+    main { width: min(1080px, 100%); min-height: 640px; display: grid; grid-template-columns: 1fr 0.9fr; overflow: hidden; border: 1px solid #d9dde5; background: #fff; box-shadow: 0 28px 80px rgba(17, 24, 39, 0.12); }
+    section { padding: 56px; }
+    .hero { display: flex; flex-direction: column; justify-content: space-between; background: #101820; color: #f9fafb; }
+    .eyebrow { color: #5ee0a0; font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+    h1 { margin: 28px 0 18px; font-size: clamp(44px, 6vw, 80px); line-height: 0.95; letter-spacing: 0; }
+    p { margin: 0; max-width: 54ch; color: #d7dde6; font-size: 18px; line-height: 1.6; }
+    .panel { display: grid; align-content: center; gap: 18px; background: #f7f2ea; }
+    .step { padding: 18px; border: 1px solid #d7cdbf; background: rgba(255, 255, 255, 0.78); }
+    .step strong { display: block; margin-bottom: 6px; color: #111827; }
+    .step span { color: #556170; line-height: 1.5; }
+    @media (max-width: 820px) { main { grid-template-columns: 1fr; } section { padding: 32px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div>
+        <div class="eyebrow">OpenDesign</div>
+        <h1>${safeTitle}</h1>
+        <p>${safeBody}</p>
+      </div>
+      <p>Replace this starter with your own audience, workflow, and key screen.</p>
+    </section>
+    <section class="panel" aria-label="Prototype outline">
+      <div class="step"><strong>1. Promise</strong><span>State the concrete thing this page helps people do.</span></div>
+      <div class="step"><strong>2. Interaction</strong><span>Sketch the main action, state change, or decision path.</span></div>
+      <div class="step"><strong>3. Proof</strong><span>Add screenshots, data, or examples that make the design credible.</span></div>
+    </section>
+  </main>
+</body>
+</html>
+`;
+}
+
+function initialWireframePage(title: string, body = 'Map structure, priority, and flows before polishing visual style.'): string {
+  return initialPrototypePage(title, body)
+    .replace('1. Promise', '1. Flow')
+    .replace('2. Interaction', '2. Screen')
+    .replace('3. Proof', '3. Questions');
+}
+
+function initialMobilePage(title: string, body = 'Shape a mobile app screen with clear hierarchy, native-feeling controls, and handoff-ready states.'): string {
+  return initialPrototypePage(title, body)
+    .replace('width: min(1080px, 100%); min-height: 640px;', 'width: min(430px, 100%); min-height: 820px;')
+    .replace('grid-template-columns: 1fr 0.9fr;', 'grid-template-columns: 1fr;');
+}
+
+function initialImagePage(title: string, body = 'Collect image direction, composition notes, references, and generation constraints in one reviewable page.'): string {
+  return initialPrototypePage(title, body)
+    .replace('Prototype outline', 'Image direction')
+    .replace('1. Promise', '1. Subject')
+    .replace('2. Interaction', '2. Composition')
+    .replace('3. Proof', '3. Style');
+}
+
+function initialVideoPage(title: string, body = 'Draft scenes, timing, captions, motion, and export requirements before rendering video.'): string {
+  return initialPrototypePage(title, body)
+    .replace('Prototype outline', 'Video storyboard')
+    .replace('1. Promise', '1. Hook')
+    .replace('2. Interaction', '2. Sequence')
+    .replace('3. Proof', '3. Output');
+}
+
+function initialHyperframesPage(title: string, body = 'Author an HTML motion piece with scenes, transitions, audio-reactive moments, and capture notes.'): string {
+  return initialVideoPage(title, body);
+}
+
+function initialAudioPage(title: string, body = 'Use this page for voice, music, sound design, pronunciation, pacing, and final-use notes.'): string {
+  return initialDocumentPage(title, body);
+}
+
+function initialLiveArtifactPage(title: string, body = 'Plan data sources, widgets, filters, refresh cadence, and empty/loading/error states.'): string {
+  return initialPrototypePage(title, body)
+    .replace('Prototype outline', 'Live artifact plan')
+    .replace('1. Promise', '1. Data')
+    .replace('2. Interaction', '2. Controls')
+    .replace('3. Proof', '3. States');
+}
+
+function initialSlidesPage(title: string, body = DEFAULT_SLIDES_PAGE_BODY): string {
+  const safeTitle = escapeHtmlText(title);
+  const safeBody = escapeHtmlText(body);
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #082015;
+      --fg: #f7fbf8;
+      --muted: #b8c9c0;
+      --accent: #34d399;
+      --surface: rgba(255, 255, 255, 0.08);
+      --shell: #050807;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--shell);
+      color: var(--fg);
+      font: 18px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .deck-shell { position: fixed; inset: 0; overflow: hidden; }
+    .deck-stage {
+      width: 1920px;
+      height: 1080px;
+      background: var(--bg);
+      position: relative;
+      transform-origin: top left;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+    }
+    .slide {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      padding: 120px 140px;
+      background: radial-gradient(circle at 88% 12%, rgba(55, 199, 132, 0.2), transparent 28%), var(--bg);
+    }
+    .slide:not(.active) { display: none !important; }
+    :where(.slide.active) { display: flex; flex-direction: column; }
+    .deck-counter, .deck-hint {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+    .cover { justify-content: center; }
+    .kicker { color: var(--accent); font-size: 22px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
+    h1 { margin-top: 34px; max-width: 980px; font-size: 112px; line-height: 0.94; letter-spacing: 0; }
+    h2 { margin-top: 20px; max-width: 980px; font-size: 78px; line-height: 1; letter-spacing: 0; }
+    .body { margin-top: 30px; max-width: 760px; color: var(--muted); font-size: 30px; line-height: 1.45; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 76px; }
+    .card { min-height: 280px; padding: 34px; border: 1px solid rgba(255,255,255,0.16); background: var(--surface); }
+    .card strong { display: block; margin-bottom: 16px; font-size: 34px; line-height: 1.05; }
+    .card p { color: var(--muted); font-size: 24px; line-height: 1.42; }
+    .num { position: absolute; right: 108px; top: 78px; color: rgba(255,255,255,0.15); font-size: 150px; font-weight: 800; line-height: 1; }
+    .footer { position: absolute; left: 140px; right: 140px; bottom: 78px; display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 22px; color: rgba(255,255,255,0.52); font-size: 20px; }
+    @media print {
+      @page { size: 1920px 1080px; margin: 0; }
+      html, body { width: 1920px !important; height: auto !important; overflow: visible !important; background: #fff !important; }
+      .deck-shell { position: static !important; display: block !important; inset: auto !important; }
+      .deck-stage { width: 1920px !important; height: auto !important; transform: none !important; box-shadow: none !important; position: static !important; }
+      .slide { display: flex !important; position: relative !important; inset: auto !important; width: 1920px !important; height: 1080px !important; page-break-after: always; break-after: page; }
+      .slide:last-child { page-break-after: auto; break-after: auto; }
+      .deck-counter, .deck-hint { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck-shell">
+    <main class="deck-stage" id="deck-stage">
+      <section class="slide active cover" data-screen-label="01 Cover">
+        <div class="kicker">OpenDesign deck</div>
+        <h1>${safeTitle}</h1>
+        <p class="body">${safeBody}</p>
+        <div class="num">01</div>
+        <div class="footer"><span>Starter deck</span><span>1920 x 1080</span></div>
+      </section>
+      <section class="slide" data-screen-label="02 Agenda">
+        <div class="kicker">Agenda</div>
+        <h2>Three points to make</h2>
+        <div class="grid">
+          <div class="card"><strong>Context</strong><p>What changed and why it matters.</p></div>
+          <div class="card"><strong>Design</strong><p>The artifact, flow, or direction to review.</p></div>
+          <div class="card"><strong>Decision</strong><p>The choice or next step you need.</p></div>
+        </div>
+        <div class="num">02</div>
+        <div class="footer"><span>Agenda</span><span>Keep delivery cues off-slide</span></div>
+      </section>
+      <section class="slide" data-screen-label="03 Decision">
+        <div class="kicker">Close</div>
+        <h2>What should happen next?</h2>
+        <p class="body">Keep the slide focused on the decision, owner, timing, and next step.</p>
+        <div class="num">03</div>
+        <div class="footer"><span>Decision</span><span>Owner / timing / next step</span></div>
+      </section>
+    </main>
+  </div>
+  <nav class="deck-counter" role="navigation" aria-label="Deck navigation">
+    <button type="button" id="deck-prev" aria-label="Previous slide">‹</button>
+    <span class="deck-count"><span id="deck-cur">01</span> / <span id="deck-total">03</span></span>
+    <button type="button" id="deck-next" aria-label="Next slide">›</button>
+  </nav>
+  <div class="deck-hint">← / → · space</div>
+  <script>
+    (function () {
+      var stage = document.getElementById('deck-stage');
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var prev = document.getElementById('deck-prev');
+      var next = document.getElementById('deck-next');
+      var cur = document.getElementById('deck-cur');
+      var total = document.getElementById('deck-total');
+      var STORE = 'deck:idx:' + (location.pathname || '/');
+      var idx = 0;
+      function fit() {
+        var sw = window.innerWidth;
+        var sh = window.innerHeight;
+        var pad = 32;
+        var s = Math.min((sw - pad) / 1920, (sh - pad) / 1080);
+        if (!isFinite(s) || s <= 0) s = 1;
+        var tx = (sw - 1920 * s) / 2;
+        var ty = (sh - 1080 * s) / 2;
+        stage.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')';
+      }
+      function pad2(n) { return (n < 10 ? '0' : '') + n; }
+      function paint() {
+        slides.forEach(function (el, i) { el.classList.toggle('active', i === idx); });
+        if (cur) cur.textContent = pad2(idx + 1);
+        if (total) total.textContent = pad2(slides.length);
+        if (prev) prev.toggleAttribute('disabled', idx <= 0);
+        if (next) next.toggleAttribute('disabled', idx >= slides.length - 1);
+      }
+      function go(i) {
+        idx = Math.max(0, Math.min(slides.length - 1, i));
+        paint();
+        try { localStorage.setItem(STORE, String(idx)); } catch (_) {}
+      }
+      function interactiveTarget(target) {
+        while (target && target !== document.body && target !== document.documentElement) {
+          var tag = String(target.tagName || '').toUpperCase();
+          if (tag === 'A' || tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable || target.getAttribute('role') === 'button' || target.getAttribute('role') === 'link') return true;
+          target = target.parentElement;
+        }
+        return false;
+      }
+      function focusDeck() { try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) {} }
+      function onKey(e) {
+        if (e.__odDeckKeyHandled) return;
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx + 1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx - 1); }
+        else if (e.key === 'Home' || String(e.key).toLowerCase() === 'r') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
+        else if (e.key === 'End') { e.__odDeckKeyHandled = true; e.preventDefault(); go(slides.length - 1); }
+      }
+      window.addEventListener('keydown', onKey, true);
+      document.addEventListener('keydown', onKey, true);
+      if (prev) prev.addEventListener('click', function () { go(idx - 1); });
+      if (next) next.addEventListener('click', function () { go(idx + 1); });
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented || (e.button !== undefined && e.button !== 0) || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || interactiveTarget(e.target)) return;
+        focusDeck();
+        if (e.clientX < window.innerWidth / 2) go(idx - 1);
+        else go(idx + 1);
+      }, true);
+      document.body.setAttribute('tabindex', '-1');
+      document.body.style.outline = 'none';
+      document.addEventListener('mousedown', focusDeck);
+      window.addEventListener('load', focusDeck);
+      try {
+        var saved = parseInt(localStorage.getItem(STORE) || '0', 10);
+        if (!isNaN(saved) && saved >= 0 && saved < slides.length) idx = saved;
+      } catch (_) {}
+      window.addEventListener('resize', fit);
+      fit();
+      paint();
+      focusDeck();
+    })();
+  </script>
+</body>
+</html>
+`;
+}
+
+function initialDocumentPage(title: string, body = DEFAULT_DOCUMENT_PAGE_BODY): string {
+  const safeTitle = escapeHtmlText(title);
+  const safeBody = escapeHtmlText(body);
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <style>
+    :root { color-scheme: light; font-family: ui-serif, Georgia, "Times New Roman", serif; background: #eef1f4; color: #1c2630; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 40px 20px; }
+    article { width: min(860px, 100%); margin: 0 auto; padding: 72px; background: #fff; border: 1px solid #d8dee6; box-shadow: 0 18px 60px rgba(19, 31, 44, 0.1); }
+    .meta { color: #607083; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+    h1 { margin: 18px 0 28px; font-size: clamp(42px, 6vw, 72px); line-height: 1.02; letter-spacing: 0; }
+    h2 { margin: 42px 0 12px; font: 700 18px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; color: #223044; }
+    p, li { font-size: 20px; line-height: 1.65; }
+    p { margin: 0 0 18px; }
+    ul { padding-left: 24px; }
+    @media (max-width: 720px) { article { padding: 36px 24px; } }
+  </style>
+</head>
+<body>
+  <article>
+    <div class="meta">OpenDesign document</div>
+    <h1>${safeTitle}</h1>
+    <p>${safeBody}</p>
+    <h2>Purpose</h2>
+    <p>State the audience, the decision, and the desired result.</p>
+    <h2>Key Points</h2>
+    <ul>
+      <li>What the artifact needs to communicate.</li>
+      <li>What evidence or references should guide the design.</li>
+      <li>What reviewers should respond to first.</li>
+    </ul>
+  </article>
+</body>
+</html>
+`;
+}
+
+function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function documentTemplateScenarioKey(projectKind: TrackingProjectKind): keyof Dict {
   switch (projectKind) {
     case 'prototype':
@@ -5200,7 +7456,8 @@ function DesignSystemInlinePreview({
   projectId: string;
   file: ProjectFile;
 }) {
-  const url = projectFileUrl(projectId, file.name);
+  const { workspaceContext } = useProjectCollabContext();
+  const url = projectFileUrl(projectId, file.name, workspaceContext);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [srcDocReady, setSrcDocReady] = useState(false);
 
@@ -5212,23 +7469,33 @@ function DesignSystemInlinePreview({
     void fetchProjectFileText(projectId, file.name, {
       cache: 'no-store',
       cacheBustKey: Math.round(file.mtime),
+      workspaceContext,
     }).then(async (html) => {
       if (cancelled) return;
       if (!html) {
         setSrcDocReady(true);
         return;
       }
-      const inlinedHtml = await inlineDesignSystemPreviewRelativeAssets(html, projectId, file.name);
+      const inlinedHtml = await inlineDesignSystemPreviewRelativeAssets(
+        html,
+        projectId,
+        file.name,
+        workspaceContext,
+      );
       if (cancelled) return;
       setSrcDoc(buildSrcdoc(inlinedHtml, {
-        baseHref: projectRawUrl(projectId, baseDirForDesignSystemPreviewFile(file.name)),
+        baseHref: projectRawUrl(
+          projectId,
+          baseDirForDesignSystemPreviewFile(file.name),
+          workspaceContext,
+        ),
       }));
       setSrcDocReady(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [file.kind, file.mtime, file.name, projectId]);
+  }, [file.kind, file.mtime, file.name, projectId, workspaceContext]);
 
   if (file.kind === 'html') {
     return (
@@ -5240,13 +7507,14 @@ function DesignSystemInlinePreview({
       />
     );
   }
-  return <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />;
+  return <img src={appendResourceQuery(url, `v=${Math.round(file.mtime)}`)} alt={file.name} />;
 }
 
 async function inlineDesignSystemPreviewRelativeAssets(
   html: string,
   projectId: string,
   ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string> {
   const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
   const links = html.match(/<link\b[^>]*>/gi) ?? [];
@@ -5256,9 +7524,17 @@ async function inlineDesignSystemPreviewRelativeAssets(
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
     const stylesheetPath = resolveDesignSystemPreviewRelativePath(ownerFileName, href);
     if (!stylesheetPath) continue;
-    replacements.push(fetchProjectFileText(projectId, stylesheetPath, { cache: 'no-store' }).then((css) => {
+    replacements.push(fetchProjectFileText(projectId, stylesheetPath, {
+      cache: 'no-store',
+      workspaceContext,
+    }).then((css) => {
       if (css == null) return null;
-      const safeCss = rewriteDesignSystemPreviewCssUrls(css, projectId, stylesheetPath)
+      const safeCss = rewriteDesignSystemPreviewCssUrls(
+        css,
+        projectId,
+        stylesheetPath,
+        workspaceContext,
+      )
         .replace(/<\/style/gi, '<\\/style');
       return {
         from: tag,
@@ -5275,7 +7551,12 @@ async function inlineDesignSystemPreviewRelativeAssets(
   for (const tag of scripts) {
     const src = readDesignSystemPreviewHtmlAttr(tag, 'src');
     if (!src) continue;
-    replacements.push(fetchDesignSystemPreviewRelativeText(projectId, ownerFileName, src).then((js) => {
+    replacements.push(fetchDesignSystemPreviewRelativeText(
+      projectId,
+      ownerFileName,
+      src,
+      workspaceContext,
+    ).then((js) => {
       if (js == null) return null;
       const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
       const attrs = open
@@ -5300,18 +7581,29 @@ async function inlineDesignSystemPreviewRelativeAssets(
     (next, replacement) => next.replace(replacement.from, () => replacement.to),
     html,
   );
-  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(withInlineAssets, projectId, ownerFileName);
-  return rewriteDesignSystemPreviewHtmlAssetUrls(withInlineCssAssets, projectId, ownerFileName);
+  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(
+    withInlineAssets,
+    projectId,
+    ownerFileName,
+    workspaceContext,
+  );
+  return rewriteDesignSystemPreviewHtmlAssetUrls(
+    withInlineCssAssets,
+    projectId,
+    ownerFileName,
+    workspaceContext,
+  );
 }
 
 async function fetchDesignSystemPreviewRelativeText(
   projectId: string,
   ownerFileName: string,
   assetRef: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string | null> {
   const filePath = resolveDesignSystemPreviewRelativePath(ownerFileName, assetRef);
   if (!filePath) return null;
-  return fetchProjectFileText(projectId, filePath, { cache: 'no-store' });
+  return fetchProjectFileText(projectId, filePath, { cache: 'no-store', workspaceContext });
 }
 
 type DesignSystemPreviewAssetPath = {
@@ -5350,23 +7642,53 @@ function isDesignSystemPreviewAppRootRef(ref: string): boolean {
     || pathOnly.startsWith('/frames/');
 }
 
-function rewriteDesignSystemPreviewCssUrls(css: string, projectId: string, stylesheetFileName: string): string {
+function designSystemPreviewAssetUrl(
+  projectId: string,
+  assetPath: DesignSystemPreviewAssetPath,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  const baseUrl = projectRawUrl(projectId, assetPath.filePath, workspaceContext);
+  const hashIndex = assetPath.suffix.indexOf('#');
+  const query = (hashIndex >= 0 ? assetPath.suffix.slice(0, hashIndex) : assetPath.suffix)
+    .replace(/^\?/, '');
+  const hash = hashIndex >= 0 ? assetPath.suffix.slice(hashIndex) : '';
+  return `${query ? appendResourceQuery(baseUrl, query) : baseUrl}${hash}`;
+}
+
+function rewriteDesignSystemPreviewCssUrls(
+  css: string,
+  projectId: string,
+  stylesheetFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, _quote: string, rawRef: string) => {
     const ref = rawRef.trim();
     const assetPath = resolveDesignSystemPreviewAssetPath(stylesheetFileName, ref);
     if (!assetPath) return match;
-    return `url("${escapeDesignSystemPreviewCssUrl(projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix)}")`;
+    return `url("${escapeDesignSystemPreviewCssUrl(
+      designSystemPreviewAssetUrl(projectId, assetPath, workspaceContext),
+    )}")`;
   });
 }
 
-function rewriteDesignSystemPreviewHtmlAssetUrls(html: string, projectId: string, ownerFileName: string): string {
+function rewriteDesignSystemPreviewHtmlAssetUrls(
+  html: string,
+  projectId: string,
+  ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   const directAssetTags = new RegExp(
     '(<(?:img|source|video|audio|track|embed|object|image|use)\\b[^>]*?\\s' +
       '(?:src|poster|data|href|xlink:href)\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
     'gi',
   );
   const withDirectAssets = html.replace(directAssetTags, (match, prefix: string, quote: string, rawRef: string) => {
-    const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(rawRef, projectId, ownerFileName);
+    const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(
+      rawRef,
+      projectId,
+      ownerFileName,
+      workspaceContext,
+    );
     if (rewritten === rawRef) return match;
     return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
   });
@@ -5375,19 +7697,29 @@ function rewriteDesignSystemPreviewHtmlAssetUrls(html: string, projectId: string
     'gi',
   );
   return withDirectAssets.replace(srcsetAssetTags, (match, prefix: string, quote: string, rawSrcset: string) => {
-    const rewritten = rewriteDesignSystemPreviewSrcset(rawSrcset, projectId, ownerFileName);
+    const rewritten = rewriteDesignSystemPreviewSrcset(
+      rawSrcset,
+      projectId,
+      ownerFileName,
+      workspaceContext,
+    );
     if (rewritten === rawSrcset) return match;
     return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
   });
 }
 
-function rewriteDesignSystemPreviewInlineCssAssetUrls(html: string, projectId: string, ownerFileName: string): string {
+function rewriteDesignSystemPreviewInlineCssAssetUrls(
+  html: string,
+  projectId: string,
+  ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   const withStyleBlocks = html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (
     match,
     attrs: string,
     css: string,
   ) => {
-    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName, workspaceContext);
     if (rewritten === css) return match;
     return `<style${attrs}>${rewritten}</style>`;
   });
@@ -5397,25 +7729,40 @@ function rewriteDesignSystemPreviewInlineCssAssetUrls(html: string, projectId: s
     quote: string,
     css: string,
   ) => {
-    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName, workspaceContext);
     if (rewritten === css) return match;
     return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
   });
 }
 
-function rewriteDesignSystemPreviewHtmlAssetRef(ref: string, projectId: string, ownerFileName: string): string {
+function rewriteDesignSystemPreviewHtmlAssetRef(
+  ref: string,
+  projectId: string,
+  ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   const assetPath = resolveDesignSystemPreviewAssetPath(ownerFileName, ref.trim());
-  return assetPath ? projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix : ref;
+  return assetPath ? designSystemPreviewAssetUrl(projectId, assetPath, workspaceContext) : ref;
 }
 
-function rewriteDesignSystemPreviewSrcset(srcset: string, projectId: string, ownerFileName: string): string {
+function rewriteDesignSystemPreviewSrcset(
+  srcset: string,
+  projectId: string,
+  ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   if (/\bdata:/i.test(srcset)) return srcset;
   return srcset
     .split(',')
     .map((candidate) => {
       const match = candidate.trim().match(/^(\S+)(\s+.+)?$/);
       if (!match) return candidate;
-      const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(match[1] ?? '', projectId, ownerFileName);
+      const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(
+        match[1] ?? '',
+        projectId,
+        ownerFileName,
+        workspaceContext,
+      );
       return `${rewritten}${match[2] ?? ''}`;
     })
     .join(', ');
@@ -5443,7 +7790,556 @@ function escapeDesignSystemPreviewCssUrl(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\a ');
 }
 
-function Tab({
+function PageCreatorPresetFrame({
+  preset,
+  t,
+  locale,
+  sourceLabel,
+}: {
+  preset: ProjectPagePreset;
+  t: TranslateFn;
+  locale?: string;
+  sourceLabel: string;
+}) {
+  const preview = preset.pluginPreview;
+  const { ref, inView } = useInView<HTMLSpanElement>({ rootMargin: '520px', once: false });
+  // Decks preview at a fixed 1280×720 logical viewport (DECK_PREVIEW_DESIGN_WIDTH)
+  // that is visually scaled down to the 16:9 frame. The fixed 480×300 scale-0.4
+  // crop below is tuned for tall webpage previews and would clip a deck to a
+  // cramped top-left corner. Tag deck presets so the frame becomes a 16:9 box.
+  // Letting the iframe fill it natively (transform:none) only works for decks
+  // that self-scale to their viewport; a fixed-pixel-canvas template
+  // (`.deck{width:100vw;height:100vh}` + fixed-px content, no fit script) then
+  // renders full-size in the tiny iframe and overflows into a cramped mess.
+  // Rendering at the design width and scaling to fit — the same approach as
+  // PreviewModal — previews every template proportionally regardless of whether
+  // it ships a self-scaling stage.
+  const odMode = (preset.plugin?.manifest?.od as { mode?: unknown } | undefined)?.mode;
+  const isDeck = odMode === 'deck' || preset.category === 'slides';
+  const frameClass = isDeck
+    ? 'page-creator-card-frame page-creator-card-frame--deck'
+    : 'page-creator-card-frame';
+
+  // Publishes `--deck-preview-scale` (frame width / 1280) so the fixed-size deck
+  // iframe shrinks to exactly the card width — the frame is 16:9, so scaling by
+  // width fits both axes. Shares the frame's `useInView` ref (same element).
+  useDeckPreviewScale(ref, isDeck);
+
+  if (preset.source === 'blank') {
+    return (
+      <span ref={ref} className={frameClass} aria-hidden>
+        <span className="page-creator-blank-thumb">
+          <span className="page-creator-blank-plus">
+            <Icon name="plus" size={28} />
+          </span>
+          <span>{sourceLabel}</span>
+        </span>
+      </span>
+    );
+  }
+
+  if (preview?.kind === 'media') {
+    return (
+      <span ref={ref} className={frameClass} aria-hidden>
+        {preview.poster ? (
+          <img
+            className="page-creator-plugin-media"
+            src={preview.poster}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <span className="page-creator-blank-thumb">
+            <span className="page-creator-blank-plus">
+              <Icon name={preset.icon} size={24} />
+            </span>
+            <span>{sourceLabel}</span>
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  if (preview?.kind === 'html') {
+    return (
+      <span ref={ref} className={frameClass} aria-hidden>
+        {inView ? (
+          <iframe title="" src={preview.src} sandbox="allow-scripts" loading="lazy" tabIndex={-1} />
+        ) : (
+          <span className="page-creator-preview-skeleton" />
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span ref={ref} className={frameClass} aria-hidden>
+      {inView ? (
+        // allow-scripts (still origin-isolated) so templates that scale
+        // themselves — the slides deck stage — preview at fit instead of a
+        // clipped corner.
+        <iframe
+          title=""
+          srcDoc={initialHtmlPage(`${preset.fileBaseName}.html`, preset, t, locale)}
+          sandbox="allow-scripts"
+          loading="lazy"
+          tabIndex={-1}
+        />
+      ) : (
+        <span className="page-creator-preview-skeleton" />
+      )}
+    </span>
+  );
+}
+
+function PageCreatorDialog({
+  open,
+  t,
+  locale,
+  presets,
+  query,
+  category,
+  previewId,
+  creating,
+  onQueryChange,
+  onCategoryChange,
+  onPreviewChange,
+  onCreate,
+  onClose,
+}: {
+  open: boolean;
+  t: TranslateFn;
+  locale?: string;
+  presets: ProjectPagePreset[];
+  query: string;
+  category: ProjectPageCategoryId;
+  previewId: ProjectPagePresetId;
+  creating: boolean;
+  onQueryChange: (value: string) => void;
+  onCategoryChange: (value: ProjectPageCategoryId) => void;
+  onPreviewChange: (value: ProjectPagePresetId) => void;
+  onCreate: (value: ProjectPagePresetId) => void;
+  onClose: () => void;
+}) {
+  const [modalPreviewId, setModalPreviewId] = useState<ProjectPagePresetId | null>(null);
+  const [subcategory, setSubcategory] = useState<string | null>(null);
+  const [previewAvailability, setPreviewAvailability] = useState<PagePresetPreviewAvailability>({});
+  const visiblePresets = useMemo(() => presets.filter(pageCreatorPresetVisible), [presets]);
+  const remotePreviewValidationKey = useMemo(
+    () => visiblePresets
+      .map((preset) => {
+        const url = pagePresetRemotePreviewUrl(preset);
+        return url ? `${preset.id}:${url}` : null;
+      })
+      .filter((item): item is string => item !== null)
+      .join('|'),
+    [visiblePresets],
+  );
+  useEffect(() => {
+    if (!open) setModalPreviewId(null);
+  }, [open]);
+  // A sub-category filter is scoped to one big category; clear it whenever the
+  // active category changes or the dialog reopens.
+  useEffect(() => {
+    setSubcategory(null);
+  }, [category, open]);
+  useEffect(() => {
+    if (!open) return;
+    if (typeof fetch !== 'function') return;
+    const candidates = visiblePresets
+      .map((preset) => ({ preset, url: pagePresetRemotePreviewUrl(preset) }))
+      .filter((item): item is { preset: ProjectPagePreset; url: string } => Boolean(item.url));
+    if (candidates.length === 0) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    for (const { preset, url } of candidates) {
+      void validatePagePresetRemotePreview(url, controller.signal)
+        .then((ok) => {
+          if (cancelled) return;
+          const status = ok ? 'ok' : 'missing';
+          setPreviewAvailability((prev) => (
+            prev[preset.id] === status ? prev : { ...prev, [preset.id]: status }
+          ));
+        })
+        .catch((err) => {
+          if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
+          setPreviewAvailability((prev) => (
+            prev[preset.id] === 'missing' ? prev : { ...prev, [preset.id]: 'missing' }
+          ));
+        });
+    }
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [open, visiblePresets, remotePreviewValidationKey]);
+  // Keep the search box instantly responsive while deferring the heavy
+  // (iframe-laden) grid re-render, so typing never blocks and results settle in
+  // smoothly instead of janking on every keystroke.
+  const deferredQuery = useDeferredValue(query);
+
+  if (!open) return null;
+
+  const normalizedQuery = deferredQuery.trim().toLocaleLowerCase();
+  const searchPending = query !== deferredQuery;
+  const displayablePresets = visiblePresets.filter((preset) =>
+    pagePresetHasDisplayablePreview(preset, previewAvailability),
+  );
+  // Facet slug for the active category (only Slides / Prototype / Image / Video
+  // carry a sub-category taxonomy). Undefined for flat categories.
+  const activeFacetSlug =
+    PAGE_KIND_TO_FACET_SLUG[category as ProjectPageKind] ?? undefined;
+  // Sub-category catalog (with counts + labels) built once from every preset's
+  // backing plugin, so both the chip row and per-card tags share one source.
+  const allPresetPlugins = displayablePresets
+    .map((preset) => preset.plugin)
+    .filter((record): record is InstalledPluginRecord => Boolean(record));
+  const subcategoryCatalog = buildSubcategoryCatalog(allPresetPlugins);
+  const subcategoryLabelBySlug = new Map<string, string>();
+  for (const options of Object.values(subcategoryCatalog)) {
+    for (const option of options) {
+      subcategoryLabelBySlug.set(option.slug, pluginSubfacetLabel(option.slug, option.label, t));
+    }
+  }
+  const subcategoryOptions: FacetOption[] = activeFacetSlug
+    ? (subcategoryCatalog[activeFacetSlug] ?? []).filter((option) => option.count > 0)
+    : [];
+  const showSubcategoryRow = !normalizedQuery && subcategoryOptions.length > 0;
+  // Resolve the type chip shown on a card. Prefer the commercial category
+  // ("品类") so the Create page cards read like the Community gallery and Home
+  // example row (Genspark / Skywork reference), then fall back to the plugin's
+  // sub-category (e.g. "Landing / marketing") and finally the preset's own
+  // category label so no card just reads "Community".
+  const presetTagLabel = (preset: ProjectPagePreset): string => {
+    if (preset.plugin) {
+      const commercial = pluginCategoryLabel(preset.plugin, t);
+      if (commercial) return commercial;
+    }
+    const slug = PAGE_KIND_TO_FACET_SLUG[preset.category];
+    if (slug && preset.plugin) {
+      const sub = extractSubcategories(preset.plugin, slug)[0];
+      const label = sub ? subcategoryLabelBySlug.get(sub) : undefined;
+      if (label) return label;
+    }
+    return pageCategoryLabel(preset.category, t);
+  };
+  const filteredPresets = displayablePresets.filter((preset) => {
+    if (normalizedQuery) {
+      const title = pagePresetTitle(preset, t, locale);
+      const description = pagePresetDescription(preset, t, locale);
+      const haystack = [
+        preset.id,
+        preset.fileBaseName,
+        preset.category,
+        pagePresetSourceLabel(preset, t),
+        presetTagLabel(preset),
+        title,
+        description,
+      ].join(' ').toLocaleLowerCase();
+      return haystack.includes(normalizedQuery);
+    }
+    if (!pagePresetMatchesCategory(preset, category)) return false;
+    if (subcategory && activeFacetSlug) {
+      // The blank card is a category-level action, not a sub-category template.
+      if (preset.source === 'blank' || !preset.plugin) return false;
+      return extractSubcategories(preset.plugin, activeFacetSlug).includes(subcategory);
+    }
+    return true;
+  });
+  const categoryCounts = new Map<ProjectPageCategoryId, number>(
+    PAGE_CREATOR_CATEGORIES.map((item) => [
+      item.id,
+      displayablePresets.filter((preset) => pagePresetMatchesCategory(preset, item.id)).length,
+    ]),
+  );
+  const previewPreset =
+    projectPagePresetById(previewId, displayablePresets)
+    ?? filteredPresets[0]
+    ?? displayablePresets[0]
+    ?? visiblePresets[0]
+    ?? PROJECT_PAGE_PRESETS[0]!;
+  const modalPreviewPreset = modalPreviewId
+    ? projectPagePresetById(modalPreviewId, displayablePresets) ?? previewPreset
+    : null;
+  const modalPreviewUrl =
+    modalPreviewPreset?.pluginHtmlPreview?.kind === 'html'
+      ? modalPreviewPreset.pluginHtmlPreview.src
+      : null;
+  const modalPreviewSrcDoc = modalPreviewPreset && !modalPreviewUrl
+    ? initialHtmlPage(`${modalPreviewPreset.fileBaseName}.html`, modalPreviewPreset, t, locale)
+    : '';
+
+  const dialog = (
+    <div
+      className="page-creator-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !creating) onClose();
+      }}
+    >
+      <section
+        className="page-creator-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('workspace.pageCreatorTitle')}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="page-creator-head">
+          <div>
+            <h2>{t('workspace.pageCreatorTitle')}</h2>
+          </div>
+          <button
+            type="button"
+            className="page-creator-close od-tooltip"
+            onClick={onClose}
+            disabled={creating}
+            title={t('common.close')}
+            data-tooltip={t('common.close')}
+            aria-label={t('common.close')}
+          >
+            <Icon name="close" size={15} />
+          </button>
+        </header>
+        <div className="page-creator-body">
+          <aside className="page-creator-sidebar" aria-label={t('workspace.pageCreatorCategoryAll')}>
+            <label className="page-creator-search">
+              <Icon name="search" size={14} />
+              <input
+                value={query}
+                onChange={(event) => onQueryChange(event.target.value)}
+                placeholder={t('workspace.pageCreatorSearch')}
+                autoFocus
+              />
+            </label>
+            {PAGE_CREATOR_CATEGORIES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={!normalizedQuery && category === item.id ? 'active' : ''}
+                onClick={() => {
+                  onCategoryChange(item.id);
+                  onQueryChange('');
+                  const firstPreset = displayablePresets.find((preset) =>
+                    pagePresetMatchesCategory(preset, item.id),
+                  );
+                  if (firstPreset) onPreviewChange(firstPreset.id);
+                }}
+              >
+                <Icon name={item.icon} size={13} />
+                <span>{t(item.labelKey)}</span>
+                <span className="page-creator-sidebar-count">{categoryCounts.get(item.id) ?? 0}</span>
+              </button>
+            ))}
+          </aside>
+          <div className="page-creator-main">
+            {showSubcategoryRow ? (
+              <div
+                className="page-creator-subcats"
+                role="tablist"
+                aria-label={t('pluginsHome.subcategoryFilterAria', {
+                  label: pageCategoryLabel(category as ProjectPageKind, t),
+                })}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={subcategory === null}
+                  className={`page-creator-subcat${subcategory === null ? ' active' : ''}`}
+                  onClick={() => setSubcategory(null)}
+                >
+                  <span>
+                    {t('pluginsHome.allCategory', {
+                      label: pageCategoryLabel(category as ProjectPageKind, t),
+                    })}
+                  </span>
+                </button>
+                {subcategoryOptions.map((option) => (
+                  <button
+                    key={option.slug}
+                    type="button"
+                    role="tab"
+                    aria-selected={subcategory === option.slug}
+                    className={`page-creator-subcat${subcategory === option.slug ? ' active' : ''}`}
+                    onClick={() => setSubcategory(option.slug)}
+                  >
+                    <span>{pluginSubfacetLabel(option.slug, option.label, t)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div
+              className={`page-creator-grid${searchPending ? ' is-pending' : ''}`}
+              role="list"
+            >
+              {filteredPresets.length === 0 ? (
+                <p className="page-creator-empty">{t('workspace.pageCreatorEmpty')}</p>
+              ) : (
+                filteredPresets.map((preset) => {
+                  const title = pagePresetTitle(preset, t, locale);
+                  const description = pagePresetDescription(preset, t, locale);
+                  const sourceLabel = pagePresetSourceLabel(preset, t);
+                  const isBlank = preset.source === 'blank';
+                  const cardClassName = [
+                    'page-creator-card',
+                    `page-creator-card--${preset.source}`,
+                    previewPreset.id === preset.id ? 'active' : '',
+                  ].filter(Boolean).join(' ');
+                  if (isBlank) {
+                    return (
+                      <article
+                        key={preset.id}
+                        className={cardClassName}
+                        role="listitem"
+                        onMouseEnter={() => onPreviewChange(preset.id)}
+                        onFocus={() => onPreviewChange(preset.id)}
+                      >
+                        <button
+                          type="button"
+                          className="page-creator-blank-card"
+                          onClick={() => onCreate(preset.id)}
+                          disabled={creating}
+                        >
+                          <span className="page-creator-blank-plus">
+                            <Icon name="plus" size={24} />
+                          </span>
+                          <span className="page-creator-blank-title">{sourceLabel}</span>
+                          <span className="page-creator-blank-hint">{description}</span>
+                        </button>
+                      </article>
+                    );
+                  }
+                  return (
+                    <article
+                      key={preset.id}
+                      className={cardClassName}
+                      role="listitem"
+                      onMouseEnter={() => onPreviewChange(preset.id)}
+                      onFocus={() => onPreviewChange(preset.id)}
+                    >
+                      <div className="page-creator-card-preview">
+                        <PageCreatorPresetFrame
+                          preset={preset}
+                          t={t}
+                          locale={locale}
+                          sourceLabel={sourceLabel}
+                        />
+                        <span className="page-creator-card-copy">
+                          <span className="page-creator-source">
+                            {presetTagLabel(preset)}
+                          </span>
+                          <strong>{title}</strong>
+                          <span>{description}</span>
+                        </span>
+                        <span className="page-creator-card-actions">
+                          <button
+                            type="button"
+                            className="page-creator-preview-button"
+                            onClick={() => setModalPreviewId(preset.id)}
+                            disabled={creating}
+                          >
+                            <Icon name="eye" size={13} />
+                            {t('workspace.pageCreatorPreview')}
+                          </button>
+                          <button
+                            type="button"
+                            className="page-creator-use"
+                            onClick={() => onCreate(preset.id)}
+                            disabled={creating}
+                          >
+                            {t('workspace.pageCreatorUse')}
+                          </button>
+                        </span>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+      {modalPreviewPreset ? (
+        <div
+          className="page-template-preview-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setModalPreviewId(null);
+          }}
+        >
+          <section
+            className="page-template-preview-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${t('workspace.pageCreatorPreview')} ${pagePresetTitle(modalPreviewPreset, t, locale)}`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="page-template-preview-head">
+              <div className="page-template-preview-heading">
+                <p className="page-creator-kicker">{t('workspace.pageCreatorPreview')}</p>
+                <div className="page-template-preview-title-row">
+                  <h3>{pagePresetTitle(modalPreviewPreset, t, locale)}</h3>
+                  <span className="page-creator-source">{presetTagLabel(modalPreviewPreset)}</span>
+                </div>
+                {pagePresetDescription(modalPreviewPreset, t, locale) ? (
+                  <p className="page-template-preview-desc">
+                    {pagePresetDescription(modalPreviewPreset, t, locale)}
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="page-creator-close od-tooltip"
+                onClick={() => setModalPreviewId(null)}
+                title={t('common.close')}
+                data-tooltip={t('common.close')}
+                aria-label={t('common.close')}
+              >
+                <Icon name="close" size={15} />
+              </button>
+            </header>
+            <iframe
+              className="page-template-preview-frame"
+              title={pagePresetTitle(modalPreviewPreset, t, locale)}
+              {...(modalPreviewUrl ? { src: modalPreviewUrl } : { srcDoc: modalPreviewSrcDoc })}
+              sandbox="allow-scripts"
+            />
+            <footer className="page-template-preview-foot">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => onCreate(modalPreviewPreset.id)}
+                disabled={creating}
+              >
+                {t('workspace.pageCreatorUse')}
+              </Button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  return typeof document !== 'undefined' ? createPortal(dialog, document.body) : dialog;
+}
+
+// Stable per-key handler bundle produced by FileWorkspace's tabHandlersFor.
+// Identity stability is the contract: Tab below is memoized, so these must
+// not be re-created per render.
+interface WorkspaceTabItemHandlers {
+  onActivate: () => void;
+  onClose: () => void;
+  onDragStart: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragLeave: () => void;
+  onDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+}
+
+// Memoized: the strip re-renders on every FileWorkspace state change, but an
+// individual tab only changes when its own label/active/drag props do.
+const Tab = memo(function Tab({
   label,
   meta,
   title,
@@ -5453,6 +8349,7 @@ function Tab({
   closable = true,
   kind,
   iconNameOverride,
+  syncBadge,
   liveArtifact,
   draggable = false,
   dragging = false,
@@ -5473,6 +8370,9 @@ function Tab({
   kind?: ProjectFile['kind'] | 'live-artifact' | 'browser';
   /** Force a specific icon (e.g. non-file tabs like terminal:<id> / chat:<id>). */
   iconNameOverride?: IconName;
+  /** Team-share sync state for this tab's file. Replaces the file-type icon
+   *  with an animated downloading/uploading badge while set. */
+  syncBadge?: FileSyncBadgeState | null;
   liveArtifact?: LiveArtifactWorkspaceEntry;
   draggable?: boolean;
   dragging?: boolean;
@@ -5485,7 +8385,13 @@ function Tab({
 }) {
   const t = useT();
   const iconName = iconNameOverride ?? kindIconName(kind);
+  const syncBadgeLabel = syncBadge
+    ? syncBadge === 'downloading'
+      ? t('workspace.fileSyncDownloading')
+      : t('workspace.fileSyncUploading')
+    : null;
   const tabTitle = title ?? (meta ? `${label} ${meta}` : label);
+  const tabTooltip = syncBadgeLabel ? `${tabTitle} · ${syncBadgeLabel}` : tabTitle;
   return (
     <div
       className={[
@@ -5509,8 +8415,8 @@ function Tab({
       role="tab"
       aria-selected={active}
       tabIndex={0}
-      title={tabTitle}
-      data-tooltip={tabTitle}
+      title={tabTooltip}
+      data-tooltip={tabTooltip}
       data-tooltip-placement="bottom"
       draggable={draggable}
       onDragStart={draggable ? onDragStart : undefined}
@@ -5519,7 +8425,11 @@ function Tab({
       onDrop={draggable ? onDrop : undefined}
       onDragEnd={draggable ? onDragEnd : undefined}
     >
-      {iconName ? (
+      {syncBadge ? (
+        <span className="tab-icon">
+          <FileSyncBadge state={syncBadge} size={13} />
+        </span>
+      ) : iconName ? (
         <span className="tab-icon" aria-hidden>
           <Icon name={iconName} size={13} />
         </span>
@@ -5554,7 +8464,7 @@ function Tab({
       ) : null}
     </div>
   );
-}
+});
 
 function tabDropEdgeFromEvent(event: ReactDragEvent<HTMLDivElement>): TabDropEdge {
   const rect = event.currentTarget.getBoundingClientRect();
@@ -5564,6 +8474,19 @@ function tabDropEdgeFromEvent(event: ReactDragEvent<HTMLDivElement>): TabDropEdg
 function arraysEqual(left: string[], right: string[]): boolean {
   if (left.length !== right.length) return false;
   return left.every((value, index) => value === right[index]);
+}
+
+export function scrollWorkspaceTabIntoView(
+  tabBar: Pick<HTMLDivElement, 'getBoundingClientRect' | 'scrollLeft'>,
+  tab: Pick<HTMLElement, 'getBoundingClientRect'>,
+) {
+  const tabRect = tab.getBoundingClientRect();
+  const barRect = tabBar.getBoundingClientRect();
+  if (tabRect.left < barRect.left) {
+    tabBar.scrollLeft += tabRect.left - barRect.left;
+  } else if (tabRect.right > barRect.right) {
+    tabBar.scrollLeft += tabRect.right - barRect.right;
+  }
 }
 
 export function scrollWorkspaceTabsWithWheel(

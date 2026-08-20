@@ -161,6 +161,14 @@ describe('OrbitService', () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'orbit-test-'));
     try {
       const service = new OrbitService(dataDir);
+      service.configure({
+        enabled: false,
+        time: '08:00',
+        workspaceScope: {
+          workspaceId: 'workspace-a',
+          workspaceMemberId: 'member-a',
+        },
+      });
       const captured: { request?: Parameters<OrbitRunHandler>[0] } = {};
       service.setRunHandler(async (request) => {
         captured.request = request;
@@ -185,11 +193,58 @@ describe('OrbitService', () => {
       expect(captured.request?.systemPrompt).toContain(
         'DAILY DIGEST CONNECTOR CURATION IS REQUIRED WHEN SUPPORTED',
       );
+      expect(captured.request?.workspaceScope).toEqual({
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      });
       let status = await service.status();
       for (let attempt = 0; attempt < 10 && !status.lastRun; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 0));
         status = await service.status();
       }
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves persisted Workspace scope for execution without a membership re-check', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'orbit-test-'));
+    try {
+      const service = new OrbitService(dataDir);
+      service.configure({
+        enabled: false,
+        time: '08:00',
+        workspaceScope: {
+          workspaceId: 'workspace-a',
+          workspaceMemberId: 'member-a',
+        },
+      });
+      const sideEffects = { projects: 0, agentRuns: 0 };
+      service.setRunHandler(async (request) => {
+        expect(request.workspaceScope).toEqual({
+          workspaceId: 'workspace-a',
+          workspaceMemberId: 'member-a',
+        });
+        sideEffects.projects += 1;
+        sideEffects.agentRuns += 1;
+        return {
+          projectId: 'project-a',
+          agentRunId: 'agent-run-a',
+          completion: Promise.resolve({
+            agentRunId: 'agent-run-a',
+            status: 'succeeded',
+          }),
+        };
+      });
+
+      await expect(service.start('manual')).resolves.toMatchObject({
+        projectId: 'project-a',
+        agentRunId: 'agent-run-a',
+      });
+      expect(sideEffects).toEqual({ projects: 1, agentRuns: 1 });
+      await vi.waitFor(async () => {
+        expect((await service.status()).lastRun).not.toBeNull();
+      });
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }

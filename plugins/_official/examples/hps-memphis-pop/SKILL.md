@@ -1,20 +1,35 @@
 ---
 name: hps-memphis-pop
-description: Memphis Pop deck — 80s Memphis design as a locked single-theme HTML deck. Warm cream canvas tiled edge-to-edge with a pink/teal/yellow confetti-dot pattern, 2.5px black-outlined cards with hard offset shadows, hot-pink #ff3d8b lead accent, Archivo Black display type. Based on the memphis-pop theme from lewislulu/html-ppt-skill. Use when the user wants a playful, loud, retro-80s presentation, product launch deck, creative pitch, or community talk.
+en_name: "Turn a Pop-Culture Retrospective into a Talk like an Editorial Curator"
+zh_name: "像内容策展人一样做流行文化回顾演讲"
+description: |
+  A pop-culture retrospective on how 1980s design language shaped today's apps — the scenes, the turning point, and the takeaway. Built as a decision-grade story deck for talk audience, design community.
+en_description: |
+  A pop-culture retrospective on how 1980s design language shaped today's apps — the scenes, the turning point, and the takeaway. Built as a decision-grade story deck for talk audience, design community.
+zh_description: |
+  像内容策展人一样做流行文化回顾演讲——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "life"
+  - "travel-photo-essay-deck"
+  - "personal"
+  - "story"
+  - "photo-essay"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "hps-memphis-pop"
 triggers:
-  - "memphis"
-  - "memphis pop"
-  - "80s deck"
-  - "retro presentation"
-  - "confetti"
-  - "playful deck"
-  - "孟菲斯"
-  - "波普"
-  - "复古幻灯片"
+  - "travel-photo-essay-deck"
+  - "life"
+  - "Turn a Pop-Culture Retrospective into a Talk like an Editorial Curator"
+  - "像内容策展人一样做流行文化回顾演讲"
+  - "story"
+  - "personal"
+  - "photo-essay"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  scenario: product
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -23,9 +38,11 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "Use Memphis Pop to turn my content into a single-file 80s Memphis-design HTML deck: cream confetti-dot canvas, black-outlined cards with hard shadows, hot-pink accents and Archivo Black headlines. Start from the seed example.html — keep its token sheet, slide scaffold and keyboard runtime exactly as-is, replace slide content only, and use real content with no lorem ipsum."
   example_prompt_i18n:
     zh-CN: "用孟菲斯波普把我的内容做成一套 80 年代孟菲斯风格的单文件 HTML 幻灯片：奶油色 confetti 圆点画布、黑描边硬阴影卡片、热粉 accent 和 Archivo Black 大标题。从种子 example.html 出发——完整保留 token 表、slide 骨架和键盘运行时，只替换幻灯片内容，使用真实内容，不要 lorem ipsum。"
+  category: "life"
+  scenario: "personal"
+  example_prompt: "Create \"Turn a Pop-Culture Retrospective into a Talk like an Editorial Curator\" as a decision-grade Life & story deck in this template's own visual system. Subject: A pop-culture retrospective on how 1980s design language shaped today's apps — the scenes, the turning point, and the takeaway. Audience: talk audience, design community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once."
 ---
 
 # Memphis Pop（孟菲斯波普）

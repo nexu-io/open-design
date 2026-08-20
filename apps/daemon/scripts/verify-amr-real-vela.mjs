@@ -15,7 +15,7 @@
  *   - Runs initialize → session/new → session/set_model (if --model given) →
  *     session/prompt with the prompt from VELA_VERIFY_PROMPT (defaults to a
  *     short hello).
- *   - Logs every Open Design `send(event, payload)` to stdout so you can see
+ *   - Logs every OpenDesign `send(event, payload)` to stdout so you can see
  *     the same text_delta / usage events the chat UI would receive.
  *   - Exits 0 on completedSuccessfully, 1 otherwise.
  */

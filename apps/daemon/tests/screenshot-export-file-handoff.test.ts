@@ -11,6 +11,7 @@ import type {
   DesktopRenderSlidesInput,
   DesktopRenderSlidesResult,
 } from '@open-design/sidecar-proto';
+import { createProjectFileVersion } from '../src/project-file-versions.js';
 import { startServer } from '../src/server.js';
 
 // ---------------------------------------------------------------------------
@@ -49,6 +50,7 @@ describe('screenshot export desktop renderer file handoff', () => {
   const projectId = 'proj-export-handoff';
   const seenDirs: string[] = [];
   const seenInputs: DesktopRenderSlidesInput[] = [];
+  let versionedVersionId = '';
 
   // Stub desktop renderer: assert we were handed an outputDir, write the image
   // files there exactly like the real renderer's emitImages, return file paths.
@@ -93,6 +95,14 @@ describe('screenshot export desktop renderer file handoff', () => {
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, 'index.html'), '<html><body><section class="slide">A</section></body></html>');
     await writeFile(path.join(dir, 'page.html'), '<html><body><main>Ordinary page</main></body></html>');
+    const versioned = await createProjectFileVersion(
+      path.join(dataDir, 'projects'),
+      projectId,
+      'versioned.html',
+      '<html><body><main>Historical export version</main></body></html>',
+    );
+    versionedVersionId = versioned.id;
+    await writeFile(path.join(dir, 'versioned.html'), '<html><body><main>Current file content</main></body></html>');
   });
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -173,6 +183,19 @@ describe('screenshot export desktop renderer file handoff', () => {
     expect(seenInputs.at(-1)?.deck).toBeUndefined();
   });
 
+  it('renders historical version image exports from the selected version content', async () => {
+    const before = seenInputs.length;
+    const res = await fetch(`${baseUrl}/api/projects/${projectId}/export/image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: 'versioned.html', versionId: versionedVersionId }),
+    });
+    expect(res.status).toBe(200);
+    expect(seenInputs.length).toBe(before + 1);
+    expect(seenInputs.at(-1)?.html).toContain('Historical export version');
+    expect(seenInputs.at(-1)?.html).not.toContain('Current file content');
+  });
+
   it('preserves generic export width and height contract inputs', async () => {
     const before = seenInputs.length;
     const res = await fetch(`${baseUrl}/api/projects/${projectId}/export`, {
@@ -184,6 +207,20 @@ describe('screenshot export desktop renderer file handoff', () => {
     expect(seenInputs.length).toBe(before + 1);
     expect(seenInputs.at(-1)?.width).toBe(1280);
     expect(seenInputs.at(-1)?.height).toBe(720);
+  });
+
+  it('forwards dedicated image export viewport dimensions to the renderer', async () => {
+    const before = seenInputs.length;
+    const res = await fetch(`${baseUrl}/api/projects/${projectId}/export/image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: 'page.html', deck: false, width: 390, height: 844 }),
+    });
+    expect(res.status).toBe(200);
+    expect(seenInputs.length).toBe(before + 1);
+    expect(seenInputs.at(-1)?.deck).toBe(false);
+    expect(seenInputs.at(-1)?.width).toBe(390);
+    expect(seenInputs.at(-1)?.height).toBe(844);
   });
 
   it('routes generic POST /export pdf through the raster screenshot renderer, not the vector path', async () => {

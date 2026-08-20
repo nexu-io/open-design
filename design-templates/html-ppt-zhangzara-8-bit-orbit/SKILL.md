@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-8-bit-orbit
+en_name: "Turn a Hobby into a Story Deck like a Passion-Project Storyteller"
+zh_name: "像热爱驱动的讲述者一样把爱好做成故事"
 description: |
-  8-Bit Orbit — Pixel-art neon arcade aesthetic on a deep navy void. Anything that should feel like a CRT screen at 2am: cyberpunk, gaming, web3, indie dev tools, hackathon demos.
+  A gamer's journey building a retro-arcade collection — the obsession, the hunt, and what the machines came to mean. Built as a decision-grade story deck for friends, hobby community.
+en_description: |
+  A gamer's journey building a retro-arcade collection — the obsession, the hunt, and what the machines came to mean. Built as a decision-grade story deck for friends, hobby community.
+zh_description: |
+  像热爱驱动的讲述者一样把爱好做成故事——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "life"
+  - "travel-photo-essay-deck"
+  - "personal"
+  - "story"
+  - "photo-essay"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-8-bit-orbit"
 triggers:
-  - "8-bit-orbit"
-  - "zhangzara-8-bit-orbit"
-  - "8-Bit Orbit"
-  - "retro-tech"
-  - "playful"
-  - "geeky"
-  - "neon"
-  - "gaming pitch"
-  - "hackathon demo"
+  - "travel-photo-essay-deck"
+  - "life"
+  - "Turn a Hobby into a Story Deck like a Passion-Project Storyteller"
+  - "像热爱驱动的讲述者一样把爱好做成故事"
+  - "story"
+  - "personal"
+  - "photo-essay"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/8-bit-orbit"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "life"
+  scenario: "personal"
+  example_prompt: "Create \"Turn a Hobby into a Story Deck like a Passion-Project Storyteller\" as a decision-grade Life & story deck in this template's own visual system. Subject: A gamer's journey building a retro-arcade collection — the obsession, the hunt, and what the machines came to mean. Audience: friends, hobby community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once."
 ---
 
 # 8-Bit Orbit

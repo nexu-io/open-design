@@ -24,6 +24,7 @@
     "en": "Shadcn"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Shadcn/ui-inspired design with minimal, clean components, monochrome palette, and utility-first patterns.",
   "description_i18n": {
     "zh-CN": "受 Shadcn/ui 启发的设计，具有简洁的组件、单色调色板和实用优先的模式。",

@@ -9,9 +9,8 @@ import { pageNameFromPath } from '../app/i18n.ts';
  * The landing-site trackers are emitted as inline-script STRINGS, so neither
  * `astro check` nor a plain import exercises their runtime branches. These
  * tests extract the real emitted script and run it against a minimal DOM shim,
- * proving that download CTAs which route to the /download/ installer-matrix
- * page (the header nav button + sub-page CTAs) still emit a download event —
- * the gap this change closes — distinguished by `download_target`.
+ * proving that both direct installer CTAs and links to the /download/
+ * installer matrix emit a download event distinguished by `download_target`.
  */
 
 type CaptureCall = { name: string; props: Record<string, unknown> };
@@ -44,18 +43,45 @@ function runPosthogTracker(pageName?: string) {
 
   const captures: CaptureCall[] = [];
   const handlers: Record<string, (ev: any) => void> = {};
-  const win: any = { posthog: { capture: (name: string, props: any) => captures.push({ name, props }) } };
+  const win: any = {
+    location: {
+      href: 'https://open-design.dev/?utm_source=twitter&utm_content=readme_download',
+    },
+    posthog: {
+      capture: (name: string, props: any) => captures.push({ name, props }),
+      get_distinct_id: () => 'web-anon-1',
+    },
+  };
   const doc: any = {
     documentElement: { getAttribute: () => 'zh' },
+    referrer: 'https://referrer.example/',
     addEventListener: (type: string, fn: (ev: any) => void) => {
       handlers[type] = fn;
     },
   };
   const nav: any = { userAgent: 'mozilla mac os x', platform: 'MacIntel' };
+  const fetchStub = async () => new Response(JSON.stringify({
+    downloadUrl: 'https://download.open-design.ai/mac/arm64/odtoken_123456/Open.dmg',
+  }), { status: 200 });
 
   // eslint-disable-next-line no-new-func
   new Function('window', 'document', 'navigator', iife)(win, doc, nav);
-  return { captures, click: (target: any) => handlers.click?.({ target }) };
+  return {
+    captures,
+    click: (target: any) => {
+      const oldFetch = globalThis.fetch;
+      (globalThis as any).fetch = fetchStub;
+      let ev: any;
+      ev = { target, defaultPrevented: false, preventDefault: () => { ev.defaultPrevented = true; } };
+      try {
+        handlers.click?.(ev);
+        return ev;
+      } finally {
+        (globalThis as any).fetch = oldFetch;
+      }
+    },
+    win,
+  };
 }
 
 test('posthog: page_view fires on load', () => {
@@ -81,6 +107,15 @@ test('posthog: hero direct download (rewritten to .dmg) → direct + placement=h
   assert.equal(dl!.props.download_target, 'direct');
   assert.equal(dl!.props.placement, 'hero');
   assert.equal(dl!.props.platform, 'macos');
+  const ev = click(
+    makeLink({
+      href: 'https://github.com/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      pathname: '/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      attrs: { 'data-download-placement': 'hero' },
+      text: '下载桌面端',
+    }),
+  );
+  assert.equal(ev.defaultPrevented, true, 'direct download should be routed through attribution mint');
 });
 
 test('posthog: cta-band direct download → direct + placement=cta', () => {
@@ -99,20 +134,40 @@ test('posthog: cta-band direct download → direct + placement=cta', () => {
   assert.equal(dl!.props.placement, 'cta');
 });
 
-test('posthog: nav /download/ button → download_page + placement=nav', () => {
+test('posthog: nav direct installer → direct + placement=nav', () => {
   const { captures, click } = runPosthogTracker();
   click(
     makeLink({
-      href: 'https://open-design.dev/zh/download/',
-      pathname: '/zh/download/',
-      attrs: { 'data-download-page': '', 'data-download-placement': 'nav' },
+      href: 'https://github.com/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      pathname: '/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      attrs: { 'data-direct-download': '', 'data-download-placement': 'nav' },
       text: '下载',
     }),
   );
   const dl = captures.find((c) => c.name === 'ui_click' && c.props.element === 'download_desktop');
   assert.ok(dl, 'expected a download_desktop click event for the nav download button');
-  assert.equal(dl!.props.download_target, 'download_page');
+  assert.equal(dl!.props.download_target, 'direct');
   assert.equal(dl!.props.placement, 'nav');
+});
+
+test('posthog: engagement prompt CTA → direct installer + placement=engagement_prompt', () => {
+  const { captures, click } = runPosthogTracker('solutions_prototype');
+  click(
+    makeLink({
+      href: 'https://github.com/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      pathname: '/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      attrs: {
+        'data-direct-download': '',
+        'data-download-placement': 'engagement_prompt',
+      },
+      text: '免费下载',
+    }),
+  );
+  const dl = captures.find((c) => c.name === 'ui_click' && c.props.element === 'download_desktop');
+  assert.ok(dl, 'expected a download event from the engagement prompt CTA');
+  assert.equal(dl!.props.download_target, 'direct');
+  assert.equal(dl!.props.placement, 'engagement_prompt');
+  assert.equal(dl!.props.page_name, 'solutions_prototype');
 });
 
 test('posthog: bare /download/ link (no attr) still matched by path', () => {

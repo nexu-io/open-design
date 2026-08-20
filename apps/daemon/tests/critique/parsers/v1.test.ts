@@ -287,6 +287,84 @@ describe('parseV1 -- SHIP guard emission and envelope rules', () => {
     ).rejects.toBeInstanceOf(MalformedBlockError);
   });
 
+  it('emits weak_debate when a non-final round lacks critic-specialist disagreement', async () => {
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="2" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="designer"><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>
+        <PANELIST role="critic" score="6"><MUST_FIX>Fix the hero contrast.</MUST_FIX></PANELIST>
+        <PANELIST role="brand" score="6"><MUST_FIX>Fix the hero contrast.</MUST_FIX></PANELIST>
+        <PANELIST role="a11y" score="6"></PANELIST>
+        <PANELIST role="copy" score="6"></PANELIST>
+        <ROUND_END n="1" composite="6" must_fix="2" decision="continue"><REASON>iterate</REASON></ROUND_END>
+      </ROUND>
+      <ROUND n="2">
+        <PANELIST role="designer" score="9"><NOTES>done</NOTES></PANELIST>
+        <PANELIST role="critic" score="9"></PANELIST>
+        <PANELIST role="brand" score="9"></PANELIST>
+        <PANELIST role="a11y" score="9"></PANELIST>
+        <PANELIST role="copy" score="9"></PANELIST>
+        <ROUND_END n="2" composite="9" must_fix="0" decision="ship"><REASON>ship</REASON></ROUND_END>
+      </ROUND>
+      <SHIP round="2" composite="9" status="shipped"><ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT><SUMMARY>done</SUMMARY></SHIP>
+    </CRITIQUE_RUN>`;
+    const events = await collect(parseV1(oneChunk(stream), opts()));
+    expect(events.filter(
+      (event) => event.type === 'parser_warning' && event.kind === 'weak_debate',
+    )).toHaveLength(1);
+  });
+
+  it('emits weak_debate when critic and specialist repeat the same two directives', async () => {
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="2" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="designer"><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>
+        <PANELIST role="critic" score="6"><MUST_FIX>Fix the hero contrast.</MUST_FIX><MUST_FIX>Use the approved font.</MUST_FIX></PANELIST>
+        <PANELIST role="brand" score="6"><MUST_FIX>Fix the hero contrast.</MUST_FIX><MUST_FIX>Use the approved font.</MUST_FIX></PANELIST>
+        <PANELIST role="a11y" score="6"></PANELIST>
+        <PANELIST role="copy" score="6"></PANELIST>
+        <ROUND_END n="1" composite="6" must_fix="4" decision="continue"><REASON>iterate</REASON></ROUND_END>
+      </ROUND>
+      <ROUND n="2">
+        <PANELIST role="designer" score="9"><NOTES>done</NOTES></PANELIST>
+        <PANELIST role="critic" score="9"></PANELIST>
+        <PANELIST role="brand" score="9"></PANELIST>
+        <PANELIST role="a11y" score="9"></PANELIST>
+        <PANELIST role="copy" score="9"></PANELIST>
+        <ROUND_END n="2" composite="9" must_fix="0" decision="ship"><REASON>ship</REASON></ROUND_END>
+      </ROUND>
+      <SHIP round="2" composite="9" status="shipped"><ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT><SUMMARY>done</SUMMARY></SHIP>
+    </CRITIQUE_RUN>`;
+    const events = await collect(parseV1(oneChunk(stream), opts()));
+    expect(events.filter(
+      (event) => event.type === 'parser_warning' && event.kind === 'weak_debate',
+    )).toHaveLength(1);
+  });
+
+  it('accepts a non-final round with distinct critic and specialist MUST_FIX directives', async () => {
+    const stream = `<CRITIQUE_RUN version="1" maxRounds="2" threshold="8.0" scale="10">
+      <ROUND n="1">
+        <PANELIST role="designer"><ARTIFACT mime="text/html"><![CDATA[<p>v1</p>]]></ARTIFACT></PANELIST>
+        <PANELIST role="critic" score="6"><MUST_FIX>Fix the hero hierarchy.</MUST_FIX></PANELIST>
+        <PANELIST role="brand" score="6"><MUST_FIX>Use the approved brand blue.</MUST_FIX></PANELIST>
+        <PANELIST role="a11y" score="6"></PANELIST>
+        <PANELIST role="copy" score="6"></PANELIST>
+        <ROUND_END n="1" composite="6" must_fix="2" decision="continue"><REASON>iterate</REASON></ROUND_END>
+      </ROUND>
+      <ROUND n="2">
+        <PANELIST role="designer" score="9"><NOTES>done</NOTES></PANELIST>
+        <PANELIST role="critic" score="9"></PANELIST>
+        <PANELIST role="brand" score="9"></PANELIST>
+        <PANELIST role="a11y" score="9"></PANELIST>
+        <PANELIST role="copy" score="9"></PANELIST>
+        <ROUND_END n="2" composite="9" must_fix="0" decision="ship"><REASON>ship</REASON></ROUND_END>
+      </ROUND>
+      <SHIP round="2" composite="9" status="shipped"><ARTIFACT mime="text/html"><![CDATA[<p>final</p>]]></ARTIFACT><SUMMARY>done</SUMMARY></SHIP>
+    </CRITIQUE_RUN>`;
+    const events = await collect(parseV1(oneChunk(stream), opts()));
+    expect(events.some(
+      (event) => event.type === 'parser_warning' && event.kind === 'weak_debate',
+    )).toBe(false);
+  });
+
   it('emits a duplicate_ship parser_warning on the second SHIP and keeps the first', async () => {
     // Two complete SHIP blocks. shipSeen flips on the first; the second is
     // surfaced as a warning at its position and skipped (no second ship event).

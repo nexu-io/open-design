@@ -45,7 +45,15 @@ import {
   writeFigmaSidecar,
 } from '../library.js';
 import { reconcileLibrary, type ReconcileLibraryResult } from '../library-sync.js';
+import { fetchExternalBrandAsset } from '../brands/safe-fetch.js';
 import { ensureProjectSubdir } from '../projects.js';
+import {
+  authorizeCreatedProjectWorkspace,
+  bindCreatedProjectToWorkspace,
+  sendCreatedProjectWorkspaceError,
+} from '../collab/created-project-workspace.js';
+import type { BoundWorkspaceResourceMutationGate } from '../collab/workspace-resource-mutation.js';
+import type { WorkspaceDirectoryFetchResult } from '../collab/vela-workspace-context.js';
 import {
   confirmPairing,
   libraryConnectionStatus,
@@ -56,7 +64,10 @@ import {
 export interface RegisterLibraryRoutesDeps
   extends RouteDeps<
     'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'auth'
-  > {}
+  > {
+  fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  enforceWorkspaceProjectMutation?: BoundWorkspaceResourceMutationGate;
+}
 
 const MAX_REMOTE_BYTES = 25 * 1024 * 1024;
 
@@ -107,7 +118,14 @@ function parseDataUrl(dataUrl: string): { bytes: Buffer; mime: string | undefine
 }
 
 async function fetchRemoteBytes(url: string): Promise<{ bytes: Buffer; mime: string | undefined }> {
-  const resp = await fetch(url, { redirect: 'follow' });
+  // Route the client-supplied URL through the same SSRF guard the brand-asset
+  // path uses (assertPublicBrandUrl): reject cloud-metadata (169.254.169.254),
+  // loopback, RFC1918/CGNAT, and link-local hosts, re-validating on every
+  // redirect hop (redirect:'manual'). Without this a caller could make the
+  // privileged daemon fetch an internal/loopback URL and read the response back
+  // via GET /api/library/assets/:id/raw — SSRF + response exfiltration. Sibling
+  // to the loopback-SSRF class in #5478.
+  const resp = await fetchExternalBrandAsset(url);
   if (!resp.ok) throw new Error(`remote fetch failed: ${resp.status}`);
   const declared = Number(resp.headers.get('content-length') ?? '0');
   if (declared && declared > MAX_REMOTE_BYTES) throw new Error('remote resource too large');
@@ -117,15 +135,66 @@ async function fetchRemoteBytes(url: string): Promise<{ bytes: Buffer; mime: str
   return { bytes: buf, mime };
 }
 
+/**
+ * Stream a file to the HTTP response with an `error` handler on the read stream.
+ * `.pipe()` does NOT forward the source's errors, so without this a mid-stream
+ * read failure (file deleted/truncated mid-read, EIO, an fd race) emits an
+ * unhandled `error` on the Readable, which Node escalates to an uncaughtException
+ * that takes the whole daemon down. On error we fall back to `onOpenError`
+ * (a 404) when nothing has been written yet, else tear the response down.
+ */
+export function streamAssetFileToResponse(
+  abs: string,
+  res: Response,
+  onOpenError: () => void,
+): void {
+  const stream = createReadStream(abs);
+  stream.on('error', () => {
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    // The route sets success-only headers (Content-Type/-Length, Cache-Control,
+    // Content-Disposition) before streaming. Strip them before the JSON error
+    // fallback so a transient open/read failure isn't returned with stale asset
+    // metadata — in particular the `max-age=3600` directive, which would cache
+    // the 404 for an hour and mask the file once it becomes available again.
+    for (const header of ['Cache-Control', 'Content-Disposition', 'Content-Type', 'Content-Length']) {
+      res.removeHeader(header);
+    }
+    onOpenError();
+  });
+  stream.pipe(res);
+}
+
 export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDeps): void {
   const { db } = ctx;
   const { sendApiError, createSseResponse, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } =
     ctx.http;
   const { LIBRARY_DIR, PROJECTS_DIR, USER_DESIGN_SYSTEMS_DIR } = ctx.paths;
-  const { getProject, insertProject } = ctx.projectStore;
+  const {
+    getProject,
+    insertProject,
+    ensureWorkspaceProject,
+    getWorkspaceProject,
+    getWorkspaceProjectByProjectId,
+  } = ctx.projectStore;
   const { writeProjectFile } = ctx.projectFiles;
   const { insertConversation } = ctx.conversations;
   const { authorizeToolRequest } = ctx.auth;
+  async function enforceProjectWrite(req: Request, res: Response, projectId: string) {
+    if (!ctx.enforceWorkspaceProjectMutation) return true;
+    return ctx.enforceWorkspaceProjectMutation(
+      req,
+      res,
+      sendApiError,
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      db,
+      projectId,
+      'writeFiles',
+    );
+  }
 
   // Copy an asset's bytes into a project (under a `library/` subdir) and record
   // the project usage as a source back-link. Shared by the loopback apply route
@@ -479,7 +548,9 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
       res.setHeader('Content-Type', asset.mime ?? 'application/octet-stream');
       res.setHeader('Content-Length', String(info.size));
       res.setHeader('Cache-Control', 'private, max-age=3600');
-      createReadStream(abs).pipe(res);
+      streamAssetFileToResponse(abs, res, () =>
+        sendApiError(res, 404, 'NOT_FOUND', 'asset bytes not available'),
+      );
     } catch {
       return sendApiError(res, 404, 'NOT_FOUND', 'asset bytes not available');
     }
@@ -501,7 +572,9 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
       res.setHeader('Content-Length', String(info.size));
       res.setHeader('Content-Disposition', `attachment; filename="${figmaDownloadName(asset)}"`);
       res.setHeader('Cache-Control', 'private, max-age=3600');
-      createReadStream(sidecar).pipe(res);
+      streamAssetFileToResponse(sidecar, res, () =>
+        sendApiError(res, 404, 'NOT_FOUND', 'no figma capture for this asset'),
+      );
     } catch {
       return sendApiError(res, 404, 'NOT_FOUND', 'no figma capture for this asset');
     }
@@ -521,7 +594,9 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Length', String(info.size));
       res.setHeader('Cache-Control', 'private, max-age=3600');
-      createReadStream(sidecar).pipe(res);
+      streamAssetFileToResponse(sidecar, res, () =>
+        sendApiError(res, 404, 'NOT_FOUND', 'no element markup for this asset'),
+      );
     } catch {
       return sendApiError(res, 404, 'NOT_FOUND', 'no element markup for this asset');
     }
@@ -534,6 +609,7 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
     if (!asset) return sendApiError(res, 404, 'NOT_FOUND', 'asset not found');
     const projectId = typeof req.body?.projectId === 'string' ? req.body.projectId : '';
     if (!projectId) return sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required');
+    if (!await enforceProjectWrite(req, res, projectId)) return;
     try {
       const includeElement = req.body?.includeElement === true;
       const result = await applyAssetToProject(asset, projectId, 'manual-upload', req.body?.dir, includeElement);
@@ -557,6 +633,13 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
     if (!asset) return sendApiError(res, 404, 'NOT_FOUND', 'asset not found');
     if (asset.kind !== 'html') {
       return sendApiError(res, 400, 'NOT_HTML', 'only html captures can be opened as an editable page');
+    }
+    const createWorkspace = await authorizeCreatedProjectWorkspace(
+      req,
+      ctx.fetchProjectCreationWorkspaceDirectory,
+    );
+    if (!createWorkspace.ok) {
+      return sendCreatedProjectWorkspaceError(res, createWorkspace);
     }
     const bytesPath = resolveAssetBytesPath(asset, PROJECTS_DIR);
     if (!bytesPath) return sendApiError(res, 404, 'NOT_FOUND', 'asset bytes not available');
@@ -588,6 +671,16 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
         createdAt: now,
         updatedAt: now,
       });
+      // A capture opened as an editable page is a project the user will
+      // immediately chat into, so it needs the same home workspace every other
+      // created project gets; otherwise it can only use the account-scoped
+      // local run lane and has no durable Workspace for later mutations.
+      bindCreatedProjectToWorkspace(
+        (input) => ensureWorkspaceProject(db, input),
+        createWorkspace.context,
+        projectId,
+        now,
+      );
       // writeProjectFile ensures the project dir; write the capture as the
       // editable entry file. No artifact manifest — a plain HTML file avoids
       // the publication/stub guards (a captured page is arbitrary markup) while
@@ -627,6 +720,7 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
     if (!asset) return sendApiError(res, 404, 'NOT_FOUND', 'asset not found');
     const projectId = grant.projectId ?? (typeof req.body?.projectId === 'string' ? req.body.projectId : '');
     if (!projectId) return sendApiError(res, 400, 'BAD_REQUEST', 'projectId is required');
+    if (!await enforceProjectWrite(req, res, projectId)) return;
     try {
       const includeElement = req.body?.includeElement === true;
       const result = await applyAssetToProject(asset, projectId, 'agent-task', req.body?.dir, includeElement);

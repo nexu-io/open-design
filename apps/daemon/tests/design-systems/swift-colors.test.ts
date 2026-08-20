@@ -55,4 +55,17 @@ describe('extractSwiftColors', () => {
   it('skips named asset colors that carry no component values', () => {
     expect(extractSwiftColors('let accent = Color("AccentColor")')).toEqual([]);
   });
+
+  it('does not backtrack catastrophically on a long modifier run', () => {
+    // Regression: the optional `(?:static|public|private|internal)*` prefix
+    // re-scanned at every offset, so a run of `static ` with no `let`/`var`
+    // was O(n^2) (a large DESIGN.md could hang the daemon during listing).
+    // Bounding the modifier group to {0,4} keeps the global scan linear.
+    const src = 'static '.repeat(16000);
+    const start = performance.now();
+    const result = extractSwiftColors(src);
+    const elapsedMs = performance.now() - start;
+    expect(result).toEqual([]);
+    expect(elapsedMs).toBeLessThan(500);
+  });
 });

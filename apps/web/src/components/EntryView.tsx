@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import type { ChatSessionMode, ConnectorDetail } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import {
@@ -10,7 +17,6 @@ import type {
   AgentInfo,
   ApiProtocol,
   AppConfig,
-  AppTheme,
   DesignSystemSummary,
   ExecMode,
   Project,
@@ -25,7 +31,7 @@ import type {
 // hero + recent projects + plugins). Keeping the redesign in a sibling
 // component lets future rebases against upstream `EntryView` (props,
 // connector lifecycle, exported helpers) stay close to a no-op here.
-import { EntryShell } from './EntryShell';
+import { EntryShell, type ProjectTitleHint } from './EntryShell';
 import type { IntegrationTab } from './IntegrationsView';
 import type { CreateInput, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import {
@@ -37,6 +43,7 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from '../state/projects';
+import type { VelaLoginStatus } from '../providers/daemon';
 
 type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   metadata?: CreateInput['metadata'];
@@ -71,6 +78,10 @@ interface Props {
   // Forwarded to EntryShell → OnboardingView so the AMR cloud card can show a
   // detecting/skeleton state while the cold-start agent stream is in flight.
   agentsLoading?: boolean;
+  amrLoggedIn?: boolean | null;
+  amrSessionState?: import('@open-design/contracts').AmrSessionState;
+  /** Forwarded to EntryShell for personal free campaign audience resolution. */
+  amrAccountPlan?: string | null;
   // Execution / model-switching context forwarded to the EntryShell so the
   // sticky top-bar can expose the active CLI/BYOK + model and persist
   // changes through the same channels as the project view.
@@ -84,18 +95,18 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
+  /** True only when GET /api/app-config returned a real config object. */
+  daemonAppConfigReady?: boolean;
+  /** Non-optimistic daemon write for the silent-update preference. */
+  onSilentUpdatePreferenceChange?: (allowSilentUpdates: boolean) => Promise<void>;
   onSkillsRefresh?: () => Promise<void> | void;
   onSkillsChanged?: (affectedSkillId?: string) => void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
-  // Quick theme switch invoked from the avatar-popover dropdown so the
-  // user can flip light/dark/system without opening the full Settings
-  // dialog. Persistence happens in `App`; this component just forwards.
-  onThemeChange: (theme: AppTheme) => void;
   // Per-resource loading flags. Each tab gates its own content on whichever
   // flag matches the data it renders, so a slow `/api/agents` probe does
   // not block tabs that don't need agents. Templates are not gated here —
@@ -116,12 +127,21 @@ interface Props {
   ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
-  onOpenProject: (id: string) => Promise<boolean> | boolean | void;
+  onOpenProject: (
+    id: string,
+    fileName?: string,
+    projectTitleHint?: ProjectTitleHint,
+  ) => Promise<boolean> | boolean | void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
   onDuplicateProject?: (id: string) => Promise<void> | void;
   onRenameProject: (id: string, name: string) => void;
   onProjectsRefresh?: () => Promise<void> | void;
+  onTeamProjectContentReady?: (
+    projectId: string,
+    workspaceId: string,
+    workspaceMemberId: string,
+  ) => Promise<boolean> | boolean;
   onChangeDefaultDesignSystem: (id: string) => void;
   onCreateDesignSystem?: () => void;
   onOpenDesignSystem?: (id: string) => void;
@@ -129,6 +149,9 @@ interface Props {
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'orbit' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'pet' | 'projectLocations' | 'library' | 'about' | 'memory' | 'designSystems') => void;
   onCompleteOnboarding: () => void;
+  onSignedOut?: () => void | Promise<void>;
+  onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
+  artifactUpgradeSlot?: ReactNode;
 }
 
 export function isTrustedConnectorCallbackOrigin(origin: string, currentOrigin?: string): boolean {
@@ -235,6 +258,9 @@ export function EntryView({
   defaultDesignSystemId,
   agents,
   agentsLoading,
+  amrLoggedIn,
+  amrSessionState,
+  amrAccountPlan,
   config,
   providerModelsCache,
   onProviderModelsCacheChange,
@@ -247,10 +273,11 @@ export function EntryView({
   onApiProtocolChange,
   onApiModelChange,
   onConfigPersist,
+  daemonAppConfigReady = false,
+  onSilentUpdatePreferenceChange,
   onSkillsRefresh,
   onSkillsChanged,
   onRefreshAgents,
-  onThemeChange,
   skillsLoading = false,
   designSystemsLoading = false,
   projectsLoading = false,
@@ -266,6 +293,7 @@ export function EntryView({
   onDuplicateProject,
   onRenameProject,
   onProjectsRefresh,
+  onTeamProjectContentReady,
   onChangeDefaultDesignSystem,
   onCreateDesignSystem,
   onOpenDesignSystem,
@@ -273,6 +301,9 @@ export function EntryView({
   onPersistComposioKey,
   onOpenSettings,
   onCompleteOnboarding,
+  onSignedOut,
+  onAmrLoginStatusChange,
+  artifactUpgradeSlot,
 }: Props) {
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
@@ -361,6 +392,9 @@ export function EntryView({
       onProviderModelsCacheChange={onProviderModelsCacheChange}
       agents={agents}
       {...(agentsLoading !== undefined ? { agentsLoading } : {})}
+      {...(amrLoggedIn !== undefined ? { amrLoggedIn } : {})}
+      {...(amrSessionState !== undefined ? { amrSessionState } : {})}
+      {...(amrAccountPlan !== undefined ? { amrAccountPlan } : {})}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
       onAgentChange={onAgentChange}
@@ -368,10 +402,11 @@ export function EntryView({
       onApiProtocolChange={onApiProtocolChange}
       onApiModelChange={onApiModelChange}
       onConfigPersist={onConfigPersist}
+      daemonAppConfigReady={daemonAppConfigReady}
+      onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onSkillsRefresh={onSkillsRefresh}
       onSkillsChanged={onSkillsChanged}
-      onRefreshAgents={onRefreshAgents}
-      onThemeChange={onThemeChange}
+          onRefreshAgents={onRefreshAgents}
       onCreateProject={onCreateProject}
       onCreatePluginShareProject={onCreatePluginShareProject}
       onImportClaudeDesign={onImportClaudeDesign}
@@ -383,6 +418,7 @@ export function EntryView({
       onDuplicateProject={onDuplicateProject}
       onRenameProject={onRenameProject}
       onProjectsRefresh={onProjectsRefresh}
+      onTeamProjectContentReady={onTeamProjectContentReady}
       onChangeDefaultDesignSystem={onChangeDefaultDesignSystem}
       onCreateDesignSystem={onCreateDesignSystem}
       onOpenDesignSystem={onOpenDesignSystem}
@@ -390,6 +426,9 @@ export function EntryView({
       onPersistComposioKey={onPersistComposioKey}
       onOpenSettings={onOpenSettings}
       onCompleteOnboarding={onCompleteOnboarding}
+      onSignedOut={onSignedOut}
+      onAmrLoginStatusChange={onAmrLoginStatusChange}
+      artifactUpgradeSlot={artifactUpgradeSlot}
     />
   );
 }

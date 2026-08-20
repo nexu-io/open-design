@@ -73,9 +73,35 @@ export function ByokKeyField({
             </span>
           ) : null}
         </span>
+      </span>
+      <div className="field-row settings-byok-key-row">
+        <span className="settings-byok-key-input-wrap">
+          <input
+            ref={inputRef}
+            aria-label={labels.apiKey}
+            type={showApiKey ? 'text' : 'password'}
+            placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
+            value={apiKey}
+            aria-invalid={showApiKeyInvalid || undefined}
+            onChange={(e) => handleChange(e.target.value)}
+            onBlur={handleBlur}
+            onFocus={onFocus}
+            autoFocus
+          />
+          <button
+            type="button"
+            className="ghost icon-btn settings-byok-key-toggle"
+            onClick={onToggleShowApiKey}
+            title={
+              showApiKey ? labels.hideKey : labels.showKey
+            }
+          >
+            {showApiKey ? labels.hide : labels.show}
+          </button>
+        </span>
         {requiresApiKey ? (
           <a
-            className="field-label-link"
+            className="field-label-link settings-byok-key-link"
             href={apiKeyConsoleLink.url}
             target="_blank"
             rel="noreferrer"
@@ -83,30 +109,6 @@ export function ByokKeyField({
             {labels.apiKeyGetLink}
           </a>
         ) : null}
-      </span>
-      <div className="field-row">
-        <input
-          ref={inputRef}
-          aria-label={labels.apiKey}
-          type={showApiKey ? 'text' : 'password'}
-          placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
-          value={apiKey}
-          aria-invalid={showApiKeyInvalid || undefined}
-          onChange={(e) => handleChange(e.target.value)}
-          onBlur={handleBlur}
-          onFocus={onFocus}
-          autoFocus
-        />
-        <button
-          type="button"
-          className="ghost icon-btn"
-          onClick={onToggleShowApiKey}
-          title={
-            showApiKey ? labels.hideKey : labels.showKey
-          }
-        >
-          {showApiKey ? labels.hide : labels.show}
-        </button>
       </div>
       {apiKeyCleanedNotice && !showApiKeyInvalid ? (
         <span className="field-inline-status success" role="status">

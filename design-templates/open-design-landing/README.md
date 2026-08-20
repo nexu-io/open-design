@@ -1,10 +1,10 @@
 # open-design-landing
 
-Reusable skill that produces a world-class editorial landing page in
+Reusable design template that produces a world-class editorial landing page in
 the **Atelier Zero** design language — the warm-paper, italic-serif,
 collage-on-grid aesthetic shared by Monocle, Apartamento, and Études.
 
-The skill is parameterized: fill one typed `inputs.json`, run one
+The template is parameterized: fill one typed `inputs.json`, run one
 script, get a self-contained HTML file. Optionally generate 16 surreal
 collage assets with `gpt-image-2`, or fall back to paper-textured SVG
 placeholders so the layout still feels intentional with zero image
@@ -73,19 +73,19 @@ Every section has scroll-reveal motion (IntersectionObserver, respects
 ## Files
 
 ```text
-skills/open-design-landing/
+design-templates/open-design-landing/
 ├── SKILL.md                 # ← agent contract (read this first)
 ├── README.md                # ← you are here
 ├── schema.ts                # typed inputs (single source of truth)
 ├── styles.css               # Atelier Zero stylesheet (single source of truth)
-├── inputs.example.json      # Open Design as the worked example
+├── inputs.example.json      # OpenDesign as the worked example
 ├── example.html             # canonical rendering, regenerable from inputs.example.json
 ├── scripts/
 │   ├── compose.ts           # inputs.json + styles.css → index.html
 │   ├── imagegen.ts          # gpt-image-2 wrapper (fal.ai backend)
 │   └── placeholder.ts       # SVG paper-textured frames
 └── assets/
-    ├── *.png                # 16 collage plates (Open Design instance)
+    ├── *.png                # 16 collage plates (OpenDesign instance)
     ├── image-manifest.json  # slot → file / dimensions / prompt mapping
     └── imagegen-prompts.md  # human-readable prompt pack
 ```
@@ -104,16 +104,16 @@ output.
 
 ## Migrating from `editorial-collage`
 
-This skill replaces the older `editorial-collage` folder:
+This design template replaces the older `editorial-collage` skill:
 
-- **Path:** `skills/editorial-collage/` → `skills/open-design-landing/`.
+- **Path:** `skills/editorial-collage/` → `design-templates/open-design-landing/`.
 - **Shared assets:** downstream paths such as `../editorial-collage/assets/`
-  (for example from the slide-deck skill) should use
+  (for example from the slide-deck template) should use
   [`../open-design-landing/assets/`](./assets/) — see
   [`open-design-landing-deck`](../open-design-landing-deck/README.md).
 
 ## See also
 
 - [`design-systems/atelier-zero/DESIGN.md`](../../design-systems/atelier-zero/DESIGN.md) — colors, type, motion tokens.
-- [`apps/landing-page/`](../../apps/landing-page/) — Astro static site that mirrors this skill’s markup at deploy time.
-- [`skills/open-design-landing-deck/`](../open-design-landing-deck/) — sibling skill that produces a slide deck in the same visual language.
+- [`apps/landing-page/`](../../apps/landing-page/) — Astro static site that mirrors this template’s markup at deploy time.
+- [`design-templates/open-design-landing-deck/`](../open-design-landing-deck/) — sibling template that produces a slide deck in the same visual language.

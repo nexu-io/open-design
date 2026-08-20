@@ -1,16 +1,35 @@
 ---
 name: html-ppt-xhs-white-editorial
-description: 白底杂志风 deck — 纯白背景 + 顶部 10 色彩虹 bar、80-110px display 标题、紫→蓝→绿→橙→粉渐变文字、马卡龙软卡片组（粉/紫/蓝/绿/橙）、黑底白字 .focus pill、引用大块。同时适合发小红书图文 + 横版 PPT 双用。
+en_name: "Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider"
+zh_name: "像晋升评审内部人一样写 Staff 工程师晋升材料"
+description: |
+  A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. Built as a decision-grade career deck for manager, calibration committee.
+en_description: |
+  A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. Built as a decision-grade career deck for manager, calibration committee.
+zh_description: |
+  像晋升评审内部人一样写 Staff 工程师晋升材料——一份可商业交付的职业发展 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "career"
+  - "year-end-self-review-deck"
+  - "personal"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-xhs-white-editorial"
 triggers:
-  - "白底杂志"
-  - "杂志风"
-  - "xhs editorial"
-  - "white editorial"
-  - "小红书白底"
-  - "editorial deck"
+  - "year-end-self-review-deck"
+  - "career"
+  - "Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider"
+  - "像晋升评审内部人一样写 Staff 工程师晋升材料"
+  - "portfolio"
+  - "promotion"
+  - "self-review"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -19,7 +38,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-xhs-white-editorial 模板做一份白底杂志风 PPT，中文优先。要点：80-110px display 大标题、彩虹顶部 bar、马卡龙软卡片、黑底白字 .focus pill。先告诉我主题和受众，再写 8-12 页。"
+  category: "career"
+  scenario: "personal"
+  example_prompt: "Create \"Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider\" as a decision-grade Career deck in this template's own visual system. Subject: A staff-engineer promotion packet — scope, the proof moments, the artifacts, and the impact that clears the bar. Audience: manager, calibration committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the evidence make the claim feel earned."
 ---
 # HTML PPT · 白底杂志风
 
@@ -32,23 +53,23 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 ## How to author the deck
 
 1. **Read the master skill first.** All authoring rules live in
-   [`skills/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
+   [`design-templates/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
    token rules, layout reuse, presenter mode, the keyboard runtime, and the
    "never put presenter-only text on the slide" rule.
 2. **Start from the matching template folder:**
-   `skills/html-ppt/templates/full-decks/xhs-white-editorial/` — copy `index.html` and
+   `design-templates/html-ppt/templates/full-decks/xhs-white-editorial/` — copy `index.html` and
    `style.css` into the project, keep the `.tpl-xhs-white-editorial` body class.
 3. **Bring the shared runtime with the template.** The upstream
    `index.html` links the shared CSS/JS via `../../../assets/...` because it
-   sits three folders deep inside `skills/html-ppt/templates/full-decks/`.
+   sits three folders deep inside `design-templates/html-ppt/templates/full-decks/`.
    Once you copy `index.html` into the project, those parent-relative URLs
    no longer resolve and `base.css`, `animations.css`, and `runtime.js`
    will 404 — meaning the deck never activates and slide navigation is
    dead. Pick one of these two recipes per project:
    - **Recipe A — copy + rewrite (preferred):** copy
-     `skills/html-ppt/assets/fonts.css`, `skills/html-ppt/assets/base.css`,
-     `skills/html-ppt/assets/animations/animations.css`, and
-     `skills/html-ppt/assets/runtime.js` into a project-local
+     `design-templates/html-ppt/assets/fonts.css`, `design-templates/html-ppt/assets/base.css`,
+     `design-templates/html-ppt/assets/animations/animations.css`, and
+     `design-templates/html-ppt/assets/runtime.js` into a project-local
      `assets/` (with `assets/animations/animations.css`), then rewrite the
      four `<link>`/`<script>` tags in `index.html` from
      `../../../assets/...` to the matching project-local paths
@@ -63,7 +84,7 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
    Either way, do not ship the upstream `../../../assets/...` URLs
    verbatim into a project artifact — they only work in-tree.
 4. **Pick a theme.** Default tokens look fine; if the user wants a different
-   feel, swap in any of the 36 themes from `skills/html-ppt/assets/themes/*.css`
+   feel, swap in any of the 36 themes from `design-templates/html-ppt/assets/themes/*.css`
    via `<link id="theme-link">` and let `T` cycle.
 5. **Replace demo content, not classes.** The `.tpl-xhs-white-editorial` scoped CSS only
    recognises the structural classes shipped in the template — keep them.
@@ -73,5 +94,5 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 
 Visual system, layouts, themes and the runtime keyboard model come from
 the upstream MIT-licensed [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill). The
-LICENSE file ships at `skills/html-ppt/LICENSE`; please keep it in place when
+LICENSE file ships at `design-templates/html-ppt/LICENSE`; please keep it in place when
 redistributing.

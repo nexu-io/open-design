@@ -1,22 +1,34 @@
 ---
 name: html-ppt-zhangzara-grove
+en_name: "Write an Urban Green-Space Policy Brief like a City Sustainability Director"
+zh_name: "像城市可持续总监一样写城市绿地政策简报"
 description: |
-  Grove — Forest-green canvas with cream type, classical Playfair serifs, and a single rust accent. Anything that should feel organic, considered, and grown-up: sustainability and wellness brands, outdoor / nature products, wineries and restaurants, literary or arts decks, advisory deliverables, bilingual EN/CN reports.
+  A municipal urban-tree-canopy policy proposal — the public need, the evidence, the options, and the funding decision. Built as a decision-grade policy briefing deck for city council, agency reviewers.
+en_description: |
+  A municipal urban-tree-canopy policy proposal — the public need, the evidence, the options, and the funding decision. Built as a decision-grade policy briefing deck for city council, agency reviewers.
+zh_description: |
+  像城市可持续总监一样写城市绿地政策简报——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "government-policy"
+  - "policy-briefing-deck"
+  - "policy"
+  - "regulatory"
+  - "risk-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-grove"
 triggers:
-  - "grove"
-  - "zhangzara-grove"
-  - "organic"
-  - "considered"
-  - "classical"
-  - "warm"
-  - "sustainability brand"
-  - "wellness brand"
+  - "policy-briefing-deck"
+  - "government-policy"
+  - "Write an Urban Green-Space Policy Brief like a City Sustainability Director"
+  - "像城市可持续总监一样写城市绿地政策简报"
+  - "policy"
+  - "regulatory"
+  - "risk-review"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/grove"
   upstream_license: MIT
   preview:
@@ -26,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "government-policy"
+  scenario: "policy"
+  example_prompt: "Create \"Write an Urban Green-Space Policy Brief like a City Sustainability Director\" as a decision-grade Government & policy deck in this template's own visual system. Subject: A municipal urban-tree-canopy policy proposal — the public need, the evidence, the options, and the funding decision. Audience: city council, agency reviewers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck reduce approval risk rather than create rhetorical heat."
 ---
 
 # Grove

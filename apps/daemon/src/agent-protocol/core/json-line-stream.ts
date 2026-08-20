@@ -22,8 +22,7 @@
  */
 export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
   let buffer = '';
-  let pendingJson = '';
-  let pendingJsonLineCount = 0;
+  let pendingJsonLines: string[] = [];
 
   const emit = (candidate: string): boolean => {
     try {
@@ -34,36 +33,52 @@ export function createJsonLineStream(onMessage: (message: unknown, rawLine: stri
     }
   };
 
+  const pendingCandidate = () => pendingJsonLines.join('\n');
+
   const startPendingJson = (line: string) => {
-    pendingJson = line;
-    pendingJsonLineCount = 1;
+    pendingJsonLines = [line];
   };
 
   const resetPendingJson = () => {
-    pendingJson = '';
-    pendingJsonLineCount = 0;
+    pendingJsonLines = [];
+  };
+
+  // A failed aggregate must never swallow a line that is itself a complete
+  // JSON frame. Aggregation is a bounded bet that recent lines form one
+  // multiline response; a truncated line ending in value position (e.g.
+  // `{"truncated":`) keeps the bet alive because the next complete frame
+  // slots into the value hole and stays syntactically plausible. When the
+  // bet is lost -- the aggregate turns invalid, outgrows its bounds, or the
+  // stream ends -- every absorbed line is settled on its own: standalone
+  // frames are delivered, non-JSON lines are dropped. Settled lines do not
+  // re-enter aggregation.
+  const replayPendingJsonLines = () => {
+    const absorbed = pendingJsonLines;
+    pendingJsonLines = [];
+    for (const line of absorbed) {
+      emit(line);
+    }
   };
 
   const handleLine = (line: string) => {
     const trimmed = line.trim();
     if (!trimmed) return;
-    if (pendingJson) {
-      const nextCandidate = `${pendingJson}\n${trimmed}`;
+    if (pendingJsonLines.length > 0) {
+      const nextCandidate = `${pendingCandidate()}\n${trimmed}`;
       if (emit(nextCandidate)) {
         resetPendingJson();
         return;
       }
-      pendingJsonLineCount += 1;
       const state = classifyJsonCandidate(nextCandidate);
       if (
         state === 'incomplete' &&
         nextCandidate.length <= 128_000 &&
-        pendingJsonLineCount <= 256
+        pendingJsonLines.length < 256
       ) {
-        pendingJson = nextCandidate;
+        pendingJsonLines.push(trimmed);
         return;
       }
-      resetPendingJson();
+      replayPendingJsonLines();
       handleLine(trimmed);
       return;
     }
@@ -95,8 +110,12 @@ export function createJsonLineStream(onMessage: (message: unknown, rawLine: stri
       if (trimmed) {
         handleLine(trimmed);
       }
-      if (pendingJson && emit(pendingJson)) {
-        pendingJson = '';
+      if (pendingJsonLines.length > 0) {
+        if (emit(pendingCandidate())) {
+          resetPendingJson();
+        } else {
+          replayPendingJsonLines();
+        }
       }
       // Ignore trailing non-JSON log lines on stdout.
     },

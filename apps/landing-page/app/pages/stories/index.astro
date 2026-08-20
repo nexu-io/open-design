@@ -28,7 +28,9 @@ import {
 } from '../../i18n';
 import '../../globals.css';
 import '../../sub-pages.css';
-import { INDEX_UI, STORY_CARD, STORY_VP } from '../../_partials/ikigai-one-i18n';
+import { INDEX_UI, STORY_CARD as IKIGAI_CARD, STORY_VP } from '../../_partials/ikigai-one-i18n';
+import { STORY_CARD as STUART_CARD } from '../../_partials/stuart-gardoll-i18n';
+import { STORY_CARD as SEUNGKI_CARD } from '../../_partials/seungki-kim-i18n';
 
 const locale = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
@@ -37,18 +39,40 @@ const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
 
 const ui = INDEX_UI[locale] ?? INDEX_UI.en!;
-const card = STORY_CARD[locale] ?? STORY_CARD.en!;
+const ikigaiCard = IKIGAI_CARD[locale] ?? IKIGAI_CARD.en!;
+const stuartCard = STUART_CARD[locale] ?? STUART_CARD.en!;
+const seungkiCard = SEUNGKI_CARD[locale] ?? SEUNGKI_CARD.en!;
 
 const vp = STORY_VP[locale] ?? STORY_VP.en!;
 
-// Story registry. Add a row when a new `/stories/<slug>` page ships.
+// Story registry. Add a row when a new `/stories/<slug>` page ships (newest
+// first). Both covers are the 1.91:1 social share cards (logo + headline on the
+// left), so `coverPosition: 'left'` keeps those from being clipped by the card's
+// side-crop and keeps the two cards visually consistent.
 const stories = [
+  {
+    slug: 'seungki-kim',
+    company: 'FABOR',
+    cover: '/stories/seungki-kim-cover.webp',
+    coverPosition: 'left',
+    title: seungkiCard.title,
+    blurb: seungkiCard.blurb,
+  },
+  {
+    slug: 'stuart-gardoll',
+    company: 'Stuart Gardoll',
+    cover: '/stories/stuart-gardoll-cover.webp',
+    coverPosition: 'left',
+    title: stuartCard.title,
+    blurb: stuartCard.blurb,
+  },
   {
     slug: 'ikigai-one',
     company: 'Ikigai One',
-    cover: '/stories/ikigai-one-cover.webp',
-    title: card.title,
-    blurb: card.blurb,
+    cover: '/stories/ikigai-one-og.jpg',
+    coverPosition: 'left',
+    title: ikigaiCard.title,
+    blurb: ikigaiCard.blurb,
   },
 ];
 
@@ -121,7 +145,7 @@ const headerHtml = renderToStaticMarkup(
               {stories.map((s) => (
                 <a class='sx-card' href={href(`/stories/${s.slug}/`)}>
                   <span class='sx-media'>
-                    <img src={s.cover} alt={s.company} loading='eager' />
+                    <img src={s.cover} alt={s.company} loading='eager' style={`object-position:${s.coverPosition}`} />
                   </span>
                   <span class='sx-copy'>
                     <span class='sx-cat'>{s.company}</span>

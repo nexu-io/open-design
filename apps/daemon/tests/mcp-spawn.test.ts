@@ -11,11 +11,13 @@
 // matches what the daemon does in production.
 
 import type http from 'node:http';
+import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { existsSync, promises as fsp, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { insertConversation } from '../src/db.js';
 import { startServer } from '../src/server.js';
 
 async function withFakeClaude<T>(run: () => Promise<T>): Promise<T> {
@@ -360,24 +362,26 @@ describe('spawn writes external MCP config for Claude Code', () => {
   it('binds conversation-less runs to the seeded project conversation', async () => {
     await withFakeClaude(async () => {
       const { id, conversationId } = await createProject();
-      const recentConvRes = await fetch(`${baseUrl}/api/projects/${id}/conversations`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title: 'Recently active' }),
-      });
-      expect(recentConvRes.ok).toBe(true);
-      const recentConvBody = (await recentConvRes.json()) as {
-        conversation: { id: string };
-      };
-      const recentConversationId = recentConvBody.conversation.id;
-      await fetch(`${baseUrl}/api/projects/${id}/conversations/${recentConversationId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
+      if (!process.env.OD_DATA_DIR) {
+        throw new Error('OD_DATA_DIR is required for seeded conversation tests');
+      }
+      const sqlite = new Database(join(process.env.OD_DATA_DIR, 'app.sqlite'));
+      const recentConversationId = `0-later-${randomUUID()}`;
+      try {
+        const seeded = sqlite
+          .prepare('SELECT created_at AS createdAt FROM conversations WHERE id = ?')
+          .get(conversationId) as { createdAt: number } | undefined;
+        if (!seeded) throw new Error('seeded project conversation missing');
+        insertConversation(sqlite as never, {
+          id: recentConversationId,
+          projectId: id,
           title: 'Recently active',
+          createdAt: seeded.createdAt,
           updatedAt: Date.now() + 60_000,
-        }),
-      });
+        });
+      } finally {
+        sqlite.close();
+      }
 
       const chatRes = await fetch(`${baseUrl}/api/runs`, {
         method: 'POST',

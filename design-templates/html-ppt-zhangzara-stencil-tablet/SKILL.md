@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-stencil-tablet
+en_name: "Present a Workplace-Safety Compliance Review like a Senior Regulator"
+zh_name: "像资深监管者一样做工作场所安全合规评审"
 description: |
-  Stencil & Tablet — Bone paper with stencil-cut headlines and a six-color earth palette: archaeology meets brand. Anything that should feel archival, tactile, and weighty-graphic: museum and cultural-institution decks, art / architecture brands, longform research, heritage and craft brands, manifestos.
+  A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. Built as a decision-grade policy briefing deck for regulator, plant leadership.
+en_description: |
+  A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. Built as a decision-grade policy briefing deck for regulator, plant leadership.
+zh_description: |
+  像资深监管者一样做工作场所安全合规评审——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "government-policy"
+  - "policy-briefing-deck"
+  - "policy"
+  - "regulatory"
+  - "risk-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-stencil-tablet"
 triggers:
-  - "stencil-tablet"
-  - "zhangzara-stencil-tablet"
-  - "Stencil & Tablet"
-  - "archival"
-  - "earthy"
-  - "weighty"
-  - "considered"
-  - "museum / cultural institution"
-  - "art / architecture brand"
+  - "policy-briefing-deck"
+  - "government-policy"
+  - "Present a Workplace-Safety Compliance Review like a Senior Regulator"
+  - "像资深监管者一样做工作场所安全合规评审"
+  - "policy"
+  - "regulatory"
+  - "risk-review"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/stencil-tablet"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "government-policy"
+  scenario: "policy"
+  example_prompt: "Create \"Present a Workplace-Safety Compliance Review like a Senior Regulator\" as a decision-grade Government & policy deck in this template's own visual system. Subject: A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. Audience: regulator, plant leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck reduce approval risk rather than create rhetorical heat."
 ---
 
 # Stencil & Tablet

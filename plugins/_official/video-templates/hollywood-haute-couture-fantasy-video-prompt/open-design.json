@@ -24,6 +24,7 @@
     "en": "Hollywood Haute Couture Fantasy Video Prompt"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A detailed, multi-scene video generation prompt for Seedance 2.0, designed to create a Hollywood Haute Couture Fantasy film. The prompt specifies style, resolution (8K), rendering engine (Unreal Engin",
   "description_i18n": {
     "zh-CN": "为 Seedance 2.0 设计的多场景视频生成提示词，用于创建好莱坞高级定制时尚风格影片，支持 8K 分辨率和 Unreal Engine 渲染。",

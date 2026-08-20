@@ -1,22 +1,35 @@
 ---
 name: html-ppt-zhangzara-retro-windows
+en_name: "Deliver a Security-Awareness Training like a CISO Enablement Team"
+zh_name: "像 CISO 赋能团队一样做安全意识培训"
 description: |
-  Retro Windows — Windows 95 chrome: gray title bars, MS Sans Serif, pixel typography, full nostalgia. Anything that should feel knowingly nostalgic: retro gaming, Y2K-aesthetic brands, creator portfolios with a 90s vibe, tech-history talks, deliberately tongue-in-cheek decks.
+  An IT security-awareness training on spotting phishing — the tells, the drill, and what to do in the first 60 seconds. Built as a decision-grade professional training deck for all employees.
+en_description: |
+  An IT security-awareness training on spotting phishing — the tells, the drill, and what to do in the first 60 seconds. Built as a decision-grade professional training deck for all employees.
+zh_description: |
+  像 CISO 赋能团队一样做安全意识培训——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "professional-training"
+  - "employee-onboarding-deck"
+  - "education"
+  - "training-deck"
+  - "workshop"
+  - "course-module"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-retro-windows"
 triggers:
-  - "retro-windows"
-  - "zhangzara-retro-windows"
-  - "Retro Windows"
-  - "nostalgic"
-  - "retro"
-  - "winking"
-  - "retro gaming pitch"
-  - "Y2K brand"
+  - "employee-onboarding-deck"
+  - "professional-training"
+  - "Deliver a Security-Awareness Training like a CISO Enablement Team"
+  - "像 CISO 赋能团队一样做安全意识培训"
+  - "training-deck"
+  - "workshop"
+  - "course-module"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/retro-windows"
   upstream_license: MIT
   preview:
@@ -26,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "professional-training"
+  scenario: "education"
+  example_prompt: "Create \"Deliver a Security-Awareness Training like a CISO Enablement Team\" as a decision-grade Professional training deck in this template's own visual system. Subject: An IT security-awareness training on spotting phishing — the tells, the drill, and what to do in the first 60 seconds. Audience: all employees. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day."
 ---
 
 # Retro Windows

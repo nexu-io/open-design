@@ -24,6 +24,7 @@
     "en": "Cyberpunk Game Trailer Script"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "An extensive video generation prompt for a cyberpunk game trailer, detailing character design, UI animations, and environmental transitions from a white void to a favela.",
   "description_i18n": {
     "zh-CN": "生成赛博朋克游戏预告片的详细视频提示词，包含角色设计、UI动画和从白色虚空到贫民窟的环境转场。",

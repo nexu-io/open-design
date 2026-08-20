@@ -7,7 +7,7 @@ type PagesFunctionContext<Env> = {
 
 type PagesFunction<Env> = (context: PagesFunctionContext<Env>) => Response | Promise<Response>;
 
-const CACHE_CONTROL = 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600';
+const CACHE_CONTROL = 'public, max-age=60, s-maxage=60, stale-while-revalidate=300';
 
 export const onRequest: PagesFunction<Record<string, never>> = async () => {
   const response = await fetch(RELEASE_METADATA_UPSTREAM_URL, {

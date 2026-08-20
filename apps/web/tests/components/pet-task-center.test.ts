@@ -15,6 +15,7 @@ function run(
   projectId: string | null,
   status: ChatRunStatusResponse['status'],
   updatedAt: number,
+  extra: Partial<ChatRunStatusResponse> = {},
 ): ChatRunStatusResponse {
   return {
     id,
@@ -25,6 +26,7 @@ function run(
     status,
     createdAt: updatedAt - 10,
     updatedAt,
+    ...extra,
   };
 }
 
@@ -59,6 +61,31 @@ describe('buildPetTaskCenter', () => {
     expect(center.recent).toEqual([
       { projectId: 'p1', projectName: 'Landing Page', status: 'failed', updatedAt: 20 },
       { projectId: 'p2', projectName: 'Brand Deck', status: 'succeeded', updatedAt: 15 },
+    ]);
+  });
+
+  // #1247 / #1060 — a succeeded run that ended with unfinished declared work
+  // must NOT read as plain "recently completed"; it files as `incomplete` so its
+  // dot never renders the success color.
+  it('files a succeeded-but-unfinished run as incomplete, never succeeded', () => {
+    const center = buildPetTaskCenter(projects, [
+      run('unfinished', 'p1', 'succeeded', 10, { endedWithUnfinishedWork: true }),
+      run('finished', 'p2', 'succeeded', 12, { endedWithUnfinishedWork: false }),
+    ]);
+
+    expect(center.recent).toEqual([
+      { projectId: 'p2', projectName: 'Brand Deck', status: 'succeeded', updatedAt: 12 },
+      { projectId: 'p1', projectName: 'Landing Page', status: 'incomplete', updatedAt: 10 },
+    ]);
+  });
+
+  it('leaves a genuinely completed run (flag absent) as succeeded', () => {
+    const center = buildPetTaskCenter(projects, [
+      run('finished', 'p1', 'succeeded', 10),
+    ]);
+
+    expect(center.recent).toEqual([
+      { projectId: 'p1', projectName: 'Landing Page', status: 'succeeded', updatedAt: 10 },
     ]);
   });
 });

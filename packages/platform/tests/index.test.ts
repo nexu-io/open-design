@@ -804,6 +804,16 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("includes ~/.grok/bin when PATH is stripped so Windows Grok Build resolves", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-grok-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: { PATH: "" }, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".grok", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   // Non-Node user toolchains that still ship agent CLIs (or their deps):
   // Deno's install root, Go's default GOBIN, and pyenv's shim dir. GUI
   // launches inherit a stripped PATH, so these must be searched explicitly.
@@ -1107,6 +1117,32 @@ describe("wellKnownUserToolchainBins", () => {
         expect(dir.trim()).not.toBe("/bin");
         expect(dir).not.toMatch(/^\s+\/bin$/);
       }
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("includes Nix profile bin dirs so nix-darwin CLIs resolve under GUI launch (issue #6121)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-nix-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      // User's active Nix profile (home-relative — always safe)
+      expect(dirs).toContain(join(home, ".nix-profile", "bin"));
+      // System-wide Nix paths must NOT appear when includeSystemBins is false
+      expect(dirs).not.toContain("/run/current-system/sw/bin");
+      expect(dirs).not.toContain("/nix/var/nix/profiles/default/bin");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("includes system-wide Nix paths only when includeSystemBins is true (issue #6121)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-nix-sys-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: true });
+      expect(dirs).toContain("/run/current-system/sw/bin");
+      expect(dirs).toContain("/nix/var/nix/profiles/default/bin");
+      expect(dirs).toContain(join(home, ".nix-profile", "bin"));
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

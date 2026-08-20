@@ -24,6 +24,7 @@
     "en": "VoltAgent"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "AI agent framework. Void-black canvas, emerald accent, terminal-native.",
   "description_i18n": {
     "zh-CN": "AI 智能体框架。深黑画布，翠绿点缀，终端原生风格。",

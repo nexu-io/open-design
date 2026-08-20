@@ -1,23 +1,32 @@
 ---
 name: huashu-luxe-whitespace
+en_name: "Write a Luxury Market-Entry Deck like a Premium-Sector Strategy Partner"
+zh_name: "像高端领域战略合伙人一样写奢侈品进入市场方案"
 description: |
-  Luxe Whitespace (奢华留白) — quiet-luxury presentation decks adapted from
-  the ppt-build showcase of 花叔 (alchaincyf)'s huashu-design. 70%+ whitespace
-  on a warm off-white #FAFAF8 canvas, Inter 200–600 ultra-thin hierarchy,
-  120px weight-200 floating numerals with gold decimal points, one warm gold
-  (#D4A574) spent on hairlines and winning comparison bars, gradient hairline
-  separators (#E0DCD6). Use when the user wants a premium brand report,
-  high-end product deck, quiet-luxury keynote, 品牌年度报告, 高端发布会,
-  奢侈品风格, or an understated thin-type presentation.
+  A market-entry study for a luxury skincare brand entering Asia — segmentation, positioning, channel, and the phased plan. Built as a decision-grade consulting deck for client leadership.
+en_description: |
+  A market-entry study for a luxury skincare brand entering Asia — segmentation, positioning, channel, and the phased plan. Built as a decision-grade consulting deck for client leadership.
+zh_description: |
+  像高端领域战略合伙人一样写奢侈品进入市场方案——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "consulting"
+  - "consulting-final-deck"
+  - "strategy"
+  - "consulting-deliverable"
+  - "client"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "huashu-luxe-whitespace"
 triggers:
-  - "luxe whitespace"
-  - "quiet luxury deck"
-  - "premium brand report"
-  - "thin typography slides"
-  - "奢华留白"
-  - "高端品牌 PPT"
-  - "轻奢幻灯片"
-  - "极简留白年报"
+  - "consulting-final-deck"
+  - "consulting"
+  - "Write a Luxury Market-Entry Deck like a Premium-Sector Strategy Partner"
+  - "像高端领域战略合伙人一样写奢侈品进入市场方案"
+  - "consulting-deliverable"
+  - "strategy"
+  - "client"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
@@ -26,9 +35,11 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Use the Luxe Whitespace template to turn my story into a quiet-luxury HTML deck: 1920×1080 fixed warm off-white canvas, 70%+ whitespace, Inter 200–600 ultra-thin hierarchy, 120px weight-200 floating numerals with gold decimal points, one warm gold #D4A574 on hairlines and winning bars, gradient hairline separators. Start from example.html, replace the content only, and keep the design system intact."
   example_prompt_i18n:
     zh-CN: "用「奢华留白」模板把我的内容做成轻奢 HTML 幻灯片：1920×1080 米白画布、70% 以上留白、Inter 200–600 超细字重层级、120px 超细数字 + 金色小数点、唯一暖金 #D4A574 用在发丝线与对比条上、渐变发丝线分隔。从 example.html 出发只换内容，不要重写设计。"
+  category: "consulting"
+  scenario: "strategy"
+  example_prompt: "Create \"Write a Luxury Market-Entry Deck like a Premium-Sector Strategy Partner\" as a decision-grade Consulting deck in this template's own visual system. Subject: A market-entry study for a luxury skincare brand entering Asia — segmentation, positioning, channel, and the phased plan. Audience: client leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a client know what to do Monday morning."
 ---
 
 # Luxe Whitespace · 奢华留白

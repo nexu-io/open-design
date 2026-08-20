@@ -1,11 +1,13 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
+import { openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
+import { trackRunRequests } from '@/playwright/mock-factory';
 import type { FakeAgentId } from '@/playwright/fake-agents';
 import { T } from '@/timeouts';
 
@@ -23,6 +25,17 @@ const DELAYED_HEADING = 'Delayed Daemon Smoke';
 const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
 const SLOW_RELOAD_HEADING = 'Slow Reload Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
+const MEDIA_ONLY_FILE = 'media-only.png';
+const SERVER_DERIVED_WORKSPACE_HEADERS = {
+  'x-od-workspace-id': 'e2e-server-derived-workspace',
+  'x-od-workspace-type': 'personal',
+  'x-od-workspace-member-id': 'e2e-server-derived-member',
+  'x-od-workspace-role': 'owner',
+  'x-od-workspace-member-status': 'active',
+  'x-od-workspace-lifecycle-state': 'active',
+  'x-od-workspace-can-share-projects': 'true',
+  'x-od-workspace-can-write-synced-files': 'true',
+} as const;
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
 
 function artifactPreview(page: Page) {
@@ -33,7 +46,11 @@ function artifactPreviewFrame(page: Page) {
   return page.frameLocator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR);
 }
 
-test.describe.configure({ mode: 'serial' });
+// No serial mode: every test performs its full setup in beforeEach (config
+// reset, localStorage seed, fake agent config) and creates its own project,
+// so tests hold order-independent. Keeping the file splittable matters for
+// the CI shard matrix — a serial group is atomic within one shard and this
+// file's chain alone would floor the UI wall time.
 
 test.beforeAll(async () => {
   fakeRuntimes = await createFakeAgentRuntimes();
@@ -71,7 +88,6 @@ test.afterEach(async ({ page }) => {
 });
 
 test('[P0] real daemon run streams, persists, and previews an artifact', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Real daemon run smoke');
   await expectWorkspaceReady(page);
 
@@ -100,8 +116,47 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 
+test('[P0] bound project reads derive Workspace authority without browser query scope', async ({ page }) => {
+  const projectId = `server-derived-raw-${Date.now()}`;
+  const { conversationId } = await createProjectViaApi(
+    page,
+    projectId,
+    'Server-derived raw authority',
+    SERVER_DERIVED_WORKSPACE_HEADERS,
+  );
+
+  expect(conversationId).toBeTruthy();
+  const conversationsResponse = await page.request.get(
+    `/api/projects/${projectId}/conversations`,
+  );
+  expect(
+    conversationsResponse.ok(),
+    await conversationsResponse.text(),
+  ).toBeTruthy();
+  const messagesResponse = await page.request.get(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages`,
+  );
+  expect(messagesResponse.ok(), await messagesResponse.text()).toBeTruthy();
+
+  const writeResponse = await page.request.post(`/api/projects/${projectId}/files`, {
+    headers: SERVER_DERIVED_WORKSPACE_HEADERS,
+    data: {
+      name: GENERATED_FILE,
+      content: `<!doctype html><html><body><h1>${GENERATED_HEADING}</h1></body></html>`,
+    },
+  });
+  expect(writeResponse.ok(), await writeResponse.text()).toBeTruthy();
+
+  const rawPath = `/api/projects/${projectId}/raw/${GENERATED_FILE}`;
+  const response = await page.goto(rawPath, { waitUntil: 'domcontentloaded' });
+  expect(response?.ok(), await response?.text()).toBeTruthy();
+  expect(new URL(page.url()).searchParams.has('workspaceId')).toBe(false);
+  expect(new URL(page.url()).searchParams.has('workspaceMemberId')).toBe(false);
+  await expect(page.getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('WORKSPACE_CONTEXT_REQUIRED');
+});
+
 test('[P0] real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Chunked daemon run smoke');
   await expectWorkspaceReady(page);
 
@@ -116,7 +171,6 @@ test('[P0] real daemon run persists an artifact streamed across multiple chunks'
 });
 
 test('[P1] plain stdout daemon runtime persists artifact tags into project files and preview', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Plain stream artifact smoke', 'qwen');
   await expectWorkspaceReady(page);
 
@@ -130,7 +184,6 @@ test('[P1] plain stdout daemon runtime persists artifact tags into project files
 });
 
 test('[P0] real daemon run surfaces process/parser errors in chat', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon error smoke');
   await expectWorkspaceReady(page);
 
@@ -141,7 +194,6 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
 });
 
 test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon socket-drop smoke', 'claude');
   await expectWorkspaceReady(page);
 
@@ -157,7 +209,6 @@ test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retry
 });
 
 test('[P0] real daemon run supports a follow-up turn in the same project', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon follow-up smoke');
   await expectWorkspaceReady(page);
 
@@ -177,8 +228,7 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
 });
 
 test('[P1] real daemon run treats an in-place artifact edit as produced work', async ({ page }) => {
-  await page.goto('/');
-  await createProject(page, 'Daemon artifact edit smoke');
+  await createProject(page, 'Daemon artifact edit smoke', 'claude');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a deterministic smoke artifact');
@@ -186,7 +236,7 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
   await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 
-  await sendPrompt(page, 'Edit the existing deterministic smoke artifact');
+  await sendPrompt(page, 'Edit the existing deterministic smoke artifact through the managed project alias');
 
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, EDITED_GENERATED_HEADING);
   const files = await listProjectFiles(page, projectId);
@@ -200,16 +250,42 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
       return assistantMessages.map((message) => ({
         runStatus: message.runStatus ?? null,
         producedFiles: message.producedFiles?.map((file) => file.name) ?? [],
+        traceObjectFiles: message.traceObjectFiles?.map((file) => file.name) ?? [],
+        resultDeliveryState: message.resultDeliveryState ?? null,
       }));
     }, { timeout: 15_000 })
     .toContainEqual({
       runStatus: 'succeeded',
-      producedFiles: [GENERATED_FILE],
+      producedFiles: [],
+      traceObjectFiles: [GENERATED_FILE],
+      resultDeliveryState: 'delivered',
     });
+  await expect(runErrorCard(page)).toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  const editedHeading = artifactPreviewFrame(page).locator('[data-od-id="smoke-title"]');
+  await expect(editedHeading).toBeVisible();
+  await editedHeading.click();
+  await expect(editedHeading).toHaveAttribute('data-od-edit-selected', 'true');
+  const fontSizeInput = page
+    .locator('.manual-edit-modal .cc-section')
+    .filter({ hasText: 'Parameters' })
+    .locator('.cc-row')
+    .filter({ hasText: 'Font size' })
+    .locator('input');
+  await fontSizeInput.fill('52');
+  await page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ }).click({ force: true });
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, 'font-size: 52px');
+  await page.getByTestId('manual-edit-mode-toggle').click();
+
+  await page.getByRole('button', { name: 'Versions' }).click();
+  const versionsDialog = page.getByRole('dialog', { name: 'Versions' });
+  await expect(versionsDialog).toBeVisible();
+  await expect(versionsDialog).toContainText('3 versions');
+  await expect(versionsDialog.getByRole('option')).toHaveCount(3);
 });
 
 test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Plan mode markdown smoke');
   await expectWorkspaceReady(page);
 
@@ -223,21 +299,123 @@ test('[P1] Plan mode daemon run creates, opens, and restores an editable markdow
   await expectProjectFilesToContain(page, projectId, ['plan.md']);
   await expectProjectFileToContain(page, projectId, 'plan.md', '# Deterministic Plan');
   await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toBeVisible();
+  await page.getByRole('tab', { name: 'Code', exact: true }).click();
   await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
-  await expect(page.getByLabel(/markdown preview/i)).toContainText('Scope');
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: 'Code', exact: true }).click();
   await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
-  await expect(page.getByLabel(/markdown preview/i)).toContainText('Keep the plan editable');
   await expect(page.getByTestId('chat-composer')).toBeVisible();
 });
 
+test('[P1] media-only turn auto-opens the generated image file', async ({ page }) => {
+  await createProject(page, 'Media-only auto-open smoke');
+  await expectWorkspaceReady(page);
+
+  // Establish an already-active project file first. Otherwise the workspace's
+  // one-time initial-primary-file fallback can open the first project file and
+  // mask whether turn-end media selection actually works.
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const workspace = page.getByTestId('file-workspace');
+  await expect(workspace.getByRole('tab', { name: /plan\.md/i })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+
+  await sendPrompt(page, 'Create a deterministic media-only artifact');
+
+  const mediaTab = workspace.getByRole('tab', { name: /media-only\.png/i });
+  await expect(mediaTab).toBeVisible({ timeout: T.medium });
+  await expect(mediaTab).toHaveAttribute('aria-selected', 'true');
+  await expect(workspace.getByRole('img', { name: MEDIA_ONLY_FILE })).toBeVisible();
+
+  const rawHref = await workspace.getByRole('link', { name: 'Open' }).getAttribute('href');
+  if (!rawHref) throw new Error('media preview did not expose its raw file URL');
+  const rawResponse = await page.request.get(rawHref);
+  expect(rawResponse.ok(), await rawResponse.text()).toBeTruthy();
+  expect(rawResponse.headers()['content-type']).toContain('image/png');
+});
+
+// Red spec for "Plan 模式生成 HTML 后没有自动打开生成的文件": after the user
+// reviews the plan and asks for the final deliverable, the generation turn
+// writes the HTML as a project file (Write tool, no inline artifact echo) and
+// then touches the plan document again. The viewer must auto-open the
+// generated HTML instead of staying on the markdown plan.
+test('[P1] Plan mode generation turn auto-opens the generated HTML file', async ({ page }) => {
+  test.setTimeout(120_000);
+  await createProject(page, 'Plan mode html auto-open smoke', 'claude');
+  await expectWorkspaceReady(page);
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['plan.md']);
+  const planTab = page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i });
+  await expect(planTab).toHaveAttribute('aria-selected', 'true');
+
+  // Mirror the real Plan-mode interaction: the user reviews and edits the
+  // markdown plan in the split editor (autosave on) before asking for the
+  // final deliverable.
+  const planEditor = page.getByRole('textbox', { name: /markdown editor/i });
+  await page.getByRole('tab', { name: 'Code', exact: true }).click();
+  await expect(planEditor).toHaveValue(/Deterministic Plan/);
+  await planEditor.click();
+  await planEditor.press('End');
+  await planEditor.pressSequentially('\n- Reviewed by the user before generation.\n', { delay: 10 });
+  await expectProjectFileToContain(page, projectId, 'plan.md', 'Reviewed by the user before generation.');
+
+  await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
+  await expectProjectFilesToContain(page, projectId, ['index.html', 'plan.md']);
+  const htmlTab = page.getByTestId('file-workspace').getByRole('tab', { name: /index\.html/i });
+  await expect(htmlTab).toBeVisible({ timeout: 2_000 });
+  await expect(htmlTab).toHaveAttribute('aria-selected', 'true');
+});
+
+// Red spec, regeneration loop: Plan mode's core iteration is
+// plan → generate → edit the plan → generate AGAIN. On the second generation
+// the HTML file already exists, so a pre/post file-name diff sees no "new"
+// file — the viewer must still re-focus the regenerated HTML. Uses the codex
+// fake runtime (no tool_use events, like most CLI protocols) so the per-write
+// auto-open path cannot mask the turn-end selection.
+test('[P1] Plan mode regeneration re-opens the existing generated HTML file', async ({ page }) => {
+  test.setTimeout(120_000);
+  await createProject(page, 'Plan mode html regen smoke');
+  await expectWorkspaceReady(page);
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['plan.md']);
+  const workspace = page.getByTestId('file-workspace');
+  await expect(workspace.getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+
+  await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
+  await expectProjectFilesToContain(page, projectId, ['index.html', 'plan.md']);
+  const htmlTab = workspace.getByRole('tab', { name: /index\.html/i });
+  await expect(htmlTab).toBeVisible({ timeout: 15_000 });
+  await expect(htmlTab).toHaveAttribute('aria-selected', 'true');
+
+  // The user goes back to the plan document to revise it...
+  await workspace.getByRole('tab', { name: /plan\.md/i }).click();
+  await expect(workspace.getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+
+  // ...and asks for another generation. index.html is rewritten in place —
+  // no new file name appears, but the fresh deliverable must take focus.
+  await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      return messages.filter((m) => m.role === 'assistant' && m.runStatus === 'succeeded').length;
+    }, { timeout: 30_000 })
+    .toBeGreaterThanOrEqual(3);
+  await expect(htmlTab).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
+});
+
 test('[P0] real daemon run restores a delayed artifact turn after reload', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Delayed daemon reload smoke');
   await expectWorkspaceReady(page);
 
@@ -265,7 +443,6 @@ test('[P0] real daemon run restores a delayed artifact turn after reload', async
 test('[P1] real daemon run reconnects after reload while the run is still active', async ({ page }) => {
   test.setTimeout(90_000);
 
-  await page.goto('/');
   await createProject(page, 'Running daemon reload smoke');
   await expectWorkspaceReady(page);
 
@@ -299,7 +476,6 @@ test('[P1] real daemon run reconnects after reload while the run is still active
 test('[P1] artifact persistence survives page reload during an active real daemon run', async ({ page }) => {
   test.setTimeout(120_000);
 
-  await page.goto('/');
   await createProject(page, 'Running daemon reload smoke');
   await expectWorkspaceReady(page);
 
@@ -368,7 +544,6 @@ test('[P1] artifact persistence survives page reload during an active real daemo
 });
 
 test('[P1] real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Delayed daemon create-response reload smoke');
   await expectWorkspaceReady(page);
 
@@ -389,7 +564,6 @@ test('[P1] real daemon run survives reload before the create response reaches th
 });
 
 test('[P0] empty daemon output fails cleanly, persists after reload, and does not leave ghost files', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Empty daemon failure smoke');
   await expectWorkspaceReady(page);
 
@@ -414,7 +588,6 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 });
 
 test('[P1] plain stdout daemon runtime surfaces stderr-only failures without ghost files', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Plain stderr failure smoke', 'qwen');
   await expectWorkspaceReady(page);
 
@@ -437,14 +610,13 @@ test('[P1] plain stdout daemon runtime surfaces stderr-only failures without gho
 });
 
 test('[P0] separate projects keep daemon artifacts isolated across recent-project navigation', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Real daemon isolation alpha');
   await expectWorkspaceReady(page);
   await sendPrompt(page, 'Create a deterministic smoke artifact');
   const alpha = await currentProjectContext(page);
   await expectProjectFilesToContain(page, alpha.projectId, [GENERATED_FILE]);
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
 
   await createProject(page, 'Real daemon isolation beta');
   await expectWorkspaceReady(page);
@@ -453,14 +625,14 @@ test('[P0] separate projects keep daemon artifacts isolated across recent-projec
   await expectProjectFilesToContain(page, beta.projectId, [FOLLOW_UP_FILE]);
   expect(beta.projectId).not.toBe(alpha.projectId);
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
   await openProjectFromProjectsView(page, alpha.projectId);
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByText(GENERATED_FILE, { exact: true })).toBeVisible();
   await expect(page.getByText(FOLLOW_UP_FILE, { exact: true })).toHaveCount(0);
   expect((await listProjectFiles(page, alpha.projectId)).map((file) => file.name)).toEqual([GENERATED_FILE]);
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
   await openProjectFromProjectsView(page, beta.projectId);
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByText(FOLLOW_UP_FILE, { exact: true })).toBeVisible();
@@ -485,33 +657,42 @@ test('[P0] real daemon run previews an artifact from a fake OpenCode runtime', a
   await expectProjectFileToContain(page, projectId, fileName, heading);
 });
 
-test('[P1] BYOK OpenCode run fails clearly before spawn when provider config is missing', async ({ page }) => {
+test('[P1] BYOK OpenCode run is blocked before spawn when provider config is missing', async ({ page }) => {
   await createByokOpenCodeProject(page, 'BYOK OpenCode missing provider smoke');
   await expectWorkspaceReady(page);
+  const projectUrl = page.url();
 
-  const runResponse = await sendPrompt(page, 'Create a BYOK OpenCode missing provider smoke artifact');
-  expectCreateRunAgentId(runResponse, 'byok-opencode');
-  const { runId } = (await runResponse.json()) as { runId: string };
+  // The client-side BYOK preflight (apps/web byok/preflight) catches a missing
+  // provider before any POST: it blocks the submit and opens the execution
+  // Settings section for the user to complete the config. So "fails clearly
+  // before spawn" now means no create-run request is issued and the preflight
+  // surfaces the fix, not a daemon-side failed run.
+  const runRequests = trackRunRequests(page);
 
-  const expectedError = 'BYOK OpenCode requires a provider, API key, and model for this run.';
-  await expect(runErrorCard(page)).toContainText(expectedError, { timeout: 15_000 });
-  await expect.poll(async () => {
-    const response = await page.request.get(`/api/runs/${runId}`);
-    expect(response.ok()).toBeTruthy();
-    const body = (await response.json()) as { status?: string; error?: string };
-    return { status: body.status ?? null, error: body.error ?? null };
-  }, { timeout: 15_000 }).toEqual({ status: 'failed', error: expectedError });
+  const { projectId } = await currentProjectContext(page);
+  const input = page.getByTestId('chat-composer-input');
+  await input.click();
+  await input.fill('Create a BYOK OpenCode missing provider smoke artifact');
+  await expect(input).toHaveText('Create a BYOK OpenCode missing provider smoke artifact');
+  await page.getByTestId('chat-send').click();
 
-  const { projectId, conversationId } = await currentProjectContext(page);
-  await expect.poll(async () => {
-    const messages = await listConversationMessages(page, projectId, conversationId);
-    return messages.find((message) => message.role === 'assistant')?.runStatus ?? 'missing';
-  }, { timeout: 15_000 }).toBe('failed');
+  // The preflight opens the execution-mode Settings section.
+  const settings = page.locator('.modal-settings');
+  await expect(settings).toBeVisible({ timeout: 15_000 });
+  await expect(settings.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
+
+  // No run was created and no artifact was produced — the block is pre-spawn.
+  await runRequests.expectNone({
+    timeout: 1_000,
+    message: 'missing BYOK provider should block before POST /api/runs',
+  });
+  runRequests.dispose?.();
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 
+  await page.goto(projectUrl, { waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await expect(runErrorCard(page)).toContainText(expectedError);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
@@ -527,9 +708,14 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await expectBrowserAgentConfig(page, 'codex');
   await dismissPrivacyDialog(page);
 
-  await page.getByTestId('home-hero-shortcuts-trigger').click();
-  await page.getByTestId('home-hero-rail-create-plugin').click();
-  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an Open Design plugin for:/);
+  // Enter plugin authoring through the current Plugins Add panel. The
+  // agent-assisted option hands its prompt back to the Home composer; the
+  // scaffold and action cards below remain the end-to-end oracle.
+  await page.goto('/plugins', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByTestId('plugin-create-with-agent').click();
+  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an OpenDesign plugin for:/);
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   const runRequestPromise = page.waitForRequest(isCreateRunRequest);
@@ -549,7 +735,7 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   expect(runBody.message).toContain('produce a folder named generated-plugin');
 
   await expectWorkspaceReady(page);
-  const { projectId } = await currentProjectContext(page);
+  const { projectId, conversationId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [
     'generated-plugin/open-design.json',
     'generated-plugin/SKILL.md',
@@ -558,12 +744,24 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await expectProjectFileToContain(page, projectId, 'generated-plugin/open-design.json', '"name": "generated-plugin"');
   await expectProjectFileToContain(page, projectId, 'generated-plugin/SKILL.md', '# Generated Plugin');
 
+  await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
+    producedFiles: [
+      'generated-plugin/examples/demo.md',
+      'generated-plugin/SKILL.md',
+      'generated-plugin/open-design.json',
+    ],
+    expectedThinking: false,
+  });
+
   await expect(page.getByText('Files from this turn')).toBeVisible();
   await expect(page.getByTestId('assistant-plugin-actions-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('assistant-plugin-install-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('assistant-plugin-publish-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('assistant-plugin-contribute-generated-plugin')).toBeVisible();
 
+  // The run auto-opens the produced file tab; the plugin-folder card lives in
+  // the Design Files ("All project files") view, so navigate there first.
+  await openAllProjectFiles(page);
   await expect(page.getByTestId('design-plugin-folder-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('design-plugin-folder-install-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('design-plugin-folder-publish-generated-plugin')).toBeVisible();
@@ -593,20 +791,27 @@ test('[P0] real daemon run supports fake non-Codex runtime protocols', async ({ 
 });
 
 async function createProject(page: Page, name: string, agentId: FakeAgentId = 'codex') {
+  const projectId = `real-daemon-${name}-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
   await configureFakeAgent(page, agentId);
   await installBrowserAgentConfig(page, agentId);
-  await gotoEntryHome(page);
-  await setBrowserAgentConfig(page, agentId);
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  // Keep the branch's conversation-scoped landing (createProjectViaApi returns
+  // the seeded conversation here), and take #6161's two improvements: the
+  // post-navigation `configureFakeAgent` + `setBrowserAgentConfig` pair is the
+  // redundant setup it removed — `installBrowserAgentConfig` above already
+  // seeded it — and the goto is guarded against the aborted-navigation races a
+  // domcontentloaded wait can lose to.
+  const { conversationId } = await createProjectViaApi(page, projectId, name);
+  try {
+    await page.goto(`/projects/${projectId}/conversations/${conversationId}`, {
+      waitUntil: 'domcontentloaded',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/ERR_ABORTED|frame was detached/i.test(message)) throw error;
+  }
   await waitForLoadingToClear(page);
-  await setBrowserAgentConfig(page, agentId);
-  await configureFakeAgent(page, agentId);
   await expectBrowserAgentConfig(page, agentId);
   await dismissPrivacyDialog(page);
-  await openNewProjectModalFromProjects(page);
-  await page.getByTestId('new-project-tab-prototype').click();
-  await page.getByTestId('new-project-name').fill(name);
-  await page.getByTestId('create-project').click();
 }
 
 async function createByokOpenCodeProject(page: Page, name: string) {
@@ -626,8 +831,14 @@ async function createByokOpenCodeProject(page: Page, name: string) {
   await page.getByTestId('create-project').click();
 }
 
-async function createProjectViaApi(page: Page, projectId: string, name: string) {
+async function createProjectViaApi(
+  page: Page,
+  projectId: string,
+  name: string,
+  headers?: Readonly<Record<string, string>>,
+) {
   const response = await page.request.post('/api/projects', {
+    ...(headers ? { headers: { ...headers } } : {}),
     data: {
       id: projectId,
       name,
@@ -642,16 +853,61 @@ async function createProjectViaApi(page: Page, projectId: string, name: string) 
 }
 
 async function openProjectFromProjectsView(page: Page, projectId: string) {
-  await gotoEntryHome(page);
-  const recentProjects = page.getByTestId('recent-projects-strip');
-  await expect(recentProjects).toBeVisible();
-  await recentProjects.locator(`[data-project-id="${projectId}"]`).click();
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+}
+
+/**
+ * Leave the open project through the UI and land back on the entry surface.
+ *
+ * This used to be `getByRole('button', { name: /back to projects/i })`, which
+ * no longer resolves to anything on a project surface. #5517 (884ed1085) gave
+ * ChatPane's top-left slot to the pane-collapse control — `onCollapse` wins
+ * over `onBack` there, and ProjectView passes both — and the standalone
+ * `AppChromeHeader` that owned the `app-chrome-back` "Back to projects" button
+ * is no longer mounted anywhere (only its portal-id constants are still
+ * imported). The single remaining "Back to projects" label lives inside the
+ * avatar menu's popover, which is closed by default, so the old locator just
+ * hung until the test timed out.
+ *
+ * The surviving way out of a project is the pinned entry tab in the workspace
+ * tabs bar: `WorkspaceTabsBar.openTab` always sends that tab home, whatever
+ * entry section it last showed. Coverage is unchanged — this still exercises
+ * "leave the project through real chrome", which is what the isolation
+ * journey below depends on.
+ */
+async function leaveProjectForEntry(page: Page) {
+  // In docked project mode the state-bearing pinned tab remains mounted in
+  // the hidden dock strip while `workspace-home-chrome` is its visible,
+  // interactive stand-in in the top chrome.
+  const dockedHome = page.getByTestId('workspace-home-chrome');
+  if (await dockedHome.isVisible().catch(() => false)) {
+    await dockedHome.click();
+    await expect(page.getByTestId('file-workspace')).toHaveCount(0);
+    return;
+  }
+  const pinnedEntryTab = page.locator('.workspace-tab.is-pinned');
+  await expect(pinnedEntryTab).toBeVisible();
+  await pinnedEntryTab.locator('.workspace-tab__main').click();
+  await expect(page.getByTestId('file-workspace')).toHaveCount(0);
 }
 
 async function gotoEntryHome(page: Page) {
+  // Hold until the async projects list settles: its late resolution re-renders
+  // the home hero (recent-projects strip mounting), which keeps controls like
+  // the shortcuts trigger unstable under CI timing. Arm before navigating.
+  const projectsSettled = page
+    .waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/projects' &&
+        response.request().method() === 'GET',
+      { timeout: 10_000 },
+    )
+    .catch(() => null);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  await projectsSettled;
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -669,17 +925,20 @@ async function expectWorkspaceReady(page: Page) {
 }
 
 async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
-  const trigger = page.getByTestId('chat-composer').getByTestId('session-mode-trigger');
+  // #5517 composer mode picker: Ask maps to the real `chat` session mode.
+  const modeId = modeTitle === 'Ask mode' ? 'chat' : modeTitle === 'Plan mode' ? 'plan' : 'design';
+  const modeName = modeTitle.replace(' mode', '');
+  const trigger = page.getByTestId('chat-composer').getByTestId('composer-mode-trigger');
   await expect(trigger).toBeVisible();
   await trigger.click();
 
-  const menu = page.locator('.session-mode-toggle__menu[role="menu"]');
+  const menu = page.getByTestId('composer-mode-menu');
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitemradio', { name: 'Ask mode' })).toBeVisible();
-  await expect(menu.getByRole('menuitemradio', { name: 'Plan mode' })).toBeVisible();
-  await expect(menu.getByRole('menuitemradio', { name: 'Design mode' })).toBeVisible();
-  await menu.getByRole('menuitemradio', { name: modeTitle }).click();
-  await expect(trigger).toHaveAttribute('aria-label', modeTitle);
+  await expect(menu.getByTestId('composer-mode-menu-chat')).toBeVisible();
+  await expect(menu.getByTestId('composer-mode-menu-plan')).toBeVisible();
+  await expect(menu.getByTestId('composer-mode-menu-design')).toBeVisible();
+  await menu.getByTestId(`composer-mode-menu-${modeId}`).click();
+  await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
 }
 
 async function sendPrompt(page: Page, prompt: string) {
@@ -690,15 +949,32 @@ async function sendPrompt(page: Page, prompt: string) {
   await input.fill(prompt);
   await expect(input).toHaveText(prompt);
   await expect(sendButton).toBeEnabled();
-  const response = await Promise.race([
-    page.waitForResponse(isCreateRunResponse, { timeout: 10_000 }),
-    (async () => {
-      await sendButton.click();
-      return page.waitForResponse(isCreateRunResponse, { timeout: 10_000 });
-    })(),
-  ]);
-  expect(response.ok()).toBeTruthy();
-  return response;
+  // Split the diagnosis on timeout: track whether the create-run POST was
+  // ever issued, so a failure distinguishes "the click never produced a
+  // request" (composer/overlay problem) from "the daemon did not answer in
+  // time" (runtime problem).
+  let createRunRequestSent = false;
+  const markRequest = (request: Request) => {
+    if (isCreateRunRequest(request)) createRunRequestSent = true;
+  };
+  page.on('request', markRequest);
+  try {
+    const [response] = await Promise.all([
+      page.waitForResponse(isCreateRunResponse, { timeout: T.medium }),
+      sendButton.click(),
+    ]);
+    expect(response.ok()).toBeTruthy();
+    return response;
+  } catch (error) {
+    throw new Error(
+      `sendPrompt did not observe a create-run response (POST /api/runs ${
+        createRunRequestSent ? 'was sent but not answered in time' : 'was never issued'
+      })`,
+      { cause: error },
+    );
+  } finally {
+    page.off('request', markRequest);
+  }
 }
 
 async function sendPromptAndReloadBeforeCreateResponse(page: Page, prompt: string) {
@@ -743,7 +1019,7 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function dismissPrivacyDialog(page: Page) {
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -751,7 +1027,7 @@ async function dismissPrivacyDialog(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function clickVisible(locator: Locator) {
@@ -780,7 +1056,14 @@ async function configureByokOpenCodeWithoutProvider(page: Page) {
       onboardingCompleted: true,
       agentId: 'byok-opencode',
       agentModels: { 'byok-opencode': { model: 'default', reasoning: 'default' } },
-      agentCliEnv: {},
+      // byok-opencode availability resolves through the `opencode` agent's
+      // configured cli env (daemon detection maps byok-opencode → opencode).
+      // Point it at the fake runtime binary: runners without a real
+      // `opencode` on PATH otherwise report the agent unavailable and the
+      // web composer refuses to POST /api/runs at all. The run still fails
+      // pre-spawn on the missing provider config — this spec's oracle — so
+      // the fake binary is never executed.
+      agentCliEnv: { opencode: fakeRuntimes.opencode.env },
       skillId: null,
       designSystemId: null,
     },
@@ -1037,6 +1320,8 @@ async function listConversationMessages(
       runStatus?: string;
       events?: Array<{ kind: string }>;
       producedFiles?: Array<{ name: string }>;
+      traceObjectFiles?: Array<{ name: string }>;
+      resultDeliveryState?: string;
     }>;
   };
   return body.messages;

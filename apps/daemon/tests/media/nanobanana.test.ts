@@ -93,7 +93,6 @@ describe('nano-banana media generation', () => {
       });
     });
     vi.stubGlobal('fetch', fetchMock);
-
     const result = await generateMedia({
       projectRoot,
       projectsRoot,
@@ -156,6 +155,76 @@ describe('nano-banana media generation', () => {
     expect(result.name).toBe('official.png');
   });
 
+  it('retries a rate-limited Nano Banana request with the same provider', async () => {
+    await writeConfig({
+      providers: {
+        nanobanana: {
+          baseUrl: TEST_NANOBANANA_BASE_URL,
+          model: 'custom-nano-model',
+        },
+      },
+    });
+    const onProviderRequestSettled = vi.fn();
+
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length === 1) {
+        return new Response(JSON.stringify({
+          error: { message: 'rate limited' },
+        }), {
+          status: 429,
+          headers: {
+            'content-type': 'application/json',
+            'retry-after': '0',
+          },
+        });
+      }
+      return new Response(JSON.stringify({
+        candidates: [{
+          content: {
+            parts: [{
+              inlineData: {
+                mimeType: 'image/png',
+                data: PNG_BASE64,
+              },
+            }],
+          },
+        }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gemini-3.1-flash-image-preview',
+      prompt: 'A neon city skyline',
+      aspect: '1:1',
+      output: 'retried.png',
+      onProviderRequestSettled,
+    });
+
+    expect(result.providerId).toBe('nanobanana');
+    expect(result.name).toBe('retried.png');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onProviderRequestSettled).toHaveBeenCalledOnce();
+    expect(onProviderRequestSettled).toHaveBeenCalledWith({
+      providerId: 'nanobanana',
+      attemptCount: 2,
+      retryCount: 1,
+      initialResponseStatus: 429,
+      responseStatus: 200,
+      retryReason: 'rate_limit_429',
+      retryAfterMs: 0,
+      retryDelayMs: 0,
+      retryFinalResult: 'success',
+    });
+  });
+
   it('surfaces upstream Nano Banana errors', async () => {
     await writeConfig({
       providers: {
@@ -165,12 +234,16 @@ describe('nano-banana media generation', () => {
       },
     });
 
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       error: { message: 'quota exceeded' },
     }), {
       status: 429,
-      headers: { 'content-type': 'application/json' },
-    })));
+      headers: {
+        'content-type': 'application/json',
+        'retry-after': '0',
+      },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
 
     await expect(generateMedia({
       projectRoot,
@@ -180,6 +253,7 @@ describe('nano-banana media generation', () => {
       model: 'gemini-3.1-flash-image-preview',
       prompt: 'A neon city skyline',
       aspect: '1:1',
-    })).rejects.toThrow(/nano-banana image 429/);
+    })).rejects.toThrow(/nano-banana image 429:.*quota exceeded/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

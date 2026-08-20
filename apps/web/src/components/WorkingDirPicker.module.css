@@ -7,6 +7,7 @@
   position: relative;
   display: inline-flex;
   align-items: flex-start;
+  flex: 0 0 auto;
 }
 
 .triggerRow {
@@ -20,7 +21,9 @@
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  /* Match the panel items' icon gap so the trigger label lines up with the
+     menu item labels below it (see `.panel` left offset). */
+  gap: 9px;
   padding: 4px 6px;
   border: 0;
   border-radius: var(--radius);
@@ -86,17 +89,23 @@
   background: var(--bg-subtle);
 }
 
-/* Downward panel — anchored to the trigger. */
+/* Downward panel — anchored to the trigger. The -9px left offset cancels the
+   panel's border(1) + padding(5) + item padding(9) = 15px content inset against
+   the trigger's 6px inset, so the menu items' icons/labels sit in the same
+   column as the trigger's icon/label instead of stepping ~9px to the right. */
 .panel {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   z-index: 90;
-  min-width: 200px;
+  box-sizing: border-box;
+  width: 220px;
+  min-width: 220px;
   display: flex;
   flex-direction: column;
-  padding: 5px;
-  border: 1px solid var(--border-strong, var(--border));
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
@@ -137,6 +146,7 @@
 
 .item {
   appearance: none;
+  box-sizing: border-box;
   width: 100%;
   min-height: 32px;
   display: flex;
@@ -176,6 +186,7 @@
 
 .submenuRow {
   position: relative;
+  width: 100%;
 }
 
 /* Right-side flyout listing recent folders. Bridges the small gap so the
@@ -191,7 +202,7 @@
   display: flex;
   flex-direction: column;
   padding: 5px;
-  border: 1px solid var(--border-strong, var(--border));
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
@@ -251,7 +262,7 @@
 }
 .recentPath {
   grid-column: 2;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted, var(--text));
   opacity: 0.7;
   overflow: hidden;

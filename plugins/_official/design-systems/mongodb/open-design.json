@@ -24,6 +24,7 @@
     "en": "MongoDB"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Document database. Green leaf branding, developer documentation focus.",
   "description_i18n": {
     "zh-CN": "文档数据库。绿叶品牌标识，专注于开发者文档。",

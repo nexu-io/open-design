@@ -9,11 +9,16 @@ const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
 const pnpmExecPath = process.env.npm_execpath;
 const nodeLoadablePackageManagerExtensions = new Set(['.js', '.cjs', '.mjs']);
 
+export type RunToolsDevJsonOptions = {
+  timeoutMs?: number;
+};
+
 export async function runToolsDevJson<T>(
   workspaceRoot: string,
   suite: ToolsDevSuiteSpec,
   args: string[],
   extraEnv: Record<string, string | undefined> = {},
+  options: RunToolsDevJsonOptions = {},
 ): Promise<T> {
   const useNpmExecPathWithNode = process.env.OD_E2E_PNPM_COMMAND == null
     && pnpmExecPath != null
@@ -35,6 +40,7 @@ export async function runToolsDevJson<T>(
     },
     maxBuffer: 20 * 1024 * 1024,
     shell: process.platform === 'win32' && command !== process.execPath,
+    timeout: options.timeoutMs,
   });
   return parseJsonOutput<T>(stdout);
 }

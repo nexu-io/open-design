@@ -8,6 +8,7 @@ import { sanitizeSeedOverrides } from './schema.js';
 import {
   brandFontAssets,
   buildBrandSystem,
+  defaultThemeAlgorithm,
   deriveTokens,
   renderArtifact,
   renderArtifactGallery,
@@ -67,7 +68,7 @@ function reassembleWithSeed(
     tokensToCssVars(themes.default, ':root') + '\n' + tokensToCssVars(themes.dark, '.dark');
   files['variables.dark.css'] = tokensToCssVars(themes.dark, ':root');
   files['scripts/apply-design-tokens.mjs'] = applyDesignTokensScript();
-  files['theme.json'] = tokensToThemeJson(seed, 'default');
+  files['theme.json'] = tokensToThemeJson(seed, defaultThemeAlgorithm(seed));
   const fonts = brandFontAssets(brand);
   files['kit.html'] = withFonts(
     renderKitPage(themes.default, {

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Module 04 · Recursion · CS101</title>
+<title>Build a New-Hire Onboarding Module like a Top Enablement Lead - Professional training</title>
 <style>/* html-ppt :: shared webfonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
@@ -366,40 +366,40 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
   <!-- 1. Cover -->
   <section class="slide full" data-title="Cover">
-    <p class="kicker">CS 101 · MODULE 04</p>
-    <h1 class="h1 mt-s">Recursion: solving<br>problems by <em>calling yourself</em>.</h1>
-    <p class="lede mt-l" style="max-width:62ch">In this module you'll learn why a function that calls itself is not a trick, but the most natural way to describe problems that contain smaller copies of themselves.</p>
+    <p class="kicker">PROFESSIONAL TRAINING · MODULE 01</p>
+    <h1 class="h1 mt-s">Guest-ready in 30 days: the<br>new-hire onboarding <em>module</em>.</h1>
+    <p class="lede mt-l" style="max-width:62ch">In this module you'll build and run a first-30-days onboarding plan for new hospitality hires — the shift behaviors to teach, the shadow-and-practice loop, the manager checks, and the follow-up conversations that make them stick.</p>
     <div class="row mt-l" style="gap:16px">
-      <span class="pill-academic">~ 45 min read</span>
-      <span class="pill-academic">prereq · functions, if/else</span>
-      <span class="pill-academic">lang · Python</span>
+      <span class="pill-academic">~ 45 min hands-on</span>
+      <span class="pill-academic">audience · new hires + managers</span>
+      <span class="pill-academic">outcome · day-1 shift ready</span>
     </div>
-    <div class="deck-footer"><span>Dr. A. Rivera · Spring 2026</span><span class="slide-number" data-current="1" data-total="7"></span></div>
+    <div class="deck-footer"><span>Harbor Row Hotels · People &amp; Learning</span><span class="slide-number" data-current="1" data-total="7"></span></div>
   </section>
 
   <!-- 2. Objectives -->
   <section class="slide" data-title="Objectives">
     <aside class="sidebar">
-      <div class="brand">CS 101 · M04</div>
+      <div class="brand">Onboarding · M01</div>
       <h5>Learning objectives</h5>
       <ul class="obj-list">
-        <li class="current">Define recursion</li>
-        <li>Identify a base case</li>
-        <li>Trace a recursive call</li>
-        <li>Convert loop ↔ recursion</li>
-        <li>Recognize when recursion helps</li>
+        <li class="current">Why the first 30 days matter</li>
+        <li>Run the onboarding workflow</li>
+        <li>Watch a shift demo</li>
+        <li>Practice the greet-and-seat</li>
+        <li>Check + manager follow-up</li>
       </ul>
       <h5>Module progress</h5>
       <p class="dim" style="font-size:13px">Page 2 of 7 · ~5 min in</p>
     </aside>
     <div class="main">
-      <p class="kicker">OBJECTIVES</p>
+      <p class="kicker">WHY IT MATTERS</p>
       <h2 class="h2 mt-s">By the end, you will be able to…</h2>
       <div class="stack mt-l">
-        <div class="concept-box"><h4>① Explain recursion in one sentence.</h4><p class="dim">"A function that solves a problem by calling itself on a smaller version of that problem."</p></div>
-        <div class="concept-box"><h4>② Write a base case that always terminates.</h4><p class="dim">Every recursive function must have an exit door, or it runs forever.</p></div>
-        <div class="concept-box"><h4>③ Trace a call stack on paper.</h4><p class="dim">Given <code>fact(4)</code>, draw the stack frames top-to-bottom.</p></div>
-        <div class="concept-box"><h4>④ Convert a while-loop to a recursive equivalent.</h4><p class="dim">And explain when one is clearer than the other.</p></div>
+        <div class="concept-box"><h4>① Explain why the first 30 days decide retention.</h4><p class="dim">Hires who don't shadow a real shift in week one leave 2.4x more often before day 90 — across all 42 Harbor Row properties.</p></div>
+        <div class="concept-box"><h4>② Run the 3-shift onboarding workflow.</h4><p class="dim">Observe, co-work, solo-with-support — each shift has one buddy, one checklist, one 5-minute huddle.</p></div>
+        <div class="concept-box"><h4>③ Perform the greet-and-seat on demand.</h4><p class="dim">Given a walk-in party, deliver the 90-second script and log a clean readiness card.</p></div>
+        <div class="concept-box"><h4>④ Close the loop with a manager check-in.</h4><p class="dim">Day 7, day 14, and day 30 conversations, and what "ready for solo shifts" actually looks like.</p></div>
       </div>
     </div>
   </section>
@@ -407,28 +407,28 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 3. Concept -->
   <section class="slide" data-title="Concept">
     <aside class="sidebar">
-      <div class="brand">CS 101 · M04</div>
+      <div class="brand">Onboarding · M01</div>
       <h5>Learning objectives</h5>
       <ul class="obj-list">
-        <li class="done">Define recursion</li>
-        <li class="current">Identify a base case</li>
-        <li>Trace a recursive call</li>
-        <li>Convert loop ↔ recursion</li>
-        <li>Recognize when recursion helps</li>
+        <li class="done">Why the first 30 days matter</li>
+        <li class="current">Run the onboarding workflow</li>
+        <li>Watch a shift demo</li>
+        <li>Practice the greet-and-seat</li>
+        <li>Check + manager follow-up</li>
       </ul>
       <h5>Key terms</h5>
-      <p class="dim" style="font-size:13px">base case · recursive case · call stack · tail call</p>
+      <p class="dim" style="font-size:13px">shadow shift · buddy · huddle · readiness check</p>
     </aside>
     <div class="main">
-      <p class="kicker">CORE CONCEPT</p>
-      <h2 class="h2 mt-s">Two parts, always.</h2>
-      <p class="lede mt-m">A recursive function has exactly two things inside it: a <b>base case</b> (when to stop) and a <b>recursive case</b> (how to shrink the problem before calling yourself).</p>
+      <p class="kicker">CORE WORKFLOW</p>
+      <h2 class="h2 mt-s">Two parts, every shift.</h2>
+      <p class="lede mt-m">Every onboarding shift has exactly two things inside it: a <b>buddy</b> (the shift lead paired with the new hire for all three shifts) and a <b>5-minute huddle</b> (one goal in before the shift, one observation out after).</p>
       <div class="callout">
-        <b>Rule of thumb.</b> If you can't name the base case out loud, don't write the recursion yet. Draw it on paper first.
+        <b>Rule of thumb.</b> Don't hand a new hire a manual — hand them a buddy and a checklist. The buddy narrates decisions out loud; the checklist turns "watch me" into "now you."
       </div>
       <div class="grid g2 mt-l">
-        <div class="concept-box"><h4>Base case</h4><p class="dim">The smallest possible input — one the function answers directly, without calling itself.</p><p class="pill-academic">e.g. <b>n == 0</b></p></div>
-        <div class="concept-box"><h4>Recursive case</h4><p class="dim">Every other input — delegate to a smaller version of the same problem.</p><p class="pill-academic">e.g. <b>n × fact(n-1)</b></p></div>
+        <div class="concept-box"><h4>The buddy</h4><p class="dim">A shift lead with 6+ months tenure, paired for all 3 onboarding shifts — same buddy, same hire.</p><p class="pill-academic">e.g. <b>front desk · F&amp;B · housekeeping</b></p></div>
+        <div class="concept-box"><h4>The huddle</h4><p class="dim">5 minutes before and after each shift, logged on the readiness card.</p><p class="pill-academic">e.g. <b>observe → co-work → solo</b></p></div>
       </div>
     </div>
   </section>
@@ -436,30 +436,28 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 4. Example -->
   <section class="slide" data-title="Example">
     <aside class="sidebar">
-      <div class="brand">CS 101 · M04</div>
+      <div class="brand">Onboarding · M01</div>
       <h5>Learning objectives</h5>
       <ul class="obj-list">
-        <li class="done">Define recursion</li>
-        <li class="done">Identify a base case</li>
-        <li class="current">Trace a recursive call</li>
-        <li>Convert loop ↔ recursion</li>
-        <li>Recognize when recursion helps</li>
+        <li class="done">Why the first 30 days matter</li>
+        <li class="done">Run the onboarding workflow</li>
+        <li class="current">Watch a shift demo</li>
+        <li>Practice the greet-and-seat</li>
+        <li>Check + manager follow-up</li>
       </ul>
       <h5>Try it yourself</h5>
-      <p class="dim" style="font-size:13px">Open repl.it and run the code on the right. Then try <code>fact(10)</code>.</p>
+      <p class="dim" style="font-size:13px">Shadow the script on the right during your next shadow shift, then run it solo with your buddy watching.</p>
     </aside>
     <div class="main">
       <p class="kicker">WORKED EXAMPLE</p>
-      <h2 class="h2 mt-s">Factorial, 7 lines.</h2>
-      <div class="code mt-m"><pre style="margin:0"><span class="cmt"># fact(n) = n × (n-1) × … × 1,  and fact(0) = 1</span>
-<span class="kw">def</span> fact(n):
-    <span class="kw">if</span> n == <span class="str">0</span>:          <span class="cmt"># base case</span>
-        <span class="kw">return</span> <span class="str">1</span>
-    <span class="kw">return</span> n * fact(n - <span class="str">1</span>)   <span class="cmt"># recursive case</span>
-
-<span class="kw">print</span>(fact(<span class="str">4</span>))   <span class="cmt"># → 24</span></pre></div>
+      <h2 class="h2 mt-s">The greet-and-seat, 90 seconds.</h2>
+      <div class="code mt-m"><pre style="margin:0"><span class="cmt"># target: under 90 seconds, door to seated</span>
+<span class="kw">01</span> Eye contact + name: <span class="str">"Welcome back, Ms. Alvarez"</span>
+<span class="kw">02</span> Confirm party size + any notes on file
+<span class="kw">03</span> Walk the table, don't point   <span class="cmt"># narrate as you go</span>
+<span class="kw">return</span> pace to guest, not to kitchen</pre></div>
       <div class="callout">
-        <b>Trace fact(4).</b> 4 × fact(3) → 4 × (3 × fact(2)) → 4 × 3 × (2 × fact(1)) → 4 × 3 × 2 × 1 × fact(0) → 4 × 3 × 2 × 1 × 1 = <b>24</b>.
+        <b>What just happened.</b> The buddy ran the 90-second greet-and-seat while narrating each decision out loud, then logged it on the readiness card — that narration is what the new hire copies on shift two.
       </div>
     </div>
   </section>
@@ -467,73 +465,73 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 5. Exercise -->
   <section class="slide" data-title="Exercise">
     <aside class="sidebar">
-      <div class="brand">CS 101 · M04</div>
+      <div class="brand">Onboarding · M01</div>
       <h5>Learning objectives</h5>
       <ul class="obj-list">
-        <li class="done">Define recursion</li>
-        <li class="done">Identify a base case</li>
-        <li class="done">Trace a recursive call</li>
-        <li class="current">Convert loop ↔ recursion</li>
-        <li>Recognize when recursion helps</li>
+        <li class="done">Why the first 30 days matter</li>
+        <li class="done">Run the onboarding workflow</li>
+        <li class="done">Watch a shift demo</li>
+        <li class="current">Practice the greet-and-seat</li>
+        <li>Check + manager follow-up</li>
       </ul>
       <h5>Time</h5>
-      <p class="dim" style="font-size:13px">~10 minutes · solo</p>
+      <p class="dim" style="font-size:13px">~10 minutes · with buddy</p>
     </aside>
     <div class="main">
-      <p class="kicker">EXERCISE 4.1</p>
-      <h2 class="h2 mt-s">Write <em>sum_to(n)</em>.</h2>
-      <p class="lede mt-m">Return <code>1 + 2 + … + n</code> using recursion — no loops allowed.</p>
+      <p class="kicker">SHIFT 2 · CO-WORK</p>
+      <h2 class="h2 mt-s">Run <em>your first greet-and-seat</em>.</h2>
+      <p class="lede mt-m">From watching to doing — three parties, solo, with your buddy one pace back at the host stand.</p>
       <div class="exercise mt-l">
         <p style="margin:0;font-size:18px;color:var(--text-1)"><b>Your task</b></p>
         <ol style="color:var(--text-2);line-height:1.8;margin:10px 0 0">
-          <li>Write the base case. What does <code>sum_to(0)</code> return?</li>
-          <li>Write the recursive case in terms of <code>sum_to(n - 1)</code>.</li>
-          <li>Test it: <code>sum_to(5) == 15</code>, <code>sum_to(10) == 55</code>.</li>
-          <li>Bonus: what happens if you call <code>sum_to(-3)</code>? Fix it.</li>
+          <li>Take the next three parties solo while your buddy observes from the host stand.</li>
+          <li>Use the three required phrases — welcome, confirm, walk — every single time.</li>
+          <li>Log your own turnaround time on the readiness card after each party.</li>
+          <li>Bonus: handle one seating conflict and narrate your choice to your buddy afterward.</li>
         </ol>
       </div>
-      <p class="dim mt-m" style="font-size:14px">Stuck? Remember: a base case is the smallest input you already know the answer to.</p>
+      <p class="dim mt-m" style="font-size:14px">Stuck? Remember: every shift you log becomes evidence for your day-14 readiness check.</p>
     </div>
   </section>
 
   <!-- 6. Check understanding -->
   <section class="slide" data-title="Check">
     <aside class="sidebar">
-      <div class="brand">CS 101 · M04</div>
+      <div class="brand">Onboarding · M01</div>
       <h5>Learning objectives</h5>
       <ul class="obj-list">
-        <li class="done">Define recursion</li>
-        <li class="done">Identify a base case</li>
-        <li class="done">Trace a recursive call</li>
-        <li class="done">Convert loop ↔ recursion</li>
-        <li class="current">Recognize when recursion helps</li>
+        <li class="done">Why the first 30 days matter</li>
+        <li class="done">Run the onboarding workflow</li>
+        <li class="done">Watch a shift demo</li>
+        <li class="done">Practice the greet-and-seat</li>
+        <li class="current">Check + manager follow-up</li>
       </ul>
       <h5>Self-assess</h5>
       <p class="dim" style="font-size:13px">You should get 3/3.</p>
     </aside>
     <div class="main">
       <p class="kicker">CHECK YOUR UNDERSTANDING</p>
-      <h2 class="h2 mt-s">Which function will recurse forever?</h2>
+      <h2 class="h2 mt-s">What makes a new hire "solo-shift ready"?</h2>
       <div class="mt-l">
-        <div class="mcq"><div class="letter">A</div><div><b>def f(n): return 1 if n == 0 else n * f(n - 1)</b><p class="dim" style="font-size:13px;margin:4px 0 0">Base case <code>n == 0</code>, shrinks toward it. Terminates.</p></div></div>
-        <div class="mcq correct"><div class="letter">B</div><div><b>def f(n): return n + f(n + 1)</b><p class="dim" style="font-size:13px;margin:4px 0 0"><b style="color:var(--accent)">✓ Correct.</b> No base case, and <code>n</code> grows — infinite recursion.</p></div></div>
-        <div class="mcq"><div class="letter">C</div><div><b>def f(n): return n if n &lt; 2 else f(n - 1) + f(n - 2)</b><p class="dim" style="font-size:13px;margin:4px 0 0">Classic Fibonacci. Base case on <code>n &lt; 2</code>. Terminates.</p></div></div>
+        <div class="mcq"><div class="letter">A</div><div><b>They finished the online orientation video</b><p class="dim" style="font-size:13px;margin:4px 0 0">No — the video covers policy, not the greet-and-seat or table-walk skills a shift actually needs.</p></div></div>
+        <div class="mcq correct"><div class="letter">B</div><div><b>Their buddy signs off on 3 shadow shifts and a clean readiness card</b><p class="dim" style="font-size:13px;margin:4px 0 0"><b style="color:var(--accent)">✓ Correct.</b> Observe, co-work, solo-with-support — each logged and signed by the same buddy.</p></div></div>
+        <div class="mcq"><div class="letter">C</div><div><b>They've worked at the property for at least two weeks</b><p class="dim" style="font-size:13px;margin:4px 0 0">No — tenure alone isn't readiness; the readiness card is what unlocks solo shifts, not the calendar.</p></div></div>
       </div>
     </div>
   </section>
 
   <!-- 7. Summary -->
   <section class="slide full" data-title="Summary">
-    <p class="kicker">SUMMARY · MODULE 04</p>
-    <h1 class="h1 mt-s">You can now…</h1>
+    <p class="kicker">SUMMARY · MODULE 01</p>
+    <h1 class="h1 mt-s">Next behavior: book the <em>day-30</em> check-in.</h1>
     <div class="grid g2 mt-l">
-      <div class="concept-box"><h4>✓ Define recursion</h4><p class="dim">A function that calls itself on a smaller input.</p></div>
-      <div class="concept-box"><h4>✓ Write a safe base case</h4><p class="dim">Every recursion needs an exit door.</p></div>
-      <div class="concept-box"><h4>✓ Trace a call stack</h4><p class="dim">You can unwind <code>fact(4)</code> by hand.</p></div>
-      <div class="concept-box"><h4>✓ Judge when to use it</h4><p class="dim">Trees and self-similar problems → recursion. Flat iteration → loop.</p></div>
+      <div class="concept-box"><h4>✓ Explain why 30 days matter</h4><p class="dim">Shadowed hires stay 2.4x longer past day 90 — the module exists to make that shadowing repeatable.</p></div>
+      <div class="concept-box"><h4>✓ Run the onboarding workflow</h4><p class="dim">One buddy, three shifts, a 5-minute huddle before and after each one.</p></div>
+      <div class="concept-box"><h4>✓ Perform the greet-and-seat</h4><p class="dim">Under 90 seconds, three required phrases, logged turnaround time.</p></div>
+      <div class="concept-box"><h4>✓ Close the loop with your manager</h4><p class="dim">Day 7 check-in, day 14 readiness review, day 30 solo-shift sign-off.</p></div>
     </div>
     <div class="callout mt-l">
-      <b>Up next · Module 05.</b> Divide &amp; conquer: merge sort. We'll use everything you just learned — but on lists, not numbers.
+      <b>Up next.</b> Managers: put the day-7, day-14, and day-30 check-ins on the calendar today — new hires: bring your readiness card to each one.
     </div>
   </section>
 

@@ -73,13 +73,29 @@ describe("win standalone prebundle policy", () => {
   it("documents the explicit code-level bundle boundaries", () => {
     expect(WIN_PREBUNDLE_ESBUILD_TARGET).toBe("node24");
     expect(WIN_PREBUNDLE_POLICIES.packagedMain.externals).toEqual(["electron"]);
-    expect(WIN_PREBUNDLE_POLICIES.daemonCli.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
-    expect(WIN_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
+    expect(WIN_PREBUNDLE_POLICIES.daemonCli.externals).toEqual([
+      "better-sqlite3",
+      "blake3-wasm",
+      "hyperframes",
+      "node-pty",
+    ]);
+    expect(WIN_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual([
+      "better-sqlite3",
+      "blake3-wasm",
+      "hyperframes",
+      "node-pty",
+    ]);
     expect(WIN_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
     expect(WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
+    // Must match apps/daemon/package.json / the pnpm lockfile, or
+    // electron-builder's collector drops the module from the shipped app and
+    // the daemon dies at boot with ERR_MODULE_NOT_FOUND (issue #4638).
     expect(WIN_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
-      "better-sqlite3": "12.9.0",
+      "better-sqlite3": "12.10.0",
       "blake3-wasm": "2.1.5",
+      "hyperframes": "0.8.1",
+      "node-pty": "1.1.0",
+      "sharp": "0.35.3",
     });
     expect(WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-cli.mjs");
     expect(WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-sidecar.mjs");
@@ -152,6 +168,25 @@ describe("assertWinPrebundleMetafile", () => {
       await writeFile(
         metafilePath,
         JSON.stringify({ inputs: { "/repo/node_modules/blake3-wasm/dist/node/index.js": {} } }),
+        "utf8",
+      );
+
+      await expect(
+        assertWinPrebundleMetafile({ metafilePath, policyName: "daemonSidecar" }),
+      ).rejects.toThrow(/daemon sidecar prebundle included forbidden inputs/);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a daemon metafile that bundled node-pty", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-prebundle-"));
+    const metafilePath = join(root, "unsafe-native-daemon.json");
+
+    try {
+      await writeFile(
+        metafilePath,
+        JSON.stringify({ inputs: { "/repo/node_modules/node-pty/lib/index.js": {} } }),
         "utf8",
       );
 

@@ -11,11 +11,13 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('claude')).toBe('Claude');
     expect(agentDisplayName('codex')).toBe('Codex');
     expect(agentDisplayName('cursor-agent')).toBe('Cursor');
+    expect(agentDisplayName('deepseek-harness')).toBe('DeepSeek Harness');
   });
 
   it('resolves common aliases like "claude code" and "qodercli"', () => {
     expect(agentDisplayName('Claude Code')).toBe('Claude');
     expect(agentDisplayName('qodercli')).toBe('Qoder');
+    expect(agentDisplayName('DeepSeek Harness')).toBe('DeepSeek Harness');
   });
 
   it('matches embedded substrings such as cursor-agent in a longer path', () => {
@@ -33,6 +35,11 @@ describe('agentDisplayName', () => {
   it('returns null when both id and fallback are missing', () => {
     expect(agentDisplayName(undefined, null)).toBeNull();
   });
+
+  it('resolves "kiro cli" and "kiro-cli" aliases to Kiro', () => {
+    expect(agentDisplayName('kiro cli')).toBe('Kiro');
+    expect(agentDisplayName('kiro-cli')).toBe('Kiro');
+  });
 });
 
 describe('exactAgentDisplayName', () => {
@@ -45,6 +52,16 @@ describe('exactAgentDisplayName', () => {
   it('returns null for empty or nullish input', () => {
     expect(exactAgentDisplayName(null)).toBeNull();
     expect(exactAgentDisplayName('')).toBeNull();
+  });
+
+  it('returns "Kiro" for exact id "kiro"', () => {
+    expect(exactAgentDisplayName('kiro')).toBe('Kiro');
+    expect(exactAgentDisplayName('Kiro')).toBe('Kiro');
+  });
+
+  it('resolves kiro-related aliases through exactAgentDisplayName (consistent with Qoder CLI)', () => {
+    expect(exactAgentDisplayName('kiro cli')).toBe('Kiro');
+    expect(exactAgentDisplayName('kiro-cli')).toBe('Kiro');
   });
 });
 

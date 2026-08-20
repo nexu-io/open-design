@@ -126,6 +126,19 @@ describe('ToolCard dispatch', () => {
     expect(markup).toContain('Q3 revenue');
   });
 
+  it.each([
+    ['websearch', { query: 'OpenCode latest release' }, 'OpenCode latest release'],
+    ['webfetch', { url: 'https://github.com/anomalyco/opencode/releases' }, 'https://github.com/anomalyco/opencode/releases'],
+  ])('renders the native OpenCode %s tool as a web card', (name, input, detail) => {
+    const markup = renderToStaticMarkup(
+      <ToolCard use={use(input, name)} runStreaming={false} runSucceeded={true} />,
+    );
+
+    expect(markup).toContain('op-web');
+    expect(markup).toContain(detail);
+    expect(markup).not.toContain('op-generic');
+  });
+
   it('renders a persisted AskUserQuestion turn as a read-only summary with the answer, not raw JSON', () => {
     // Legacy AUQ tool_use events survive in upgraded chat history. They must
     // render the model-authored question text AND the persisted answer, not

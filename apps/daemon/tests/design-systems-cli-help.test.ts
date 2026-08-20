@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DESIGN_SYSTEMS_USAGE,
   isDesignSystemsHelpArg,
-} from '../src/design-systems-cli-help.js';
+} from '../src/cli-help/index.js';
 
 describe('od design-systems help surface', () => {
   it('routes help, --help, and -h to the usage text', () => {
@@ -28,5 +28,7 @@ describe('od design-systems help surface', () => {
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-github');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-shadcn');
     expect(DESIGN_SYSTEMS_USAGE).toContain('rebuild-token-contract');
+    expect(DESIGN_SYSTEMS_USAGE).toContain('--workspace <id>');
+    expect(DESIGN_SYSTEMS_USAGE).toContain('--workspace-member <id>');
   });
 });

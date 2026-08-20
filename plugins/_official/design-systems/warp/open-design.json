@@ -24,6 +24,7 @@
     "en": "Warp"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Modern terminal. Dark IDE-like interface, block-based command UI.",
   "description_i18n": {
     "zh-CN": "现代化终端工具。深色 IDE 风格界面，基于块的命令 UI。",

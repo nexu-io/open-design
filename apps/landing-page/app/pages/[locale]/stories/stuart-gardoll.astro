@@ -1,0 +1,20 @@
+---
+/*
+ * Locale variants of the Stuart Gardoll customer story (`/<locale>/stories/stuart-gardoll/`).
+ *
+ * Re-renders the canonical page once per non-default locale so the hreflang
+ * alternates SeoHead emits resolve to real URLs. The page body is currently
+ * English for every locale (same English fallback an untranslated blog post
+ * uses); the surrounding chrome localizes from the URL's locale prefix.
+ */
+import StoryPage from '../../stories/stuart-gardoll.astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../i18n';
+
+export function getStaticPaths() {
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).map(
+    (locale) => ({ params: { locale: locale.code } }),
+  );
+}
+---
+
+<StoryPage />

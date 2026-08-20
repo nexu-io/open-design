@@ -111,7 +111,10 @@ function swiftColorArgsToHex(args: string): string | null {
  */
 export function extractSwiftColors(raw: string): SwiftColorToken[] {
   const tokens: SwiftColorToken[] = [];
-  const declRe = /(?:(?:static\s+|public\s+|private\s+|internal\s+)*(?:let|var)\s+([A-Za-z_]\w*)\s*(?::[^=\n]+)?=\s*)?\bColor\s*\(([^)]*)\)/gu;
+  // The modifier run is bounded ({0,4}, not *) so a long line of `static ` with
+  // no `let`/`var` can't force quadratic backtracking across the global scan.
+  // Real Swift declarations carry at most a couple of leading modifiers.
+  const declRe = /(?:(?:static\s+|public\s+|private\s+|internal\s+){0,4}(?:let|var)\s+([A-Za-z_]\w*)\s*(?::[^=\n]+)?=\s*)?\bColor\s*\(([^)]*)\)/gu;
   let match: RegExpExecArray | null;
   while ((match = declRe.exec(raw)) !== null) {
     const name = match[1] ?? '';

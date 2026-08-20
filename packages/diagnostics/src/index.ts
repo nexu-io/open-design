@@ -14,8 +14,10 @@ export {
 export {
   collectLogSource,
   collectLogSources,
+  findCrashDumps,
   findMacOSCrashReports,
   type CollectedFile,
+  type CrashDumpLookup,
   type CrashReportLookup,
   type LogSource,
   type LogSourceKind,

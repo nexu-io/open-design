@@ -1,12 +1,12 @@
 # Alibaba Cloud (阿里云) Deployment
 
-This guide covers self-hosting Open Design on Alibaba Cloud for users in mainland China and the broader Asia-Pacific region. It documents the supported deployment paths, image-pull optimisations, and ICP filing considerations for public-facing instances.
+This guide covers self-hosting OpenDesign on Alibaba Cloud for users in mainland China and the broader Asia-Pacific region. It documents the supported deployment paths, image-pull optimisations, and ICP filing considerations for public-facing instances.
 
 > **Status:** This is a docs-only guide. The flows below follow Alibaba Cloud's published product behaviour and the existing [`docs/deployment/docker.md`](../docker.md) and [`docs/install-guide.md`](../../install-guide.md) container model. Live ROS templates, one-click scripts, and verification screenshots are tracked as a follow-up under issue #1025; contributions from operators with active Alibaba Cloud accounts are welcome.
 
 ## Why Alibaba Cloud?
 
-For users in mainland China, deploying Open Design to Alibaba Cloud (阿里云) instead of an overseas provider gives you:
+For users in mainland China, deploying OpenDesign to Alibaba Cloud (阿里云) instead of an overseas provider gives you:
 
 - **Lower latency** for users on China Telecom, China Unicom, and China Mobile networks.
 - **Image acceleration** via Alibaba Cloud Container Registry (容器镜像服务 ACR) — Docker Hub pulls from the mainland are unreliable; ACR mirrors solve this.
@@ -33,7 +33,7 @@ Most first-time deployments should start with **Path A (ECS)**.
 
 ## Path A — Deploy to ECS
 
-This path puts Open Design on a single ECS instance using the same Docker Compose stack documented in [`docs/deployment/docker.md`](../docker.md).
+This path puts OpenDesign on a single ECS instance using the same Docker Compose stack documented in [`docs/deployment/docker.md`](../docker.md).
 
 ### Step 1: Create the ECS instance
 
@@ -42,7 +42,7 @@ Use the Alibaba Cloud console or the CLI. A reasonable starting shape for evalua
 | Setting | Recommended value | Notes |
 |---------|------------------|-------|
 | Instance type | `ecs.t6-c1m2.large` (2 vCPU / 4 GiB) | Lightweight; bump to `ecs.c7` for production |
-| Image | Ubuntu 24.04 LTS 64-bit | Open Design's Docker image is `linux/amd64` and `linux/arm64` |
+| Image | Ubuntu 24.04 LTS 64-bit | OpenDesign's Docker image is `linux/amd64` and `linux/arm64` |
 | Storage | 40 GiB ESSD | Enough for the image, agent CWDs, and SQLite |
 | Network | VPC with a public IP or EIP | Required if users will reach the instance directly |
 | Security group | Inbound `22/tcp` (your IP only), outbound all | Add `443/tcp` only behind a reverse proxy — see [Network exposure](#network-exposure) |
@@ -94,7 +94,7 @@ sudo systemctl restart docker
 
 Get your personal mirror prefix from the Alibaba Cloud console under **Container Registry → Image Tools → Image Accelerator** (容器镜像服务 → 镜像工具 → 镜像加速器).
 
-### Step 4: Run Open Design
+### Step 4: Run OpenDesign
 
 From this point the flow matches [`docs/install-guide.md`](../../install-guide.md):
 
@@ -106,7 +106,7 @@ bash deploy/scripts/install.sh --non-interactive --port 7456
 
 ### Step 5: Put a reverse proxy in front
 
-Open Design binds to `127.0.0.1:7456` by design — the daemon is never directly exposed to the network. For public access, terminate TLS at Nginx or an Alibaba Cloud SLB / ALB and forward to `127.0.0.1:7456`. Do not expose port 7456 directly through the security group. See the network section of [`docs/install-guide.md`](../../install-guide.md) for the full rationale.
+OpenDesign binds to `127.0.0.1:7456` by design — the daemon is never directly exposed to the network. For public access, terminate TLS at Nginx or an Alibaba Cloud SLB / ALB and forward to `127.0.0.1:7456`. Do not expose port 7456 directly through the security group. See the network section of [`docs/install-guide.md`](../../install-guide.md) for the full rationale.
 
 A minimal Nginx block:
 
@@ -151,7 +151,7 @@ Set `OPEN_DESIGN_ALLOWED_ORIGINS` in `deploy/.env` to the public URL so CORS cle
 - High availability across availability zones.
 - Standard Kubernetes tooling (`kubectl`, Helm) for ops.
 
-Open Design does not yet ship an official Helm chart. The minimal manifest below is a starting point — production users should harden it (resource limits, PodDisruptionBudget, NetworkPolicy, persistent storage class).
+OpenDesign does not yet ship an official Helm chart. The minimal manifest below is a starting point — production users should harden it (resource limits, PodDisruptionBudget, NetworkPolicy, persistent storage class).
 
 > **Required env for Kubernetes:** the daemon defaults to `OD_BIND_HOST=127.0.0.1`, which makes the readiness probe (and the Service) unable to reach the container. To make the Pod reachable inside the cluster you must set `OD_BIND_HOST=0.0.0.0`, and the daemon's bound-API-token guard then requires `OD_API_TOKEN` to be set whenever it binds to a non-loopback interface. Both env vars are reflected in the manifest below.
 >
@@ -174,7 +174,7 @@ kind: Deployment
 metadata:
   name: open-design
 spec:
-  replicas: 1  # Open Design uses local SQLite; multi-replica needs shared storage
+  replicas: 1  # OpenDesign uses local SQLite; multi-replica needs shared storage
   selector:
     matchLabels: { app: open-design }
   template:
@@ -229,7 +229,7 @@ Apply with `kubectl apply -f open-design.yaml`. Front the Service with an Ingres
 
 ## Path C — ROS templates
 
-Resource Orchestration Service (资源编排 ROS) provisions the same resources declaratively. There is no first-party ROS template for Open Design yet. Operators with Alibaba Cloud access are welcome to contribute one as a follow-up to this guide; the natural location is `deploy/aliyun/ros/`.
+Resource Orchestration Service (资源编排 ROS) provisions the same resources declaratively. There is no first-party ROS template for OpenDesign yet. Operators with Alibaba Cloud access are welcome to contribute one as a follow-up to this guide; the natural location is `deploy/aliyun/ros/`.
 
 Until a template lands, treat ROS as advanced infra-as-code and use Path A or Path B above.
 
@@ -265,7 +265,7 @@ A practical pattern for many teams: deploy to **Hong Kong (`cn-hongkong`)** firs
 
 ## Network exposure
 
-Open Design's daemon binds to `127.0.0.1:7456` and is never exposed directly. Public access must go through:
+OpenDesign's daemon binds to `127.0.0.1:7456` and is never exposed directly. Public access must go through:
 
 1. A reverse proxy that terminates TLS (Nginx, Caddy, Alibaba Cloud SLB/ALB).
 2. An ICP-filed domain (for mainland regions).
@@ -297,8 +297,8 @@ This guide is intentionally docs-only. Tracked under #1025, contributions welcom
 
 ## References
 
-- Open Design Docker deployment: [`docs/deployment/docker.md`](../docker.md)
-- Open Design one-click installer: [`docs/install-guide.md`](../../install-guide.md)
+- OpenDesign Docker deployment: [`docs/deployment/docker.md`](../docker.md)
+- OpenDesign one-click installer: [`docs/install-guide.md`](../../install-guide.md)
 - Alibaba Cloud ECS docs: <https://www.alibabacloud.com/help/en/ecs>
 - Alibaba Cloud ACK docs: <https://www.alibabacloud.com/help/en/ack>
 - Alibaba Cloud Container Registry docs: <https://www.alibabacloud.com/help/en/acr>

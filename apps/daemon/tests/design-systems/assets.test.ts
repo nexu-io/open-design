@@ -551,6 +551,28 @@ describe('isDesignTokenChannelEnabled (PR-D env gate)', () => {
 // run that whole pipeline (env gate → readDesignSystemAssets per
 // root → fallback chain → DesignSystemAssets shape) end-to-end.
 describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () => {
+  it('keeps a user-prefixed selection on the user-installed package root', async () => {
+    clearDesignSystemAssetsCacheForTests();
+    const builtInRoot = fresh();
+    const userRoot = fresh();
+    writeDesignSystemProject(builtInRoot, 'default', {
+      tokens: ':root { --authority: built-in; }',
+      components: '<button class="built-in">Built-in fixture</button>',
+    });
+    writeDesignSystemProject(userRoot, 'default', {
+      tokens: ':root { --authority: user; }',
+      components: '<button class="user-installed">User fixture</button>',
+    });
+
+    const assets = await resolveDesignSystemAssets('user:default', builtInRoot, userRoot, {});
+
+    expect(assets.tokensCss).toBe(':root { --authority: user; }');
+    expect(assets.fixtureHtml).toBe(
+      '<button class="user-installed">User fixture</button>',
+    );
+    clearDesignSystemAssetsCacheForTests();
+  });
+
   it('returns the built-in assets when the channel is enabled (env unset, default-on)', async () => {
     const builtInRoot = fresh();
     const userRoot = fresh();

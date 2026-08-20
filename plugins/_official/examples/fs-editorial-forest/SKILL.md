@@ -1,23 +1,44 @@
 ---
 name: fs-editorial-forest
-description: "Editorial Forest — a quiet, literary HTML deck theme: deep forest green #2e4a2a, dusty pink #e89cb1, and warm cream #efe7d4 paper set in Source Serif 4 with JetBrains Mono kickers. Mixed light/dark scheme, 8-slide quarterly-review rhythm, fixed 1920×1080 stage scaled to any viewport."
+en_name: "Art-Direct an Annual Report like a Magazine Creative Director"
+zh_name: "像杂志创意总监一样艺术指导年度报告"
+description: |
+  Art-directing a fashion house's annual report — the editorial system, the photography rhythm, and the data spreads. Built as a decision-grade design craft deck for brand stakeholders, exec audience.
+en_description: |
+  Art-directing a fashion house's annual report — the editorial system, the photography rhythm, and the data spreads. Built as a decision-grade design craft deck for brand stakeholders, exec audience.
+zh_description: |
+  像杂志创意总监一样艺术指导年度报告——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "design-craft"
+  - "board-upgrade-deck-rescue"
+  - "design"
+  - "brand"
+  - "visual-system"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "fs-editorial-forest"
 triggers:
-  - "editorial forest"
-  - "forest green deck"
-  - "quiet editorial slides"
-  - "quarterly review deck"
-  - "林间编辑部"
+  - "board-upgrade-deck-rescue"
+  - "design-craft"
+  - "Art-Direct an Annual Report like a Magazine Creative Director"
+  - "像杂志创意总监一样艺术指导年度报告"
+  - "design"
+  - "brand"
+  - "visual-system"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  category: slides
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates"
   preview:
     type: html
     entry: example.html
-  example_prompt: "Use Editorial Forest to turn my content into a quiet, literary single-file HTML deck: forest green, dusty pink, and warm cream in Source Serif 4, on a fixed 1920×1080 stage that scales to any viewport. Start from example.html and replace only the content — keep the design system and the inline deck-stage runtime."
   example_prompt_i18n:
     zh-CN: "用林间编辑部（Editorial Forest）把我的内容做成一套安静、文学气质的单文件 HTML 幻灯片：森林绿 × 尘粉 × 暖奶油配色、Source Serif 4 字体、固定 1920×1080 舞台等比缩放。从 example.html 出发只替换内容，保留设计系统和内联 deck-stage 运行时。"
+  category: "design-craft"
+  scenario: "design"
+  example_prompt: "Create \"Art-Direct an Annual Report like a Magazine Creative Director\" as a decision-grade Design craft deck in this template's own visual system. Subject: Art-directing a fashion house's annual report — the editorial system, the photography rhythm, and the data spreads. Audience: brand stakeholders, exec audience. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated."
 ---
 
 # Editorial Forest (林间编辑部)

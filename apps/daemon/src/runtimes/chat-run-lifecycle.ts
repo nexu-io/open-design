@@ -1,4 +1,5 @@
 const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS = 0;
 const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 
@@ -7,6 +8,16 @@ export function assertValidRuntimeDefInactivityTimeoutMs(agentDefault?: number):
   if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
     throw new RangeError(
       `RuntimeAgentDef.inactivityTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
+        'Fix the runtime def — invalid values used to silently disable the watchdog.',
+    );
+  }
+}
+
+export function assertValidRuntimeDefFirstOutputTimeoutMs(agentDefault?: number): void {
+  if (agentDefault === undefined) return;
+  if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
+    throw new RangeError(
+      `RuntimeAgentDef.firstOutputTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
         'Fix the runtime def — invalid values used to silently disable the watchdog.',
     );
   }
@@ -22,6 +33,18 @@ export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
     return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
   }
   return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+}
+
+export function resolveChatRunFirstOutputTimeoutMs(agentDefault?: number): number {
+  assertValidRuntimeDefFirstOutputTimeoutMs(agentDefault);
+  const env = Number(process.env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS);
+  if (Number.isFinite(env)) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
+  }
+  if (agentDefault !== undefined) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
+  }
+  return DEFAULT_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS;
 }
 
 export function resolveChatRunArtifactQuietPeriodMs() {
@@ -92,14 +115,24 @@ export function applyClaudeStreamJsonRunBookkeeping(
     name?: unknown;
     id?: unknown;
     stopReason?: unknown;
+    isError?: unknown;
   };
 
-  const cleanTerminalTurn =
+  const terminalTurn =
     (event.type === 'turn_end' && event.stopReason !== 'tool_use') ||
     (event.type === 'usage' && event.stopReason !== 'tool_use');
-  if (!cleanTerminalTurn) return;
+  if (!terminalTurn) return;
 
-  run.turnCompletedCleanly = true;
+  // An error termination (is_error result frame) ends the turn — stdin must
+  // still close — but it is NOT a clean completion: marking it clean lets
+  // classifyChatRunCloseStatus translate the CLI's non-zero exit into
+  // 'succeeded' and the failure never reaches the user. A SessionEnd-hook
+  // non-zero exit after a normal result (#3373) carries no isError flag and
+  // keeps taking the clean path.
+  const errorTermination = event.type === 'usage' && event.isError === true;
+  if (!errorTermination) {
+    run.turnCompletedCleanly = true;
+  }
   if (run.stdinOpen) {
     if (run.child?.stdin && !run.child.stdin.destroyed) {
       try { run.child.stdin.end(); } catch {}
@@ -225,4 +258,32 @@ export function bufferedAntigravityGeminiFirstTokenAt(
     offset = nextOffset;
   }
   return null;
+}
+
+/**
+ * Writes the composed prompt as the final chunk on the child's stdin, closes
+ * it, and reports whether that write was backpressured.
+ *
+ * `end(chunk)` cannot report this: it returns the stream rather than a boolean,
+ * and `writableNeedDrain` is already back to false by the time it returns — even
+ * for a chunk that `write(chunk)` would have rejected. Every runtime except
+ * Claude (which streams JSON and keeps stdin open) takes this path, so reading
+ * backpressure off `end()` left `stdin_backpressure` permanently false on
+ * exactly the runs whose `stdin_write` stalls it exists to attribute. Issuing
+ * the write and the close separately is what makes the signal real.
+ *
+ * Returns true when the chunk had to be buffered because the OS pipe was full,
+ * i.e. the child was not draining stdin.
+ */
+export function writePromptAndEndStdin(
+  stdin: {
+    write: (chunk: string, encoding: BufferEncoding, cb: (err?: Error | null) => void) => boolean;
+    end: () => void;
+  },
+  composed: string,
+  onFlush: (err?: Error | null) => void,
+): boolean {
+  const accepted = stdin.write(composed, 'utf8', onFlush);
+  stdin.end();
+  return accepted === false;
 }

@@ -24,6 +24,7 @@
     "en": "Social Media Post - Vintage Sign-Painter Sketch"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Generates a hand-drawn marker sketch on paper with realistic details like graphite lines and ink bleed, perfect for vintage lettering styles.",
   "description_i18n": {
     "zh-CN": "生成纸上手绘马克笔素描，包含石墨线条和墨水渗透等真实细节，适合复古字体风格。",

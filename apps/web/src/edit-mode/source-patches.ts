@@ -129,14 +129,27 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
 
   if (patch.kind === 'set-text') {
     if (hasElementChildren(el)) {
-      return { ok: false, source, error: 'This element contains nested markup. Use the HTML tab instead.' };
+      const soleText = findSoleMeaningfulTextNode(el);
+      if (!soleText) {
+        return { ok: false, source, error: 'This element contains nested markup. Use the HTML tab instead.' };
+      }
+      soleText.nodeValue = patch.value;
+    } else {
+      el.textContent = patch.value;
     }
-    el.textContent = patch.value;
   } else if (patch.kind === 'set-link') {
     if (hasElementChildren(el)) {
       const currentText = el.textContent?.trim() ?? '';
       if (patch.text.trim() !== currentText) {
-        return { ok: false, source, error: 'This link contains nested markup. Use the HTML tab to change its label.' };
+        // The label changed on a link that has element children (e.g. an
+        // icon `<span>` beside a label `<span>`). Route the edit to the one
+        // text node that carries the visible label instead of refusing
+        // outright — see findSoleMeaningfulTextNode for the safety bound.
+        const soleText = findSoleMeaningfulTextNode(el);
+        if (!soleText) {
+          return { ok: false, source, error: 'This link contains nested markup. Use the HTML tab to change its label.' };
+        }
+        soleText.nodeValue = patch.text;
       }
     } else {
       el.textContent = patch.text;
@@ -593,6 +606,52 @@ function findElementByPath(doc: Document, id: string): Element | null {
 
 function hasElementChildren(el: Element): boolean {
   return Array.from(el.children).some((child) => child.nodeType === 1);
+}
+
+/**
+ * The one text node in `el`'s subtree that carries visible (non-whitespace)
+ * text, if — and only if — there is exactly one. An element with element
+ * children can still be a safe target for a flat text edit when every
+ * sibling/descendant besides that single node is decorative (an icon
+ * `<span>`/`<svg>`, empty wrapper markup, or pure whitespace): the new value
+ * has nowhere ambiguous to go, so the caller can overwrite that node in place
+ * and leave the surrounding structure untouched.
+ *
+ * Returns null the moment a second meaningful text node shows up (genuine
+ * mixed inline content like `<p><strong>Nested</strong> copy</p>`) — that
+ * case has no unambiguous target, so the caller must keep refusing the patch
+ * and point the user at the HTML tab instead of guessing which fragment they
+ * meant to change.
+ */
+function findSoleMeaningfulTextNode(el: Element): Text | null {
+  // Walk childNodes/nodeType directly (nodeType 3 = text, 1 = element)
+  // instead of TreeWalker/NodeFilter — this code runs against a parsed
+  // Document that may not come with a full global DOM realm attached.
+  let found: Text | null = null;
+  let ambiguous = false;
+  const visit = (node: Node): void => {
+    if (ambiguous) return;
+    const children = node.childNodes;
+    for (let i = 0; i < children.length && !ambiguous; i++) {
+      const child = children[i]!;
+      if (child.nodeType === 3) {
+        const text = child as unknown as Text;
+        const parentTag = (child.parentElement?.tagName ?? '').toLowerCase();
+        const isInert = parentTag === 'script' || parentTag === 'style' || parentTag === 'template';
+        if (!isInert && (text.nodeValue ?? '').trim() !== '') {
+          if (found) {
+            ambiguous = true;
+            return;
+          }
+          found = text;
+        }
+      } else if (child.nodeType === 1) {
+        visit(child);
+      }
+    }
+  };
+  visit(el);
+  return ambiguous ? null : found;
 }
 
 function setInlineStyles(el: HTMLElement, styles: Partial<ManualEditStyles>): void {

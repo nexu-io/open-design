@@ -4,8 +4,8 @@
   inset: 0;
   z-index: 100;
   background: color-mix(in srgb, #111827 18%, transparent);
-  backdrop-filter: blur(1px);
-  -webkit-backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   display: flex;
   justify-content: flex-end;
   align-items: flex-end;
@@ -54,7 +54,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -62,7 +62,7 @@
 }
 .connector-drawer-titles h2 {
   margin: 0;
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0;
@@ -84,7 +84,7 @@
   border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
   background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-subtle));
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
 }
@@ -126,7 +126,7 @@
 }
 .connector-drawer-section-title {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -158,7 +158,7 @@
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -190,7 +190,7 @@
 .connector-drawer-details dt {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 .connector-drawer-details dd {
@@ -241,7 +241,7 @@
 }
 .connector-drawer-tool-title {
   min-width: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
   line-height: 1.35;
@@ -252,7 +252,7 @@
   flex: 0 0 auto;
   padding: 1px 6px;
   border-radius: var(--radius-pill);
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -283,7 +283,7 @@
 }
 .connector-drawer-tool-name {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-faint);
   background: color-mix(in srgb, var(--bg-subtle) 76%, transparent);
   padding: 2px 5px;
@@ -446,7 +446,17 @@
   overflow: hidden;
   min-height: 168px;
 }
+.design-card.is-design-system-project {
+  border-color: color-mix(in srgb, var(--red) 62%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 42%, transparent);
+}
 .design-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.design-card.is-design-system-project:hover {
+  border-color: var(--red);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--red) 54%, transparent),
+    var(--shadow-sm);
+}
 .design-card-thumb {
   flex: 1;
   min-height: 100px;
@@ -455,8 +465,11 @@
   justify-content: center;
   background: var(--bg-subtle);
   color: var(--text-faint);
-  font-size: 38px;
+  font-size: 36px;
   position: relative;
+  /* Clip the hover cover zoom below so scaled media never bleeds onto the
+     meta block. */
+  overflow: hidden;
 }
 .design-card-thumb::before {
   /* Folder-shape icon */
@@ -503,7 +516,7 @@
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   min-width: 0;
   white-space: nowrap;
@@ -528,7 +541,8 @@
 .design-card-status-running {
   color: var(--accent);
 }
-.design-card-status-awaiting_input {
+.design-card-status-awaiting_input,
+.design-card-status-incomplete {
   color: var(--amber);
 }
 .design-card-status-queued,
@@ -626,7 +640,7 @@
   background: transparent;
   border-radius: var(--radius-sm);
   color: var(--text-strong);
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
 }
@@ -671,11 +685,10 @@
   border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-strong);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
 }
 .designs-select-toggle:hover { border-color: var(--border-strong); }
-.designs-new-project-button,
 .designs-refresh-button {
   display: inline-flex;
   align-items: center;
@@ -686,15 +699,10 @@
   border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-strong);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
   transition: border-color 120ms var(--ease-out), opacity 120ms var(--ease-out);
 }
-.designs-new-project-button {
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
-  color: var(--accent);
-}
-.designs-new-project-button:hover,
 .designs-refresh-button:hover:not(:disabled) {
   border-color: var(--border-strong);
 }
@@ -712,7 +720,7 @@
   background: var(--bg-panel);
 }
 .designs-select-count {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-strong);
 }
 .designs-select-delete {
@@ -769,6 +777,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .design-card-thumb .thumb-iframe {
   position: absolute;
@@ -776,11 +785,16 @@
   left: 0;
   width: 250%;
   height: 250%;
-  transform: scale(0.4);
+  /* --thumb-zoom multiplies the fixed fit scale so an optional zoom composes
+     with (never replaces) it. Nothing sets it today — the hover cover zoom
+     was removed (see recent-projects.css) — but the seam stays cheap. */
+  --thumb-zoom: 1;
+  transform: scale(calc(0.4 * var(--thumb-zoom)));
   transform-origin: top left;
   border: 0;
   background: var(--bg-panel);
   pointer-events: none;
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .project-thumb-image,
 .project-thumb-video,
@@ -873,7 +887,7 @@
   border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   padding: 2px 7px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -909,7 +923,7 @@
 }
 .live-artifact-badges.compact .live-artifact-badge {
   padding: 1px 5px;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.25;
 }
 .design-live-count {
@@ -983,7 +997,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
   flex-shrink: 0;
@@ -1018,10 +1032,22 @@
   transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
   box-shadow: var(--shadow-xs);
 }
+.design-kanban-card.is-design-system-project {
+  border-color: color-mix(in srgb, var(--red) 62%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--red) 42%, transparent),
+    var(--shadow-xs);
+}
 .design-kanban-card:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
+}
+.design-kanban-card.is-design-system-project:hover {
+  border-color: var(--red);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--red) 54%, transparent),
+    var(--shadow-sm);
 }
 .design-kanban-card:active {
   transform: none;
@@ -1123,7 +1149,7 @@
 }
 .example-cta { align-self: flex-start; padding: 8px 18px; }
 .example-tag {
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 2px 8px;
@@ -1203,7 +1229,7 @@
   bottom: 8px;
   background: rgba(15, 15, 18, 0.78);
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1241,7 +1267,7 @@
   min-width: 0;
 }
 .ds-card-badge {
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   padding: 2px 6px;
@@ -1268,7 +1294,7 @@
   padding-top: 6px;
 }
 .ds-card-category {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1317,7 +1343,7 @@
   gap: 8px;
 }
 .ds-row-default {
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   padding: 2px 6px;
@@ -1344,11 +1370,10 @@
 .ds-row-swatch + .ds-row-swatch { border-left: 1px solid rgba(0, 0, 0, 0.05); }
 
 @media (max-width: 900px) {
-  .entry {
-    grid-template-columns: 56px 1fr !important;
-    height: 100%;
-    min-height: 0;
-  }
+  /* The legacy `.entry { grid-template-columns: 56px 1fr !important }` narrow
+     override is gone: entry-layout.css owns the entry grid now, and its
+     ≤1080px rule collapses the rail track to 0 (hidden) instead of squeezing
+     a broken 56px sliver. */
   .example-card { grid-template-columns: 1fr; }
   .example-preview { height: 240px; }
   /* Note: home-redesign breakpoints (entry-nav-rail, entry-main__inner,
@@ -1360,11 +1385,14 @@
    File workspace — tabs + viewer
    ============================================================ */
 .workspace {
+  /* Containing block for .workspace-toast-anchor (viewer/routines.css), which
+     pins workspace-owned toasts to this pane instead of the viewport. */
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: var(--bg);
+  background: var(--veil-canvas);
   flex: 1;
   overflow: hidden;
 }
@@ -1373,12 +1401,26 @@
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-  height: 38px;
+  /* Solid, matching the panel below (材质规范 exception: nothing scrolls
+     under this strip, so glass only produced a tone mismatch). */
+  background: var(--bg);
+  /* 44px (matches the top workspace chrome) rather than 38px: the active tab
+     pill carries a 1px inset border now, and at 38px the pill filled almost
+     the whole row so `.ws-tabs-bar`'s `overflow-y: hidden` shaved its top and
+     bottom border strokes. The extra height gives the pill clear vertical
+     margin so it reads fully, un-clipped. */
+  height: 44px;
   position: sticky;
   top: 0;
   z-index: 4;
+  /* This row carries both the file tabs (设计文件/RECO.../…) and the
+     right-aligned 分享/历史版本/演示 action cluster (the former standalone
+     chrome header was merged into it, see .ws-tabs-actions above), but had
+     no edge of its own — it read as fused into the preview content
+     scrolling directly beneath it. Same hairline other sticky toolbar rows
+     in this file use (.page-creator-head, .ds-card-thumb) to read as a
+     distinct strip instead of bleeding into the canvas. */
+  border-bottom: 1px solid var(--border);
 }
 .ws-tabs-shell:has(.entry-settings-menu__popover) {
   z-index: 1900;
@@ -1386,7 +1428,7 @@
 .ws-tabs-bar {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   overflow-x: auto;
   overflow-y: hidden;
   flex-wrap: nowrap;
@@ -1416,6 +1458,7 @@
      never compressed by long/numerous file tabs. */
   margin-inline-start: auto;
 }
+.ws-tabs-file-actions-before,
 .ws-tabs-file-actions,
 .ws-tabs-project-actions {
   display: inline-flex;
@@ -1423,6 +1466,7 @@
   gap: 6px;
   flex-shrink: 0;
 }
+
 /* The present button is wrapped in an inline-block .present-wrap that
    doesn't vertically center its child; make it a flex item so the icon
    button sits on the row's centerline like the others. */
@@ -1430,12 +1474,14 @@
   display: inline-flex;
   align-items: center;
 }
+/* Settings cluster sits after the file-actions group with a small gap and no
+   divider (both the leading divider before file-actions and this one after
+   分享 were removed per design). */
 .ws-tabs-file-actions:not(:empty) + .ws-tabs-project-actions {
   margin-inline-start: 2px;
-  padding-inline-start: 8px;
-  border-inline-start: 1px solid var(--border);
+  padding-inline-start: 4px;
 }
-/* The Design Files row is 38px tall, so shrink the action cluster's buttons
+/* The Design Files row is 44px tall, so shrink the action cluster's buttons
    (present / share / handoff / avatar) to sit comfortably within it without
    touching the global chrome-action sizing used elsewhere. The `.app`
    prefix matches the specificity of the global `.app .handoff-trigger` /
@@ -1454,8 +1500,27 @@
   min-height: 28px;
   padding: 0;
   justify-content: center;
+  /* Borderless soft grey-white icon buttons: drop the outline and sit on a
+     light grey fill so present / 历史版本 read as one quiet cluster next to the
+     dark 分享 button. */
+  border-color: transparent;
+  background: var(--bg-subtle);
+}
+.app .ws-tabs-actions .chrome-action-icon:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: transparent;
+}
+.app .ws-tabs-actions .chrome-action-icon.is-active,
+.app .ws-tabs-actions .chrome-action-icon[aria-expanded='true'] {
+  background: var(--bg-muted);
+  border-color: transparent;
 }
 .app .ws-tabs-actions .handoff-trigger {
+  height: 28px;
+  min-height: 28px;
+  align-items: center;
+}
+.app .ws-tabs-actions .handoff-caret {
   height: 28px;
   min-height: 28px;
   align-items: center;
@@ -1470,16 +1535,149 @@
 .app .ws-tabs-actions .chrome-action > svg:first-child {
   transform: none;
 }
+/* The panel's lead action (导出) as a solid dark (inverted) button: black fill
+   + white icon/label in light mode; inverts cleanly to a light fill + dark
+   content in dark mode. Was 分享 until export took the lead slot. */
+.app .ws-tabs-actions .chrome-action-dark {
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  color: var(--bg-app);
+}
+/* Hover keeps the ink fill and flips the label/icon to brand green — the
+   same black-fill + green-ink pairing as the Community selected tab and the
+   page-creator 使用 button. */
+.app .ws-tabs-actions .chrome-action-dark:hover:not(:disabled) {
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  color: var(--brand, #87ea5c);
+}
+.app .ws-tabs-actions .chrome-action-dark svg,
+.app .ws-tabs-actions .chrome-action-dark i {
+  color: var(--bg-app);
+}
+.app .ws-tabs-actions .chrome-action-dark:hover:not(:disabled) svg,
+.app .ws-tabs-actions .chrome-action-dark:hover:not(:disabled) i {
+  color: var(--brand, #87ea5c);
+}
+
+.project-collab-demo-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.project-collab-demo-stage > .viewer {
+  height: 100%;
+}
+
+.project-collab-demo-overlay {
+  position: absolute;
+  inset: 48px 0 0;
+  z-index: 32;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.project-collab-demo-selection {
+  --collab-color: var(--accent);
+  position: absolute;
+  border: 2px solid var(--collab-color);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #fff 82%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--collab-color) 12%, transparent),
+    0 16px 44px color-mix(in srgb, var(--collab-color) 16%, transparent);
+  transition:
+    left 520ms cubic-bezier(0.23, 1, 0.32, 1),
+    top 520ms cubic-bezier(0.23, 1, 0.32, 1),
+    width 520ms cubic-bezier(0.23, 1, 0.32, 1),
+    height 520ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.project-collab-demo-selection > span {
+  position: absolute;
+  top: -29px;
+  left: -2px;
+  padding: 5px 8px 6px;
+  border-radius: var(--radius-large, 8px) 7px 7px 2px;
+  background: var(--collab-color);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.project-collab-demo-cursor {
+  --collab-color: var(--accent);
+  position: absolute;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--collab-color);
+  filter: drop-shadow(0 6px 12px color-mix(in srgb, var(--text-strong) 16%, transparent));
+  transition:
+    left 520ms cubic-bezier(0.23, 1, 0.32, 1),
+    top 520ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.project-collab-demo-cursor__pointer {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  transform: translate(-4px, -3px);
+}
+
+.project-collab-demo-cursor__outline {
+  fill: #fff;
+  stroke: #fff;
+  stroke-linejoin: round;
+  stroke-width: 3.25px;
+}
+
+.project-collab-demo-cursor__fill {
+  fill: var(--collab-color);
+  stroke: color-mix(in srgb, var(--collab-color) 72%, #000);
+  stroke-linejoin: round;
+  stroke-width: 0.75px;
+}
+
+.project-collab-demo-cursor__name {
+  margin-top: 11px;
+  margin-left: -9px;
+  padding: 3px 8px 4px;
+  border-radius: var(--radius-medium, 4px);
+  background: var(--collab-color);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, #fff 18%, transparent),
+    0 5px 12px color-mix(in srgb, var(--collab-color) 18%, transparent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
 
 .ws-tab {
+  /* Positioning context for the inter-tab separator (::before, see the
+     .app overrides in viewer/routines.css). */
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 8px;
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 8px;
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
-  font-size: 12.5px;
+  /* Rounded rect (12px), matching the top workspace tab strip — not a full
+     pill — so the Design Files tab and the file tabs read as one family. */
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
   max-width: 110px;
@@ -1517,7 +1715,7 @@
 .ws-tab.active {
   background: var(--bg-subtle);
   color: var(--text);
-  font-weight: 500;
+  box-shadow: none;
 }
 .ws-tab .tab-icon {
   flex: 0 0 auto;
@@ -1552,6 +1750,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 96px;
+  line-height: 1;
 }
 .ws-tab.has-meta {
   max-width: 320px;
@@ -1571,8 +1770,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-faint);
-  font-size: 11.5px;
-  font-weight: 450;
+  font-size: 12px;
+  font-weight: 500;
 }
 .ws-tab-meta::before {
   content: "/";
@@ -1623,29 +1822,730 @@
 }
 .ws-tab-close:hover { background: var(--border); color: var(--text); }
 
-.ws-tab.design-files-tab {
-  font-weight: 500;
-  color: var(--text);
-  /* Pin the Design Files entry to the left edge of the horizontally
-     scrollable tab strip so the user always has a way back to the file
-     list even when many tabs overflow. Without sticky positioning,
-     Design Files sits at flex index 0 and scrolls off the left edge
-     once the strip is wide enough to require horizontal scrolling.
-     Issue #775. */
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  /* Solid panel surface so other tabs that scroll past underneath the
-     sticky element do not visibly bleed through. */
-  background: var(--bg-panel);
-  /* Subtle right-edge shadow signals the visual separation when other
-     tabs are scrolled beneath it. */
-  box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
+/* The Design Files tab scrolls with the strip like any other tab. It was
+   previously pinned with position: sticky (issue #775), but its transparent
+   background let overflowed tabs slide THROUGH it, rendering both on top of
+   each other. */
+
+.page-creator-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: color-mix(in srgb, #111827 38%, transparent);
+  animation: page-creator-fade 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.ws-tab.design-files-tab.active {
-  /* Active state should still read as selected; layer the active tint
-     over the sticky panel surface. */
+.page-creator-modal {
+  width: min(1180px, calc(100vw - 40px));
+  height: min(780px, calc(100vh - 48px));
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: 0 28px 88px rgba(15, 23, 42, 0.28);
+  animation: page-creator-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.page-creator-head {
+  flex: 0 0 auto;
+  display: grid;
+  /* Title + close only — the search pill lives at the top of the category
+     sidebar now, above 幻灯片. */
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px 17px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.page-creator-head > div {
+  min-width: 0;
+}
+.page-creator-kicker {
+  margin: 0 0 3px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.page-creator-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.page-creator-close {
+  justify-self: end;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.page-creator-close:hover:not(:disabled) {
   background: var(--bg-subtle);
+  color: var(--text);
+}
+.page-creator-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  background: var(--bg);
+}
+.page-creator-sidebar {
+  min-width: 0;
+  padding: 14px 10px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow-y: auto;
+}
+.page-creator-sidebar button {
+  width: 100%;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+.page-creator-sidebar button span:not(.page-creator-sidebar-count) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-creator-sidebar-count {
+  min-width: 24px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-subtle) 86%, transparent);
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+}
+.page-creator-sidebar button:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.page-creator-sidebar button.active {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  color: var(--accent);
+  font-weight: 600;
+}
+.page-creator-sidebar button.active .page-creator-sidebar-count {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
+  color: var(--accent);
+}
+.page-creator-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 18px 20px;
+  overflow: hidden;
+}
+.page-creator-search {
+  /* First row of the category sidebar, above 幻灯片. */
+  width: 100%;
+  height: 34px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  transition:
+    border-color 140ms var(--ease-out),
+    background 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
+}
+.page-creator-search:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 70%, var(--border));
+}
+.page-creator-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--bg-panel);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.page-creator-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+/* Cancel the shared primitives.css `input:focus` blue halo (border + ring);
+   the pill itself carries the accent focus treatment via :focus-within. */
+.page-creator-search input:focus,
+.page-creator-search input:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+.page-creator-search input::placeholder {
+  color: var(--text-faint);
+}
+/* Second-level sub-category filter row (Slides / Prototype / Image / Video). */
+.page-creator-subcats {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 1px 2px 2px 1px;
+}
+.page-creator-subcat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 120ms var(--ease-out),
+    background 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.page-creator-subcat:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+/* Active filter mirrors the Community selected-tab treatment: solid strong
+   fill under brand-green ink. Both tokens are theme-aware, and unlike a
+   solid-accent fill this can never read as blank white ("反白") — the strong
+   fill is always a deep tone. */
+.page-creator-subcat.active {
+  border-color: var(--text-strong);
+  background: var(--text-strong);
+  color: var(--brand, #87ea5c);
+  font-weight: 550;
+}
+.page-creator-subcat.active:hover {
+  border-color: var(--text-strong);
+  background: color-mix(in srgb, var(--text-strong) 88%, var(--brand, #87ea5c));
+  color: var(--brand, #87ea5c);
+}
+.page-creator-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 2px 2px 6px 1px;
+  transition: opacity 160ms var(--ease-out);
+}
+/* While the deferred search query settles, dim the (heavy) grid so results
+   fade rather than snap in. */
+.page-creator-grid.is-pending {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.page-creator-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  transition:
+    border-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+  /* Newly-mounted cards (category switch / search) fade+rise in; `backwards`
+     holds the start frame before paint and reverts to base after, so the
+     :hover lift keeps working. */
+  animation: page-creator-card-in 240ms var(--ease-out) backwards;
+}
+@keyframes page-creator-card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-creator-card:hover {
+  border-color: color-mix(in srgb, var(--border) 55%, var(--text-faint));
+  box-shadow: 0 6px 20px -12px rgba(15, 23, 42, 0.4);
+  transform: translateY(-1px);
+}
+.page-creator-card.active {
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.page-creator-card-preview {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg-panel);
+  color: inherit;
+  text-align: left;
+}
+.page-creator-card-frame {
+  display: block;
+  height: 132px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.page-creator-card--blank .page-creator-card-frame {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.72)),
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--border) 58%, transparent) 0,
+      color-mix(in srgb, var(--border) 58%, transparent) 1px,
+      transparent 1px,
+      transparent 18px
+    );
+}
+.page-creator-card-frame iframe {
+  width: 480px;
+  height: 300px;
+  border: 0;
+  pointer-events: none;
+  transform: scale(0.4);
+  transform-origin: top left;
+}
+/* Deck presets: a 16:9 frame that renders the first slide at a fixed 1280×720
+   logical viewport and visually scales it down to fit (等比缩小看到全貌).
+   Delegating the fit to the template's own CSS/JS (width/height:100% +
+   transform:none) only works for decks that self-scale to their viewport; a
+   template authored on a fixed pixel canvas (`.deck{width:100vw;height:100vh}`
+   + fixed-px content, no fit script) then renders full-size inside the tiny
+   iframe and its content overflows/overlaps into a cramped mess. Mirroring the
+   PreviewModal treatment (render at designWidth 1280, scale to the stage) makes
+   every template preview proportionally regardless of its internal strategy.
+   `--deck-preview-scale` is measured per-card (frame width / 1280) in
+   PageCreatorPresetFrame; the default is a first-paint fallback for the ~214px
+   grid column until the ResizeObserver lands the exact value. */
+.page-creator-card-frame--deck {
+  height: auto;
+  aspect-ratio: 16 / 9;
+  position: relative;
+  --deck-preview-scale: 0.167;
+}
+.page-creator-card-frame--deck iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  transform: scale(var(--deck-preview-scale));
+  transform-origin: top left;
+}
+.page-creator-plugin-media,
+.page-creator-preview-skeleton {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: var(--radius-sm);
+}
+.page-creator-plugin-media {
+  object-fit: cover;
+  background: var(--bg-subtle);
+}
+.page-creator-preview-skeleton {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--bg-subtle) 80%, transparent),
+      color-mix(in srgb, var(--border) 42%, transparent),
+      color-mix(in srgb, var(--bg-subtle) 80%, transparent)
+    );
+}
+.page-creator-blank-thumb {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.page-creator-blank-plus {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  color: var(--accent);
+}
+/* Blank-page card: a pure "start from scratch" action, visually distinct from
+   the template cards — dashed accent frame, big centered +, no thumbnail/badge. */
+.page-creator-card--blank {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-panel));
+}
+.page-creator-card--blank:hover {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+  box-shadow: 0 6px 20px -12px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.page-creator-blank-card {
+  width: 100%;
+  height: 100%;
+  min-height: 208px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+}
+.page-creator-blank-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+.page-creator-blank-card .page-creator-blank-plus {
+  width: 56px;
+  height: 56px;
+  border-width: 1.5px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+  transition:
+    transform 160ms var(--ease-out),
+    background 160ms var(--ease-out);
+}
+.page-creator-card--blank:hover .page-creator-blank-plus {
+  transform: scale(1.06);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-panel));
+}
+.page-creator-blank-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.page-creator-blank-hint {
+  max-width: 92%;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.page-creator-card-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.page-creator-source {
+  align-self: flex-start;
+  max-width: 100%;
+  min-height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-creator-card-copy strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+/* Description only — must NOT match the sub-category tag span, or the tag
+   inherits the 2-line clamp + 34px min-height and floats in dead space. */
+.page-creator-card-copy > span:not(.page-creator-source) {
+  display: -webkit-box;
+  min-height: 34px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.42;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.page-creator-card-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.page-creator-card:hover .page-creator-card-actions,
+.page-creator-card:focus-within .page-creator-card-actions,
+.page-creator-card.active .page-creator-card-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.page-creator-preview-button,
+.page-creator-use {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 76%, transparent);
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 140ms var(--ease-out),
+    border-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+.page-creator-preview-button {
+  background: var(--bg-panel);
+  color: var(--accent);
+}
+.page-creator-preview-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 88%, transparent);
+  color: var(--accent);
+}
+/* Black fill + brand-green ink — the same pairing as the Community selected
+   tab — in the resting state; hover only lightens the fill slightly. */
+.page-creator-use {
+  background: var(--text-strong);
+  border-color: transparent;
+  color: var(--brand, #87ea5c);
+}
+/* Hover keeps the solid fill but flips the label to brand-green ink — the
+   same black-fill/green-ink pairing as the Community selected tab. */
+.page-creator-use:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-strong) 88%, var(--brand, #87ea5c));
+  border-color: transparent;
+  color: var(--brand, #87ea5c);
+  box-shadow: 0 6px 14px -10px color-mix(in srgb, var(--text-strong) 72%, transparent);
+}
+.page-creator-use:active:not(:disabled),
+.page-creator-preview-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.page-creator-use:disabled {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: color-mix(in srgb, var(--accent) 56%, var(--text-faint));
+  cursor: not-allowed;
+  opacity: 1;
+}
+.page-creator-preview-button:disabled {
+  background: var(--bg-panel);
+  border-color: color-mix(in srgb, var(--border) 88%, transparent);
+  color: var(--text-faint);
+  cursor: not-allowed;
+  opacity: 1;
+}
+.page-creator-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+.page-creator-empty {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  background: var(--bg-panel);
+}
+.page-template-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2700;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #111827 46%, transparent);
+}
+.page-template-preview-modal {
+  width: min(980px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 48px));
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-panel);
+  box-shadow: 0 28px 88px rgba(15, 23, 42, 0.32);
+}
+.page-template-preview-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.page-template-preview-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.page-template-preview-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.page-template-preview-head h3 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.25;
+}
+/* Reuse the card's category chip so the preview reads with the same type
+   signal ("品类") the grid cards show. */
+.page-template-preview-title-row .page-creator-source {
+  flex: 0 0 auto;
+}
+.page-template-preview-desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.page-template-preview-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+.page-template-preview-foot {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+@keyframes page-creator-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes page-creator-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 980px) {
+  .page-creator-body {
+    grid-template-columns: 156px minmax(0, 1fr);
+  }
+  .page-creator-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .page-creator-search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+    width: auto;
+  }
+}
+@media (max-width: 680px) {
+  .page-creator-backdrop {
+    padding: 10px;
+  }
+  .page-creator-modal {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+    min-height: 0;
+  }
+  .page-creator-body {
+    grid-template-columns: 1fr;
+  }
+  .page-creator-sidebar {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-creator-sidebar button {
+    width: auto;
+    flex: 0 0 auto;
+    grid-template-columns: auto minmax(0, auto) auto;
+    white-space: nowrap;
+  }
+  .page-creator-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ws-add-tab {
@@ -1658,7 +2558,7 @@
 }
 .ws-tabs-bar.is-overflowing + .ws-add-tab {
   padding-left: 4px;
-  background: var(--bg-panel);
+  background: #fff;
   box-shadow: -8px 0 10px -9px color-mix(in srgb, var(--text) 30%, transparent);
 }
 .ws-tab-add {
@@ -1666,7 +2566,7 @@
   height: 28px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
   display: inline-flex;
@@ -1720,7 +2620,7 @@
 }
 .ws-tab-action {
   padding: 4px 12px;
-  font-size: 12.5px;
+  font-size: 13px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -1738,6 +2638,23 @@
   border-color: #000;
 }
 
+.workspace-readonly-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-subtle) 74%, var(--bg-panel));
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.workspace-readonly-notice svg {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+}
+
 .ws-body {
   flex: 1;
   min-height: 0;
@@ -1747,7 +2664,7 @@
 }
 
 .ws-browser-panel {
-  display: flex;
+  display: none;
   position: absolute;
   inset: 0;
   flex: 1 1 auto;
@@ -1755,16 +2672,9 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
-  z-index: 0;
 }
 .ws-browser-panel.active {
-  opacity: 1;
-  pointer-events: auto;
-  visibility: visible;
-  z-index: 1;
+  display: flex;
 }
 
 .designs-empty-state {

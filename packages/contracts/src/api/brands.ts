@@ -74,6 +74,31 @@ export interface BrandLayout {
   postureRules: string[];
 }
 
+/** Authored overrides for the deterministic design-system seed. Omitted
+ *  fields continue to use the engine defaults. */
+export interface BrandSeedOverrides {
+  colorPrimary?: string;
+  colorSuccess?: string;
+  colorWarning?: string;
+  colorError?: string;
+  colorInfo?: string;
+  colorLink?: string;
+  colorTextBase?: string;
+  colorBgBase?: string;
+  fontFamily?: string;
+  fontFamilyCode?: string;
+  fontSize?: number;
+  borderRadius?: number;
+  sizeUnit?: number;
+  sizeStep?: number;
+  controlHeight?: number;
+  lineWidth?: number;
+  motionUnit?: number;
+  motionBase?: number;
+  wireframe?: boolean;
+  motion?: boolean;
+}
+
 /** The canonical brand kit — the single source of truth for every brand surface. */
 export interface Brand {
   name: string;
@@ -95,6 +120,8 @@ export interface Brand {
   voice: BrandVoice;
   imagery: BrandImagery;
   layout: BrandLayout;
+  /** Optional authored inputs retained across finalize and exposed by the API. */
+  seed?: BrandSeedOverrides;
 }
 
 /**

@@ -5,11 +5,9 @@
 // "landing page / dashboard / portfolio" under its "Website" choice, and
 // matching the exact sub-category taxonomy the Community plugin grid uses.
 //
-// The list is NOT hand-authored here: it is derived from the same
-// `SUBCATEGORIES` facet table the Community section uses
-// (`plugins-home/facets.ts`), so the labels and grouping stay in lockstep.
-// Picking a sub-type filters the example-prompt cards below the rail to that
-// scene; it does NOT bind a plugin or stamp an active badge.
+// Prototype owns a fixed Home information architecture. Its eight scenes stay
+// visible even when the installed plugin catalog has no matching example.
+// Deck continues to use the dynamic Community facet taxonomy.
 
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import type { IconName } from '../Icon';
@@ -30,6 +28,10 @@ export interface HomeHeroSubChip {
   slug: string;
   label: string;
   icon: IconName;
+  // Mobile and Wireframe used to be top-level Home chips. Keep their catalog
+  // action ids so selecting the nested scene preserves the platform/fidelity
+  // metadata those actions stamp on the project.
+  actionChipId?: 'mobile' | 'wireframe';
 }
 
 const PARENT_IDS: readonly SubChipParentId[] = ['prototype', 'deck'];
@@ -44,15 +46,47 @@ const SUBCATEGORY_ICONS: Record<string, IconName> = {
   'developer-tools': 'terminal',
   'docs-reports': 'file',
   'brand-design': 'palette',
-  // deck
-  'pitch-business': 'present',
-  'course-training': 'lightbulb',
-  'reports-briefings': 'file',
-  'product-sales': 'star',
-  'engineering-talks': 'terminal',
-  'creative-decks': 'palette',
+  // deck — the 15 commercial "品类" scenes (slug === commercial category id)
+  'fundraising-pitch': 'present',
+  'corporate-strategy': 'kanban',
+  'b2b-sales': 'send',
+  'product-management': 'blocks',
+  'design-craft': 'palette',
+  'marketing-gtm': 'globe',
+  'data-finance': 'sliders',
+  consulting: 'orbit',
+  'government-policy': 'info',
+  'professional-training': 'lightbulb',
+  'academic-research': 'search',
+  'ai-literacy': 'sparkles',
+  career: 'star',
+  'student-coursework': 'file-text',
+  life: 'sun',
 };
 const DEFAULT_SUBCATEGORY_ICON: IconName = 'blocks';
+
+const PROTOTYPE_SUB_CHIPS: readonly HomeHeroSubChip[] = [
+  { slug: 'landing-marketing', label: 'Landing / marketing', icon: 'globe' },
+  { slug: 'business-dashboards', label: 'Dashboards', icon: 'grid' },
+  { slug: 'mobile', label: 'Mobile app', icon: 'smartphone', actionChipId: 'mobile' },
+  { slug: 'wireframe', label: 'Wireframe', icon: 'layout', actionChipId: 'wireframe' },
+  { slug: 'app-prototypes', label: 'Apps', icon: 'blocks' },
+  { slug: 'developer-tools', label: 'Developer tools', icon: 'terminal' },
+  { slug: 'brand-design', label: 'Brand / design', icon: 'palette' },
+  { slug: 'docs-reports', label: 'Docs / reports', icon: 'file' },
+];
+
+export function prototypeSubChipForSlug(slug: string | null): HomeHeroSubChip | null {
+  if (!slug) return null;
+  return PROTOTYPE_SUB_CHIPS.find((item) => item.slug === slug) ?? null;
+}
+
+export function prototypeSubChipForActionChipId(
+  chipId: string | null,
+): HomeHeroSubChip | null {
+  if (!chipId) return null;
+  return PROTOTYPE_SUB_CHIPS.find((item) => item.actionChipId === chipId) ?? null;
+}
 
 export function isSubChipParent(chipId: string | null): chipId is SubChipParentId {
   return chipId === 'prototype' || chipId === 'deck';
@@ -69,6 +103,7 @@ export function subChipsForChip(
   plugins: InstalledPluginRecord[],
 ): HomeHeroSubChip[] {
   if (!isSubChipParent(chipId)) return [];
+  if (chipId === 'prototype') return PROTOTYPE_SUB_CHIPS.map((item) => ({ ...item }));
   const catalog = buildSubcategoryCatalog(plugins);
   const options: FacetOption[] = catalog[chipId] ?? [];
   return options

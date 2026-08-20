@@ -365,7 +365,7 @@ export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number):
 <body>
   <div class="card">
     <div class="top-bar">
-      <span class="label">Open Design · Skill</span>
+      <span class="label">OpenDesign · Skill</span>
       <span class="index">Nº ${indexStr}</span>
     </div>
     <div class="body">

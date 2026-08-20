@@ -27,43 +27,38 @@ describe('subChipsForChip', () => {
     expect(subChipsForChip(null, records)).toEqual([]);
   });
 
-  it('surfaces only prototype sub-categories that have installed plugins, using facet labels', () => {
+  it('always exposes the fixed eight prototype scenes in product order', () => {
     const records = [
       prototypePlugin('p-dash', ['dashboard']),
       prototypePlugin('p-land', ['landing-page']),
     ];
     const result = subChipsForChip('prototype', records);
-    const slugs = result.map((s) => s.slug);
-    expect(slugs).toContain('business-dashboards');
-    expect(slugs).toContain('landing-marketing');
-    // No app/dev/docs/brand plugins installed → those pills are hidden.
-    expect(slugs).not.toContain('app-prototypes');
-    expect(slugs).not.toContain('developer-tools');
-    // Labels match the Community facet table exactly.
+    expect(result.map((s) => s.slug)).toEqual([
+      'landing-marketing',
+      'business-dashboards',
+      'mobile',
+      'wireframe',
+      'app-prototypes',
+      'developer-tools',
+      'brand-design',
+      'docs-reports',
+    ]);
     const dash = result.find((s) => s.slug === 'business-dashboards');
     expect(dash?.label).toBe('Dashboards');
+    expect(result.find((s) => s.slug === 'mobile')?.actionChipId).toBe('mobile');
+    expect(result.find((s) => s.slug === 'wireframe')?.actionChipId).toBe('wireframe');
   });
 
-  it('returns an empty list when the chip has no installed plugins', () => {
-    expect(subChipsForChip('prototype', [])).toEqual([]);
+  it('keeps the fixed prototype hierarchy visible without installed plugins', () => {
+    expect(subChipsForChip('prototype', [])).toHaveLength(8);
   });
 
-  it('only surfaces pills for sub-categories present in the candidate list it is given', () => {
-    // Regression for the "looks unfiltered" bug: subchips must be derived from
-    // the SAME list that feeds the preset cards. A dashboard plugin that exists
-    // in the full install set but is NOT in the displayed candidate list must
-    // not produce a Dashboards pill — otherwise selecting it would filter to an
-    // empty/fallback slice.
+  it('keeps the Home prototype hierarchy independent from the dynamic plugin catalog', () => {
     const displayed = [prototypePlugin('p-land', ['landing-page'])];
     const slugs = subChipsForChip('prototype', displayed).map((s) => s.slug);
-    expect(slugs).toEqual(['landing-marketing']);
-    expect(slugs).not.toContain('business-dashboards');
-
-    // And every pill the helper returns must filter to a non-empty slice of
-    // that same list.
-    for (const slug of slugs) {
-      expect(filterPluginsBySubChip(displayed, 'prototype', slug).length).toBeGreaterThan(0);
-    }
+    expect(slugs).toContain('business-dashboards');
+    expect(slugs).toContain('developer-tools');
+    expect(slugs).toContain('mobile');
   });
 });
 

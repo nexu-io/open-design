@@ -2,7 +2,7 @@
 // current design project folder in a local editor, while the dropdown also
 // exposes copy-to-CLI prompts for handing the same local folder to code agents.
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentInfo,
   HostEditor,
@@ -15,18 +15,16 @@ import {
 } from '@open-design/contracts/analytics';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
-import { getResolvedDeviceId } from '../analytics/client';
-import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { trackHandoffClick } from '../analytics/events';
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { Icon } from './Icon';
 import { EditorIcon } from './EditorIcon';
 import { AgentIcon } from './AgentIcon';
+import { useProjectCollabContext } from '../collab/collab-context';
 
 const PREFERRED_EDITOR_KEY = 'open-design:preferred-editor';
 const PREFERRED_FRAMEWORK_KEY = 'open-design:handoff-framework';
-const AMR_WEBSITE_URL = 'https://open-design.ai/amr';
 const PROJECT_PATH_COPY_ID = 'project-path';
 
 type HandoffTab = 'editor' | 'cli';
@@ -83,7 +81,7 @@ const CLI_ORDER = [
 ];
 
 const FALLBACK_CLI_TARGETS: CliTarget[] = [
-  { id: 'amr', name: 'Open Design', bin: 'vela', available: false },
+  { id: 'amr', name: 'OpenDesign', bin: 'vela', available: false },
   { id: 'claude', name: 'Claude Code', bin: 'claude', available: false },
   { id: 'codex', name: 'Codex CLI', bin: 'codex', available: false },
   { id: 'opencode', name: 'OpenCode', bin: 'opencode-cli', available: false },
@@ -116,8 +114,12 @@ interface Props {
   // Undefined when no artifact tab is active.
   artifactId?: string;
   artifactKind?: TrackingArtifactKind;
+  // Retained on the props contract for the callers that still pass them
+  // (FileViewer / ProjectView). No longer read here since the OpenDesign
+  // Cloud website link was removed from the CLI tab (acceptance #101).
   metricsConsent?: boolean;
   installationId?: string | null;
+  embedded?: boolean;
   // Optional fallback "always open in OS file manager" — falls back to the
   // existing shell.openPath bridge in case the daemon catalogue is empty
   // (highly unlikely on macOS / Win / Linux but harmless to support).
@@ -161,7 +163,7 @@ function writePreferredFramework(id: string): void {
 }
 
 function cliDisplayName(agent: Pick<CliTarget, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : agent.name;
+  return agent.id === 'amr' ? 'OpenDesign' : agent.name;
 }
 
 function mergeCliTargets(agents: AgentInfo[] | undefined): CliTarget[] {
@@ -190,6 +192,48 @@ function mergeCliTargets(agents: AgentInfo[] | undefined): CliTarget[] {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+const HOST_PLATFORMS: ReadonlyArray<HostEditorsResponse['platform']> = [
+  'darwin',
+  'win32',
+  'linux',
+  'unknown',
+];
+
+// `fetchHostEditors` casts the raw `/api/editors` JSON to `HostEditorsResponse`
+// without checking it, and this button now mounts in the viewer chrome on every
+// artifact — so a host that answers off-contract must not be able to take the
+// viewer down with it. These two helpers state the invariant the render path
+// relies on: `editors` is always an array whose entries each have a non-empty
+// string `id` (React key, icon lookup, preference storage, open-in request body)
+// and `label` (rendered text) plus a boolean `available`; `platform` is always
+// one of the four values the fallback control branches on. Entries that cannot
+// satisfy that are dropped rather than rendered half-formed.
+function normalizeHostEditors(value: unknown): HostEditor[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const editors: HostEditor[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const candidate = entry as Partial<HostEditor>;
+    if (typeof candidate.id !== 'string' || candidate.id.length === 0) continue;
+    if (typeof candidate.label !== 'string' || candidate.label.length === 0) continue;
+    // A duplicate id would collide as a React key and as a `data-testid`.
+    if (seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    editors.push({
+      ...(candidate as HostEditor),
+      available: candidate.available === true,
+    });
+  }
+  return editors;
+}
+
+function normalizeHostPlatform(value: unknown): HostEditorsResponse['platform'] {
+  return HOST_PLATFORMS.includes(value as HostEditorsResponse['platform'])
+    ? (value as HostEditorsResponse['platform'])
+    : 'unknown';
 }
 
 type T = ReturnType<typeof useT>;
@@ -293,12 +337,12 @@ export function HandoffButton({
   agents,
   artifactId,
   artifactKind,
-  metricsConsent = false,
-  installationId,
+  embedded = false,
   onRequestRevealInFinder,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const { workspaceContext } = useProjectCollabContext();
   // One-liner so every hand-off interaction emits the same
   // `ui_click` / `area=handoff` shape; callers pass only what varies. The
   // active-artifact context is attached to every event so handoff slices line
@@ -320,7 +364,7 @@ export function HandoffButton({
   const [editors, setEditors] = useState<HostEditor[]>([]);
   const [platform, setPlatform] = useState<HostEditorsResponse['platform']>('unknown');
   const [loaded, setLoaded] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
   const [busy, setBusy] = useState<HostEditorId | null>(null);
   const [copyBusy, setCopyBusy] = useState<string | null>(null);
   const [copiedCliId, setCopiedCliId] = useState<string | null>(null);
@@ -330,30 +374,18 @@ export function HandoffButton({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const copiedTimerRef = useRef<number | null>(null);
 
-  const handleAmrWebsiteClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    fireHandoff({ element: 'amr_website', handoff_tab: 'cli' });
-    const attribution = recordAmrEntry(analytics.track, 'handoff_amr_website', new Date(), {
-      metricsConsent,
-    });
-    const deviceId = amrHandoffDeviceId({
-      metricsConsent,
-      resolvedDeviceId: getResolvedDeviceId(),
-      installationId,
-    });
-    event.currentTarget.href = attributedAmrUrl(
-      AMR_WEBSITE_URL,
-      attribution,
-      deviceId,
-    );
-  };
-
   useEffect(() => {
     let cancelled = false;
     fetchHostEditors()
       .then((resp) => {
         if (cancelled) return;
-        setEditors(resp.editors);
-        setPlatform(resp.platform);
+        // The daemon contract always carries `editors`, but the button now
+        // mounts in the viewer chrome on every artifact, so a malformed host
+        // response must degrade to "no editors" instead of crashing the viewer.
+        const body: Partial<HostEditorsResponse> | null =
+          typeof resp === 'object' && resp !== null ? resp : null;
+        setEditors(normalizeHostEditors(body?.editors));
+        setPlatform(normalizeHostPlatform(body?.platform));
         setLoaded(true);
       })
       .catch(() => {
@@ -367,6 +399,10 @@ export function HandoffButton({
   }, []);
 
   useEffect(() => {
+    if (embedded) {
+      setOpen(true);
+      return;
+    }
     if (!open) return;
     function onPointer(e: MouseEvent) {
       if (wrapRef.current?.contains(e.target as Node)) return;
@@ -381,7 +417,7 @@ export function HandoffButton({
       document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, embedded]);
 
   useEffect(() => {
     return () => {
@@ -421,7 +457,7 @@ export function HandoffButton({
     setBusy(editor.id);
     writePreferred(editor.id);
     try {
-      await openProjectInEditor(projectId, editor.id);
+      await openProjectInEditor(projectId, editor.id, workspaceContext);
       setOpen(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -574,7 +610,7 @@ export function HandoffButton({
             });
             setError(null);
             setBusy(fallbackId);
-            void openProjectInEditor(projectId, fallbackId)
+            void openProjectInEditor(projectId, fallbackId, workspaceContext)
               .catch((err) => {
                 setError(err instanceof Error ? err.message : String(err));
                 onRequestRevealInFinder?.();
@@ -582,7 +618,11 @@ export function HandoffButton({
               .finally(() => setBusy(null));
           }}
         >
-          <EditorIcon editorId={fallbackId} size={20} />
+          {busy === fallbackId ? (
+            <Icon name="spinner" size={20} />
+          ) : (
+            <EditorIcon editorId={fallbackId} size={20} />
+          )}
           <span className="handoff-trigger-label">{fallbackLabel}</span>
         </button>
         {error ? (
@@ -596,7 +636,7 @@ export function HandoffButton({
 
   return (
     <div
-      className={`handoff-wrap${open ? ' open' : ''}`}
+      className={`handoff-wrap${open ? ' open' : ''}${embedded ? ' handoff-wrap--embedded' : ''}`}
       ref={wrapRef}
       data-testid="handoff-wrap"
     >
@@ -604,6 +644,7 @@ export function HandoffButton({
           editor, the right caret opens the picker. Sibling buttons
           (instead of a nested caret) so the caret has its own real
           tap target and so we don't render an invalid button-in-button. */}
+      {embedded ? null : (
       <div className="handoff-split">
         <button
           type="button"
@@ -636,7 +677,11 @@ export function HandoffButton({
         >
           {primary ? (
             <>
-              <EditorIcon editorId={primary.id} size={20} />
+              {busy === primary.id ? (
+                <Icon name="spinner" size={20} />
+              ) : (
+                <EditorIcon editorId={primary.id} size={20} />
+              )}
               <span className="handoff-trigger-label sr-only">
                 {primaryTitle}
               </span>
@@ -665,6 +710,7 @@ export function HandoffButton({
           <Icon name="chevron-down" size={14} />
         </button>
       </div>
+      )}
       {open ? (
         <div className="handoff-menu" role="dialog" aria-label={t('handoff.optionsAria')} data-testid="handoff-menu">
           <div className="handoff-menu-tabs" role="tablist" aria-label={t('handoff.optionsAria')}>
@@ -704,7 +750,16 @@ export function HandoffButton({
             >
               <span className="handoff-path-button-main">
                 <span className="handoff-path-button-icon" aria-hidden>
-                  <Icon name={copiedCliId === PROJECT_PATH_COPY_ID ? 'check' : 'copy'} size={13} />
+                  <Icon
+                    name={
+                      copyBusy === PROJECT_PATH_COPY_ID
+                        ? 'spinner'
+                        : copiedCliId === PROJECT_PATH_COPY_ID
+                          ? 'check'
+                          : 'copy'
+                    }
+                    size={14}
+                  />
                 </span>
                 <span className="handoff-path-button-label">
                   {copiedCliId === PROJECT_PATH_COPY_ID ? t('handoff.copied') : t('designFiles.copyPath')}
@@ -727,9 +782,13 @@ export function HandoffButton({
                       disabled={busy === editor.id}
                       title={t('handoff.openInTarget', { target: editor.label })}
                     >
-                      <EditorIcon editorId={editor.id} size={24} />
+                      {busy === editor.id ? (
+                        <Icon name="spinner" size={24} />
+                      ) : (
+                        <EditorIcon editorId={editor.id} size={24} />
+                      )}
                       <span className="handoff-target-label">{editor.label}</span>
-                      <Icon className="handoff-target-arrow" name="chevron-right" size={12} />
+                      <Icon className="handoff-target-arrow" name="chevron-right" size={14} />
                     </button>
                   ))}
                 </div>
@@ -748,7 +807,11 @@ export function HandoffButton({
                         disabled={busy === editor.id}
                         title={t('handoff.notDetectedTitle', { target: editor.label })}
                       >
-                        <EditorIcon editorId={editor.id} size={24} />
+                        {busy === editor.id ? (
+                          <Icon name="spinner" size={24} />
+                        ) : (
+                          <EditorIcon editorId={editor.id} size={24} />
+                        )}
                         <span className="handoff-target-label">{editor.label}</span>
                       </button>
                     ))}
@@ -758,30 +821,21 @@ export function HandoffButton({
             </section>
           ) : (
             <section className="handoff-menu-block" role="tabpanel">
-              <a
-                className="handoff-amr-link"
-                href={AMR_WEBSITE_URL}
-                target="_blank"
-                rel="noreferrer"
-                onClick={handleAmrWebsiteClick}
-              >
-                <AgentIcon id="amr" size={18} />
-                <span>{t('handoff.amrWebsite')}</span>
-                <Icon name="external-link" size={12} />
-              </a>
-              <div className="handoff-framework-row" role="group" aria-label={t('handoff.framework')}>
+              <div className="handoff-framework-block" role="group" aria-label={t('handoff.framework')}>
                 <span className="handoff-framework-label">{t('handoff.framework')}</span>
-                {FRAMEWORKS.map((framework) => (
-                  <button
-                    key={framework.id}
-                    type="button"
-                    className={`handoff-framework-chip${framework.id === selectedFramework.id ? ' active' : ''}`}
-                    aria-pressed={framework.id === selectedFramework.id}
-                    onClick={() => chooseFramework(framework.id)}
-                  >
-                    {frameworkLabel(framework.id, t)}
-                  </button>
-                ))}
+                <div className="handoff-framework-grid">
+                  {FRAMEWORKS.map((framework) => (
+                    <button
+                      key={framework.id}
+                      type="button"
+                      className={`handoff-framework-chip${framework.id === selectedFramework.id ? ' active' : ''}`}
+                      aria-pressed={framework.id === selectedFramework.id}
+                      onClick={() => chooseFramework(framework.id)}
+                    >
+                      {frameworkLabel(framework.id, t)}
+                    </button>
+                  ))}
+                </div>
               </div>
               {availableCliTargets.length > 0 ? (
                 <div className="handoff-target-group">
@@ -804,7 +858,11 @@ export function HandoffButton({
                           disabled={copyBusy === cli.id}
                           title={t('handoff.copyPromptForTarget', { target: cliDisplayName(cli) })}
                         >
-                          <AgentIcon id={cli.id} size={24} />
+                          {copyBusy === cli.id ? (
+                            <Icon name="spinner" size={24} />
+                          ) : (
+                            <AgentIcon id={cli.id} size={24} />
+                          )}
                           <span className="handoff-target-copy">
                             <span className="handoff-target-label">{cliDisplayName(cli)}</span>
                             <span className="handoff-target-meta">
@@ -838,7 +896,11 @@ export function HandoffButton({
                         disabled={copyBusy === cli.id}
                         title={t('handoff.copyPromptForTarget', { target: cliDisplayName(cli) })}
                       >
-                        <AgentIcon id={cli.id} size={24} />
+                        {copyBusy === cli.id ? (
+                          <Icon name="spinner" size={24} />
+                        ) : (
+                          <AgentIcon id={cli.id} size={24} />
+                        )}
                         <span className="handoff-target-label">{cliDisplayName(cli)}</span>
                       </button>
                     );

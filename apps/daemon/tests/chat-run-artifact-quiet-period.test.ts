@@ -571,6 +571,46 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
     expect(run.child.stdin.end).not.toHaveBeenCalled();
   });
 
+  it('closes stdin without recording clean completion when usage reports an error termination', () => {
+    // Real Claude CLI error terminations (error_during_execution,
+    // error_max_turns, resume failures — the #4275 fixture family) emit a
+    // result frame with is_error true and stop_reason null. The turn IS over,
+    // so stdin must close — but it did not complete cleanly: marking it clean
+    // lets classifyChatRunCloseStatus translate the CLI's exit code 1 into
+    // 'succeeded' and the run fails silently with no error surfaced.
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'usage',
+      usage: null,
+      stopReason: null,
+      isError: true,
+    });
+
+    expect(run.stdinOpen).toBe(false);
+    expect(run.child.stdin.end).toHaveBeenCalled();
+    expect(run.turnCompletedCleanly).toBe(false);
+
+    expect(classifyChatRunCloseStatus({
+      cancelRequested: false,
+      code: 1,
+      signal: null,
+      acpCleanCompletion: false,
+      artifactQuietShutdownRequested: false,
+      turnCompletedCleanly: run.turnCompletedCleanly,
+      artifactProducedThisRun: false,
+    })).toBe('failed');
+  });
+
   it('closes stdin and records clean completion after an AskUserQuestion tool_use followed by end_turn (#4273)', () => {
     // Regression test: the dead AskUserQuestion detection branch used to add
     // the tool_use id to pendingHostAnswers and return early, preventing stdin

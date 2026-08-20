@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-hps-bauhaus",
-  "title": "Bauhaus Primary",
+  "title": "Teach Design Fundamentals like a World-Class Studio Mentor",
   "title_i18n": {
-    "en": "Bauhaus Primary",
-    "zh-CN": "包豪斯三原色"
+    "en": "Teach Design Fundamentals like a World-Class Studio Mentor",
+    "zh-CN": "像世界级工作室导师一样教设计基础",
+    "zh-TW": "像世界级工作室导师一样教设计基础"
   },
   "version": "1.0.0",
-  "description": "Design-history geometric deck: aged canvas #f4efe3, the red/yellow/blue primaries (#e03c27/#f4c430/#1d4eaf), a hard three-band gradient, zero border radius, 2px ink strokes, hard offset shadows, Archivo Black + Space Grotesk. Based on lewislulu/html-ppt-skill bauhaus theme — single-file HTML deck with keyboard navigation and #/N hash deep links.",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "A visual-design fundamentals course for new brand designers — grid, type, color, and the exercises that build the eye. Built as a decision-grade professional training deck for junior designers, new hires.",
   "description_i18n": {
-    "en": "Design-history geometric deck: aged canvas #f4efe3, the red/yellow/blue primaries (#e03c27/#f4c430/#1d4eaf), a hard three-band gradient, zero border radius, 2px ink strokes, hard offset shadows, Archivo Black + Space Grotesk. Based on lewislulu/html-ppt-skill bauhaus theme — single-file HTML deck with keyboard navigation and #/N hash deep links.",
-    "zh-CN": "设计史几何主义幻灯片：做旧画布 #f4efe3 + 红黄蓝三原色 #e03c27/#f4c430/#1d4eaf + 三段硬分色渐变，零圆角、2px 黑描边、硬偏移阴影，Archivo Black + Space Grotesk。基于 lewislulu/html-ppt-skill 的 bauhaus 主题——单文件 HTML 幻灯片，键盘翻页 + #/N 哈希直达。"
+    "en": "A visual-design fundamentals course for new brand designers — grid, type, color, and the exercises that build the eye. Built as a decision-grade professional training deck for junior designers, new hires.",
+    "zh-CN": "像世界级工作室导师一样教设计基础——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像世界级工作室导师一样教设计基础——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -30,7 +33,19 @@
     "geometric",
     "primary-colors",
     "design-history",
-    "html-ppt"
+    "html-ppt",
+    "design",
+    "brand",
+    "visual-system",
+    "hps-bauhaus",
+    "professional-training",
+    "employee-onboarding-deck",
+    "education",
+    "training-deck",
+    "workshop",
+    "course-module",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -43,7 +58,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "education",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -52,13 +67,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a {{deckType}} for {{audience}} about {{topic}}, {{slideCount}}, as a single-file HTML deck in the locked Bauhaus Primary style. Start from the seed `example.html` and replace slide content only — never rewrite the design system, the token sheet, or the runtime script. Hard spec: aged-canvas ground --bg:#f4efe3 (soft #e8e2d1), ink #111111 for text and every stroke, the three primaries --accent:#e03c27 (red) / --accent-2:#f4c430 (yellow) / --accent-3:#1d4eaf (blue), semantic good #1b8c3c, and the hard three-band gradient linear-gradient(135deg,#e03c27 0 33%,#f4c430 33% 66%,#1d4eaf 66% 100%) reserved for .gradient-text heroes and .tri-band/.divider-accent rules. Zero border radius everywhere (--radius:0), 2px solid #111 borders on cards/pills/bars, hard offset shadows 4px 4px 0 #111 (8px 8px 0 #111 large) — never blurred drop shadows. Typography: Archivo Black for display headings (.h1/.h2/.stat-big/.quote, weight 400, uppercase, tight -.03em), Space Grotesk for body, JetBrains Mono for step counters and chips; no other fonts, no serifs, no handwriting. Signature devices: the Kandinsky square/triangle/circle inline-SVG mark in red/yellow/blue with 3px ink strokes, outlined stroke-only section numerals (-webkit-text-stroke), primary-colored thick top rules on cards, square checkboxes filled yellow. Structure: <section class=\"slide\" data-title=\"...\"> cards in a horizontal scroll-snap deck, one screen per slide with no internal scrolling, fixed .deck-header/.deck-footer/.progress-bar chrome, keyboard arrows/Space/Home/End navigation and #/N hash routing kept verbatim from the seed. Compose from the upstream 31-layout catalog (cover → toc → section dividers → content/data layouts → quote → thanks); rebuild all charts as pure CSS blocks or inline SVG with primary fills and ink strokes (no chart libraries, no external images), write real content with no lorem ipsum, and put 1–3 sentences of speaker notes in each slide's hidden .notes block. Do not introduce any color or font outside this spec.",
-        "zh-CN": "为 {{audience}} 制作一套关于 {{topic}} 的 {{deckType}}（{{slideCount}}），锁定「包豪斯三原色」风格的单文件 HTML 幻灯片。从种子 example.html 出发，只替换内容，不重写设计系统和运行时脚本：做旧画布 #f4efe3、墨色 #111 描边、红黄蓝三原色 #e03c27/#f4c430/#1d4eaf、三段硬分色渐变只用于大标题和色带；零圆角、2px 黑描边、4px/8px 硬偏移阴影；Archivo Black 大标题 + Space Grotesk 正文 + JetBrains Mono 编号。方形/三角/圆形康定斯基徽记、描边镂空章节大数字为签名装置。横向 scroll-snap 一屏一卡，键盘翻页 + #/N 哈希路由保持种子原样；图表用纯 CSS/SVG 三原色重建，真实内容不用 lorem ipsum，每页在隐藏 .notes 写演讲备注。禁止引入规格外的颜色和字体，其余细节遵循英文 query。"
+        "en": "Create \"Teach Design Fundamentals like a World-Class Studio Mentor\" as a decision-grade Professional training deck in this template's own visual system. Subject: A visual-design fundamentals course for new brand designers — grid, type, color, and the exercises that build the eye. Audience: junior designers, new hires. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day.",
+        "zh-CN": "像世界级工作室导师一样教设计基础。像世界级工作室导师一样教设计基础——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。 主题：A visual-design fundamentals course for new brand designers — grid, type, color, and the exercises that build the eye. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Bauhaus Primary · FORMWERK Möbelsystem demo deck"
+          "title": "Teach Design Fundamentals like a World-Class Studio Mentor",
+          "title_i18n": {
+            "en": "Teach Design Fundamentals like a World-Class Studio Mentor",
+            "zh-CN": "像世界级工作室导师一样教设计基础",
+            "zh-TW": "像世界级工作室导师一样教设计基础"
+          }
         }
       ]
     },
@@ -137,6 +157,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "professional-training"
   }
 }

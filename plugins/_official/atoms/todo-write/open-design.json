@@ -4,10 +4,11 @@
   "name": "todo-write",
   "title": "Todo write",
   "version": "0.1.0",
+  "publishedAt": "2026-05-09T13:00:27Z",
   "description": "TodoWrite-driven plan that the agent commits to before generation.",
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/todo-write",

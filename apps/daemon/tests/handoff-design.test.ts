@@ -20,8 +20,8 @@ import {
   EmptyTranscriptError,
   HANDOFF_SYSTEM_PROMPT,
   synthesizeHandoffPrompt,
-} from '../src/handoff-design.js';
-import { FinalizeUpstreamError } from '../src/finalize-design.js';
+} from '../src/design/index.js';
+import { FinalizeUpstreamError } from '../src/design/index.js';
 
 const PROJECT_ID = 'project-handoff-1';
 let tempDir: string | null = null;

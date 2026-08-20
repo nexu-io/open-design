@@ -146,4 +146,39 @@ describe('BoardComposerPopover keyboard submit', () => {
     expect(top).toBeLessThanOrEqual(266);
     expect(Number.parseInt(popover.style.maxHeight, 10)).toBeGreaterThan(0);
   });
+
+  it('places the composer outside a wide selected element when vertical space is available', () => {
+    renderPopover({
+      targetOverride: {
+        hoverPoint: { x: 400, y: 250 },
+        position: { x: 80, y: 220, width: 640, height: 100 },
+      },
+      bounds: { width: 800, height: 600 },
+    });
+
+    const popover = screen.getByTestId('comment-popover');
+    const top = Number.parseInt(popover.style.top, 10);
+
+    expect(top).toBeGreaterThanOrEqual(334);
+    expect(Number.parseInt(popover.style.maxHeight, 10)).toBeLessThanOrEqual(252);
+  });
+
+  it('drags the composer and clamps it inside the preview bounds', () => {
+    renderPopover({
+      targetOverride: {
+        hoverPoint: { x: 120, y: 120 },
+        position: { x: 110, y: 110, width: 80, height: 40 },
+      },
+      bounds: { width: 800, height: 600 },
+    });
+
+    const handle = screen.getByLabelText('Move comment box');
+    fireEvent.pointerDown(handle, { clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(document, { clientX: 2000, clientY: 2000, pointerId: 1 });
+    fireEvent.pointerUp(document, { pointerId: 1 });
+
+    const popover = screen.getByTestId('comment-popover');
+    expect(Number.parseInt(popover.style.left, 10)).toBeLessThanOrEqual(466);
+    expect(Number.parseInt(popover.style.top, 10)).toBeLessThanOrEqual(266);
+  });
 });

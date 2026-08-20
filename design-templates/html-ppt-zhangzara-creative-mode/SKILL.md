@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-creative-mode
+en_name: "Present a Visual-Identity System like a Lead Brand Designer"
+zh_name: "像主创品牌设计师一样发布视觉识别系统"
 description: |
-  Creative Mode — Cream paper canvas with confident multi-color (green, pink, orange, yellow) accents and Archivo Black display. Anything that should feel design-led and confident: creative agency pitches, design studio decks, ad shop credentials, brand creative reviews, art-direction reviews.
+  A brand visual-identity system reveal for an outdoor label — logo, color, type, and the rules that keep it consistent. Built as a decision-grade design craft deck for brand team, client.
+en_description: |
+  A brand visual-identity system reveal for an outdoor label — logo, color, type, and the rules that keep it consistent. Built as a decision-grade design craft deck for brand team, client.
+zh_description: |
+  像主创品牌设计师一样发布视觉识别系统——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "design-craft"
+  - "board-upgrade-deck-rescue"
+  - "design"
+  - "brand"
+  - "visual-system"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-creative-mode"
 triggers:
-  - "creative-mode"
-  - "zhangzara-creative-mode"
-  - "Creative Mode"
-  - "creative"
-  - "confident"
-  - "graphic"
-  - "expressive"
-  - "creative agency pitch"
-  - "design studio deck"
+  - "board-upgrade-deck-rescue"
+  - "design-craft"
+  - "Present a Visual-Identity System like a Lead Brand Designer"
+  - "像主创品牌设计师一样发布视觉识别系统"
+  - "design"
+  - "brand"
+  - "visual-system"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/creative-mode"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "design-craft"
+  scenario: "design"
+  example_prompt: "Create \"Present a Visual-Identity System like a Lead Brand Designer\" as a decision-grade Design craft deck in this template's own visual system. Subject: A brand visual-identity system reveal for an outdoor label — logo, color, type, and the rules that keep it consistent. Audience: brand team, client. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated."
 ---
 
 # Creative Mode

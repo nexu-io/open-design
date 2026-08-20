@@ -24,6 +24,7 @@
     "en": "Beat-Synced Outfit Transformation Dance"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A prompt for Seedance 2.0 that coordinates a character dance following breakdown frames while performing a beat-synced outfit change.",
   "description_i18n": {
     "zh-CN": "适用于 Seedance 2.0 的提示词，让角色跟随分解帧跳舞的同时进行节拍同步的服装变换。",

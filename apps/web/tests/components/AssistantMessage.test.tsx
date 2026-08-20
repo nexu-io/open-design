@@ -6,11 +6,14 @@
  * streaming turns, failed runs, and empty responses.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
+import { CollabProvider } from '../../src/collab/collab-context';
+import * as registry from '../../src/providers/registry';
 import type { ChatMessage, ProjectFile } from '../../src/types';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 
 beforeAll(() => {
   const store = new Map<string, string>();
@@ -27,10 +30,13 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  window.sessionStorage.clear();
+  vi.restoreAllMocks();
 });
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 function baseMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
@@ -58,7 +64,117 @@ function producedFile(name: string): ProjectFile {
   } as ProjectFile;
 }
 
+const PROJECT_A_CONTEXT = workspaceContextFixture({
+  workspaceId: 'workspace-a',
+  workspaceMemberId: 'member-a',
+});
+
+function projectCollabValue(workspaceContext = PROJECT_A_CONTEXT) {
+  return {
+    workspaceContext,
+    workspaceContextLoading: false,
+    enabled: false,
+    member: null,
+    present: [],
+    publishedVersion: null,
+    syncState: null,
+    viewerOnly: false,
+    isOwner: false,
+    ownerDisplayName: null,
+    ownerRole: null,
+    downloadPending: false,
+    reportChange: vi.fn(),
+    requestPublish: vi.fn(),
+    refreshPresence: vi.fn(),
+    checkStatusNow: vi.fn(),
+  };
+}
+
 describe('AssistantMessage feedback gate', () => {
+  it('opens a produced file when the user clicks the filename row', () => {
+    const onRequestOpenFile = vi.fn();
+    render(
+      <AssistantMessage
+        message={baseMessage({ producedFiles: [producedFile('poster.png')] })}
+        streaming={false}
+        projectId="proj-1"
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('poster.png'));
+    expect(onRequestOpenFile).toHaveBeenCalledWith('poster.png');
+  });
+
+  it.each(['Enter', ' '])(
+    'opens a produced file when the user presses %s on its row',
+    (key) => {
+      const onRequestOpenFile = vi.fn();
+      render(
+        <AssistantMessage
+          message={baseMessage({ producedFiles: [producedFile('poster.png')] })}
+          streaming={false}
+          projectId="proj-1"
+          onRequestOpenFile={onRequestOpenFile}
+        />,
+      );
+
+      const row = screen.getByRole('button', { name: 'Open: poster.png' });
+      fireEvent.keyDown(row, { key });
+      expect(onRequestOpenFile).toHaveBeenCalledWith('poster.png');
+    },
+  );
+
+  it('renders plugin suggestions as compact user decisions with secondary actions in details', () => {
+    const message = baseMessage({
+      content: '',
+      events: [
+        {
+          kind: 'plugin_candidate',
+          candidateId: 'candidate-1',
+          title: 'Design review helper',
+          description: 'Turn this repository workflow into a reusable helper.',
+        } as ChatMessage['events'][number],
+      ],
+    });
+
+    const { container } = render(
+      <AssistantMessage
+        message={message}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(container.querySelector('[data-user-action-card="plugin-suggestion"]')).toBeTruthy();
+    const contribute = screen.getByRole('button', { name: 'Contribute to open-design' });
+    expect(contribute).toBeTruthy();
+    expect(contribute.classList.contains('plugin-action-button--primary')).toBe(false);
+    const toggle = screen.getByRole('button', { name: 'View details' });
+    const disclosure = container.querySelector('[data-user-action-card="plugin-suggestion"] .accordion-collapsible');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(disclosure?.classList.contains('open')).toBe(false);
+
+    fireEvent.click(toggle);
+    expect(disclosure?.classList.contains('open')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Create plugin/template' })).toBeTruthy();
+  });
+
+  it('omits the repeated identity header for a consecutive assistant reply', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage()}
+        streaming={false}
+        projectId="proj-1"
+        showRole={false}
+      />,
+    );
+
+    expect(container.querySelector('.msg.assistant-continuation')).toBeTruthy();
+    expect(container.querySelector('.msg .role')).toBeNull();
+    expect(container.textContent).toContain('Done.');
+  });
+
   it('copies the raw assistant markdown from the completion footer', async () => {
     const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -101,6 +217,50 @@ describe('AssistantMessage feedback gate', () => {
     }
   });
 
+  it('recvqacy887jsF — shows the copy button mid-stream once there is partial text', () => {
+    // The copy affordance is gated on "is there any non-whitespace text yet"
+    // (copyMarkdown in AssistantMessage.tsx), not on the turn having ended —
+    // so a user can copy what has streamed in so far instead of waiting for
+    // the whole reply. The footer's own CSS backs this: `.assistant-footer`
+    // is opacity:0/hover-revealed at rest, but `[data-streaming="true"]`
+    // forces it to full opacity so a mid-stream reader doesn't ALSO need to
+    // hover to see it.
+    const message = baseMessage({
+      content: 'Partial answer so far',
+      runStatus: undefined,
+      endedAt: undefined,
+      events: [{ kind: 'text', text: 'Partial answer so far' } as ChatMessage['events'][number]],
+    });
+    render(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Copy response markdown' })).toBeTruthy();
+  });
+
+  it('recvqacy887jsF — hides the copy button while streaming has not produced any text yet', () => {
+    // The inverse of the above: before the first token lands there is
+    // nothing to copy, so the button correctly stays absent (not merely
+    // faded out) rather than rendering with an empty payload.
+    const message = baseMessage({
+      content: '',
+      runStatus: undefined,
+      endedAt: undefined,
+      events: [{ kind: 'status', label: 'thinking' } as ChatMessage['events'][number]],
+    });
+    render(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Copy response markdown' })).toBeNull();
+  });
+
   it('calls the fork handler from completed assistant turns', () => {
     const onForkFromMessage = vi.fn();
     render(
@@ -117,7 +277,7 @@ describe('AssistantMessage feedback gate', () => {
     expect(onForkFromMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('reaches Contribute (share to Open Design) through the More -> Share cascade', () => {
+  it('reaches Contribute (share to OpenDesign) through the More -> Share cascade', () => {
     const onShare = vi.fn();
 
     render(
@@ -301,7 +461,7 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
               kind: 'status',
               label: 'error',
               detail:
-                'AMR Cloud reported insufficient balance. Recharge at https://open-design.ai/amr/wallet, then retry.',
+                'AMR Cloud reported insufficient balance. Top up at https://open-design.ai/amr/dashboard, then retry.',
             } as ChatMessage['events'][number],
           ],
         })}
@@ -311,9 +471,30 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
       />,
     );
 
-    const link = screen.getByRole('link', { name: 'https://open-design.ai/amr/wallet' });
-    expect(link.getAttribute('href')).toBe('https://open-design.ai/amr/wallet');
+    const link = screen.getByRole('link', { name: 'https://open-design.ai/amr/dashboard' });
+    expect(link.getAttribute('href')).toBe('https://open-design.ai/amr/dashboard');
     expect(link.classList.contains('md-link')).toBe(true);
+  });
+
+  it('renders context compaction status with a readable label and detail', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'status',
+              label: 'context_compaction',
+              detail: 'Compacting conversation history after a context-length error',
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('compacting context')).toBeTruthy();
+    expect(screen.getByText('Compacting conversation history after a context-length error')).toBeTruthy();
   });
 });
 
@@ -357,7 +538,7 @@ describe('AssistantMessage thinking blocks', () => {
 });
 
 describe('AssistantMessage question forms', () => {
-  it('renders repeated question forms as one compact Questions banner in chat', () => {
+  it('renders repeated question forms once as an interactive inline form', () => {
     const firstForm = [
       '<question-form id="discovery" title="Quick brief — tailored">',
       JSON.stringify({
@@ -386,7 +567,7 @@ describe('AssistantMessage question forms', () => {
       }),
       '</question-form>',
     ].join('\n');
-    const onOpenQuestions = vi.fn();
+    const onSubmitQuestionForm = vi.fn();
 
     render(
       <AssistantMessage
@@ -400,23 +581,387 @@ describe('AssistantMessage question forms', () => {
         })}
         streaming={false}
         projectId="proj-1"
-        onOpenQuestions={onOpenQuestions}
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
       />,
     );
 
-    const banners = screen.getAllByTestId('questions-banner');
-    expect(banners).toHaveLength(1);
-    fireEvent.click(banners[0]!);
-    expect(onOpenQuestions).toHaveBeenCalledWith(expect.objectContaining({
-      form: expect.objectContaining({ id: 'discovery', title: 'Quick brief — tailored' }),
-    }));
-    expect(screen.queryByText('Quick brief — tailored')).toBeNull();
-    expect(screen.queryByText('Who is this for?')).toBeNull();
+    expect(screen.getByText('Quick brief — tailored')).toBeTruthy();
+    const audienceInput = document.querySelector('.qf-input');
+    if (!(audienceInput instanceof HTMLInputElement)) throw new Error('expected audience input');
+    fireEvent.change(audienceInput, {
+      target: { value: 'Product evaluators' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+    expect(onSubmitQuestionForm).toHaveBeenCalledWith(
+      expect.stringContaining('- Who is this for?: Product evaluators'),
+    );
     expect(screen.queryByText('Quick brief — 30 seconds')).toBeNull();
     expect(screen.queryByText('What are we making?')).toBeNull();
   });
 
-  it('renders an answered question banner as a disabled, non-clickable done state', () => {
+  it('restores an inline form draft after remounting the conversation', () => {
+    const form = [
+      '<question-form id="draft" title="Quick brief">',
+      JSON.stringify({
+        questions: [{ id: 'audience', label: 'Audience', type: 'text' }],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const props = {
+      message: baseMessage({
+        content: form,
+        events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+      }),
+      streaming: false,
+      projectId: 'proj-1',
+      conversationId: 'conv-1',
+      isLast: true,
+      onSubmitQuestionForm: vi.fn(),
+    };
+    const first = render(<AssistantMessage {...props} />);
+    const draftInput = first.container.querySelector('.qf-input');
+    if (!(draftInput instanceof HTMLInputElement)) throw new Error('expected draft input');
+    fireEvent.change(draftInput, {
+      target: { value: 'Product leaders' },
+    });
+    first.unmount();
+
+    const restored = render(<AssistantMessage {...props} />);
+    const restoredInput = restored.container.querySelector('.qf-input');
+    if (!(restoredInput instanceof HTMLInputElement)) throw new Error('expected restored input');
+    expect(restoredInput.value).toBe('Product leaders');
+  });
+
+  it('submits one answer when the send action is triggered twice', () => {
+    const form = [
+      '<question-form id="single-submit" title="Quick brief">',
+      JSON.stringify({
+        questions: [{ id: 'audience', label: 'Audience', type: 'text', required: true }],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const onSubmitQuestionForm = vi.fn();
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        conversationId="conv-1"
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
+      />,
+    );
+    const audienceInput = document.querySelector('.qf-input');
+    if (!(audienceInput instanceof HTMLInputElement)) throw new Error('expected audience input');
+    fireEvent.change(audienceInput, {
+      target: { value: 'Product leaders' },
+    });
+    const send = screen.getByRole('button', { name: 'Send answers' });
+    fireEvent.click(send);
+    fireEvent.click(send);
+
+    expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-enables an inline form when the host blocks its submit before a run starts', async () => {
+    let resolveSubmit: (started: boolean) => void = () => {};
+    const onSubmitQuestionForm = vi.fn(
+      () => new Promise<boolean>((resolve) => {
+        resolveSubmit = resolve;
+      }),
+    );
+    const form = [
+      '<question-form id="single-submit" title="Quick brief">',
+      JSON.stringify({
+        questions: [{ id: 'audience', label: 'Audience', type: 'text', required: true }],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        conversationId="conv-1"
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
+      />,
+    );
+    const audienceInput = container.querySelector('.qf-input');
+    if (!(audienceInput instanceof HTMLInputElement)) throw new Error('expected audience input');
+    fireEvent.change(audienceInput, {
+      target: { value: 'Product leaders' },
+    });
+    const send = screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement;
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);
+    });
+    expect(send.disabled).toBe(true);
+
+    await act(async () => {
+      resolveSubmit(false);
+    });
+
+    await waitFor(() => {
+      expect(send.disabled).toBe(false);
+    });
+    expect(audienceInput.value).toBe('Product leaders');
+  });
+
+  it('uploads file answers before sending their attachment context', async () => {
+    vi.spyOn(registry, 'uploadProjectFiles').mockResolvedValue({
+      uploaded: [
+        {
+          name: 'mood.png',
+          path: 'uploads/mood.png',
+          kind: 'image',
+          size: 4,
+        },
+      ],
+      failed: [],
+    });
+    const form = [
+      '<question-form id="references" title="References">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'assets',
+            label: 'Reference assets',
+            type: 'file',
+            required: true,
+            accept: 'image/*',
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const onSubmitQuestionForm = vi.fn();
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        conversationId="conv-1"
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
+      />,
+    );
+    const input = container.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error('expected file input');
+    const file = new File(['mood'], 'mood.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+
+    await waitFor(() => {
+      expect(onSubmitQuestionForm).toHaveBeenCalledWith(
+        expect.stringContaining('Uploaded file 1: mood.png -> uploads/mood.png (for: Reference assets)'),
+        [expect.objectContaining({ name: 'mood.png', path: 'uploads/mood.png', order: 0 })],
+        {
+          workspaceItems: [
+            {
+              id: 'file:uploads/mood.png',
+              kind: 'file',
+              label: 'mood.png',
+              path: 'uploads/mood.png',
+            },
+          ],
+        },
+      );
+    });
+  });
+
+  it('rolls back successful inline uploads when the host rejects a send before it starts', async () => {
+    const uploadProjectFilesMock = vi
+      .spyOn(registry, 'uploadProjectFiles')
+      .mockResolvedValue({
+        uploaded: [
+          {
+            name: 'mood.png',
+            path: 'uploads/mood.png',
+            kind: 'image' as const,
+            size: 4,
+          },
+        ],
+        failed: [],
+      });
+    const deleteProjectFileMock = vi.spyOn(registry, 'deleteProjectFile').mockResolvedValue(true);
+    const form = [
+      '<question-form id="references" title="References">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'assets',
+            label: 'Reference assets',
+            type: 'file',
+            required: true,
+            accept: 'image/*',
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const onSubmitQuestionForm = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        conversationId="conv-1"
+        isLast
+        onSubmitQuestionForm={onSubmitQuestionForm}
+      />,
+    );
+    const input = container.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error('expected file input');
+    const file = new File(['mood'], 'mood.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [file] } });
+    const send = screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement;
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);
+      expect(deleteProjectFileMock).toHaveBeenCalledWith(
+        'proj-1',
+        'uploads/mood.png',
+        null,
+      );
+    });
+    expect(send.disabled).toBe(false);
+
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(uploadProjectFilesMock).toHaveBeenCalledTimes(2);
+      expect(onSubmitQuestionForm).toHaveBeenCalledTimes(2);
+    });
+    expect(deleteProjectFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans up partial file uploads before retrying an inline answer', async () => {
+    const uploadProjectFilesMock = vi
+      .spyOn(registry, 'uploadProjectFiles')
+      .mockResolvedValueOnce({
+        uploaded: [
+          {
+            name: 'mood.png',
+            path: 'uploads/mood.png',
+            kind: 'image' as const,
+            size: 4,
+          },
+        ],
+        failed: [{ name: 'brief.png', error: 'storage unavailable' }],
+        error: 'storage unavailable',
+      })
+      .mockResolvedValueOnce({
+        uploaded: [
+          {
+            name: 'mood.png',
+            path: 'uploads/mood.png',
+            kind: 'image' as const,
+            size: 4,
+          },
+          {
+            name: 'brief.png',
+            path: 'uploads/brief.png',
+            kind: 'image' as const,
+            size: 5,
+          },
+        ],
+        failed: [],
+      });
+    const deleteProjectFileMock = vi.spyOn(registry, 'deleteProjectFile').mockResolvedValue(true);
+    const form = [
+      '<question-form id="references" title="References">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'assets',
+            label: 'Reference assets',
+            type: 'file',
+            required: true,
+            accept: 'image/*',
+            multiple: true,
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const onSubmitQuestionForm = vi.fn();
+    const { container } = render(
+      <CollabProvider value={projectCollabValue()}>
+        <AssistantMessage
+          message={baseMessage({
+            content: form,
+            events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+          })}
+          streaming={false}
+          projectId="proj-1"
+          conversationId="conv-1"
+          isLast
+          onSubmitQuestionForm={onSubmitQuestionForm}
+        />
+      </CollabProvider>,
+    );
+    const input = container.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error('expected file input');
+    const mood = new File(['mood'], 'mood.png', { type: 'image/png' });
+    const brief = new File(['brief'], 'brief.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [mood, brief] } });
+
+    const send = screen.getByRole('button', { name: 'Send answers' });
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(uploadProjectFilesMock).toHaveBeenNthCalledWith(
+        1,
+        'proj-1',
+        [mood, brief],
+        undefined,
+        PROJECT_A_CONTEXT,
+      );
+      expect(deleteProjectFileMock).toHaveBeenCalledWith(
+        'proj-1',
+        'uploads/mood.png',
+        PROJECT_A_CONTEXT,
+      );
+    });
+    expect(onSubmitQuestionForm).not.toHaveBeenCalled();
+
+    fireEvent.click(send);
+
+    await waitFor(() => {
+      expect(uploadProjectFilesMock).toHaveBeenCalledTimes(2);
+      expect(onSubmitQuestionForm).toHaveBeenCalledWith(
+        expect.any(String),
+        [
+          expect.objectContaining({ path: 'uploads/mood.png' }),
+          expect.objectContaining({ path: 'uploads/brief.png' }),
+        ],
+        expect.any(Object),
+      );
+    });
+    expect(deleteProjectFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('collapses answered questions into a readable inline summary', () => {
     const form = [
       '<question-form id="discovery" title="Quick brief — tailored">',
       JSON.stringify({
@@ -431,7 +976,6 @@ describe('AssistantMessage question forms', () => {
       '</question-form>',
     ].join('\n');
 
-    const onOpenQuestions = vi.fn();
     render(
       <AssistantMessage
         message={baseMessage({
@@ -445,24 +989,238 @@ describe('AssistantMessage question forms', () => {
         streaming={false}
         projectId="proj-1"
         nextUserContent={'[form answers for discovery]\n- Who is this for?: Product evaluators'}
-        onOpenQuestions={onOpenQuestions}
       />,
     );
 
-    const banner = screen.getByTestId('questions-banner') as HTMLButtonElement;
-    // Answered: no longer an open affordance — disabled, marked answered, and
-    // clicking it must not re-open the Questions panel.
-    expect(banner.disabled).toBe(true);
-    expect(banner.getAttribute('data-answered')).toBe('true');
-    expect(banner.textContent).toContain('Questions answered');
-    fireEvent.click(banner);
-    expect(onOpenQuestions).not.toHaveBeenCalled();
+    expect(screen.getByTestId('question-form-summary')).toBeTruthy();
+    expect(screen.getByText('Questions answered')).toBeTruthy();
+    expect(screen.getByText('Who is this for?')).toBeTruthy();
+    expect(screen.getByText('Product evaluators')).toBeTruthy();
     expect(screen.queryByText('Quick brief — tailored')).toBeNull();
-    expect(screen.queryByText('Who is this for?')).toBeNull();
-    expect(screen.queryByText('Product evaluators')).toBeNull();
   });
 
-  it('keeps an unanswered question banner clickable', () => {
+  it('keeps file names in the answered summary when an upload appendix repeats a question label', () => {
+    const form = [
+      '<question-form id="references" title="References">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'assets',
+            label: 'Reference assets',
+            type: 'file',
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        nextUserContent={[
+          '[form answers for references]',
+          '- Reference assets: mood.png',
+          '',
+          '[uploaded design files]',
+          '- Reference assets: mood.png -> uploads/mood.png',
+        ].join('\n')}
+      />,
+    );
+
+    expect(screen.getByTestId('question-form-summary')).toBeTruthy();
+    expect(screen.getByText('mood.png')).toBeTruthy();
+  });
+
+  it('keeps selected visual style previews in the answered summary', () => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'checkbox',
+            options: ['Editorial / magazine', 'Modern minimal'],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectKind="slide_deck"
+        nextUserContent={'[form answers for discovery]\n- Visual tone: Editorial / magazine'}
+      />,
+    );
+
+    expect(screen.getByText('Visual tone')).toBeTruthy();
+    expect(screen.getByText('Editorial narrative')).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Visual tone: Editorial narrative' })).toHaveAttribute(
+      'src',
+      'https://repo-assets.open-design.ai/style-catalog/v1/deck-editorial-narrative-v1.webp',
+    );
+  });
+
+  it.each([
+    {
+      projectKind: 'web_clone' as const,
+      title: 'Quiet SaaS',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/prototype-quiet-saas-v1.webp',
+    },
+    {
+      projectKind: 'wireframe' as const,
+      title: 'Quiet SaaS',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/prototype-quiet-saas-v1.webp',
+    },
+    {
+      projectKind: 'live_artifact' as const,
+      title: 'Quiet SaaS',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/prototype-quiet-saas-v1.webp',
+    },
+    {
+      projectKind: 'document' as const,
+      title: 'Docs reference',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/document-docs-reference-v1.webp',
+    },
+    {
+      projectKind: 'image' as const,
+      title: 'Editorial photo',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/image-photo-editorial-v1.webp',
+    },
+    {
+      projectKind: 'video' as const,
+      title: 'Swiss Pulse',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/video-swiss-pulse-v1.webp',
+    },
+    {
+      projectKind: 'hyperframes' as const,
+      title: 'Swiss Pulse',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/video-swiss-pulse-v1.webp',
+    },
+  ])('keeps selected $projectKind style previews in the answered summary', ({
+    projectKind,
+    title,
+    src,
+  }) => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'checkbox',
+            options: [title],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectKind={projectKind}
+        nextUserContent={`[form answers for discovery]\n- Visual tone: ${title}`}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: `Visual tone: ${title}` })).toHaveAttribute('src', src);
+  });
+
+  it('normalizes every selected legacy visual style to its preview card', () => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'checkbox',
+            options: ['Editorial / magazine', 'Luxury / refined'],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectKind="slide_deck"
+        nextUserContent={[
+          '[form answers for discovery]',
+          '- Visual tone: Editorial / magazine, Luxury / refined',
+        ].join('\n')}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Visual tone: Editorial narrative' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Visual tone: Premium pitch' })).toHaveAttribute(
+      'src',
+      'https://repo-assets.open-design.ai/style-catalog/v1/deck-premium-pitch-v1.webp',
+    );
+  });
+
+  it('keeps a custom visual style selection alongside preview cards', () => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'checkbox',
+            options: ['Editorial / magazine'],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectKind="slide_deck"
+        nextUserContent={[
+          '[form answers for discovery]',
+          '- Visual tone: Editorial / magazine, Warm Japanese editorial',
+        ].join('\n')}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Visual tone: Editorial narrative' })).toBeTruthy();
+    expect(screen.getByText('Warm Japanese editorial')).toBeTruthy();
+  });
+
+  it('does not recommend next steps for a question-only turn', () => {
     const form = [
       '<question-form id="discovery" title="Quick brief — tailored">',
       JSON.stringify({
@@ -476,31 +1234,67 @@ describe('AssistantMessage question forms', () => {
       }),
       '</question-form>',
     ].join('\n');
+    const questionMessage = baseMessage({
+      content: form,
+      events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+    });
+    const onNextStepPromptAction = vi.fn();
+    const { rerender } = render(
+      <AssistantMessage
+        message={questionMessage}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        onNextStepPromptAction={onNextStepPromptAction}
+      />,
+    );
 
-    const onOpenQuestions = vi.fn();
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+
+    rerender(
+      <AssistantMessage
+        message={questionMessage}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        nextUserContent={'[form answers for discovery]\n- Who is this for?: Product evaluators'}
+        onNextStepPromptAction={onNextStepPromptAction}
+      />,
+    );
+    expect(screen.getByTestId('question-form-summary')).toBeTruthy();
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+
+    rerender(
+      <AssistantMessage
+        message={baseMessage()}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        onNextStepPromptAction={onNextStepPromptAction}
+      />,
+    );
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+  });
+
+  it('shows an inline loading frame while a form is streaming', () => {
     render(
       <AssistantMessage
         message={baseMessage({
           events: [
             {
               kind: 'text',
-              text: form,
+              text: 'One quick check:\n<question-form id="discovery" title="Quick brief">\n{"questions":[',
             } as ChatMessage['events'][number],
           ],
         })}
-        streaming={false}
+        streaming
         projectId="proj-1"
-        onOpenQuestions={onOpenQuestions}
+        isLast
       />,
     );
 
-    const banner = screen.getByTestId('questions-banner') as HTMLButtonElement;
-    expect(banner.disabled).toBe(false);
-    expect(banner.getAttribute('data-answered')).toBeNull();
-    fireEvent.click(banner);
-    expect(onOpenQuestions).toHaveBeenCalledWith(expect.objectContaining({
-      form: expect.objectContaining({ id: 'discovery', title: 'Quick brief — tailored' }),
-    }));
+    expect(screen.getByTestId('question-form-loading')).toBeTruthy();
+    expect(screen.getByText('One quick check:')).toBeTruthy();
   });
 });
 
@@ -508,30 +1302,132 @@ describe('AssistantMessage recovered produced files', () => {
   it('shows linked project files from the assistant summary as files this turn', () => {
     const content = '已创建计划文档：[browser-war-deck-outline.md](browser-war-deck-outline.md)。';
     render(
+      <CollabProvider value={projectCollabValue()}>
+        <AssistantMessage
+          message={baseMessage({
+            content,
+            events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+            producedFiles: [],
+          })}
+          streaming={false}
+          projectId="proj-1"
+          projectFiles={[
+            {
+              name: 'browser-war-deck-outline.md',
+              path: 'browser-war-deck-outline.md',
+              size: 4096,
+              mtime: 1700000005,
+              kind: 'text',
+              mime: 'text/markdown',
+            } as ProjectFile,
+          ]}
+        />
+      </CollabProvider>,
+    );
+
+    // #5517 shape: recovered files land in the flat produced-files block (name
+    // / size / Open / Download), not folded into the collapsible tool-op
+    // summary — that summary lists only ops the turn actually emitted.
+    const produced = document.querySelector('.produced-files');
+    expect(produced).toBeTruthy();
+    expect(produced?.textContent).toContain('browser-war-deck-outline.md');
+    const download = produced?.querySelector('a[download]');
+    expect(download).toBeTruthy();
+    expect(download?.getAttribute('href')).toBe(
+      '/api/projects/proj-1/raw/browser-war-deck-outline.md',
+    );
+    expect(screen.queryByTestId('file-ops-summary')).toBeNull();
+  });
+
+  it('never shows the tool-op summary and the produced-files block at once (P0 recvqaerXd82bE)', () => {
+    // A turn that both writes a file via a tracked tool call AND mentions an
+    // older, already-existing file in its prose recovers that older file into
+    // `displayedProduced` too. Before the fix this rendered two stacked panels
+    // that both read "Files from this turn" — one scoped to the tool call,
+    // one to the wider recovered set — which reads to users as a duplicate,
+    // untrustworthy render rather than two different pieces of information.
+    const content = '已创建 index.html，基于更早的 [logo.svg](logo.svg)。';
+    render(
       <AssistantMessage
         message={baseMessage({
           content,
-          events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+          events: [
+            { kind: 'text', text: content } as ChatMessage['events'][number],
+            {
+              kind: 'tool_use',
+              id: 'tool-1',
+              name: 'Write',
+              input: { file_path: 'index.html' },
+            } as ChatMessage['events'][number],
+          ],
           producedFiles: [],
         })}
         streaming={false}
         projectId="proj-1"
         projectFiles={[
           {
-            name: 'browser-war-deck-outline.md',
-            path: 'browser-war-deck-outline.md',
-            size: 4096,
+            name: 'logo.svg',
+            path: 'logo.svg',
+            size: 2048,
             mtime: 1700000005,
-            kind: 'text',
-            mime: 'text/markdown',
+            kind: 'image',
+            mime: 'image/svg+xml',
           } as ProjectFile,
         ]}
       />,
     );
 
-    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
-    expect(screen.getByTestId('file-ops-row-browser-war-deck-outline.md')).toBeTruthy();
-    expect(screen.getByText(/Write 1/)).toBeTruthy();
+    const hasFileOpsSummary = !!screen.queryByTestId('file-ops-summary');
+    const hasProducedFiles = !!document.querySelector('.produced-files');
+    expect(hasFileOpsSummary).toBe(true);
+    expect(hasProducedFiles).toBe(false);
+  });
+
+  it('lists only the authoritative artifact when an earlier edit targeted a wrong project path', () => {
+    const fileName = 'opendesign-b2b-sales-deck.html';
+    const failedPath = `/workspace/projects/wrong-project/${fileName}`;
+    const deliveredPath = `/workspace/projects/project-1/${fileName}`;
+    const file = producedFile(fileName);
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'failed-edit',
+              name: 'Edit',
+              input: { file_path: failedPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'failed-edit',
+              content: `File ${failedPath} not found`,
+              isError: true,
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_use',
+              id: 'successful-edit',
+              name: 'Edit',
+              input: { file_path: deliveredPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'successful-edit',
+              content: 'Updated successfully.',
+              isError: false,
+            } as ChatMessage['events'][number],
+          ],
+          producedFiles: [file],
+        })}
+        streaming={false}
+        projectId="project-1"
+        projectFiles={[file]}
+      />,
+    );
+
+    expect(screen.getAllByTestId(`file-ops-row-${fileName}`)).toHaveLength(1);
+    expect(screen.queryByTestId('file-ops-toggle')).toBeNull();
   });
 
   it('shows project files mentioned as plain filenames in the assistant summary', () => {
@@ -558,8 +1454,9 @@ describe('AssistantMessage recovered produced files', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
-    expect(screen.getByTestId('file-ops-row-browser-war-deck-outline.md')).toBeTruthy();
+    const produced = document.querySelector('.produced-files');
+    expect(produced).toBeTruthy();
+    expect(produced?.textContent).toContain('browser-war-deck-outline.md');
   });
 
   it('does not recover old reference files as produced files', () => {

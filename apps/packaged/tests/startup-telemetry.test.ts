@@ -26,6 +26,7 @@ import {
   parseDaemonLogTail,
   reportStartupFailure,
   resolveStartupDistinctId,
+  readErrnoFields,
   scrubUserPaths,
 } from '../src/startup-telemetry.js';
 
@@ -86,6 +87,20 @@ describe('classifyStartupFailure', () => {
 
   it('falls back to unknown for an unrecognized error', () => {
     expect(classifyStartupFailure(new Error('boom'), false).failureKind).toBe('unknown');
+  });
+
+  it('classifies a status-wait timeout as status-timeout, not unknown', () => {
+    // waitForStatus throws this when the budget expires with the child still
+    // ALIVE (the win32 first-launch AV-scan case) — the pipe never bound in
+    // time, so there is no exit code, signal, or daemon log to read. Splitting
+    // it out of `unknown` is what makes the win32 budget-raise measurable.
+    const winPipe =
+      'timed out waiting for sidecar status at \\\\.\\pipe\\open-design-release-stable-win-daemon (connect ENOENT \\\\.\\pipe\\open-design-release-stable-win-daemon)';
+    const c = classifyStartupFailure(new Error(winPipe), false);
+    expect(c.failureKind).toBe('status-timeout');
+    expect(c.exitCode).toBeNull();
+    expect(c.signal).toBeNull();
+    expect(c.logPath).toBeNull();
   });
 });
 
@@ -232,6 +247,72 @@ describe('captureStartupFailure', () => {
     expect(p.event_id).toBe('ins-fixed');
     expect(p.$insert_id).toBe('ins-fixed');
     expect(typeof p.env).toBe('string');
+  });
+
+  it('labels main-process events production (unset NODE_ENV) so they match daemon events', async () => {
+    // The packaged main process has no NODE_ENV of its own, while the daemon it
+    // spawns runs with NODE_ENV=production. Without this the event reported
+    // `development` — 100% of packaged_runtime_failed were mislabeled dev in
+    // prod and filtered out of the env=production dashboards.
+    const saved = {
+      OD_TELEMETRY_ENV: process.env.OD_TELEMETRY_ENV,
+      OPEN_DESIGN_ENV: process.env.OPEN_DESIGN_ENV,
+      POSTHOG_ENV: process.env.POSTHOG_ENV,
+      LANGFUSE_ENVIRONMENT: process.env.LANGFUSE_ENVIRONMENT,
+      NODE_ENV: process.env.NODE_ENV,
+    };
+    delete process.env.OD_TELEMETRY_ENV;
+    delete process.env.OPEN_DESIGN_ENV;
+    delete process.env.POSTHOG_ENV;
+    delete process.env.LANGFUSE_ENVIRONMENT;
+    delete process.env.NODE_ENV;
+    try {
+      const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+      await captureStartupFailure(
+        {
+          posthogKey: 'phc_test',
+          posthogHost: null,
+          distinctId: 'install-123',
+          event: STARTUP_FAILURE_EVENT,
+          properties: { failure_kind: 'daemon-start' },
+        },
+        { fetchImpl: fetchImpl as unknown as typeof fetch, now: () => '2026-06-23T00:00:00.000Z' },
+      );
+      const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+      const p = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
+        .properties;
+      expect(p.env).toBe('production');
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  it('honors an explicit OD_TELEMETRY_ENV override (local smoke test can force dev)', async () => {
+    const savedOd = process.env.OD_TELEMETRY_ENV;
+    process.env.OD_TELEMETRY_ENV = 'development';
+    try {
+      const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+      await captureStartupFailure(
+        {
+          posthogKey: 'phc_test',
+          posthogHost: null,
+          distinctId: 'install-123',
+          event: STARTUP_FAILURE_EVENT,
+          properties: { failure_kind: 'daemon-start' },
+        },
+        { fetchImpl: fetchImpl as unknown as typeof fetch, now: () => '2026-06-23T00:00:00.000Z' },
+      );
+      const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+      const p = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
+        .properties;
+      expect(p.env).toBe('development');
+    } finally {
+      if (savedOd === undefined) delete process.env.OD_TELEMETRY_ENV;
+      else process.env.OD_TELEMETRY_ENV = savedOd;
+    }
   });
 
   it('never blocks past the timeout even if fetch hangs forever', async () => {
@@ -401,5 +482,187 @@ describe('reportStartupFailure', () => {
     const props = (JSON.parse(init.body as string) as { properties: Record<string, unknown> }).properties;
     expect(props.native_module_present).toBe(false);
     expect(props.native_module_size).toBeNull();
+  });
+});
+
+// Attribution guards. Every input below is a VERBATIM field payload pulled from
+// the `packaged_runtime_failed` stream (7d window, 2026-07-22) while triaging
+// the weekly alert. Each one is a failure the event carried enough evidence to
+// name and reported as an opaque `unknown` / `null` anyway:
+//
+//   - 62 devices: daemon exited(code=1) with the log tail successfully read, but
+//     `parseDaemonLogTail` only ever matched `ERR_*`, so any daemon that died of
+//     something else (SQLite corruption, EPERM, a plain throw) reported
+//     error_code=null AND missing_module=null — evidence in hand, nothing
+//     extracted.
+//   - 21 devices: Windows CreateProcess failures whose Error carries
+//     code/errno/syscall as own properties. The event sent `.message` only and
+//     dropped the triplet, so `spawn UNKNOWN` could not be separated from any
+//     other opaque failure.
+//   - 149 devices: an Error with an empty `.message` AND no `.stack`, which fell
+//     through to error_message=null + error_stack=null + failure_kind=unknown —
+//     a total black hole with no way to count or name the residue.
+describe('startup-failure attribution', () => {
+  // Verbatim tail shape of a daemon that threw without an ERR_ code.
+  const NON_ERR_CODE_LOG = `[open-design daemon] starting namespace=release-stable-win
+SqliteError: database disk image is malformed
+    at Database.prepare (node:sqlite:214:9)
+[open-design packaged] exited app=daemon pid=8123 code=1 signal=none`;
+
+  it('names the daemon crash when the log tail carries no ERR_ code', () => {
+    const parsed = parseDaemonLogTail(NON_ERR_CODE_LOG);
+    expect(parsed.errorCode).toBeUndefined();
+    // The reason is right there in the tail; it must not be dropped.
+    expect(parsed.daemonError).toBe('SqliteError: database disk image is malformed');
+  });
+
+  it('still prefers the ERR_ code when the log has one', () => {
+    expect(parseDaemonLogTail(ISSUE_4638_LOG).errorCode).toBe('ERR_MODULE_NOT_FOUND');
+  });
+
+  it('classifies a Windows spawn failure instead of burying it in unknown', () => {
+    expect(classifyStartupFailure(new Error('spawn UNKNOWN'), false).failureKind).toBe(
+      'spawn-failed',
+    );
+  });
+
+  it('sends the Node errno triplet off the error object', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+    // Exactly how Node shapes a failed CreateProcess on win32.
+    const spawnError = Object.assign(new Error('spawn UNKNOWN'), {
+      code: 'UNKNOWN',
+      errno: -4094,
+      syscall: 'spawn',
+    });
+    await reportStartupFailure(
+      {
+        error: spawnError,
+        isPathAccess: false,
+        posthogKey: 'phc_test',
+        posthogHost: null,
+        distinctId: 'd',
+        appVersion: '0.15.1',
+        namespace: 'release-stable-win',
+        source: 'packaged',
+      },
+      { fetchImpl: fetchImpl as unknown as typeof fetch },
+    );
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const props = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
+      .properties;
+    expect(props.sys_code).toBe('UNKNOWN');
+    expect(props.sys_errno).toBe(-4094);
+    expect(props.sys_syscall).toBe('spawn');
+    expect(props.failure_kind).toBe('spawn-failed');
+  });
+
+  it('never reports a null error_message for an Error that carries none', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+    // The 149-device black hole: instanceof Error, name 'Error', no message, no
+    // stack. Whatever we send must be non-null so the residue stays countable.
+    const empty = new Error('');
+    delete (empty as { stack?: string }).stack;
+    await reportStartupFailure(
+      {
+        error: empty,
+        isPathAccess: false,
+        posthogKey: 'phc_test',
+        posthogHost: null,
+        distinctId: 'd',
+        appVersion: '0.15.1',
+        namespace: 'release-stable-win',
+        source: 'packaged',
+      },
+      { fetchImpl: fetchImpl as unknown as typeof fetch },
+    );
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const props = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
+      .properties;
+    expect(props.error_message).not.toBeNull();
+    expect(String(props.error_message)).toContain('Error');
+  });
+
+  it('surfaces the parsed daemon error on the emitted event', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+    await reportStartupFailure(
+      {
+        error: new Error(DAEMON_EXIT_MESSAGE),
+        isPathAccess: false,
+        posthogKey: 'phc_test',
+        posthogHost: null,
+        distinctId: 'd',
+        appVersion: '0.15.1',
+        namespace: 'release-stable',
+        source: 'packaged',
+      },
+      {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        readLogTail: async () => NON_ERR_CODE_LOG,
+      },
+    );
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const props = (JSON.parse(init.body as string) as { properties: Record<string, unknown> })
+      .properties;
+    expect(props.daemon_error).toBe('SqliteError: database disk image is malformed');
+  });
+});
+
+// Privacy guard for the errno triplet (review of PR #5956).
+//
+// Node does not guarantee `syscall` is only the operation name: a failed
+// child_process.spawn sets it to the whole invocation. Verified against real
+// Node behaviour — spawning a missing binary yields
+// `syscall === 'spawn /Users/<name>/.../tool'`. Forwarding that verbatim would
+// put the local username and install path into an event that is retained even
+// for opted-out users, while every other path this module sends is scrubbed.
+describe('errno triplet privacy', () => {
+  it('reduces a path-bearing POSIX syscall to the operation token', () => {
+    const err = Object.assign(new Error('spawn /Users/alice/tools/vela ENOENT'), {
+      code: 'ENOENT',
+      errno: -2,
+      syscall: 'spawn /Users/alice/tools/vela',
+    });
+    expect(readErrnoFields(err).syscall).toBe('spawn');
+  });
+
+  it('reduces a path-bearing Windows syscall to the operation token', () => {
+    const err = Object.assign(new Error('spawn UNKNOWN'), {
+      syscall: 'spawn C:\\Users\\Alice Smith\\AppData\\Open Design\\vela.exe',
+    });
+    expect(readErrnoFields(err).syscall).toBe('spawn');
+  });
+
+  it('emits no username anywhere in the payload for a path-bearing spawn failure', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('ok'));
+    const err = Object.assign(new Error('spawn /Users/alice/tools/vela ENOENT'), {
+      code: 'ENOENT',
+      errno: -2,
+      syscall: 'spawn /Users/alice/tools/vela',
+    });
+    await reportStartupFailure(
+      {
+        error: err,
+        isPathAccess: false,
+        posthogKey: 'phc_test',
+        posthogHost: null,
+        distinctId: 'd',
+        appVersion: '0.15.1',
+        namespace: 'release-stable',
+        source: 'packaged',
+      },
+      { fetchImpl: fetchImpl as unknown as typeof fetch },
+    );
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(init.body as string).not.toContain('alice');
+  });
+
+  it('classifies a spawn failure whose syscall carries a path', () => {
+    // The pre-normalization check compared the raw `syscall` to 'spawn', so a
+    // spawn error carrying a path fell through to `unknown` — the exact bucket
+    // this PR exists to drain.
+    const err = Object.assign(new Error('spawn /Users/alice/tools/vela ENOENT'), {
+      syscall: 'spawn /Users/alice/tools/vela',
+    });
+    expect(classifyStartupFailure(err, false).failureKind).toBe('spawn-failed');
   });
 });

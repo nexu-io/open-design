@@ -21,7 +21,7 @@ export const HU_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     description:
-      'Böngészőautomatizálási CLI AI-ügynököknek. Akkor használd, ha a felhasználónak böngészőviselkedést kell\nvizsgálnia, tesztelnie vagy automatizálnia: oldalak navigálása, űrlapok kitöltése,\ngombok kattintása, képernyőképek készítése, oldaladatok kinyerése, a kiválasztott\nOpen Design böngészőfül-kontextus olvasása, webalkalmazások tesztelése, Open Design\nelőnézetek dogfoodingja, QA, hibavadászat vagy alkalmazásminőség áttekintése. Részesítsd előnyben a helyi Open Design\nelőnézeti URL-eket, hacsak a felhasználó kifejezetten nem kér külső böngészést.',
+      'Böngészőautomatizálási CLI AI-ügynököknek. Akkor használd, ha a felhasználónak böngészőviselkedést kell\nvizsgálnia, tesztelnie vagy automatizálnia: oldalak navigálása, űrlapok kitöltése,\ngombok kattintása, képernyőképek készítése, oldaladatok kinyerése, a kiválasztott\nOpenDesign böngészőfül-kontextus olvasása, webalkalmazások tesztelése, OpenDesign\nelőnézetek dogfoodingja, QA, hibavadászat vagy alkalmazásminőség áttekintése. Részesítsd előnyben a helyi OpenDesign\nelőnézeti URL-eket, hacsak a felhasználó kifejezetten nem kér külső böngészést.',
     examplePrompt:
       'Böngészőautomatizálási CLI AI-ügynököknek.',
   },
@@ -849,7 +849,7 @@ export const HU_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'ui-ux-pro-max': {
     description:
-      'Csak katalógusos UI/UX Pro Max bejegyzés. A teljes upstream sablonok, adatok és keresési munkafolyamat nincs csomagolva az Open Designba.',
+      'Csak katalógusos UI/UX Pro Max bejegyzés. A teljes upstream sablonok, adatok és keresési munkafolyamat nincs csomagolva az OpenDesignba.',
     examplePrompt:
       'Csak katalógusos UI/UX Pro Max bejegyzés.',
   },
@@ -959,6 +959,7 @@ export const HU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': 'Lágy, lekerekített, 3D-szerű formák, amelyek a formálható agyagot idézik, játékos, pufók elemekkel és színes felületekkel.',
   'clean': 'Egyszerűségre összpontosító dizájn bőséges üres terekkel, jól olvasható tipográfiával és korlátozott színpalettával a vizuális zsúfoltság csökkentésére.',
   'clickhouse': 'Gyors analitikai adatbázis. Sárga kiemelésű, technikai dokumentációs stílus.',
+  'cloudflare-kumo': 'A Cloudflare komponensrendszere modern webalkalmazásokhoz: szemantikus világos/sötét tokenek, kompakt Inter tipográfia, rétegzett semleges felületek, akadálymentes vezérlők és diagramokhoz készült színútmutató.',
   'cohere': 'Vállalati AI-platform. Élénk színátmenetek, adatgazdag irányítópult-esztétika.',
   'coinbase': 'Kriptotőzsde. Letisztult kék arculat, bizalomközpontú, intézményi érzet.',
   'colorful': 'Élénk, nagy kontrasztú paletták és színátmenetek a magával ragadó, emlékezetes és modern felhasználói élményért.',

@@ -22,23 +22,174 @@ import type { SolutionPageKey } from '../solution-pages-i18n/types';
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_DISCUSSIONS = `${REPO}/discussions`;
 const DISCORD = 'https://discord.gg/mHAjSMV6gz';
+const FEISHU = 'https://od.kokiai.net/community/website';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
 
-// Open Design Cloud endpoints for the header sign-in module.
+type CommunityEntryCopy = {
+  cta: string;
+  benefits: readonly [string, string, string];
+};
+
+const COMMUNITY_ENTRY_COPY = {
+  en: {
+    cta: 'Join Discord',
+    benefits: [
+      'Model × design scenario arenas',
+      'Weekly Hackathon: credits + promotion',
+      'Super Thursday: weekly prize draws',
+    ],
+  },
+  zh: {
+    cta: '加入飞书社群',
+    benefits: [
+      '模型 × 设计场景竞技场',
+      'Weekly Hackathon：Credits + 流量扶持',
+      'Super Thursday：每周抽奖',
+    ],
+  },
+  'zh-tw': {
+    cta: '加入飛書社群',
+    benefits: [
+      '模型 × 設計場景競技場',
+      'Weekly Hackathon：Credits + 流量扶持',
+      'Super Thursday：每週抽獎',
+    ],
+  },
+  ja: {
+    cta: 'Discordに参加',
+    benefits: [
+      'モデル × デザインシーンのアリーナ',
+      'Weekly Hackathon：クレジット＋露出支援',
+      'Super Thursday：毎週抽選',
+    ],
+  },
+  ko: {
+    cta: 'Discord 참여',
+    benefits: [
+      '모델 × 디자인 시나리오 아레나',
+      'Weekly Hackathon: 크레딧 + 홍보 지원',
+      'Super Thursday: 매주 추첨',
+    ],
+  },
+  de: {
+    cta: 'Discord beitreten',
+    benefits: [
+      'Arenen für Modelle × Designszenarien',
+      'Weekly Hackathon: Credits + Reichweite',
+      'Super Thursday: wöchentliche Verlosung',
+    ],
+  },
+  fr: {
+    cta: 'Rejoindre Discord',
+    benefits: [
+      'Arènes modèles × scénarios de design',
+      'Weekly Hackathon : crédits + mise en avant',
+      'Super Thursday : tirage hebdomadaire',
+    ],
+  },
+  ru: {
+    cta: 'Вступить в Discord',
+    benefits: [
+      'Арены: модели × дизайн-сценарии',
+      'Weekly Hackathon: кредиты + продвижение',
+      'Super Thursday: еженедельный розыгрыш',
+    ],
+  },
+  es: {
+    cta: 'Unirse a Discord',
+    benefits: [
+      'Arenas de modelos × escenarios de diseño',
+      'Weekly Hackathon: créditos + promoción',
+      'Super Thursday: sorteo semanal',
+    ],
+  },
+  'pt-br': {
+    cta: 'Entrar no Discord',
+    benefits: [
+      'Arenas de modelos × cenários de design',
+      'Weekly Hackathon: créditos + divulgação',
+      'Super Thursday: sorteio semanal',
+    ],
+  },
+  it: {
+    cta: 'Unisciti a Discord',
+    benefits: [
+      'Arene modelli × scenari di design',
+      'Weekly Hackathon: crediti + promozione',
+      'Super Thursday: estrazione settimanale',
+    ],
+  },
+  vi: {
+    cta: 'Tham gia Discord',
+    benefits: [
+      'Đấu trường mô hình × bối cảnh thiết kế',
+      'Weekly Hackathon: credit + hỗ trợ quảng bá',
+      'Super Thursday: quay thưởng hằng tuần',
+    ],
+  },
+  pl: {
+    cta: 'Dołącz do Discorda',
+    benefits: [
+      'Areny modeli × scenariuszy projektowych',
+      'Weekly Hackathon: kredyty + promocja',
+      'Super Thursday: cotygodniowe losowanie',
+    ],
+  },
+  id: {
+    cta: 'Gabung Discord',
+    benefits: [
+      'Arena model × skenario desain',
+      'Weekly Hackathon: kredit + dukungan promosi',
+      'Super Thursday: undian mingguan',
+    ],
+  },
+  nl: {
+    cta: 'Word lid van Discord',
+    benefits: [
+      'Arena’s voor modellen × ontwerpscenario’s',
+      'Weekly Hackathon: credits + promotie',
+      'Super Thursday: wekelijkse loting',
+    ],
+  },
+  ar: {
+    cta: 'انضم إلى Discord',
+    benefits: [
+      'ساحات النماذج × سيناريوهات التصميم',
+      'Weekly Hackathon: أرصدة + دعم الترويج',
+      'Super Thursday: سحب أسبوعي',
+    ],
+  },
+  tr: {
+    cta: "Discord'a katıl",
+    benefits: [
+      'Model × tasarım senaryosu arenaları',
+      'Weekly Hackathon: kredi + tanıtım desteği',
+      'Super Thursday: haftalık çekiliş',
+    ],
+  },
+  uk: {
+    cta: 'Приєднатися до Discord',
+    benefits: [
+      'Арени: моделі × дизайн-сценарії',
+      'Weekly Hackathon: кредити + промопідтримка',
+      'Super Thursday: щотижневий розіграш',
+    ],
+  },
+} as const satisfies Record<LandingLocaleCode, CommunityEntryCopy>;
+
+// OpenDesign Cloud endpoints for the header account module.
 // Production defaults; overridable at build time via PUBLIC_* env so a
 // preview/staging build can point at a non-prod cloud. These are surfaced to
 // the runtime via `data-*` on `.nav-account` because the auth logic lives in
 // `header-enhancer.astro`'s `<script is:inline>` (NOT processed by Vite, so it
 // cannot read `import.meta.env` itself).
-const env = import.meta.env as Record<string, string | undefined>;
+const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
 const CLOUD_API_BASE =
   env.PUBLIC_CLOUD_API_BASE ?? env.PUBLIC_AMR_API_BASE ?? 'https://amr-api.open-design.ai';
-const CLOUD_LOGIN_URL =
-  env.PUBLIC_CLOUD_LOGIN_URL ?? env.PUBLIC_AMR_LOGIN_URL ?? 'https://open-design.ai/cloud/login';
 const CLOUD_CONSOLE_URL =
   env.PUBLIC_CLOUD_CONSOLE_URL ??
   env.PUBLIC_AMR_CONSOLE_URL ??
-  'https://open-design.ai/cloud/wallet?source=open_design';
+  'https://open-design.ai/cloud/dashboard?source=open_design';
 
 // Solution → Use cases / Roles. Hrefs mirror upstream main's header 1:1 and
 // pair positionally with the localized `useCaseItems` / `roleItems` tuples.
@@ -75,7 +226,10 @@ const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
 
 // Agent column — the coding agents with a dedicated long-form design page
 // upstream. Routes stay in lockstep with main's /agents/ hub.
-const AGENTS: ReadonlyArray<{ name: string; route: string }> = [
+const AGENTS: ReadonlyArray<{ name: string; route: string; highlight?: boolean }> = [
+  // DeepSeek Harness leads with a red-dot highlight while its integration is
+  // the freshly launched entry (2026-08 request); demote when the push ends.
+  { name: 'DeepSeek Harness', route: 'deepseek-harness-design', highlight: true },
   { name: 'Codex', route: 'codex-design' },
   { name: 'Cursor Agent', route: 'cursor-design' },
   { name: 'Claude Code', route: 'claude-code-design' },
@@ -111,6 +265,8 @@ export interface HeaderProps {
     | 'product'
     | 'html-anything'
     | 'html-video'
+    | 'codex-slides'
+    | 'open-design-plugin'
     | 'solution'
     | 'agent'
     | 'plugins'
@@ -176,6 +332,8 @@ export function Header({
   const href = (path: string) => localizedHref(path, locale);
   const homeBrandHref = brandHref === '/' ? href('/') : brandHref;
   const productMenuCopy = getHeaderProductMenuCopy(locale);
+  const usesFeishuCommunity = locale === 'zh' || locale === 'zh-tw';
+  const communityCopy = COMMUNITY_ENTRY_COPY[locale];
 
   return (
     <header className='nav' data-od-id='nav'>
@@ -184,13 +342,13 @@ export function Header({
           <img
             className='brand-logo'
             src='/logo-lockup.svg'
-            alt='Open Design'
+            alt='OpenDesign'
             width={225}
             height={83}
           />
         </a>
         {/*
-          Mobile / tablet hamburger. Hidden by CSS at ≥1100px (the desktop
+          Mobile / tablet hamburger. Hidden by CSS at ≥1367px (the desktop
           breakpoint where the full nav fits). At narrower widths it toggles
           `.is-open` on the parent <header> via a small handler in
           `header-enhancer.astro` — when open, the `<nav>` element below
@@ -208,23 +366,31 @@ export function Header({
         </button>
         <nav id='primary-nav' data-nav-primary>
           <ul className='nav-links'>
-            {/* Product — the Open Design products. The trigger lights up only
-                for its own family; every other section maps to its own
-                trigger below, so a sub-page never marks Product by accident.
-                It is a <button> (not a link) so it never navigates — Product
-                used to bounce to the homepage — but its dropdown is revealed
-                by the SAME pure-CSS :hover / :focus-within rule as the hub
-                menus, so it works with no JS (first paint / script failure)
-                and on touch (tapping focuses the button → :focus-within). */}
-            <li className='has-dropdown'>
+            {/* Product — a mega menu whose columns are top-level categories:
+                the OpenDesign product family and the Agent catalog today,
+                with room to add more (e.g. Feature) as its own column later.
+                The trigger is a <button> (not a link) so it never navigates —
+                Product used to bounce to the homepage — but its panel is
+                revealed by the SAME pure-CSS :hover / :focus-within rule as
+                the hub menus, so it works with no JS (first paint / script
+                failure) and on touch (tapping focuses the button →
+                :focus-within). It lights ONLY for destinations inside the
+                mega panel (Codex Plugin, Solutions, /agents/) — footer-only
+                product siblings (HTML Anything / HTML Video / Codex Slides)
+                intentionally do not light this tab. */}
+            {/* `nav-item-mega`: on desktop this li goes position:static so
+                the five-column mega panel positions against `.container`
+                and centers on it (anchored to the li
+                it overflowed narrow desktop widths). */}
+            <li className='has-dropdown nav-item-mega'>
               <button
                 type='button'
                 className={
                   'nav-trigger' +
                   (active === 'product' ||
-                  active === 'home' ||
-                  active === 'html-anything' ||
-                  active === 'html-video'
+                  active === 'open-design-plugin' ||
+                  active === 'solution' ||
+                  active === 'agent'
                     ? ' is-active'
                     : '')
                 }
@@ -232,151 +398,113 @@ export function Header({
                 {productMenuCopy.product}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </button>
-              <ul className='nav-dropdown' aria-label={productMenuCopy.product}>
-                <li>
-                  <a href={href('/')}>
-                    <span className='dropdown-name'>{productMenuCopy.openDesignName}</span>
-                    <span className='dropdown-blurb'>{productMenuCopy.openDesignBlurb}</span>
-                  </a>
+              <ul
+                className='nav-dropdown nav-dropdown-mega'
+                aria-label={productMenuCopy.product}
+              >
+                {/* Feature column — the first mega-panel group. The former
+                    head-only "Codex Plugin" column read as a blank panel next
+                    to the populated Solution/Agent columns (live bug), so the
+                    column is now the localized "Feature" category with Codex
+                    Plugin as its first entry (2026-08 design). The product
+                    family (HTML Anything / HTML Video / Codex Slides) stays
+                    footer-only per the 2026-08 nav consolidation. */}
+                <li className='nav-mega-col nav-mega-col-merged'>
+                  <span className='nav-mega-col-head'>{productMenuCopy.feature}</span>
+                  <ul className='nav-mega-list'>
+                    {/* Product name, not a translatable phrase — same
+                        convention as the Agent column entries. */}
+                    <li>
+                      <a
+                        href={href('/codex-plugin/')}
+                        className={
+                          active === 'open-design-plugin' ? 'is-active' : undefined
+                        }
+                      >
+                        <span className='dropdown-name'>Codex Plugin</span>
+                      </a>
+                    </li>
+                  </ul>
                 </li>
-                <li>
+                {/* Former Solution dropdown, folded into the mega panel as
+                    three side-by-side columns (Use cases / Roles / Tools). */}
+                <li className='nav-mega-col nav-mega-col-merged'>
                   <a
-                    href={href('/html-anything/')}
-                    className={active === 'html-anything' ? 'is-active' : undefined}
+                    href={href('/solutions/')}
+                    className={
+                      'nav-mega-col-head' + (active === 'solution' ? ' is-active' : '')
+                    }
                   >
-                    <span className='dropdown-name'>{productMenuCopy.htmlAnythingName}</span>
-                    <span className='dropdown-blurb'>{productMenuCopy.htmlAnythingBlurb}</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={href('/html-video/')}>
-                    <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
-                    <span className='dropdown-blurb'>{productMenuCopy.htmlVideoBlurb}</span>
-                  </a>
-                </li>
-              </ul>
-            </li>
-
-            {/* Solution — Use cases + Roles. */}
-            <li className='has-dropdown'>
-              <a
-                href={href('/solutions/')}
-                className={active === 'solution' ? 'is-active' : undefined}
-              >
-                {productMenuCopy.solution}
-                <span className='dropdown-caret' aria-hidden='true'>▾</span>
-              </a>
-              <ul
-                className='nav-dropdown nav-dropdown-solution'
-                aria-label={productMenuCopy.solution}
-              >
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
-                    {productMenuCopy.tools}
-                  </span>
-                </li>
-                {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
-                  <li key={key}>
-                    <a href={href(toolHref)}>
-                      <span className='dropdown-name'>
-                        {getSolutionPageCopy(locale, key).breadcrumb}
-                      </span>
-                    </a>
-                  </li>
-                ))}
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
                     {productMenuCopy.useCases}
-                  </span>
-                </li>
-                {productMenuCopy.useCaseItems.map((name, index) => (
-                  <li key={name}>
-                    <a href={href(USE_CASE_HREFS[index]!)}>
-                      <span className='dropdown-name'>{name}</span>
-                    </a>
-                  </li>
-                ))}
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
-                    {productMenuCopy.roles}
-                  </span>
-                </li>
-                {productMenuCopy.roleItems.map((name, index) => (
-                  <li key={name}>
-                    <a href={href(ROLE_HREFS[index]!)}>
-                      <span className='dropdown-name'>{name}</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </li>
-
-            {/* Agent — the coding agents with a dedicated design page. The
-                top-level link goes to the /agents/ hub. */}
-            <li className='has-dropdown'>
-              <a
-                href={href('/agents/')}
-                className={active === 'agent' ? 'is-active' : undefined}
-              >
-                {productMenuCopy.agent}
-                <span className='dropdown-caret' aria-hidden='true'>▾</span>
-              </a>
-              {/* 21 coding-agent rows — reuse the tall-dropdown height cap so
-                  the panel scrolls instead of running off short viewports. */}
-              <ul
-                className='nav-dropdown nav-dropdown-solution'
-                aria-label={productMenuCopy.agent}
-              >
-                {AGENTS.map((agent) => (
-                  <li key={agent.route}>
-                    <a href={href(`/agents/${agent.route}/`)}>
-                      <span className='dropdown-name'>{agent.name}</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </li>
-
-            {/* Plugins — the three composable catalogs. */}
-            <li className='has-dropdown'>
-              <a
-                href={href('/plugins/')}
-                className={
-                  active === 'plugins' ||
-                  active === 'library' ||
-                  active === 'skills' ||
-                  active === 'systems' ||
-                  active === 'templates' ||
-                  active === 'craft'
-                    ? 'is-active'
-                    : undefined
-                }
-              >
-                {productMenuCopy.plugins}
-                <span className='dropdown-caret' aria-hidden='true'>▾</span>
-              </a>
-              <ul className='nav-dropdown' aria-label={productMenuCopy.plugins}>
-                <li>
-                  <a href={href('/plugins/templates/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.pluginItems.templates}
-                    </span>
                   </a>
+                  <ul className='nav-mega-list'>
+                    {productMenuCopy.useCaseItems.map((name, index) => (
+                      <li key={name}>
+                        <a href={href(USE_CASE_HREFS[index]!)}>
+                          <span className='dropdown-name'>{name}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
-                <li>
-                  <a href={href('/plugins/skills/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.pluginItems.skills}
-                    </span>
+                <li className='nav-mega-col nav-mega-col-merged'>
+                  <span className='nav-mega-col-head'>{productMenuCopy.roles}</span>
+                  <ul className='nav-mega-list'>
+                    {productMenuCopy.roleItems.map((name, index) => (
+                      <li key={name}>
+                        <a href={href(ROLE_HREFS[index]!)}>
+                          <span className='dropdown-name'>{name}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+                <li className='nav-mega-col nav-mega-col-merged'>
+                  <span className='nav-mega-col-head'>{productMenuCopy.tools}</span>
+                  <ul className='nav-mega-list nav-mega-list-scroll'>
+                    {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
+                      <li key={key}>
+                        <a href={href(toolHref)}>
+                          <span className='dropdown-name'>
+                            {getSolutionPageCopy(locale, key).breadcrumb}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+                {/* Agent column — the coding agents each with a dedicated
+                    design page. The column header links to the /agents/ hub
+                    (the old top-level Agent tab's target). The list caps its
+                    own height and scrolls so 21 rows never run the panel
+                    off-screen; the shorter Products column stays static. */}
+                <li className='nav-mega-col nav-mega-col-agent'>
+                  <a
+                    href={href('/agents/')}
+                    className={
+                      'nav-mega-col-head' + (active === 'agent' ? ' is-active' : '')
+                    }
+                  >
+                    {productMenuCopy.agent}
                   </a>
+                  <ul className='nav-mega-list nav-mega-list-scroll'>
+                    {AGENTS.map((agent) => (
+                      <li key={agent.route}>
+                        <a href={href(`/agents/${agent.route}/`)}>
+                          <span className='dropdown-name'>
+                            {agent.name}
+                            {agent.highlight ? (
+                              <span className='nav-new-dot' aria-hidden='true'></span>
+                            ) : null}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
-                <li>
-                  <a href={href('/plugins/systems/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.pluginItems.systems}
-                    </span>
-                  </a>
-                </li>
+                {/* Future category columns (e.g. Feature) drop in here as
+                    another <li className='nav-mega-col'> with its own head +
+                    list; the panel widens automatically. */}
               </ul>
             </li>
 
@@ -406,7 +534,13 @@ export function Header({
                   active === 'blog' ||
                   active === 'stories' ||
                   active === 'tutorials' ||
-                  active === 'download'
+                  active === 'download' ||
+                  active === 'plugins' ||
+                  active === 'library' ||
+                  active === 'skills' ||
+                  active === 'systems' ||
+                  active === 'templates' ||
+                  active === 'craft'
                     ? ' is-active'
                     : '')
                 }
@@ -456,12 +590,34 @@ export function Header({
                     </span>
                   </a>
                 </li>
+                {/* Plugins hub — the former top-level Plugins dropdown folded
+                    into Resources as a single hub link (2026-08 nav
+                    consolidation); the catalog sub-pages stay one click away
+                    on the hub and in the footer. */}
+                <li>
+                  <a
+                    href={href('/plugins/')}
+                    className={
+                      active === 'plugins' ||
+                      active === 'library' ||
+                      active === 'skills' ||
+                      active === 'systems' ||
+                      active === 'templates' ||
+                      active === 'craft'
+                        ? 'is-active'
+                        : undefined
+                    }
+                  >
+                    <span className='dropdown-name'>{productMenuCopy.plugins}</span>
+                  </a>
+                </li>
               </ul>
             </li>
 
-            {/* Community — Contributors / Ambassadors / Moderators. These
+            {/* Community — Contributors / Ambassadors / Moderators / Events. These
                 pages are now localized Astro routes, so link through `href()`
-                to keep visitors on their language variant. */}
+                to keep visitors on their language variant. Discord and Feishu
+                open their respective community spaces in a new tab. */}
             <li className='has-dropdown'>
               <a
                 href={href('/community/')}
@@ -493,8 +649,18 @@ export function Header({
                   </a>
                 </li>
                 <li>
+                  <a href={href('/community/events/')}>
+                    <span className='dropdown-name'>Events</span>
+                  </a>
+                </li>
+                <li>
                   <a href={DISCORD} {...ext}>
                     <span className='dropdown-name'>Discord</span>
+                  </a>
+                </li>
+                <li>
+                  <a href={FEISHU} {...ext}>
+                    <span className='dropdown-name'>Feishu</span>
                   </a>
                 </li>
                 <li>
@@ -512,9 +678,69 @@ export function Header({
               </ul>
             </li>
 
+            {/* Compact navigation keeps the community action inside the
+                hamburger panel so long localized labels cannot crowd the
+                fixed header row. The desktop counterpart stays in nav-side. */}
+            <li className='nav-community-mobile-entry'>
+              <a
+                className='nav-community-mobile-cta'
+                href={usesFeishuCommunity ? FEISHU : DISCORD}
+                {...ext}
+                data-community-cta
+                data-community-platform={usesFeishuCommunity ? 'feishu' : 'discord'}
+              >
+                <svg
+                  className='nav-community-cta-icon'
+                  viewBox='0 0 20 20'
+                  aria-hidden='true'
+                >
+                  <path d='M4 4.75h12v8.5H9l-3.8 2.5v-2.5H4z' />
+                  <path d='M7 8h6M7 10.5h4' />
+                </svg>
+                <span>{communityCopy.cta}</span>
+              </a>
+              <div className='nav-community-mobile-benefits'>
+                {communityCopy.benefits.map((benefit) => (
+                  <div className='nav-community-mobile-benefit' key={benefit}>
+                    <span className='nav-community-benefits-dot' aria-hidden='true' />
+                    <span>{benefit}</span>
+                  </div>
+                ))}
+              </div>
+            </li>
+
           </ul>
         </nav>
         <div className='nav-side'>
+          <div className='nav-community-entry'>
+            <a
+              className='nav-community-cta'
+              href={usesFeishuCommunity ? FEISHU : DISCORD}
+              {...ext}
+              data-community-cta
+              data-community-platform={usesFeishuCommunity ? 'feishu' : 'discord'}
+            >
+              <svg
+                className='nav-community-cta-icon'
+                viewBox='0 0 20 20'
+                aria-hidden='true'
+              >
+                <path d='M4 4.75h12v8.5H9l-3.8 2.5v-2.5H4z' />
+                <path d='M7 8h6M7 10.5h4' />
+              </svg>
+              {communityCopy.cta}
+            </a>
+            <div className='nav-community-benefits-card'>
+              <ul>
+                {communityCopy.benefits.map((benefit) => (
+                  <li key={benefit}>
+                    <span className='nav-community-benefits-dot' aria-hidden='true' />
+                    <span>{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
           {localeSwitcher ? (
             <details className='locale-switch nav-locale-switch' data-locale-switch>
               <summary
@@ -554,23 +780,33 @@ export function Header({
               </div>
             </details>
           ) : null}
+          {/* GitHub star chip — quiet pill so Download stays the only
+              strong CTA in the bar. [data-github-stars] is refreshed by the
+              header enhancers (homepage inline script / header-enhancer). */}
+          <a
+            className='nav-star'
+            href={REPO}
+            {...ext}
+            aria-label='Star OpenDesign on GitHub'
+          >
+            <svg viewBox='0 0 16 16' width='14' height='14' fill='currentColor' aria-hidden='true'><path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z' /></svg>
+            <span data-github-stars>{github?.starsLabel ?? '83K+'}</span>
+          </a>
           <a
             className='nav-cta ghost'
             href={href('/download/')}
             aria-label={headerCopy.downloadAria}
             title={headerCopy.downloadTitle}
             data-download-cta
-            data-download-page
+            data-direct-download
             data-download-placement='nav'
           >
             {headerCopy.download}
           </a>
           {/*
-            Open Design Cloud account entry. Renders BOTH states up front
-            and lets `header-enhancer.astro` toggle them at runtime: the
-            signed-out "Sign in" link is visible by default (so no-JS / pre-hydration
-            shows a working login link), and the signed-in avatar menu stays
-            `hidden` until the enhancer confirms a live cloud session via
+            OpenDesign Cloud account entry. Signed-out visitors only see the
+            download CTA above; the avatar menu stays `hidden` until the
+            enhancer confirms a live cloud session via
             `GET {api}/api/auth/get-session`. Config flows through `data-*`
             because the enhancer script cannot read `import.meta.env`.
           */}
@@ -578,13 +814,8 @@ export function Header({
             className='nav-account'
             data-amr-account
             data-amr-api={CLOUD_API_BASE}
-            data-amr-login={CLOUD_LOGIN_URL}
             data-amr-console={CLOUD_CONSOLE_URL}
-            data-amr-home={href('/')}
           >
-            <a className='nav-signin' href={CLOUD_LOGIN_URL} data-amr-signin>
-              {headerCopy.signIn}
-            </a>
             <details className='nav-account-menu' data-amr-menu hidden>
               <summary
                 className='nav-account-trigger'

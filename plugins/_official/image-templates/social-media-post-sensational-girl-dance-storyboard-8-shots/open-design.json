@@ -24,6 +24,7 @@
     "en": "Social Media Post - Sensational Girl Dance Storyboard (8 Shots)"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A full 8-shot storyboard prompt set for generating a coherent frame-by-frame dance sequence of a stylish character. Includes shared global style tokens, a reusable negative prompt, and eight per-shot prompts (opening pose, hip groove, body wave, beat-drop waist twist, side hip sway, hair flick, power stance, finishing pose). Tuned for GPT-Image-2 tier models: concise vocabulary, no sensitive phrasing, consistent framing and lighting language across shots so the frames feel like one continuous choreography.",
   "description_i18n": {
     "zh-CN": "包含8个连续舞蹈镜头的完整分镜提示词集，用于生成风格统一的舞蹈角色动作序列。适配gpt-image-2模型，提供全局样式参数、通用负面提示词和8个分镜提示词（开场姿势、胯部律动、身体波浪、节拍扭腰、侧胯摇摆、甩发、力量站姿、结束造型）。",

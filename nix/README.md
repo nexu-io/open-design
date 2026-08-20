@@ -1,6 +1,6 @@
-# Open Design — Nix flake
+# OpenDesign — Nix flake
 
-This flake exposes Open Design as a reproducible package, a `nix run` entry
+This flake exposes OpenDesign as a reproducible package, a `nix run` entry
 point, a dev shell, and Home Manager / NixOS modules. The architecture
 mirrors the runtime: the **daemon** (`od` CLI, Express API on `/api/*`)
 and the **web frontend** (Next.js static SPA at `apps/web/out/`) are
@@ -86,7 +86,7 @@ configuration prefer the Home Manager module.
 
 ## (3) `webFrontend` — when to use it, when to bring your own server
 
-Open Design's frontend is a static SPA that issues relative `/api/*`,
+OpenDesign's frontend is a static SPA that issues relative `/api/*`,
 `/artifacts/*`, and `/frames/*` requests. Three serving options:
 
 | Option                                 | When                                                                                                                                                                                                              |
@@ -177,7 +177,7 @@ If you serve the static bundle yourself, replicate that shape:
   response compression.
 - SPA fallback for unmatched paths → `index.html`.
 
-The static-server's environment does not need any Open Design env
+The static-server's environment does not need any OpenDesign env
 vars — but **the daemon's environment usually does**, because its
 same-origin gate is built from `OD_BIND_HOST:port` (loopback hosts
 included). The browser's `Origin` and `Host` are whatever your proxy
@@ -241,19 +241,18 @@ installing the workspace.
 
 ## CI
 
-`.github/workflows/ci.yml` owns Nix validation through the required
-`Validate workspace` gate. Pull requests run `nix flake check` only when they
-touch Nix inputs, daemon/web Nix build closures, or generated hash maintenance
-workflows. Merge queue and manual full CI runs execute the full Nix path before
-merge. The flake also filters each derivation down to only the workspace
-packages it actually installs, so unrelated package/tool changes stay off the
-slower Nix path and do not churn the other derivation's pnpm store hash.
+Nix validation is a **standalone** workflow (`.github/workflows/nix.yml`), not
+part of core merge validation (`ci.yml` / `Validate workspace` / merge queue).
+It runs `nix flake check` on pull requests and `main` pushes that touch flake,
+lock, or `nix/**` inputs (plus manual `workflow_dispatch`).
 
-When a PR run fails because `nix/pnpm-deps.nix` is stale, the CI job also
-tries to regenerate a hash-only patch:
+Refresh a stale `nix/pnpm-deps.nix` locally:
 
-- same-repo PRs get a bot-authored commit pushed back to the PR branch when
-  the generated patch only touches `nix/pnpm-deps.nix`;
-- fork PRs get a PR comment plus a workflow artifact containing the patch;
-- the failing run still stays red until the generated patch lands and a
-  fresh validation run passes.
+```bash
+pnpm nix:update-hash
+nix flake check --print-build-logs --keep-going
+```
+
+The flake filters each derivation down to only the workspace packages it
+actually installs, so unrelated package/tool changes stay off the slower Nix
+path and do not churn the other derivation's pnpm store hash.

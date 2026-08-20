@@ -32,6 +32,7 @@ import type {
   TrustTier,
 } from '@open-design/contracts';
 import { defaultTrustForRecord, resolveCapabilitiesGranted } from './trust.js';
+import { getWorkspaceResourceByResourceId } from '../db.js';
 import type Database from 'better-sqlite3';
 
 type SqliteDb = Database.Database;
@@ -230,9 +231,191 @@ export function rowToInstalledPlugin(row: DbRow): InstalledPluginRecord {
   };
 }
 
-export function listInstalledPlugins(db: SqliteDb): InstalledPluginRecord[] {
+/**
+ * Is this plugin visible from `scope` (the requesting workspace)?
+ *
+ * Bundled plugins are app capabilities and remain global. User plugins in an
+ * explicit Workspace are stricter: Team bindings are visible to active Team
+ * members, while Personal bindings require the exact creator member. An
+ * unbound user plugin is quarantined from every explicit Workspace because no
+ * caller may adopt legacy bytes merely by viewing them.
+ *
+ * `scope === undefined` (as opposed to `null` or `''`) is a SEPARATE signal
+ * from "no identity": it means the caller — `listInstalledPlugins` called
+ * with no second argument at all — never asked for scoping and is the
+ * preserved local/CLI compatibility lane. `null`/`''` is the headerless HTTP
+ * catalog: it may see unbound local user plugins and bundled plugins, but not
+ * anything claimed by a Workspace.
+ */
+function pluginVisibleFromWorkspace(
+  db: SqliteDb,
+  plugin: InstalledPluginRecord,
+  scope: string | null | undefined,
+  workspaceMemberId: string | null | undefined,
+): boolean {
+  if (scope !== undefined && plugin.sourceKind === 'bundled') return true;
+  let binding: ReturnType<typeof getWorkspaceResourceByResourceId>;
+  try {
+    binding = getWorkspaceResourceByResourceId(db, 'plugin', plugin.id);
+  } catch (error) {
+    // Narrow plugin-library tests and external embedders may initialize only
+    // the plugin schema. Unscoped/local reads do not require Workspace data;
+    // a scoped read must still fail rather than silently bypass isolation.
+    if (scope === undefined) return true;
+    throw error;
+  }
+  const ownerId = typeof binding?.workspaceId === 'string' ? binding.workspaceId.trim() : '';
+  if (binding?.resourceState === 'deleted') return false;
+  if (scope === undefined) return true;
+  const scopeId = scope?.trim();
+  if (!scopeId) return !ownerId;
+  if (!ownerId || ownerId !== scopeId) return false;
+  if (binding?.visibility === 'team') return true;
+  const creatorId = binding?.createdByWorkspaceMemberId?.trim();
+  const callerId = workspaceMemberId?.trim();
+  return Boolean(creatorId && callerId && creatorId === callerId);
+}
+
+/**
+ * A materialized Team plugin is readable only while its exact Workspace
+ * binding is live. An unbound marker is still accepted for one compatibility
+ * read so pre-binding installs can be adopted by the daemon without vanishing
+ * during an upgrade; callers must persist that binding immediately.
+ */
+export function workspaceTeamPluginBindingAllowsRead(
+  db: SqliteDb,
+  workspaceId: string,
+  pluginId: string,
+): boolean {
+  const binding = getWorkspaceResourceByResourceId(
+    db,
+    'plugin',
+    workspaceTeamPluginBindingResourceId(workspaceId, pluginId),
+  );
+  if (!binding) return true;
+  return binding.workspaceId === workspaceId
+    && binding.visibility === 'team'
+    && binding.resourceState !== 'deleted';
+}
+
+/**
+ * Snapshot the local binding generation before an asynchronous hub read.
+ * `resourceState` is intentionally part of the fence in addition to
+ * `updatedAt`: two synchronous SQLite writes can share the same millisecond,
+ * but an intervening tombstone must still invalidate an older positive read.
+ * `null` is the generation for a binding that does not exist yet.
+ */
+export function workspaceTeamPluginBindingActivationFence(
+  db: SqliteDb,
+  workspaceId: string,
+  pluginId: string,
+): string | null {
+  const binding = getWorkspaceResourceByResourceId(
+    db,
+    'plugin',
+    workspaceTeamPluginBindingResourceId(workspaceId, pluginId),
+  );
+  if (!binding) return null;
+  return JSON.stringify([
+    binding.workspaceId,
+    binding.visibility,
+    binding.resourceState ?? null,
+    binding.updatedAt,
+    binding.updatedByWorkspaceMemberId ?? null,
+    binding.resourceHubResourceId ?? null,
+  ]);
+}
+
+const WORKSPACE_TEAM_PLUGIN_BINDING_PREFIX = 'team-mirror:';
+
+/**
+ * Team materializations are separate from the Personal installed-plugin row.
+ * The generic binding table only allows one row per resource id, so a Team
+ * mirror must not claim the bare plugin id: Personal and Team plugins with the
+ * same manifest id are valid and coexist in `listWorkspacePlugins`.
+ */
+export function workspaceTeamPluginBindingResourceId(
+  workspaceId: string,
+  pluginId: string,
+): string {
+  return `${WORKSPACE_TEAM_PLUGIN_BINDING_PREFIX}${encodeURIComponent(workspaceId)}:${encodeURIComponent(pluginId)}`;
+}
+
+export function pluginIdFromWorkspaceTeamPluginBinding(
+  workspaceId: string,
+  bindingResourceId: string,
+): string | null {
+  const prefix = `${WORKSPACE_TEAM_PLUGIN_BINDING_PREFIX}${encodeURIComponent(workspaceId)}:`;
+  if (!bindingResourceId.startsWith(prefix)) return null;
+  try {
+    return decodeURIComponent(bindingResourceId.slice(prefix.length));
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveWorkspaceTeamPluginWithBindingGate<T>(input: {
+  bindingAllowsRead: () => boolean;
+  resolve: () => Promise<T | null>;
+}): Promise<T | null> {
+  if (!input.bindingAllowsRead()) return null;
+  const resolved = await input.resolve();
+  if (resolved == null || !input.bindingAllowsRead()) return null;
+  return resolved;
+}
+
+export async function resolveAndActivateWorkspaceTeamPlugin<T>(input: {
+  resolve: () => Promise<T | null>;
+  captureActivationFence: () => string | null;
+  stillShared: () => Promise<boolean>;
+  activationFenceIsCurrent: (fence: string | null) => boolean;
+  activate: () => boolean;
+}): Promise<T | null> {
+  const resolved = await input.resolve();
+  if (resolved == null) return null;
+  if (!await activateWorkspaceTeamPluginIfStillShared(input)) return null;
+  return resolved;
+}
+
+export async function activateWorkspaceTeamPluginIfStillShared(input: {
+  captureActivationFence: () => string | null;
+  stillShared: () => Promise<boolean>;
+  activationFenceIsCurrent: (fence: string | null) => boolean;
+  activate: () => boolean;
+}): Promise<boolean> {
+  const activationFence = input.captureActivationFence();
+  if (!await input.stillShared()) return false;
+  // The hub read above is asynchronous. A newer reconciliation may retire the
+  // binding while it is pending, so a positive result is authoritative only
+  // for the binding generation captured before that read. Both this final
+  // check and `activate` are synchronous, leaving no event-loop interleave in
+  // which a tombstone can be overwritten.
+  if (!input.activationFenceIsCurrent(activationFence)) return false;
+  return input.activate();
+}
+
+/**
+ * `workspaceId` is optional and defaults to the pre-workspace-isolation
+ * behavior (every live installed plugin, otherwise unfiltered) so every existing caller —
+ * `od plugin list`, inventory stats, the bundled-scenario scan in server.ts —
+ * keeps working unchanged, AS LONG AS THEY OMIT THE ARGUMENT ENTIRELY. A
+ * reconciled tombstone is terminal even for these unscoped internal callers.
+ * `GET /api/plugins` always passes a second argument (`headerValue(...)`,
+ * which returns `string | null`, never `undefined`), so it always gets the
+ * workspace-scoped view even when the caller has no header — see
+ * `pluginVisibleFromWorkspace`'s doc comment for why `undefined` and `null`
+ * must NOT collapse to the same "unfiltered" behavior here.
+ */
+export function listInstalledPlugins(
+  db: SqliteDb,
+  workspaceId?: string | null,
+  workspaceMemberId?: string | null,
+): InstalledPluginRecord[] {
   const rows = db.prepare(`SELECT * FROM installed_plugins ORDER BY title ASC`).all() as DbRow[];
-  return rows.map(rowToInstalledPlugin);
+  const records = rows.map(rowToInstalledPlugin);
+  return records.filter((record) =>
+    pluginVisibleFromWorkspace(db, record, workspaceId, workspaceMemberId),
+  );
 }
 
 export function getInstalledPlugin(db: SqliteDb, id: string): InstalledPluginRecord | null {

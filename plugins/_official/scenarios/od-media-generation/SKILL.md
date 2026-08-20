@@ -51,8 +51,9 @@ artifact reference that `live-artifact` can wrap:
   `16:9`. The contracts `MediaAspect` union enumerates the legal
   values.
 - `provider` — left blank by default so the daemon picks the user's
-  configured provider for this media kind (see Settings → Media). Only
-  set this when the user names a provider explicitly.
+  configured provider for this media kind
+  (see Settings → Media providers).
+  Only set this when the user names a provider explicitly.
 
 After the media atom returns:
 

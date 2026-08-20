@@ -286,6 +286,36 @@ export interface RegisterLibraryAssetResult {
   taskId?: string;
 }
 
+/** Append this ingest's source + tags onto an asset that already holds these
+ * exact bytes (either a prior ingest, or a concurrent one that won the insert
+ * race). This is the single idempotent-by-content-hash convergence point. */
+function dedupIntoExistingAsset(
+  db: SqliteDb,
+  existing: LibraryAssetRecord,
+  input: RegisterLibraryAssetInput,
+): RegisterLibraryAssetResult {
+  addLibraryAssetSource(db, { assetId: existing.id, ...input.source });
+  if (input.tags && input.tags.length) {
+    const merged = dedupeTags([...existing.tags, ...input.tags]);
+    updateLibraryAsset(db, existing.id, { tags: merged });
+  }
+  const refreshed = getLibraryAsset(db, existing.id) ?? existing;
+  return { asset: refreshed, deduped: true };
+}
+
+/** True when `err` is the UNIQUE(content_hash) constraint firing on insert. */
+function isUniqueContentHashViolation(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const code = (err as { code?: unknown }).code;
+  const message = (err as { message?: unknown }).message;
+  return (
+    code === 'SQLITE_CONSTRAINT_UNIQUE' ||
+    (typeof message === 'string' &&
+      message.includes('UNIQUE constraint failed') &&
+      message.includes('content_hash'))
+  );
+}
+
 /**
  * Index an asset into the library. Idempotent by content hash. Owned assets
  * are written content-addressed under LIBRARY_DIR; referenced assets only
@@ -314,13 +344,7 @@ export async function registerLibraryAsset(
   // Dedup: same bytes already indexed → append source, union tags.
   const existing = findLibraryAssetByHash(db, contentHash);
   if (existing) {
-    addLibraryAssetSource(db, { assetId: existing.id, ...input.source });
-    if (input.tags && input.tags.length) {
-      const merged = dedupeTags([...existing.tags, ...input.tags]);
-      updateLibraryAsset(db, existing.id, { tags: merged });
-    }
-    const refreshed = getLibraryAsset(db, existing.id) ?? existing;
-    return { asset: refreshed, deduped: true };
+    return dedupIntoExistingAsset(db, existing, input);
   }
 
   if (!mime) mime = detectMime(bytes, input.filename);
@@ -346,26 +370,39 @@ export async function registerLibraryAsset(
   const domain = domainFromUrl(input.sourceUrl);
   const tags = dedupeTags([...(input.tags ?? []), domain]);
 
-  insertLibraryAsset(db, {
-    id,
-    kind,
-    storage: input.storage,
-    sourceUrl: input.sourceUrl,
-    sourceTitle: input.sourceTitle,
-    sourceDomain: domain,
-    capturedAt,
-    archivedDate: archivedDateFor(capturedAt),
-    filePath,
-    originProjectId: input.originProjectId,
-    relPath: input.relPath,
-    mime,
-    width: dims?.width,
-    height: dims?.height,
-    size: bytes.length,
-    contentHash,
-    tags,
-    metadata: input.metadata,
-  });
+  try {
+    insertLibraryAsset(db, {
+      id,
+      kind,
+      storage: input.storage,
+      sourceUrl: input.sourceUrl,
+      sourceTitle: input.sourceTitle,
+      sourceDomain: domain,
+      capturedAt,
+      archivedDate: archivedDateFor(capturedAt),
+      filePath,
+      originProjectId: input.originProjectId,
+      relPath: input.relPath,
+      mime,
+      width: dims?.width,
+      height: dims?.height,
+      size: bytes.length,
+      contentHash,
+      tags,
+      metadata: input.metadata,
+    });
+  } catch (err) {
+    // A concurrent ingest of the same bytes won the UNIQUE(content_hash) race in
+    // the window between our findLibraryAssetByHash SELECT above and this INSERT
+    // (the `await mkdir`/`await writeFile` yield lets a sibling request slip
+    // through the same not-found check). registerLibraryAsset is idempotent by
+    // content hash, so fold into the dedup branch rather than surfacing a 500.
+    if (isUniqueContentHashViolation(err)) {
+      const winner = findLibraryAssetByHash(db, contentHash);
+      if (winner) return dedupIntoExistingAsset(db, winner, input);
+    }
+    throw err;
+  }
   addLibraryAssetSource(db, { assetId: id, ...input.source });
 
   const taskId = recordEnrichmentTask(db, id, kind);

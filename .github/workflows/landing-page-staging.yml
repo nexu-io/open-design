@@ -188,6 +188,19 @@ jobs:
       # project's production branch, so it serves at its custom domain
       # staging.open-design.ai. The production project (open-design-landing)
       # is a different project and is never named here.
+      - name: Prepare staging Pages configuration
+        run: cp apps/landing-page/wrangler.staging.toml apps/landing-page/wrangler.toml
+
+      - name: Apply attribution ledger migrations (staging)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing-page
+          packageManager: npm
+          wranglerVersion: "4.110.0"
+          command: d1 migrations apply open-design-landing-staging-attribution --remote
+
       - name: Deploy to Cloudflare Pages (staging)
         uses: cloudflare/wrangler-action@v3
         with:

@@ -1,8 +1,9 @@
 name: Docker image
 
-# Phase 5 / spec §15.5 — multi-arch image builds.
+# Standalone Docker packaging line (not part of core merge validation in ci.yml).
 #
-# Pushes to ghcr.io on release tags and when invoked by release automation.
+# - pull_request / workflow_dispatch: smoke build only (push: false, amd64)
+# - tag v*.*.* / workflow_call from release: multi-arch build + push to ghcr.io
 
 on:
   workflow_call:
@@ -24,6 +25,15 @@ on:
         default: false
   push:
     tags: ['v*.*.*']
+  pull_request:
+    paths:
+      - "deploy/**"
+      - ".dockerignore"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/docker-image.yml"
+  workflow_dispatch:
 
 jobs:
   build-and-push:
@@ -38,7 +48,33 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
 
+      - name: Resolve publish mode
+        id: mode
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          PUBLISH_LATEST: ${{ inputs.publish_latest }}
+        run: |
+          set -euo pipefail
+          # Publish on:
+          #   - tag push (event_name=push with tags filter), or
+          #   - reusable release call that passes release_version / publish_latest.
+          # Do NOT key on event_name == 'workflow_call': nested reusable workflows
+          # keep the *caller's* event name (usually workflow_dispatch), so that
+          # check never matches and stable GHCR publish would silently become a
+          # smoke-only build.
+          if [ "$EVENT_NAME" = "push" ] || [ -n "${RELEASE_VERSION:-}" ] || [ "${PUBLISH_LATEST:-}" = "true" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
+          else
+            # pull_request and standalone workflow_dispatch: smoke only
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up QEMU
+        if: ${{ steps.mode.outputs.publish == 'true' }}
         uses: docker/setup-qemu-action@v3
         with:
           platforms: linux/amd64,linux/arm64
@@ -47,7 +83,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
+        if: ${{ steps.mode.outputs.publish == 'true' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -62,21 +98,24 @@ jobs:
           # spec §15.1 tag scheme:
           #   - vX.Y.Z push             → :X.Y.Z + :latest
           #   - workflow_call (stable)  → :<release_version> + optional :latest
+          #   - PR / manual validate    → local-only sha tags (only when not publishing)
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=${{ inputs.release_version }},enable=${{ inputs.release_version != '' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=latest,enable=${{ inputs.publish_latest == true }}
+            type=sha,prefix=pr-${{ github.event.pull_request.number }}-sha-,format=short,enable=${{ steps.mode.outputs.publish != 'true' && github.event_name == 'pull_request' }}
+            type=sha,prefix=manual-sha-,format=short,enable=${{ steps.mode.outputs.publish != 'true' && github.event_name == 'workflow_dispatch' }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/Dockerfile
-          # spec §15.1 — multi-arch single manifest
-          platforms: linux/amd64,linux/arm64
-          # Tags and release workflow calls publish.
-          push: ${{ github.event_name != 'pull_request' }}
+          platforms: ${{ steps.mode.outputs.platforms }}
+          push: ${{ steps.mode.outputs.publish == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # The in-tree Dockerfile uses node:24-alpine + apk for build
@@ -84,5 +123,31 @@ jobs:
           # from local builds. Spec §15.1 nominates bookworm-slim as
           # the canonical base; switching is a follow-up that needs
           # the Dockerfile's apk lines re-cast for apt.
+          build-args: |
+            NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+            RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify public GHCR pull access
+        if: ${{ steps.mode.outputs.publish == 'true' }}
+        shell: bash
+        env:
+          PUBLISHED_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+
+          docker logout ghcr.io >/dev/null 2>&1 || true
+
+          while IFS= read -r image; do
+            [ -n "$image" ] || continue
+            echo "Verifying anonymous access for $image"
+            if ! docker buildx imagetools inspect "$image" >/dev/null; then
+              printf '%s\n' \
+                "Published image is not anonymously pullable: $image" \
+                "" \
+                "Make the GHCR package public before cutting a public Docker release:" \
+                "GitHub organization -> Packages -> od -> Package settings -> Change visibility -> Public." >&2
+              exit 1
+            fi
+          done <<< "$PUBLISHED_TAGS"

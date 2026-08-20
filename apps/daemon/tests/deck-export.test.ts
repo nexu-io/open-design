@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,8 +9,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   buildScreenshotPdf,
   buildScreenshotPptx,
+  buildDeckRenderInput,
   decodeSlideDataUrls,
   readSlideFiles,
+  resolvePptxConstructor,
 } from '../src/deck-export.js';
 
 // 1x1 transparent PNG.
@@ -47,6 +49,34 @@ describe('decodeSlideDataUrls', () => {
   });
 });
 
+describe('resolvePptxConstructor', () => {
+  // Stands in for the real class; only the module shape matters here.
+  class FakePptxGenJS {}
+
+  it('resolves the bare CJS shape where the namespace itself is the constructor', () => {
+    expect(resolvePptxConstructor(FakePptxGenJS)).toBe(FakePptxGenJS);
+  });
+
+  it('resolves the pure ESM shape where default is the constructor', () => {
+    expect(resolvePptxConstructor({ default: FakePptxGenJS })).toBe(FakePptxGenJS);
+  });
+
+  it('resolves the tsx CJS-interop shape where default is double-wrapped', () => {
+    // tsx (the tools-dev daemon runtime) loads pptxgenjs's CJS build and wraps
+    // it so the namespace's `.default` is an object whose own `.default` is the
+    // class. Reaching only one level — as the old
+    // `PptxGenJSModule.default as ...` did — constructs a plain Object and
+    // fails with "PptxGenJS is not a constructor" on every PPTX export.
+    expect(resolvePptxConstructor({ default: { default: FakePptxGenJS } })).toBe(FakePptxGenJS);
+  });
+
+  it('throws on shapes with no reachable constructor', () => {
+    expect(() => resolvePptxConstructor({})).toThrow(/unable to resolve/);
+    expect(() => resolvePptxConstructor({ default: {} })).toThrow(/unable to resolve/);
+    expect(() => resolvePptxConstructor(null)).toThrow(/unable to resolve/);
+  });
+});
+
 describe('readSlideFiles', () => {
   let dir = '';
   beforeAll(async () => {
@@ -80,6 +110,74 @@ describe('readSlideFiles', () => {
     await expect(readSlideFiles([path.join(dir, 'missing.png')])).rejects.toMatchObject({
       code: 'ENOENT',
     });
+  });
+});
+
+describe('buildDeckRenderInput', () => {
+  it('injects a deck-stage fallback runtime before desktop rendering', async () => {
+    const projectsRoot = mkdtempSync(path.join(tmpdir(), 'od-deck-render-input-'));
+    const projectId = 'project-1';
+    const projectDir = path.join(projectsRoot, projectId);
+    mkdirSync(projectDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'broken-deck.html'),
+      `<!doctype html>
+<html>
+  <body>
+    <deck-stage width="1920" height="1080">
+      <section class="slide">One</section>
+      <section class="slide">Two</section>
+    </deck-stage>
+    <script>
+    /**
+     * Original runtime was truncated while documenting a speaker notes tag.
+     * Example marker: <script type="application/json" id="speaker-notes">
+    []
+    </script>
+  </body>
+</html>`,
+    );
+
+    try {
+      const request = await buildDeckRenderInput({
+        daemonUrl: 'http://127.0.0.1:60636',
+        deck: true,
+        fileName: 'broken-deck.html',
+        projectId,
+        projectsRoot,
+      });
+
+      expect(request.input.html).toContain('data-od-deck-stage-fallback');
+      expect(request.input.html).toContain("window.customElements.define('deck-stage'");
+      expect(request.input.html).toContain("type: 'od:slide-state'");
+    } finally {
+      rmSync(projectsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('uses supplied sourceHtml for version exports instead of reading the current file', async () => {
+    const projectsRoot = mkdtempSync(path.join(tmpdir(), 'od-deck-render-input-'));
+    const projectId = 'project-1';
+    const projectDir = path.join(projectsRoot, projectId);
+    mkdirSync(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'deck.html'), '<html><body>Current deck</body></html>');
+
+    try {
+      const request = await buildDeckRenderInput({
+        daemonUrl: 'http://127.0.0.1:60636',
+        deck: true,
+        fileName: 'deck.html',
+        projectId,
+        projectsRoot,
+        sourceHtml: '<html><body>Historical deck version</body></html>',
+      });
+
+      expect(request.input.html).toContain('Historical deck version');
+      expect(request.input.html).not.toContain('Current deck');
+      expect(request.input.baseHref).toBe('http://127.0.0.1:60636/api/projects/project-1/raw/');
+    } finally {
+      rmSync(projectsRoot, { recursive: true, force: true });
+    }
   });
 });
 

@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal } from '@/playwright/rail';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 
@@ -140,7 +140,7 @@ test('[P1] design system dropdown is not clipped by the modal body', async ({ pa
 test('[P1] design system dropdown stays within a very short viewport (both sides tight)', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 360 });
+  await page.setViewportSize({ width: 1280, height: 320 });
   await page.goto('/');
   await openNewProjectPanel(page);
   await page.getByTestId('new-project-tab-prototype').click();
@@ -189,6 +189,117 @@ test('[P1] design system dropdown stays within a very short viewport (both sides
   expect(
     geometry.popTop,
     `Popover top (${geometry.popTop}) is above the viewport. Geometry: ${JSON.stringify(geometry)}`,
+  ).toBeGreaterThanOrEqual(-1);
+});
+
+// Review follow-up (#5883): the popover list was portaled to the body, but its
+// companion brand-preview flyout (shown for a finalized `user:<id>` brand) kept
+// its old inline `position: absolute` against the trigger wrapper — so for a
+// finalized brand the flyout was still clipped by the modal body / mispositioned
+// once the popover moved out. The flyout must portal and stay in the viewport
+// beside the popover too.
+const BRAND_DESIGN_SYSTEM = {
+  id: 'user:brand-acme',
+  title: 'Acme Brand Kit',
+  category: 'Brand',
+  summary: 'Acme brand kit.',
+  source: 'user',
+  isEditable: true,
+  surface: 'web',
+  status: 'published',
+  swatches: ['#0b5fff', '#0a0a0a'],
+};
+
+const ACME_BRAND = {
+  meta: {
+    id: 'brand-acme',
+    sourceUrl: 'https://acme.example.com',
+    createdAt: 0,
+    updatedAt: 0,
+    status: 'ready',
+    designSystemId: BRAND_DESIGN_SYSTEM.id,
+    projectId: 'brand-project-acme',
+  },
+  brand: {
+    name: 'Acme',
+    tagline: 'Build the future, faster.',
+    description: 'Acme is a bold engineering brand for fast-moving teams.',
+    sourceUrl: 'https://acme.example.com',
+    logo: { primary: 'logos/acme.svg', alternates: [], notes: '' },
+    colors: [
+      { role: 'accent', hex: '#0b5fff', oklch: '', name: 'Signal Blue', usage: 'Primary actions' },
+      { role: 'background', hex: '#0a0a0a', oklch: '', name: 'Ink', usage: 'Surfaces' },
+    ],
+    typography: {
+      display: { family: 'Space Grotesk', fallbacks: ['sans-serif'], weights: [500, 700] },
+      body: { family: 'Inter', fallbacks: ['sans-serif'], weights: [400, 600] },
+    },
+    voice: { adjectives: [], tone: '', messagingPillars: [], vocabulary: { use: [], avoid: [] } },
+    imagery: { style: '', subjects: [], treatment: '', avoid: [], samples: [] },
+    layout: { radius: '', borderWeight: '', spacing: '', postureRules: [] },
+  },
+};
+
+test('[P1] finalized-brand preview flyout is not clipped by the modal body', async ({ page }) => {
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: [BRAND_DESIGN_SYSTEM, ...DESIGN_SYSTEMS] } });
+  });
+  await page.route('**/api/brands', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { brands: [ACME_BRAND] } });
+      return;
+    }
+    await route.continue();
+  });
+
+  // Short window: the modal's `.newproj-body` scroll box clips anything that
+  // keeps trigger-relative absolute positioning inside it.
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await openNewProjectPanel(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await expect(page.getByTestId('design-system-trigger')).toBeVisible();
+
+  await page.getByTestId('design-system-trigger').click();
+  await expect(page.locator('.ds-picker-popover')).toBeVisible();
+
+  // Hovering the finalized brand row swaps the thin preview for the rich Brand
+  // Kit card flyout.
+  await page.getByRole('option', { name: /Acme Brand Kit/i }).hover();
+  const flyout = page.getByTestId('new-project-ds-brand-flyout');
+  await expect(flyout).toBeVisible();
+
+  const geometry = await flyout.evaluate((el: Element) => {
+    const body = document.querySelector('.newproj-body') as HTMLElement | null;
+    const bodyRect = body?.getBoundingClientRect() ?? null;
+    const r = el.getBoundingClientRect();
+    return {
+      left: Math.round(r.left),
+      right: Math.round(r.right),
+      top: Math.round(r.top),
+      bottom: Math.round(r.bottom),
+      viewportW: window.innerWidth,
+      viewportH: window.innerHeight,
+      bodyBottom: bodyRect ? Math.round(bodyRect.bottom) : null,
+      bodyRight: bodyRect ? Math.round(bodyRect.right) : null,
+    };
+  });
+
+  expect(
+    geometry.right,
+    `Flyout right (${geometry.right}) overflows the viewport (${geometry.viewportW}). ${JSON.stringify(geometry)}`,
+  ).toBeLessThanOrEqual(geometry.viewportW + 1);
+  expect(
+    geometry.left,
+    `Flyout left (${geometry.left}) is off-screen. ${JSON.stringify(geometry)}`,
+  ).toBeGreaterThanOrEqual(-1);
+  expect(
+    geometry.bottom,
+    `Flyout bottom (${geometry.bottom}) overflows the viewport (${geometry.viewportH}). ${JSON.stringify(geometry)}`,
+  ).toBeLessThanOrEqual(geometry.viewportH + 1);
+  expect(
+    geometry.top,
+    `Flyout top (${geometry.top}) is above the viewport. ${JSON.stringify(geometry)}`,
   ).toBeGreaterThanOrEqual(-1);
 });
 

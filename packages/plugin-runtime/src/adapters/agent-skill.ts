@@ -42,10 +42,16 @@ export function adaptAgentSkill(
   const warnings: string[] = [];
 
   const name = stringOr(frontmatter['name'], opts.folderId).trim() || opts.folderId;
-  const title = humanizeName(name);
-  const description = stringOr(frontmatter['description'], '');
+  const titleI18n = localizedMapFromFields(frontmatter['en_name'], frontmatter['zh_name']);
+  const title = stringOr(frontmatter['en_name'], '') || humanizeName(name);
+  const descriptionI18n = localizedMapFromFields(
+    frontmatter['en_description'],
+    frontmatter['zh_description'],
+  );
+  const description = stringOr(frontmatter['en_description'], '') || stringOr(frontmatter['description'], '');
   const version = stringOr(frontmatter['version'], '0.0.0');
   const compatPath = opts.compatPath ?? './SKILL.md';
+  const tags = stringArray(frontmatter['tags']);
 
   const designSystemFm = isObject(od['design_system']) ? od['design_system'] : null;
   const designSystem = designSystemFm
@@ -83,8 +89,11 @@ export function adaptAgentSkill(
     specVersion: OPEN_DESIGN_PLUGIN_SPEC_VERSION,
     name,
     title,
+    title_i18n: titleI18n,
     version,
     description: description || undefined,
+    description_i18n: descriptionI18n,
+    tags,
     compat: { agentSkills: [{ path: compatPath }] },
     od: {
       kind: 'skill',
@@ -111,6 +120,24 @@ function isObject(value: FrontmatterValue | undefined): value is FrontmatterObje
 
 function stringOr(value: FrontmatterValue | undefined, fallback: string): string {
   return typeof value === 'string' ? value : fallback;
+}
+
+function localizedMapFromFields(
+  enValue: FrontmatterValue | undefined,
+  zhValue: FrontmatterValue | undefined,
+): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  if (typeof enValue === 'string' && enValue.trim()) out.en = enValue.trim();
+  if (typeof zhValue === 'string' && zhValue.trim()) out['zh-CN'] = zhValue.trim();
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function stringArray(value: FrontmatterValue | undefined): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .map((item) => item.trim());
+  return out.length > 0 ? out : undefined;
 }
 
 function humanizeName(name: string): string {

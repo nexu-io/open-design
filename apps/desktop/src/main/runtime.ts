@@ -6,7 +6,8 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, screen, session, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell, webFrameMain } from "electron";
+import type { WebFrameMain } from "electron";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -19,17 +20,62 @@ import {
   type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
+import type {
+  OpenDesignHostActionResult,
+  OpenDesignHostCaptureResult,
+  OpenDesignHostPreviewNavigationFailure,
+  OpenDesignHostProjectImportInit,
+  OpenDesignHostUpdaterActionOptions,
+  OpenDesignHostUpdaterMenuLabels,
+  OpenDesignHostUpdaterOpenDialogRequest,
+} from "@open-design/host";
 
 import { renderDeckSlides } from "./deck-capture.js";
+import { openFirstPartyMailto } from "./mailto-open.js";
 import { openValidatedDirectory } from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
+import { RendererCrashLoopBreaker } from "./renderer-crash-loop.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
+import { parseDesktopUpdateMenuLabels } from "./update-menu.js";
+import {
+  checkUpdateRestartSafety,
+  parseUpdateActionRequest,
+  updateRestartSafetyError,
+} from "./update-preflight.js";
 
 const execFileAsync = promisify(execFile);
+const PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL = "od:preview-navigation-failed";
+const ABORTED_NAVIGATION_ERROR_CODE = -3;
+let previewNavigationFailureEventSequence = 0;
+
+function isPreviewTransportNavigationUrl(url: string): boolean {
+  return url === "about:srcdoc" || url.startsWith("blob:od://app/");
+}
+
+export function previewNavigationFailureFromDidFailLoad(input: {
+  errorCode: number;
+  eventId: number;
+  frameName?: string;
+  isMainFrame: boolean;
+  occurredAtMs: number;
+  validatedUrl: string;
+}): OpenDesignHostPreviewNavigationFailure | null {
+  if (
+    input.isMainFrame
+    || input.errorCode !== ABORTED_NAVIGATION_ERROR_CODE
+    || !isPreviewTransportNavigationUrl(input.validatedUrl)
+  ) return null;
+  return {
+    errorCode: input.errorCode,
+    eventId: input.eventId,
+    ...(input.frameName ? { frameName: input.frameName } : {}),
+    occurredAtMs: input.occurredAtMs,
+    validatedUrl: input.validatedUrl,
+  };
+}
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -249,7 +295,7 @@ const MIN_SPLASH_MS = 2000;
 // While the splash is up, the real web app loads in a hidden main window. We
 // reveal it only once the web bundle reports it has actually mounted (it sets
 // `data-od-app-mounted="1"` on first paint of the real UI), so the user never
-// sees the web's own "Loading Open Design…" shell flash between the splash and
+// sees the web's own "Loading OpenDesign…" shell flash between the splash and
 // the app. Poll cadence + a hard ceiling so a missing mount signal can never
 // strand the user on the splash forever.
 const WEB_MOUNT_POLL_MS = 80;
@@ -265,13 +311,16 @@ const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
 const DESKTOP_PET_WINDOW_MARGIN = 24;
 const UPDATER_STATUS_EVENT = "od:update:status-changed";
+const UPDATER_OPEN_DIALOG_EVENT = "od:update:open-dialog";
 const DESIGN_BROWSER_PARTITION = "persist:open-design-design-browser";
 const UPDATER_IPC_CHANNELS = [
   "od:update:status",
   "od:update:check",
+  "od:update:clear-cache",
   "od:update:download",
   "od:update:install",
   "od:update:quit",
+  "od:update:set-menu-labels",
 ] as const;
 
 export type DesktopEvalInput = {
@@ -337,6 +386,7 @@ export type DesktopRuntime = {
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
   exportArtifact(input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
+  openUpdateDialog(request: OpenDesignHostUpdaterOpenDialogRequest): void;
   renderSlides(input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
@@ -423,9 +473,10 @@ export type DesktopRuntimeOptions = {
    * as having reached running for abnormal-exit detection.
    */
   onRevealed?: () => void;
+  onUpdateMenuLabels?: (labels: OpenDesignHostUpdaterMenuLabels) => void;
 };
 
-const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
+const DESKTOP_IMPORT_TOKEN_HEADER = "x-od-desktop-import-token";
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 
 export function mintImportToken(secret: Buffer, baseDir: string): string {
@@ -467,7 +518,7 @@ export type PickAndImportFolderDeps = {
   baseDir: string;
   desktopAuthSecret: Buffer;
   fetchImpl?: typeof globalThis.fetch;
-  init?: { name?: string; skillId?: string | null; designSystemId?: string | null };
+  init?: OpenDesignHostProjectImportInit;
   /** Round-5: lazy re-registration hook. Called once on 503. */
   registerDesktopAuth?: () => Promise<boolean>;
   /** Injected for tests; defaults to the production HMAC mint. */
@@ -499,6 +550,22 @@ export async function pickAndImportFolder(
         headers: {
           "Content-Type": "application/json",
           [DESKTOP_IMPORT_TOKEN_HEADER]: headerValue,
+          ...(deps.init?.workspaceContext
+            ? {
+                "x-od-workspace-id": deps.init.workspaceContext.workspaceId,
+                "x-od-workspace-type": deps.init.workspaceContext.workspaceType,
+                "x-od-workspace-member-id": deps.init.workspaceContext.workspaceMemberId,
+                "x-od-workspace-role": deps.init.workspaceContext.role,
+                "x-od-workspace-lifecycle-state": deps.init.workspaceContext.lifecycleState,
+                "x-od-workspace-member-status": deps.init.workspaceContext.memberStatus,
+                "x-od-workspace-can-share-projects": String(
+                  deps.init.workspaceContext.permissions.canShareProjects,
+                ),
+                "x-od-workspace-can-write-synced-files": String(
+                  deps.init.workspaceContext.permissions.canWriteSyncedFiles,
+                ),
+              }
+            : {}),
         },
         method: "POST",
       });
@@ -710,19 +777,48 @@ const MAC_WINDOW_CHROME =
   process.platform === "darwin"
     ? ({
         titleBarStyle: "hiddenInset" as const,
-        trafficLightPosition: { x: 12, y: 10 },
+        // y centers the 12px traffic-light circles on the tab strip's midline.
+        // The base `.workspace-tabs-chrome.app-chrome-header` rule in apps/web
+        // shell.css says 44px, but every real window wraps the tab bar in
+        // `.workspace-shell` (see App.tsx), and `.workspace-shell
+        // .workspace-tabs-chrome.app-chrome-header` in viewer/routines.css
+        // overrides it to 52px (10px above the tab + 32px tab + 10px below) —
+        // confirmed via getBoundingClientRect() against a live desktop window,
+        // not by reading the CSS alone, since that 44px rule reads as "the"
+        // rule until you check what actually wins. Midline is 52 / 2 = 26, so
+        // the circles' top edge is 26 - 6 = 20. A prior pass "corrected" this
+        // to y: 16 off the un-overridden 44px rule, which is what actually
+        // reintroduced the misalignment — don't repeat that without first
+        // measuring the live header height.
+        trafficLightPosition: { x: 12, y: 20 },
+        // Frosted-glass window: the desktop wallpaper blurs through the whole
+        // window (NSVisualEffectView). The web shell keeps html/body
+        // transparent in desktop mode (see apps/web app-wash.css) so the
+        // vibrancy is actually visible; 'active' keeps the blur when the
+        // window loses focus instead of flattening to gray.
+        vibrancy: "under-window" as const,
+        visualEffectState: "active" as const,
+        backgroundColor: "#00000000",
       })
     : {};
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
-    --app-chrome-traffic-space: 96px !important;
-    --app-chrome-traffic-margin: 12px !important;
+    /* Windowed: the home pill sits 4px after the traffic lights (lights span
+       x:12 + 52px = 64px). Fullscreen (class synced from main below): the
+       lights are hidden, so the pill left-aligns with the nav-rail card's
+       10px inset instead. */
+    --app-chrome-traffic-space: 64px !important;
+    --app-chrome-traffic-margin: 4px !important;
     -webkit-app-region: drag;
   }
+  html.is-window-fullscreen .app-chrome-header {
+    --app-chrome-traffic-space: 10px !important;
+    --app-chrome-traffic-margin: 0px !important;
+  }
   .app-chrome-traffic-space {
-    flex: 0 0 96px !important;
-    width: 96px !important;
+    flex: 0 0 var(--app-chrome-traffic-space) !important;
+    width: var(--app-chrome-traffic-space) !important;
   }
   .app-chrome-header button,
   .app-chrome-header a,
@@ -841,7 +937,7 @@ function createPendingHtml(): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Open Design</title>
+    <title>OpenDesign</title>
     <style>
       html,
       body {
@@ -979,6 +1075,288 @@ function createPendingHtml(): string {
 }
 
 /**
+ * Last-resort error screen shown when the renderer crash-loop breaker opens.
+ * A deterministic renderer crash reloads-and-crashes forever, leaving a blank
+ * window; parking here gives the user a calm explanation instead. It is a
+ * fully static, dependency-free page (no daemon, no preload, no network) so it
+ * renders even when everything else is wedged, and the failing app bundle
+ * cannot take it down. Recovery is automatic (the poll loop re-arms after a
+ * quiet cooldown); reinstalling is the manual escape hatch.
+ */
+interface RendererCrashScreenContext {
+  appVersion: string;
+  platform: NodeJS.Platform;
+  osVersion: string;
+  reason: string;
+  exitCode: number | null;
+}
+
+const CRASH_REPORT_ISSUES_URL = "https://github.com/nexu-io/open-design/issues/new";
+const SUPPORT_EMAIL = "support@open-design.ai";
+// Every address the app is allowed to hand to the OS mail client. Keep this in
+// sync with the renderer's own contact affordances (`CONTACT_EMAIL_URL` in
+// `apps/web/src/components/EntryNavRail.tsx`); an address that is not listed
+// here silently does nothing when clicked in the packaged shell.
+const FIRST_PARTY_EMAILS = new Set([SUPPORT_EMAIL, "contact@open.design"]);
+
+// Narrow allowlist for the crash screen's "Email us" action: only a mailto
+// addressed to our own support address, carrying nothing but the crash-screen's
+// own `subject`/`body`, opens. Validating just protocol+pathname is not enough —
+// `mailto:support@open-design.ai?bcc=attacker@example.com` (or `?to=`/`?cc=`)
+// keeps `pathname === "support@open-design.ai"` yet smuggles extra recipients
+// and headers through to `shell.openExternal`. Because this predicate widens the
+// renderer-exposed `shell:open-external` bridge past http, a compromised
+// renderer could otherwise launch the mail client with arbitrary recipients, so
+// reject any `to`/`cc`/`bcc`/unknown query key.
+export function isSupportMailtoUrl(url: string): boolean {
+  return isMailtoUrlAddressedTo(url, (address) => address === SUPPORT_EMAIL);
+}
+
+// Same allowlist discipline as `isSupportMailtoUrl`, widened to every address
+// this app owns. A `mailto:` the user clicks in the UI never reaches the OS on
+// its own: Electron raises `will-navigate` for it, and a handler that only
+// recognises http(s) leaves the navigation to be dropped, so the click reads as
+// dead. Routing first-party mailtos through `shell.openExternal` is what
+// actually opens the mail client.
+export function isFirstPartyMailtoUrl(url: string): boolean {
+  return isMailtoUrlAddressedTo(url, (address) => FIRST_PARTY_EMAILS.has(address));
+}
+
+function isMailtoUrlAddressedTo(url: string, allow: (address: string) => boolean): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "mailto:") return false;
+    if (!allow(parsed.pathname.toLowerCase())) return false;
+    for (const [key, value] of parsed.searchParams) {
+      if (key !== "subject" && key !== "body") return false;
+      // Reject a decoded CR/LF in the value: `subject=ok%0D%0ABcc:attacker@…`
+      // would otherwise smuggle a header past the key allowlist and inject an
+      // extra recipient once the mail client parses the mailto.
+      if (/[\r\n]/.test(value)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function osLabelForReport(platform: NodeJS.Platform): string {
+  if (platform === "darwin") return "macOS";
+  if (platform === "win32") return "Windows";
+  if (platform === "linux") return "Linux";
+  return platform;
+}
+
+function formatRendererExitCode(code: number | null): string {
+  if (code == null) return "unknown";
+  // Renderer exit codes are signed 32-bit; the unsigned hex form (e.g.
+  // 0x80000003 = a V8/Chromium CHECK/breakpoint) is how they're recognizable,
+  // so show both the raw number and the hex.
+  return `${code} (0x${(code >>> 0).toString(16).toUpperCase()})`;
+}
+
+// Prefilled GitHub new-issue URL. The daemon is still alive on a renderer
+// crash, so the "Save logs…" button can produce a diagnostics bundle; this
+// report body asks the user to attach it (neither an issue URL nor mailto can
+// carry a file attachment) and auto-fills the version/OS/exit-code that a
+// triager always needs.
+function buildCrashReportUrl(ctx: RendererCrashScreenContext): string {
+  const title = `Desktop app keeps crashing (renderer ${ctx.reason})`;
+  const body = [
+    "**What happened**",
+    "The OpenDesign desktop window crashed several times in a row and showed the recovery screen.",
+    "",
+    "**What I was doing when it started** (please add any detail):",
+    "",
+    "",
+    "> Please attach the diagnostics file you saved with the “Save logs…” button on the recovery screen — it has the logs we need.",
+    "",
+    "---",
+    "_Auto-filled:_",
+    `- App version: ${ctx.appVersion}`,
+    `- OS: ${osLabelForReport(ctx.platform)} ${ctx.osVersion}`,
+    `- Renderer exit: ${ctx.reason}, code ${formatRendererExitCode(ctx.exitCode)}`,
+  ].join("\n");
+  return `${CRASH_REPORT_ISSUES_URL}?${new URLSearchParams({ title, body }).toString()}`;
+}
+
+// Prefilled mailto for the "Email us" action — same auto-filled diagnostics as
+// the issue, for users who'd rather email than open a GitHub account.
+function buildCrashMailtoUrl(ctx: RendererCrashScreenContext): string {
+  const subject = `OpenDesign keeps crashing (renderer ${ctx.reason})`;
+  const body = [
+    "The OpenDesign desktop app crashed several times in a row on my device.",
+    "",
+    "(If possible, attach the diagnostics file you saved with the “Save logs…” button.)",
+    "",
+    `App version: ${ctx.appVersion}`,
+    `OS: ${osLabelForReport(ctx.platform)} ${ctx.osVersion}`,
+    `Renderer exit: ${ctx.reason}, code ${formatRendererExitCode(ctx.exitCode)}`,
+  ].join("\n");
+  return `mailto:${SUPPORT_EMAIL}?${new URLSearchParams({ subject, body }).toString()}`;
+}
+
+function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
+  const issueUrl = buildCrashReportUrl(ctx);
+  const mailtoUrl = buildCrashMailtoUrl(ctx);
+  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenDesign</title>
+    <style>
+      /* Palette mirrors the app's neutral design tokens (apps/web tokens.css):
+         warm off-white + near-black, no accent color — matching the black/white
+         onboarding rather than a stray blue. */
+      :root { color-scheme: light dark; }
+      html, body {
+        background: #faf9f7;
+        color: #1a1916;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+      body {
+        align-items: center;
+        display: flex;
+        justify-content: center;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .panel {
+        max-width: 460px;
+        padding: 32px;
+        text-align: center;
+      }
+      .title {
+        font-size: 17px;
+        font-weight: 600;
+        margin: 0 0 10px;
+      }
+      .body {
+        color: #57534d;
+        font-size: 14px;
+        line-height: 1.55;
+        margin: 0 0 6px;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin: 22px 0 0;
+      }
+      button {
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        border-radius: 8px;
+        padding: 9px 16px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+          border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      button:disabled { cursor: default; opacity: 0.6; }
+      /* Monochrome primary: near-black on the warm off-white. */
+      .primary { background: #1a1916; color: #faf9f7; }
+      .primary:hover { background: #0d0c0a; }
+      .secondary { background: transparent; color: #1a1916; border-color: rgba(26, 25, 22, 0.2); }
+      .secondary:hover { border-color: rgba(26, 25, 22, 0.36); }
+      .status {
+        color: #8f8b84;
+        font-size: 12px;
+        line-height: 1.5;
+        margin: 12px 0 0;
+        min-height: 16px;
+      }
+      .email {
+        color: #8f8b84;
+        font-size: 13px;
+        line-height: 1.5;
+        margin: 14px 0 0;
+      }
+      .email a { color: #1a1916; text-decoration: underline; text-underline-offset: 2px; }
+      .hint {
+        color: #8f8b84;
+        font-size: 13px;
+        line-height: 1.5;
+        margin: 16px 0 0;
+      }
+      @media (prefers-color-scheme: dark) {
+        html, body { background: #1a1917; color: #e8e4dc; }
+        .body { color: #9a9690; }
+        .hint, .status, .email { color: #6e6b65; }
+        /* Dark inverts the monochrome pair — a near-black button would vanish
+           against the dark bg, so use a light button with dark text. */
+        .primary { background: #e8e4dc; color: #1a1917; }
+        .primary:hover { background: #f2ede4; }
+        .secondary { color: #e8e4dc; border-color: rgba(232, 228, 220, 0.28); }
+        .secondary:hover { border-color: rgba(232, 228, 220, 0.5); }
+        .email a { color: #e8e4dc; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <p class="title">OpenDesign keeps closing on this device</p>
+      <p class="body">The app window crashed several times in a row, so it has paused to avoid getting stuck reloading.</p>
+      <p class="body">It will try to recover on its own in a few minutes.</p>
+      <div class="actions">
+        <button id="report" class="primary">Report a problem</button>
+        <button id="logs" class="secondary">Save logs…</button>
+      </div>
+      <p class="hint" id="diag-note">Saved logs include a crash memory snapshot so we can find the cause. Nothing is sent unless you choose to share it.</p>
+      <p class="status" id="status" aria-live="polite"></p>
+      <p class="email" id="email-line">Prefer email? <a href="#" id="email">Contact ${SUPPORT_EMAIL}</a></p>
+      <p class="hint">If this keeps happening, quitting and reinstalling OpenDesign usually resolves it.</p>
+    </div>
+    <script>
+      (function () {
+        var issueUrl = ${JSON.stringify(issueUrl)};
+        var mailtoUrl = ${JSON.stringify(mailtoUrl)};
+        var host = window.__od__;
+        var diag = window.openDesignDesktop;
+        var report = document.getElementById("report");
+        var logs = document.getElementById("logs");
+        var emailLine = document.getElementById("email-line");
+        var email = document.getElementById("email");
+        var status = document.getElementById("status");
+        function say(t) { if (status) status.textContent = t; }
+        var canOpen = host && typeof host.openExternal === "function";
+        // Actions reuse IPC the preload already exposes; if the bridge is
+        // missing (preload failed to load) hide the dead control instead of a
+        // no-op.
+        if (report) {
+          if (canOpen) {
+            report.addEventListener("click", function () { host.openExternal(issueUrl); });
+          } else { report.style.display = "none"; }
+        }
+        if (email) {
+          if (canOpen) {
+            email.addEventListener("click", function (e) { e.preventDefault(); host.openExternal(mailtoUrl); });
+          } else if (emailLine) { emailLine.style.display = "none"; }
+        }
+        if (logs) {
+          if (diag && typeof diag.exportDiagnostics === "function") {
+            logs.addEventListener("click", function () {
+              logs.disabled = true;
+              say("Saving logs…");
+              Promise.resolve(diag.exportDiagnostics()).then(function (r) {
+                if (r && r.ok) say("Logs saved — please attach that file to your report.");
+                else if (r && r.cancelled) say("");
+                else say("Could not save logs.");
+              }).catch(function () { say("Could not save logs."); }).then(function () { logs.disabled = false; });
+            });
+          } else { logs.style.display = "none"; }
+        }
+      })();
+    </script>
+  </body>
+</html>`)}`;
+}
+
+/**
  * Boot phases surfaced as a muted status line under the splash logo. The cold
  * boot on a slow machine can hold the splash's settled final frame for many
  * seconds; the stage text, the step counter ("3/7"), the filling progress bar,
@@ -1019,7 +1397,7 @@ const SPLASH_STAGE_SEQUENCE: readonly SplashBootStage[] = [
 ];
 
 const SPLASH_STAGE_LABELS: Record<SplashBootStage, string> = {
-  starting: "Starting Open Design",
+  starting: "Starting OpenDesign",
   engine: "Starting the local engine",
   engineReady: "Local engine ready",
   interface: "Preparing the interface",
@@ -1122,6 +1500,22 @@ export type SplashWindowHandle = {
 };
 
 /**
+ * Pin Electron's native appearance to light.
+ *
+ * The app has one theme now, so `themeSource` is not a preference to sync — it
+ * is a constant. Leaving it at Electron's `system` default lets a dark-mode OS
+ * colour everything the web layer does not own: the macOS vibrancy glass
+ * (`vibrancy: "under-window"`), native menus and dialogs, and the renderer's
+ * own `prefers-color-scheme` before `data-theme` is stamped.
+ *
+ * Idempotent, so both the splash path and the `od:appearance:set-theme` handler
+ * can call it.
+ */
+export function pinNativeAppearanceToLight(): void {
+  nativeTheme.themeSource = "light";
+}
+
+/**
  * Create and immediately show the light brand-splash window. The packaged entry
  * calls this BEFORE awaiting the daemon/web sidecars so the animation masks the
  * whole cold boot (no black no-window gap); the desktop runtime then adopts it
@@ -1130,6 +1524,12 @@ export type SplashWindowHandle = {
  * + matching size so the reveal swap reads as a single window, never a flash.
  */
 export function createSplashWindow(): SplashWindowHandle {
+  // OpenDesign ships light-only (the theme setting was removed), so pin the
+  // native appearance before the first window exists. Electron defaults
+  // `themeSource` to `system`, which paints the macOS vibrancy glass and the
+  // native chrome dark on a dark-mode Mac — visible on the splash and again in
+  // the gap before the renderer's `od:appearance:set-theme` lands.
+  pinNativeAppearanceToLight();
   // Stamp creation time at the instant the window appears (see SplashWindowHandle).
   const startedAt = Date.now();
   const splash = new BrowserWindow({
@@ -1139,7 +1539,7 @@ export function createSplashWindow(): SplashWindowHandle {
     height: 900,
     resizable: false,
     show: true,
-    title: "Open Design",
+    title: "OpenDesign",
     width: 1280,
     webPreferences: {
       contextIsolation: true,
@@ -1263,7 +1663,25 @@ function installWindowChromeCssHook(window: BrowserWindow): void {
     void applyWindowChromeCss(window).catch((error: unknown) => {
       console.error("desktop window chrome CSS injection failed", error);
     });
+    void syncWindowFullscreenClass(window);
   });
+  window.on("enter-full-screen", () => void syncWindowFullscreenClass(window));
+  window.on("leave-full-screen", () => void syncWindowFullscreenClass(window));
+}
+
+/** Mirrors the macOS fullscreen state onto <html> so the injected window
+ *  chrome CSS can reposition the tab-strip home pill (the traffic lights
+ *  disappear in fullscreen). */
+async function syncWindowFullscreenClass(window: BrowserWindow): Promise<void> {
+  if (process.platform !== "darwin" || window.isDestroyed()) return;
+  const flag = window.isFullScreen();
+  try {
+    await window.webContents.executeJavaScript(
+      `document.documentElement.classList.toggle('is-window-fullscreen', ${flag ? "true" : "false"});`,
+    );
+  } catch (error: unknown) {
+    console.error("desktop fullscreen class sync failed", error);
+  }
 }
 
 function desktopPetUrl(baseUrl: string): string {
@@ -1342,8 +1760,10 @@ function showWindowButtons(window: BrowserWindow): void {
 // window minimized or hidden even when constructed with show:true,
 // leaving users unable to locate the window. Cross-platform safe: only
 // acts when the window is actually minimized or hidden, preserving any
-// user-adjusted window state.
-function ensureWindowVisible(window: BrowserWindow): void {
+// user-adjusted window state. Also the revealed path of `DesktopRuntime.show()`
+// (deeplink hand-off / external show): restore-before-focus is what brings a
+// minimized client back, so exported for regression coverage.
+export function ensureWindowVisible(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   if (window.isMinimized()) window.restore();
   if (!window.isVisible()) window.show();
@@ -1541,7 +1961,16 @@ function checkOptionsFromHost(options: unknown): { autoDownload?: boolean } | un
 
 async function reportRendererCrash(
   options: DesktopRuntimeOptions,
-  properties: { reason: string; exit_code: number | null },
+  properties: {
+    reason: string;
+    exit_code: number | null;
+    loop_tripped?: boolean;
+    // Set on the bounded "recovery-attempt" signal (reason === "recovery-attempt"):
+    // the Nth time the breaker re-armed and tried to actively recover this
+    // session. Lets triage see chronic loopers (index keeps climbing) apart from
+    // devices that recovered (no further recovery-attempt events).
+    recovery_attempt?: number;
+  },
 ): Promise<void> {
   try {
     // discoverDaemonUrl returns the real http://127.0.0.1:<port> URL the
@@ -1560,6 +1989,11 @@ async function reportRendererCrash(
         properties: {
           reason: properties.reason,
           exit_code: properties.exit_code,
+          // Marks the single crash that tripped the loop breaker, so a crash
+          // loop is one flagged event instead of thousands of anonymous ones.
+          loop_tripped: properties.loop_tripped ?? false,
+          // Present on the bounded recovery-attempt signal; null on real crashes.
+          recovery_attempt: properties.recovery_attempt ?? null,
         },
       }),
     });
@@ -1614,6 +2048,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     ipcMain.removeHandler(channel);
   }
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
+    // http(s) as before, plus a mailto strictly to our support address (the
+    // crash screen's "Email us"); no other scheme opens.
+    if (isSupportMailtoUrl(url)) return openFirstPartyMailto(url);
     if (!isHttpUrl(url)) return false;
     try {
       await shell.openExternal(url);
@@ -1638,7 +2075,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // import boundary while leaving web-only deployments untouched.
   ipcMain.handle(
     "dialog:pick-and-import",
-    async (event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
+    async (event, init?: OpenDesignHostProjectImportInit) => {
       // Defensive failsafe for non-production runtimes (test harnesses
       // that construct createDesktopRuntime without a secret). Round-5
       // production wiring in runDesktopMain ALWAYS passes the per-process
@@ -1805,10 +2242,21 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // True while a `tick()` is mid-flight, so load failures do not schedule two
   // independent polling loops.
   let ticking = false;
+  // Bounds the reload loop when the renderer crashes deterministically (a
+  // GPU/V8 CHECK, a corrupt profile): without it a wedged device reloads →
+  // crashes → reloads forever, staying blank and flooding telemetry (one
+  // 0.14.0 machine logged 26k renderer-crash events in a day). When it opens we
+  // park on a recoverable error screen and re-arm after a quiet cooldown.
+  const rendererCrashLoop = new RendererCrashLoopBreaker();
+  // Monotonic per session: how many times the breaker re-armed and tried to
+  // recover (a passive reload). Not reset on a successful load, so a chronic
+  // looper's index keeps climbing while a recovered device simply stops
+  // emitting recovery-attempt events.
+  let rendererRecoveryAttempts = 0;
 
   const consoleEntries: DesktopConsoleEntry[] = [];
   const petWindow = createDesktopPetWindow(preloadPath, options.osLocale);
-  const windowTitle = options.windowTitle ?? "Open Design";
+  const windowTitle = options.windowTitle ?? "OpenDesign";
   const window = new BrowserWindow({
     height: 900,
     icon: resolveDesktopIconPath(),
@@ -1821,7 +2269,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // Starts hidden: the splash window is what the user sees while the real web
     // app loads in here. We reveal this window only once the app has actually
     // mounted (see `revealWhenReady` below), so there is never a flash of the
-    // web's own "Loading Open Design…" shell.
+    // web's own "Loading OpenDesign…" shell.
     show: false,
     title: windowTitle,
     autoHideMenuBar: true,
@@ -1840,6 +2288,34 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+  const previewFrameNameByRoutingId = new Map<string, string>();
+  const previewFrameRoutingKey = (processId: number, routingId: number) =>
+    `${processId}:${routingId}`;
+  const rememberPreviewFrameName = (frame: WebFrameMain | null | undefined) => {
+    if (!frame?.name.startsWith("od-artifact-preview-srcdoc-")) return;
+    const key = previewFrameRoutingKey(frame.processId, frame.routingId);
+    previewFrameNameByRoutingId.set(key, frame.name);
+    // Routing IDs are unique for a frame lifetime, but this process can run
+    // for days. Keep the late-failure lookup bounded without retaining frame
+    // objects after Chromium destroys them.
+    if (previewFrameNameByRoutingId.size > 512) {
+      const oldestKey = previewFrameNameByRoutingId.keys().next().value;
+      if (oldestKey) previewFrameNameByRoutingId.delete(oldestKey);
+    }
+  };
+  window.webContents.on("frame-created", (_event, details) => {
+    const frame = details.frame;
+    if (!frame) return;
+    rememberPreviewFrameName(frame);
+    frame.on("dom-ready", () => rememberPreviewFrameName(frame));
+  });
+  window.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame || !isPreviewTransportNavigationUrl(details.url)) return;
+    // `did-fail-load` can arrive after Chromium has destroyed the frame, at
+    // which point webFrameMain.fromId() and frame-created/dom-ready are too
+    // late to recover its name. Snapshot the identity when navigation starts.
+    rememberPreviewFrameName(details.frame);
+  });
   window.on("page-title-updated", (event) => {
     event.preventDefault();
     window.setTitle(windowTitle);
@@ -1862,15 +2338,42 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       url: window.webContents.getURL(),
     });
   });
-  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+  window.webContents.on("did-fail-load", (
+    _event,
+    errorCode,
+    errorDescription,
+    validatedURL,
+    isMainFrame,
+    frameProcessId,
+    frameRoutingId,
+  ) => {
+    const failedFrame = isMainFrame
+      ? undefined
+      : webFrameMain.fromId(frameProcessId, frameRoutingId);
+    const cachedFrameName = isMainFrame
+      ? undefined
+      : previewFrameNameByRoutingId.get(previewFrameRoutingKey(frameProcessId, frameRoutingId));
+    const frameName = failedFrame?.name || cachedFrameName;
     console.error("[open-design desktop] main window did-fail-load", {
       errorCode,
       errorDescription,
+      frameName,
+      frameProcessId,
+      frameRoutingId,
       isMainFrame,
       pendingUrl,
       validatedURL,
       url: window.webContents.getURL(),
     });
+    const failure = previewNavigationFailureFromDidFailLoad({
+      errorCode,
+      eventId: ++previewNavigationFailureEventSequence,
+      ...(frameName ? { frameName } : {}),
+      isMainFrame,
+      occurredAtMs: Date.now(),
+      validatedUrl: validatedURL,
+    });
+    if (failure) window.webContents.send(PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL, failure);
   });
   window.on("unresponsive", () => {
     console.error("[open-design desktop] main window unresponsive", {
@@ -1893,19 +2396,58 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // PostHog with `device_id = installationId`. Best-effort: a failure to
   // reach the daemon must not block the crash recovery flow.
   window.webContents.on("render-process-gone", (_event, details) => {
+    // During app quit / teardown the renderer goes away and the window (and its
+    // webContents) can already be destroyed when this fires. Reading getURL()
+    // then throws "Object has been destroyed" as a fatal uncaught exception, so
+    // guard the same way `sendUpdaterStatus` does below and skip crash-report /
+    // recovery work once the window is already on its way out.
+    const gone = window.isDestroyed() || window.webContents.isDestroyed();
     console.error("[open-design desktop] main window render-process-gone", {
       exitCode: details.exitCode,
       reason: details.reason,
-      url: window.webContents.getURL(),
+      url: gone ? null : window.webContents.getURL(),
     });
-    void reportRendererCrash(options, {
-      reason: details.reason,
-      exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
-    });
-    // A clean-exit is intentional teardown; a crash / OOM / OS kill of a
-    // backgrounded renderer leaves the window blank, so flag it for the poll
-    // loop to reload the app.
-    if (details.reason !== "clean-exit") markRendererFailed();
+    // During app quit / teardown the window is already destroyed; skip all
+    // crash-loop bookkeeping, telemetry, and recovery (mirrors the getURL guard
+    // above — a clean teardown must not look like a crash).
+    if (gone) return;
+    // A clean-exit is intentional teardown; only a crash / OOM / OS kill feeds
+    // the crash-loop breaker and triggers recovery.
+    const isCrash = details.reason !== "clean-exit";
+    const outcome = isCrash
+      ? rendererCrashLoop.recordCrash(Date.now())
+      : { tripped: false, suppressTelemetry: rendererCrashLoop.isOpen(), justOpened: false };
+    // Report every crash up to and including the one that trips the breaker so
+    // the loop is visible in analytics, then go quiet — one wedged device must
+    // not emit tens of thousands of identical events.
+    if (!outcome.suppressTelemetry) {
+      void reportRendererCrash(options, {
+        reason: details.reason,
+        exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
+        loop_tripped: outcome.tripped,
+      });
+    }
+    if (!isCrash) return;
+    if (outcome.tripped) {
+      // Breaker open: stop the poll loop from cycling a deterministic crash.
+      // Show the recoverable error screen once (on the opening crash) instead
+      // of reloading into another blank window; the loop re-arms and attempts
+      // one passive recovery reload after a quiet cooldown.
+      if (outcome.justOpened) {
+        console.warn(
+          "[open-design desktop] renderer crash-loop breaker OPEN — parking; will attempt recovery after cooldown",
+          { reason: details.reason, exitCode: details.exitCode },
+        );
+        showRendererCrashScreen({
+          reason: details.reason,
+          exitCode: typeof details.exitCode === "number" ? details.exitCode : null,
+        });
+      }
+      return;
+    }
+    // A crash / OOM / OS kill of a backgrounded renderer leaves the window
+    // blank, so flag it for the poll loop to reload the app.
+    markRendererFailed();
   });
   // A failed main-frame navigation parks the renderer on chrome-error:// (blank
   // white) with no auto-retry. errorCode -3 (ABORTED) is a normal navigation
@@ -1936,8 +2478,22 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
   const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
     if (event.sender !== window.webContents) {
-      throw new Error("host IPC is only available to the main Open Design window");
+      throw new Error("host IPC is only available to the main OpenDesign window");
     }
+  };
+  const discoverUpdateDaemonBaseUrl = async (): Promise<string> => {
+    const daemonUrl = await options.discoverDaemonUrl?.();
+    const baseUrl = daemonUrl ?? await options.discoverUrl();
+    if (baseUrl == null) throw new Error("daemon URL is unavailable");
+    return baseUrl;
+  };
+  const guardedUpdaterStatus = async (rawOptions: unknown): Promise<DesktopUpdateStatusSnapshot | null> => {
+    const request = parseUpdateActionRequest(rawOptions);
+    if (request.force) return null;
+    const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
+    if (safety.state === "clear") return null;
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    return { ...status, error: updateRestartSafetyError(safety) };
   };
   window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
     const src = typeof params.src === "string" ? params.src : "";
@@ -2011,20 +2567,38 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     sendUpdaterStatus(status);
     return status;
   });
+  ipcMain.handle("od:update:clear-cache", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.clearCache() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
   ipcMain.handle("od:update:download", async (event) => {
     requireMainWindowSender(event);
     const status = await (options.updater?.downloadUpdate() ?? unavailableUpdaterStatus());
     sendUpdaterStatus(status);
     return status;
   });
-  ipcMain.handle("od:update:install", async (event) => {
+  ipcMain.handle("od:update:install", async (event, updaterOptions: unknown) => {
     requireMainWindowSender(event);
+    const blocked = await guardedUpdaterStatus(updaterOptions);
+    if (blocked != null) {
+      // Preflight denials travel only on the IPC response. The updater store
+      // itself is still healthy, so broadcasting the synthetic error through
+      // the shared status channel would make unrelated subscribers observe a
+      // failure that never happened.
+      return blocked;
+    }
     const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
     sendUpdaterStatus(status);
     return status;
   });
-  ipcMain.handle("od:update:quit", async (event): Promise<OpenDesignHostActionResult> => {
+  ipcMain.handle("od:update:quit", async (event, updaterOptions: unknown): Promise<OpenDesignHostActionResult> => {
     requireMainWindowSender(event);
+    const blocked = await guardedUpdaterStatus(updaterOptions);
+    if (blocked?.error != null) {
+      return { details: blocked.error.details, ok: false, reason: blocked.error.code };
+    }
     const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
     if (status.installResult == null) {
       return { ok: false, reason: "installer has not been opened" };
@@ -2035,12 +2609,33 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     setTimeout(() => options.requestQuit?.(), 0);
     return { ok: true };
   });
+  ipcMain.handle("od:update:set-menu-labels", async (event, rawLabels: unknown): Promise<OpenDesignHostActionResult> => {
+    requireMainWindowSender(event);
+    const labels = parseDesktopUpdateMenuLabels(rawLabels);
+    if (labels == null) return { ok: false, reason: "invalid updater menu labels" };
+    options.onUpdateMenuLabels?.(labels);
+    return { ok: true };
+  });
 
   ipcMain.removeAllListeners("desktop-pet:set-visible");
   ipcMain.on("desktop-pet:set-visible", (event, visible: unknown) => {
     if (petWindow.isDestroyed() || event.sender !== petWindow.webContents) return;
     if (visible) petWindow.showInactive();
     else petWindow.hide();
+  });
+
+  ipcMain.removeAllListeners("od:appearance:set-theme");
+  ipcMain.on("od:appearance:set-theme", (event, theme: unknown) => {
+    if (window.isDestroyed() || event.sender !== window.webContents) return;
+    if (theme !== "light" && theme !== "dark" && theme !== "system") return;
+    // Pin the native appearance to the app theme. The macOS frosted window
+    // (vibrancy: under-window) draws its glass in the SYSTEM appearance by
+    // default, so a light app over a dark OS sat on dark glass and read as a
+    // muddy gray (#94); forcing the native theme keeps the glass material in
+    // step with the app's tokens. The host protocol still carries all three
+    // values as generic infrastructure, but the app ships light-only, so this
+    // is the same value `pinNativeAppearanceToLight` already set at startup.
+    nativeTheme.themeSource = theme;
   });
 
   ipcMain.removeHandler('od:print-pdf');
@@ -2091,10 +2686,22 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedChildWindowUrl(url)) return { action: "allow" };
     if (isHttpUrl(url)) void shell.openExternal(url);
+    else if (isFirstPartyMailtoUrl(url)) void openFirstPartyMailto(url);
     return { action: "deny" };
   });
 
   window.webContents.on("will-navigate", (event, url) => {
+    // A `mailto:` never belongs in this window. Hand it to the local mail
+    // client and cancel the navigation, otherwise Electron drops it and the
+    // user sees the page sit there unchanged. `openFirstPartyMailto` also
+    // covers the machine whose OS-level mailto handler is a web browser —
+    // recvpZzUroEPUT: `shell.openExternal(mailto:)` there just focuses the
+    // browser on its current page and no compose window ever opens.
+    if (isFirstPartyMailtoUrl(url)) {
+      event.preventDefault();
+      void openFirstPartyMailto(url);
+      return;
+    }
     if (!isHttpUrl(url) || url === currentUrl) return;
     const currentOrigin = currentUrl ? new URL(currentUrl).origin : null;
     const nextOrigin = new URL(url).origin;
@@ -2201,6 +2808,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     splashStartedAt = created.startedAt;
   }
 
+  let pendingUpdateDialogRequest: OpenDesignHostUpdaterOpenDialogRequest | null = null;
   let revealed = false;
   let revealing = false;
 
@@ -2211,6 +2819,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     window.show();
     window.focus();
     ensureWindowVisible(window);
+    if (pendingUpdateDialogRequest != null) {
+      window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, pendingUpdateDialogRequest);
+      pendingUpdateDialogRequest = null;
+    }
     if (splash != null && !splash.isDestroyed()) splash.close();
     // The app is now truly up (mounted + shown). Fire once — revealed guards
     // re-entry — so callers can mark "reached running".
@@ -2223,7 +2835,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   // Hold the splash until BOTH (a) the web bundle reports it has mounted — it
   // sets `data-od-app-mounted="1"` on first paint of the real UI — so we never
-  // reveal the web's own dark "Loading Open Design…" shell, and (b) the splash
+  // reveal the web's own dark "Loading OpenDesign…" shell, and (b) the splash
   // has been up at least MIN_SPLASH_MS so the brand clip plays through. A hard
   // ceiling guarantees the user is never stranded on the splash if the mount
   // signal never arrives.
@@ -2263,8 +2875,44 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // the `rendererFailed` branch) and clears the flag once the load succeeds. If
   // the web server is still unreachable, discovery returns null and the loop
   // naturally backs off to RUNNING_POLL_MS until it returns.
+  // Park the wedged window on a static, self-contained error page (trivial HTML
+  // that the failing app renderer cannot take down) instead of an endless blank
+  // reload. The page tells the user recovery is automatic, and offers two
+  // actions wired to IPC the preload already exposes — "Report a problem" opens
+  // a prefilled GitHub issue, "Save logs…" exports the diagnostics bundle (the
+  // daemon is still alive on a renderer crash, so the bundle is available).
+  const showRendererCrashScreen = (crash: { reason: string; exitCode: number | null }) => {
+    if (stopped || window.isDestroyed()) return;
+    // Loading the crash screen resets currentUrl so the next successful reload
+    // (after re-arm) is treated as a fresh navigation.
+    currentUrl = null;
+    pendingUrl = null;
+    void window
+      .loadURL(
+        createRendererCrashHtml({
+          appVersion: app.getVersion(),
+          platform: process.platform,
+          osVersion: release(),
+          reason: crash.reason,
+          exitCode: crash.exitCode,
+        }),
+      )
+      .catch(() => undefined);
+    // Make the crash screen the revealed, active window and tear down the
+    // splash. Without this, a crash loop that trips DURING startup (before
+    // revealWhenReady() set revealed=true) would leave the splash open, and the
+    // runtime's show() keeps focusing the splash while !revealed — so a user
+    // re-focusing the app during a startup crash loop is sent back to the boot
+    // splash instead of this recovery screen. revealMainWindow() no-ops when the
+    // app already revealed normally (the common crash-after-boot case).
+    revealMainWindow();
+  };
+
   const markRendererFailed = () => {
     if (stopped || window.isDestroyed()) return;
+    // Breaker open: stay parked on the crash screen; the tick's cooldown re-arm
+    // is the only path back to reloading.
+    if (rendererCrashLoop.isOpen()) return;
     rendererFailed = true;
     // Mid-tick failures (a rejecting loadURL) are rescheduled by the tick's own
     // catch/success path; scheduling here too would spawn a second poll loop.
@@ -2281,6 +2929,32 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
     ticking = true;
     try {
+      // Crash-loop breaker open: park on the crash screen instead of reloading a
+      // deterministically-crashing renderer. Re-arm once the cooldown has
+      // elapsed with no further crash, then fall through for one reload attempt.
+      // The retry is intentionally PASSIVE: mutating a wedged device's state
+      // (clearing caches/storage) on every cooldown risked amplifying the churn
+      // without helping a GPU/V8-CHECK crash, so we only stop the loop and let a
+      // transient fault clear on its own. The attempt is still logged + counted
+      // so the recovery is observable.
+      if (rendererCrashLoop.isOpen()) {
+        if (rendererCrashLoop.rearmIfCooledDown(Date.now())) {
+          rendererRecoveryAttempts += 1;
+          console.info(
+            "[open-design desktop] renderer crash-loop cooldown elapsed — attempting recovery reload",
+            { attempt: rendererRecoveryAttempts },
+          );
+          void reportRendererCrash(options, {
+            reason: "recovery-attempt",
+            exit_code: null,
+            recovery_attempt: rendererRecoveryAttempts,
+          });
+          rendererFailed = true;
+        } else {
+          schedule(RUNNING_POLL_MS);
+          return;
+        }
+      }
       const url = await options.discoverUrl();
       // Reload when the discovered URL changes, OR when the renderer is in a
       // failed/blank state (URL unchanged but the page died), so a window
@@ -2350,6 +3024,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       }
       unsubscribeUpdater();
       ipcMain.removeAllListeners("desktop-pet:set-visible");
+      ipcMain.removeAllListeners("od:appearance:set-theme");
       for (const channel of UPDATER_IPC_CHANNELS) {
         ipcMain.removeHandler(channel);
       }
@@ -2394,6 +3069,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     exportPdf(input) {
       return exportPdfFromHtml(input);
     },
+    openUpdateDialog(request) {
+      if (window.isDestroyed()) return;
+      if (!revealed) {
+        pendingUpdateDialogRequest = request;
+        return;
+      }
+      window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, request);
+      window.show();
+      window.focus();
+    },
     renderSlides(input) {
       return renderDeckSlides(input);
     },
@@ -2420,8 +3105,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         }
         return;
       }
-      window.show();
-      window.focus();
+      // A minimized window must be restored before focus — `focus()` alone
+      // leaves it in the Dock, silently breaking the deeplink hand-off whose
+      // entire payload is this bring-to-front.
+      ensureWindowVisible(window);
     },
     status() {
       return {

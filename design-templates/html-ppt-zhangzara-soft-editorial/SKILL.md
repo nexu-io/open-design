@@ -1,22 +1,34 @@
 ---
 name: html-ppt-zhangzara-soft-editorial
+en_name: "Deliver a Digital-Transformation Roadmap like a Big-Four Partner"
+zh_name: "像四大合伙人一样交付数字化转型路线图"
 description: |
-  Soft Editorial — Cormorant Garamond serif on warm paper with sage, blush, and lemon accents. Anything that should feel literary, elegant, and unhurried: editorial features, longform brand stories, gallery / museum decks, advisory deliverables, wedding / lifestyle media, founder essays.
+  A digital-transformation roadmap for a legacy insurer — the diagnosis, the sequenced bets, and the operating rhythm to land them. Built as a decision-grade consulting deck for client executives.
+en_description: |
+  A digital-transformation roadmap for a legacy insurer — the diagnosis, the sequenced bets, and the operating rhythm to land them. Built as a decision-grade consulting deck for client executives.
+zh_description: |
+  像四大合伙人一样交付数字化转型路线图——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "consulting"
+  - "consulting-final-deck"
+  - "strategy"
+  - "consulting-deliverable"
+  - "client"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-soft-editorial"
 triggers:
-  - "soft-editorial"
-  - "zhangzara-soft-editorial"
-  - "Soft Editorial"
-  - "literary"
-  - "elegant"
-  - "considered"
-  - "editorial feature"
-  - "longform brand story"
+  - "consulting-final-deck"
+  - "consulting"
+  - "Deliver a Digital-Transformation Roadmap like a Big-Four Partner"
+  - "像四大合伙人一样交付数字化转型路线图"
+  - "consulting-deliverable"
+  - "strategy"
+  - "client"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/soft-editorial"
   upstream_license: MIT
   preview:
@@ -26,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "consulting"
+  scenario: "strategy"
+  example_prompt: "Create \"Deliver a Digital-Transformation Roadmap like a Big-Four Partner\" as a decision-grade Consulting deck in this template's own visual system. Subject: A digital-transformation roadmap for a legacy insurer — the diagnosis, the sequenced bets, and the operating rhythm to land them. Audience: client executives. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a client know what to do Monday morning."
 ---
 
 # Soft Editorial

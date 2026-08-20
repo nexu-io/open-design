@@ -24,6 +24,7 @@
     "en": "Application"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "App dashboard with purple-themed aesthetic, top-bar navigation, card-based layouts, and developer-first workflows.",
   "description_i18n": {
     "zh-CN": "紫色主题的应用仪表板，包含顶栏导航、卡片式布局和开发者优先的工作流程。",

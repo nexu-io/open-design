@@ -16,6 +16,7 @@
 import { spawn } from 'node:child_process';
 import { access, constants as fsConstants } from 'node:fs/promises';
 import path from 'node:path';
+import { createCommandInvocation } from '@open-design/platform';
 import type { Express } from 'express';
 import type {
   HostEditor,
@@ -24,9 +25,12 @@ import type {
   OpenProjectInEditorResponse,
 } from '@open-design/contracts';
 import type { RouteDeps } from '../server-context.js';
+import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
 export interface RegisterHostToolsRoutesDeps
-  extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles'> {}
+  extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles'> {
+  authorizeProjectRequest: AuthorizeProjectRequest;
+}
 
 export type RealPlatform = 'darwin' | 'win32' | 'linux';
 export type Platform = RealPlatform | 'unknown';
@@ -234,10 +238,20 @@ export function launchHostTool(
   return new Promise((resolve) => {
     // Detached so the daemon doesn't keep the child alive; same shape paseo
     // uses (CLI shim, `open -a`, Explorer, xdg-open, etc.).
-    const child = spawn(command, args, {
+    //
+    // Do NOT pass `shell: true`. On Windows that runs the launch through cmd.exe,
+    // which shell-interprets the args — and one of them is the (project-derived)
+    // directory path, so a path containing `&`, `|`, `^`, `>` etc. would inject
+    // commands. `command` is already a resolved absolute path (incl. .exe/.cmd),
+    // so route it through `createCommandInvocation`, which runs a .cmd/.bat via
+    // cmd.exe with CommandLineToArgvW-safe verbatim args and everything else
+    // directly — no shell, no metacharacter interpretation.
+    const invocation = createCommandInvocation({ command, args });
+    const child = spawn(invocation.command, invocation.args, {
       detached: true,
       stdio: 'ignore',
-      shell: process.platform === 'win32',
+      windowsHide: process.platform === 'win32',
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
     let settled = false;
     child.once('spawn', () => {
@@ -333,6 +347,7 @@ export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRout
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
+      if (!await ctx.authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       const resolvedDir = projectHostOpenDir(
         PROJECTS_DIR,
         project,

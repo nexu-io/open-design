@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-hps-retro-tv",
-  "title": "Retro TV",
+  "title": "Turn Home Movies into a Family-History Story like a Documentary Editor",
   "title_i18n": {
-    "en": "Retro TV",
-    "zh-CN": "复古显像管"
+    "en": "Turn Home Movies into a Family-History Story like a Documentary Editor",
+    "zh-CN": "像纪录片剪辑师一样把家庭影像做成家族史",
+    "zh-TW": "像纪录片剪辑师一样把家庭影像做成家族史"
   },
   "version": "1.0.0",
-  "description": "80s/90s picture-tube deck — warm cream canvas with CRT scanlines on every slide (::before repeating-gradient) over a curved-glass tube vignette, amber #e67e14 / brick-red #c73a1f accents, Playfair Display headlines with heavy offset shadows, test-card color bars and antenna/dial inline-SVG decor. Single-file HTML, keyboard navigation, zero dependencies. Based on lewislulu/html-ppt-skill retro-tv. Use for nostalgic product launches, media or entertainment pitches, retrospectives, or any deck that wants warm broadcast-era television energy.",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. Built as a decision-grade story deck for family, close friends.",
   "description_i18n": {
-    "en": "80s/90s picture-tube deck — warm cream canvas with CRT scanlines on every slide (::before repeating-gradient) over a curved-glass tube vignette, amber #e67e14 / brick-red #c73a1f accents, Playfair Display headlines with heavy offset shadows, test-card color bars and antenna/dial inline-SVG decor. Single-file HTML, keyboard navigation, zero dependencies. Based on lewislulu/html-ppt-skill retro-tv. Use for nostalgic product launches, media or entertainment pitches, retrospectives, or any deck that wants warm broadcast-era television energy.",
-    "zh-CN": "80/90 年代显像管幻灯片——暖奶油底，每页叠加 CRT 扫描线（::before repeating-gradient），底层是显像管弧面暗角背景；琥珀 #e67e14 / 砖红 #c73a1f accent，Playfair Display 大标题配厚重偏移投影，检验图彩条与天线/旋钮内联 SVG 装饰。单文件 HTML、键盘翻页、零依赖。基于 lewislulu/html-ppt-skill 的 retro-tv 主题。适合怀旧产品发布、媒体娱乐提案、年度回顾等想要老电视机广播质感的演示。"
+    "en": "A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. Built as a decision-grade story deck for family, close friends.",
+    "zh-CN": "像纪录片剪辑师一样把家庭影像做成家族史——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像纪录片剪辑师一样把家庭影像做成家族史——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -33,7 +36,18 @@
     "scanlines",
     "nostalgia",
     "retro-80s",
-    "html-ppt"
+    "html-ppt",
+    "design",
+    "brand",
+    "visual-system",
+    "hps-retro-tv",
+    "life",
+    "travel-photo-essay-deck",
+    "personal",
+    "story",
+    "photo-essay",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -46,7 +60,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "personal",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -55,13 +69,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a {{deckType}} for {{audience}} about {{topic}}, {{slideCount}}, as a single-file HTML deck locked to the Retro TV theme (upstream lewislulu/html-ppt-skill `retro-tv`). Start from the seed `example.html` and replace slide content only — never rewrite the design system, the token sheet, or the runtime script. Locked visual spec: warm cream picture-tube canvas — the body background layers faint horizontal scanlines `repeating-linear-gradient(0deg,rgba(80,40,0,.06) 0 2px,transparent 2px 4px)` over a curved-glass vignette `radial-gradient(ellipse at center,#f7ecd0 0%,#e8d9b0 85%,#c9b888 100%)`, and EVERY slide carries the `.slide::before` CRT scanline overlay `repeating-linear-gradient(0deg,rgba(0,0,0,.035) 0 2px,transparent 2px 4px)` with slide content lifted to z-index 2 — keep both devices on every page, never paint an opaque slide background, never remove or dim the scanlines. Tokens: `--bg:#f5ecd7`, surfaces `--surface:#fbf5e2` / `--surface-2:#efe3c2`, warm ink text `--text-1:#2a1a08` / `--text-2:#6b4a22` / `--text-3:#a68656`, amber `--accent:#e67e14` leads with brick red `--accent-2:#c73a1f` and gold `--accent-3:#f2b544` support, gradient `--grad:linear-gradient(135deg,#c73a1f,#e67e14 55%,#f2b544)` reserved for display numerals and 1–2 highlight words, `--radius:10px`, chunky tube shadows `--shadow:0 6px 0 rgba(80,40,0,.12),0 12px 28px rgba(80,40,0,.15)` / `--shadow-lg:0 10px 0 rgba(80,40,0,.15),0 24px 50px rgba(80,40,0,.2)` (hard offset + soft blur together — never a plain flat shadow). Type: 'Playfair Display' (weights 700–900, italic for quotes and section numerals) for display headings with a heavy offset text-shadow like `3px 3px 0 rgba(80,40,0,.18)`, `.h1` in brick red `#c73a1f`; 'Inter'/'Noto Sans SC' body; 'JetBrains Mono' for code, pills and channel badges. Reuse only the broadcast decor devices already in the seed: scanline canvas + per-slide CRT overlay, SMPTE-style `.test-bars` color strips in the locked palette, antenna / dial-knob / tiny-TV inline SVGs stroked in warm browns (1–2 per slide max), the pulsing `.on-air` lamp pill, brick `CH 01` channel badges on step cards, and the giant italic outlined section numeral — this is a LIGHT warm-cream device: no dark backgrounds, no terminal/phosphor-green language, no window chrome, no colors or fonts outside this spec. Keep the seed's horizontal scroll-snap `section.slide` scaffold (one 100vw×100vh screen per slide, no internal scrolling), the fixed header/footer chrome with the N / total counter and progress bar, and the keyboard runtime (←/→/Space/PageUp/PageDown/Home/End navigation, #/N hash deep links). Compose pages from the upstream 31-layout catalog (cover → toc → section dividers → content layouts → big-number / chart / quote pages → thanks); rebuild any charts in pure CSS or inline SVG (no chart libraries, no external images or scripts); write real content with no lorem ipsum; put 1–3 sentences of speaker notes in each slide's hidden `.notes` block.",
-        "zh-CN": "为 {{audience}} 制作一套关于 {{topic}} 的 {{deckType}}（{{slideCount}}）：锁定复古显像管主题的单文件 HTML 幻灯片。从种子 example.html 出发，只替换内容，绝不重写设计系统和运行时脚本。锁定规格：暖奶油底 #f5ecd7，body 是扫描线 + 显像管弧面暗角双层背景，每页 .slide::before 叠加 CRT 扫描线（内容提到 z-index 2），扫描线不可移除或调淡；琥珀 #e67e14 主 accent，砖红 #c73a1f、金黄 #f2b544 辅助；Playfair Display 大标题配厚重偏移投影（h1 砖红），Inter/Noto Sans SC 正文，JetBrains Mono 频道徽章；装饰只用种子里已有的广播装置：检验图彩条、天线/旋钮/小电视内联 SVG、ON AIR 呼吸灯 pill、CH 01 频道徽章、巨型斜体描边章节数字——浅色暖调装置，禁止暗底、终端绿和窗口 chrome。版式从上游 31 版式目录选取，一屏一页不滚动，图表用纯 CSS/SVG 重建，真实内容不用 lorem ipsum，每页在隐藏 .notes 写演讲备注。其余细节遵循英文 query。"
+        "en": "Create \"Turn Home Movies into a Family-History Story like a Documentary Editor\" as a decision-grade Life & story deck in this template's own visual system. Subject: A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. Audience: family, close friends. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once.",
+        "zh-CN": "像纪录片剪辑师一样把家庭影像做成家族史。像纪录片剪辑师一样把家庭影像做成家族史——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。 主题：A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Retro TV · RERUN Broadcast Demo Deck"
+          "title": "Turn Home Movies into a Family-History Story like a Documentary Editor",
+          "title_i18n": {
+            "en": "Turn Home Movies into a Family-History Story like a Documentary Editor",
+            "zh-CN": "像纪录片剪辑师一样把家庭影像做成家族史",
+            "zh-TW": "像纪录片剪辑师一样把家庭影像做成家族史"
+          }
         }
       ]
     },
@@ -140,6 +159,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "life"
   }
 }

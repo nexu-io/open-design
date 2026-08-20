@@ -24,6 +24,7 @@
     "en": "Bento"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Modular grid layout with card-like blocks, clear hierarchy, soft spacing, and subtle visual contrast for organized, scannable interfaces.",
   "description_i18n": {
     "zh-CN": "模块化网格布局，包含卡片式区块、清晰的层级结构、柔和的间距和微妙的视觉对比，打造有序、易扫描的界面。",

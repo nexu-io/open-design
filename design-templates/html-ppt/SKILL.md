@@ -1,24 +1,34 @@
 ---
 name: html-ppt
-description: HTML PPT Studio — author professional static HTML presentations in many styles, layouts, and animations, all driven by templates. Use when the user asks for a presentation, PPT, slides, keynote, deck, slideshow, "幻灯片", "演讲稿", "做一份 PPT", "做一份 slides", a reveal-style HTML deck, a 小红书 图文, or any kind of multi-slide pitch/report/sharing document that should look tasteful and be usable with keyboard navigation. Triggers include keywords like "presentation", "ppt", "slides", "deck", "keynote", "reveal", "slideshow", "幻灯片", "演讲稿", "分享稿", "小红书图文", "talk slides", "pitch deck", "tech sharing", "technical presentation".
+en_name: "Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead"
+zh_name: "像一线咨询 AI 行业负责人一样讲清行业 AI"
+description: |
+  For consulting delivery work: turn diagnosis, frameworks, and project work into a client-adoptable action plan. Built around the core query "consulting-final-deck", with engagement manager judgment, buyer-ready proof, and this outcome: accept the recommendation and commit owners to the roadmap.
+en_description: |
+  For consulting delivery work: turn diagnosis, frameworks, and project work into a client-adoptable action plan. Built around the core query "consulting-final-deck", with engagement manager judgment, buyer-ready proof, and this outcome: accept the recommendation and commit owners to the roadmap.
+zh_description: |
+  咨询/客户交付场景：围绕 core query「consulting-final-deck」把粗糙材料整理成“像一线咨询 AI 行业负责人一样讲清行业 AI”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。
+tags:
+  - "consulting"
+  - "consulting-final-deck"
+  - "consulting-deliverable"
+  - "strategy"
+  - "client"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt"
 triggers:
-  - "ppt"
-  - "deck"
-  - "slides"
-  - "presentation"
-  - "keynote"
-  - "reveal"
-  - "slideshow"
-  - "幻灯片"
-  - "演讲稿"
-  - "分享稿"
-  - "talk slides"
-  - "pitch deck"
-  - "tech sharing"
-  - "technical presentation"
+  - "consulting-final-deck"
+  - "consulting"
+  - "Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead"
+  - "像一线咨询 AI 行业负责人一样讲清行业 AI"
+  - "consulting-deliverable"
+  - "strategy"
+  - "client"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -27,7 +37,8 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt 做一份 12 页的 HTML PPT。先帮我确认三件事：内容/页数/受众、主题（从 36 套里推荐 2-3 个）、起点全 deck 模板（pitch-deck / tech-sharing / weekly-report / xhs-post / presenter-mode-reveal 任选一个），对齐之后再开始写 slides。"
+  scenario: "strategy"
+  example_prompt: "Create \"Brief AI in Your Industry like a Tier-1 Consulting AI Vertical Lead\" as a Consulting delivery deck in the Html Ppt visual system. Scene: consulting-final-deck. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce a commercial-grade slide plan, written slides, visual direction, speaker-ready structure, and critic pass against this rubric: would a client know what to do Monday morning."
 ---
 
 # html-ppt — HTML PPT Studio
@@ -87,11 +98,13 @@ Only `presenter-mode-reveal` is designed from the ground up around the feature w
 Keyboard in presenter window: `← →` navigate (syncs audience) · `R` reset timer · `Esc` close popup.
 Keyboard in audience window: `S` open presenter · `T` cycle theme · `← →` navigate (syncs presenter) · `F` fullscreen · `O` overview.
 
-## Before you author anything — ALWAYS ask or recommend
+## Before you author anything — infer first, ask only when blocked
 
-**Do not start writing slides until you understand three things.** Either ask
-the user directly, or — if they already handed you rich content — propose a
-tasteful default and confirm.
+Before writing slides, resolve the three decisions below from the user's brief,
+project metadata, supplied content, and conversation. If they are sufficiently
+clear, choose a tasteful default and proceed without waiting for confirmation;
+state the choices briefly in the plan. Ask one consolidated clarification only
+when a missing answer would materially change the deck.
 
 1. **Content & audience.** What's the deck about, how many slides, who's
    watching (engineers / execs / 小红书读者 / 学生 / VC)?
@@ -105,19 +118,19 @@ tasteful default and confirm.
    - Academic / report → `academic-paper`, `editorial-serif`, `minimal-white`
    - Edgy / cyber / launch → `cyberpunk-neon`, `vaporwave`, `y2k-chrome`,
      `neo-brutalism`
-3. **Starting point.** One of the 14 full-deck templates, or scratch? Point
-   to the closest `templates/full-decks/<name>/` and ask if it fits. If the
+3. **Starting point.** One of the 14 full-deck templates, or scratch? Choose
+   the closest `templates/full-decks/<name>/`. If the
    user's content suggests something obvious (e.g. "我要做产品发布会" →
-   `product-launch`), propose it confidently instead of asking blindly.
+   `product-launch`), use it confidently instead of asking blindly.
 
-A good opening message looks like:
+A good clarification, when one is actually needed, follows the active
+`discovery-question-form` protocol and contains only unresolved fields. For
+example, if content and audience are known but the requested tone spans
+incompatible themes, ask one theme question with 2–3 recommended options. Do
+not repeat the form as a markdown checklist.
 
-> 我可以给你做这份 PPT！先确认三件事：
-> 1. 大致内容 / 页数 / 观众是谁？
-> 2. 风格偏好？我建议从这 3 个主题里选一个：`tokyo-night`（技术分享默认好看）、`xiaohongshu-white`（小红书风）、`corporate-clean`（正式汇报）。
-> 3. 要不要用我现成的 `tech-sharing` 全 deck 模板打底？
-
-Only after those are clear, scaffold the deck and start writing.
+If the known context already resolves them, scaffold the deck and start writing
+immediately.
 
 ## Quick start
 

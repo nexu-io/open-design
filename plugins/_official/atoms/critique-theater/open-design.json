@@ -4,10 +4,11 @@
   "name": "critique-theater",
   "title": "Critique theater",
   "version": "0.1.0",
+  "publishedAt": "2026-05-09T13:00:27Z",
   "description": "5-dimension critique panel; emits the critique.score signal that drives devloop convergence.",
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/critique-theater",

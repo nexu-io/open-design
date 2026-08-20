@@ -7,7 +7,7 @@ import type { DesktopUpdateChannel } from "@open-design/sidecar-proto";
 export const INSTALLER_OBSERVATION_SCHEMA_VERSION = 1;
 export const INSTALLER_OBSERVATION_KIND = "installer_apply_observation";
 
-export type InstallerObservationArtifactType = "dmg" | "installer";
+export type InstallerObservationArtifactType = "dmg" | "installer" | "payload";
 export type InstallerObservationResult = "pending" | "success" | "not_applied" | "unknown";
 export type InstallerObservationReason =
   | "installer_open_requested"

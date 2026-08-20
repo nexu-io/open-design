@@ -23,8 +23,8 @@ The shape is:
 
 `mocks/scripts/smoke-test.sh` confirms the mock CLIs *run* and emit
 events. It doesn't tell you whether the events have the *right shape*
-— a parser change in `apps/daemon/src/claude-stream.ts` or
-`json-event-stream.ts` could silently drop a field, rename
+— a parser change in `apps/daemon/src/runtimes/claude-stream.ts` or
+`runtimes/json-event-stream.ts` could silently drop a field, rename
 `sessionID` → `sessionId`, or stop emitting `turn_end`. The goldens
 are diffed by `apps/daemon/tests/mocks-golden.test.ts`; a regression
 makes that test fail loudly.
@@ -49,8 +49,12 @@ something.
 | `9a9522ec…events.json` | opencode | data-report session | 7 | Covers `step_start` / `step_finish` / `tool_use` / `cost` envelope |
 | `dcdff3b3…events.json` | codex | 14-tool refactor | 14 | High tool density; exercises `thread.started` + thread message streaming |
 
-Other agents (gemini / cursor-agent / plain / ACP / vela) aren't
-golden-tested here because their parsers either (a) emit only assistant
-text (gemini, cursor-agent, plain) — covered by simpler unit tests, or
-(b) use JSON-RPC over stdio rather than streamed stdout (ACP / vela)
-— which needs a different harness; see `apps/daemon/tests/acp.test.ts`.
+Other agents are not golden-tested here for different reasons:
+
+- `cursor-agent` and plain streams do not emit structured tool events and are
+  covered by simpler unit tests.
+- The retained Gemini parser emits structured `tool_use` / `tool_result`
+  events and is covered by `apps/daemon/tests/runtimes/json-event-stream.test.ts`,
+  but has no committed golden.
+- ACP / vela use JSON-RPC over stdio rather than streamed stdout and need a
+  different harness; see `apps/daemon/tests/acp.test.ts`.

@@ -29,7 +29,7 @@ import type { Brand, AssetKind } from "../schema.js";
 import { injectFontFaces, type FontFile } from "../fonts.js";
 import { prefetchBrand, type PrefetchResult } from "../prefetch.js";
 import type { BrandSystem, DesignTokens, SeedToken, ThemeAlgorithm } from "./types.js";
-import { deriveTokens } from "./derive.js";
+import { deriveTokens, defaultThemeAlgorithm } from "./derive.js";
 import { seedFromBrand, seedFromMaterial } from "./seed.js";
 import { tokensToJson, tokensToCssVars, tokensToThemeJson } from "./export.js";
 import { renderKitPage } from "./kit.js";
@@ -116,7 +116,7 @@ Everything below is *derived* — no token here was hand-authored.
 
 | Path | What it is |
 | --- | --- |
-| \`seed.json\` | The ~20-field SeedToken — the only authored surface. |
+| \`seed.json\` | Generated snapshot of the effective seed; persistent overrides live in \`brand.json.seed\`. |
 | \`tokens.default.json\` | Full derived DesignTokens (light). |
 | \`tokens.dark.json\` | Same seed, dark algorithm. |
 | \`tokens.compact.json\` | Same seed, compact (dense) algorithm. |
@@ -135,10 +135,12 @@ Everything below is *derived* — no token here was hand-authored.
 
 ## How to re-theme
 
-The whole system traces back to \`seed.json\`. To re-brand, change one field and
-re-run the engine — every downstream token, component and artifact follows.
+The whole system is regenerated from \`brand.json\` and optional
+\`brand.json.seed\` overrides. Persist authored overrides there, then run
+\`od brand finalize <brand-id>\` — every downstream token, component and artifact
+follows. Do not edit \`system/seed.json\` directly; finalize replaces it.
 
-- **Change the brand color:** edit \`colorPrimary\` in the seed (e.g. \`"#1677ff"\`).
+- **Change the brand color:** edit the accent role or \`seed.colorPrimary\` in \`brand.json\`.
   The 10-step palette, all interaction states, the primary background/border and
   every component that references \`var(--brand-color-primary)\` update together.
 - **Light → dark:** the dark theme is the same seed run through the \`"dark"\`
@@ -198,7 +200,10 @@ function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" 
   files["scripts/apply-design-tokens.mjs"] = applyDesignTokensScript();
 
   // ── antd ConfigProvider theme ──
-  files["theme.json"] = tokensToThemeJson(seed, "default");
+  // Route through defaultThemeAlgorithm so a dark-first seed exports
+  // algorithm:"dark" here too, matching the dark math already baked into
+  // tokens.default.json / variables.css / kit.html.
+  files["theme.json"] = tokensToThemeJson(seed, defaultThemeAlgorithm(seed));
 
   // kit/index sit at the bundle root, artifacts one level deeper — each doc's
   // @font-face urls are relative to its own location.

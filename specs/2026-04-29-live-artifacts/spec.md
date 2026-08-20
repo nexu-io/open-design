@@ -5,13 +5,13 @@
 **Siblings:** [`docs/skills-protocol.md`](../../docs/skills-protocol.md) · [`docs/agent-adapters.md`](../../docs/agent-adapters.md) · [`docs/modes.md`](../../docs/modes.md)  
 **Reference implementation:** `~/Projects/monet` connectors + live artifacts
 
-This spec defines how to bring Monet's **connectors** and **live artifacts** ideas into Open Design, but implement the agent-facing surface as **file-based agent skills plus daemon-owned local tools**, not as an in-process tool registry or MCP-first integration.
+This spec defines how to bring Monet's **connectors** and **live artifacts** ideas into OpenDesign, but implement the agent-facing surface as **file-based agent skills plus daemon-owned local tools**, not as an in-process tool registry or MCP-first integration.
 
 ---
 
 ## 1. Product goal
 
-Open Design should let an agent create previewable artifacts that are not just one-off generated files, but **live, refreshable, auditable views** backed by external or local data sources.
+OpenDesign should let an agent create previewable artifacts that are not just one-off generated files, but **live, refreshable, auditable views** backed by external or local data sources.
 
 Examples:
 
@@ -167,7 +167,7 @@ skills/live-artifact/
 ---
 name: live-artifact
 description: |
-  Create refreshable, auditable Open Design artifacts backed by connector or local data.
+  Create refreshable, auditable OpenDesign artifacts backed by connector or local data.
   Trigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts.
 triggers:
   - live artifact

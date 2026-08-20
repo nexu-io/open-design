@@ -24,6 +24,7 @@
     "uk": "Звіт візуалізації даних"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-13T13:02:05Z",
   "description": "Turns CSV, Excel, or JSON data into a polished visual report page.",
   "description_i18n": {
     "en": "Turns CSV, Excel, or JSON data into a polished visual report page.",
@@ -47,7 +48,7 @@
   },
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/data-report",

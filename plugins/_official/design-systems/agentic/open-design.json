@@ -24,6 +24,7 @@
     "en": "Agentic"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Conversational AI-first interface with minimal controls, clear outcomes, and delegated task flows for agentic workflows.",
   "description_i18n": {
     "zh-CN": "对话式 AI 优先界面，控件简洁、结果清晰，支持代理工作流的委派任务流程。",

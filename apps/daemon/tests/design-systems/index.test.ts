@@ -7,10 +7,12 @@ import {
   createUserDesignSystem,
   createUserDesignSystemRevision,
   deleteUserDesignSystem,
+  isTeamSyncedUserDesignSystem,
   linkUserDesignSystemProject,
   listDesignSystems,
   listUserDesignSystemFiles,
   readDesignSystem,
+  readDesignSystemStaticFile,
   readUserDesignSystemFile,
   readUserDesignSystemRevision,
   updateUserDesignSystem,
@@ -47,6 +49,23 @@ describe('design systems registry', () => {
         isEditable: false,
       },
     ]);
+  });
+
+  it('parses a DESIGN.md with a pathological marker run without catastrophic backtracking', async () => {
+    // Regression: the swatch parser's Form A regex had overlapping star-consumers
+    // (`[\s>*-]*\**\s*`), so a long run of `*` at a line start was O(n^2) — a large
+    // installed DESIGN.md could hang the daemon during `listDesignSystems`
+    // (reachable via GET /api/design-systems). The collapsed prefix is linear.
+    await mkdir(path.join(root, 'acme'), { recursive: true });
+    await writeFile(
+      path.join(root, 'acme', 'DESIGN.md'),
+      `# Acme\n\n${'*'.repeat(24000)}\n`,
+    );
+    const start = performance.now();
+    const systems = await listDesignSystems(root);
+    const elapsedMs = performance.now() - start;
+    expect(systems.map((s) => s.id)).toContain('acme');
+    expect(elapsedMs).toBeLessThan(1000);
   });
 
   it('creates, updates, reads, and deletes user design systems with prefixed ids', async () => {
@@ -388,5 +407,224 @@ describe('design systems registry', () => {
       ]),
     );
     expect(generatedFiles?.map((file) => file.path)).not.toEqual(expect.arrayContaining(['README.md']));
+  });
+
+  // Regression #556 (issue #323): updating a generated design system used to
+  // unconditionally rewrite every derived file, clobbering user-authored
+  // components/docs and forcing users to redo work. Regeneration must now only
+  // refresh files the user has not customized.
+  const dirOf = (id: string): string => path.join(root, id.slice('user:'.length));
+
+  const seedUserEdits = async (dir: string): Promise<void> => {
+    await writeFile(
+      path.join(dir, 'ui_kits', 'app', 'components', 'App.jsx'),
+      'MY CUSTOM APP',
+      'utf8',
+    );
+    await mkdir(path.join(dir, 'src', 'components'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'src', 'components', 'MyButton.tsx'),
+      'export const MyButton = () => null;\n',
+      'utf8',
+    );
+    await mkdir(path.join(dir, 'ui_kits', 'app', 'custom'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'ui_kits', 'app', 'custom', 'Panel.jsx'),
+      'CUSTOM PANEL',
+      'utf8',
+    );
+  };
+
+  it('preserves user-created files and edits when updating a generated design system', async () => {
+    const created = await createUserDesignSystem(root, {
+      title: 'Retention Kit',
+      category: 'Custom',
+      status: 'draft',
+      body: '# Retention Kit\n\n> Category: Custom\n> Surface: web\n\nOriginal.\n',
+    });
+    const dir = dirOf(created.id);
+    await seedUserEdits(dir);
+
+    const updated = await updateUserDesignSystem(root, created.id, { title: 'Retention Kit Pro' });
+    expect(updated?.title).toBe('Retention Kit Pro');
+
+    await expect(readFile(path.join(dir, 'ui_kits', 'app', 'components', 'App.jsx'), 'utf8'))
+      .resolves
+      .toBe('MY CUSTOM APP');
+    await expect(readFile(path.join(dir, 'src', 'components', 'MyButton.tsx'), 'utf8'))
+      .resolves
+      .toBe('export const MyButton = () => null;\n');
+    await expect(readFile(path.join(dir, 'ui_kits', 'app', 'custom', 'Panel.jsx'), 'utf8'))
+      .resolves
+      .toBe('CUSTOM PANEL');
+  });
+
+  it('preserves user edits when accepting a design-system revision', async () => {
+    const created = await createUserDesignSystem(root, {
+      title: 'Revision Kit',
+      body: '# Revision Kit\n\n> Category: Custom\n> Surface: web\n\nBase.\n',
+    });
+    const dir = dirOf(created.id);
+    await seedUserEdits(dir);
+
+    const baseBody = await readDesignSystem(root, created.id, { idPrefix: 'user:' });
+    const revision = await createUserDesignSystemRevision(root, created.id, {
+      feedback: 'Tighten guidance from source evidence.',
+      baseBody: baseBody ?? '',
+      proposedBody: '# Revision Kit\n\n> Category: Custom\n> Surface: web\n\nRevised guidance.\n',
+    });
+    await updateUserDesignSystemRevisionStatus(root, created.id, revision?.id ?? '', 'accepted');
+
+    await expect(readDesignSystem(root, created.id, { idPrefix: 'user:' }))
+      .resolves
+      .toContain('Revised guidance.');
+    await expect(readFile(path.join(dir, 'ui_kits', 'app', 'components', 'App.jsx'), 'utf8'))
+      .resolves
+      .toBe('MY CUSTOM APP');
+    await expect(readFile(path.join(dir, 'src', 'components', 'MyButton.tsx'), 'utf8'))
+      .resolves
+      .toBe('export const MyButton = () => null;\n');
+  });
+
+  it('still refreshes untouched generated docs when the title changes', async () => {
+    const created = await createUserDesignSystem(root, {
+      title: 'Refresh Kit',
+      body: '# Refresh Kit\n\n> Category: Custom\n> Surface: web\n\nOriginal.\n',
+    });
+    const dir = dirOf(created.id);
+    await expect(readFile(path.join(dir, 'README.md'), 'utf8')).resolves.toContain('Refresh Kit');
+
+    await updateUserDesignSystem(root, created.id, { title: 'Polished System' });
+
+    // README was never user-edited, so regeneration must still refresh it.
+    await expect(readFile(path.join(dir, 'README.md'), 'utf8')).resolves.toContain('Polished System');
+  });
+
+  it('does not generate derived files for agent-managed systems on update', async () => {
+    const created = await createUserDesignSystem(root, {
+      title: 'Agent Managed Kit',
+      artifactMode: 'agent-managed',
+      body: '# Agent Managed Kit\n\n> Category: Custom\n> Surface: web\n\nBase.\n',
+    });
+
+    await updateUserDesignSystem(root, created.id, { title: 'Agent Managed Renamed' });
+
+    const files = await listUserDesignSystemFiles(root, created.id);
+    expect(files?.map((file) => file.path)).toEqual(['DESIGN.md']);
+  });
+
+  it('preserves user edits when regenerating after README deletion (read path)', async () => {
+    const created = await createUserDesignSystem(root, {
+      title: 'Read Path Kit',
+      body: '# Read Path Kit\n\n> Category: Custom\n> Surface: web\n\nBase.\n',
+    });
+    const dir = dirOf(created.id);
+    await writeFile(
+      path.join(dir, 'ui_kits', 'app', 'components', 'App.jsx'),
+      'MY CUSTOM APP',
+      'utf8',
+    );
+    await rm(path.join(dir, 'README.md'), { force: true });
+
+    // Listing files triggers ensureGeneratedDesignSystemFiles, which regenerates
+    // when README is missing. The missing README must be restored without
+    // clobbering the user's edited App.jsx.
+    const files = await listUserDesignSystemFiles(root, created.id);
+    expect(files?.map((file) => file.path)).toEqual(expect.arrayContaining(['README.md']));
+    await expect(readFile(path.join(dir, 'ui_kits', 'app', 'components', 'App.jsx'), 'utf8'))
+      .resolves
+      .toBe('MY CUSTOM APP');
+  });
+
+  it('keeps a revision file-change to a generated doc across later updates', async () => {
+    const created = await createUserDesignSystem(root, {
+      title: 'FileChange Kit',
+      body: '# FileChange Kit\n\n> Category: Custom\n> Surface: web\n\nBase.\n',
+    });
+    const dir = dirOf(created.id);
+    const baseBody = await readDesignSystem(root, created.id, { idPrefix: 'user:' });
+    const revision = await createUserDesignSystemRevision(root, created.id, {
+      feedback: 'Hand-author the README in this revision.',
+      baseBody: baseBody ?? '',
+      proposedBody: baseBody ?? '',
+      fileChanges: [{
+        path: 'README.md',
+        baseContent: '',
+        proposedContent: '# Hand-authored README\n\nCustom.\n',
+      }],
+    });
+    await updateUserDesignSystemRevisionStatus(root, created.id, revision?.id ?? '', 'accepted');
+    await expect(readFile(path.join(dir, 'README.md'), 'utf8'))
+      .resolves
+      .toBe('# Hand-authored README\n\nCustom.\n');
+
+    // A later metadata-only update must not overwrite the revision's README.
+    await updateUserDesignSystem(root, created.id, { title: 'FileChange Kit Renamed' });
+    await expect(readFile(path.join(dir, 'README.md'), 'utf8'))
+      .resolves
+      .toBe('# Hand-authored README\n\nCustom.\n');
+  });
+
+  it('preserves edits and backfills gaps for legacy systems without a manifest', async () => {
+    // Simulate an older generated system: derived files exist on disk but there
+    // is no .od-generated.json fingerprint manifest yet.
+    await mkdir(path.join(root, 'legacy', 'ui_kits', 'app', 'components'), { recursive: true });
+    await writeFile(
+      path.join(root, 'legacy', 'DESIGN.md'),
+      '# Legacy\n\n> Category: Custom\n> Surface: web\n\nBody.\n',
+      'utf8',
+    );
+    await writeFile(path.join(root, 'legacy', 'README.md'), 'USER EDITED README', 'utf8');
+
+    const updated = await updateUserDesignSystem(root, 'user:legacy', { title: 'Legacy Renamed' });
+    expect(updated?.title).toBe('Legacy Renamed');
+
+    const dir = path.join(root, 'legacy');
+    // Pre-existing (possibly user-edited) file with no fingerprint is preserved.
+    await expect(readFile(path.join(dir, 'README.md'), 'utf8')).resolves.toBe('USER EDITED README');
+    // Missing derived files are still backfilled.
+    await expect(readFile(path.join(dir, 'SKILL.md'), 'utf8')).resolves.toContain('Legacy Renamed');
+  });
+
+  it('does not expose the generated-fingerprint manifest through file surfaces', async () => {
+    const created = await createUserDesignSystem(root, {
+      title: 'Manifest Privacy Kit',
+      body: '# Manifest Privacy Kit\n\n> Category: Custom\n> Surface: web\n\nBase.\n',
+    });
+    const dir = dirOf(created.id);
+    // The manifest exists on disk after generation.
+    await expect(readFile(path.join(dir, '.od-generated.json'), 'utf8')).resolves.toContain('README.md');
+
+    const files = await listUserDesignSystemFiles(root, created.id);
+    expect(files?.map((file) => file.path)).not.toContain('.od-generated.json');
+    await expect(
+      readDesignSystemStaticFile(root, created.id, '.od-generated.json', { idPrefix: 'user:' }),
+    ).resolves.toBeNull();
+  });
+
+  // recvqb6mfyqXLD: `isTeamSyncedUserDesignSystem` is the signal routes use to
+  // decide whether a `user:`-prefixed system needs the team-share permission
+  // check before PATCH/DELETE — it must read the exact flag
+  // `markTeamSynced` (server.ts) writes onto a pulled system's metadata.json.
+  describe('isTeamSyncedUserDesignSystem', () => {
+    it('is false for a system the caller authored themselves', async () => {
+      const created = await createUserDesignSystem(root, { title: 'My Own System' });
+      await expect(isTeamSyncedUserDesignSystem(root, created.id)).resolves.toBe(false);
+    });
+
+    it('is true once metadata.json carries the teamSynced flag', async () => {
+      const created = await createUserDesignSystem(root, { title: 'Synced From Teammate' });
+      const dirId = created.id.slice('user:'.length);
+      const metadataPath = path.join(root, dirId, 'metadata.json');
+      const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as Record<string, unknown>;
+      await writeFile(metadataPath, JSON.stringify({ ...metadata, teamSynced: true }, null, 2), 'utf8');
+
+      await expect(isTeamSyncedUserDesignSystem(root, created.id)).resolves.toBe(true);
+    });
+
+    it('is false for an unknown or malformed id', async () => {
+      await expect(isTeamSyncedUserDesignSystem(root, 'user:does-not-exist')).resolves.toBe(false);
+      await expect(isTeamSyncedUserDesignSystem(root, 'not-a-user-id')).resolves.toBe(false);
+    });
   });
 });

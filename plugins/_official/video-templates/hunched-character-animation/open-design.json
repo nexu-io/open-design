@@ -24,6 +24,7 @@
     "en": "Hunched Character Animation"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Instruction for Seedance 2 to create an in-place walking animation for a specific character reference.",
   "description_i18n": {
     "zh-CN": "指导 Seedance 2 创建特定角色参考的原地行走动画。",

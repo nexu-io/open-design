@@ -1,28 +1,35 @@
 ---
 name: ib-pitch-book
+en_name: "Write an Investor Pitch Book like a Growth-Equity Analyst"
+zh_name: "像成长股权分析师一样写投资 Pitch Book"
 description: |
-  Investment-banking pitch book for strategic alternatives — trading comps,
-  precedent transactions, valuation football field, DCF sensitivity,
-  strategic-options matrix, process recommendation. Built by adapting
-  `assets/template.html` so IB-specific chrome, disclosure bands, and source
-  labels are preserved. Use for Board / sell-side discussion materials. Not a
-  VC fundraising deck (see html-ppt-pitch-deck). Workflow adapted from
-  Anthropic financial-services Pitch Agent (Apache-2.0).
+  OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.
+en_description: |
+  OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Built as a decision-grade fundraising pitch deck for growth-equity investors.
+zh_description: |
+  像成长股权分析师一样写投资 Pitch Book——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "fundraising-pitch"
+  - "series-a-pitch-deck"
+  - "finance"
+  - "pitch-deck"
+  - "fundraising"
+  - "investor-deck"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "ib-pitch-book"
 triggers:
-  - "ib pitch book"
-  - "investment banking pitch"
-  - "strategic alternatives"
-  - "sell-side pitch"
-  - "board materials"
-  - "football field valuation"
-  - "trading comps"
-  - "precedent transactions"
-  - "投行 pitch"
-  - "并购材料"
-  - "战略选项"
+  - "series-a-pitch-deck"
+  - "fundraising-pitch"
+  - "Write an Investor Pitch Book like a Growth-Equity Analyst"
+  - "像成长股权分析师一样写投资 Pitch Book"
+  - "pitch-deck"
+  - "fundraising"
+  - "investor-deck"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: finance
   featured: 15
   upstream: "https://github.com/anthropics/financial-services/tree/main/plugins/agent-plugins/pitch-agent"
   preview:
@@ -32,11 +39,9 @@ od:
     requires: true
     sections: [color, typography, layout, components]
   speaker_notes: true
-  example_prompt: |
-    Build a 10-page strategic alternatives review pitch book for the Board of
-    NorthPeak Industries (NYSE: NPK). Include trading comps, precedent
-    transactions, valuation football field, DCF sensitivity, and a
-    recommended process timeline.
+  category: "fundraising-pitch"
+  scenario: "finance"
+  example_prompt: "Create \"Write an Investor Pitch Book like a Growth-Equity Analyst\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: OpenDesign's investor pitch book: market map, moat, unit economics, and the ask — analyst-grade and diligence-ready. Audience: growth-equity investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
 ---
 
 # IB Pitch Book
@@ -45,7 +50,7 @@ End-to-end **investment-banking-style** pitch materials for a **strategic
 alternatives** conversation (coverage & advisory). This is the workflow shape
 of Anthropic's **Pitch Agent** from
 [`financial-services`](https://github.com/anthropics/financial-services),
-repackaged as an Open Design `deck` skill.
+repackaged as an OpenDesign `deck` skill.
 
 ## When to use
 
@@ -144,10 +149,10 @@ Default **10-slide** spine unless the brief says otherwise:
 
 ### Step 3 — Export
 
-Follow Open Design's deck export path for the active session (HTML / PDF /
+Follow OpenDesign's deck export path for the active session (HTML / PDF /
 PPTX per daemon capabilities).
 
-## Relationship to Open Design financial skills
+## Relationship to OpenDesign financial skills
 
 - **`dcf-valuation`** produces a Markdown valuation memo — complementary; this
   deck embeds DCF **summary** slides, not the full memo file.
@@ -158,4 +163,4 @@ PPTX per daemon capabilities).
 
 See **`references/attribution.md`**. Source workflow and naming derive from
 Anthropic's Apache-2.0 **financial-services** repository; this skill file is an
-original adaptation for Open Design.
+original adaptation for OpenDesign.

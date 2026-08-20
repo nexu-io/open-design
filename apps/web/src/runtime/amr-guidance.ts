@@ -3,38 +3,124 @@
 // the error text, and whether to show the AMR promotion card below. Kept in
 // its own module so ChatPane / ProjectView / AssistantMessage can import it
 // without a circular dependency.
+import {
+  isModelWindowLimitFailure,
+  readModelWindowResetAt,
+} from '@open-design/contracts';
 
-// AMR model-gateway console wallet (account, balance, recharge).
+// AMR model-gateway console (account, balance, top-up, plans).
 // `source=open_design` tags the landing page_view so vela analytics can
-// attribute the visit to Open Design (per-product revenue/traffic attribution).
+// attribute the visit to OpenDesign (per-product revenue/traffic attribution).
+//
+// The console's dashboard — not a wallet page — is the account surface every
+// entry here targets. A wallet route still answers on B's side, but it is no
+// longer part of the product's information architecture: balance, manual
+// top-up and the auto-recharge policy were all rehomed onto the dashboard
+// (vela #1055), so sending a user to /wallet would drop them on a surface the
+// product no longer navigates to.
 export const AMR_CONSOLE_URL =
-  'https://open-design.ai/amr/wallet?source=open_design';
-export const AMR_RECHARGE_URL = AMR_CONSOLE_URL;
+  'https://open-design.ai/amr/dashboard?source=open_design';
+export const DEFAULT_AMR_RECHARGE_URL = AMR_CONSOLE_URL;
+export const AMR_RECHARGE_URL = DEFAULT_AMR_RECHARGE_URL;
+export const OPEN_DESIGN_PRICING_URL = 'https://open-design.ai/pricing/';
+
+// Path + attribution the console is always reached through, so a runtime
+// origin only has to carry the host.
+const AMR_CONSOLE_PATH = '/dashboard?source=open_design';
 
 const AMR_CONSOLE_URL_BY_PROFILE: Record<string, string> = {
-  prod: AMR_CONSOLE_URL,
-  test: 'https://vela.powerformer.net/wallet?source=open_design',
-  local: 'http://localhost:5173/wallet?source=open_design',
+  prod: DEFAULT_AMR_RECHARGE_URL,
+  test: 'https://vela.powerformer.net/dashboard?source=open_design',
+  local: 'http://localhost:5173/dashboard?source=open_design',
 };
 
-export function amrConsoleUrlForProfile(profile: string | null | undefined): string {
+// Every AMR profile the packaged runtime can be built with (mirrors the daemon's
+// resolveAmrProfile allowlist). Anything else is treated as prod.
+const KNOWN_AMR_PROFILES: ReadonlySet<string> = new Set([
+  'prod',
+  'test',
+  'feature-test',
+  'local',
+]);
+
+// Console origin the daemon reported for THIS runtime (GET
+// /api/integrations/vela/status -> consoleOrigin, sourced from OD_VELA_WEB_URL).
+//
+// The web bundle ships publicly, so the hostnames of internal (non-public) AMR
+// environments are not literals in this source tree: packaging injects the
+// origin from a CI secret and the daemon hands it to the client at runtime.
+// Kept module-level rather than threaded through every caller because it is a
+// property of the runtime, not of any one call site, and it is written once per
+// status fetch (see setRuntimeAmrConsoleOrigin's single caller in
+// providers/daemon.ts).
+let runtimeAmrConsoleOrigin: string | null = null;
+
+/**
+ * Record the vela console origin the daemon reported, or clear it with a blank
+ * value. Normalizes away a trailing slash so callers can append console paths.
+ */
+export function setRuntimeAmrConsoleOrigin(origin: string | null | undefined): void {
+  const normalized = origin?.trim().replace(/\/$/, '') ?? '';
+  runtimeAmrConsoleOrigin = normalized.length > 0 ? normalized : null;
+}
+
+export function amrConsoleUrlForProfile(
+  profile: string | null | undefined,
+  consoleOrigin?: string | null,
+): string {
   const normalized = profile?.trim() || 'prod';
-  return AMR_CONSOLE_URL_BY_PROFILE[normalized] ?? AMR_CONSOLE_URL;
+  // prod's console is the public product URL and stays pinned to it: a runtime
+  // origin must never be able to redirect a production user's account, plan, or
+  // upgrade links somewhere else. Unrecognized profiles are treated as prod for
+  // the same reason.
+  if (normalized === 'prod' || !KNOWN_AMR_PROFILES.has(normalized)) {
+    return DEFAULT_AMR_RECHARGE_URL;
+  }
+  const statusOrigin = consoleOrigin?.trim().replace(/\/$/, '') ?? '';
+  if (statusOrigin) return `${statusOrigin}${AMR_CONSOLE_PATH}`;
+  if (runtimeAmrConsoleOrigin) return `${runtimeAmrConsoleOrigin}${AMR_CONSOLE_PATH}`;
+  return AMR_CONSOLE_URL_BY_PROFILE[normalized] ?? DEFAULT_AMR_RECHARGE_URL;
 }
 
 export function amrRechargeUrlForProfile(profile: string | null | undefined): string {
   return amrConsoleUrlForProfile(profile);
 }
 
-// Console wallet deep-linked to open the subscription/plans modal
-// (`view=plans`), used by the "Upgrade" affordances next to the plan tier.
-export function amrPlansUrlForProfile(profile: string | null | undefined): string {
-  const base = amrConsoleUrlForProfile(profile);
-  return base.includes('?') ? `${base}&view=plans` : `${base}?view=plans`;
+function amrWorkspaceUrl(
+  profile: string | null | undefined,
+  workspaceId: string | null | undefined,
+): string | null {
+  const normalizedWorkspaceId = workspaceId?.trim();
+  if (!normalizedWorkspaceId) return null;
+  const url = new URL(amrConsoleUrlForProfile(profile));
+  url.searchParams.set('workspaceId', normalizedWorkspaceId);
+  return url.toString();
+}
+
+export function amrConsoleUrlForWorkspace(
+  profile: string | null | undefined,
+  workspaceId: string | null | undefined,
+): string | null {
+  return amrWorkspaceUrl(profile, workspaceId);
+}
+
+export function amrPlansUrlForWorkspace(
+  _profile: string | null | undefined,
+  workspaceId: string | null | undefined,
+): string | null {
+  return workspaceId?.trim() ? OPEN_DESIGN_PRICING_URL : null;
+}
+
+// Public comparison surface used by every generic Upgrade / View plans entry.
+// A selected Pricing card still carries plan + interval back to Vela for
+// direct checkout; generic discovery never opens the Cloud plan modal.
+export function amrPlansUrlForProfile(_profile: string | null | undefined): string {
+  return OPEN_DESIGN_PRICING_URL;
 }
 
 export function amrProfileBadgeLabel(profile: string | null | undefined): string | null {
   if (profile === 'test') return 'TEST';
+  if (profile === 'feature-test') return 'FEATURE TEST';
   if (profile === 'local') return 'LOCAL';
   return null;
 }
@@ -54,8 +140,8 @@ const PROMOTE_AMR_CODES = new Set<string>([
 // Primary action offered in the gray error card.
 //   - retry:                       re-run with the current agent.
 //   - authorize:                   AMR sign-in/authorize flow, then auto-retry on success.
-//   - recharge:                    open the AMR wallet (manual retry afterwards).
-//   - upgrade:                     open the AMR plans view (manual retry afterwards).
+//   - recharge:                    open the AMR console (manual retry afterwards).
+//   - upgrade:                     open public Pricing (manual retry afterwards).
 //   - launch-terminal-auth:        Antigravity-specific. agy's `-p`
 //                                  print mode cannot complete Google
 //                                  Sign-In on its own (no input field
@@ -99,12 +185,20 @@ export type RunFailureMessageKey =
   | 'chat.runError.promptTooLargeMessage'
   | 'chat.runError.modelUnavailableMessage'
   | 'chat.runError.rateLimitedMessage'
+  | 'chat.runError.modelWindowLimitMessage'
+  | 'chat.runError.modelWindowLimitMessageNoTime'
   | 'chat.runError.upstreamUnavailableMessage'
   | 'chat.runError.toolLoopMessage'
   | 'chat.runError.outputInvalidMessage'
   | 'chat.runError.runtimeConfigMessage'
   | 'chat.runError.quotaExhaustedMessage'
   | 'chat.runError.workspaceCreditsMessage'
+  | 'chat.runError.timedOutMessage'
+  | 'chat.runError.inactivityTimeoutMessage'
+  | 'chat.runError.emptyOutputMessage'
+  | 'chat.runError.sessionExpiredMessage'
+  | 'chat.runError.gitBashMissingMessage'
+  | 'chat.runError.cpuUnsupportedMessage'
   | null;
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
@@ -117,6 +211,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.connectionDropped'
   | 'chat.runError.title.signInRequired'
   | 'chat.runError.title.rateLimited'
+  | 'chat.runError.title.modelWindowLimit'
   | 'chat.amrBalanceGate.title'
   | 'chat.runError.title.cliMissing'
   | 'chat.runError.title.promptTooLarge'
@@ -126,6 +221,12 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.outputInvalid'
   | 'chat.runError.title.runtimeConfig'
   | 'chat.runError.title.quotaExhausted'
+  | 'chat.runError.title.timedOut'
+  | 'chat.runError.title.emptyOutput'
+  | 'chat.runError.title.sessionExpired'
+  | 'chat.runError.title.gitBashMissing'
+  | 'chat.runError.title.artifactMissing'
+  | 'chat.runError.title.cpuUnsupported'
   | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
@@ -135,11 +236,74 @@ export interface RunFailureUi {
   // Override the gray error card's text (e.g. AMR auth / balance get a clearer
   // explanation than the raw upstream string).
   messageKey: RunFailureMessageKey;
+  // Interpolation values for `messageKey`, for the cases whose copy names
+  // something the daemon read off the failure (e.g. when a rolling model window
+  // reopens). Absent for every message that is a fixed sentence.
+  messageVars?: Record<string, string>;
   // Show a secondary plain "retry" button alongside the primary action (used
   // by the recharge case, where retry is manual after topping up).
   secondaryRetry: boolean;
   // Show the AMR promotion card under the gray error card.
   showSwitchCard: boolean;
+}
+
+/**
+ * The two window-limit message keys, narrowed away from `RunFailureMessageKey`
+ * (which includes `null` for the cases that keep the raw upstream string) so
+ * callers can hand the result straight to `t()` without a non-null assertion.
+ */
+export type ModelWindowLimitMessageKey =
+  | 'chat.runError.modelWindowLimitMessage'
+  | 'chat.runError.modelWindowLimitMessageNoTime';
+
+/**
+ * The copy a rolling model-window rejection should render, or null when the
+ * text is some other failure.
+ *
+ * Two surfaces need this and they arrive from opposite directions: the chat
+ * card already knows the daemon's `model_window_limit` classification and only
+ * wants the instant, while the Home composer fails before a run exists and has
+ * nothing but the raw upstream sentence. Sharing one reader keeps them from
+ * disagreeing about what counts as a window limit.
+ */
+export function modelWindowLimitCopy(
+  rawMessage: string | null | undefined,
+): { messageKey: ModelWindowLimitMessageKey; retryAt?: string } | null {
+  if (!isModelWindowLimitFailure(rawMessage)) return null;
+  const parsed = readModelWindowResetAt(rawMessage);
+  // Shape-valid but not a real instant (`2026-13-45T…`) counts as unreadable,
+  // so the message key and the variable can never disagree about whether a
+  // time exists — the card would otherwise render "Invalid Date".
+  const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
+  return retryAt
+    ? { messageKey: 'chat.runError.modelWindowLimitMessage', retryAt }
+    // Promising a time we could not read is worse than not naming one.
+    : { messageKey: 'chat.runError.modelWindowLimitMessageNoTime' };
+}
+
+/**
+ * The instant a model window reopens, rendered for a reader in `locale`.
+ *
+ * The gateway reports UTC; a user waiting on a clock needs their own. Date and
+ * time are both shown because the wait can cross midnight, and the year is left
+ * off because a rolling window never reaches one.
+ *
+ * Returns the input untouched if it cannot be formatted, so the copy degrades
+ * to a machine-readable instant rather than to a gap.
+ */
+export function formatModelWindowRetryAt(retryAt: string, locale: string): string {
+  const parsed = new Date(retryAt);
+  if (!Number.isFinite(parsed.getTime())) return retryAt;
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(parsed);
+  } catch {
+    return retryAt;
+  }
 }
 
 // Small helper for the common shape: a named failure type + actionable copy,
@@ -165,6 +329,12 @@ function retryWithGuidance(
 // of that taxonomy — a human-readable type name plus a one-line instruction,
 // with the raw upstream string preserved in the card's collapsible source area.
 const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
+  // The run completed but did not leave a deliverable file. Name the actual
+  // missing outcome in the compact card and keep the raw reason in details.
+  ARTIFACT_NOT_FOUND: retryWithGuidance(
+    'chat.runError.title.artifactMissing',
+    null,
+  ),
   // CLI binary not found on PATH (user_action: install_cli).
   AGENT_UNAVAILABLE: retryWithGuidance(
     'chat.runError.title.cliMissing',
@@ -242,9 +412,63 @@ const DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   ),
 };
 
+// Agent-agnostic failure causes keyed by the daemon's `failure_detail`, resolved
+// BEFORE the AMR/Antigravity agent branches (unlike DETAIL_FAILURE_UI above).
+// These are engine-neutral run outcomes — a timeout, an empty result, a stale
+// resumed session, a missing Git Bash — that carry the same named type + fix for
+// every agent, including AMR. They leak in under the opaque AGENT_EXECUTION_FAILED
+// / process-exit codes, so without this the card would only show the raw stderr.
+const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
+  // Hard wall-clock timeout for the run (daemon user_action: retry). A plain
+  // retry — optionally with a smaller task — usually gets through.
+  timeout: retryWithGuidance(
+    'chat.runError.title.timedOut',
+    'chat.runError.timedOutMessage',
+  ),
+  // The agent stalled (no new output for too long) and was cut off as a
+  // timeout. Distinct copy from a hard timeout, same retry recovery.
+  inactivity_timeout: retryWithGuidance(
+    'chat.runError.title.timedOut',
+    'chat.runError.inactivityTimeoutMessage',
+  ),
+  // Run terminated without producing any output (daemon user_action: retry);
+  // usually transient, so name it and offer a straight retry.
+  empty_output: retryWithGuidance(
+    'chat.runError.title.emptyOutput',
+    'chat.runError.emptyOutputMessage',
+  ),
+  // A resumed agent session id went stale; the daemon already cleared it so the
+  // next run starts fresh (#3408). Name it as recoverable and offer Retry.
+  session_resume_expired: retryWithGuidance(
+    'chat.runError.title.sessionExpired',
+    'chat.runError.sessionExpiredMessage',
+  ),
+  // Windows: the agent needs Git Bash to spawn and it isn't installed
+  // (daemon user_action: install_cli). Point at installing Git for Windows,
+  // then retry — same "install the dependency, then re-run" shape as cli_missing.
+  git_bash_missing: retryWithGuidance(
+    'chat.runError.title.gitBashMissing',
+    'chat.runError.gitBashMissingMessage',
+  ),
+  // The bundled agent binary needs a CPU instruction set (AVX2) this device
+  // doesn't have, so it crashes on launch — retrying reproduces the crash and
+  // switching hosted models doesn't help (the runtime binary is the problem).
+  // The fix is updating OpenDesign to a build that bundles a compatible
+  // (baseline) runtime, so show guidance copy without a dead Retry button.
+  cpu_unsupported: {
+    primaryAction: 'none',
+    titleKey: 'chat.runError.title.cpuUnsupported',
+    messageKey: 'chat.runError.cpuUnsupportedMessage',
+    secondaryRetry: false,
+    showSwitchCard: false,
+  },
+};
+
 // Resolve the failure UI for a failed run:
 //   - agent-agnostic root cause (cli missing, prompt too large, model
 //     unavailable, tool loop, bad output, bad runtime def) → named type + fix
+//   - agent-agnostic failure_detail (timeout, empty output, stale resumed
+//     session, missing Git Bash) → named type + retry, for every agent
 //   - AMR agent, auth required      → authorize-and-retry button, clearer copy
 //   - AMR agent, insufficient funds → recharge button + manual retry, clearer copy
 //   - AMR agent, tier entitlement   → upgrade button + manual retry
@@ -257,18 +481,48 @@ export function resolveRunFailureUi(
   code: string | null | undefined,
   detail: string | null | undefined,
   agentId: string | null | undefined,
+  rawMessage?: string | null,
 ): RunFailureUi {
   // Agent-agnostic codes resolve first so an AMR/Antigravity run that hits one
   // of them still gets the specific guidance instead of the generic fallback.
   const agnostic = typeof code === 'string' ? AGENT_AGNOSTIC_FAILURE_UI[code] : undefined;
   if (agnostic) return agnostic;
+  // A rolling per-model window (the hosted gateway's `model_limit_exceeded`)
+  // resolves before every agent branch. It has to: the window is the gateway's,
+  // not the agent's, and the AMR branch below ends in a catch-all that would
+  // otherwise render it as "task failed" with the raw English sentence as the
+  // body. The reset instant is read from the same upstream text the card
+  // already displays, through the shared contracts reader.
+  if (detail === 'model_window_limit') {
+    // The daemon already decided this IS a window limit, so read the instant
+    // directly rather than re-deciding from the text — an upstream rewording
+    // that the daemon still classified must not silently lose the card.
+    const parsed = readModelWindowResetAt(rawMessage);
+    const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
+    return {
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.modelWindowLimit',
+      messageKey: retryAt
+        ? 'chat.runError.modelWindowLimitMessage'
+        : 'chat.runError.modelWindowLimitMessageNoTime',
+      ...(retryAt ? { messageVars: { retryAt } } : {}),
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
+  }
+  // Engine-neutral failure_detail (timeout, empty output, stale resumed session,
+  // missing Git Bash) resolves before the agent branches so it applies to every
+  // agent — including AMR, whose branch below otherwise returns a generic retry.
+  const agnosticDetail =
+    typeof detail === 'string' ? AGENT_AGNOSTIC_DETAIL_FAILURE_UI[detail] : undefined;
+  if (agnosticDetail) return agnosticDetail;
   if (agentId === 'amr') {
     if (code === 'AMR_AUTH_REQUIRED') {
       return {
         primaryAction: 'authorize',
         // PRD「需要登录」type — shared title with the non-AMR sign-in case.
         titleKey: 'chat.runError.title.signInRequired',
-        // "Open Design 智能体尚未登录，前往登录即可正常使用" — single CTA, no
+        // "OpenDesign 智能体尚未登录，前往登录即可正常使用" — single CTA, no
         // AMR promotion (the agent already IS AMR). The authorize action reuses
         // the inline AmrLoginPill (sign-in + auto-retry on success).
         messageKey: 'chat.runError.signInMessage.amr',

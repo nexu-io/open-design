@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-raw-grid
+en_name: "Present a Poster-Series Case Study like a Festival Art Director"
+zh_name: "像音乐节艺术总监一样讲海报系列案例"
 description: |
-  Raw Grid — Neo-brutalist deck with thick borders, offset shadows, and a pink/sage/ink palette. Anything that should feel direct and graphic-confident: founder pitches, accelerator demos, brand decks, indie launches, creator portfolios.
+  A brutalist poster-series case study for a music festival — the concept, the system, and how it scaled across formats. Built as a decision-grade design craft deck for design peers, client.
+en_description: |
+  A brutalist poster-series case study for a music festival — the concept, the system, and how it scaled across formats. Built as a decision-grade design craft deck for design peers, client.
+zh_description: |
+  像音乐节艺术总监一样讲海报系列案例——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "design-craft"
+  - "board-upgrade-deck-rescue"
+  - "design"
+  - "brand"
+  - "visual-system"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-raw-grid"
 triggers:
-  - "raw-grid"
-  - "zhangzara-raw-grid"
-  - "Raw Grid"
-  - "raw"
-  - "punchy"
-  - "direct"
-  - "modern"
-  - "startup pitch"
-  - "accelerator demo day"
+  - "board-upgrade-deck-rescue"
+  - "design-craft"
+  - "Present a Poster-Series Case Study like a Festival Art Director"
+  - "像音乐节艺术总监一样讲海报系列案例"
+  - "design"
+  - "brand"
+  - "visual-system"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/raw-grid"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "design-craft"
+  scenario: "design"
+  example_prompt: "Create \"Present a Poster-Series Case Study like a Festival Art Director\" as a decision-grade Design craft deck in this template's own visual system. Subject: A brutalist poster-series case study for a music festival — the concept, the system, and how it scaled across formats. Audience: design peers, client. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated."
 ---
 
 # Raw Grid

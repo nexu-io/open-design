@@ -1,12 +1,12 @@
 /**
  * Built-in design direction library.
  *
- * Distilled from huashu-design's "5 schools × 20 philosophies" idea: when
- * the user hasn't specified a brand and selected "Pick a direction for me"
- * in the discovery form, the agent emits a *second* `<question-form>` whose
- * radio options are these 5 schools. Each school carries a concrete spec —
- * fonts, palette in OKLch, mood keywords, real-world references — that the
- * agent then encodes into the active CSS `:root` tokens before generating.
+ * Distilled from huashu-design's "5 schools × 20 philosophies" idea. The
+ * library gives the agent concrete visual references to infer from by default.
+ * When the user explicitly asks to compare visual directions, it can also
+ * render these schools as `<question-form>` choices. Each school carries a
+ * concrete spec — fonts, palette in OKLch, mood keywords, real-world
+ * references — that the agent encodes into active CSS `:root` tokens.
  *
  * The library has TWO purposes:
  *
@@ -239,42 +239,79 @@ export function renderDirectionFormBody(): string {
  * discovery prompt to teach the agent *how* to bind a chosen direction
  * onto the seed template's `:root` variables.
  */
+/** Full spec for one direction: mood, references, CSS-ready :root, posture. */
+export function renderDirectionSpec(d: DesignDirection): string {
+  const lines: string[] = [];
+  lines.push(`### ${d.label}  \`(id: ${d.id})\``);
+  lines.push('');
+  lines.push(`**Mood:** ${d.mood}`);
+  lines.push('');
+  lines.push(`**References:** ${d.references.join(', ')}.`);
+  lines.push('');
+  lines.push('**Palette (drop into `:root`):**');
+  lines.push('');
+  lines.push('```css');
+  lines.push(`:root {`);
+  lines.push(`  --bg:      ${d.palette.bg};`);
+  lines.push(`  --surface: ${d.palette.surface};`);
+  lines.push(`  --fg:      ${d.palette.fg};`);
+  lines.push(`  --muted:   ${d.palette.muted};`);
+  lines.push(`  --border:  ${d.palette.border};`);
+  lines.push(`  --accent:  ${d.palette.accent};`);
+  lines.push('');
+  lines.push(`  --font-display: ${d.displayFont};`);
+  lines.push(`  --font-body:    ${d.bodyFont};`);
+  if (d.monoFont) lines.push(`  --font-mono:    ${d.monoFont};`);
+  lines.push(`}`);
+  lines.push('```');
+  lines.push('');
+  lines.push('**Posture:**');
+  for (const p of d.posture) lines.push(`- ${p}`);
+  lines.push('');
+  return lines.join('\n');
+}
+
 export function renderDirectionSpecBlock(): string {
   const lines: string[] = [
-    '## Direction library — bind into `:root` when the user picks one',
+    '## Direction library — infer and bind by default',
     '',
-    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. When the user selects one in the direction-form, replace the seed template\'s `:root` block with that direction\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
+    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. If the user explicitly requested direction comparison and selected one in a direction-form, use that selection instead. Replace the seed template\'s `:root` block with the chosen direction\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
     '',
   ];
   for (const d of DESIGN_DIRECTIONS) {
-    lines.push(`### ${d.label}  \`(id: ${d.id})\``);
-    lines.push('');
-    lines.push(`**Mood:** ${d.mood}`);
-    lines.push('');
-    lines.push(`**References:** ${d.references.join(', ')}.`);
-    lines.push('');
-    lines.push('**Palette (drop into `:root`):**');
-    lines.push('');
-    lines.push('```css');
-    lines.push(`:root {`);
-    lines.push(`  --bg:      ${d.palette.bg};`);
-    lines.push(`  --surface: ${d.palette.surface};`);
-    lines.push(`  --fg:      ${d.palette.fg};`);
-    lines.push(`  --muted:   ${d.palette.muted};`);
-    lines.push(`  --border:  ${d.palette.border};`);
-    lines.push(`  --accent:  ${d.palette.accent};`);
-    lines.push('');
-    lines.push(`  --font-display: ${d.displayFont};`);
-    lines.push(`  --font-body:    ${d.bodyFont};`);
-    if (d.monoFont) lines.push(`  --font-mono:    ${d.monoFont};`);
-    lines.push(`}`);
-    lines.push('```');
-    lines.push('');
-    lines.push('**Posture:**');
-    for (const p of d.posture) lines.push(`- ${p}`);
-    lines.push('');
+    lines.push(renderDirectionSpec(d));
   }
   return lines.join('\n');
+}
+
+/**
+ * Compact pull-layer replacement for the full direction library (slim core):
+ * one line per direction so the model can shortlist by vibe, plus the CLI
+ * command that prints the chosen direction's full spec. Keeps ~6.7K of
+ * palette data out of the always-on prompt at the cost of one tool call on
+ * the direction-pick path (which runs once per project at most).
+ */
+export function renderDirectionIndexBlock(): string {
+  const lines: string[] = [
+    '## Direction library — index (pull the chosen one on demand)',
+    '',
+    'When you must pick a visual direction yourself (no active design system, no user-provided brand source), choose the best match for the brief\'s tone from this index, then run `"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>` directly — do not probe CLI help or alternate paths first, and retry only after materially changing the fix or input. Bind the printed `:root` palette + font stacks **verbatim** into the seed, honour the posture cues, and never improvise palette values from the label alone.',
+    '',
+  ];
+  for (const d of DESIGN_DIRECTIONS) {
+    lines.push(`- \`${d.id}\` — ${d.label}`);
+  }
+  return lines.join('\n');
+}
+
+/** Resolve an inferred or user-selected direction; used by `od tools directions`. */
+export function formatDirectionSpecText(idOrLabel: string): string | null {
+  const needle = idOrLabel.trim().toLowerCase();
+  if (!needle) return null;
+  const match = DESIGN_DIRECTIONS.find(
+    (d) => d.id.toLowerCase() === needle || d.label.toLowerCase() === needle,
+  );
+  return match ? renderDirectionSpec(match) : null;
 }
 
 /** Look up a direction by its `label` (what the user sees in the form). */

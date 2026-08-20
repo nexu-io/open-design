@@ -1,9 +1,23 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignsTab } from '../../src/components/DesignsTab';
+import { fetchLiveArtifacts, fetchProjectFiles } from '../../src/providers/registry';
+
+const designsWorkspaceState = vi.hoisted(() => ({
+	loading: false,
+  context: {
+    workspaceId: 'workspace-designs',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-designs',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    permissions: {},
+  },
+}));
 
 vi.mock('../../src/providers/registry', () => ({
   deleteLiveArtifact: vi.fn(),
@@ -11,8 +25,25 @@ vi.mock('../../src/providers/registry', () => ({
   fetchProjectFiles: vi.fn(async () => []),
   liveArtifactPreviewUrl: (projectId: string, artifactId: string) =>
     `/api/projects/${projectId}/live-artifacts/${artifactId}/preview`,
-  projectFileUrl: (projectId: string, fileName: string) =>
-    `/api/projects/${projectId}/files/${fileName}`,
+  projectFileUrl: (
+    projectId: string,
+    fileName: string,
+    workspaceContext?: { workspaceId: string; workspaceMemberId: string } | null,
+  ) => {
+    const base = `/api/projects/${projectId}/files/${fileName}`;
+    return workspaceContext
+      ? `${base}?workspaceId=${workspaceContext.workspaceId}&workspaceMemberId=${workspaceContext.workspaceMemberId}`
+      : base;
+  },
+}));
+
+vi.mock('../../src/collab/useWorkspaceContext', () => ({
+  useWorkspaceContext: () => ({
+    context: designsWorkspaceState.context,
+		loading: designsWorkspaceState.loading,
+    failure: null,
+    refresh: vi.fn(),
+  }),
 }));
 
 describe('DesignsTab empty state', () => {
@@ -31,7 +62,10 @@ describe('DesignsTab empty state', () => {
   });
 
   beforeEach(() => {
+		designsWorkspaceState.loading = false;
     window.localStorage.clear();
+    vi.mocked(fetchLiveArtifacts).mockReset().mockResolvedValue([]);
+    vi.mocked(fetchProjectFiles).mockReset().mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -86,6 +120,35 @@ describe('DesignsTab empty state', () => {
     expect(screen.queryByRole('button', { name: 'New project' })).toBeNull();
   });
 
+  it('scopes browser-owned project cover URLs to the exact Workspace identity', () => {
+    const { container } = render(
+      <DesignsTab
+        projects={[
+          {
+            id: 'project-cover',
+            name: 'Cover project',
+            skillId: null,
+            designSystemId: null,
+            createdAt: 1,
+            updatedAt: 2,
+            status: { value: 'not_started' },
+            metadata: { kind: 'image', entryFile: 'cover.png' },
+          },
+        ]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+      />,
+    );
+
+    const src = container.querySelector('.design-card-thumb img')?.getAttribute('src');
+    expect(src).toContain('workspaceId=workspace-designs');
+    expect(src).toContain('workspaceMemberId=member-designs');
+  });
+
   it('renders No projects match your search when projects exist but query filters them out', () => {
     render(
       <DesignsTab
@@ -118,4 +181,181 @@ describe('DesignsTab empty state', () => {
     expect(screen.queryByText('No projects yet.')).toBeNull();
     expect(screen.queryByRole('button', { name: 'New project' })).toBeNull();
   });
+
+  it('does not scan while hidden and aborts both background scan types when deactivated', async () => {
+    let liveSignal: AbortSignal | undefined;
+    let filesSignal: AbortSignal | undefined;
+    vi.mocked(fetchLiveArtifacts).mockImplementation((_projectId, options) => {
+      liveSignal = options?.signal;
+      return new Promise((resolve) => {
+        options?.signal?.addEventListener('abort', () => resolve([]), { once: true });
+      });
+    });
+    vi.mocked(fetchProjectFiles).mockImplementation((_projectId, options) => {
+      filesSignal = options?.signal;
+      return new Promise((resolve) => {
+        options?.signal?.addEventListener('abort', () => resolve([]), { once: true });
+      });
+    });
+    const project = {
+      id: 'project-reopen',
+      name: 'Reopen project',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1,
+      updatedAt: 2,
+      status: { value: 'not_started' as const },
+    };
+    const props = {
+      projects: [project],
+      skills: [],
+      designSystems: [],
+      onOpen: vi.fn(),
+      onOpenLiveArtifact: vi.fn(),
+      onDelete: vi.fn(),
+      onRename: vi.fn(),
+    };
+    const { rerender } = render(<DesignsTab {...props} isActive={false} />);
+
+    expect(fetchLiveArtifacts).not.toHaveBeenCalled();
+    expect(fetchProjectFiles).not.toHaveBeenCalled();
+
+    rerender(<DesignsTab {...props} isActive />);
+    await vi.waitFor(() => {
+      expect(fetchLiveArtifacts).toHaveBeenCalledTimes(1);
+      expect(fetchProjectFiles).toHaveBeenCalledTimes(1);
+    });
+    expect(fetchProjectFiles).toHaveBeenCalledWith(
+      'project-reopen',
+      expect.objectContaining({
+        workspaceContext: expect.objectContaining({
+          workspaceId: 'workspace-designs',
+          workspaceMemberId: 'member-designs',
+        }),
+      }),
+    );
+    expect(liveSignal).toBeDefined();
+    expect(filesSignal).toBeDefined();
+
+    rerender(<DesignsTab {...props} isActive={false} />);
+
+    expect(liveSignal?.aborted).toBe(true);
+    expect(filesSignal?.aborted).toBe(true);
+  });
+
+	it('waits for the Workspace authority before reading project metadata', async () => {
+		designsWorkspaceState.loading = true;
+		const project = {
+			id: 'project-authority-loading',
+			name: 'Authority loading',
+			skillId: null,
+			designSystemId: null,
+			createdAt: 1,
+			updatedAt: 2,
+			status: { value: 'not_started' as const },
+		};
+		const props = {
+			projects: [project],
+			skills: [],
+			designSystems: [],
+			onOpen: vi.fn(),
+			onOpenLiveArtifact: vi.fn(),
+			onDelete: vi.fn(),
+			onRename: vi.fn(),
+		};
+		const { rerender } = render(<DesignsTab {...props} />);
+
+		expect(fetchLiveArtifacts).not.toHaveBeenCalled();
+		expect(fetchProjectFiles).not.toHaveBeenCalled();
+
+		designsWorkspaceState.loading = false;
+		rerender(<DesignsTab {...props} />);
+		await vi.waitFor(() => {
+			expect(fetchLiveArtifacts).toHaveBeenCalledTimes(1);
+			expect(fetchProjectFiles).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	it('bounds project cover file reads to two concurrent requests', async () => {
+		let active = 0;
+		let maxActive = 0;
+		const releases: Array<() => void> = [];
+		vi.mocked(fetchProjectFiles).mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					active += 1;
+					maxActive = Math.max(maxActive, active);
+					releases.push(() => {
+						active -= 1;
+						resolve([]);
+					});
+				}),
+		);
+		const projects = Array.from({ length: 5 }, (_, index) => ({
+			id: `project-concurrency-${index}`,
+			name: `Project ${index}`,
+			skillId: null,
+			designSystemId: null,
+			createdAt: 1,
+			updatedAt: 2,
+			status: { value: 'not_started' as const },
+		}));
+		render(
+			<DesignsTab
+				projects={projects}
+				skills={[]}
+				designSystems={[]}
+				onOpen={vi.fn()}
+				onOpenLiveArtifact={vi.fn()}
+				onDelete={vi.fn()}
+				onRename={vi.fn()}
+			/>,
+		);
+
+		await vi.waitFor(() => expect(fetchProjectFiles).toHaveBeenCalledTimes(2));
+		expect(maxActive).toBe(2);
+		await act(async () => {
+			releases.splice(0, 2).forEach((release) => release());
+		});
+		await vi.waitFor(() => expect(fetchProjectFiles).toHaveBeenCalledTimes(4));
+		expect(maxActive).toBe(2);
+		await act(async () => {
+			releases.splice(0, 2).forEach((release) => release());
+		});
+		await vi.waitFor(() => expect(fetchProjectFiles).toHaveBeenCalledTimes(5));
+		expect(maxActive).toBe(2);
+		await act(async () => {
+			releases.splice(0).forEach((release) => release());
+		});
+	});
+
+	it('reuses a resolved project cover decision across remounts', async () => {
+		const project = {
+			id: 'project-cached-cover',
+			name: 'Cached cover',
+			skillId: null,
+			designSystemId: null,
+			createdAt: 1,
+			updatedAt: 2,
+			status: { value: 'not_started' as const },
+		};
+		const props = {
+			projects: [project],
+			skills: [],
+			designSystems: [],
+			onOpen: vi.fn(),
+			onOpenLiveArtifact: vi.fn(),
+			onDelete: vi.fn(),
+			onRename: vi.fn(),
+		};
+		const first = render(<DesignsTab {...props} />);
+		await vi.waitFor(() => expect(fetchProjectFiles).toHaveBeenCalledTimes(1));
+		first.unmount();
+
+		render(<DesignsTab {...props} />);
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(fetchProjectFiles).toHaveBeenCalledTimes(1);
+	});
 });

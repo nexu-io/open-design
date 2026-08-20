@@ -1,4 +1,4 @@
-// Use Open Design Everywhere — modal entry that documents Open Design's
+// Use OpenDesign Everywhere — modal entry that documents OpenDesign's
 // non-UI surfaces (CLI, MCP, HTTP, Skills) and ships a one-click "copy
 // guide for an agent" payload. Reachable from the entry top-bar and
 // from Settings → Integrations as a sibling of the existing MCP install
@@ -49,7 +49,7 @@ interface Props {
   onOpenSettings?: () => void;
   /** Live daemon URL when known (e.g. http://127.0.0.1:7456). */
   daemonUrl?: string;
-  /** Optional Open Design version string surfaced in the agent guide header. */
+  /** Optional OpenDesign version string surfaced in the agent guide header. */
   versionHint?: string;
 }
 
@@ -307,7 +307,7 @@ export function UseEverywhereGuidePanel({
               }}
               data-testid="use-everywhere-open-settings"
             >
-              <Icon name="settings" size={13} />
+              <Icon name="settings" size={14} />
               {t('useEverywhere.configureMcp')}
             </button>
           ) : null}
@@ -324,7 +324,7 @@ export function UseEverywhereGuidePanel({
             }}
             data-testid="use-everywhere-copy-guide"
           >
-            <Icon name="copy" size={13} />
+            <Icon name="copy" size={14} />
             {copyLabel(guideCopy, t('useEverywhere.copyGuide'), t)}
           </button>
         </div>
@@ -410,7 +410,7 @@ function SectionView({
                   onClick={() => onCopySnippet(key, snippet)}
                   aria-label={t('useEverywhere.copySnippetAria', { label: snippet.label })}
                 >
-                  <Icon name="copy" size={11} />
+                  <Icon name="copy" size={14} />
                   {copyLabel(state, t('useEverywhere.copy'), t)}
                 </button>
               </div>

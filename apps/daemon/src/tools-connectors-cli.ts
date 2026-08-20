@@ -45,7 +45,7 @@ const CONNECTORS_USAGE = `Usage:
 
 Environment:
   OD_NODE_BIN     Node-compatible runtime for agent wrapper invocations
-  OD_BIN          Open Design CLI script for agent wrapper invocations
+  OD_BIN          OpenDesign CLI script for agent wrapper invocations
   OD_DAEMON_URL   Daemon base URL injected into agent runs
   OD_TOOL_TOKEN   Bearer token injected into agent runs
 
@@ -1761,18 +1761,27 @@ export async function auditDesignSystemPackage(
 
   if (options.referencePackage === true) {
     if (!fileSet.has('DESIGN.md')) {
-      addIssue('warning', 'missing_open_design_rules', 'Reference packages may omit DESIGN.md, but generated Open Design packages must include it as the canonical rules file.', 'DESIGN.md');
+      addIssue('warning', 'missing_open_design_rules', 'Reference packages may omit DESIGN.md, but generated OpenDesign packages must include it as the canonical rules file.', 'DESIGN.md');
     }
   } else {
     requireFile('DESIGN.md', 'Claude Design-style packages need DESIGN.md as the canonical system rules.');
   }
   requireFile('README.md', 'Claude Design-style packages need README.md so the system is reusable outside the current run.');
   requireFile('SKILL.md', 'Claude Design-style packages need SKILL.md with agent-facing usage instructions.');
-  requireFile('colors_and_type.css', 'Claude Design-style packages need colors_and_type.css for reusable color, type, spacing, radius, and state tokens.');
+  requireFile('colors_and_type.css', 'Claude Design-style packages need colors_and_type.css for reusable color and typography foundations; spacing and radius may live in tokens.css.');
+  const companionTokenCss = fileSet.has('tokens.css')
+    ? await readAuditText(projectPath, 'tokens.css')
+    : undefined;
   await requireContent('DESIGN.md', 800, 'thin_design_rules', 'DESIGN.md is too thin to be a reusable rules document; include source-backed context, foundations, tokens, components, motion, voice, and anti-patterns.', validateDesignRules);
   await requireContent('README.md', 600, 'thin_readme', 'README.md is too thin to explain the package, source evidence, generated files, and reuse workflow.', requireMarkdownHeading);
   await requireContent('SKILL.md', 500, 'thin_skill', 'SKILL.md is too thin to guide future agents on how to use this design system.', validateSkillInstructions);
-  await requireContent('colors_and_type.css', 500, 'thin_token_css', 'colors_and_type.css is too thin to carry reusable color, typography, spacing, radius, and state tokens.', validateTokenCss);
+  await requireContent(
+    'colors_and_type.css',
+    500,
+    'thin_token_css',
+    'colors_and_type.css is too thin to carry reusable color and typography foundations.',
+    (text) => validateTokenCss(text, companionTokenCss),
+  );
   if (fileSet.has('SKILL.md')) {
     const skillText = await readAuditText(projectPath, 'SKILL.md');
     if (skillText !== undefined && !skillHasAgentFrontmatter(skillText)) {
@@ -2336,14 +2345,15 @@ function validateDesignRules(text: string): string | undefined {
     : `DESIGN.md is missing source-backed sections for ${missing.map((group) => group[0]).join(', ')}.`;
 }
 
-function validateTokenCss(text: string): string | undefined {
+function validateTokenCss(text: string, companionText?: string): string | undefined {
   const variables = [...text.matchAll(/--[a-z0-9_-]+\s*:/giu)].length;
   if (variables < 12) return `Expected at least 12 CSS custom properties, found ${variables}.`;
   const colors = [...text.matchAll(/#[0-9a-f]{3,8}\b|rgb[a]?\(|hsl[a]?\(/giu)].length;
   if (colors < 4) return `Expected concrete color values in colors_and_type.css, found ${colors}.`;
   if (!/font(-family)?|--[^:]*font/iu.test(text)) return 'Expected font-family or font token declarations.';
-  if (!/radius|border-radius/iu.test(text)) return 'Expected radius token declarations.';
-  if (!/space|spacing|gap/iu.test(text)) return 'Expected spacing token declarations.';
+  const layoutTokens = companionText === undefined ? text : `${text}\n${companionText}`;
+  if (!/radius|border-radius/iu.test(layoutTokens)) return 'Expected radius token declarations in colors_and_type.css or tokens.css.';
+  if (!/space|spacing|gap/iu.test(layoutTokens)) return 'Expected spacing token declarations in colors_and_type.css or tokens.css.';
   return undefined;
 }
 

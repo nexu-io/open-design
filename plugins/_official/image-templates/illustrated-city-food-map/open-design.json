@@ -24,6 +24,7 @@
     "en": "Illustrated City Food Map"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T05:25:44Z",
   "description": "Generates a hand-drawn, watercolor-style tourist map featuring numbered local food specialties, landmarks, and a legend.",
   "description_i18n": {
     "zh-CN": "生成手绘水彩风格的旅游地图，展示带编号的当地特色美食、地标建筑和图例说明。",

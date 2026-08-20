@@ -24,6 +24,7 @@
     "en": "Illustration - Crayon Kid-Drawing Rework"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A style-transfer prompt that reworks any reference image (product shot, screenshot, portrait, UI mockup) into a hand-drawn crayon illustration that feels like it was made by a 10-year-old. Replaces the original palette with bright playful crayon colors on clean white paper, and sprinkles childlike whimsy — castles, candy, stars, clouds, rainbows — to amplify the innocent storybook vibe. Works as an image-to-image edit in GPT-image-2 (requires uploading a reference image alongside the prompt); well-suited to website screenshots, brand key art, product photos, and portraits.",
   "description_i18n": {
     "zh-CN": "将任何参考图像转换为10岁儿童手绘蜡笔插画风格，使用明亮的蜡笔色彩和白纸背景，添加童趣元素如城堡、糖果、星星、云朵、彩虹等。适用于网页截图、品牌视觉、产品照片和人像的 gpt-image-2 图生图编辑。",

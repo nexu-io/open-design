@@ -433,31 +433,31 @@ export const playwrightUiScenarios: UiScenario[] = [
     ],
   },
   {
-    id: 'question-form-selection-limit',
-    title: 'Question form checkbox limits block selecting more than the allowed maximum',
+    id: 'question-form-single-selection',
+    title: 'Visual style question keeps exactly one selected direction',
     kind: 'workspace',
-    flow: 'question-form-selection-limit',
+    flow: 'question-form-single-selection',
     automated: true,
     description:
-      'Verifies that a discovery-style checkbox question with maxSelections=2 cannot be pushed past two selected options.',
+      'Verifies that choosing another visual style replaces the previous discovery direction.',
     create: {
-      projectName: 'Question form selection limit',
+      projectName: 'Single visual style',
       tab: 'prototype',
     },
     prompt: 'Help me plan a restaurant homepage',
     notes: [
       'Mocks a question-form response instead of an artifact so the test can exercise the inline clarifying UI.',
-      'Confirms both the interaction guard and the rendered checked state stay capped at two options.',
+      'Confirms the visual card picker exposes radio semantics and keeps exactly one selected option.',
     ],
   },
   {
     id: 'question-form-submit-persistence',
-    title: 'Question form answers persist into chat history and reload in a locked state',
+    title: 'Question form answers persist as a chat summary after reload',
     kind: 'workspace',
     flow: 'question-form-submit-persistence',
     automated: true,
     description:
-      'Verifies that answering a question form writes a user follow-up message, then rehydrates the form in an answered and locked state after reload.',
+      'Verifies that answering an inline question form writes a structured follow-up and restores its readable summary after reload.',
     create: {
       projectName: 'Question form submit persistence',
       tab: 'prototype',
@@ -512,14 +512,15 @@ export const playwrightUiScenarios: UiScenario[] = [
     flow: 'deck-pagination-next-prev-correctness',
     automated: true,
     description:
-      'Should verify that deck preview pagination moves to the actual previous and next slide instead of routing both actions to the same page.',
+      'Should verify that persisted deck-stage thumbnails and pagination move the real preview while host chrome and speaker notes stay synchronized.',
     create: {
       projectName: 'Deck pagination controls',
       tab: 'deck',
     },
     prompt: 'Review pagination behavior in a multi-slide deck preview',
     notes: [
-      'Seeds deterministic deck HTML through the project files API and verifies previous/next controls in Playwright.',
+      'Seeds mixed legacy and modern slide markers through the project files API, including a decoy screen label outside the explicit deck-stage.',
+      'Verifies thumbnail selection, previous/next controls, and deck-originated navigation in Playwright.',
     ],
   },
   {
@@ -541,7 +542,7 @@ export const playwrightUiScenarios: UiScenario[] = [
   },
   {
     id: 'uploaded-image-renders-in-preview',
-    title: 'Uploaded reference images render correctly in generated deck preview',
+    title: 'Uploaded reference images render correctly in generated page preview',
     kind: 'workspace',
     flow: 'uploaded-image-renders-in-preview',
     automated: true,
@@ -551,7 +552,7 @@ export const playwrightUiScenarios: UiScenario[] = [
       projectName: 'Uploaded image preview render',
       tab: 'prototype',
     },
-    prompt: 'Use uploaded brand images inside a generated deck preview',
+    prompt: 'Use uploaded brand images inside a generated page preview',
     expectedFiles: [
       {
         name: 'brand.png',
@@ -565,7 +566,7 @@ export const playwrightUiScenarios: UiScenario[] = [
     ],
     expectedPreviewText: 'Image Preview',
     notes: [
-      'Seeds an image plus relative HTML reference and asserts the preview iframe loads the image.',
+      'Uploads an image through the real Design Files control, references it by generated root-relative HTML path, and asserts the preview iframe decodes it.',
     ],
   },
   {

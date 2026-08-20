@@ -1,8 +1,8 @@
 // @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
-import { chromeDumpDom, chromeScreenshot, findChrome } from "./chrome.js";
 import { harvestFonts, type FontFile } from "./fonts.js";
+import { fetchExternalBrandAsset } from "./safe-fetch.js";
 
 /**
  * Deterministic brand-material prefetch. Given a site URL, fetch the HTML +
@@ -66,9 +66,10 @@ export type PrefetchResult = {
   paragraphs: string[];
   navLabels: string[];
   extraPages: Array<{ url: string; title: string; text: string }>;
-  /** Path (relative to the brand dir) of a headless-Chrome page screenshot,
-   *  captured when no logo could be downloaded — vision material for the
-   *  synthesis agent. */
+  /** Path (relative to the brand dir) of a page screenshot used as vision
+   *  material for the synthesis agent. Always null server-side now that the
+   *  headless-Chrome capture was removed (it could not be constrained to public
+   *  hosts — SSRF). */
   screenshot: string | null;
   /** True when the harvest looks too thin to synthesize from (likely a
    *  bot-blocked or fully JS-rendered site). The synthesis prompt switches
@@ -112,9 +113,8 @@ async function fetchText(
   },
 ): Promise<{ text: string; finalUrl: string; contentType: string; ok: boolean } | null> {
   try {
-    const res = await fetch(url, {
+    const res = await fetchExternalBrandAsset(url, {
       headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,text/css,*/*" },
-      redirect: "follow",
       signal: fetchDeadline(opts?.signal),
     });
     if (!res.ok && !opts?.allowHttpError) return null;
@@ -143,7 +143,7 @@ async function fetchBinary(
 ): Promise<{ buf: Buffer; contentType: string } | null> {
   const attempt = async (): Promise<{ buf: Buffer; contentType: string } | null> => {
     try {
-      const res = await fetch(url, {
+      const res = await fetchExternalBrandAsset(url, {
         headers: {
           "User-Agent": UA,
           Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
@@ -152,7 +152,6 @@ async function fetchBinary(
           "Sec-Fetch-Site": "cross-site",
           ...(referer ? { Referer: referer } : {}),
         },
-        redirect: "follow",
         signal: fetchDeadline(signal),
       });
       if (!res.ok) return null;
@@ -217,9 +216,22 @@ export function isChallengePage(html: string): boolean {
   return false;
 }
 
+/**
+ * Captured pages are stored as READ-ONLY source evidence. Defuse every script
+ * tag so previewing a capture can never run the source site's live code —
+ * auth widgets (Google One Tap sign-in bubbles), analytics beacons, consent
+ * SDKs. The markup stays readable: only execution is disabled, by leading the
+ * tag with a non-JS type attribute (on duplicate attributes the HTML parser
+ * keeps the first, so an original type="module" further right is inert).
+ */
+function defuseScripts(html: string): string {
+  return html.replace(/<script\b/gi, '<script type="text/od-defused-script"');
+}
+
 export function previewablePrefetchHtml(html: string, cap = HTML_CAP): string {
-  const out = html.slice(0, cap);
-  if (/<body\b/i.test(out) || out.length < cap) return out;
+  const raw = html.slice(0, cap);
+  const out = defuseScripts(raw);
+  if (/<body\b/i.test(out) || raw.length < cap) return out;
   const title = decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(out)?.[1] ?? "").trim();
   return [
     "<!doctype html>",
@@ -765,50 +777,30 @@ export async function prefetchBrand(
   throwIfPrefetchAborted(signal);
   let html: string;
   let baseUrl: string;
-  let renderedDom: string | null = null; // set once Chrome has rendered the page
   if (page && !isChallengePage(page.text)) {
     html = page.text;
     baseUrl = page.finalUrl;
+  } else if (page) {
+    // Bot-challenge page. The system-Chrome render fallback was removed (a
+    // spawned browser can't be constrained to public hosts — SSRF), so keep
+    // going in blocked mode: the favicon-service logo tier still runs and the
+    // challenge content is discarded below. JS-heavy sites are rendered by the
+    // in-app browser path (prefetchFromHtml), not here.
+    html = page.text;
+    baseUrl = page.finalUrl;
   } else {
-    // Plain fetch blocked or answered with a bot challenge → headless-Chrome
-    // fallback (real browser fingerprint).
-    throwIfPrefetchAborted(signal);
-    onProgress(
-      "chrome",
-      page
-        ? "bot challenge detected — rendering with headless Chrome"
-        : "plain fetch blocked — rendering with headless Chrome",
-    );
-    renderedDom = await chromeDumpDom(url);
-    throwIfPrefetchAborted(signal);
-    if (renderedDom) {
-      html = renderedDom.slice(0, HTML_CAP);
-      baseUrl = page?.finalUrl ?? url;
-    } else if (page) {
-      // Challenge page and no Chrome render — keep going in blocked mode so
-      // the favicon-service logo tier still runs; the page content itself is
-      // discarded below.
-      html = page.text;
-      baseUrl = page.finalUrl;
-    } else {
-      return null;
-    }
+    // Plain fetch blocked outright with nothing usable.
+    return null;
   }
-  return harvestFromHtml(html, baseUrl, brandDir, { url, renderedDom, onProgress, signal });
+  return harvestFromHtml(html, baseUrl, brandDir, { url, onProgress, signal });
 }
 
 interface HarvestFromHtmlOptions {
   /** Original input URL recorded as `result.url`. */
   url: string;
-  /** Pre-rendered DOM (headless Chrome) captured during fetch, used as a logo
-   *  fallback source. Null for the extract-from-html path. */
-  renderedDom?: string | null;
   /** Extra CSS folded into the harvest before parsing (e.g. stylesheet text the
    *  web read out of the rendered browser page). */
   cssSeed?: string;
-  /** Whether headless-Chrome rescue passes (thin-CSS re-harvest, screenshot) may
-   *  run. False when the caller already supplied rendered DOM. Defaults true. */
-  allowChrome?: boolean;
   onProgress?: PrefetchProgress;
   /** Caller cancellation (user Stop) threaded into the harvest's sub-fetches. */
   signal?: AbortSignal;
@@ -816,7 +808,7 @@ interface HarvestFromHtmlOptions {
 
 /** Turn page HTML (+ optional seed CSS) into a PrefetchResult: harvest colors,
  *  fonts, logos, and copy, self-host webfonts, and build the material digest.
- *  `prefetchBrand` feeds fetched / Chrome-rendered HTML; `prefetchFromHtml`
+ *  `prefetchBrand` feeds server-fetched HTML; `prefetchFromHtml`
  *  feeds the DOM the web read out of the unblocked in-app browser tab. */
 async function harvestFromHtml(
   html: string,
@@ -826,11 +818,9 @@ async function harvestFromHtml(
 ): Promise<PrefetchResult> {
   const { url, signal } = opts;
   const onProgress: PrefetchProgress = opts.onProgress ?? (() => {});
-  const allowChrome = opts.allowChrome ?? true;
-  let renderedDom = opts.renderedDom ?? null;
   throwIfPrefetchAborted(signal);
-  // Chrome can render a challenge page too (interactive Turnstile etc.) —
-  // re-check the HTML we actually ended up with.
+  // Re-check the HTML we actually ended up with (a challenge page can slip
+  // through when the caller supplies pre-rendered DOM).
   const blocked = isChallengePage(html);
   if (blocked) {
     onProgress("blocked", "anti-bot challenge page — discarding its content from the harvest");
@@ -878,28 +868,6 @@ async function harvestFromHtml(
 
     colors = extractColors(allCss);
     ({ fonts, fontFaceFamilies } = extractFonts(allCss));
-
-    // CSS-in-JS rescue: a thin static harvest usually means styles are injected
-    // at runtime. Render once with headless Chrome — the dumped DOM carries the
-    // injected <style> tags and inline styles — and re-extract.
-    if (colors.filter((c) => !c.extreme).length < 3 && !renderedDom && allowChrome && findChrome()) {
-      throwIfPrefetchAborted(signal);
-      onProgress("chrome", "thin static CSS — re-harvesting from the rendered DOM");
-      renderedDom = await chromeDumpDom(baseUrl);
-      throwIfPrefetchAborted(signal);
-      if (renderedDom) {
-        const domCss: string[] = [];
-        for (const m of renderedDom.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) domCss.push(m[1]);
-        for (const m of renderedDom.matchAll(/<([a-z][\w:-]*)([^>]{0,2000}?)\sstyle=["']([^"']{1,2000})["'][^>]*>/gi)) {
-          domCss.push(`${inlineStyleSelector(m[1], m[2] ?? '')}{${m[3]};}`);
-        }
-        if (domCss.length) {
-          allCss = [allCss, ...domCss].join("\n");
-          colors = extractColors(allCss);
-          ({ fonts, fontFaceFamilies } = extractFonts(allCss));
-        }
-      }
-    }
   }
   onProgress("styles", `${colors.length} colors, ${fonts.length} fonts`);
 
@@ -938,9 +906,7 @@ async function harvestFromHtml(
       contentType: "image/svg+xml",
     });
   }
-  // The rendered DOM sees lazily-injected header logos the raw HTML may miss.
-  let refs = blocked ? [] : findLogoRefs(html, baseUrl);
-  if (refs.length === 0 && renderedDom && !blocked) refs = findLogoRefs(renderedDom, baseUrl);
+  const refs = blocked ? [] : findLogoRefs(html, baseUrl);
   for (const ref of refs) {
     if (logos.length >= MAX_LOGOS) break;
     const bin = await fetchBinary(ref.url, baseUrl, signal);
@@ -969,20 +935,13 @@ async function harvestFromHtml(
     const logoColors = extractLogoSvgColorCandidates(logosDir, logos);
     if (logoColors.length > 0) colors = mergeColorCandidates(colors, logoColors);
   }
-  // Still nothing → grab a page screenshot instead; the synthesis agent Reads
-  // it with vision to locate the logo and judge visual style. Pointless for a
-  // challenge page — the screenshot would show the interstitial.
   const prefetchDir = path.join(brandDir, "prefetch");
   fs.mkdirSync(prefetchDir, { recursive: true });
-  let screenshot: string | null = null;
-  if (logos.length === 0 && !blocked && allowChrome && findChrome()) {
-    throwIfPrefetchAborted(signal);
-    onProgress("chrome", "no logo downloadable — capturing a page screenshot");
-    const shotPath = path.join(prefetchDir, "screenshot.png");
-    if (await chromeScreenshot(baseUrl, shotPath)) screenshot = "prefetch/screenshot.png";
-    throwIfPrefetchAborted(signal);
-  }
-  onProgress("logos-done", `${logos.length} candidates${screenshot ? " + page screenshot" : ""}`);
+  // The page-screenshot fallback relied on spawning system Chrome, which was
+  // removed (it could not be constrained to public hosts — SSRF), so no
+  // screenshot is captured on the server side.
+  const screenshot: string | null = null;
+  onProgress("logos-done", `${logos.length} candidates`);
 
   // ── copy ──
   // Challenge-page copy ("Just a moment…", "performing security verification")
@@ -1068,7 +1027,7 @@ async function harvestFromHtml(
 
 /** Harvest a brand from HTML the web already rendered (e.g. the in-app browser
  *  tab after the user cleared an anti-bot wall) instead of fetching it. Skips
- *  all main-page network fetching and headless-Chrome rescue; logo/webfont
+ *  main-page network fetching; logo/webfont
  *  downloads still run best-effort against `baseUrl`. Returns null on empty
  *  input. The provided `css` (stylesheet text + computed styles collected from
  *  the rendered page) is folded in alongside the inline `<style>` in `html`. */
@@ -1089,8 +1048,6 @@ export async function prefetchFromHtml(
   return harvestFromHtml(html.slice(0, HTML_CAP), resolvedBase, brandDir, {
     url: baseUrl,
     cssSeed: css ?? "",
-    renderedDom: null,
-    allowChrome: false,
     onProgress,
   });
 }

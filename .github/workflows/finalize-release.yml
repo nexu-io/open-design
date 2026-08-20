@@ -149,7 +149,7 @@ jobs:
           fi
           # Bump only the synchronized set: every workspace package.json whose version
           # equals the current monorepo version. Independently-versioned packages
-          # (telemetry-worker, components, agui-adapter, tools/serve, …) keep their own
+          # (components, agui-adapter, tools/serve, …) keep their own
           # version. `npm pkg set version` touches only the top-level "version" field,
           # never a pinned dependency that happens to share the number (e.g. @xterm/addon-fit).
           changed=0

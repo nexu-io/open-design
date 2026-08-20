@@ -11,7 +11,8 @@ export type StorageConfig = {
 };
 
 type PutObjectOptions = StorageConfig & {
-  bodyPath: string;
+  body?: Buffer;
+  bodyPath?: string;
   cacheControl: string;
   contentType: string;
   headers?: Record<string, string>;
@@ -123,7 +124,10 @@ export async function putStorageObject(options: PutObjectOptions): Promise<void>
 }
 
 export async function putStorageObjectWithStatus(options: PutObjectOptions): Promise<{ body: string; ok: boolean; status: number; url: string }> {
-  const body = readFileSync(options.bodyPath);
+  if (options.body == null && options.bodyPath == null) {
+    throw new Error("PUT storage object requires body or bodyPath");
+  }
+  const body = options.body == null ? readFileSync(options.bodyPath ?? "") : Buffer.from(options.body);
   const payloadHash = hash(body);
   const { canonicalUri, url } = objectUrl(options, options.objectKey);
   // x-amz-date is filled in per attempt inside signedFetchWithRetry so the
@@ -164,7 +168,7 @@ export async function putStorageObjectWithStatus(options: PutObjectOptions): Pro
   };
 }
 
-export async function getStorageObject(options: GetObjectOptions): Promise<{ etag: string; text: string } | null> {
+export async function getStorageObject(options: GetObjectOptions): Promise<{ bytes: Buffer; etag: string; text: string } | null> {
   const payloadHash = hash("");
   const { canonicalUri, url } = objectUrl(options, options.objectKey);
   const headers: Record<string, string> = {
@@ -195,9 +199,11 @@ export async function getStorageObject(options: GetObjectOptions): Promise<{ eta
     const text = await response.text().catch(() => "");
     throw new Error(`GET ${url} failed with HTTP ${response.status}${text.length > 0 ? `: ${text}` : ""}`);
   }
+  const bytes = Buffer.from(await response.arrayBuffer());
   return {
+    bytes,
     etag: response.headers.get("etag") ?? "",
-    text: await response.text(),
+    text: bytes.toString("utf8"),
   };
 }
 

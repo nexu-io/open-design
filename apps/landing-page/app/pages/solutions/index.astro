@@ -81,7 +81,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: SITE },
       { '@type': 'ListItem', position: 2, name: page.heading, item: `${SITE}solutions/` },
     ],
   },
@@ -107,7 +107,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="solution" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <span aria-current="page">{page.heading}</span>
   </nav>

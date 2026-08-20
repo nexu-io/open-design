@@ -24,6 +24,7 @@
     "en": "Video - Three Kingdoms ARPG - Guan Yu Slays Yan Liang (Seedance 2.0)"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A ~10s in-engine cinematic action sequence bringing the companion image template game-screenshot-three-kingdoms-guanyu-slaying-yanliang to life. Guan Yu (关羽) rides his Red Hare horse straight into an enemy battle line, raises the Green Dragon Crescent Blade, and executes a single clean cleave of the opposing general Yan Liang. Tuned for Seedance 2.0 — tight camera discipline, one decisive strike, clean horse-and-blade physics, photoreal lighting, absolutely no gore on-screen (the strike is implied by a gold qi flash, not by any blood). Designed as the direct video companion to the matching image template so the still and the clip can be served as a pair. Reference image: the Guan Yu slaying-Yan-Liang screenshot template.",
   "description_i18n": {
     "zh-CN": "约10秒的引擎内动作过场动画，配套《三国关羽斩颜良》截图模板。关羽骑赤兔马冲入敌阵，挥动青龙偃月刀斩杀颜良。为Seedance 2.0优化，使用金色气劲特效表现击杀瞬间，无血腥画面。",

@@ -120,40 +120,349 @@ function installImageCompositeMocks() {
   };
 }
 
+// Capture the ResizeObserver callback so a test can re-run the overlay's
+// canvas-sizing logic after overriding the wrap's layout vs. visual geometry.
+function installResizeObserver() {
+  let callback: ResizeObserverCallback | null = null;
+  class MockResizeObserver {
+    constructor(cb: ResizeObserverCallback) {
+      callback = cb;
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  const previous = (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    writable: true,
+    value: MockResizeObserver as unknown as typeof ResizeObserver,
+  });
+  return {
+    trigger: () => callback?.([], {} as ResizeObserver),
+    restore: () => {
+      if (previous) {
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+          configurable: true,
+          writable: true,
+          value: previous,
+        });
+      } else {
+        delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+      }
+    },
+  };
+}
+
 describe('PreviewDrawOverlay', () => {
+  it('sizes the ink canvas from the frame layout box, not its CSS-scaled rect', () => {
+    // A tablet/phone device frame wraps this overlay in a `transform: scale()`
+    // shell. getBoundingClientRect() reports the already-scaled width, so sizing
+    // the canvas from it and then letting the ancestor transform shrink it again
+    // left the canvas covering only the left slice of the frame — the right half
+    // was un-drawable. offsetWidth is the untransformed layout size and fixes it.
+    const observer = installResizeObserver();
+    try {
+      const { container } = render(
+        <PreviewDrawOverlay active>
+          <div style={{ width: 320, height: 200 }} />
+        </PreviewDrawOverlay>,
+      );
+
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      // Layout box is the full 800×600 frame; the visually-scaled rect is half.
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => 800 });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => 600 });
+      wrap.getBoundingClientRect = () =>
+        ({ x: 0, y: 0, left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300, toJSON: () => ({}) }) as DOMRect;
+
+      observer.trigger();
+
+      expect(canvas.style.width).toBe('800px');
+      expect(canvas.style.height).toBe('600px');
+    } finally {
+      observer.restore();
+    }
+  });
+
   it('keeps the draw toolbar responsive inside narrow preview surfaces', () => {
-    const { container } = render(
+    const { container, getByRole } = render(
       <PreviewDrawOverlay active>
         <div style={{ width: 320, height: 200 }} />
       </PreviewDrawOverlay>,
     );
 
     const canvas = container.querySelector<HTMLCanvasElement>('canvas');
-    // The warning / attached-image strip / toolbar now share one bottom-anchored
-    // dock, so the responsive positioning lives on the dock and they never
-    // overlap regardless of how tall the toolbar wraps.
+    // The warning / attached-image strip / toolbar share one bottom-anchored
+    // floating dock. The toolbar stays one compact row and keeps overflow
+    // visible so its popover menus are not clipped by the dock.
     const dock = container.querySelector<HTMLElement>('.preview-draw-dock');
     const toolbar = container.querySelector<HTMLElement>('.preview-draw-toolbar');
     const toolCluster = container.querySelector<HTMLElement>('.preview-draw-tool-cluster');
+    const subTools = container.querySelectorAll<HTMLElement>('.preview-draw-subtool-action');
     const noteActions = container.querySelector<HTMLElement>('.preview-draw-note-actions');
     const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
+    const close = getByRole('button', { name: 'Close' }) as HTMLButtonElement;
 
     expect(canvas?.style.zIndex).toBe('80');
+    expect(canvas?.style.touchAction).toBe('none');
+    expect(canvas?.style.userSelect).toBe('none');
+    expect(container.querySelector('.preview-draw-overlay-active')).toBeTruthy();
+    expect(container.querySelector('style')?.textContent).toContain('.preview-draw-overlay-active iframe');
     expect(dock?.style.zIndex).toBe('91');
     expect(dock?.dataset.drawLayout).toBe('docked');
     expect(dock?.style.flexDirection).toBe('column');
     expect(dock?.style.left).toBe('calc(50% - 52px)');
     expect(dock?.style.maxWidth).toContain('100% - 144px');
-    expect(toolbar?.style.flexWrap).toBe('wrap');
+    expect(toolbar?.style.flexWrap).toBe('nowrap');
+    expect(toolbar?.style.overflow).toBe('visible');
     expect(toolCluster?.style.flex).toBe('0 0 auto');
+    // One 34px segment per mark tool, sharing a single translucent track.
+    expect(subTools).toHaveLength(3);
+    for (const segment of subTools) {
+      expect(segment.style.width).toBe('34px');
+      expect(segment.style.color).toBe('rgb(255, 255, 255)');
+      expect(segment.style.borderStyle).toBe('none');
+    }
+    expect(subTools[0]?.parentElement?.style.background).toBe('rgba(255, 255, 255, 0.08)');
+    expect(subTools[0]?.parentElement?.style.borderStyle).toBe('none');
     expect(noteActions?.style.flex).toBe('1 1 360px');
     expect(noteActions?.style.minWidth).toBe('0px');
-    expect(noteActions?.style.maxWidth).toBe('412px');
+    expect(noteActions?.style.maxWidth).toBe('420px');
+    expect(close.style.flex).toBe('0 0 30px');
+    expect(close.style.minWidth).toBe('30px');
+    expect(close.style.aspectRatio).toBe('1 / 1');
     expect(input?.style.flexGrow).toBe('1');
     expect(input?.style.flexShrink).toBe('1');
-    expect(input?.style.flexBasis).toBe('220px');
+    expect(input?.style.flexBasis).toBe('240px');
     expect(input?.style.minWidth).toBe('0px');
     expect(input?.style.maxWidth).toBe('100%');
+  });
+
+  it('shows every mark tool as its own segment and arms the one clicked', () => {
+    const onToolbarClick = vi.fn();
+    const { container, getByRole, queryByRole } = render(
+      <PreviewDrawOverlay active onToolbarClick={onToolbarClick}>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    // Flat segmented group: no dropdown, and switching never hides a tool.
+    expect(container.querySelectorAll('.preview-draw-subtool-action')).toHaveLength(3);
+    expect(queryByRole('menu', { name: 'Mark tool' })).toBeNull();
+    expect(getByRole('group', { name: 'Mark tool' })).toBeTruthy();
+
+    // Box select is armed on open.
+    expect(getByRole('button', { name: 'Box select' }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(getByRole('button', { name: 'Pen' }));
+    expect(onToolbarClick).toHaveBeenLastCalledWith('pen');
+    expect(getByRole('button', { name: 'Pen' }).getAttribute('aria-pressed')).toBe('true');
+    expect(getByRole('button', { name: 'Box select' }).getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(getByRole('button', { name: 'Box select' }));
+    expect(onToolbarClick).toHaveBeenLastCalledWith('rect');
+    expect(getByRole('button', { name: 'Box select' }).getAttribute('aria-pressed')).toBe('true');
+    expect(getByRole('button', { name: 'Pen' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('offers a text tool alongside the others and switches to it', () => {
+    const onToolbarClick = vi.fn();
+    const { getByRole } = render(
+      <PreviewDrawOverlay active onToolbarClick={onToolbarClick}>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Text' }));
+    expect(onToolbarClick).toHaveBeenLastCalledWith('text');
+    expect(getByRole('button', { name: 'Text' }).getAttribute('aria-pressed')).toBe('true');
+    // The other tools stay on the bar rather than collapsing behind the active one.
+    expect(getByRole('button', { name: 'Box select' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Pen' })).toBeTruthy();
+  });
+
+  it('drops focusable, independent text labels where the canvas is pressed', () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    canvas.getBoundingClientRect = () =>
+      ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
+
+    fireEvent.click(getByRole('button', { name: 'Text' }));
+
+    // First press drops a label and focuses it.
+    fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
+    let textareas = container.querySelectorAll<HTMLTextAreaElement>('.preview-draw-text-layer textarea');
+    expect(textareas).toHaveLength(1);
+    expect(document.activeElement).toBe(textareas[0]);
+    fireEvent.change(textareas[0]!, { target: { value: 'Look here' } });
+    expect(textareas[0]!.value).toBe('Look here');
+
+    // A second press adds another independent label, not replacing the first.
+    fireEvent.pointerDown(canvas, { clientX: 120, clientY: 120, pointerId: 1 });
+    textareas = container.querySelectorAll<HTMLTextAreaElement>('.preview-draw-text-layer textarea');
+    expect(textareas).toHaveLength(2);
+    expect(textareas[0]!.value).toBe('Look here');
+  });
+
+  it('discards a text label left empty on blur', () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    canvas.getBoundingClientRect = () =>
+      ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
+
+    fireEvent.click(getByRole('button', { name: 'Text' }));
+    fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
+
+    const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
+    expect(textarea).toBeTruthy();
+    fireEvent.blur(textarea);
+    expect(container.querySelectorAll('.preview-draw-text-layer textarea')).toHaveLength(0);
+  });
+
+  it('places a plain caret label with no placeholder, and reveals remove on hover only', () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    canvas.getBoundingClientRect = () =>
+      ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
+
+    fireEvent.click(getByRole('button', { name: 'Text' }));
+    fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
+
+    const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
+    // No placeholder — the label is just glyphs + a blinking caret.
+    expect(textarea.getAttribute('placeholder')).toBeNull();
+    // The remove control is hover-gated via CSS, not always-on.
+    const remove = container.querySelector<HTMLElement>('.preview-draw-text-remove');
+    expect(remove).toBeTruthy();
+    const style = container.querySelector('style')?.textContent ?? '';
+    expect(style).toContain('.preview-draw-text-mark:hover .preview-draw-text-remove');
+  });
+
+  it('moves a placed text label by dragging it', () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    canvas.getBoundingClientRect = () =>
+      ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
+
+    fireEvent.click(getByRole('button', { name: 'Text' }));
+    // Drop at 20%,20% and give it text so it survives blur as a placed label.
+    fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
+    const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
+    fireEvent.change(textarea, { target: { value: 'drag me' } });
+    fireEvent.blur(textarea);
+
+    const wrap = container.querySelector<HTMLElement>('.preview-draw-text-mark')!;
+    expect(wrap.style.left).toBe('20%');
+
+    // Grab at the drop point, drag to 60%,60%.
+    fireEvent.pointerDown(wrap, { clientX: 40, clientY: 40, pointerId: 2 });
+    fireEvent.pointerMove(wrap, { clientX: 120, clientY: 120, pointerId: 2 });
+    fireEvent.pointerUp(wrap, { clientX: 120, clientY: 120, pointerId: 2 });
+
+    expect(wrap.style.left).toBe('60%');
+    expect(wrap.style.top).toBe('60%');
+  });
+
+  it('re-opens a placed label for editing on double tap', () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    canvas.getBoundingClientRect = () =>
+      ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
+
+    fireEvent.click(getByRole('button', { name: 'Text' }));
+    fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
+    const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
+    fireEvent.change(textarea, { target: { value: 'edit me' } });
+    fireEvent.blur(textarea);
+    // Placed: read-only until re-opened.
+    expect(textarea.readOnly).toBe(true);
+
+    const wrap = container.querySelector<HTMLElement>('.preview-draw-text-mark')!;
+    // Two taps in the same spot re-open it for editing.
+    fireEvent.pointerDown(wrap, { clientX: 40, clientY: 40, pointerId: 2 });
+    fireEvent.pointerUp(wrap, { clientX: 40, clientY: 40, pointerId: 2 });
+    fireEvent.pointerDown(wrap, { clientX: 40, clientY: 40, pointerId: 3 });
+    fireEvent.pointerUp(wrap, { clientX: 40, clientY: 40, pointerId: 3 });
+
+    expect(container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!.readOnly).toBe(false);
+  });
+
+  it('captures and sends a text-only annotation', async () => {
+    const restoreCompositeMocks = installImageCompositeMocks();
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active captureViewport captureSnapshot={async () => ({ dataUrl: 'data:image/png;base64,cG5n', w: 20, h: 12 })}>
+          <div style={{ width: 320, height: 200 }} />
+        </PreviewDrawOverlay>,
+      );
+
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      canvas.getBoundingClientRect = () =>
+        ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
+
+      fireEvent.click(getByRole('button', { name: 'Text' }));
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
+      const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
+      fireEvent.change(textarea, { target: { value: 'Annotate me' } });
+
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent).detail as { file: File | null; markKind?: string };
+      expect(detail.file).toBeInstanceOf(File);
+      expect(detail.markKind).toBe('stroke');
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      restoreCompositeMocks();
+    }
+  });
+
+  it('prevents preview text selection while drawing on touch-sized frames', () => {
+    const { container } = render(
+      <PreviewDrawOverlay active>
+        <iframe title="preview" />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas');
+    expect(canvas).toBeTruthy();
+
+    expect(fireEvent.pointerDown(canvas!, { clientX: 10, clientY: 10, pointerId: 1 })).toBe(false);
+    expect(fireEvent.pointerMove(canvas!, { clientX: 40, clientY: 40, pointerId: 1 })).toBe(false);
+    expect(fireEvent.pointerUp(canvas!, { clientX: 40, clientY: 40, pointerId: 1 })).toBe(false);
   });
 
   it('queues a note when Enter submits from the draw input', async () => {
@@ -228,9 +537,8 @@ describe('PreviewDrawOverlay', () => {
       // Send is the split button's default action; Queue and Add-to-input now
       // live in its dropdown, opened via the chevron.
       const sendButton = getByRole('button', { name: 'Send' }) as HTMLButtonElement;
-      fireEvent.click(getByRole('button', { name: 'Submit options' }));
-      const queueButton = getByRole('menuitemradio', { name: 'Queue' }) as HTMLButtonElement;
-      const addToInputButton = getByRole('menuitemradio', { name: 'Add to input' }) as HTMLButtonElement;
+      const queueButton = getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
+      const addToInputButton = getByRole('button', { name: 'Add to input' }) as HTMLButtonElement;
       expect(sendButton.disabled).toBe(true);
       expect(sendButton.title).toBe('Task running');
       expect(queueButton.disabled).toBe(false);
@@ -248,7 +556,7 @@ describe('PreviewDrawOverlay', () => {
       // The dropdown stays open through this flow, so click the Queue item
       // directly (re-clicking the chevron would just toggle it shut).
       fireEvent.change(input!, { target: { value: 'Queue another note.' } });
-      fireEvent.click(getByRole('menuitemradio', { name: 'Queue' }));
+      fireEvent.click(getByRole('button', { name: 'Queue' }));
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(2));
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
@@ -274,8 +582,7 @@ describe('PreviewDrawOverlay', () => {
       fireEvent.change(input!, { target: { value: 'Keep this in the input.' } });
 
       // Add-to-input is now a choice in the submit dropdown.
-      fireEvent.click(getByRole('button', { name: 'Submit options' }));
-      fireEvent.click(getByRole('menuitemradio', { name: 'Add to input' }));
+      fireEvent.click(getByRole('button', { name: 'Add to input' }));
 
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(annotation.mock.calls[0]?.[0]).toMatchObject({
@@ -469,7 +776,6 @@ describe('PreviewDrawOverlay', () => {
 
     const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
     fireEvent.change(input, { target: { value: 'keep me here' } });
-    fireEvent.click(getByRole('button', { name: 'Submit options' }));
 
     drawSelectionBox(canvas, { x: 80, y: 80 }, { x: 180, y: 160 });
     await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
@@ -477,10 +783,13 @@ describe('PreviewDrawOverlay', () => {
     const inputAfter = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
     expect(inputAfter).toBe(input);
     expect(inputAfter.value).toBe('keep me here');
-    expect(getByRole('menu')).toBeTruthy();
+    // Every submit action stays reachable across the re-dock.
+    expect(getByRole('button', { name: 'Add to input' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Queue' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Send' })).toBeTruthy();
   });
 
-  it('remembers the submit action chosen from the dropdown', async () => {
+  it('runs each submit action from its own always-visible button', async () => {
     const annotation = vi.fn((event: Event) => {
       const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
       detail.ack?.({ ok: true });
@@ -497,19 +806,21 @@ describe('PreviewDrawOverlay', () => {
       const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
       fireEvent.change(input!, { target: { value: 'ship it' } });
 
-      // Default main action is Send.
+      // All three destinations are on the bar at once — no chevron, no
+      // remembered default that changes what the primary click does.
+      expect(getByRole('button', { name: 'Add to input' })).toBeTruthy();
+      expect(getByRole('button', { name: 'Queue' })).toBeTruthy();
       expect(getByRole('button', { name: 'Send' })).toBeTruthy();
 
-      // Pick Queue from the dropdown: it runs the action and becomes the new default.
-      fireEvent.click(getByRole('button', { name: 'Submit options' }));
-      fireEvent.click(getByRole('menuitemradio', { name: 'Queue' }));
+      fireEvent.click(getByRole('button', { name: 'Queue' }));
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(annotation.mock.calls[0]?.[0]).toMatchObject({
         detail: expect.objectContaining({ action: 'queue' }),
       });
 
-      // The split button's default action is now Queue.
-      await waitFor(() => expect(getByRole('button', { name: 'Queue' })).toBeTruthy());
+      // Send is still Send afterwards — the bar does not re-label itself.
+      await waitFor(() => expect(getByRole('button', { name: 'Send' })).toBeTruthy());
+      expect(getByRole('button', { name: 'Queue' })).toBeTruthy();
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
     }
@@ -662,6 +973,28 @@ describe('PreviewDrawOverlay', () => {
       expect(wrap.contains(input!)).toBe(false);
       expect(body.contains(input!)).toBe(true);
     });
+  });
+
+  it('uses the caller-provided preview viewport as the draw toolbar host', async () => {
+    const toolbarHost = document.createElement('div');
+    toolbarHost.className = 'preview-viewport';
+    document.body.appendChild(toolbarHost);
+
+    try {
+      const { container } = render(
+        <PreviewDrawOverlay active toolbarHost={toolbarHost}>
+          <div style={{ width: 320, height: 200 }} />
+        </PreviewDrawOverlay>,
+      );
+
+      await waitFor(() => {
+        const input = toolbarHost.querySelector<HTMLInputElement>('.preview-draw-note-input');
+        expect(input).toBeTruthy();
+        expect(container.querySelector<HTMLInputElement>('.preview-draw-note-input')).toBeNull();
+      });
+    } finally {
+      toolbarHost.remove();
+    }
   });
 
   it('positions the floating dock in viewer-body coordinates when portaled', async () => {

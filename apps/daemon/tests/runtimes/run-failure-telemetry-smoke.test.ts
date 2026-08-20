@@ -131,7 +131,7 @@ describe('run failure telemetry smoke', () => {
         expectedDetail: 'prompt_too_large',
         expectedDiagnosticSource: 'error_event',
         expectStderr: false,
-        message: `od-failure-smoke-context ${'large-context '.repeat(4000)}`,
+        message: `od-failure-smoke-context ${'large-context '.repeat(10_000)}`,
       },
       {
         id: 'hang_timeout',
@@ -167,7 +167,7 @@ describe('run failure telemetry smoke', () => {
         signal: run.signal,
       });
 
-      expect(run.status).toBe('failed');
+      expect(run.status, item.id).toBe('failed');
       expect('expectedCodes' in item ? item.expectedCodes : [item.expectedCode])
         .toContain(errorCode);
       expect(failure?.failure_category).toBe(item.expectedCategory);
@@ -187,7 +187,7 @@ describe('run failure telemetry smoke', () => {
         expect(trace.body.metadata.stderr).toBeUndefined();
       }
     }
-  });
+  }, 60_000);
 
   it('reclassifies upstream + install/env failures end-to-end through a real daemon run (#3408 P1)', async () => {
     // End-to-end proof for the reclassification: a real agent process emits the

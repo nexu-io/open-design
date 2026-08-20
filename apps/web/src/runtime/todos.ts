@@ -1,3 +1,4 @@
+import { todoStatusIsUnfinished } from '@open-design/contracts';
 import type { AgentEvent } from '../types';
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'stopped';
@@ -69,7 +70,10 @@ export function latestTodosFromEvents(events: AgentEvent[] | undefined): TodoIte
 }
 
 export function unfinishedTodosFromEvents(events: AgentEvent[] | undefined): TodoItem[] {
-  return latestTodosFromEvents(events).filter((todo) => todo.status !== 'completed');
+  // Uses the SAME canonical predicate the daemon stamps `endedWithUnfinishedWork`
+  // with (todoStatusIsUnfinished), so this footer and the Pet task center / project
+  // pill can never disagree about whether a run's work is finished (#1247 / #1060).
+  return latestTodosFromEvents(events).filter((todo) => todoStatusIsUnfinished(todo.status));
 }
 
 // Walk the conversation in reverse to find the most recent TodoWrite

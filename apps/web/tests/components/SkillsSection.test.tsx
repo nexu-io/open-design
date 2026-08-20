@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillsSection } from '../../src/components/SkillsSection';
 import { I18nProvider } from '../../src/i18n';
+import { en } from '../../src/i18n/locales/en';
+import { zhCN } from '../../src/i18n/locales/zh-CN';
 import type { AppConfig } from '../../src/types';
 import type { SkillSummary } from '@open-design/contracts';
 
@@ -46,27 +48,37 @@ function renderSkillsSection(
     locale?: 'en' | 'zh-CN';
     onSkillsRefresh?: () => void | Promise<void>;
     onSkillsChanged?: (id?: string) => void;
+    filesById?: Record<string, Array<{ path: string; kind: 'file' | 'directory'; size: number | null }>>;
   },
 ) {
   const setCfg = vi.fn();
   const onSkillsRefresh = options?.onSkillsRefresh;
   const onSkillsChanged = options?.onSkillsChanged;
+  let catalog = [...skills];
+  const filesById = options?.filesById ?? {};
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
     if (url === '/api/skills' && (!init || init.method === undefined)) {
-      return new Response(JSON.stringify({ skills }), {
+      return new Response(JSON.stringify({ skills: catalog }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
     }
     if (url === '/api/skills/import' && init?.method === 'POST') {
+      const payload = init.body
+        ? (JSON.parse(init.body as string) as { name?: string; description?: string; body?: string; triggers?: string[] })
+        : {};
+      const skill = makeSkill({
+        id: 'new-skill',
+        name: payload.name ?? 'New skill',
+        description: payload.description ?? '',
+        triggers: payload.triggers ?? [],
+        source: 'user',
+      });
+      catalog = [skill, ...catalog];
       return new Response(
         JSON.stringify({
-          skill: makeSkill({
-            id: 'new-skill',
-            name: 'New skill',
-            source: 'user',
-          }),
+          skill,
         }),
         {
           status: 200,
@@ -98,7 +110,8 @@ function renderSkillsSection(
       });
     }
     if (url.match(/^\/api\/skills\/[^/]+\/files$/) && (!init || init.method === undefined)) {
-      return new Response(JSON.stringify({ files: [] }), {
+      const id = decodeURIComponent(url.split('/').at(-2) ?? '');
+      return new Response(JSON.stringify({ files: filesById[id] ?? [] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -224,6 +237,92 @@ describe('SkillsSection', () => {
     expect(await within(row).findByTestId('skills-edit-form')).toBeTruthy();
   });
 
+  // Regression for the nettee / lefarcen follow-up on PR #4793: editing a
+  // built-in skill must read as an explicit "user override" flow in every
+  // locale, never a hardcoded-English or plain "Edit" / "Save" affordance.
+  // Lock the override wording end to end — edit tooltip → confirmation →
+  // form heading → submit — in the default English locale and one translated
+  // zh-CN path, so a regression to the old wording (or to a missing locale
+  // key) goes red.
+  describe.each([
+    { locale: 'en' as const, dict: en },
+    { locale: 'zh-CN' as const, dict: zhCN },
+  ])('built-in skill override wording ($locale)', ({ locale, dict }) => {
+    it('frames the edit affordance, confirmation, form, and submit as a user override', async () => {
+      renderSkillsSection(
+        [
+          makeSkill({
+            id: 'builtin-skill',
+            name: 'Built-in skill',
+            source: 'built-in',
+          }),
+        ],
+        { locale },
+      );
+
+      const row = await screen.findByTestId('skill-row-builtin-skill');
+
+      // The edit (pencil) tooltip reads "Create user override".
+      expect(within(row).getByTestId('skills-edit').title).toBe(
+        dict['settings.skillsOverrideCreate'],
+      );
+
+      fireEvent.click(within(row).getByTestId('skills-edit'));
+
+      // The inline confirmation shows the localized override warning and an
+      // override-framed confirm button — not the plain "Edit" label.
+      expect(
+        await within(row).findByText(dict['settings.skillsBuiltInOverrideWarning']),
+      ).toBeTruthy();
+      expect(
+        within(row).getByTestId('skills-edit-builtin-confirm').textContent,
+      ).toBe(dict['settings.skillsOverrideCreate']);
+
+      fireEvent.click(within(row).getByTestId('skills-edit-builtin-confirm'));
+
+      // The override form heading and submit both read as "user override".
+      const form = await within(row).findByTestId('skills-edit-form');
+      expect(within(form).getByRole('heading', { level: 4 }).textContent).toBe(
+        dict['settings.skillsOverrideCreate'],
+      );
+      expect(within(form).getByTestId('skills-save').textContent).toBe(
+        dict['settings.skillsOverrideSave'],
+      );
+    });
+  });
+
+  // The override wording must stay scoped to built-in skills: editing a
+  // user-authored skill keeps the plain Edit / Save affordance and never
+  // surfaces the override confirmation.
+  it('keeps the plain edit/save wording for user skills', async () => {
+    renderSkillsSection(
+      [
+        makeSkill({
+          id: 'user-skill',
+          name: 'User skill',
+          source: 'user',
+        }),
+      ],
+      { locale: 'en' },
+    );
+
+    const row = await screen.findByTestId('skill-row-user-skill');
+    expect(within(row).getByTestId('skills-edit').title).toBe(
+      en['settings.skillsEdit'],
+    );
+
+    fireEvent.click(within(row).getByTestId('skills-edit'));
+    expect(within(row).queryByTestId('skills-edit-builtin-warning')).toBeNull();
+
+    const form = await within(row).findByTestId('skills-edit-form');
+    expect(within(form).getByRole('heading', { level: 4 }).textContent).toBe(
+      en['settings.skillsEdit'],
+    );
+    expect(within(form).getByTestId('skills-save').textContent).toBe(
+      en['settings.skillsSave'],
+    );
+  });
+
   it('matches localized built-in skill names and descriptions in search', async () => {
     renderSkillsSection(
       [
@@ -287,6 +386,38 @@ describe('SkillsSection', () => {
           url.toString() === '/api/skills/import' && init?.method === 'POST',
       ),
     ).toBe(true);
+  });
+
+  it('loads the file tree for a newly created skill when its row is expanded automatically', async () => {
+    const { fetchMock } = renderSkillsSection([], {
+      filesById: {
+        'new-skill': [{ path: 'SKILL.md', kind: 'file', size: 28 }],
+      },
+    });
+
+    fireEvent.click(await screen.findByTestId('skills-new'));
+    const form = await screen.findByTestId('skills-create-form');
+    fireEvent.change(within(form).getByPlaceholderText('my-skill'), {
+      target: { value: 'New skill' },
+    });
+    fireEvent.change(within(form).getAllByRole('textbox').at(-1)!, {
+      target: { value: '# New skill\n\nDo the thing.' },
+    });
+    fireEvent.click(within(form).getByTestId('skills-save'));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            url.toString() === '/api/skills/new-skill/files' && init?.method === undefined,
+        ),
+      ).toBe(true);
+    });
+    const row = await screen.findByTestId('skill-row-new-skill');
+    const fileTree = row.querySelector('.skills-file-tree');
+    expect(fileTree).toBeTruthy();
+    expect(within(fileTree as HTMLElement).getByText('SKILL.md')).toBeTruthy();
+    expect(within(row).queryByText(en['settings.skillsNoFiles'])).toBeNull();
   });
 
   // Regression for the mrcfps follow-up on PR #2190: when a user edits

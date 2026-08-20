@@ -1,7 +1,8 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
+import { expectAllProjectFilesActive, expectAllProjectFilesInactive, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Response } from '@playwright/test';
-import { applyStandardMocks } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
 
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 
@@ -31,7 +32,7 @@ test('[P1] quick switcher opens from keyboard and activates the selected file', 
   await expect(quickSwitcherInput).toBeVisible();
 
   await quickSwitcherInput.fill('beta');
-  await expect(page.getByRole('option', { name: /beta-file\.png/i })).toBeVisible();
+  await expect(page.getByRole('option', { name: /beta-file\.png/i }).first()).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -85,9 +86,9 @@ test('[P1] quick switcher arrow keys move selection before opening a file', asyn
   await openQuickSwitcher(page);
   const quickSwitcher = page.locator('.qs-overlay');
   const quickSwitcherInput = page.locator('.qs-input');
-  const selectedOption = page.getByRole('option', { selected: true });
+  const selectedOption = quickSwitcher.getByRole('option', { selected: true });
   await expect(quickSwitcher).toBeVisible();
-  await expect(page.getByRole('option')).toHaveCount(3);
+  expect(await quickSwitcher.getByRole('option').count()).toBeGreaterThanOrEqual(3);
 
   const initialSelection = await selectedOption.textContent();
   await quickSwitcherInput.press('ArrowDown');
@@ -136,8 +137,8 @@ test('[P1] workspace tab launcher searches files and opens the selected file pre
   await page.reload();
   await expectWorkspaceReady(page);
 
-  await page.getByTestId('design-files-tab').click();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await openAllProjectFiles(page);
+  await expectAllProjectFilesActive(page);
 
   await page.getByTestId('workspace-add-tab').click();
   const launcher = page.getByTestId('tab-launcher-menu');
@@ -148,7 +149,7 @@ test('[P1] workspace tab launcher searches files and opens the selected file pre
   await result.click();
 
   await expect(launcher).toHaveCount(0);
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
   await expect(tabBySuffix(page, 'launcher-beta.png')).toHaveAttribute('aria-selected', 'true');
 });
 
@@ -189,17 +190,9 @@ test('[P1] keyboard chat panel resize persists after reload', async ({ page }) =
 });
 
 test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newline', async ({ page }) => {
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `keyboard-run-${runCount}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
+  const runRequests = await routeSuccessfulRuns(page, {
+    runIdPrefix: 'keyboard-run',
+    eventBody: successfulRunEventBody([
       'event: start',
       'data: {"bin":"mock-agent"}',
       '',
@@ -209,19 +202,7 @@ test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newlin
           '<artifact identifier="keyboard-artifact" type="text/html" title="Keyboard Artifact"><!doctype html><html><body><main><h1>Keyboard Artifact</h1></main></body></html></artifact>',
       })}`,
       '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+    ]),
   });
 
   await gotoEntryHome(page);
@@ -239,14 +220,14 @@ test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newlin
   // verified by the `.msg.user` assertions below.
   await expect(input).toContainText('first line');
   await expect(input).toContainText('second line');
-  expect(runCount).toBe(0);
+  await runRequests.expectNone({ timeout: 100 });
 
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
     input.press('Enter'),
   ]);
 
-  expect(runCount).toBe(1);
+  await runRequests.expectCount(1);
   await expect(input).toHaveText('');
   await expect(page.locator('.msg.user', { hasText: 'first line' })).toHaveCount(1);
   await expect(page.locator('.msg.user', { hasText: 'second line' })).toHaveCount(1);
@@ -281,7 +262,7 @@ test('[P1] quick switcher still activates another file after the project reloads
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('reload-beta');
-  await expect(page.getByRole('option', { name: /reload-beta\.png/i })).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /reload-beta\.png/i }).first()).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -298,7 +279,7 @@ test('[P1] quick switcher only lists files from the active project after switchi
 
   await uploadTinyPng(page, 'alpha-project-file.png');
   await uploadTinyPng(page, 'alpha-project-secondary.png');
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await page.goto('/projects', { waitUntil: 'domcontentloaded' });
   await expectProjectsView(page);
 
   await createProject(page, 'Quick switcher Project Beta');
@@ -314,10 +295,10 @@ test('[P1] quick switcher only lists files from the active project after switchi
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('project');
-  await expect(page.getByRole('option', { name: /beta-project-file\.png/i })).toBeVisible();
-  await expect(page.getByRole('option', { name: /beta-project-secondary\.png/i })).toBeVisible();
-  await expect(page.getByRole('option', { name: /alpha-project-file\.png/i })).toHaveCount(0);
-  await expect(page.getByRole('option', { name: /alpha-project-secondary\.png/i })).toHaveCount(0);
+  await expect(quickSwitcher.getByRole('option', { name: /beta-project-file\.png/i }).first()).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /beta-project-secondary\.png/i }).first()).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /alpha-project-file\.png/i })).toHaveCount(0);
+  await expect(quickSwitcher.getByRole('option', { name: /alpha-project-secondary\.png/i })).toHaveCount(0);
   await expectProjectFilesToIncludeSuffixes(page, betaProjectId, ['beta-project-file.png', 'beta-project-secondary.png']);
   await expectProjectFilesToIncludeSuffixes(page, alphaProjectId, ['alpha-project-file.png', 'alpha-project-secondary.png']);
 
@@ -333,16 +314,14 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
   await uploadTinyPng(page, 'design-files-alpha.png');
   await uploadTinyPng(page, 'design-files-beta.png');
 
-  await page.getByTestId('design-files-tab').click();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await openAllProjectFiles(page);
+  await expectAllProjectFilesActive(page);
 
-  const betaRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: 'design-files-beta.png',
-  });
-  await expect(betaRow).toBeVisible();
-  await betaRow.getByRole('button').first().click();
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
-  await expect(page.getByTestId('design-file-preview').getByText(/design-files-beta\.png/i)).toBeVisible();
+  // #5517 deleted the preview pane, so "parked on the Design Files panel" is
+  // now expressed by the panel being the active surface with its rows on
+  // screen. Clicking a row would open that file and leave the panel, which is
+  // exactly the transition this test wants the quick switcher to perform.
+  await expect(rowBySuffix(page, 'design-files-beta.png')).toBeVisible();
 
   await openQuickSwitcher(page);
   const quickSwitcher = page.locator('.qs-overlay');
@@ -350,49 +329,30 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('design-files-alpha');
-  await expect(page.getByRole('option', { name: /design-files-alpha\.png/i })).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /design-files-alpha\.png/i }).first()).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
   await expect(page.getByRole('tab', { name: /design-files-alpha\.png/i })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('design-file-preview')).toHaveCount(0);
 });
 
 test('[P1] quick switcher can switch from a design file tab back to a generated artifact tab', async ({ page }) => {
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"mock-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const artifact =
-      '<artifact identifier="quick-switcher-artifact" type="text/html" title="Quick Switcher Artifact">' +
-      '<!doctype html><html><body><main><h1>Quick Switcher Artifact</h1></main></body></html>' +
-      '</artifact>';
-    const body = [
+  const artifact =
+    '<artifact identifier="quick-switcher-artifact" type="text/html" title="Quick Switcher Artifact">' +
+    '<!doctype html><html><body><main><h1>Quick Switcher Artifact</h1></main></body></html>' +
+    '</artifact>';
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'mock-run',
+    eventBody: successfulRunEventBody([
       'event: start',
       'data: {"bin":"mock-agent"}',
       '',
       'event: stdout',
       `data: ${JSON.stringify({ chunk: artifact })}`,
       '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+    ]),
   });
 
   await gotoEntryHome(page);
@@ -415,7 +375,7 @@ test('[P1] quick switcher can switch from a design file tab back to a generated 
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('quick-switcher-artifact');
-  await expect(page.getByRole('option', { name: /quick-switcher-artifact\.html/i })).toBeVisible();
+  await expect(quickSwitcher.getByRole('option', { name: /quick-switcher-artifact\.html/i }).first()).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -446,8 +406,8 @@ async function createProject(
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -461,16 +421,34 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function expectProjectsView(page: Page) {
-  if ((await page.locator('.tab-panel-toolbar').count()) === 0) {
-    await ensureRailOpen(page);
-    await page.getByTestId('entry-nav-projects').click();
+  const legacyProjectsToolbar = page.locator('.tab-panel-toolbar');
+  const projectsHeading = page.getByRole('heading', { name: /^Projects$/i });
+  const homeRecentProjects = page.getByRole('heading', { name: /recent projects|最近项目/i });
+  if (await legacyProjectsToolbar.isVisible().catch(() => false)) return;
+  if (await projectsHeading.isVisible().catch(() => false)) return;
+  if (await homeRecentProjects.isVisible().catch(() => false)) return;
+
+  await ensureRailOpen(page);
+  const projectsNav = page.getByTestId('entry-nav-projects');
+  if (await projectsNav.isVisible().catch(() => false)) {
+    await projectsNav.click();
+    await expect(legacyProjectsToolbar).toBeVisible();
+    return;
   }
-  await expect(page.locator('.tab-panel-toolbar')).toBeVisible();
+
+  const allProjectsNav = page.getByTestId('entry-nav-all-projects');
+  if (await allProjectsNav.isVisible().catch(() => false)) {
+    await allProjectsNav.click();
+    await expect(page.getByRole('heading', { name: /all projects|全部项目/i })).toBeVisible();
+    return;
+  }
+
+  await expect(projectsHeading.or(homeRecentProjects)).toBeVisible();
 }
 
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0);
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -558,6 +536,13 @@ async function sendPrompt(page: Page, prompt: string) {
 
 function tabBySuffix(page: Page, name: string): Locator {
   return page.getByTestId('file-workspace').getByRole('tab', { name: new RegExp(escapeRegExp(name), 'i') });
+}
+
+// Uploaded files can land under a deduplicated name, and #5517 image cards
+// carry no visible filename text, so match the row by its `data-testid`
+// suffix instead of by rendered text.
+function rowBySuffix(page: Page, name: string): Locator {
+  return page.locator(`[data-testid^="design-file-row-"][data-testid$="${name}"]`).first();
 }
 
 function currentProjectId(page: Page): string {

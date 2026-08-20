@@ -131,7 +131,9 @@ describe('memory routes', () => {
       extraction: unknown;
     };
     expect(json.enabled).toBe(true);
-    expect(json.chatExtractionEnabled).toBe(true);
+    // Injection is on by default; chat auto-extraction is opt-in (retired
+    // as a default after the regex pack kept minting junk facts).
+    expect(json.chatExtractionEnabled).toBe(false);
     expect(json.rootDir).toBe(memoryDir(dataDir));
     expect(json.index).toContain('# Memory');
     expect(json.entries).toEqual([]);
@@ -285,6 +287,13 @@ describe('memory routes', () => {
   });
 
   it('extracts heuristic memories from a user message and reports the changed entries', async () => {
+    // Auto-extraction defaults OFF; this spec covers the extract route's
+    // mechanics, so opt in through the same HTTP surface first.
+    await fetch(`${baseUrl}/api/memory/config`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chatExtractionEnabled: true }),
+    });
     const res = await fetch(`${baseUrl}/api/memory/extract`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -350,6 +359,11 @@ describe('memory routes', () => {
   });
 
   it('reports attemptedLLM for post-turn extraction requests without triggering a real provider call', async () => {
+    await fetch(`${baseUrl}/api/memory/config`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chatExtractionEnabled: true }),
+    });
     const res = await fetch(`${baseUrl}/api/memory/extract`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

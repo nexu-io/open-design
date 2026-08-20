@@ -223,12 +223,16 @@ export function derivePluginSourceLinks(
   };
 }
 
-/** Deterministic two-letter monogram for the avatar fallback. */
+/**
+ * Deterministic two-letter monogram for the avatar fallback. CamelCase
+ * boundaries count as word breaks so single-token brand names like
+ * "OpenDesign" still yield a two-letter monogram ("OD").
+ */
 export function authorInitials(name: string | null): string {
   if (!name) return '??';
   const parts = name
     .trim()
-    .split(/\s+/)
+    .split(/\s+|(?<=[a-z])(?=[A-Z])/)
     .filter(Boolean)
     .slice(0, 2);
   if (parts.length === 0) return '??';

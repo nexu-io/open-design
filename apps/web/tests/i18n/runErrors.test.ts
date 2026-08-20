@@ -11,7 +11,14 @@ const t = ((key: keyof Dict) => {
 }) as (key: keyof Dict) => string;
 
 describe('localizeRunFailureReason', () => {
-  it('maps known daemon empty-output errors to i18n', () => {
+  it('passes through the updated daemon empty-output guidance', () => {
+    const reason =
+      'Agent completed without producing any output. The model or provider may have returned an empty response. Check the agent logs for upstream errors, then try re-authenticating the agent, checking quota, or switching models.';
+
+    expect(localizeRunFailureReason(reason, t)).toBe(reason);
+  });
+
+  it('maps legacy daemon empty-output errors to i18n', () => {
     const reason =
       'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.';
 

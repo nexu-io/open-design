@@ -55,6 +55,13 @@ describe('composeSystemPrompt — audio voice options', () => {
     expect(prompt).toContain('"value": "voice-50"');
     expect(prompt).not.toContain('showing the first 12');
     expect(prompt).toContain('selected value must be the exact `voice_id`');
+    expect(prompt).toContain('If the provider default can safely satisfy the brief');
+    expect(prompt).toContain(
+      'Only when voice selection would materially change the requested result',
+    );
+    expect(prompt).toContain(
+      'Conditional template — do not emit unless the voice-selection policy above requires clarification',
+    );
   });
 
   it('surfaces ElevenLabs voice lookup failures in the prompt', () => {

@@ -492,7 +492,7 @@ const countryOptions = buildCountryOptions(locale);
 
       const data = new FormData(form);
       // The country select's value is the ISO code; submit the localized
-      // label plus the code (e.g. "中国 (CN)") so the Feishu lead card stays
+      // label plus the code (e.g. "中国 (CN)") so the canonical KV lead stays
       // readable while analytics keep the canonical code.
       const countrySel = fieldInput('country');
       const countryCode = countrySel ? countrySel.value : '';

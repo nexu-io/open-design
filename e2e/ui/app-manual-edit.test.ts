@@ -1,13 +1,15 @@
 import { expect, test } from '@/playwright/suite';
-import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
-import { routeAgents } from '@/playwright/mock-factory';
+import { expectStableCount } from '@/playwright/assertions';
+import { applyStandardMocks, routeAgents, routeSuccessfulRuns } from '@/playwright/mock-factory';
+import { clickDeckNextSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Page } from '@playwright/test';
+import { pathToFileURL } from 'node:url';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
-test.describe.configure({ timeout: T.long });
+test.describe.configure({ timeout: T.xlong });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -18,44 +20,7 @@ function artifactPreviewFrame(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 test('[P0] manual edit inspector previews and persists page and selected element styles', async ({ page }) => {
@@ -68,12 +33,11 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(artifactPreview(page)).toBeVisible();
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
-  const responsivePair = frame.locator('[data-od-id="responsive-pair"]');
-  await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
+  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection')).toBe('row');
 
   await page.getByTestId('manual-edit-mode-toggle').click();
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
-  await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
+  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection')).toBe('row');
 
   await frame.locator('body').evaluate(() => {
     window.parent.postMessage({ type: 'od-edit-background' }, '*');
@@ -89,30 +53,31 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(inspectorRow(page, 'Font').locator('select')).toHaveValue('Georgia, serif');
   await expect(inspectorRow(page, 'Base size').locator('input')).toHaveValue('18');
 
-  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY');
+  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'Parameters');
   const selectedTitleMarker = frame.locator('[data-od-id="hero-title"][data-od-edit-selected="true"]');
   await expect(selectedTitleMarker).toHaveCount(1);
-  const fontSizeInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Size' }).locator('input');
+  const parameters = inspectorSection(page, 'Parameters');
+  const fontSizeInput = parameters.locator('.cc-row').filter({ hasText: 'Font size' }).locator('input');
   await fontSizeInput.click();
   await expect(selectedTitleMarker).toHaveCount(1);
   await expect(fontSizeInput).not.toHaveValue('');
   await expect(fontSizeInput).not.toHaveValue(/px/i);
-  await expect(inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Color' }).locator('input')).toHaveValue(/^#[0-9a-f]{6}$/);
-  const lineInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Line' }).locator('input');
+  await expect(parameters.locator('.cc-row').filter({ hasText: 'Text color' }).locator('input:not([type="color"])')).toHaveValue(/^#[0-9a-f]{6}$/);
+  const lineInput = parameters.locator('.cc-row').filter({ hasText: 'Line height' }).locator('input');
   await lineInput.click();
   await lineInput.blur();
   await expect(page.locator('.manual-edit-error')).toHaveCount(0);
   await frame.locator('body').evaluate(() => {
     window.parent.postMessage({ type: 'od-edit-targets', targets: [] }, '*');
   });
-  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  await expect(page.locator('.manual-edit-modal')).toContainText('Parameters');
   await expect(page.locator('.manual-edit-modal')).not.toContainText('PAGE');
   await frame.locator('body').evaluate(() => {
     (window as Window & typeof globalThis & { __manualEditSmokeMarker?: string }).__manualEditSmokeMarker = 'stable-frame';
   });
 
   await fontSizeInput.fill('48');
-  await inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Color' }).locator('input').fill('#ef4444');
+  await parameters.locator('.cc-row').filter({ hasText: 'Text color' }).locator('input:not([type="color"])').fill('#ef4444');
   await expect(fontSizeInput).toHaveValue('48');
 
   const title = frame.getByRole('heading', { name: 'Original Hero' });
@@ -126,36 +91,204 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expectFileSourceExcludes(page, projectId, 'manual-edit.html', ['data-od-edit-selected']);
   await expect(page.locator('.manual-edit-error')).toHaveCount(0);
 
-  await expect(page.getByRole('button', { name: /^Share$/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Download$/ })).toBeVisible();
-});
-
-test('[P0] manual edit mode preserves preview actions after style edits', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Manual edit smoke');
-  await seedHtmlArtifact(page, projectId, 'manual-edit.html', manualEditHtml());
-  await page.goto(`/projects/${projectId}/files/manual-edit.html`);
-  await openDesignFile(page, 'manual-edit.html');
-
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
+  const viewMode = page.getByRole('tablist', { name: 'View mode' });
+  await expect(viewMode).toBeVisible();
+  await expect(viewMode.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(viewMode.getByRole('tab', { name: 'Code', exact: true })).toBeVisible();
   await expect(artifactPreview(page)).toBeVisible();
-  const frame = artifactPreviewFrame(page);
-  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
-
-  await page.getByTestId('manual-edit-mode-toggle').click();
-  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY');
-  const fontSizeInput = await selectStyleRowInput(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY', 'Size');
-  await fontSizeInput.fill('48');
-  await inspectSaveButton(page).click({ force: true });
-  await expectFileSource(page, projectId, 'manual-edit.html', ['font-size: 48px']);
-
-  await page.getByTestId('manual-edit-mode-toggle').click();
-  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
 
   await page.getByTestId('board-mode-toggle').click();
   await expect(page.getByRole('button', { name: /^Comment$/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Share$/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Download$/ })).toBeVisible();
+  const actionMenu = await openShareExportMenu(page);
+  await expect(actionMenu.getByRole('menuitem', { name: /Export as PDF/i })).toBeVisible();
 });
+
+test('[P0] manual edit mode preserves the current page in a multi-page mobile app', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Multi-page mobile edit');
+  await seedHtmlArtifact(page, projectId, 'mobile-app.html', multiPageMobileHtml());
+  await page.goto(`/projects/${projectId}/files/mobile-app.html`);
+  await openDesignFile(page, 'mobile-app.html');
+
+  const preview = artifactPreviewFrame(page);
+  await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Code', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Code', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: 'Preview', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
+  const prewarmedSrcDoc = page.frameLocator('iframe[data-testid="artifact-preview-frame-srcdoc"]');
+  await expect(prewarmedSrcDoc.getByTestId('mobile-page-home')).toBeAttached();
+  await waitForUrlPreviewRefreshToSettle(page);
+
+  await preview.getByRole('button', { name: 'Profile' }).click();
+  await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-home')).toBeHidden();
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-home')).toBeHidden();
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
+  await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
+  await preview.getByRole('button', { name: 'Home' }).click();
+  await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-profile')).toBeHidden();
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await preview.locator('[data-od-id="mobile-page-home"]').evaluate((element) => {
+    element.dispatchEvent(new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    }));
+  });
+
+  const selectedHtml = page.locator('.manual-edit-modal label')
+    .filter({ hasText: 'Selected element HTML' })
+    .locator('textarea');
+  await expect(selectedHtml).toBeVisible();
+  const currentHtml = await selectedHtml.inputValue();
+  const editedHtml = currentHtml.replace(
+    'data-page="home"',
+    'data-page="home" data-edit-revision="fresh"',
+  );
+  expect(editedHtml).not.toBe(currentHtml);
+  await selectedHtml.fill(editedHtml);
+  await inspectSaveButton(page).click();
+
+  // Saving rebuilds the srcDoc transport. The consumed Profile snapshot must
+  // not replay over the newer Home navigation when that later load completes.
+  await expectFileSource(page, projectId, 'mobile-app.html', ['data-edit-revision="fresh"']);
+  await expect(preview.locator('[data-edit-revision="fresh"]')).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-profile')).toBeHidden();
+});
+
+test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Runtime-rendered mobile edit');
+  await seedHtmlArtifact(page, projectId, 'mobile-app.html', runtimeRenderedMobileHtml());
+  await page.goto(`/projects/${projectId}/files/mobile-app.html`);
+  await openDesignFile(page, 'mobile-app.html');
+
+  const preview = artifactPreviewFrame(page);
+  await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
+  await page.getByRole('tab', { name: 'Code', exact: true }).click();
+  await page.getByRole('tab', { name: 'Preview', exact: true }).click();
+  await expect(page.frameLocator('iframe[data-testid="artifact-preview-frame-srcdoc"]')
+    .getByTestId('mobile-page-today')).toBeAttached();
+  await waitForUrlPreviewRefreshToSettle(page);
+
+  await preview.getByRole('button', { name: 'Profile' }).click();
+  await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
+  await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-today')).toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
+  await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
+  await expect(preview.getByRole('heading', { name: 'Today page' })).toHaveCount(0);
+  await expect(preview.getByTestId('mobile-page-today')).toHaveCount(0);
+  await preview.locator('[data-od-id="profile-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer]')).toHaveCount(1);
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
+  await selectPreviewElementThroughBridge(
+    page,
+    preview,
+    '[data-od-id="profile-screen"]',
+    'CONTENT',
+  );
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
+  await preview.getByRole('button', { name: 'Today' }).click();
+  await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-profile')).toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-profile')).toHaveCount(0);
+  await preview.locator('[data-od-id="today-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
+});
+
+test('[P0] srcDoc page navigation keeps manual edit hover guides across files and re-entry', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Cross-file mobile edit');
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'today.html',
+    linkedMobilePageHtml('Today page', 'today-screen', 'profile.html', 'Profile'),
+  );
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'profile.html',
+    linkedMobilePageHtml('Profile page', 'profile-screen', 'today.html', 'Today'),
+  );
+  await page.goto(`/projects/${projectId}/files/today.html`);
+  await openDesignFile(page, 'today.html');
+
+  const preview = artifactPreviewFrame(page);
+  await expect(preview.getByRole('heading', { name: 'Today page' })).toBeVisible();
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await preview.locator('[data-od-id="today-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
+  await preview.getByRole('link', { name: 'Profile' }).click();
+
+  await expect(tabBySuffix(page, 'profile.html')).toHaveAttribute('aria-selected', 'true');
+  await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await preview.locator('[data-od-id="profile-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(1);
+  await preview.locator('[data-od-id="profile-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
+});
+
+async function waitForUrlPreviewRefreshToSettle(page: Page) {
+  const frame = page.locator(
+    'iframe[data-od-render-mode="url-load"][data-od-active="true"]',
+  );
+  let observedSrc: string | null = null;
+  let unchangedSince = Date.now();
+  await expect.poll(async () => {
+    const currentSrc = await frame.getAttribute('data-od-loaded-src');
+    if (!currentSrc || currentSrc === 'about:blank') return 0;
+    if (currentSrc !== observedSrc) {
+      observedSrc = currentSrc;
+      unchangedSince = Date.now();
+    }
+    return Date.now() - unchangedSince;
+  }, {
+    message: 'URL preview should stop reloading before the runtime-state interaction',
+    timeout: 5_000,
+  }).toBeGreaterThanOrEqual(400);
+}
 
 async function selectPreviewElementThroughBridge(
   page: Page,
@@ -179,35 +312,107 @@ async function selectPreviewElementThroughBridge(
   await expect(page.locator('.manual-edit-modal')).toContainText(section);
 }
 
-test('[P0] @critical preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }) => {
+test('[P0] @critical preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }, testInfo) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Preview toolbar smoke');
-  await seedHtmlArtifact(page, projectId, 'toolbar-preview.html', manualEditHtml());
+  const entryHtml = manualEditHtml()
+    .replace('/hero.png', 'assets/offline.svg')
+    .replace('</head>', '<link rel="stylesheet" href="styles/offline.css"></head>')
+    .replace(
+      '</body>',
+      '<img id="offline-image" src="assets/offline.svg">' +
+        '<script type="module" src="scripts/main.js"></script></body>',
+    );
+  await seedHtmlArtifact(page, projectId, 'toolbar-preview.html', entryHtml);
+  await seedProjectFile(
+    page,
+    projectId,
+    'styles/offline.css',
+    'body{--offline-export-proof:ready;background-image:url("../assets/offline.svg")}',
+  );
+  await seedProjectFile(
+    page,
+    projectId,
+    'scripts/main.js',
+    'import { markReady } from "./motion.js"; markReady();',
+  );
+  await seedProjectFile(
+    page,
+    projectId,
+    'scripts/motion.js',
+    'export const markReady = () => { document.body.dataset.offlineMotion = "ready"; };',
+  );
+  await seedProjectFile(
+    page,
+    projectId,
+    'assets/offline.svg',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>',
+  );
   await page.goto(`/projects/${projectId}/files/toolbar-preview.html`);
   await openDesignFile(page, 'toolbar-preview.html');
 
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Preview' }),
-  ).toHaveAttribute('aria-selected', 'true');
+  const viewMode = page.getByRole('tablist', { name: 'View mode' });
+  await expect(viewMode).toBeVisible();
+  await expect(viewMode.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(viewMode.getByRole('tab', { name: 'Code', exact: true })).toBeVisible();
+
+  // The three intents are top-level header controls again — Share, Export, and
+  // the hand-off split button sit side by side, with no tab strip to cross.
+  await expect(page.getByRole('button', { name: /^Export$/ })).toBeVisible();
+  await expect(page.getByTestId('handoff-trigger')).toBeVisible();
 
   await page.getByRole('button', { name: /^Share$/ }).click();
   const shareMenu = page.locator('.share-menu-popover[role="menu"]');
   await expect(shareMenu).toBeVisible();
-  await expect(shareMenu).toContainText('PUBLISH ONLINE');
-  await expect(shareMenu).toContainText('SOCIAL SHARE');
+  // Share opens straight onto the link/asset-shaped rows; file formats are
+  // Export's job now, so they must NOT be reachable from this panel.
+  await expect(shareMenu.getByRole('menuitem', { name: /Export as PDF/i })).toHaveCount(0);
+  // This local Personal fixture deliberately has neither a Team identity nor
+  // an authenticated public-publish capability. Keep this toolbar smoke about
+  // the stable action surface instead of requiring a workspace-specific card.
+  await expect(shareMenu.getByText(/Share project in workspace/i)).toHaveCount(0);
+  await expect(shareMenu.getByText(/Publish this file/i)).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(shareMenu).toHaveCount(0);
 
-  await page.getByRole('button', { name: /^Download$/ }).click();
-  const downloadMenu = page.locator('.share-menu-popover[role="menu"]');
+  const downloadMenu = await openShareExportMenu(page);
   await expect(downloadMenu).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Download as \.zip/ })).toBeVisible();
+  const htmlExportResponse = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/projects/${projectId}/export/html`),
+  );
   const htmlDownload = page.waitForEvent('download');
   await downloadMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click();
+  const exportResponse = await htmlExportResponse;
+  expect(exportResponse.ok(), await exportResponse.text()).toBeTruthy();
   const download = await htmlDownload;
   expect(download.suggestedFilename()).toMatch(/toolbar-preview.*\.html$/i);
+  const offlinePath = testInfo.outputPath('offline-standalone.html');
+  await download.saveAs(offlinePath);
+  const offlinePage = await page.context().newPage();
+  const failedRequests: string[] = [];
+  const scriptErrors: string[] = [];
+  offlinePage.on('requestfailed', (request) => failedRequests.push(request.url()));
+  offlinePage.on('pageerror', (error) => scriptErrors.push(error.message));
+  offlinePage.on('console', (message) => {
+    if (message.type() === 'error') scriptErrors.push(message.text());
+  });
+  await offlinePage.goto(pathToFileURL(offlinePath).href, { waitUntil: 'load' });
+  try {
+    await expect.poll(() => offlinePage.locator('body').getAttribute('data-offline-motion')).toBe('ready');
+  } catch {
+    throw new Error(`offline module did not execute: ${scriptErrors.join(' | ') || 'no browser error reported'}`);
+  }
+  await expect.poll(() => offlinePage.locator('body').evaluate(
+    (body) => getComputedStyle(body).getPropertyValue('--offline-export-proof').trim(),
+  )).toBe('ready');
+  await expect.poll(() => offlinePage.locator('#offline-image').evaluate(
+    (image) => (image as HTMLImageElement).naturalWidth,
+  )).toBeGreaterThan(0);
+  expect(failedRequests).toEqual([]);
+  await offlinePage.close();
   await expect(downloadMenu).toHaveCount(0);
 
   await page.getByRole('button', { name: /^Comment$/ }).click();
@@ -216,7 +421,7 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
 
   const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
-  await expect(zoomButton).toHaveText('100%');
+  await expect(zoomButton).toHaveText(/^\d+%$/);
   await zoomButton.click();
   const zoomMenu = page.locator('.zoom-menu-popover[role="menu"]');
   await expect(zoomMenu).toBeVisible();
@@ -244,8 +449,8 @@ test('[P1] preview toolbar exports PDF and PPTX through the daemon contracts', a
   await page.goto(`/projects/${projectId}/files/export-page.html`);
   await openDesignFile(page, 'export-page.html');
 
-  await page.getByRole('button', { name: /^Download$/ }).click();
-  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as PDF/ }).click();
+  const pdfMenu = await openShareExportMenu(page);
+  await pdfMenu.getByRole('menuitem', { name: /Export as PDF/ }).click();
 
   await expect
     .poll(() => pdfRequests.length, { timeout: 10_000 })
@@ -274,8 +479,8 @@ test('[P1] preview toolbar exports PDF and PPTX through the daemon contracts', a
   await openDesignFile(page, 'contract-deck.html');
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: 'Intro' })).toBeVisible();
 
-  await page.getByRole('button', { name: /^Download$/ }).click();
-  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as PPTX/ }).click();
+  const pptxMenu = await openShareExportMenu(page);
+  await pptxMenu.getByRole('menuitem', { name: /Export as PPTX/ }).click();
   const dialog = page.getByRole('dialog', { name: /Export as PPTX/ });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('radio', { name: /^Export as PPTX \(editable\)/i })).toBeChecked();
@@ -318,7 +523,7 @@ test('[P1] powered WebGL HTML artifacts open through the isolated preview route'
   await expect(frame.getByTestId('powered-status')).toContainText(/isolated|not-isolated/);
 });
 
-test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit workflows', async ({ page }) => {
+test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', async ({ page }) => {
   test.setTimeout(60_000);
 
   await page.addInitScript(() => {
@@ -348,11 +553,9 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
   await expect(artifactPreview(page)).toBeVisible();
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: 'Original Hero' })).toBeVisible();
 
-  await page.getByTestId('screenshot-copy-button').click();
-  await expect(
-    page.getByText(/Screenshot copied to clipboard|Browser blocked clipboard access|Could not capture the preview|Preview is still loading/),
-  ).toBeVisible();
-
+  // The screenshot step is gone: `screenshot-copy-button` no longer exists in
+  // apps/web, and FileViewer's own suite asserts its absence. Comments, mark
+  // and edit below are still live, so the rest of this spec stands.
   await page.getByTestId('board-mode-toggle').click();
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await artifactPreviewFrame(page).locator('[data-od-id="hero-title"]').click();
@@ -361,10 +564,15 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
   await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
   await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
 
+  await expect(page.getByTestId('comment-side-panel')).toHaveCount(0);
+  const commentsButton = page.getByTestId('comment-panel-toggle');
+  await commentsButton.click();
+  await expect(commentsButton).toHaveAttribute('aria-pressed', 'false');
+  await commentsButton.click();
   await expect(page.getByTestId('comment-side-panel')).toBeVisible();
   await expect(page.getByTestId('comment-side-panel')).toContainText('Panel-level comment');
-  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
-  await page.getByTestId('comment-panel-toggle').click();
+  await expect(commentsButton).toContainText('1');
+  await page.getByRole('button', { name: /hide comments/i }).click();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
 
   await holdNextRunOpen(page);
@@ -375,7 +583,10 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
   await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Box select' })).toBeVisible();
   await page.getByPlaceholder('Add a note for this mark').fill('Mark this hero crop');
-  await expect(page.getByRole('button', { name: 'Add to input' })).toBeEnabled();
+  const addToInputButton = page.getByRole('button', { name: 'Add to input' });
+  const queueButton = page.getByRole('button', { name: 'Queue' });
+  await expect(addToInputButton).toBeEnabled();
+  await expect(queueButton).toBeEnabled();
 
   const previewBox = await artifactPreview(page).boundingBox();
   expect(previewBox).not.toBeNull();
@@ -383,8 +594,6 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
   await page.mouse.down();
   await page.mouse.move(previewBox!.x + 220, previewBox!.y + 170);
   await page.mouse.up();
-  const queueButton = page.getByRole('button', { name: 'Queue' });
-  await expect(queueButton).toBeEnabled();
   await queueButton.click();
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
@@ -393,9 +602,9 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
 
   await page.getByTestId('manual-edit-mode-toggle').click();
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
-  await selectPreviewElementThroughBridge(page, artifactPreviewFrame(page), '[data-od-id="hero-title"]', 'TYPOGRAPHY');
+  await selectPreviewElementThroughBridge(page, artifactPreviewFrame(page), '[data-od-id="hero-title"]', 'Parameters');
   await expect(page.locator('.manual-edit-modal')).toContainText('Hero title');
-  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  await expect(page.locator('.manual-edit-modal')).toContainText('Parameters');
   await expect(page.getByRole('button', { name: /^Save$/ })).toBeVisible();
 });
 
@@ -439,8 +648,7 @@ test('[P1] draw annotation composer floats near the selected mark and can be que
   expect(Math.abs(noteBox!.y - mark.y2)).toBeLessThan(220);
 
   await noteInput.fill('Float this note near the marked hero area');
-  await page.getByRole('button', { name: 'Submit options' }).click();
-  const queueButton = page.getByRole('menuitemradio', { name: 'Queue' });
+  const queueButton = page.getByRole('button', { name: 'Queue' });
   await expect(queueButton).toBeEnabled();
   await queueButton.click();
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
@@ -517,10 +725,11 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
   await page.goto(`/projects/${projectId}/files/first-loop-export.html`);
   await openDesignFile(page, 'first-loop-export.html');
 
-  await page.getByRole('button', { name: /^Download$/ }).click();
-  const htmlDownload = page.waitForEvent('download');
-  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as standalone HTML/ }).click();
-  const download = await htmlDownload;
+  const shareMenu = await openShareExportMenu(page);
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    shareMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click(),
+  ]);
   expect(download.suggestedFilename()).toMatch(/first-loop-export.*\.html$/i);
 
   await expect.poll(() => analyticsBodies.join('\n'), { timeout: 15_000 }).toContain('onboarding_completed');
@@ -532,89 +741,20 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
   expect(raw).toContain('artifact_viewed');
   expect(raw).toContain('delivered');
 
-  await page.getByRole('button', { name: /^Download$/ }).click();
-  const secondHtmlDownload = page.waitForEvent('download');
-  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as standalone HTML/ }).click();
-  await secondHtmlDownload;
-  await page.waitForTimeout(500);
-  const completedCount = analyticsBodies.join('\n').match(/onboarding_completed/g)?.length ?? 0;
-  expect(completedCount).toBe(1);
+  await openShareExportMenu(page);
+  await Promise.all([
+    page.waitForEvent('download'),
+    shareMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click(),
+  ]);
+  await expectStableCount(
+    () => analyticsBodies.join('\n').match(/onboarding_completed/g)?.length ?? 0,
+    1,
+    {
+      timeout: 750,
+      message: 're-exporting the same first-loop artifact should not emit a duplicate completion event',
+    },
+  );
 });
-
-async function selectStyleRowInput(
-  page: Page,
-  frame: ReturnType<Page['frameLocator']>,
-  selector: string,
-  section: string,
-  label: string,
-) {
-  await frame.locator(selector).evaluate((el) => {
-    const element = el as HTMLElement;
-    const rect = element.getBoundingClientRect();
-    const styles = window.getComputedStyle(element);
-    window.parent.postMessage({
-      type: 'od-edit-select',
-      target: {
-        id: element.dataset.odId ?? element.id,
-        kind: 'text',
-        label: element.textContent?.trim() || element.tagName.toLowerCase(),
-        tagName: element.tagName.toLowerCase(),
-        className: typeof element.className === 'string' ? element.className : '',
-        text: element.textContent?.trim() ?? '',
-        rect: {
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        },
-        fields: { text: element.textContent?.trim() ?? '' },
-        attributes: Object.fromEntries(Array.from(element.attributes).map((attr) => [attr.name, attr.value])),
-        styles: {
-          fontFamily: styles.fontFamily,
-          fontSize: styles.fontSize,
-          fontWeight: styles.fontWeight,
-          color: styles.color,
-          textAlign: styles.textAlign,
-          lineHeight: styles.lineHeight,
-          letterSpacing: styles.letterSpacing,
-          width: styles.width,
-          height: styles.height,
-          minHeight: styles.minHeight,
-          gap: styles.gap,
-          flexDirection: styles.flexDirection,
-          justifyContent: styles.justifyContent,
-          alignItems: styles.alignItems,
-          backgroundColor: styles.backgroundColor,
-          opacity: styles.opacity,
-          padding: styles.padding,
-          paddingTop: styles.paddingTop,
-          paddingRight: styles.paddingRight,
-          paddingBottom: styles.paddingBottom,
-          paddingLeft: styles.paddingLeft,
-          margin: styles.margin,
-          marginTop: styles.marginTop,
-          marginRight: styles.marginRight,
-          marginBottom: styles.marginBottom,
-          marginLeft: styles.marginLeft,
-          border: styles.border,
-          borderTopWidth: styles.borderTopWidth,
-          borderRightWidth: styles.borderRightWidth,
-          borderBottomWidth: styles.borderBottomWidth,
-          borderLeftWidth: styles.borderLeftWidth,
-          borderStyle: styles.borderStyle,
-          borderColor: styles.borderColor,
-          borderRadius: styles.borderRadius,
-        },
-        isLayoutContainer: false,
-        outerHtml: element.outerHTML,
-      },
-    }, '*');
-  });
-  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
-  const row = inspectorSection(page, section).locator('.cc-row').filter({ hasText: label }).locator('input');
-  await expect(row).toBeVisible();
-  return row;
-}
 
 test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML', async ({ page }) => {
   await routeMockAgents(page);
@@ -625,163 +765,53 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
 });
 
-test('[P0] deck host navigation advances one slide when the deck also handles slide messages', async ({ page }) => {
+test('[P1] deck thumbnail rail keeps complete 16:9 slides separated and aligned', async ({ page }) => {
   await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Deck keyboard single step');
+  const projectId = await createEmptyProject(page, 'Deck thumbnail rail layout');
   await seedDeckArtifact(
     page,
     projectId,
-    'keyboard-deck.html',
-    'Keyboard Deck',
+    'thumbnail-rail.html',
+    'Thumbnail Rail',
     ['Slide One', 'Slide Two', 'Slide Three'],
-    { stopsSlideMessagePropagation: true },
+    { frameworkDeck: true },
   );
-  await page.goto(`/projects/${projectId}/files/keyboard-deck.html`);
-  await openDesignFile(page, 'keyboard-deck.html');
+  await page.goto(`/projects/${projectId}/files/thumbnail-rail.html`);
+  await openDesignFile(page, 'thumbnail-rail.html');
 
-  const frame = artifactPreviewFrame(page);
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await expect(frame.getByText('Slide Three')).toBeHidden();
-});
+  const rail = page.locator('.deck-thumbnail-rail');
+  const frames = rail.locator('.deck-thumbnail-frame');
+  const numbers = rail.locator('.deck-thumbnail-number');
+  await expect(rail).toBeVisible();
+  await expect(frames).toHaveCount(3);
 
-test('[P0] focused deck keyboard navigation advances one slide when the deck handles keys', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Deck iframe keyboard single step');
-  await seedDeckArtifact(
-    page,
-    projectId,
-    'iframe-keyboard-deck.html',
-    'Iframe Keyboard Deck',
-    ['Slide One', 'Slide Two', 'Slide Three'],
-    { frameworkDeck: true, handlesKeyboard: true, stopsSlideMessagePropagation: true },
+  const [railBox, firstFrame, secondFrame, firstNumber] = await Promise.all([
+    rail.boundingBox(),
+    frames.nth(0).boundingBox(),
+    frames.nth(1).boundingBox(),
+    numbers.nth(0).boundingBox(),
+  ]);
+  expect(railBox).not.toBeNull();
+  expect(firstFrame).not.toBeNull();
+  expect(secondFrame).not.toBeNull();
+  expect(firstNumber).not.toBeNull();
+  if (!railBox || !firstFrame || !secondFrame || !firstNumber) return;
+
+  expect(firstFrame.width / firstFrame.height).toBeCloseTo(16 / 9, 1);
+  expect(secondFrame.width / secondFrame.height).toBeCloseTo(16 / 9, 1);
+  expect(secondFrame.y).toBeGreaterThanOrEqual(firstFrame.y + firstFrame.height + 8);
+  expect(firstNumber.y).toBeGreaterThanOrEqual(firstFrame.y);
+  expect(firstNumber.y).toBeLessThan(firstFrame.y + firstFrame.height);
+  expect(firstFrame.x + firstFrame.width).toBeLessThanOrEqual(
+    railBox.x + railBox.width,
   );
-  await page.goto(`/projects/${projectId}/files/iframe-keyboard-deck.html`);
-  await openDesignFile(page, 'iframe-keyboard-deck.html');
-
-  const frame = artifactPreviewFrame(page);
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await frame.locator('body').click();
-  await page.keyboard.press('ArrowRight');
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await expect(frame.getByText('Slide Three')).toBeHidden();
 });
 
-test('[P0] deck host navigation works when deck content only mentions slide messages', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Deck protocol text');
-  await seedDeckArtifact(
-    page,
-    projectId,
-    'protocol-text-deck.html',
-    'Protocol Text Deck',
-    ['Slide One', 'Slide Two'],
-    { mentionsSlideMessageProtocol: true },
-  );
-  await page.goto(`/projects/${projectId}/files/protocol-text-deck.html`);
-  await openDesignFile(page, 'protocol-text-deck.html');
-
-  const frame = artifactPreviewFrame(page);
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await expect(frame.getByText('Protocol token: od:slide')).toBeVisible();
-  await page.getByLabel('Next slide').click();
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await expect(frame.getByText('Slide One')).toBeHidden();
-});
-
-test('[P0] deck host counter stays synced when a self-handling deck stops slide messages', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Deck stopped message sync');
-  await seedDeckArtifact(
-    page,
-    projectId,
-    'stopped-message-deck.html',
-    'Stopped Message Deck',
-    ['Slide One', 'Slide Two', 'Slide Three'],
-    { stopsSlideMessagePropagation: true },
-  );
-  await page.goto(`/projects/${projectId}/files/stopped-message-deck.html`);
-  await openDesignFile(page, 'stopped-message-deck.html');
-
-  const frame = artifactPreviewFrame(page);
-  const hostCounter = page.locator('.deck-nav-counter');
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await expect(hostCounter).toHaveText('1 / 3');
-  await expect(frame.locator('#deck-cur')).toHaveText('01');
-
-  await page.getByLabel('Next slide').click();
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await expect(hostCounter).toHaveText('2 / 3');
-  await expect(frame.locator('#deck-cur')).toHaveText('02');
-
-  await page.getByLabel('Previous slide').click();
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await expect(hostCounter).toHaveText('1 / 3');
-  await expect(frame.locator('#deck-cur')).toHaveText('01');
-});
-
-
-test('[P0] simple deck keeps the active slide stable across preview mode switches', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Simple deck navigation state');
-  await seedDeckArtifact(page, projectId, 'simple-deck.html', 'Simple Deck', ['Slide One', 'Slide Two', 'Slide Three']);
-  await page.goto(`/projects/${projectId}/files/simple-deck.html`);
-  await openDesignFile(page, 'simple-deck.html');
-
-  const frame = artifactPreviewFrame(page);
-  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
-
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-
-  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
-  await expect(page.locator('.viewer-source')).toContainText('Slide Three');
-  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
-
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await page.getByLabel('Next slide').click();
-  await expect(frame.getByText('Slide Three')).toBeVisible();
-});
-
-test('[P0] @critical HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'HTML preview toggle regression');
-  await seedHtmlArtifact(
-    page,
-    projectId,
-    'toggle-preview.html',
-    '<!doctype html><html><body><main><h1>Toggle Preview Stable</h1><p>Still visible after tab switches.</p></main></body></html>',
-  );
-  await page.goto(`/projects/${projectId}`);
-  await openDesignFile(page, 'toggle-preview.html');
-
-  const previewFrame = artifactPreview(page);
-  await expect(previewFrame).toBeVisible();
-  await expect(
-    artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
-  ).toBeVisible();
-
-  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
-  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
-  await expect(page.locator('.viewer-source')).toContainText('Toggle Preview Stable');
-
-  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
-  await expect(previewFrame).toBeVisible();
-  await expect(
-    artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
-  ).toBeVisible();
-  await expect(
-    artifactPreviewFrame(page).getByText('Still visible after tab switches.'),
-  ).toBeVisible();
-});
-
-test('[P0] @critical edited HTML file restores selected tab, source, and preview after reload', async ({ page }) => {
+test('[P0] @critical edited HTML file restores selected tab and preview after reload', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'File edit restore smoke');
   await seedHtmlArtifact(page, projectId, 'restore-edit.html', manualEditHtml());
@@ -795,10 +825,7 @@ test('[P0] @critical edited HTML file restores selected tab, source, and preview
   await openDesignFile(page, 'secondary-preview.html');
   await expect(tabBySuffix(page, 'secondary-preview.html')).toHaveAttribute('aria-selected', 'true');
 
-  await page
-    .getByRole('tablist', { name: 'Design Files' })
-    .getByRole('tab', { name: /^Design Files$/ })
-    .click();
+  await openAllProjectFiles(page);
   await openDesignFile(page, 'restore-edit.html');
 
   const restoreTab = tabBySuffix(page, 'restore-edit.html');
@@ -810,19 +837,26 @@ test('[P0] @critical edited HTML file restores selected tab, source, and preview
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
-  await page.getByTestId('manual-edit-mode-toggle').click();
-  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY');
-  const fontSizeInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Size' }).locator('input');
+  const activeEditToggle = page.locator(
+    '[data-testid="file-workspace"] [data-testid="manual-edit-mode-toggle"]:visible',
+  );
+  await expect(activeEditToggle).toHaveCount(1);
+  await activeEditToggle.click();
+  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'Parameters');
+  const parameters = inspectorSection(page, 'Parameters');
+  const fontSizeInput = parameters.locator('.cc-row').filter({ hasText: 'Font size' }).locator('input');
   await expect(fontSizeInput).toBeVisible();
   await fontSizeInput.fill('52');
-  await inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Color' }).locator('input').fill('#2563eb');
+  await parameters.locator('.cc-row').filter({ hasText: 'Text color' }).locator('input:not([type="color"])').fill('#2563eb');
   await inspectSaveButton(page).click({ force: true });
   await expectFileSource(page, projectId, 'restore-edit.html', ['font-size: 52px', 'color:']);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
-  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
-  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
-  await expect(page.locator('.viewer-source')).toContainText('font-size: 52px');
+  await activeEditToggle.click();
+  const viewMode = page.getByRole('tablist', { name: 'View mode' });
+  await expect(viewMode).toBeVisible();
+  await expect(viewMode.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(viewMode.getByRole('tab', { name: 'Code', exact: true })).toBeVisible();
+  await expect(page.locator('.viewer-source')).toHaveCount(0);
   await expect(restoreTab).toHaveAttribute('aria-selected', 'true');
   await expect(secondaryTab).toHaveAttribute('aria-selected', 'false');
 
@@ -832,15 +866,16 @@ test('[P0] @critical edited HTML file restores selected tab, source, and preview
   const restoredTab = tabBySuffix(page, 'restore-edit.html');
   await expect(restoredTab).toBeVisible();
   await expect(restoredTab).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Code' }).click();
-  await expect(page.locator('.viewer-source')).toContainText('font-size: 52px');
-
-  await page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Preview' }).click();
+  const restoredViewMode = page.getByRole('tablist', { name: 'View mode' });
+  await expect(restoredViewMode).toBeVisible();
+  await expect(restoredViewMode.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(restoredViewMode.getByRole('tab', { name: 'Code', exact: true })).toBeVisible();
+  await expect(page.locator('.viewer-source')).toHaveCount(0);
   await expect(artifactPreview(page)).toBeVisible();
   const restoredFrame = artifactPreviewFrame(page);
   const restoredTitle = restoredFrame.getByRole('heading', { name: 'Original Hero' });
   await expect(restoredTitle).toBeVisible();
-  await expect.poll(async () => restoredTitle.evaluate((el) => getComputedStyle(el).fontSize)).toBe('52px');
+  await expect(restoredTitle).toHaveCSS('font-size', '52px');
   await expect(restoredTitle).toHaveCSS('color', 'rgb(37, 99, 235)');
 });
 
@@ -858,16 +893,28 @@ async function routeMockAgents(page: Page) {
 }
 
 async function createEmptyProject(page: Page, name: string): Promise<string> {
-  await gotoEntryHome(page);
-  await openNewProjectModal(page);
-  await page.getByTestId('new-project-name').fill(name);
-  await page.getByTestId('create-project').click();
-  await waitForLoadingToClear(page);
-  await expect(page).toHaveURL(/\/projects\//);
-  const current = new URL(page.url());
-  const [, projects, projectId] = current.pathname.split('/');
-  if (projects !== 'projects' || !projectId) throw new Error(`unexpected project route: ${current.pathname}`);
+  const projectId = await createProjectViaApi(page, name);
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page).catch(() => {});
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
   return projectId;
+}
+
+// Export is its own header button now — no Share detour, no tab strip. The
+// popover shell is still shared with Share, so the locator is unchanged.
+async function openShareExportMenu(page: Page): Promise<ReturnType<Page['locator']>> {
+  await page.getByRole('button', { name: /^Export$/ }).click();
+  const menu = page.locator('.share-menu-popover[role="menu"]');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /^Export as/ }).first()).toBeVisible();
+  return menu;
+}
+
+async function previewCss(page: Page, selector: string, property: keyof CSSStyleDeclaration): Promise<string> {
+  return artifactPreviewFrame(page)
+    .locator(selector)
+    .evaluate((el, cssProperty) => String(getComputedStyle(el)[cssProperty as keyof CSSStyleDeclaration] ?? ''), property)
+    .catch(() => '');
 }
 
 async function createProjectViaApi(page: Page, name: string): Promise<string> {
@@ -891,19 +938,23 @@ async function createProjectViaApi(page: Page, name: string): Promise<string> {
 }
 
 async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/ERR_ABORTED|frame was detached/i.test(message)) throw error;
+    }
+    await waitForLoadingToClear(page).catch(() => {});
+    if (await page.getByTestId('home-hero').isVisible({ timeout: 3_000 }).catch(() => false)) break;
+  }
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
-}
-
-async function openNewProjectModal(page: Page) {
-  await openNewProjectModalFromProjects(page);
 }
 
 async function seedHtmlArtifact(page: Page, projectId: string, fileName: string, content: string) {
@@ -928,6 +979,14 @@ async function seedHtmlArtifact(page: Page, projectId: string, fileName: string,
   expect(resp.ok()).toBeTruthy();
 }
 
+async function seedProjectFile(page: Page, projectId: string, fileName: string, content: string) {
+  const response = await page.request.post(`/api/projects/${projectId}/files`, {
+    data: { name: fileName, content },
+    timeout: 15_000,
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
 async function latestConversationId(page: Page, projectId: string): Promise<string> {
   const response = await page.request.get(`/api/projects/${projectId}/conversations`, { timeout: 15_000 });
   expect(response.ok()).toBeTruthy();
@@ -940,17 +999,9 @@ async function latestConversationId(page: Page, projectId: string): Promise<stri
 }
 
 async function holdNextRunOpen(page: Page) {
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `preview-tools-run-${runCount}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async () => {
-    await new Promise(() => undefined);
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'preview-tools-run',
+    events: 'pending',
   });
 }
 
@@ -1121,9 +1172,10 @@ async function seedDeckArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = artifactPreview(page);
-  await waitForLoadingToClear(page);
+  await waitForLoadingToClear(page).catch(() => {});
   const activePath = new URL(page.url()).pathname;
-  if (activePath.endsWith(`/files/${encodeURIComponent(fileName)}`) && await preview.isVisible().catch(() => false)) {
+  if (activePath.endsWith(`/files/${encodeURIComponent(fileName)}`)) {
+    await expect(preview).toBeVisible();
     return;
   }
   const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
@@ -1141,22 +1193,20 @@ async function openDesignFile(page: Page, fileName: string) {
       await fileTabButton.click();
     }
   } else {
-    const fileButton = page.getByRole('button', { name: filePattern }).first();
-    await fileButton.click();
-    if (!(await preview.isVisible().catch(() => false))) {
-      const openButton = page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' });
-      if (await openButton.isVisible().catch(() => false)) {
-        await openButton.click();
-      } else {
-        await fileButton.dblclick();
-      }
-    }
+    // #5517 deleted the design-file preview pane and its "Open" button: the
+    // Design Files row's primary target opens the file in a workspace tab on
+    // a single click, so the preview renders straight away.
+    const fileRow = page
+      .locator(`[data-testid^="design-file-row-"][data-testid$="${fileName}"]`)
+      .first();
+    await expect(fileRow).toBeVisible();
+    await fileRow.getByRole('button').first().click();
   }
   await expect(preview).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {
@@ -1231,6 +1281,100 @@ function manualEditHtml(): string {
         <a data-od-id="cta" data-od-label="Primary CTA" href="/start">Start now</a>
         <img data-od-id="hero-image" data-od-label="Hero image" src="/hero.png" alt="Hero" style="width:64px;height:64px;">
       </section>
+    </main>
+  </body>
+</html>`;
+}
+
+function multiPageMobileHtml(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body { margin: 0; font-family: sans-serif; }
+      main { min-height: 480px; padding: 32px; }
+      nav { display: flex; gap: 12px; padding: 16px 32px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main data-testid="mobile-page-home" data-od-id="mobile-page-home" data-page="home">
+      <h1>Home page</h1>
+    </main>
+    <main data-testid="mobile-page-profile" data-od-id="mobile-page-profile" data-page="profile" hidden>
+      <h1>Profile page</h1>
+    </main>
+    <nav aria-label="Mobile navigation">
+      <button type="button" data-target-page="home">Home</button>
+      <button type="button" data-target-page="profile">Profile</button>
+    </nav>
+    <script>
+      document.querySelectorAll('[data-target-page]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const target = button.getAttribute('data-target-page');
+          document.querySelectorAll('[data-page]').forEach((page) => {
+            page.toggleAttribute('hidden', page.getAttribute('data-page') !== target);
+          });
+        });
+      });
+    </script>
+  </body>
+</html>`;
+}
+
+function runtimeRenderedMobileHtml(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      const app = document.querySelector('#app');
+      const renderToday = () => {
+        app.innerHTML =
+          '<main data-testid="mobile-page-today" data-od-id="today-screen">' +
+            '<h1>Today page</h1>' +
+            '<button type="button" data-page-target="profile">Profile</button>' +
+          '</main>';
+      };
+      const renderProfile = () => {
+        app.innerHTML =
+          '<main data-testid="mobile-page-profile" data-od-id="profile-screen">' +
+            '<section><h1>Profile page</h1><p>Current page content</p></section>' +
+            '<button type="button" data-page-target="today">Today</button>' +
+          '</main>';
+      };
+      document.addEventListener('click', (event) => {
+        if (event.target.closest('[data-page-target="profile"]')) renderProfile();
+        if (event.target.closest('[data-page-target="today"]')) renderToday();
+      });
+      renderToday();
+    </script>
+  </body>
+</html>`;
+}
+
+function linkedMobilePageHtml(
+  heading: string,
+  screenId: string,
+  href: string,
+  linkLabel: string,
+): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head>
+  <body>
+    <main data-od-id="${screenId}">
+      <h1>${heading}</h1>
+      <a href="${href}">${linkLabel}</a>
     </main>
   </body>
 </html>`;

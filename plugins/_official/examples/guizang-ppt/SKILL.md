@@ -1,24 +1,35 @@
 ---
 name: magazine-web-ppt
-description: Generates an "editorial magazine × electronic ink" style horizontal-swipe web deck (a single HTML file), with a WebGL fluid background, serif headlines + sans-serif body, act dividers, big-number data pages, image grids, and more templates. Use when the user wants to make a talk / share / launch-style web deck, or mentions "magazine-style PPT", "horizontal swipe deck", "editorial magazine", or "e-ink presentation".
+en_name: "Write a Brand-to-Revenue Story like a Growth Strategy Lead"
+zh_name: "像增长策略负责人一样写品牌到收入故事"
+description: |
+  For marketing and gtm work: bind launches, campaigns, events, and brand plans to growth and pipeline outcomes. Built around the core query "annual-marketing-plan", with GTM strategy lead judgment, buyer-ready proof, and this outcome: approve launch plan, campaign budget, or GTM motion.
+en_description: |
+  For marketing and gtm work: bind launches, campaigns, events, and brand plans to growth and pipeline outcomes. Built around the core query "annual-marketing-plan", with GTM strategy lead judgment, buyer-ready proof, and this outcome: approve launch plan, campaign budget, or GTM motion.
+zh_description: |
+  市场/增长/GTM场景：围绕 core query「annual-marketing-plan」把粗糙材料整理成“像增长策略负责人一样写品牌到收入故事”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。
+tags:
+  - "marketing-gtm"
+  - "annual-marketing-plan"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "marketing"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "guizang-ppt"
 triggers:
-  - "ppt"
-  - "deck"
-  - "slides"
-  - "presentation"
-  - "magazine"
-  - "magazine style"
-  - "magazine-style PPT"
-  - "horizontal swipe"
-  - "horizontal swipe deck"
-  - "editorial magazine"
-  - "e-ink presentation"
-  - "web deck"
-  - "launch event"
-  - "talk deck"
+  - "annual-marketing-plan"
+  - "marketing-gtm"
+  - "Write a Brand-to-Revenue Story like a Growth Strategy Lead"
+  - "像增长策略负责人一样写品牌到收入故事"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: marketing
   featured: 9
   default_for: deck
   upstream: "https://github.com/op7418/guizang-ppt-skill"
@@ -27,7 +38,8 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Make me a magazine-style deck about 'One-person company · the organization folded by AI', a 25-minute talk for an audience of designers and founders. First recommend one direction (Monocle / WIRED / Kinfolk / Domus / Lab) for me to choose from."
+  scenario: "marketing"
+  example_prompt: "Create \"Write a Brand-to-Revenue Story like a Growth Strategy Lead\" as a Marketing and GTM deck in the Guizang Ppt visual system. Scene: annual-marketing-plan. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce a commercial-grade slide plan, written slides, visual direction, speaker-ready structure, and critic pass against this rubric: can the plan connect creative choices to measurable growth."
 ---
 
 # Magazine Web Ppt
@@ -60,11 +72,15 @@ This skill's aesthetic is not "corporate PPT," nor "consumer-internet UI": it lo
 
 ## Workflow
 
-### Step 0 · Pick a direction (Direction · the mandatory first step)
+### Step 0 · Infer a direction; ask only when comparison is requested
 
-**Before asking the 6 clarifying questions, first let the user pick one of the 5 magazine directions**. Each direction packages up its "theme color / recommended layouts / chrome style / recommended slide count," and picking a direction answers half the clarifying questions.
+Infer one of the 5 magazine directions from the brief, audience, content, and
+known context. Each direction packages its theme color, recommended layouts,
+chrome style, and slide count. Use the closest fit and continue without asking.
 
-Open `references/styles.md`, **copy the whole section over** to show the user the 1-line summary of the 5 directions, then let them choose:
+Only when the user explicitly asks to see or compare direction options, open
+`references/styles.md` and present the 1-line summaries in one
+`direction-cards` question form:
 
 ```
 1. Monocle Editorial · International magazine style ✦ default
@@ -74,19 +90,28 @@ Open `references/styles.md`, **copy the whole section over** to show the user th
 5. Lab / Reference · Academic + craft manual
 ```
 
-If the user says "I don't know, you recommend": **default to Monocle Editorial**, because it has the lowest failure probability. If the user mentions "AI / benchmark / technical launch": recommend WIRED; "reading / private / social circle": recommend Kinfolk; "design / architecture / portfolio": recommend Domus; "research / academic / methodology": recommend Lab.
+If the user says "I don't know, you recommend" or provides no direction cue:
+**default to Monocle Editorial** without asking, because it has the lowest
+failure probability. If the user mentions "AI / benchmark / technical launch":
+choose WIRED; "reading / private / social circle": choose Kinfolk; "design /
+architecture / portfolio": choose Domus; "research / academic / methodology":
+choose Lab.
 
 After picking a direction, create or update `项目记录.md` (Project Record) in the project folder, with the first line clearly stating direction + theme color + audience + duration (see the template at the end of `styles.md`). **Do not change direction at any point**: switching midway = everything before is wasted.
 
-### Step 1 · Clarify intent (**do before starting**)
+### Step 1 · Resolve intent
 
 **If the user has already given a complete outline + images**, you can skip straight to Step 2.
 
-**If the user only gave a topic or a vague idea**, align on these 6 questions one by one before starting. Don't begin writing slides based on guesses: once the structure is wrong, later rework is very costly:
+Infer the checklist below from the brief, project metadata, supplied content,
+and conversation. If a missing answer would materially change the deck and no
+safe default exists, ask only those unresolved fields in one consolidated
+question form. Do not ask the checklist one by one.
 
 #### 6-question clarifying checklist
 
-> Question 5 is already answered when you pick a direction in Step 0 (direction → theme color). In the 5 questions below, just leave question 5 blank.
+> Direction and theme color are inferred in Step 0 unless the user explicitly
+> asks to compare options.
 
 | # | Question | Why ask it |
 |---|------|-----------|

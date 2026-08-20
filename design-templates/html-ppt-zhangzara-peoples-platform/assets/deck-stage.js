@@ -126,8 +126,7 @@
       position: fixed;
       left: 50%;
       bottom: 22px;
-      transform: translate(-50%, 6px) scale(0.92);
-      filter: blur(6px);
+      transform: translate(-50%, 8px);
       display: flex;
       align-items: center;
       gap: 4px;
@@ -140,7 +139,7 @@
       letter-spacing: 0.01em;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 260ms ease, transform 260ms cubic-bezier(.2,.8,.2,1), filter 260ms ease;
+      transition: opacity 200ms ease, transform 200ms cubic-bezier(.2,.8,.2,1);
       transform-origin: center bottom;
       z-index: 2147483000;
       user-select: none;
@@ -148,8 +147,7 @@
     .overlay[data-visible] {
       opacity: 1;
       pointer-events: auto;
-      transform: translate(-50%, 0) scale(1);
-      filter: blur(0);
+      transform: translate(-50%, 0);
     }
 
     .btn {

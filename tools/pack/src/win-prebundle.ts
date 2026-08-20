@@ -13,9 +13,21 @@ export const WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER =
   'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);';
 export const WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME = "prebundle-entrypoints";
 
+// Runtime externals the prebundled daemon loads from node_modules at boot
+// (see the `externals` in WIN_PREBUNDLE_POLICIES below). Their pinned versions
+// MUST stay in lockstep with apps/daemon/package.json / the pnpm lockfile: the
+// app is assembled with these as its declared deps (win/app.ts), and
+// electron-builder 26's pnpm node_modules collector DROPS a dependency whose
+// pin doesn't semver-satisfy the version resolvable on disk — silently
+// shipping an app whose daemon dies at boot with `ERR_MODULE_NOT_FOUND`
+// (issue #4638). A stale `12.9.0` pin here vs `12.10.0` on disk did exactly
+// that. Keep every entry equal to the daemon's corresponding exact pin.
 export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
-  "better-sqlite3": "12.9.0",
+  "better-sqlite3": "12.10.0",
   "blake3-wasm": "2.1.5",
+  "hyperframes": "0.8.1",
+  "node-pty": "1.1.0",
+  "sharp": "0.35.3",
 } as const;
 
 export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
@@ -42,13 +54,15 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "packaged main",
   },
   daemonCli: {
-    externals: ["better-sqlite3", "blake3-wasm"],
+    externals: ["better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
+      "/node_modules/hyperframes/",
       "/node_modules/next/",
+      "/node_modules/node-pty/",
       "/node_modules/openai/",
       "/node_modules/react/",
       "/node_modules/react-dom/",
@@ -56,13 +70,15 @@ export const WIN_PREBUNDLE_POLICIES = {
     label: "daemon cli",
   },
   daemonSidecar: {
-    externals: ["better-sqlite3", "blake3-wasm"],
+    externals: ["better-sqlite3", "blake3-wasm", "hyperframes", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
+      "/node_modules/hyperframes/",
       "/node_modules/next/",
+      "/node_modules/node-pty/",
       "/node_modules/openai/",
       "/node_modules/react/",
       "/node_modules/react-dom/",

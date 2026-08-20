@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -109,6 +109,50 @@ describe('ChatComposer infinite re-render regression (#2097)', () => {
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(window.localStorage.getItem(key)).toBeNull());
+  });
+
+  it('keeps the original draft while Send is paused and when the decision is canceled', async () => {
+    let resolveDecision!: (outcome: 'restore-draft') => void;
+    const onSend = vi.fn(() => new Promise<'restore-draft'>((resolve) => {
+      resolveDecision = resolve;
+    }));
+    renderComposer({ onSend });
+    await flushMounts();
+
+    typeAndSettle('keep this exact prompt');
+    await waitFor(() => expect(screen.getByTestId('chat-send')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(composerText()).toBe('keep this exact prompt');
+
+    await act(async () => resolveDecision('restore-draft'));
+    expect(composerText()).toBe('keep this exact prompt');
+  });
+
+  it('accepts only one submit while the current send decision is pending', async () => {
+    let resolveFirstSend!: () => void;
+    const firstSend = new Promise<void>((resolve) => {
+      resolveFirstSend = resolve;
+    });
+    const onSend = vi.fn()
+      .mockReturnValueOnce(firstSend)
+      .mockResolvedValueOnce(undefined);
+    renderComposer({ onSend });
+    await flushMounts();
+
+    await typeAndSettle('send this once');
+    pressEnter();
+    pressEnter();
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolveFirstSend());
+    await waitFor(() => expect(composerText().trim()).toBe(''));
+
+    await typeAndSettle('send a later turn');
+    pressEnter();
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
   });
 
   it('does not enter an infinite update loop on rapid plain-text typing', async () => {

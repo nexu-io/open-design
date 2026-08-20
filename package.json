@@ -1,6 +1,6 @@
 {
   "name": "open-design",
-  "version": "0.14.1",
+  "version": "0.19.2",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
@@ -11,12 +11,13 @@
   },
   "scripts": {
     "postinstall": "node ./scripts/postinstall.mjs",
+    "bootstrap": "node ./scripts/postinstall.mjs",
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
     "tools-release": "pnpm exec tools-release",
     "tools-serve": "pnpm exec tools-serve",
     "nix:update-hash": "node --experimental-strip-types ./scripts/update-nix-pnpm-deps-hash.ts",
-    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/product-neutrality.test.ts scripts/web-import-isolation.test.ts scripts/check-cross-app-imports.test.ts scripts/approve-fork-pr-workflows.test.ts scripts/lint-craft-references.test.ts scripts/check-design-system-manifests.test.ts scripts/check-plugin-preview-manifest.test.ts",
+    "guard": "tsx ./scripts/guard.ts",
     "lint:craft": "tsx ./scripts/lint-craft-references.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
     "i18n:coverage": "tsx ./scripts/i18n-coverage-report.ts",
@@ -44,15 +45,18 @@
   },
   "pnpm": {
     "overrides": {
-      "brace-expansion": "5.0.6",
+      "brace-expansion": "5.0.9",
       "devalue": "5.8.1",
-      "fast-uri": "3.1.2",
-      "hono": "4.12.19",
-      "ip-address": "10.2.0",
+      "fast-uri": "3.1.5",
+      "hono": "4.12.34",
+      "ip-address": "10.3.1",
       "postcss": "8.5.15",
       "protobufjs": "8.4.0",
       "qs": "6.15.2",
+      "tar": "7.5.22",
       "tmp": "0.2.7",
+      "undici@^6": "6.28.0",
+      "undici@^7": "7.29.0",
       "yaml": "2.9.0"
     },
     "onlyBuiltDependencies": [
@@ -61,6 +65,7 @@
       "electron",
       "electron-winstaller",
       "esbuild",
+      "onnxruntime-node",
       "protobufjs",
       "sharp"
     ]

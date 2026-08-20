@@ -184,10 +184,12 @@ describe('NextStepActions', () => {
 
     expect(screen.queryByText(AUTO_MATCH_TITLE)).toBeNull();
     expect(screen.queryByText(VISUAL_POLISH_TITLE)).toBeNull();
-    expect(screen.getByText(en['nextStep.brandAiOptimizeTitle'])).toBeTruthy();
-    expect(screen.getByText(en['nextStep.brandAiOptimizeBody'])).toBeTruthy();
-    expect(screen.getByText(en['nextStep.brandCreateDesignTitle'])).toBeTruthy();
-    expect(screen.getByText(en['nextStep.brandCreateDesignBody'])).toBeTruthy();
+    expect(screen.getByRole('button', {
+      name: `${en['nextStep.brandAiOptimizeTitle']}. ${en['nextStep.brandAiOptimizeBody']}`,
+    })).toBeTruthy();
+    expect(screen.getByRole('button', {
+      name: `${en['nextStep.brandCreateDesignTitle']}. ${en['nextStep.brandCreateDesignBody']}`,
+    })).toBeTruthy();
     expect(screen.getByTestId('next-step-toolbox-more')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('next-step-brand-action-brand-ai-optimize'));
@@ -250,6 +252,8 @@ describe('NextStepActions', () => {
     expect(onPromptAction).toHaveBeenCalledWith(PROJECT_CONTINUE_PROMPT);
     fireEvent.click(screen.getByTestId('next-step-project-action-project-generate-artifact'));
     expect(onPromptAction).toHaveBeenCalledWith(PROJECT_GENERATE_ARTIFACT_PROMPT);
+    expect(PROJECT_GENERATE_ARTIFACT_PROMPT).toContain('semantic filename');
+    expect(PROJECT_GENERATE_ARTIFACT_PROMPT).not.toContain('usually index.html');
   });
 
   it('localizes incomplete-project recovery prompts in Chinese', () => {
@@ -268,8 +272,14 @@ describe('NextStepActions', () => {
     expect(onPromptAction).toHaveBeenCalledWith(
       expect.stringContaining('现在生成缺失的项目产物'),
     );
+    expect(onPromptAction).toHaveBeenCalledWith(
+      expect.stringContaining('语义化文件名'),
+    );
     expect(onPromptAction).not.toHaveBeenCalledWith(
       expect.stringContaining('Generate the missing project artifact now'),
+    );
+    expect(onPromptAction).not.toHaveBeenCalledWith(
+      expect.stringContaining('通常保存为 index.html'),
     );
   });
 

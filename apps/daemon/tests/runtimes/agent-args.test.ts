@@ -269,6 +269,38 @@ test('pi args use rpc mode without --no-session and append model/thinking option
   ]);
 });
 
+test('pi fetchModels reads the model table from stdout', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-pi-models-'));
+  try {
+    const bin = join(dir, process.platform === 'win32' ? 'pi.cmd' : 'pi');
+    if (process.platform === 'win32') {
+      writeFileSync(
+        bin,
+        '@echo off\r\nif "%~1"=="--list-models" (\r\n  echo provider model context max-out thinking images\r\n  echo anthropic claude-sonnet-4-5 200K 64K yes yes\r\n  exit /b 0\r\n)\r\nexit /b 1\r\n',
+      );
+    } else {
+      writeFileSync(
+        bin,
+        '#!/bin/sh\nif [ "$1" = "--list-models" ]; then\n  printf \'%s\\n\' \\\n    \'provider model context max-out thinking images\' \\\n    \'anthropic claude-sonnet-4-5 200K 64K yes yes\'\n  exit 0\nfi\nexit 1\n',
+      );
+      chmodSync(bin, 0o755);
+    }
+
+    assert.ok(pi.fetchModels, 'pi must define fetchModels');
+    const models = await pi.fetchModels(bin, {});
+
+    assert.deepEqual(models, [
+      { id: 'default', label: 'Default (CLI config)' },
+      {
+        id: 'anthropic/claude-sonnet-4-5',
+        label: 'anthropic/claude-sonnet-4-5',
+      },
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('pi args forward extraAllowedDirs as --append-system-prompt flags', () => {
   const args = pi.buildArgs(
     '',
@@ -839,6 +871,8 @@ test('grok-build uses --prompt-file and never embeds the prompt in argv or stdin
   assert.deepEqual(args, [
     '--prompt-file',
     promptFilePath,
+    '--no-plan',
+    '--always-approve',
     '--model',
     'grok-4.3',
   ]);
@@ -847,6 +881,13 @@ test('grok-build uses --prompt-file and never embeds the prompt in argv or stdin
   assert.equal(args.includes('-p'), false);
   assert.equal(args.includes('--single'), false);
   assert.equal(args.filter((entry) => entry === '--prompt-file').length, 1);
+});
+
+test('grok-build disables plan mode and auto-approves headless tool calls (issue #5507)', () => {
+  const promptFilePath = '/tmp/od-grok-prompt/prompt.md';
+  const args = grokBuild.buildArgs('', [], [], { model: 'grok-build' }, { promptFilePath });
+
+  assert.deepEqual(args.slice(2, 4), ['--no-plan', '--always-approve']);
 });
 
 test('grok-build omits effort for default/build models but keeps it for reasoning models', () => {
@@ -861,6 +902,8 @@ test('grok-build omits effort for default/build models but keeps it for reasonin
   assert.deepEqual(reasoningArgs, [
     '--prompt-file',
     promptFilePath,
+    '--no-plan',
+    '--always-approve',
     '--model',
     'grok-4.20-reasoning',
     '--effort',

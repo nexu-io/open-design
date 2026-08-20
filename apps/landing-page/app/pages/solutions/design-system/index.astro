@@ -1,7 +1,7 @@
 ---
 /*
  * /solutions/design-system/ — Solution use-case page: design systems with
- * Open Design.
+ * OpenDesign.
  *
  * Structure mirrors /solutions/prototype/ (the template), with ONE
  * difference: the feature grid is replaced by real design-system swatch
@@ -62,7 +62,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: SITE },
       { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: pageUrl },
     ],
   },
@@ -88,7 +88,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="solution" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
@@ -100,8 +100,8 @@ const jsonLd = [
         <h1 class="display">{page.heading}</h1>
         <p class="lead">{page.lead}</p>
         <div class="solution-hero-cta">
-          <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
-          <a class="btn btn-ghost" href={href('/download/')}>{common.downloadDesktop}</a>
+          <a class="btn btn-primary solution-download-cta hero-download-attention" href={href('/download/')} data-download-cta data-direct-download data-download-placement="solution_hero">{common.downloadDesktop}</a>
+          <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
         </div>
       </header>
       <figure class="solution-hero">
@@ -193,19 +193,19 @@ const jsonLd = [
       </ol>
     </section>
 
-    <section class="info-cta" aria-label="Open Design call to action">
+    <section class="info-cta" aria-label="OpenDesign call to action">
       <div>
         <h2>{page.ctaTitle}</h2>
         <p>{page.ctaBody}</p>
       </div>
       <div class="info-cta-actions">
-        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
-        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+        <a class="btn btn-primary solution-download-cta hero-download-attention" href={REPO_RELEASES} data-download-cta data-direct-download data-download-placement="solution_footer" target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+        <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
       </div>
       <div class="info-cta-meta">
         <span class="stamp">● {common.apache}</span>
         <span>{common.localFirst} · {common.byok}</span>
-        <span>{common.macWinLinux}</span>
+        <span>{common.macWin}</span>
       </div>
     </section>
   </article>

@@ -9,7 +9,7 @@ import {
   attributedAmrUrl,
   recordAmrEntry,
 } from '../analytics/amr-attribution';
-import { amrConsoleUrlForProfile, amrPlansUrlForProfile } from '../runtime/amr-guidance';
+import { amrConsoleUrlForProfile } from '../runtime/amr-guidance';
 import { setAmrLowBalanceWarnOptedOut } from '../runtime/amr-balance-gate';
 import { formatVelaBalanceUsd } from '../providers/daemon';
 import { Icon } from './Icon';
@@ -20,9 +20,7 @@ export type AmrLowBalanceDecision = 'proceed' | 'recharge' | 'dismiss';
 interface Props {
   /** Raw wallet balance string from the warning snapshot. */
   balanceUsd: string | null;
-  /** Billing plan tier; free accounts get an upgrade CTA instead of top-up copy. */
-  plan?: string | null;
-  /** Open Design Cloud profile from the warning snapshot; picks the console origin. */
+  /** OpenDesign Cloud profile from the warning snapshot; picks the console origin. */
   profile: string | null;
   /** Which surface warned — keys the amr_entry attribution on the recharge click. */
   entrySource: 'home_low_balance_warn_recharge' | 'chat_low_balance_warn_recharge';
@@ -32,16 +30,15 @@ interface Props {
   onDecision: (decision: AmrLowBalanceDecision) => void;
 }
 
-// SOFT pre-run reminder for Open Design Cloud tasks: the wallet can still
+// SOFT pre-run reminder for OpenDesign Cloud tasks: the balance can still
 // fund a start but sits at or below the low-balance line, so the run may die
 // mid-flight. Unlike the hard AmrBalanceDialog this never stands between the
 // user and their task — "start anyway" resolves the SAME pending send the
 // gate paused (a continuation, not a re-submit), "top up" opens the console
-// wallet page and parks the send, and the "don't remind me" opt-out persists
+// dashboard and parks the send, and the "don't remind me" opt-out persists
 // for every future soft warning. Hard blocks ignore the opt-out by design.
 export function AmrLowBalanceDialog({
   balanceUsd,
-  plan,
   profile,
   entrySource,
   metricsConsent,
@@ -52,13 +49,6 @@ export function AmrLowBalanceDialog({
   const analytics = useAnalytics();
   const optOutRef = useRef<HTMLInputElement>(null);
   const formattedBalance = formatVelaBalanceUsd(balanceUsd) ?? '';
-  const isFreePlan = plan?.trim().toLowerCase() === 'free';
-  const primaryActionUrl = isFreePlan
-    ? amrPlansUrlForProfile(profile)
-    : amrConsoleUrlForProfile(profile);
-  const primaryActionLabel = isFreePlan
-    ? t('chat.amrBalanceGate.plansCta')
-    : t('chat.amrLowBalance.rechargeCta');
   const commitOptOut = () => {
     if (optOutRef.current?.checked) setAmrLowBalanceWarnOptedOut();
   };
@@ -66,7 +56,7 @@ export function AmrLowBalanceDialog({
     commitOptOut();
     onDecision(decision);
   };
-  const openWalletAndPark = () => {
+  const openConsoleAndPark = () => {
     const attribution = recordAmrEntry(analytics.track, entrySource, new Date(), {
       metricsConsent,
     });
@@ -76,7 +66,7 @@ export function AmrLowBalanceDialog({
       installationId,
     });
     window.open(
-      attributedAmrUrl(primaryActionUrl, attribution, deviceId),
+      attributedAmrUrl(amrConsoleUrlForProfile(profile), attribution, deviceId),
       '_blank',
       'noopener,noreferrer',
     );
@@ -122,10 +112,10 @@ export function AmrLowBalanceDialog({
           <Button
             variant="primary"
             className={styles.cta}
-            onClick={openWalletAndPark}
+            onClick={openConsoleAndPark}
             data-testid="amr-low-balance-dialog-recharge"
           >
-            {primaryActionLabel}
+            {t('chat.amrLowBalance.rechargeCta')}
           </Button>
         </div>
       </div>

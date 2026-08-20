@@ -12,7 +12,7 @@ import {
   KIT_CSS,
 } from "../kit.js";
 import type { Brand } from "../../schema.js";
-import { type DesignTokens, varRef, flattenTokens } from "../types.js";
+import { type DesignTokens, varRef, flattenTokens, isRenderableFontFamily } from "../types.js";
 
 // ─────────────────────────── small html helpers ─────────────────────────────
 
@@ -60,7 +60,7 @@ export function brandFontAssets(brand: Brand): { links: string; displayFamily: s
   const families = [
     brand.typography?.display?.family,
     ...(brand.typography?.display?.fallbacks ?? []),
-  ].filter((f): f is string => Boolean(f && f.trim()));
+  ].filter((f): f is string => Boolean(f && f.trim()) && isRenderableFontFamily(f!));
   const displayFamily = families.length
     ? [...new Set(families)].map(quote).join(", ") + ", " + varRef("fontFamily")
     : varRef("fontFamily");

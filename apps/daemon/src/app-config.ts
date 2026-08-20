@@ -77,6 +77,7 @@ export function readPluginEnvKnobs(): PluginEnvKnobs {
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;
+  serviceTier?: string;
 }
 
 export type AgentCliEnvPrefs = Record<string, Record<string, string>>;
@@ -92,6 +93,10 @@ export interface OrbitConfigPrefs {
   enabled: boolean;
   time: string;
   templateSkillId?: string | null;
+  workspaceScope?: {
+    workspaceId: string;
+    workspaceMemberId: string;
+  } | null;
 }
 
 export interface ProjectLocationPrefs {
@@ -163,7 +168,11 @@ export function appConfigDir(projectRoot: string, env: NodeJS.ProcessEnv = proce
   return path.isAbsolute(expanded) ? expanded : path.resolve(projectRoot, expanded);
 }
 
-const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
+const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set([
+  'model',
+  'reasoning',
+  'serviceTier',
+]);
 const RETIRED_AGENT_IDS: ReadonlySet<string> = new Set(['gemini']);
 
 const TELEMETRY_KEYS: ReadonlySet<string> = new Set([
@@ -314,6 +323,23 @@ function validateOrbit(raw: unknown): OrbitConfigPrefs | undefined {
     orbit.templateSkillId = typeof obj.templateSkillId === 'string' && obj.templateSkillId.trim()
       ? obj.templateSkillId.trim()
       : null;
+  }
+  if (Object.hasOwn(obj, 'workspaceScope')) {
+    const rawScope = obj.workspaceScope;
+    if (rawScope && typeof rawScope === 'object' && !Array.isArray(rawScope)) {
+      const workspaceId =
+        typeof (rawScope as Record<string, unknown>).workspaceId === 'string'
+          ? ((rawScope as Record<string, unknown>).workspaceId as string).trim()
+          : '';
+      const workspaceMemberId =
+        typeof (rawScope as Record<string, unknown>).workspaceMemberId === 'string'
+          ? ((rawScope as Record<string, unknown>).workspaceMemberId as string).trim()
+          : '';
+      orbit.workspaceScope =
+        workspaceId && workspaceMemberId ? { workspaceId, workspaceMemberId } : null;
+    } else {
+      orbit.workspaceScope = null;
+    }
   }
 
   return orbit;
@@ -575,6 +601,19 @@ function applyConfigValue(
   if (key === 'orbit') {
     const validated = validateOrbit(value);
     if (validated !== undefined) {
+      const existingOrbit = target[key] as OrbitConfigPrefs | undefined;
+      if (
+        value
+        && typeof value === 'object'
+        && !Array.isArray(value)
+        && !Object.hasOwn(value, 'workspaceScope')
+        && existingOrbit?.workspaceScope
+      ) {
+        // Older clients do not know this field. Editing Orbit time/enabled
+        // must not silently convert an already-scoped unattended automation
+        // back into an ambient/unbound one. An explicit null still clears it.
+        validated.workspaceScope = existingOrbit.workspaceScope;
+      }
       target[key] = validated;
     } else {
       delete target[key];
@@ -791,19 +830,37 @@ async function doWrite(
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
   await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), 'utf8');
   await rename(tmp, file);
+  const installationIdWasExplicitlyReset = Object.prototype.hasOwnProperty.call(partial, 'installationId')
+    && (partial.installationId == null || (
+      typeof existing.installationId === 'string'
+      && typeof normalizedNextWithoutRetiredAgents.installationId === 'string'
+      && existing.installationId !== normalizedNextWithoutRetiredAgents.installationId
+    ));
+  const metricsWereExplicitlyDisabled = isMetricsExplicitlyDisabled(partial.telemetry);
+  const shouldClearAttribution = installationIdWasExplicitlyReset || metricsWereExplicitlyDisabled;
   // Mirror the identity bits to the channel-root installation file so they
   // survive a namespace-scoped data-dir wipe. Only fires when the caller
-  // explicitly touched `installationId` (avoiding noisy writes on every
-  // unrelated app-config update). A write failure here doesn't roll back
-  // the app-config write — the next read merges them transparently.
-  if (Object.prototype.hasOwnProperty.call(partial, 'installationId')) {
+  // explicitly touches installation identity or consent lifecycle state
+  // (avoiding noisy writes on every unrelated app-config update). A write
+  // failure here doesn't roll back the app-config write — the next read
+  // merges them transparently.
+  if (Object.prototype.hasOwnProperty.call(partial, 'installationId') || shouldClearAttribution) {
     const id = normalizedNextWithoutRetiredAgents.installationId;
     // Caller explicitly touched installationId — mirror the outcome
     // (including the clear case) to installation.json so a future read
     // doesn't keep serving the old value out of the channel-root file.
     // "Delete my data" relies on this clear path.
     const installPatch: InstallationFilePatch = {
-      installationId: typeof id === 'string' && id.length > 0 ? id : null,
+      ...(Object.prototype.hasOwnProperty.call(partial, 'installationId')
+        ? { installationId: typeof id === 'string' && id.length > 0 ? id : null }
+        : {}),
+      ...(shouldClearAttribution
+        ? {
+            pendingAttribution: null,
+            attributionClaimedAt: null,
+            attributionClaimResultAt: null,
+          }
+        : {}),
     };
     try {
       await writeInstallationFile(resolveInstallationDir(dataDir), installPatch);
@@ -813,4 +870,11 @@ async function doWrite(
     }
   }
   return normalizedNextWithoutRetiredAgents;
+}
+
+function isMetricsExplicitlyDisabled(value: unknown): boolean {
+  return value != null
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && (value as Record<string, unknown>).metrics === false;
 }

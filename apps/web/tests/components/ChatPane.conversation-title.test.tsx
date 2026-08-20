@@ -8,13 +8,16 @@ import { ChatPane } from '../../src/components/ChatPane';
 import { trackRunFailedToastSurfaceView } from '../../src/analytics/events';
 import type { AppConfig, ChatMessage, Conversation } from '../../src/types';
 
+const translate = (key: string, vars?: Record<string, string | number>) => {
+  if (vars && Object.keys(vars).length > 0) {
+    return `${key} ${Object.values(vars).join(' ')}`;
+  }
+  return key;
+};
+
 vi.mock('../../src/i18n', () => ({
-  useT: () => (key: string, vars?: Record<string, string | number>) => {
-    if (vars && Object.keys(vars).length > 0) {
-      return `${key} ${Object.values(vars).join(' ')}`;
-    }
-    return key;
-  },
+  useI18n: () => ({ locale: 'en', setLocale: () => undefined, t: translate }),
+  useT: () => translate,
 }));
 
 vi.mock('../../src/components/AssistantMessage', () => ({
@@ -143,7 +146,7 @@ describe('ChatPane session switcher', () => {
     });
   });
 
-  it('opens the profile-scoped wallet from the AMR recharge action', () => {
+  it('opens the profile-scoped console from the AMR recharge action', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(
       <ChatPane
@@ -171,19 +174,30 @@ describe('ChatPane session switcher', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('chat.amrError.rechargeCta'));
+    const rechargeAction = screen.getByText('chat.amrError.rechargeCta');
+    const retryAction = screen.getByText('promptTemplates.retry');
+    expect(rechargeAction.parentElement).toBe(retryAction.parentElement);
+    expect(
+      rechargeAction.parentElement?.closest('[data-user-action-footer="true"]'),
+    ).toBeTruthy();
 
-    const [walletUrl, target, features] = openSpy.mock.calls[0] ?? [];
+    fireEvent.click(rechargeAction);
+
+    const [consoleUrl, target, features] = openSpy.mock.calls[0] ?? [];
     expect(target).toBe('_blank');
     expect(features).toBe('noopener,noreferrer');
-    const parsedWalletUrl = new URL(String(walletUrl));
-    expect(`${parsedWalletUrl.origin}${parsedWalletUrl.pathname}`).toBe(
-      'https://vela.powerformer.net/wallet',
+    const parsedConsoleUrl = new URL(String(consoleUrl));
+    // Top-up reports on the console dashboard now, not a wallet page.
+    expect(`${parsedConsoleUrl.origin}${parsedConsoleUrl.pathname}`).toBe(
+      'https://vela.powerformer.net/dashboard',
     );
-    expect(parsedWalletUrl.searchParams.get('od_entry_source')).toBe('chat_error_recharge');
+    // The plain top-up entry must NOT carry the upgrade intent — it opens the
+    // console to add credit, not the plan catalog.
+    expect(parsedConsoleUrl.searchParams.get('billing')).toBeNull();
+    expect(parsedConsoleUrl.searchParams.get('od_entry_source')).toBe('chat_error_recharge');
   });
 
-  it('opens the profile-scoped plans view from the AMR tier upgrade action', () => {
+  it('opens public Pricing from the AMR tier upgrade action', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(
       <ChatPane
@@ -218,9 +232,9 @@ describe('ChatPane session switcher', () => {
     expect(features).toBe('noopener,noreferrer');
     const parsedPlansUrl = new URL(String(plansUrl));
     expect(`${parsedPlansUrl.origin}${parsedPlansUrl.pathname}`).toBe(
-      'https://vela.powerformer.net/wallet',
+      'https://open-design.ai/pricing/',
     );
-    expect(parsedPlansUrl.searchParams.get('view')).toBe('plans');
+    expect(parsedPlansUrl.searchParams.get('billing')).toBeNull();
     expect(parsedPlansUrl.searchParams.get('od_entry_source')).toBe('chat_error_upgrade');
   });
 });

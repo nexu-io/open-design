@@ -1,0 +1,55 @@
+name: nix
+
+# Standalone Nix packaging check. Not part of core merge validation (ci.yml).
+# Triggered when flake/lock/nix inputs change; red here does not block merge.
+
+on:
+  pull_request:
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - "scripts/update-nix-pnpm-deps-hash.ts"
+      - ".github/workflows/nix.yml"
+  push:
+    branches: [main]
+    paths:
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - "scripts/update-nix-pnpm-deps-hash.ts"
+      - ".github/workflows/nix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flake-check:
+    name: nix flake check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: nix flake check
+        run: nix flake check --print-build-logs --keep-going

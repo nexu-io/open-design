@@ -24,6 +24,7 @@
     "en": "Viral K-pop Dance Choreography"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A detailed prompt for Seedance 2.0 to animate a character performing a dance based on a 16-panel storyboard reference.",
   "description_i18n": {
     "zh-CN": "为Seedance 2.0提供详细提示词，根据16格分镜参考动画角色表演舞蹈。",

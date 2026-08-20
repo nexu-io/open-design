@@ -113,7 +113,7 @@ before it is accepted:
 }
 ```
 
-This prompt-only v1 atom does not claim a measured accuracy lift by
+This deterministic v1 atom does not claim a measured accuracy lift by
 itself. Treat the expected improvement as coverage of previously
 manual anonymous-token cases when the Figma tree contains enough role
 evidence. Real accuracy numbers require a fixture suite with known
@@ -142,6 +142,6 @@ on strict mode; default is "soft converge" (proceed with
 
 ## Status
 
-Reserved id, prompt-only fragment in v1. The deterministic mapping
-algorithm + DESIGN.md token-extraction helper land in spec §16
-Phase 6 alongside `figma-extract`.
+Implemented by the daemon runner in
+`apps/daemon/src/plugins/atoms/token-map.ts`. It parses design-system tokens,
+performs deterministic mapping, and writes the mapped and unmatched outputs.

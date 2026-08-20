@@ -24,6 +24,7 @@
     "en": "Game Screenshot - Anime Fighting Game: Captain Ryuuga vs Kaze Renshin"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "An in-game fighting game key visual / combat screenshot in the style of Street Fighter 6 or Tekken 8 intro art. Two anime-style male warriors square off in the center of a dramatic nighttime Chinese temple courtyard — a shirtless straw-hat pirate with a warm orange-red fire aura on the left, and a spiky-haired martial artist in an orange gi charging a massive crackling blue lightning energy sphere on the right. Ships with a complete fighting-game HUD (dual health bars, round timer, P1/P2 portrait panels with named fighters and emblems, per-side combo counters and max gauges). Warm-orange vs cool-blue split color grading matches the rival-fighter convention of the genre. Tuned for gpt-image-2 at 16:9.",
   "description_i18n": {
     "zh-CN": "街头霸王 6 或铁拳 8 风格的格斗游戏视觉截图。两名动漫风格的男性战士在夜晚的中国寺庙庭院中对决，配有完整的格斗游戏 HUD（双血条、回合计时器、P1/P2 角色面板、连击计数器和能量槽）。为 gpt-image-2 优化，16:9 比例。",

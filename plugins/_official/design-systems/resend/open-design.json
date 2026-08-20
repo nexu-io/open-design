@@ -24,6 +24,7 @@
     "en": "Resend"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Email API. Minimal dark theme, monospace accents.",
   "description_i18n": {
     "zh-CN": "电子邮件 API。极简深色主题，等宽字体点缀。",

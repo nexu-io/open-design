@@ -182,14 +182,18 @@ export function metadataForHomeMediaComposer(
       }
     : undefined;
 
-  // Media surfaces no longer seed ratio / duration / model / audio kind from
-  // the composer footer — those are asked for by the agent during the run
-  // (system.ts prints "(unknown — ask: …)" when a field is unset). We only
-  // seed `kind` (+ the hyperframes route discriminator) and any picked prompt
-  // template, mirroring how prototype/deck defer their settings.
+  // Media surfaces no longer seed ratio / duration / audio kind from
+  // the composer footer. The prompt marks them as not provided, infers safe
+  // defaults, and asks only when a choice materially changes the output. We
+  // seed `kind`, the selected image route, (+ the hyperframes route
+  // discriminator) and any picked prompt template, mirroring how
+  // prototype/deck defer their settings. Persisting the image route keeps the
+  // run aligned with the model shown in the Home composer.
   if (surface === 'image') {
+    const imageModel = stringValue(inputs.model);
     return {
       kind: 'image',
+      ...(imageModel ? { imageModel } : {}),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }

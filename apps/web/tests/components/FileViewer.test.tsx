@@ -2,15 +2,54 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactElement } from 'react';
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
+import type {
+  OpenDesignHostPreviewNavigationFailure,
+  OpenDesignHostPreviewNavigationFailureListener,
+} from '@open-design/host';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
 
 const { saveTemplateMock } = vi.hoisted(() => ({
   saveTemplateMock: vi.fn(),
+}));
+
+// Shared analytics spy so deck-tracking tests can assert the exact
+// (eventName, props) pairs FileViewer emits. The real provider returns a
+// no-op `track` outside a provider tree, so swapping in a spy changes no
+// behavior for the rest of the suite — it just records calls.
+const { analyticsTrackMock } = vi.hoisted(() => ({
+  analyticsTrackMock: vi.fn(),
+}));
+
+const { safetyEventMock } = vi.hoisted(() => ({
+  safetyEventMock: vi.fn(),
+}));
+
+vi.mock('../../src/analytics/provider', async () => {
+  const actual = await vi.importActual<typeof import('../../src/analytics/provider')>(
+    '../../src/analytics/provider',
+  );
+  return {
+    ...actual,
+    useAnalytics: () => ({
+      track: analyticsTrackMock,
+      setConsent: () => undefined,
+      setIdentity: () => undefined,
+      setConfigureGlobals: () => undefined,
+      setUserId: () => undefined,
+      anonymousId: 'test-anon',
+      sessionId: 'test-session',
+      newRequestId: () => 'test-request',
+    }),
+  };
+});
+
+vi.mock('../../src/analytics/error-tracking', () => ({
+  reportSafetyEvent: safetyEventMock,
 }));
 
 vi.mock('../../src/state/projects', async () => {
@@ -29,13 +68,19 @@ import {
   LiveArtifactViewer,
   LiveArtifactRefreshHistoryPanel,
   SvgViewer,
-  appendSavedPreviewCommentOrder,
   applyInspectOverridesToSource,
   commentPreviewCanvasSize,
+  computeReorderedSortKey,
+  desktopPreviewAutoFitZoomPercent,
+  desktopPreviewDocumentContentWidth,
+  deckKeyboardShortcutForEvent,
   effectivePreviewScale,
   fileVersionPreviewOptions,
   parseInspectOverridesFromSource,
   previewOverlayTransform,
+  previewMeasurementFrameIsUsable,
+  resolveDesktopPreviewContentMeasurement,
+  resolveDesktopPreviewZoomPercent,
   serializeInspectOverrides,
   updateInspectOverride,
 } from '../../src/components/FileViewer';
@@ -51,15 +96,100 @@ import { I18nProvider } from '../../src/i18n';
 import type { Dict } from '../../src/i18n/types';
 import { emptyManualEditStyles } from '../../src/edit-mode/types';
 import { __resetPreviewIsolationCache } from '../../src/runtime/powered-preview';
+import { installPreviewIframeMessageObserver } from '../../src/observability/iframe-error';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
+import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
+import {
+  CollabProvider,
+  type CollabContextValue,
+} from '../../src/collab/collab-context';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
+
+/** A team workspace context — the only state that can address the resource hub,
+ *  and therefore the only one where the public "Publish file" entry is offered. */
+function teamWorkspaceContext(): WorkspaceCollabContext {
+  return {
+    workspaceId: 'ws-1',
+    workspaceType: 'team',
+    teamId: 'team-1',
+    workspaceMemberId: 'wm-1',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: null,
+    providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 5, usedSeats: 1 }),
+    permissions: buildWorkspacePermissions({ role: 'member', lifecycleState: 'active' }),
+  };
+}
+
+/** Fetch stub that answers the workspace-context read with `context`, and every
+ *  other route with the empty-deployments payload these viewer tests expect. */
+function stubFetchWithWorkspaceContext(context: WorkspaceCollabContext | null): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/workspace/context')) {
+        return new Response(JSON.stringify({ context }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    }),
+  );
+}
+
+function renderWithProjectWorkspace(
+  ui: ReactElement,
+  workspaceContext: WorkspaceCollabContext | null,
+) {
+  const value = projectWorkspaceCollabValue(workspaceContext);
+  return render(<CollabProvider value={value}>{ui}</CollabProvider>);
+}
+
+function projectWorkspaceCollabValue(
+  workspaceContext: WorkspaceCollabContext | null,
+): CollabContextValue {
+  return {
+    workspaceContext,
+    workspaceContextLoading: false,
+    enabled: false,
+    member: null,
+    present: [],
+    publishedVersion: null,
+    syncState: null,
+    viewerOnly: false,
+    writerAuthority: 'allowed',
+    isOwner: false,
+    isEffectiveOwner: false,
+    isSharedNonOwner: false,
+    ownerDisplayName: null,
+    ownerRole: null,
+    downloadPending: false,
+    reportChange: () => {},
+    requestPublish: () => {},
+    refreshPresence: () => {},
+    checkStatusNow: () => {},
+  };
+}
 
 const TEST_SNAPSHOT_DATA_URL = 'data:image/png;base64,c25hcHNob3Q=';
 
 afterEach(() => {
   cleanup();
   __resetPreviewIsolationCache();
+  // `useWorkspaceContext` caches the last resolved context at module scope so a
+  // remount does not flash the signed-out state. Left alone, a test that signs
+  // into a team would silently sign the NEXT test in too.
+  resetWorkspaceContextCache();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  analyticsTrackMock.mockReset();
+  safetyEventMock.mockReset();
   Reflect.deleteProperty(navigator, 'clipboard');
   Reflect.deleteProperty(document, 'execCommand');
 });
@@ -113,10 +243,16 @@ function deferredResponse() {
 function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
   return calls
     .map(([message]) => message)
-    .filter((message): message is { type: 'od:srcdoc-transport-activate'; html: string } => {
+    .filter((message): message is {
+      type: 'od:srcdoc-transport-activate';
+      html: string;
+      generation: string;
+    } => {
       if (typeof message !== 'object' || message === null) return false;
-      const data = message as { type?: unknown; html?: unknown };
-      return data.type === 'od:srcdoc-transport-activate' && typeof data.html === 'string';
+      const data = message as { type?: unknown; html?: unknown; generation?: unknown };
+      return data.type === 'od:srcdoc-transport-activate'
+        && typeof data.html === 'string'
+        && typeof data.generation === 'string';
     });
 }
 
@@ -134,8 +270,83 @@ function testRect(left: number, top: number, width: number, height: number): DOM
   } as DOMRect;
 }
 
+function installSandboxedPreviewWindow(frame: HTMLIFrameElement): Window {
+  const previewWindow = {
+    postMessage: vi.fn(),
+  } as unknown as Window;
+  Object.defineProperty(previewWindow, 'document', {
+    configurable: true,
+    get() {
+      throw new DOMException('Blocked by iframe sandbox', 'SecurityError');
+    },
+  });
+  Object.defineProperty(frame, 'contentWindow', {
+    configurable: true,
+    value: previewWindow,
+  });
+  return previewWindow;
+}
+
+function latestPreviewContentSizeRequest(source: Window) {
+  const postMessage = source.postMessage as ReturnType<typeof vi.fn>;
+  const request = previewContentSizeRequests(source)
+    .reverse()
+    .find((data) => data.type === 'od:preview-content-size-request');
+  if (!request?.measurementId || !request.generation) {
+    throw new Error('Expected a witnessed preview content-size request');
+  }
+  return request;
+}
+
+function previewContentSizeRequests(source: Window) {
+  const postMessage = source.postMessage as ReturnType<typeof vi.fn>;
+  return [...postMessage.mock.calls]
+    .map(([data]) => data as {
+      type?: string;
+      measurementId?: string;
+      generation?: string;
+      documentEpoch?: string;
+      canvasWidth?: number;
+      previewScale?: number;
+    })
+    .filter((data) => data.type === 'od:preview-content-size-request');
+}
+
+function postPreviewContentWidth(source: Window, scrollWidth: number, clientWidth = scrollWidth) {
+  const request = latestPreviewContentSizeRequest(source);
+  postPreviewContentSizeResponse(source, request, scrollWidth, clientWidth);
+}
+
+function postPreviewContentSizeResponse(
+  source: Window,
+  request: { measurementId?: string; generation?: string; documentEpoch?: string },
+  scrollWidth: number,
+  clientWidth: number,
+) {
+  window.dispatchEvent(new MessageEvent('message', {
+    source,
+    data: {
+      type: 'od:preview-content-size',
+      measurementId: request.measurementId,
+      generation: request.generation,
+      documentEpoch: request.documentEpoch,
+      scrollWidth,
+      clientWidth,
+    },
+  }));
+}
+
 function clickAgentTool(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
+}
+
+async function openUnifiedExportTab() {
+  // Export is a standalone header button now (no tab strip inside the popover).
+  fireEvent.click(await screen.findByRole('button', { name: /export/i }));
+}
+
+async function openUnifiedShareTab() {
+  fireEvent.click(await screen.findByRole('button', { name: /^share$/i }));
 }
 
 function manualEditTarget(id: string, label: string, x: number) {
@@ -213,12 +424,616 @@ function installPreviewSnapshotBridge(iframe: HTMLIFrameElement) {
 }
 
 describe('FileViewer preview scale', () => {
+  it('keeps responsive previews at 100% and fits true fixed-width overflow', () => {
+    const responsive = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-responsive',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-responsive',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 964,
+        clientWidth: 964,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-responsive',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 1,
+      confirmedContentWidth: null,
+    });
+    expect(responsive).toEqual({
+      action: 'accept',
+      contentWidth: 964,
+      measuredClientWidth: 964,
+      overflow: false,
+    });
+    expect(desktopPreviewAutoFitZoomPercent(
+      { width: 964, height: 710 },
+      responsive.action === 'accept' ? responsive.contentWidth : null,
+    )).toBe(100);
+
+    const fixedWidth = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-fixed',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-fixed',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 1440,
+        clientWidth: 964,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-fixed',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 1,
+      confirmedContentWidth: null,
+    });
+    expect(fixedWidth).toEqual({
+      action: 'accept',
+      contentWidth: 1440,
+      measuredClientWidth: 964,
+      overflow: true,
+    });
+    expect(desktopPreviewAutoFitZoomPercent(
+      { width: 964, height: 710 },
+      fixedWidth.action === 'accept' ? fixedWidth.contentWidth : null,
+    ))
+      .toBeCloseTo(66.9444, 3);
+  });
+
+  it('rejects scaled viewport-floor feedback instead of collapsing auto-fit to 1%', () => {
+    const polluted = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-scaled',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 0.669444,
+      },
+      response: {
+        measurementId: 'measure-scaled',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 96_400,
+        clientWidth: 96_400,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-scaled',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 0.669444,
+      confirmedContentWidth: 1440,
+      confirmedOverflow: true,
+    });
+
+    expect(polluted).toEqual({ action: 'preserve' });
+    expect(desktopPreviewAutoFitZoomPercent({ width: 964, height: 710 }, 1440))
+      .toBeCloseTo(66.9444, 3);
+  });
+
+  it('ignores stale measurements and rejects retained offscreen 1px preview frames', () => {
+    const stale = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-old',
+        generation: 'generation-old',
+        documentEpoch: 'document-old',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-old',
+        generation: 'generation-old',
+        documentEpoch: 'document-old',
+        scrollWidth: 96_400,
+        clientWidth: 96_400,
+      },
+      currentGeneration: 'generation-new',
+      latestMeasurementId: 'measure-new',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 1,
+      confirmedContentWidth: 1440,
+      confirmedOverflow: true,
+    });
+    expect(stale).toEqual({ action: 'ignore' });
+    expect(resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-new-host-generation',
+        generation: 'generation-new',
+        documentEpoch: 'document-new',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-new-host-generation',
+        generation: 'generation-new',
+        documentEpoch: 'document-old',
+        scrollWidth: 96_400,
+        clientWidth: 96_400,
+      },
+      currentGeneration: 'generation-new',
+      latestMeasurementId: 'measure-new-host-generation',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 1,
+      confirmedContentWidth: 1440,
+      confirmedOverflow: true,
+    })).toEqual({ action: 'ignore' });
+    expect(resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-before-resize',
+        generation: 'generation-new',
+        documentEpoch: 'document-new',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-before-resize',
+        generation: 'generation-new',
+        documentEpoch: 'document-new',
+        scrollWidth: 964,
+        clientWidth: 964,
+      },
+      currentGeneration: 'generation-new',
+      latestMeasurementId: 'measure-before-resize',
+      currentCanvasWidth: 720,
+      currentPreviewScale: 1,
+      confirmedContentWidth: 964,
+      confirmedOverflow: false,
+    })).toEqual({ action: 'ignore' });
+
+    expect(previewMeasurementFrameIsUsable({
+      connected: true,
+      active: true,
+      frameRect: testRect(-99_532, 0, 1, 710),
+      canvasRect: testRect(0, 0, 964, 710),
+    })).toBe(false);
+    expect(previewMeasurementFrameIsUsable({
+      connected: true,
+      active: true,
+      frameRect: testRect(0, 0, 964, 710),
+      canvasRect: testRect(0, 0, 964, 710),
+    })).toBe(true);
+  });
+
+  it('does not chase viewport-relative overflow while scaled without a neutral witness', () => {
+    const grown = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-growth',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 0.669444,
+      },
+      response: {
+        measurementId: 'measure-growth',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 1800,
+        clientWidth: 1440,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-growth',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 0.669444,
+      confirmedContentWidth: 1440,
+      confirmedOverflow: true,
+    });
+    expect(grown).toEqual({ action: 'preserve' });
+
+    const missingWitness = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-no-witness',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 0.5,
+      },
+      response: {
+        measurementId: 'measure-no-witness',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 1928,
+        clientWidth: 1928,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-no-witness',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 0.5,
+      confirmedContentWidth: null,
+    });
+    expect(missingWitness).toEqual({ action: 'remeasure-neutral' });
+  });
+
   it('keeps file viewer selectors in the effective global stylesheet', () => {
     const css = readExpandedIndexCss();
 
     expect(css).toContain('.viewer');
     expect(css).toContain('.viewer-toolbar');
     expect(css).toContain('.viewer-action');
+  });
+
+  it('uses a layered skeleton for the initial preview loading state', () => {
+    const css = readExpandedIndexCss();
+
+    expect(css).toContain('.viewer-loading-stage');
+    expect(css).toContain('aspect-ratio: 16 / 9;');
+    expect(css).toContain('.viewer-loading-card-back-one');
+    expect(css).toContain('.viewer-loading-card-main::before');
+    expect(css).toContain('.viewer-loading-chart');
+    expect(css).toContain('@keyframes od-viewer-loading-sweep');
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.viewer-loading-stage,[\s\S]*animation: none;/,
+    );
+  });
+
+  it('waits for exact Team authority before loading initial raw source', async () => {
+    const file = baseFile({
+      name: 'first-open.html',
+      path: 'first-open.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'First open',
+        entry: 'first-open.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const rawReads: Array<{ init?: RequestInit; url: string }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/raw/first-open.html')) {
+        rawReads.push({ init, url });
+        return new Response('<html><body>Materialized</body></html>', { status: 200 });
+      }
+      if (url.endsWith('/files')) {
+        return new Response(JSON.stringify({ files: [file] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    }));
+
+    const pendingContext = {
+      ...projectWorkspaceCollabValue(null),
+      workspaceContextLoading: true,
+      projectResourceAuthority: 'pending' as const,
+    };
+    const { rerender } = render(
+      <CollabProvider value={pendingContext}>
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+        />
+      </CollabProvider>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(rawReads).toEqual([]);
+    expect(document.querySelector('.viewer-loading')).not.toBeNull();
+    expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
+
+    rerender(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(teamWorkspaceContext()),
+        workspaceContextLoading: true,
+        projectResourceAuthority: 'workspace',
+      }}>
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+        />
+      </CollabProvider>,
+    );
+
+    await waitFor(() => {
+      expect(rawReads).toHaveLength(1);
+      expect(document.querySelector('.viewer-loading')).toBeNull();
+      expect(screen.getByTestId('artifact-preview-frame')).toBeTruthy();
+    });
+    expect(rawReads[0]?.url).not.toContain('workspaceId=');
+    expect(rawReads[0]?.url).not.toContain('workspaceMemberId=');
+    expect(rawReads[0]?.init?.headers).toMatchObject({
+      'x-od-workspace-id': 'ws-1',
+      'x-od-workspace-member-id': 'wm-1',
+    });
+  });
+
+  it('recovers the same preview mount when pending authority settles as local', async () => {
+    const file = baseFile({
+      name: 'local-first-open.html',
+      path: 'local-first-open.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Local first open',
+        entry: 'local-first-open.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const rawReads: Array<{ init?: RequestInit; url: string }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/raw/local-first-open.html')) {
+        rawReads.push({ init, url });
+        return new Response('<html><body>Local materialized</body></html>', { status: 200 });
+      }
+      if (url.endsWith('/files')) {
+        return new Response(JSON.stringify({ files: [file] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    }));
+
+    const { rerender } = render(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(teamWorkspaceContext()),
+        workspaceContextLoading: true,
+        projectResourceAuthority: 'pending',
+      }}>
+        <FileViewer projectId="project-1" projectKind="prototype" file={file} />
+      </CollabProvider>,
+    );
+
+    expect(document.querySelector('.viewer-loading')).not.toBeNull();
+    expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
+    expect(rawReads).toEqual([]);
+
+    rerender(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(null),
+        workspaceContextLoading: false,
+        projectResourceAuthority: 'local',
+      }}>
+        <FileViewer projectId="project-1" projectKind="prototype" file={file} />
+      </CollabProvider>,
+    );
+
+    await waitFor(() => {
+      expect(rawReads).toHaveLength(1);
+      expect(document.querySelector('.viewer-loading')).toBeNull();
+      expect(screen.getByTestId('artifact-preview-frame')).toBeTruthy();
+    });
+    expect(rawReads[0]?.url).not.toContain('workspaceId=');
+    expect(rawReads[0]?.url).not.toContain('workspaceMemberId=');
+    expect(rawReads[0]?.init?.headers).toBeUndefined();
+  });
+
+  it('warms a newly retained inactive HTML viewer before its first activation', async () => {
+    const file = baseFile({
+      name: 'inactive-first-open.html',
+      path: 'inactive-first-open.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Inactive first open',
+        entry: 'inactive-first-open.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const rawReads: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/raw/inactive-first-open.html')) {
+        rawReads.push(url);
+        return new Response('<html><body>Already warm</body></html>', { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    }));
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      file,
+    };
+    const { rerender } = render(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(null),
+        projectResourceAuthority: 'local',
+      }}>
+        <FileViewer {...props} workspaceActive={false} />
+      </CollabProvider>,
+    );
+
+    const retainedFrame = await waitFor(() => {
+      expect(rawReads).toHaveLength(1);
+      const frame = document.querySelector<HTMLIFrameElement>(
+        'iframe[data-testid="artifact-preview-frame-retained-inactive-first-open.html"], iframe[data-testid="artifact-preview-frame-srcdoc-retained-inactive-first-open.html"]',
+      );
+      expect(frame).not.toBeNull();
+      return frame!;
+    });
+
+    rerender(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(null),
+        projectResourceAuthority: 'local',
+      }}>
+        <FileViewer {...props} workspaceActive />
+      </CollabProvider>,
+    );
+
+    expect(document.querySelector('iframe[data-testid="artifact-preview-frame"]')).toBe(retainedFrame);
+    expect(rawReads).toHaveLength(1);
+  });
+
+  it('never downgrades denied project resources to local reads', async () => {
+    const file = baseFile({
+      name: 'authority.html',
+      path: 'authority.html',
+      mime: 'text/html',
+      kind: 'html',
+    });
+    const rawReads: Array<{ init?: RequestInit; url: string }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/raw/authority.html')) {
+        rawReads.push({ init, url });
+        return new Response('<html><body>Authorized</body></html>', { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    }));
+
+    const denied = render(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(null),
+        projectResourceAuthority: 'denied',
+      }}>
+        <FileViewer projectId="project-1" projectKind="prototype" file={file} />
+      </CollabProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(rawReads).toEqual([]);
+    expect(document.querySelector('.viewer-loading')).toBeNull();
+    expect(screen.getByText(/Preview unavailable/)).toBeTruthy();
+    denied.unmount();
+
+    const local = render(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(null),
+        projectResourceAuthority: 'local',
+      }}>
+        <FileViewer projectId="project-1" projectKind="prototype" file={file} />
+      </CollabProvider>,
+    );
+    await waitFor(() => expect(rawReads).toHaveLength(1));
+    expect(rawReads[0]?.url).not.toContain('workspaceId=');
+    expect(new Headers(rawReads[0]?.init?.headers).get('x-od-workspace-id')).toBeNull();
+
+    local.rerender(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(null),
+        projectResourceAuthority: 'denied',
+      }}>
+        <FileViewer projectId="project-1" projectKind="prototype" file={file} />
+      </CollabProvider>,
+    );
+    await waitFor(() => expect(screen.getByText(/Preview unavailable/)).toBeTruthy());
+    expect(rawReads).toHaveLength(1);
+  });
+
+  it('gates non-HTML resource URLs for pending and denied projects', () => {
+    const file = baseFile({
+      name: 'private.png',
+      path: 'private.png',
+      mime: 'image/png',
+      kind: 'image',
+    });
+    const { rerender } = render(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(null),
+        workspaceContextLoading: true,
+        projectResourceAuthority: 'pending',
+      }}>
+        <FileViewer projectId="project-1" projectKind="prototype" file={file} />
+      </CollabProvider>,
+    );
+    expect(document.querySelector('.viewer-loading')).not.toBeNull();
+    expect(screen.queryByRole('img')).toBeNull();
+
+    rerender(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(null),
+        projectResourceAuthority: 'denied',
+      }}>
+        <FileViewer projectId="project-1" projectKind="prototype" file={file} />
+      </CollabProvider>,
+    );
+    expect(document.querySelector('.viewer-loading')).toBeNull();
+    expect(screen.getByText(/Preview unavailable/)).toBeTruthy();
+    expect(screen.queryByRole('img')).toBeNull();
+
+    rerender(
+      <CollabProvider value={{
+        ...projectWorkspaceCollabValue(null),
+        projectResourceAuthority: 'local',
+      }}>
+        <FileViewer projectId="project-1" projectKind="prototype" file={file} />
+      </CollabProvider>,
+    );
+    expect(screen.getByRole('img').getAttribute('src')).toContain(
+      '/api/projects/project-1/raw/private.png',
+    );
+  });
+
+  it('keeps the preview viewport trigger flat by default', () => {
+    const css = readExpandedIndexCss();
+    const rules = Array.from(css.matchAll(/\.viewer-viewport-trigger\s*\{[^}]+\}/g), (match) => match[0]);
+
+    // Flat = no chip. Transparent fill + transparent border + no shadow; the
+    // resting state must not read as a raised control sitting on the bar.
+    expect(rules.some((rule) => rule.includes('background-color: transparent;'))).toBe(true);
+    expect(rules.some((rule) => rule.includes('border-color: transparent;'))).toBe(true);
+    expect(rules.some((rule) => rule.includes('box-shadow: none;'))).toBe(true);
+    expect(rules.every((rule) => !rule.includes('box-shadow: var(--shadow-xs);'))).toBe(true);
+    // …and it must hug its content so the label and chevron stay visible. A
+    // fixed square hid the label and left an empty chip behind (issue: the
+    // deck toolbar's "empty grey block").
+    expect(rules.some((rule) => rule.includes('width: auto;'))).toBe(true);
+    expect(rules.every((rule) => !rule.includes('width: 30px;'))).toBe(true);
+  });
+
+  it('clips deck thumbnail loading overlays to the thumbnail frame radius', () => {
+    const css = readExpandedIndexCss();
+    const rule = css.match(/\.deck-thumbnail-loading\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('inset: 0;');
+    expect(rule).toContain('border-radius: inherit;');
+    expect(rule).toContain('clip-path: inset(0 round 8px);');
+    expect(rule).toContain('overflow: hidden;');
+  });
+
+  it('uses a centered compact deck rail on mobile and tablet preview frames', () => {
+    const css = readExpandedIndexCss();
+
+    expect(css).toContain(
+      '.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail',
+    );
+    expect(css).toContain('--deck-device-frame-radius: 18px;');
+    expect(css).toContain('--deck-compact-rail-width: 56px;');
+    expect(css).toContain('.preview-viewport-mobile.comment-preview-layer-with-deck-rail');
+    expect(css).toMatch(
+      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-rail\s*\{[\s\S]*width: var\(--deck-compact-rail-width\);[\s\S]*height: calc\(var\(--preview-viewport-height\) \* var\(--preview-scale, 1\)\);[\s\S]*border-radius: var\(--deck-device-frame-radius\) 0 0 var\(--deck-device-frame-radius\);/,
+    );
+    expect(css).toMatch(
+      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-frame\s*\{[\s\S]*display: none;/,
+    );
+    expect(css).toMatch(
+      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-number\s*\{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*align-items: center;[\s\S]*justify-content: center;/,
+    );
+    expect(css).toMatch(
+      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-button\.active \.deck-thumbnail-number\s*\{[\s\S]*box-shadow: 0 0 0 2px/,
+    );
+    expect(css).toMatch(
+      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail\.comment-preview-layer-deck-rail-collapsed \.comment-preview-canvas\s*\{[\s\S]*border-left: 1px solid var\(--border-strong\);[\s\S]*border-radius: var\(--deck-device-frame-radius\);/,
+    );
+  });
+
+  it('keeps the draw toolbar floating without reserving preview space', () => {
+    const css = readExpandedIndexCss();
+
+    expect(css).not.toContain('--preview-draw-dock-clearance');
+    expect(css).not.toContain('padding-bottom: var(--preview-draw-dock-clearance);');
   });
 
   it('keeps manual edit canvas layout aligned with comment preview on device viewports (#2960)', () => {
@@ -250,6 +1065,79 @@ describe('FileViewer preview scale', () => {
 
   it('uses the requested zoom for desktop preview overlays', () => {
     expect(effectivePreviewScale('desktop', 1.5, { width: 320, height: 480 })).toBe(1.5);
+  });
+
+  it('calculates a desktop auto-fit zoom for wide landing pages', () => {
+    expect(desktopPreviewAutoFitZoomPercent({ width: 900, height: 700 })).toBe(100);
+    expect(desktopPreviewAutoFitZoomPercent({ width: 900, height: 700 }, 1440)).toBeCloseTo(62.5);
+    expect(desktopPreviewAutoFitZoomPercent({ width: 900, height: 700 }, 900)).toBe(100);
+    expect(desktopPreviewAutoFitZoomPercent({ width: 1600, height: 900 }, 1440)).toBe(100);
+  });
+
+  it('never applies the wide-page desktop auto-fit to decks', () => {
+    // A deck measures its full slide filmstrip as content width; running that
+    // through the wide-page fit would collapse the opening zoom to ~1%. Decks
+    // paginate and fit one slide in-iframe, so they must open at 100%
+    // regardless of the measured filmstrip width (issue rec:recvq3NXctofXr).
+    const filmstripCanvas = { width: 1280, height: 720 };
+    const filmstripWidth = 1280 * 40; // 40 slides laid out horizontally
+    expect(desktopPreviewAutoFitZoomPercent(filmstripCanvas, filmstripWidth)).toBeCloseTo(2.5);
+
+    expect(
+      resolveDesktopPreviewZoomPercent({
+        zoomMode: 'auto',
+        viewport: 'desktop',
+        isDeck: true,
+        manualZoomPercent: 100,
+        canvasSize: filmstripCanvas,
+        contentWidth: filmstripWidth,
+      }),
+    ).toBe(100);
+
+    // A non-deck wide page still gets the auto-fit.
+    expect(
+      resolveDesktopPreviewZoomPercent({
+        zoomMode: 'auto',
+        viewport: 'desktop',
+        isDeck: false,
+        manualZoomPercent: 100,
+        canvasSize: { width: 900, height: 700 },
+        contentWidth: 1440,
+      }),
+    ).toBeCloseTo(62.5);
+
+    // Manual mode always honors the caller's zoom, deck or not.
+    expect(
+      resolveDesktopPreviewZoomPercent({
+        zoomMode: 'manual',
+        viewport: 'desktop',
+        isDeck: false,
+        manualZoomPercent: 150,
+        canvasSize: { width: 900, height: 700 },
+        contentWidth: 1440,
+      }),
+    ).toBe(150);
+  });
+
+  it('measures desktop preview document content width from real iframe layout', () => {
+    const doc = document.implementation.createHTMLDocument('preview');
+    Object.defineProperty(doc.documentElement, 'scrollWidth', { configurable: true, value: 960 });
+    Object.defineProperty(doc.body, 'scrollWidth', { configurable: true, value: 1440 });
+
+    expect(desktopPreviewDocumentContentWidth(doc)).toBe(1440);
+  });
+
+  it('only treats unmodified deck keyboard presses as deck shortcuts', () => {
+    const base = { ctrlKey: false, altKey: false, metaKey: false, shiftKey: false };
+
+    expect(deckKeyboardShortcutForEvent({ ...base, key: 'r' })).toBe('reset');
+    expect(deckKeyboardShortcutForEvent({ ...base, key: 'R' })).toBe('reset');
+    expect(deckKeyboardShortcutForEvent({ ...base, key: 'ArrowRight' })).toBe('next');
+    expect(deckKeyboardShortcutForEvent({ ...base, key: 'r', metaKey: true })).toBeNull();
+    expect(deckKeyboardShortcutForEvent({ ...base, key: 'r', ctrlKey: true })).toBeNull();
+    expect(deckKeyboardShortcutForEvent({ ...base, key: 'r', altKey: true })).toBeNull();
+    expect(deckKeyboardShortcutForEvent({ ...base, key: 'r', shiftKey: true })).toBeNull();
+    expect(deckKeyboardShortcutForEvent({ ...base, key: 'ArrowRight', metaKey: true })).toBeNull();
   });
 
   it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
@@ -631,7 +1519,8 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(firstFrame.getAttribute('src')).toContain('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability&odPreviewEpoch=');
+    const firstSrc = firstFrame.getAttribute('src');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -639,11 +1528,181 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(parkedFrame?.getAttribute('src')).toBe(firstFrame.getAttribute('src'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
     expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
+    expect(firstFrame.getAttribute('src')).toBe(firstSrc);
+  });
+
+  it('reuses a cached HTML source across ordinary viewer remounts until the file version changes', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const sourceReads: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (
+        url.includes('/api/projects/project-1/raw/page.html?')
+        && url.includes('cacheBust=')
+      ) {
+        sourceReads.push(url);
+        return new Response('<html><body>cached</body></html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function Shell({ version }: { version: number }) {
+      const [visible, setVisible] = useState(true);
+      return (
+        <IframeKeepAliveProvider>
+          <button type="button" onClick={() => setVisible((next) => !next)}>
+            {visible ? 'Show files' : 'Show preview'}
+          </button>
+          {visible ? (
+            <FileViewer
+              projectId="project-1"
+              projectKind="prototype"
+              file={{ ...file, mtime: version }}
+            />
+          ) : (
+            <div data-testid="files-view" />
+          )}
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const view = renderWithProjectWorkspace(
+      <Shell version={file.mtime} />,
+      teamWorkspaceContext(),
+    );
+    await waitFor(() => expect(sourceReads).toHaveLength(1));
+
+    for (let round = 0; round < 10; round += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Show files' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Show preview' }));
+    }
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame')).toBeTruthy();
+    });
+    expect(sourceReads).toHaveLength(1);
+
+    view.rerender(
+      <CollabProvider value={projectWorkspaceCollabValue(teamWorkspaceContext())}>
+        <Shell version={file.mtime + 1} />
+      </CollabProvider>,
+    );
+    await waitFor(() => expect(sourceReads).toHaveLength(2));
+
+    const nextWorkspaceContext = {
+      ...teamWorkspaceContext(),
+      workspaceId: 'ws-2',
+      workspaceMemberId: 'wm-2',
+      teamId: 'team-2',
+    };
+    view.rerender(
+      <CollabProvider value={projectWorkspaceCollabValue(nextWorkspaceContext)}>
+        <Shell version={file.mtime + 1} />
+      </CollabProvider>,
+    );
+    await waitFor(() => expect(sourceReads).toHaveLength(3));
+  });
+
+  it('promotes large HTML files to the srcDoc path when the routing preview shows sandbox-unsafe scripts', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      size: 3 * 1024 * 1024,
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Imported app',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const previewText = '<!doctype html><html><head><script src="./app.js"></script></head>';
+    let fullHtml = `${previewText}<body><main>Imported filesystem app</main></body></html>`;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.startsWith('/api/projects/project-1/text-preview/index.html')) {
+        return new Response(JSON.stringify({
+          text: previewText,
+          poweredPreview: { required: false, reasons: [] },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.startsWith('/api/projects/project-1/raw/index.html')) {
+        return new Response(fullHtml, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+      if (url === '/api/projects/project-1/files') {
+        return new Response(JSON.stringify({ files: [file] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.getAttribute('srcDoc')).toContain('Imported filesystem app');
+    });
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/projects/project-1/text-preview/index.html'), { cache: 'no-store' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/projects/project-1/raw/index.html?cacheBust='),
+      { cache: 'no-store' },
+    );
+
+    fullHtml = `${previewText}<body><main>Updated filesystem app</main></body></html>`;
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{ ...file, mtime: file.mtime + 1 }}
+      />,
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.getAttribute('srcDoc')).toContain('Updated filesystem app');
+    });
   });
 
   it('evicts least-recent inactive preview iframes once the pool exceeds its limit', () => {
@@ -680,6 +1739,199 @@ describe('FileViewer SVG artifacts', () => {
     );
     expect(parkedFrames).toEqual([secondFrame, thirdFrame]);
     expect(parkedFrames).not.toContain(firstFrame);
+  });
+
+  it('parks a newly pooled iframe before starting its srcDoc navigation', () => {
+    const originalSetAttribute = HTMLIFrameElement.prototype.setAttribute;
+    const navigationAttributes: string[] = [];
+    const setAttribute = vi.spyOn(HTMLIFrameElement.prototype, 'setAttribute')
+      .mockImplementation(function setIframeAttribute(
+        this: HTMLIFrameElement,
+        name: string,
+        value: string,
+      ) {
+        if (name === 'src' || name === 'srcdoc') navigationAttributes.push(name);
+        return originalSetAttribute.call(this, name, value);
+      });
+    try {
+      render(
+        <IframeKeepAliveProvider>
+          <PooledIframe
+            cacheKey={previewIframeKeepAliveKey('project-1', 'deck.html')}
+            src="about:blank"
+            srcDoc="<!doctype html><html><body>Deck</body></html>"
+            title="deck.html"
+          />
+        </IframeKeepAliveProvider>,
+      );
+
+      expect(navigationAttributes).toEqual(['src', 'srcdoc']);
+    } finally {
+      setAttribute.mockRestore();
+    }
+  });
+
+  it('recreates a srcDoc preview iframe instead of parking its browsing context across project views', () => {
+    const viewer = (
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'deck.html',
+          path: 'deck.html',
+          mime: 'text/html',
+          kind: 'html',
+        })}
+        liveHtml={'<!doctype html><html><body><main>Deck</main><script>location.reload()</script></body></html>'}
+        workspaceActive
+      />
+    );
+    const { container, rerender } = render(
+      <IframeKeepAliveProvider>{viewer}</IframeKeepAliveProvider>,
+    );
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const srcDoc = frame.srcdoc;
+    const frameName = frame.name;
+
+    rerender(<IframeKeepAliveProvider>{null}</IframeKeepAliveProvider>);
+    expect(container.querySelector('.iframe-keep-alive-pool')?.contains(frame)).toBe(false);
+    expect(frame.isConnected).toBe(false);
+
+    rerender(<IframeKeepAliveProvider>{viewer}</IframeKeepAliveProvider>);
+    const reactivatedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(reactivatedFrame).not.toBe(frame);
+    expect(reactivatedFrame.srcdoc).toBe(srcDoc);
+    expect(reactivatedFrame.name).toBe(frameName);
+  });
+
+  it('does not cover non-empty srcDoc content while paint verification is pending', () => {
+    const viewer = (
+      <I18nProvider initial="zh-CN">
+        <FileViewer
+          projectId="first-paint-project"
+          projectKind="prototype"
+          file={baseFile({
+            name: 'first-paint-deck.html',
+            path: 'first-paint-deck.html',
+            mime: 'text/html',
+            kind: 'html',
+          })}
+          liveHtml={'<!doctype html><html><body><main>First paint</main><script>location.reload()</script></body></html>'}
+          workspaceActive
+        />
+      </I18nProvider>
+    );
+    const { unmount } = render(viewer);
+    expect(screen.queryByTestId('artifact-preview-first-load')).not.toBeInTheDocument();
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    fireEvent.load(frame);
+    const probe = postMessage.mock.calls.find(
+      ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
+    )?.[0] as { generation?: string; probeId?: string } | undefined;
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'od:srcdoc-transport-activated',
+          generation: probe?.generation,
+          probeId: probe?.probeId,
+          bodyComplete: true,
+        },
+      }));
+    });
+    expect(screen.queryByTestId('artifact-preview-first-load')).not.toBeInTheDocument();
+
+    unmount();
+    render(viewer);
+    expect(screen.queryByTestId('artifact-preview-first-load')).not.toBeInTheDocument();
+  });
+
+  it('loads an inline preview through a blob URL when the browser supports it', () => {
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    const createObjectURL = vi.fn(() => 'blob:od://app/preview-document');
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get')
+      .mockReturnValue('OpenDesign/0.20 Electron/41.3.0');
+    try {
+      render(
+        <FileViewer
+          projectId="blob-preview-project"
+          projectKind="prototype"
+          file={baseFile({
+            name: 'blob-preview.html',
+            path: 'blob-preview.html',
+            mime: 'text/html',
+            kind: 'html',
+          })}
+          liveHtml={'<!doctype html><html><body><main>Blob preview</main><script>location.reload()</script></body></html>'}
+          workspaceActive
+        />,
+      );
+
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(frame.getAttribute('src')).toBe('blob:od://app/preview-document');
+      expect(frame.hasAttribute('srcdoc')).toBe(false);
+    } finally {
+      userAgent.mockRestore();
+      if (originalCreateObjectURL) {
+        Object.defineProperty(URL, 'createObjectURL', {
+          configurable: true,
+          value: originalCreateObjectURL,
+        });
+      } else {
+        Reflect.deleteProperty(URL, 'createObjectURL');
+      }
+      if (originalRevokeObjectURL) {
+        Object.defineProperty(URL, 'revokeObjectURL', {
+          configurable: true,
+          value: originalRevokeObjectURL,
+        });
+      } else {
+        Reflect.deleteProperty(URL, 'revokeObjectURL');
+      }
+    }
+  });
+
+  it('enforces the iframe pool limit when new active frames attach over parked entries', () => {
+    function Frame({ name }: { name: string }) {
+      return (
+        <PooledIframe
+          cacheKey={previewIframeKeepAliveKey('project-1', `${name}.html`)}
+          src={`/api/projects/project-1/raw/${name}.html?v=1&r=0`}
+          title={`${name}.html`}
+          data-testid={`pooled-frame-${name}`}
+        />
+      );
+    }
+    function Harness({ names }: { names: string[] }) {
+      return (
+        <IframeKeepAliveProvider maxEntries={2}>
+          {names.map((name) => <Frame key={name} name={name} />)}
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const { container, rerender } = render(<Harness names={['parked']} />);
+    const parked = screen.getByTestId('pooled-frame-parked');
+    rerender(<Harness names={[]} />);
+    expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBe(parked);
+
+    rerender(<Harness names={['active-one', 'active-two']} />);
+
+    expect(document.body.contains(parked)).toBe(false);
+    expect(screen.getByTestId('pooled-frame-active-one')).toBeTruthy();
+    expect(screen.getByTestId('pooled-frame-active-two')).toBeTruthy();
+    expect(container.querySelectorAll('iframe')).toHaveLength(2);
   });
 
   it('evicts inactive preview iframes for a project when the project is invalidated', () => {
@@ -786,8 +2038,81 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot&amp;odPreviewBridge=observability&amp;odPreviewEpoch=preview-document-');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
+  });
+
+  it('does not mint a second preview capability for Workspace URL-load HTML', () => {
+    const context = teamWorkspaceContext();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => (
+      Response.json({ deployments: [] })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWithProjectWorkspace(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml="<html><body>URL loaded</body></html>"
+      />,
+      context,
+    );
+
+    expect(
+      (screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement)
+        .getAttribute('data-od-render-mode'),
+    ).toBe('url-load');
+    expect(fetchMock.mock.calls.some(([input]) => (
+      String(input).includes('/api/projects/project-1/preview-url')
+    ))).toBe(false);
+  });
+
+  it('keeps browser-owned URL preview navigation server-authorized by project id', () => {
+    const file = baseFile({
+      name: 'team-page.html',
+      path: 'team-page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Team page',
+        entry: 'team-page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const markup = renderToStaticMarkup(
+      <CollabProvider value={projectWorkspaceCollabValue(teamWorkspaceContext())}>
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          liveHtml="<html><body>team</body></html>"
+        />
+      </CollabProvider>,
+    );
+
+    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
+    expect(markup).toContain(
+      'src="/api/projects/project-1/raw/team-page.html?v=1710000000',
+    );
+    expect(markup).not.toContain('workspaceMemberId=');
   });
 
   it('routes brand extraction stop requests from the preview iframe', async () => {
@@ -882,18 +2207,410 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(frame.getAttribute('src')).toContain('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability&odPreviewEpoch=');
 
     fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
 
     const reloadedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(reloadedFrame).toBe(frame);
-    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(reloadedFrame.getAttribute('src')).toContain('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability&odPreviewEpoch=');
+  });
+
+  it('keeps raw file-watch refresh measurements on the refreshed document epoch', async () => {
+    const replaceMock = vi.fn();
+    const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, 900, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
+      let fakeWindow = frameWindows.get(this);
+      if (!fakeWindow) {
+        fakeWindow = {
+          document: document.implementation.createHTMLDocument('preview'),
+          location: { replace: replaceMock },
+          postMessage: vi.fn(),
+        } as unknown as Window;
+        frameWindows.set(this, fakeWindow);
+      }
+      return fakeWindow;
+    });
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      file,
+      liveHtml: '<html><body><main style="min-width:1440px">Wide</main></body></html>',
+    };
+    const { rerender } = render(<FileViewer {...props} />);
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const initialEpoch = new URL(frame.src).searchParams.get('odPreviewEpoch');
+    expect(initialEpoch).toMatch(/^preview-document-\d+$/);
+
+    rerender(<FileViewer {...props} filesRefreshKey={7} />);
+
+    await waitFor(() => expect(frame.getAttribute('src')).toContain('fr=7'));
+    expect(replaceMock).not.toHaveBeenCalled();
+    const refreshedUrl = new URL(frame.src, window.location.href);
+    expect(refreshedUrl.pathname).toBe('/api/projects/project-1/raw/page.html');
+    expect(refreshedUrl.searchParams.get('fr')).toBe('7');
+    expect(refreshedUrl.searchParams.get('odPreviewEpoch')).toMatch(/^preview-document-\d+$/);
+    expect(refreshedUrl.searchParams.get('odPreviewEpoch')).not.toBe(initialEpoch);
+
+    frame.setAttribute('src', refreshedUrl.toString());
+    fireEvent.load(frame);
+    const previewWindow = frame.contentWindow!;
+    const refreshedRequest = latestPreviewContentSizeRequest(previewWindow);
+    expect(refreshedRequest.documentEpoch).toBe(refreshedUrl.searchParams.get('odPreviewEpoch'));
+    act(() => postPreviewContentSizeResponse(previewWindow, refreshedRequest, 1440, 900));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+
+  });
+
+  it('applies a committed file-watch generation and refreshed mtime in one preview navigation', async () => {
+    const replaceMock = vi.fn();
+    const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
+      let fakeWindow = frameWindows.get(this);
+      if (!fakeWindow) {
+        fakeWindow = {
+          document: document.implementation.createHTMLDocument('preview'),
+          location: { replace: replaceMock },
+          postMessage: vi.fn(),
+        } as unknown as Window;
+        frameWindows.set(this, fakeWindow);
+      }
+      return fakeWindow;
+    });
+    const htmlFile = (mtime: number) => baseFile({
+      name: 'watch-coalesce.html',
+      path: 'watch-coalesce.html',
+      mtime,
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Watch coalesce',
+        entry: 'watch-coalesce.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const sharedProps = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      liveHtml: '<html><body>watch</body></html>',
+    };
+    const { rerender } = render(
+      <FileViewer {...sharedProps} file={htmlFile(1_000)} filesRefreshKey={1} />,
+    );
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const initialSrc = frame.getAttribute('src');
+    const navigations: string[] = [];
+    const observer = new MutationObserver(() => {
+      navigations.push(frame.getAttribute('src') ?? '');
+    });
+    observer.observe(frame, { attributes: true, attributeFilter: ['src'] });
+
+    rerender(<FileViewer {...sharedProps} file={htmlFile(2_000)} filesRefreshKey={2} />);
+    await waitFor(() => expect(frame.getAttribute('src')).toContain('fr=2'));
+    const refreshedSrc = frame.getAttribute('src');
+    expect(refreshedSrc).not.toBe(initialSrc);
+    expect(refreshedSrc).toContain('v=2000');
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    // Re-rendering the same committed snapshot is inert.
+    rerender(<FileViewer {...sharedProps} file={htmlFile(2_000)} filesRefreshKey={2} />);
+    await new Promise((resolve) => window.setTimeout(resolve, 240));
+    observer.disconnect();
+    expect(frame.getAttribute('src')).toBe(refreshedSrc);
+    expect(new Set(navigations)).toEqual(new Set([refreshedSrc ?? '']));
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('defers file-watch refreshes while retained and consumes only the latest key when reactivated', async () => {
+    const replaceMock = vi.fn();
+    const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
+      let fakeWindow = frameWindows.get(this);
+      if (!fakeWindow) {
+        fakeWindow = {
+          document: document.implementation.createHTMLDocument('preview'),
+          location: { replace: replaceMock },
+          postMessage: vi.fn(),
+        } as unknown as Window;
+        frameWindows.set(this, fakeWindow);
+      }
+      return fakeWindow;
+    });
+    const file = baseFile({
+      name: 'retained.html',
+      path: 'retained.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Retained',
+        entry: 'retained.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      file,
+      liveHtml: '<html><body>retained</body></html>',
+    };
+    const { rerender } = render(<FileViewer {...props} />);
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const initialSrc = frame.getAttribute('src');
+    replaceMock.mockClear();
+
+    rerender(<FileViewer {...props} workspaceActive={false} filesRefreshKey={7} />);
+    rerender(<FileViewer {...props} workspaceActive={false} filesRefreshKey={9} />);
+    await new Promise((resolve) => window.setTimeout(resolve, 240));
+    expect(frame.getAttribute('src')).toBe(initialSrc);
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    rerender(<FileViewer {...props} workspaceActive filesRefreshKey={9} />);
+    await waitFor(() => expect(frame.getAttribute('src')).toContain('fr=9'));
+    // React commits the accumulated revision directly on activation. It must
+    // not follow that navigation with a second location.replace reload.
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    rerender(<FileViewer {...props} workspaceActive={false} filesRefreshKey={9} />);
+    rerender(<FileViewer {...props} workspaceActive filesRefreshKey={9} />);
+    await new Promise((resolve) => window.setTimeout(resolve, 240));
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps file action nodes mounted while a retained viewer becomes inactive', async () => {
+    const chromeActionsHost = document.createElement('div');
+    chromeActionsHost.id = 'app-chrome-file-actions';
+    chromeActionsHost.dataset.appChromeFileActions = 'true';
+    document.body.appendChild(chromeActionsHost);
+    const file = baseFile({
+      name: 'toolbar-owner.html',
+      path: 'toolbar-owner.html',
+      mime: 'text/html',
+      kind: 'html',
+    });
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      file,
+      liveHtml: '<html><body>toolbar owner</body></html>',
+    };
+
+    try {
+      const { rerender } = render(<FileViewer {...props} workspaceActive />);
+      const owner = await waitFor(() => {
+        const node = chromeActionsHost.querySelector<HTMLElement>(
+          '[data-od-file-actions-owner="toolbar-owner.html"]',
+        );
+        expect(node).not.toBeNull();
+        return node!;
+      });
+
+      rerender(<FileViewer {...props} workspaceActive={false} />);
+
+      expect(chromeActionsHost.contains(owner)).toBe(true);
+      expect(owner.style.display).toBe('none');
+    } finally {
+      chromeActionsHost.remove();
+    }
+  });
+
+  it('defers simultaneous mtime and file-watch updates while retained, then applies only the latest version once', async () => {
+    const replaceMock = vi.fn();
+    const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
+      let fakeWindow = frameWindows.get(this);
+      if (!fakeWindow) {
+        fakeWindow = {
+          document: document.implementation.createHTMLDocument('preview'),
+          location: { replace: replaceMock },
+          postMessage: vi.fn(),
+        } as unknown as Window;
+        frameWindows.set(this, fakeWindow);
+      }
+      return fakeWindow;
+    });
+    const htmlFile = (mtime: number) => baseFile({
+      name: 'retained-version.html',
+      path: 'retained-version.html',
+      mtime,
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Retained version',
+        entry: 'retained-version.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const sharedProps = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      liveHtml: '<html><body>retained</body></html>',
+    };
+    const { rerender } = render(
+      <FileViewer {...sharedProps} file={htmlFile(1_000)} filesRefreshKey={1} />,
+    );
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const initialSrc = frame.getAttribute('src');
+    replaceMock.mockClear();
+
+    rerender(
+      <FileViewer
+        {...sharedProps}
+        file={htmlFile(2_000)}
+        filesRefreshKey={7}
+        workspaceActive={false}
+      />,
+    );
+    rerender(
+      <FileViewer
+        {...sharedProps}
+        file={htmlFile(3_000)}
+        filesRefreshKey={9}
+        workspaceActive={false}
+      />,
+    );
+    await Promise.resolve();
+
+    expect(document.querySelector('iframe[title="retained-version.html"]')).toBe(frame);
+    expect(frame.getAttribute('src')).toBe(initialSrc);
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    rerender(
+      <FileViewer
+        {...sharedProps}
+        file={htmlFile(3_000)}
+        filesRefreshKey={9}
+        workspaceActive
+      />,
+    );
+    await waitFor(() => expect(frame.getAttribute('src')).toContain('fr=9'));
+    const activatedUrl = String(frame.getAttribute('src'));
+    expect(activatedUrl).toContain('v=3000');
+    expect(activatedUrl).toContain('fr=9');
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    rerender(
+      <FileViewer
+        {...sharedProps}
+        file={htmlFile(3_000)}
+        filesRefreshKey={9}
+        workspaceActive={false}
+      />,
+    );
+    rerender(
+      <FileViewer
+        {...sharedProps}
+        file={htmlFile(3_000)}
+        filesRefreshKey={9}
+        workspaceActive
+      />,
+    );
+    await Promise.resolve();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a retained deck inert to global keyboard, body portals, and telemetry', async () => {
+    const deck = baseFile({
+      name: 'retained-deck.html',
+      path: 'retained-deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Retained deck',
+        entry: 'retained-deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const source = '<html><body><section class="slide">one</section><section class="slide">two</section></body></html>';
+    const { rerender } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="slide_deck"
+        file={deck}
+        isDeck
+        liveHtml={source}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+    expect(await screen.findByRole('dialog', { name: 'Versions' })).toBeTruthy();
+
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="slide_deck"
+        file={deck}
+        isDeck
+        liveHtml={source}
+        workspaceActive={false}
+      />,
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Versions' })).toBeNull());
+    expect(document.body.querySelector('.viewer-modal-backdrop')).toBeNull();
+
+    const retainedFrame = document.querySelector<HTMLIFrameElement>(
+      'iframe[title="retained-deck.html"][data-od-render-mode="srcdoc"], iframe[title="retained-deck.html"][data-od-render-mode="url-load"]',
+    );
+    expect(retainedFrame?.contentWindow).toBeTruthy();
+    const postMessage = vi.spyOn(retainedFrame!.contentWindow!, 'postMessage').mockImplementation(() => {});
+    postMessage.mockClear();
+    analyticsTrackMock.mockClear();
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(postMessage).not.toHaveBeenCalledWith({ type: 'od:slide', action: 'next' }, '*');
+    expect(analyticsTrackMock).not.toHaveBeenCalled();
   });
 
   it('keeps powered HTML previews on the powered URL when file-watch refreshes', async () => {
     const replaceMock = vi.fn();
     const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, 900, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
     vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
       let fakeWindow = frameWindows.get(this);
       if (!fakeWindow) {
@@ -939,7 +2656,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
     const workerHtml = '<!doctype html><html><body><script>new Worker("worker.js")</script></body></html>';
-    const poweredSrc = 'http://localhost:43111/api/projects/project-1/powered/worker.html?v=1000&r=0';
+    const poweredSrc = 'http://localhost:43111/api/projects/project-1/powered/worker.html?v=1000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability';
 
     const { rerender } = render(
       <FileViewer
@@ -953,8 +2670,11 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(frame.getAttribute('data-od-powered')).toBe('true');
-      expect(frame.getAttribute('src')).toBe(poweredSrc);
+      expect(frame.getAttribute('src')).toContain(`${poweredSrc}&odPreviewEpoch=`);
     });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const initialEpoch = new URL(frame.src).searchParams.get('odPreviewEpoch');
+    expect(initialEpoch).toMatch(/^preview-document-\d+$/);
 
     rerender(
       <FileViewer
@@ -966,11 +2686,63 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
+    await waitFor(() => expect(frame.getAttribute('src')).toContain('fr=7'));
+    expect(replaceMock).not.toHaveBeenCalled();
+    const refreshedUrl = new URL(frame.src);
+    expect(refreshedUrl.pathname).toBe('/api/projects/project-1/powered/worker.html');
+    expect(refreshedUrl.searchParams.get('fr')).toBe('7');
+    expect(refreshedUrl.searchParams.get('odPreviewEpoch')).toMatch(/^preview-document-\d+$/);
+    expect(refreshedUrl.searchParams.get('odPreviewEpoch')).not.toBe(initialEpoch);
+
+    frame.setAttribute('src', refreshedUrl.toString());
+    fireEvent.load(frame);
+    const previewWindow = frame.contentWindow!;
+    const refreshedRequest = latestPreviewContentSizeRequest(previewWindow);
+    expect(refreshedRequest.documentEpoch).toBe(refreshedUrl.searchParams.get('odPreviewEpoch'));
+    act(() => postPreviewContentSizeResponse(previewWindow, refreshedRequest, 1440, 900));
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith(`${poweredSrc}&fr=7`);
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
     });
-    const refreshUrls = replaceMock.mock.calls.map(([url]) => String(url));
-    expect(refreshUrls.some((url) => url.includes('/raw/'))).toBe(false);
+
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{ ...file, mtime: 2000 }}
+        filesRefreshKey={7}
+        liveHtml={workerHtml}
+      />,
+    );
+
+    await waitFor(() => {
+      const nextRevisionFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const nextRevisionUrl = new URL(nextRevisionFrame.src);
+      expect(nextRevisionFrame.getAttribute('data-od-powered')).toBe('true');
+      expect(nextRevisionUrl.origin).toBe('http://localhost:43111');
+      expect(nextRevisionUrl.searchParams.get('v')).toBe('2000');
+      expect(nextRevisionUrl.searchParams.get('fr')).toBeNull();
+    });
+    const nextRevisionFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const nextRevisionEpoch = new URL(nextRevisionFrame.src).searchParams.get('odPreviewEpoch');
+    expect(nextRevisionEpoch).not.toBe(refreshedUrl.searchParams.get('odPreviewEpoch'));
+
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{ ...file, mtime: 2000, size: file.size + 1 }}
+        filesRefreshKey={7}
+        liveHtml={workerHtml}
+      />,
+    );
+
+    await waitFor(() => {
+      const resizedRevisionFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const resizedRevisionUrl = new URL(resizedRevisionFrame.src);
+      expect(resizedRevisionFrame.getAttribute('data-od-powered')).toBe('true');
+      expect(resizedRevisionUrl.origin).toBe('http://localhost:43111');
+      expect(resizedRevisionUrl.searchParams.get('odPreviewEpoch')).not.toBe(nextRevisionEpoch);
+    });
   });
 
   it('remounts the srcDoc HTML preview when reload is requested', () => {
@@ -1009,7 +2781,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(reloadedFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
   });
 
-  it('offers image export for URL-loaded HTML previews', () => {
+  it('offers image export for URL-loaded HTML previews', async () => {
     const file = baseFile({
       name: 'workspace.html',
       path: 'workspace.html',
@@ -1036,12 +2808,12 @@ describe('FileViewer SVG artifacts', () => {
 
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
 
-    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    await openUnifiedExportTab();
 
     expect(screen.getByRole('menuitem', { name: /export as image/i })).toBeTruthy();
   });
 
-  it('keeps inactive HTML preview transports mounted without booting the artifact', async () => {
+  it('restores captured URL preview state once after the matching prewarmed document is verified', async () => {
     const file = baseFile({
       name: 'page.html',
       path: 'page.html',
@@ -1066,27 +2838,177 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+    const initialUrlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+    const initialSrcDocFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
+
+    expect(initialUrlFrame).toBeTruthy();
+    expect(initialSrcDocFrame).toBeTruthy();
+    expect(initialUrlFrame?.getAttribute('data-od-active')).toBe('true');
+    expect(initialSrcDocFrame?.getAttribute('data-od-active')).toBe('false');
+    expect(initialSrcDocFrame?.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+    expect(initialSrcDocFrame?.srcdoc).not.toContain('__odArtifactBootCount');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+    expect(screen.getByRole('tab', { name: 'Code' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+
+    const urlFrame = await waitFor(() => {
+      const frame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+      expect(frame?.getAttribute('data-od-active')).toBe('true');
+      return frame!;
+    });
     const srcDocFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
-
-    expect(urlFrame).toBeTruthy();
-    expect(srcDocFrame).toBeTruthy();
-    expect(urlFrame?.getAttribute('data-od-active')).toBe('true');
     expect(srcDocFrame?.getAttribute('data-od-active')).toBe('false');
-    expect(srcDocFrame?.srcdoc).toContain('data-od-lazy-srcdoc-transport');
-    expect(srcDocFrame?.srcdoc).not.toContain('__odArtifactBootCount');
+    expect(srcDocFrame?.srcdoc).toContain('__odArtifactBootCount');
+    const srcDocPostSpy = vi.spyOn(srcDocFrame!.contentWindow!, 'postMessage');
+    fireEvent.load(srcDocFrame!);
 
+    const readyGeneration = srcDocFrame?.srcdoc.match(
+      /data-od-srcdoc-transport-activation>[\s\S]*?var generation = "([^"]+)";/,
+    )?.[1];
+    expect(readyGeneration).toBeTruthy();
+    const readinessProbe = srcDocPostSpy.mock.calls.find(
+      ([message]) => (
+        (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe'
+        && (message as { generation?: unknown }).generation === readyGeneration
+      ),
+    )?.[0] as { generation?: string; probeId?: string } | undefined;
+    expect(readinessProbe?.generation).toBe(readyGeneration);
+    expect(readinessProbe?.probeId).toBeTruthy();
+    act(() => {
+      // The eager head acknowledgement is provisional and must not consume
+      // URL runtime state before the challenged witness arrives.
+      window.dispatchEvent(new MessageEvent('message', {
+        source: srcDocFrame?.contentWindow,
+        data: {
+          type: 'od:srcdoc-transport-activated',
+          generation: readyGeneration,
+        },
+      }));
+      // A late acknowledgement from the document this frame replaced must not
+      // overwrite the matching prewarm witness.
+      window.dispatchEvent(new MessageEvent('message', {
+        source: srcDocFrame?.contentWindow,
+        data: {
+          type: 'od:srcdoc-transport-activated',
+          generation: `${readyGeneration}-stale`,
+        },
+      }));
+    });
+
+    const urlPostSpy = vi.spyOn(urlFrame.contentWindow!, 'postMessage');
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
 
+    const captureRequest = await waitFor(() => {
+      const message = urlPostSpy.mock.calls
+        .map(([value]) => value)
+        .find((value) => (
+          typeof value === 'object' &&
+          value !== null &&
+          (value as { type?: unknown }).type === 'od:preview-runtime-state-capture'
+        )) as { type: string; id: string } | undefined;
+      expect(message?.id).toBeTruthy();
+      return message!;
+    });
+    // The URL preview can become interactive one task before its injected
+    // runtime-state bridge installs the message listener. A single capture
+    // post is therefore lossy: reproduce that ordering by ignoring the first
+    // request and require the host to retry the same id before we answer.
+    const retriedCaptureRequest = await waitFor(() => {
+      const messages = urlPostSpy.mock.calls
+        .map(([value]) => value)
+        .filter((value): value is { type: string; id: string } => (
+          typeof value === 'object'
+          && value !== null
+          && (value as { type?: unknown }).type === 'od:preview-runtime-state-capture'
+        ));
+      expect(messages.length).toBeGreaterThanOrEqual(2);
+      expect(messages.at(-1)?.id).toBe(captureRequest.id);
+      return messages.at(-1)!;
+    });
+    const capturedState = {
+      version: 1 as const,
+      hash: '',
+      htmlAttrs: {},
+      bodyAttrs: {},
+      entries: [
+        {
+          path: [1],
+          tag: 'main',
+          odId: 'hero',
+          attrs: { class: 'profile-page' },
+        },
+      ],
+    };
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: urlFrame.contentWindow,
+        data: {
+          type: 'od:preview-runtime-state-captured',
+          id: retriedCaptureRequest.id,
+          state: capturedState,
+        },
+      }));
+    });
+
     const urlFrameAfter = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
-    const srcDocFrameAfter = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
+    const srcDocFrameAfter = await waitFor(() => {
+      const frame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
+      expect(frame?.getAttribute('data-od-active')).toBe('true');
+      return frame;
+    });
 
     expect(urlFrameAfter).toBe(urlFrame);
     expect(urlFrameAfter?.getAttribute('data-od-active')).toBe('false');
     expect(urlFrameAfter?.getAttribute('src')).toBe('about:blank');
-    expect(srcDocFrameAfter?.getAttribute('data-od-active')).toBe('true');
+    expect(srcDocFrameAfter).toBe(srcDocFrame);
     expect(srcDocFrameAfter?.srcdoc).toContain('__odArtifactBootCount');
     expect(srcDocFrameAfter?.srcdoc).toContain('data-od-edit-bridge');
+
+    const restoreCalls = () => srcDocPostSpy.mock.calls.filter(([message]) => (
+      typeof message === 'object'
+      && message !== null
+      && (message as { type?: unknown }).type === 'od:preview-runtime-state-restore'
+    ));
+    expect(restoreCalls()).toHaveLength(0);
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: srcDocFrameAfter?.contentWindow,
+        data: {
+          type: 'od:srcdoc-transport-activated',
+          generation: readinessProbe!.generation,
+          probeId: readinessProbe!.probeId,
+          bodyComplete: true,
+        },
+      }));
+    });
+    await waitFor(() => {
+      expect(srcDocPostSpy).toHaveBeenCalledWith(
+        { type: 'od:preview-runtime-state-restore', state: capturedState },
+        '*',
+      );
+    });
+
+    expect(restoreCalls()).toHaveLength(1);
+
+    srcDocPostSpy.mockClear();
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: srcDocFrameAfter?.contentWindow,
+        data: {
+          type: 'od:srcdoc-transport-activated',
+          generation: readyGeneration,
+        },
+      }));
+    });
+    expect(srcDocPostSpy).toHaveBeenCalledWith(
+      { type: 'od-edit-mode', enabled: true },
+      '*',
+    );
+    fireEvent.load(srcDocFrameAfter!);
+
+    expect(restoreCalls()).toHaveLength(0);
   });
 
   it('keeps the srcDoc edit transport active after canceling manual edit', async () => {
@@ -1265,6 +3187,146 @@ describe('FileViewer SVG artifacts', () => {
     });
   });
 
+  it('blocks a second viewer from entering Manual Edit while another viewer owns the edit session', async () => {
+    const file = baseFile({
+      name: 'blocked.html',
+      path: 'blocked.html',
+      mime: 'text/html',
+      kind: 'html',
+    });
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body>Blocked</body></html>"
+        manualEditEntryAllowed={false}
+      />,
+    );
+
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    expect(toggle).toBeDisabled();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('preserves pending inline text and style edits while retained, then saves both after reactivation', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const initialSource = '<html><body><p data-od-id="copy">Editable copy</p></body></html>';
+    let persistedSource = initialSource;
+    const writes: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/files/page.html/versions')) {
+        return new Response(JSON.stringify({ versions: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { content: string };
+        persistedSource = body.content;
+        writes.push(body.content);
+        return new Response(JSON.stringify({ file: { ...file, mtime: file.mtime + writes.length } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/page.html')) {
+        return new Response(persistedSource, { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }));
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      file,
+      liveHtml: initialSource,
+    };
+    const { rerender } = render(<FileViewer {...props} />);
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const textTarget = {
+      ...manualEditTarget('copy', 'Editable copy', 20),
+      kind: 'text' as const,
+      tagName: 'p',
+      text: 'Editable copy',
+      fields: { text: 'Editable copy' },
+      isLayoutContainer: false,
+      outerHtml: '<p data-od-id="copy">Editable copy</p>',
+    };
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-select', target: textTarget },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: true },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'od-edit-drag-commit',
+          id: 'copy',
+          transform: 'translate(12px, 8px)',
+          display: 'block',
+        },
+      }));
+    });
+    expect(await screen.findByTitle('Editable copy')).toBeTruthy();
+
+    rerender(<FileViewer {...props} workspaceActive={false} />);
+    expect(document.body.contains(frame)).toBe(true);
+    rerender(<FileViewer {...props} workspaceActive />);
+
+    const toggle = await screen.findByTestId('manual-edit-mode-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(await screen.findByTitle('Editable copy')).toBeTruthy();
+
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-text-finish', commit: true }, '*');
+    });
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-commit', id: 'copy', value: 'Edited after return' },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: false, committed: true, changed: true },
+      }));
+    });
+
+    await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('false'));
+    expect(writes).toHaveLength(2);
+    expect(writes.at(-1)).toContain('Edited after return');
+    expect(writes.at(-1)).toContain('translate(12px, 8px)');
+  });
+
   // #4291 review: if the exit-time text commit fails, the close path must NOT
   // tear down edit mode (which clears the error) and look like a successful
   // save — it has to keep edit mode open with the error preserved.
@@ -1343,6 +3405,493 @@ describe('FileViewer SVG artifacts', () => {
     // The save error is surfaced and edit mode stays open instead of tearing down.
     expect(await screen.findByText(/Could not save the edited file/)).toBeTruthy();
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('keeps edit mode open when inline finish times out without an ack or commit witness', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({ name: 'page.html', path: 'page.html', mime: 'text/html', kind: 'html' })}
+        liveHtml='<html><body><p data-od-id="copy">Copy</p></body></html>'
+      />,
+    );
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const textTarget = {
+      ...manualEditTarget('copy', 'Copy', 20),
+      kind: 'text' as const,
+      tagName: 'p',
+      text: 'Copy',
+      fields: { text: 'Copy' },
+      isLayoutContainer: false,
+      outerHtml: '<p data-od-id="copy">Copy</p>',
+    };
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-select', target: textTarget },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: true },
+      }));
+    });
+    vi.useFakeTimers();
+    fireEvent.click(toggle);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+    vi.useRealTimers();
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+    // A timed-out finish is not proof that the iframe abandoned its edit.
+    // Repeating the exit attempt must remain fail-closed until a matching
+    // session ack or commit arrives; otherwise the second click can tear down
+    // the iframe and discard the still-live DOM edit.
+    vi.useFakeTimers();
+    fireEvent.click(toggle);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+    vi.useRealTimers();
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('does not accept an older text session commit as the witness for a newer timed-out finish', async () => {
+    const initialSource = [
+      '<html><body>',
+      '<p data-od-id="old-copy">Old copy</p>',
+      '<p data-od-id="new-copy">New copy</p>',
+      '</body></html>',
+    ].join('');
+    let resolveOldSave!: (response: Response) => void;
+    const oldSave = new Promise<Response>((resolve) => { resolveOldSave = resolve; });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') return oldSave;
+      if (url.includes('/versions')) {
+        return new Response(JSON.stringify({ versions: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/raw/page.html')) return new Response(initialSource, { status: 200 });
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({ name: 'page.html', path: 'page.html', mime: 'text/html', kind: 'html' })}
+        liveHtml={initialSource}
+      />,
+    );
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const textTarget = {
+      ...manualEditTarget('copy', 'Copy', 20),
+      kind: 'text' as const,
+      tagName: 'p',
+      text: 'Copy',
+      fields: { text: 'Copy' },
+      isLayoutContainer: false,
+      outerHtml: '<p data-od-id="copy">Copy</p>',
+    };
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-select', target: textTarget },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-commit', id: 'old-copy', value: 'Saved old copy' },
+      }));
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
+    });
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'new-copy', active: true },
+      }));
+    });
+
+    vi.useFakeTimers();
+    fireEvent.click(toggle);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+      resolveOldSave(new Response(JSON.stringify({ file: { name: 'page.html', mtime: 2 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+      await Promise.resolve();
+    });
+    vi.useRealTimers();
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('does not reuse a successful commit when the same text target starts a new session', async () => {
+    const initialSource = '<html><body><p data-od-id="copy">Copy</p></body></html>';
+    let postCount = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+        postCount += 1;
+        return new Response(JSON.stringify({ file: { name: 'page.html', mtime: 2 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/versions')) {
+        return new Response(JSON.stringify({ versions: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/raw/page.html')) return new Response(initialSource, { status: 200 });
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({ name: 'page.html', path: 'page.html', mime: 'text/html', kind: 'html' })}
+        liveHtml={initialSource}
+      />,
+    );
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: true },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-commit', id: 'copy', value: 'First edit' },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: false, committed: true, changed: true },
+      }));
+    });
+    await waitFor(() => expect(postCount).toBe(1));
+
+    // A second editing instance for the same DOM id has no ack and emits no
+    // commit. Its timeout must not borrow the prior instance's successful save.
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: true },
+      }));
+    });
+    vi.useFakeTimers();
+    fireEvent.click(toggle);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+    vi.useRealTimers();
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(postCount).toBe(1);
+  });
+
+  it('accepts a commit started after the current inline finish as its timeout witness', async () => {
+    const initialSource = '<html><body><p data-od-id="copy">Copy</p></body></html>';
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ file: { name: 'page.html', mtime: 2 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/versions')) {
+        return new Response(JSON.stringify({ versions: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/raw/page.html')) return new Response(initialSource, { status: 200 });
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({ name: 'page.html', path: 'page.html', mime: 'text/html', kind: 'html' })}
+        liveHtml={initialSource}
+      />,
+    );
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: true },
+      }));
+    });
+
+    vi.useFakeTimers();
+    fireEvent.click(toggle);
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-commit', id: 'copy', value: 'Edited copy' },
+      }));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+    vi.useRealTimers();
+
+    await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('false'));
+  });
+
+  it.each([
+    { retryId: 'copy', retryLabel: 'same session' },
+    { retryId: 'other-copy', retryLabel: 'new session' },
+  ])('keeps a settled Enter-commit failure with a $retryLabel retry', async ({ retryId }) => {
+    const initialSource = [
+      '<html><body>',
+      '<p data-od-id="copy">Copy</p>',
+      '<p data-od-id="other-copy">Other copy</p>',
+      '</body></html>',
+    ].join('');
+    let postCount = 0;
+    let persistedSource = initialSource;
+    let resolveSave!: (response: Response) => void;
+    const saveResponse = new Promise<Response>((resolve) => { resolveSave = resolve; });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+        postCount += 1;
+        if (postCount === 1) return saveResponse;
+        persistedSource = JSON.parse(String(init.body) || '{}').content ?? persistedSource;
+        return new Response(JSON.stringify({ file: { name: 'page.html', mtime: 2 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/versions')) {
+        return new Response(JSON.stringify({ versions: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/raw/page.html')) return new Response(persistedSource, { status: 200 });
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({ name: 'page.html', path: 'page.html', mime: 'text/html', kind: 'html' })}
+        liveHtml={initialSource}
+      />,
+    );
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const textTarget = {
+      ...manualEditTarget('copy', 'Copy', 20),
+      kind: 'text' as const,
+      tagName: 'p',
+      text: 'Copy',
+      fields: { text: 'Copy' },
+      isLayoutContainer: false,
+      outerHtml: '<p data-od-id="copy">Copy</p>',
+    };
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-select', target: textTarget },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: true },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-commit', id: 'copy', value: 'Unsaved copy' },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: false, committed: true, changed: true },
+      }));
+    });
+    expect(await screen.findByTitle('Copy')).toBeTruthy();
+    await waitFor(() => expect(postCount).toBe(1));
+    await act(async () => {
+      resolveSave(new Response(JSON.stringify({ error: { message: 'disk full' } }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(await screen.findByText(/Could not save the edited file/)).toBeTruthy();
+    await act(async () => { await Promise.resolve(); });
+
+    fireEvent.click(toggle);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText(/Could not save the edited file/)).toBeTruthy();
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: retryId, active: true },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-commit', id: retryId, value: 'Saved retry' },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: retryId, active: false, committed: true, changed: true },
+      }));
+    });
+    await waitFor(() => expect(postCount).toBe(2));
+
+    fireEvent.click(toggle);
+    if (retryId === 'copy') {
+      await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('false'));
+      return;
+    }
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: true },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-commit', id: 'copy', value: 'Saved original retry' },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: false, committed: true, changed: true },
+      }));
+    });
+    await waitFor(() => expect(postCount).toBe(3));
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('false'));
+  });
+
+  it('retains a failed pending style save and retries it on the next safe exit', async () => {
+    const initialSource = '<html><body><p data-od-id="copy">Copy</p></body></html>';
+    let postCount = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, opts?: { method?: string; body?: BodyInit | null }) => {
+      const value = String(url);
+      if (value.includes('/files') && opts?.method === 'POST') {
+        postCount += 1;
+        if (postCount === 1) {
+          return new Response(JSON.stringify({ error: { message: 'disk full' } }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ file: { name: 'page.html', mtime: 2 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (value.includes('/raw/page.html')) return new Response(initialSource, { status: 200 });
+      if (value.includes('/versions')) {
+        return new Response(JSON.stringify({ versions: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }));
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({ name: 'page.html', path: 'page.html', mime: 'text/html', kind: 'html' })}
+        liveHtml={initialSource}
+      />,
+    );
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const textTarget = {
+      ...manualEditTarget('copy', 'Copy', 20),
+      kind: 'text' as const,
+      tagName: 'p',
+      text: 'Copy',
+      fields: { text: 'Copy' },
+      isLayoutContainer: false,
+      outerHtml: '<p data-od-id="copy">Copy</p>',
+    };
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-select', target: textTarget },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'od-edit-drag-commit',
+          id: 'copy',
+          transform: 'translate(12px, 8px)',
+          display: 'block',
+        },
+      }));
+    });
+    expect(await screen.findByTitle('Copy')).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(await screen.findByText(/Could not save the edited file/)).toBeTruthy();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('false'));
+    expect(postCount).toBe(2);
   });
 
   // #4291 review (iframe-driven path): an Enter-committed edit can still be
@@ -1462,7 +4011,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(srcDocFrame?.srcdoc).toContain('data-od-sandbox-shim');
   });
 
-  it('reactivates the srcDoc transport after switching source back to preview', async () => {
+  it('keeps srcDoc HTML previews available with a compact Code action', async () => {
     const file = baseFile({
       name: 'page.html',
       path: 'page.html',
@@ -1478,7 +4027,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    render(
+    const { container } = render(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
@@ -1487,17 +4036,14 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
-
-    await waitFor(() => {
-      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-    });
-
+    // Both destinations stay on the bar as a two-segment tablist.
+    expect(screen.getByRole('tab', { name: 'Code' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Preview' })).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
-    expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
-
+    expect(screen.getByRole('tab', { name: 'Code' }).getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('.viewer-source')?.textContent).toContain('data-od-id="hero"');
     fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
 
     await waitFor(() => {
       const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -1557,17 +4103,17 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
     const initialFrame = getFrame();
-    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(initialFrame?.getAttribute('src')).toContain('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability&odPreviewEpoch=');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
 
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
-    expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot',
+    expect(observedCommittedSrcs[observationsBeforeSwitch]).toContain(
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability&odPreviewEpoch=',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(nextFrame?.getAttribute('src')).toContain('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability&odPreviewEpoch=');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', { timeout: 10_000 }, async () => {
@@ -1624,9 +4170,55 @@ describe('FileViewer SVG artifacts', () => {
     const resolvedTop = window
       .getComputedStyle(overlay!)
       .top.replace(/var\(--workspace-tabs-chrome-height,\s*38px\)/, bodyChromeHeight || '38px');
-    expect(resolvedTop).toBe('34px');
+    expect(resolvedTop).toBe('0px');
     style.remove();
     workspaceShell.remove();
+  });
+
+  it('closes deck in-tab presentation when the present iframe forwards Escape', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml="<html><body><section class='slide active'>one</section><section class='slide'>two</section></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /present/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
+
+    const frame = await waitFor(() => {
+      const nextFrame = document.body.querySelector<HTMLIFrameElement>('.present-overlay iframe');
+      expect(nextFrame).toBeTruthy();
+      return nextFrame!;
+    });
+    expect(container.querySelector('.html-viewer.is-tab-present')).toBeTruthy();
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'od:present-escape' },
+      source: frame.contentWindow,
+    }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.html-viewer.is-tab-present')).toBeNull();
+    });
   });
 
   it('allows downloads in React component preview iframes', async () => {
@@ -1656,6 +4248,39 @@ describe('FileViewer SVG artifacts', () => {
 
     const frame = await screen.findByTestId('react-component-preview-frame');
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
+  });
+
+  it('disables React component sharing controls for viewer-only shared projects', async () => {
+    const file = baseFile({
+      name: 'Card.jsx',
+      path: 'Card.jsx',
+      mime: 'text/jsx',
+      kind: 'code',
+      artifactManifest: {
+        version: 1,
+        kind: 'react-component',
+        title: 'Card',
+        entry: 'Card.jsx',
+        renderer: 'react-component',
+        exports: ['jsx', 'html', 'zip'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/Card.jsx') {
+        return new Response('export default function Card() { return <button>Readonly</button>; }');
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} viewerOnly />);
+
+    const shareButton = await screen.findByRole('button', { name: 'Share' });
+    expect(shareButton).toBeDisabled();
+    expect(shareButton).toHaveAttribute(
+      'title',
+      'Shared project is read-only: you can comment, but cannot edit or export.',
+    );
   });
 
   it('points a .jsx module loaded by a sibling HTML to that entry, not the React error (issue #2744)', async () => {
@@ -1783,7 +4408,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="false"');
   });
 
-  it('hides preview-only toolbar controls when switching an HTML deck to source view', async () => {
+  it('keeps HTML deck preview chrome with a reachable Code action', async () => {
     const file = baseFile({
       name: 'deck.html',
       path: 'deck.html',
@@ -1809,22 +4434,386 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    expect(container.querySelector('.deck-nav')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Preview' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Code' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+    expect(container.querySelector('.viewer-source')?.textContent).toContain('section class="slide"');
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+    expect(container.querySelector('.deck-nav')).toBeNull();
+    expect(container.querySelector('.deck-thumbnail-toolbar-toggle')).toBeTruthy();
+    expect(container.querySelector('.deck-thumbnail-rail .deck-thumbnail-toggle')).toBeNull();
+    expect(container.querySelector('.deck-floating-nav')).toBeTruthy();
+    const thumbnailFrames = Array.from(
+      container.querySelectorAll('.deck-thumbnail-frame iframe'),
+    ) as HTMLIFrameElement[];
+    expect(thumbnailFrames.length).toBeGreaterThan(0);
+    for (const frame of thumbnailFrames) {
+      expect(frame.srcdoc).toContain('data-od-deck-chrome-hidden');
+      expect(frame.srcdoc).toContain('.deck-floating-nav');
+      expect(frame.srcdoc).toContain('[role="navigation"][aria-label*="Deck"]');
+    }
+    expect(screen.getByTestId('speaker-notes-panel')).toBeTruthy();
+    expect(screen.getByText('No speaker notes for this slide.')).toBeTruthy();
+    fireEvent.click(container.querySelector('.deck-thumbnail-toolbar-toggle')!);
+    expect(container.querySelector('.comment-preview-layer-deck-rail-collapsed')).toBeTruthy();
+    expect(container.querySelector('.deck-thumbnail-toolbar-toggle')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Manual' })).toBeNull();
     expect(container.querySelector('.viewer-viewport-switcher')).toBeTruthy();
     expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
+    expect(screen.getByTestId('artifact-preview-frame')).toBeTruthy();
+  });
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+  it('keeps deck thumbnail resource URLs independent of shell Workspace changes', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'deck',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const workspaceA = teamWorkspaceContext();
+    const workspaceB: WorkspaceCollabContext = {
+      ...workspaceA,
+      workspaceId: 'ws-2',
+      teamId: 'team-2',
+      workspaceMemberId: 'wm-2',
+    };
+    const viewer = (
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section></body></html>'}
+      />
+    );
+    const { container, rerender } = render(
+      <CollabProvider value={projectWorkspaceCollabValue(workspaceA)}>
+        {viewer}
+      </CollabProvider>,
+    );
+
+    const thumbnail = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
+    expect(thumbnail).toBeTruthy();
+    expect(thumbnail!.srcdoc).not.toContain('workspaceId=');
+    expect(thumbnail!.srcdoc).not.toContain('workspaceMemberId=');
+    const originalSrcDoc = thumbnail!.srcdoc;
+
+    rerender(
+      <CollabProvider value={projectWorkspaceCollabValue(workspaceB)}>
+        {viewer}
+      </CollabProvider>,
+    );
 
     await waitFor(() => {
-      expect(container.querySelector('.deck-nav')).toBeNull();
-      expect(container.querySelector('.viewer-viewport-switcher')).toBeNull();
-      expect(screen.queryByTestId('manual-edit-mode-toggle')).toBeNull();
-      expect(screen.queryByTestId('draw-overlay-toggle')).toBeNull();
-      expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
-      expect(screen.queryByRole('button', { name: /100%/ })).toBeNull();
-      expect(screen.queryByRole('button', { name: /zoom out/i })).toBeNull();
-      expect(screen.queryByRole('button', { name: /zoom in/i })).toBeNull();
+      const updated = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
+      expect(updated?.srcdoc).toBe(originalSrcDoc);
+      expect(updated?.srcdoc).not.toContain('workspaceId=');
+      expect(updated?.srcdoc).not.toContain('workspaceMemberId=');
+    });
+  });
+
+  it('shows speaker notes panel with existing real notes', () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={[
+          '<html><body>',
+          '<section class="slide">one</section>',
+          '<section class="slide">two</section>',
+          '<script type="application/json" id="speaker-notes">',
+          '["Intro note", ""]',
+          '</script>',
+          '</body></html>',
+        ].join('')}
+      />,
+    );
+
+    const panel = screen.getByTestId('speaker-notes-panel');
+    expect(panel).toBeTruthy();
+    expect(screen.getByText('Intro note')).toBeTruthy();
+    expect(within(panel).queryByRole('switch', { name: /edit/i })).toBeNull();
+
+    const preview = panel.querySelector('.speaker-notes-preview') as HTMLElement | null;
+    expect(preview).toBeTruthy();
+    fireEvent.click(preview!);
+    const editor = panel.querySelector('.speaker-notes-editor textarea') as HTMLTextAreaElement | null;
+    expect(editor).toBeTruthy();
+    expect(editor?.value).toBe('Intro note');
+  });
+
+  it('does not reload deck preview or thumbnails when speaker notes save on blur', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/files' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ file: { ...file, mtime: file.mtime + 1 } }), { status: 200 });
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={[
+          '<!doctype html><html><body>',
+          '<section class="slide">one</section>',
+          '<section class="slide">two</section>',
+          '</body></html>',
+        ].join('')}
+      />,
+    );
+
+    const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewSrcDocBefore = previewFrame.srcdoc;
+    const thumbnailFrame = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
+    expect(thumbnailFrame).toBeTruthy();
+    const thumbnailSrcDocBefore = thumbnailFrame!.srcdoc;
+
+    const notesPreview = screen.getByTestId('speaker-notes-panel').querySelector('.speaker-notes-preview') as HTMLElement;
+    fireEvent.click(notesPreview);
+    const editor = screen.getByTestId('speaker-notes-panel').querySelector('.speaker-notes-editor textarea') as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'Keep this private' } });
+    fireEvent.blur(editor);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/projects/project-1/files',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+    const [, request] = fetchMock.mock.calls.find(([input, init]) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      return url === '/api/projects/project-1/files' && init?.method === 'POST';
+    }) ?? [];
+    expect(String(request?.body)).toContain('Keep this private');
+    expect(String(request?.body)).toContain('speaker-notes');
+    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(previewSrcDocBefore);
+    const thumbnailFrameAfter = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
+    expect(thumbnailFrameAfter?.srcdoc).toBe(thumbnailSrcDocBefore);
+  });
+
+  describe('deck analytics', () => {
+    function deckFile() {
+      return baseFile({
+        name: 'deck.html',
+        path: 'deck.html',
+        mime: 'text/html',
+        kind: 'html',
+        artifactManifest: {
+          version: 1,
+          kind: 'html',
+          title: 'Deck',
+          entry: 'deck.html',
+          renderer: 'html',
+          exports: ['html'],
+        },
+      });
+    }
+    const twoSlideDeck = [
+      '<!doctype html><html><body>',
+      '<section class="slide">one</section>',
+      '<section class="slide">two</section>',
+      '</body></html>',
+    ].join('');
+
+    function trackedEvents(name: string) {
+      return analyticsTrackMock.mock.calls
+        .filter(([eventName]) => eventName === name)
+        .map(([, props]) => props);
+    }
+
+    it('fires deck_viewer surface_view once when a deck mounts', () => {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={deckFile()}
+          isDeck
+          liveHtml={twoSlideDeck}
+        />,
+      );
+
+      const views = trackedEvents('surface_view').filter(
+        (props) => props?.area === 'deck_viewer',
+      );
+      expect(views).toHaveLength(1);
+      expect(views[0]).toMatchObject({
+        page_name: 'artifact',
+        area: 'deck_viewer',
+      });
+      // slide_count is snapshotted at first deck recognition, before the
+      // iframe reports its real total — so we assert it is a resolved number
+      // rather than a specific value.
+      expect(typeof views[0].slide_count).toBe('number');
+      expect(typeof views[0].artifact_id).toBe('string');
+    });
+
+    it('tracks thumbnail rail toggle with expand/collapse action', () => {
+      const { container } = render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={deckFile()}
+          isDeck
+          liveHtml={twoSlideDeck}
+        />,
+      );
+
+      fireEvent.click(container.querySelector('.deck-thumbnail-toolbar-toggle')!);
+      fireEvent.click(container.querySelector('.deck-thumbnail-toolbar-toggle')!);
+
+      const toggles = trackedEvents('ui_click').filter(
+        (props) => props?.element === 'thumbnail_rail_toggle',
+      );
+      expect(toggles).toHaveLength(2);
+      expect(toggles[0]).toMatchObject({
+        page_name: 'artifact',
+        area: 'deck_viewer',
+        element: 'thumbnail_rail_toggle',
+        action: 'collapse',
+      });
+      expect(toggles[1]).toMatchObject({ action: 'expand' });
+    });
+
+    it('tracks slide navigation once per move via the shared handler', () => {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={deckFile()}
+          isDeck
+          liveHtml={twoSlideDeck}
+        />,
+      );
+
+      // Drive the deck through the keyboard entry point (ArrowRight →
+      // postSlide('next')), which routes through the same shared handler every
+      // nav surface uses. One key press must yield exactly one slide_next.
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+      const nexts = trackedEvents('ui_click').filter(
+        (props) => props?.element === 'slide_next',
+      );
+      expect(nexts).toHaveLength(1);
+      expect(nexts[0]).toMatchObject({
+        page_name: 'artifact',
+        area: 'deck_viewer',
+        element: 'slide_next',
+      });
+      expect(typeof nexts[0].slide_index).toBe('number');
+    });
+
+    it('tracks opening speaker notes for edit', () => {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={deckFile()}
+          isDeck
+          liveHtml={twoSlideDeck}
+        />,
+      );
+
+      const notesPreview = screen
+        .getByTestId('speaker-notes-panel')
+        .querySelector('.speaker-notes-preview') as HTMLElement;
+      fireEvent.click(notesPreview);
+
+      const edits = trackedEvents('ui_click').filter(
+        (props) => props?.element === 'speaker_notes_edit',
+      );
+      expect(edits).toHaveLength(1);
+      expect(edits[0]).toMatchObject({
+        page_name: 'artifact',
+        area: 'deck_viewer',
+        element: 'speaker_notes_edit',
+      });
+    });
+
+    it('fires speaker_notes_save_result on blur save', async () => {
+      const file = deckFile();
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url === '/api/projects/project-1/files' && init?.method === 'POST') {
+          return new Response(JSON.stringify({ file: { ...file, mtime: file.mtime + 1 } }), { status: 200 });
+        }
+        return new Response('', { status: 404 });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          isDeck
+          liveHtml={twoSlideDeck}
+        />,
+      );
+
+      const notesPreview = screen
+        .getByTestId('speaker-notes-panel')
+        .querySelector('.speaker-notes-preview') as HTMLElement;
+      fireEvent.click(notesPreview);
+      const editor = screen
+        .getByTestId('speaker-notes-panel')
+        .querySelector('.speaker-notes-editor textarea') as HTMLTextAreaElement;
+      fireEvent.change(editor, { target: { value: 'Rehearse this line' } });
+      fireEvent.blur(editor);
+
+      await waitFor(() => {
+        expect(trackedEvents('speaker_notes_save_result')).toHaveLength(1);
+      });
+      expect(trackedEvents('speaker_notes_save_result')[0]).toMatchObject({
+        page_name: 'artifact',
+        area: 'deck_viewer',
+        edit_surface: 'preview',
+        result: 'success',
+        has_content: true,
+      });
     });
   });
 
@@ -1850,7 +4839,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
 
     expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
@@ -1917,7 +4906,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const openDeployModal = async () => {
-      fireEvent.click(screen.getByRole('button', { name: /share/i }));
+      await openUnifiedShareTab();
       fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i }));
       return screen.findByRole('dialog');
     };
@@ -1961,7 +4950,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const exportButton = screen.getByRole('button', { name: /download/i });
+    const exportButton = screen.getByRole('button', { name: /export/i });
     await waitFor(() => {
       expect(exportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -2010,7 +4999,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const firstExportButton = screen.getByRole('button', { name: /download/i });
+    const firstExportButton = screen.getByRole('button', { name: /export/i });
     await waitFor(() => {
       expect(firstExportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -2026,7 +5015,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const secondExportButton = screen.getByRole('button', { name: /download/i });
+    const secondExportButton = screen.getByRole('button', { name: /export/i });
     await waitFor(() => {
       expect(secondExportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -2092,7 +5081,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -2154,7 +5143,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -2280,7 +5269,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const zoneSelect = await screen.findByRole('combobox', { name: /Domain/i });
@@ -2380,7 +5369,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     expect(screen.queryByRole('menuitem', { name: /Copy Vercel link/i })).toBeNull();
@@ -2449,7 +5438,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     fireEvent.click(copyShareLink);
@@ -2500,7 +5489,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
@@ -2556,7 +5545,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
@@ -2611,7 +5600,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     fireEvent.click(copyShareLink);
@@ -2636,50 +5625,485 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ deployments: [] }), { status: 200 })));
+    const context = teamWorkspaceContext();
+    stubFetchWithWorkspaceContext(context);
+
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+      context,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    // Share panel: everything that produces a link or reusable asset —
+    // publish, deploy, social share, save as template. No file formats.
+    expect(await screen.findByRole('menu')).toBeTruthy();
+    expect(screen.getByText('Share project in workspace')).toBeTruthy();
+    expect(await screen.findByText('Get a share link')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+    expect(screen.getByText('SHARE ON YOUR OWN HOSTING')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i })).toBeTruthy();
+    // The "publish online first" guide row is gone — the publish button above
+    // IS that step now.
+    expect(screen.queryByRole('menuitem', { name: /Publish online above to enable share/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Export as PDF/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Export as image/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /export/i }));
+
+    // Export panel: pure file formats, nothing publish/deploy flavored.
+    const menuItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+    expect(menuItems).toContain('Export as PDF');
+    expect(menuItems).toContain('Export as image');
+    expect(menuItems).toContain('Download as .zip');
+    expect(menuItems).toContain('Export as standalone HTML');
+    expect(screen.queryByText('SHARE ON YOUR OWN HOSTING')).toBeNull();
+    expect(menuItems).not.toContain('Publish online above to enable share ↑');
+    expect(menuItems).not.toContain('Deploy to Vercel');
+    expect(menuItems).not.toContain('Deploy to Cloudflare Pages');
+    expect(menuItems).not.toContain('Save as template…');
+
+    expect(menuItems).not.toContain('Export as PPTX');
+    expect(menuItems).not.toContain('Export as PPTX (images)');
+    expect(menuItems).not.toContain('Export as PPTX (editable)');
+    expect(menuItems).not.toContain('Export as Markdown');
+
+    // 「截图」 (clipboard capture) is NOT an export. Export produces a file or a
+    // link to hand to someone; a clipboard copy is a different job that the
+    // toolbar's screenshot-to-chat already leads with. "Export as image" — the
+    // row that DOES write a file — stays, and is asserted present above.
+    expect(menuItems).not.toContain('Screenshot');
+  });
+
+  // The per-file "Publish" entry point (a single file → a backend link) is
+  // gated on HAVING A WORKSPACE, not on having a TEAM one.
+  //
+  // It was briefly team-only, on the premise that a public link is a hub
+  // snapshot keyed by teamId and a personal session had nothing to publish
+  // under. B's control-key auth path stopped refusing non-team callers — it now
+  // mints a principal whose teamId IS the workspace id, and its access check
+  // only compares that id against the resource's own — so a personal workspace
+  // publishes into its own partition of one. The daemon's `publicFilePrincipal`
+  // was widened to match, and these two tests pin both halves of the rule: the
+  // card renders for a personal workspace, and is still gone with no workspace
+  // at all (where the daemon really does answer 409).
+  function publicPublishFile() {
+    return baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+  }
+
+  it('offers the public publish entry to a personal workspace', async () => {
+    const context: WorkspaceCollabContext = {
+      ...teamWorkspaceContext(),
+      workspaceType: 'personal',
+      teamId: undefined,
+    };
+    stubFetchWithWorkspaceContext(context);
+
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+      context,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    expect(await screen.findByRole('menu')).toBeTruthy();
+    // The single-file publish card — the thing the dogfood report said was
+    // missing — is back for a personal workspace.
+    expect(await screen.findByText('Get a share link')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+    // "Share project in workspace" is TEAM project sharing, which a personal
+    // workspace has no team to receive — see the dedicated test below
+    // (recvq5bM78HWCE) for the card's own gating.
+    expect(screen.queryByText('Share project in workspace')).toBeNull();
+  });
+
+  // recvq56lzckGtE: publishing a file from a real team workspace 403'd against
+  // the daemon's `canShareProjectsForRequest` gate (daemon routes,
+  // collab-sync.ts), which reads `x-od-workspace-can-share-projects` etc. and
+  // falls back to a headerless context re-read (often false/denied) when those
+  // headers are missing. `publishProjectFilePublic`/`fetchProjectFilePublicPublication`/
+  // `unpublishProjectFilePublic` never attached `workspaceProjectHeaders`, unlike
+  // every other workspace-scoped mutation in state/projects.ts — so a team
+  // member's publish request always looked headerless to the daemon.
+  it('attaches the workspace identity headers to every publish-public request', async () => {
+    const context = teamWorkspaceContext();
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.includes('/api/workspace/context')) {
+          return new Response(JSON.stringify({ context }), { status: 200 });
+        }
+        if (url.includes('publish-public')) {
+          calls.push({ url, headers: (init?.headers as Record<string, string>) ?? {} });
+          return new Response(JSON.stringify({ url: 'https://pub.example/x', slug: 'x', fileName: 'index.html' }), {
+            status: 200,
+          });
+        }
+        return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+      }),
+    );
+
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+      context,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    expect(await screen.findByRole('menu')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Get a share link/i }));
+
+    await waitFor(() => expect(calls.some((call) => call.url.includes('publish-public'))).toBe(true));
+    const publishCall = calls.find((call) => call.url.includes('publish-public'));
+    expect(publishCall?.headers['x-od-workspace-id']).toBe(context.workspaceId);
+    expect(publishCall?.headers['x-od-workspace-member-id']).toBe(context.workspaceMemberId);
+    expect(publishCall?.headers['x-od-workspace-can-share-projects']).toBe(
+      String(context.permissions.canShareProjects),
+    );
+  });
+
+  it('exposes Stop sharing when publication persistence and compensation both fail', async () => {
+    const context = teamWorkspaceContext();
+    const publicUrl =
+      'https://hub.example.test/api/v1/public/snapshots/manual-revoke-slug/files/index.html';
+    const unpublishBodies: unknown[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.includes('/api/workspace/context')) {
+          return new Response(JSON.stringify({ context }), { status: 200 });
+        }
+        if (url.includes('publish-public')) {
+          const method = (init?.method ?? 'GET').toUpperCase();
+          if (method === 'GET') {
+            return new Response(JSON.stringify({ publication: null }), { status: 200 });
+          }
+          if (method === 'DELETE') {
+            unpublishBodies.push(JSON.parse(String(init?.body)));
+            return new Response(
+              JSON.stringify({ ok: true, slug: 'manual-revoke-slug', fileName: 'index.html' }),
+              { status: 200 },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: 'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED',
+                message: `The public link remains active at ${publicUrl}.`,
+                data: {
+                  projectId: 'project-1',
+                  url: publicUrl,
+                  slug: 'manual-revoke-slug',
+                  fileName: 'index.html',
+                },
+              },
+            }),
+            { status: 502 },
+          );
+        }
+        return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+      }),
+    );
+
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+      context,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Get a share link/i }));
+
+    expect(await screen.findByText(publicUrl)).toBeTruthy();
+    const stopSharing = screen.getByRole('button', { name: /Stop sharing/i });
+    fireEvent.click(stopSharing);
+
+    await waitFor(() => expect(unpublishBodies).toEqual([{ slug: 'manual-revoke-slug' }]));
+    expect(await screen.findByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+  });
+
+  // Reading the help must never publish. The publish row's trailing "?" carries
+  // the reach + single-file limitation copy, i.e. exactly what a user wants to
+  // read BEFORE committing — but it used to be nested inside the same
+  // `role="menuitem"` button whose onClick calls `publishCurrentFilePublic()`
+  // unconditionally, so activating it created a public link. Touch devices have
+  // no hover path at all, so pressing was the only way to read it. The "?" now
+  // lives on the section label instead, outside the actionable row.
+  //
+  // The invariant: activating the publish help emits no publish-public request,
+  // in both viewer chromes.
+  function publishHelpCase(fileFor: () => ProjectFile, label: string) {
+    it(`reads the publish help without publishing (${label})`, async () => {
+      const context = teamWorkspaceContext();
+      // Only the mutating POST counts — the viewer GETs the same path on mount
+      // to read the current publication state, which is not a publish.
+      const publishCalls: string[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (url.includes('/api/workspace/context')) {
+            return new Response(JSON.stringify({ context }), { status: 200 });
+          }
+          if (url.includes('publish-public')) {
+            if ((init?.method ?? 'GET').toUpperCase() !== 'GET') {
+              publishCalls.push(`${init?.method} ${url}`);
+            }
+            return new Response(
+              JSON.stringify({ url: 'https://pub.example/x', slug: 'x', fileName: 'index.html' }),
+              { status: 200 },
+            );
+          }
+          return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+        }),
+      );
+
+      renderWithProjectWorkspace(
+        <FileViewer projectId="project-1" projectKind="prototype" file={fileFor()}
+          liveHtml="<html><body><h1>Hello</h1></body></html>"
+        />,
+        context,
+      );
+
+      fireEvent.click(await screen.findByRole('button', { name: /share/i }));
+      expect(await screen.findByRole('menu')).toBeTruthy();
+
+      // Located by the explanation it carries, not by a testid the fix added —
+      // so this spec still finds the pre-fix help (nested in the publish row)
+      // and goes red on the behavior rather than on a missing hook.
+      const help = await screen.findByLabelText(/Only a single file can be shared for now/i);
+      // It is NOT inside the actionable publish row.
+      expect(help.closest('[role="menuitem"]')).toBeNull();
+
+      // It must be a real focusable control, not a decorative span: the tooltip
+      // layer discloses on `focusin`, which only a focusable element receives,
+      // and touch devices have no hover path at all. A <span> leaves the
+      // single-file limitation unreadable for keyboard and touch users.
+      expect(help.tagName).toBe('BUTTON');
+      expect(help).toHaveProperty('type', 'button');
+      help.focus();
+      expect(document.activeElement).toBe(help);
+
+      fireEvent.click(help);
+
+      // No public link was created by a help-discovery gesture.
+      await waitFor(() => expect(screen.getByRole('menu')).toBeTruthy());
+      expect(publishCalls).toEqual([]);
+      // The publish row is still sitting there unactivated.
+      expect(screen.getByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+    });
+  }
+
+  publishHelpCase(publicPublishFile, 'HtmlViewer');
+  publishHelpCase(
+    () =>
+      baseFile({
+        name: 'Widget.tsx',
+        path: 'Widget.tsx',
+        mime: 'text/plain',
+        kind: 'code',
+        artifactManifest: {
+          version: 1,
+          kind: 'react-component',
+          title: 'Widget',
+          entry: 'Widget.tsx',
+          renderer: 'react-component',
+          exports: ['jsx'],
+        },
+      }),
+    'ReactComponentViewer',
+  );
+
+  // The publish "?" is not the only one — the workspace-access help beside it
+  // uses the same markup, so the focusability fix has to be panel-wide rather
+  // than a one-off on the row that happened to get reviewed. This case needs a
+  // TEAM workspace, since the access card is team-gated.
+  it('exposes the workspace-access help as a focusable control too', async () => {
+    const context = teamWorkspaceContext();
+    stubFetchWithWorkspaceContext(context);
+
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+      context,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /share/i }));
+    expect(await screen.findByRole('menu')).toBeTruthy();
+
+    const help = await screen.findByTestId('workspace-access-help');
+    expect(help.tagName).toBe('BUTTON');
+    expect(help).toHaveProperty('type', 'button');
+    expect(help.closest('[role="menuitem"]')).toBeNull();
+    help.focus();
+    expect(document.activeElement).toBe(help);
+  });
+
+  // recvq5bM78HWCE: the "在工作空间中分享项目" card rendered for a personal
+  // workspace with no gate at all, so clicking its access toggle called
+  // `moveWorkspaceProject({ visibility: 'team' })`, which the daemon's
+  // `teamShareRefusalFor` always refuses outside a team workspace — the click
+  // silently failed. The public single-file publish card right above it is
+  // unaffected (that one IS meant to work for a personal workspace).
+  it('hides the team-only workspace-share card for a personal workspace', async () => {
+    const context: WorkspaceCollabContext = {
+      ...teamWorkspaceContext(),
+      workspaceType: 'personal',
+      teamId: undefined,
+    };
+    stubFetchWithWorkspaceContext(context);
+
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+      context,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    expect(await screen.findByRole('menu')).toBeTruthy();
+    await screen.findByText('Get a share link');
+    expect(screen.queryByText('Share project in workspace')).toBeNull();
+  });
+
+  // recvqgif6Xa7Wb: product ruled the "no team to share with yet" bridge card
+  // (added for recvqae3pK5hyx/recvq6W8GX8NaH) out entirely — it was never a
+  // designed surface, just a stopgap to avoid a blank tab. A personal
+  // workspace that can already publish must show ONLY the publish card, with
+  // no team-CTA card and no create-team link underneath it.
+  it('does not show a create-team CTA for a personal workspace that can already publish', async () => {
+    const context: WorkspaceCollabContext = {
+      ...teamWorkspaceContext(),
+      workspaceType: 'personal',
+      teamId: undefined,
+      workspaceSettingsUrl: 'https://web.example.com/console/settings?workspaceId=ws-1',
+    };
+    stubFetchWithWorkspaceContext(context);
+
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+      context,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    expect(await screen.findByRole('menu')).toBeTruthy();
+    await screen.findByText('Get a share link');
+    expect(screen.queryByText('Nothing to share yet')).toBeNull();
+    expect(screen.queryByText('No team to share with yet')).toBeNull();
+    expect(screen.queryByRole('link', { name: /create team/i })).toBeNull();
+  });
+
+  // The team-workspace side of the same rule: the card must still render
+  // there — "separates deploy sharing actions from download actions" above
+  // already pins this, this test names the invariant directly.
+  it('offers the workspace-share card to a team workspace', async () => {
+    const context = teamWorkspaceContext();
+    stubFetchWithWorkspaceContext(context);
+
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+      context,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    expect(await screen.findByRole('menu')).toBeTruthy();
+    expect(screen.getByText('Share project in workspace')).toBeTruthy();
+  });
+
+  it('hides the public publish entry when there is no workspace at all', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/workspace/context')) {
+        return new Response(JSON.stringify({ context: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
     render(
-      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+      <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    expect(await screen.findByRole('menu')).toBeTruthy();
+    // Gone, not merely disabled — a signed-out caller has no id to publish
+    // under and the daemon answers 409 WORKSPACE_IDENTITY_REQUIRED.
+    expect(screen.queryByText('Get a share link')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Get a share link/i })).toBeNull();
+    expect(screen.queryByText('Share project in workspace')).toBeNull();
+    // recvqgif6Xa7Wb: the "no team to share with yet" bridge card that used to
+    // fill this gap was product-ruled out entirely (never a designed surface —
+    // see recvqae3pK5hyx/recvq6W8GX8NaH history). With neither card able to
+    // render, the share tab is simply empty now — no fallback text, no
+    // create-team link.
+    expect(screen.queryByText('Nothing to share yet')).toBeNull();
+    expect(screen.queryByText('No team to share with yet')).toBeNull();
+    expect(screen.queryByRole('link', { name: /create team/i })).toBeNull();
 
-    expect(screen.getByText('SHARE')).toBeTruthy();
-    expect(screen.getByText('PUBLISH ONLINE')).toBeTruthy();
-    const menuItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
-    expect(menuItems.slice(0, 1)).toEqual([
-      'Publish online above to enable share ↑',
-    ]);
-    expect(menuItems.slice(1, 3)).toEqual([
-      'Deploy to Vercel',
-      'Deploy to Cloudflare Pages',
-    ]);
-    expect(screen.getByText('Publish online above to enable share ↑')).toBeTruthy();
-    expect(screen.queryByRole('menuitem', { name: /Copy share link/i })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: /Open share page/i })).toBeNull();
-    expect(menuItems).not.toContain('Export as PDF');
-    expect(menuItems).not.toContain('Export as image');
-    expect(menuItems).not.toContain('Download as .zip');
-    expect(menuItems).not.toContain('Export as standalone HTML');
+    // And nothing may probe the endpoint on behalf of a caller it will refuse.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const requested = fetchMock.mock.calls.map(([input]) =>
+      typeof input === 'string' ? input : String(input),
+    );
+    expect(requested.some((url) => url.includes('publish-public'))).toBe(false);
+  });
 
-    fireEvent.click(screen.getByRole('menuitem', { name: /Publish online above to enable share/i }));
-    expect(await screen.findByText('Publish online first to get a link')).toBeTruthy();
+  // The version-history entry carries the same disabled contract as the Share
+  // button beside it in the same toolbar: `viewerOnly`, with
+  // `fileViewer.readonlySharedNoExport` as the reason.
+  //
+  // This supersedes recvq56vFjQKfT, which had un-gated the entry on the
+  // reasoning that browsing history is a pure read action. That reasoning does
+  // not survive what the entry actually leads to: `.file-versions` is excluded
+  // from member mirrors, so a readonly member's panel can never hold the
+  // owner's history — measured live, the owner's 4 versions rendered as 1
+  // synthetic entry the member's own read had just created (飞书 recvqAMSX4RXPm,
+  // daemon side fixed in 5f34ae655). An entry that can only ever open an empty
+  // panel is not a read affordance worth keeping.
+  it('disables the version-history entry for a viewer-only shared project, like Share', async () => {
+    const file = publicPublishFile(); // an .html file, so versioningAvailable is true
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ deployments: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
 
-    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+        viewerOnly
+      />,
+    );
 
-    const downloadItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
-    expect(downloadItems).toContain('Export as PDF');
-    expect(downloadItems).toContain('Export as image');
-    expect(downloadItems).toContain('Download as .zip');
-    expect(downloadItems).toContain('Export as standalone HTML');
-    expect(downloadItems).not.toContain('Copy share link');
-    expect(downloadItems).not.toContain('Deploy to Vercel');
-    expect(downloadItems).not.toContain('Export as PPTX');
-    expect(downloadItems).not.toContain('Export as PPTX (images)');
-    expect(downloadItems).not.toContain('Export as PPTX (editable)');
-    expect(downloadItems).not.toContain('Export as Markdown');
+    const historyButton = await screen.findByRole('button', { name: 'Versions' });
+    expect(historyButton).toBeDisabled();
+    expect(historyButton).toHaveAttribute('title', 'Shared project is read-only: you can comment, but cannot edit or export.');
   });
 
   it('keeps plain .slide pages on page-mode export routing', async () => {
@@ -2723,7 +6147,7 @@ describe('FileViewer SVG artifacts', () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: /download/i }));
+      await openUnifiedExportTab();
 
       const downloadItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
       expect(downloadItems).not.toContain('Export as PPTX');
@@ -2781,7 +6205,7 @@ describe('FileViewer SVG artifacts', () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: /download/i }));
+      await openUnifiedExportTab();
 
       const downloadItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
       expect(downloadItems).not.toContain('Export as PPTX');
@@ -2845,7 +6269,7 @@ describe('FileViewer SVG artifacts', () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: /download/i }));
+      await openUnifiedExportTab();
       fireEvent.click(screen.getByRole('menuitem', { name: /Export as PPTX/i }));
 
       const dialog = await screen.findByRole('dialog', { name: /Export as PPTX/i });
@@ -2900,6 +6324,249 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(options.deck).toBe(true);
     expect(options.baseHref).toBe('/api/projects/project-1/raw/');
+
+    expect(fileVersionPreviewOptions(
+      'project-1',
+      'slides.html',
+      '<section class="slide">A</section><section class="slide">B</section>',
+    ).deck).toBe(true);
+
+    expect(fileVersionPreviewOptions(
+      'project-1',
+      'prototype.html',
+      '<main><h1 data-screen-label="Hero title">Prototype</h1></main>',
+    ).deck).toBe(false);
+  });
+
+  it('routes history deck arrow keys to the preview unless a text input is focused', async () => {
+    const deckSource = [
+      '<!doctype html><html><body>',
+      '<deck-stage>',
+      '<section data-screen-label="01 Cover">Cover</section>',
+      '<section data-screen-label="02 Plan">Plan</section>',
+      '</deck-stage>',
+      '</body></html>',
+    ].join('');
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const currentVersion = {
+      id: 'v4',
+      fileName: 'index.html',
+      version: 4,
+      label: 'Current checkpoint',
+      createdAt: 1_725_000_000_000,
+      source: 'manual',
+      prompt: 'Current prompt',
+      size: 42,
+      mime: 'text/html',
+      kind: 'html',
+      current: true,
+    };
+    const earlierVersions = [3, 2, 1].map((version) => ({
+      ...currentVersion,
+      id: `v${version}`,
+      version,
+      label: `Prior checkpoint ${version}`,
+      prompt: `Prior prompt ${version}`,
+      current: false,
+    }));
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/projects/project-1/files/index.html/versions' && method === 'GET') {
+        return new Response(JSON.stringify({ file, versions: [currentVersion, ...earlierVersions] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="slide_deck"
+        file={file}
+        liveHtml={deckSource}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+    const versionDialog = await screen.findByRole('dialog', { name: 'Versions' });
+    const currentOption = within(versionDialog).getByRole('option', { name: /Current prompt/ }) as HTMLButtonElement;
+    currentOption.focus();
+    // The iframe node exists before the selected version content has committed
+    // and before the deck keyboard effect has installed its window listener.
+    // Wait on the user's observable readiness contract instead: the Open
+    // preview action becomes enabled from the same
+    // selectedContentMatchesVersion/loadingContent state that enables deck
+    // keyboard routing.
+    const openPreview = within(versionDialog).getByRole('button', { name: 'Open preview' }) as HTMLButtonElement;
+    await waitFor(() => expect(openPreview.disabled).toBe(false));
+    const previewFrame = await waitFor(() => {
+      const frame = versionDialog.querySelector('iframe[title="index.html v4"]') as HTMLIFrameElement | null;
+      expect(frame?.contentWindow).toBeTruthy();
+      return frame!;
+    });
+    const postMessage = vi.spyOn(previewFrame.contentWindow!, 'postMessage').mockImplementation(() => {});
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(postMessage).toHaveBeenCalledWith({ type: 'od:slide', action: 'next' }, '*');
+
+    postMessage.mockClear();
+    const search = within(versionDialog).getByRole('searchbox', { name: 'Search…' }) as HTMLInputElement;
+    search.focus();
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it('hides standalone HTML for historical versions without a dependency snapshot', async () => {
+    const originalCreateObjectUrl = URL.createObjectURL;
+    const originalRevokeObjectUrl = URL.revokeObjectURL;
+    let capturedBlob: Blob | null = null;
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn((blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:version-export';
+      }),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const currentVersion = {
+      id: 'v2',
+      fileName: 'index.html',
+      version: 2,
+      label: 'Current checkpoint',
+      createdAt: 1_725_000_000_000,
+      source: 'manual',
+      prompt: 'Current prompt',
+      size: 42,
+      mime: 'text/html',
+      kind: 'html',
+      current: true,
+    };
+    const priorVersion = {
+      ...currentVersion,
+      id: 'v1',
+      version: 1,
+      label: 'Prior checkpoint',
+      prompt: 'Prior prompt',
+      current: false,
+    };
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/projects/project-1/files/index.html/versions' && method === 'GET') {
+        return new Response(JSON.stringify({ file, versions: [currentVersion, priorVersion] }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/files/index.html/versions/v1' && method === 'GET') {
+        return new Response(JSON.stringify({
+          version: priorVersion,
+          content: '<html><body><h1>Prior version export</h1></body></html>',
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/export/html' && method === 'POST') {
+        return Response.json({
+          error: {
+            code: 'CONFLICT',
+            message: 'standalone HTML cannot export a historical entry with current project dependencies',
+          },
+        }, { status: 409 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const workspaceContext = teamWorkspaceContext();
+      renderWithProjectWorkspace(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          liveHtml="<html><body><h1>Current</h1></body></html>"
+        />,
+        workspaceContext,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+      const versionDialog = await screen.findByRole('dialog', { name: 'Versions' });
+      fireEvent.click(within(versionDialog).getByRole('option', { name: /Prior prompt/ }));
+      await waitFor(() => {
+        expect(within(versionDialog).getByRole('button', { name: 'Download Version 1' })).toBeTruthy();
+      });
+      fireEvent.click(within(versionDialog).getByRole('button', { name: 'Download Version 1' }));
+
+      const menuItems = within(versionDialog).getAllByRole('menuitem').map((item) => item.textContent ?? '');
+      expect(menuItems).toEqual([
+        'Export as PDF',
+        'Export as image',
+        'Download as .zip',
+      ]);
+      expect(menuItems).not.toContain('Save as template…');
+      expect(within(versionDialog).queryByRole('menuitem', { name: 'Export as standalone HTML' })).toBeNull();
+      expect(capturedBlob).toBeNull();
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/projects/project-1/files/index.html/versions/v1')).toBe(true);
+      const versionRead = fetchMock.mock.calls.find(
+        ([input]) => String(input) === '/api/projects/project-1/files/index.html/versions/v1',
+      );
+      expect(new Headers(versionRead?.[1]?.headers).get('x-od-workspace-id'))
+        .toBe(workspaceContext.workspaceId);
+      expect(new Headers(versionRead?.[1]?.headers).get('x-od-workspace-member-id'))
+        .toBe(workspaceContext.workspaceMemberId);
+      const exportCall = fetchMock.mock.calls.find(
+        ([input]) => String(input) === '/api/projects/project-1/export/html',
+      );
+      expect(exportCall).toBeUndefined();
+    } finally {
+      if (originalCreateObjectUrl) {
+        Object.defineProperty(URL, 'createObjectURL', {
+          configurable: true,
+          value: originalCreateObjectUrl,
+        });
+      } else {
+        Reflect.deleteProperty(URL, 'createObjectURL');
+      }
+      if (originalRevokeObjectUrl) {
+        Object.defineProperty(URL, 'revokeObjectURL', {
+          configurable: true,
+          value: originalRevokeObjectUrl,
+        });
+      } else {
+        Reflect.deleteProperty(URL, 'revokeObjectURL');
+      }
+    }
   });
 
   it('closes the version modal and shows success feedback after switching versions', async () => {
@@ -2992,7 +6659,12 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Versions' })).toBeNull();
     });
-    expect((await screen.findByRole('status')).textContent).toContain('Switched to this version.');
+    // Scope to the toast: #6156 added the `artifact-preview-first-load` cover,
+    // which is a `role="status"` of its own, so a bare `findByRole('status')`
+    // now resolves ambiguously against the preview's loading state.
+    await waitFor(() => {
+      expect(document.querySelector('.od-toast')?.textContent).toContain('Switched to this version.');
+    });
     expect(onFileSaved).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/projects/project-1/files/index.html/versions/v1/restore',
@@ -3123,7 +6795,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    await openUnifiedExportTab();
     fireEvent.click(await screen.findByRole('menuitem', { name: /Export as PDF/i }));
 
     await waitFor(() => {
@@ -3178,7 +6850,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i }) as HTMLButtonElement;
     const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
@@ -3387,7 +7059,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await openUnifiedShareTab();
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     expect((copyShareLink as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(copyShareLink);
@@ -3397,7 +7069,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByRole('menu')).toBeTruthy();
   });
 
-  it('opens existing deployed projects in the deploy/share modal before showing social targets', async () => {
+  it('shows social icons inline once a deployment link is live', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -3451,20 +7123,15 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
-    const socialShareItem = await screen.findByRole('menuitem', { name: /social share/i });
-    expect(document.querySelector('.share-menu-social-grid')).toBeNull();
-    fireEvent.click(socialShareItem);
+    await openUnifiedShareTab();
 
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog).toBeTruthy();
-    expect(within(dialog).getByRole('heading', { name: /Publish share page/i })).toBeTruthy();
-    expect(within(dialog).getByRole('button', { name: /Publish share page/i })).toBeTruthy();
+    // A ready deployment IS a clean link: social icons render inline in the
+    // share panel — no share-page ceremony, no modal detour.
     expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
-    expect(screen.getAllByText('https://vercel.example').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('keeps social sharing in the deploy modal after a successful deploy', async () => {
+  it('hides social icons until any link exists', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -3518,21 +7185,16 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /deploy then share/i }));
+    await openUnifiedShareTab();
 
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog).toBeTruthy();
-    expect(within(dialog).getByRole('heading', { name: /Publish share page/i })).toBeTruthy();
+    // No link yet (nothing published, nothing deployed): no social icons and
+    // no "deploy first" teaser row — the deploy rows below are the path.
+    expect(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'X' })).toBeNull();
-    const deployButtons = within(dialog).getAllByRole('button', { name: /Publish share page/i });
-    fireEvent.click(deployButtons[deployButtons.length - 1]!);
-
-    expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
-    expect(screen.getAllByText('https://vercel.example').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('menuitem', { name: /deploy then share/i })).toBeNull();
   });
 
-  it('shows social sharing with a warning for protected deployments', async () => {
+  it('hides social icons for protected deployments', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -3586,17 +7248,12 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
-    const socialShareItem = await screen.findByRole('menuitem', { name: /social share/i });
-    fireEvent.click(socialShareItem);
+    await openUnifiedShareTab();
 
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog).toBeTruthy();
-    expect(within(dialog).getByRole('heading', { name: /Publish share page/i })).toBeTruthy();
-    expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
-    expect(screen.getAllByText(/requiring authentication/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('https://protected.vercel.example').length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: /copy link/i }).length).toBeGreaterThan(0);
+    // A protected deployment is NOT a clean link — recipients could not open
+    // it, so the panel offers no social icons until the link is public.
+    expect(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'X' })).toBeNull();
   });
 
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {
@@ -3655,7 +7312,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    await openUnifiedShareTab();
     fireEvent.click(screen.getByRole('menuitem', { name: /save as template/i }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
@@ -3729,22 +7386,105 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByRole('menuitem', { name: 'Region' })).toBeNull();
     expect(screen.getByTestId('draw-overlay-toggle')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Mark' })).toBeTruthy();
-    // Screenshot-to-clipboard is a primary preview tool: present in preview mode.
-    expect(screen.getByTestId('screenshot-copy-button')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Screenshot' })).toBeTruthy();
+    // Screenshot-to-chat is the toolbar's ONLY capture tool in preview mode:
+    // clipboard capture used to live in the export menu and has been removed
+    // from there too, so this is the single 截图 affordance in the viewer.
+    expect(screen.getByTestId('edit-screenshot-to-chat-button')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Screenshot to chat' })).toBeTruthy();
+    expect(screen.queryByTestId('screenshot-copy-button')).toBeNull();
     expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Pods' })).toBeNull();
 
     fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
     expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
+    // Every mark tool is its own always-visible segment; switching does not
+    // hide the others.
     expect(screen.getByRole('button', { name: 'Box select' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Pen' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Pen' }));
+    expect(screen.getByRole('button', { name: 'Pen' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Box select' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.queryByRole('button', { name: 'Click' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Redo' })).toBeTruthy();
 
     clickAgentTool('draw-overlay-toggle');
     expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
+  });
+
+  it('reports diagnostics only from the active viewer and preview iframe', async () => {
+    const teardownObserver = installPreviewIframeMessageObserver();
+    try {
+      const { rerender } = render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><main>Preview</main></body></html>'
+        />,
+      );
+
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const inactiveFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: activeFrame.contentWindow,
+          data: {
+            type: 'od:preview-observability',
+            version: 1,
+            event: 'runtime_error',
+            message: 'active preview failed',
+          },
+        }));
+        window.dispatchEvent(new MessageEvent('message', {
+          source: inactiveFrame.contentWindow,
+          data: {
+            type: 'od:preview-observability',
+            version: 1,
+            event: 'runtime_error',
+            message: 'hidden preview failed',
+          },
+        }));
+      });
+
+      await waitFor(() => {
+        expect(safetyEventMock).toHaveBeenCalledTimes(1);
+      });
+      expect(safetyEventMock).toHaveBeenCalledWith(
+        'client_preview_runtime_error',
+        expect.objectContaining({
+          render_mode: 'url_load',
+          error_message: 'active preview failed',
+        }),
+      );
+
+      rerender(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><main>Preview</main></body></html>'
+          workspaceActive={false}
+        />,
+      );
+      const retainedFrame = screen.getByTestId(
+        'artifact-preview-frame-retained-preview.html',
+      ) as HTMLIFrameElement;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: retainedFrame.contentWindow,
+          data: {
+            type: 'od:preview-observability',
+            version: 1,
+            event: 'white_screen',
+            message: 'retained preview looks blank',
+          },
+        }));
+      });
+      expect(safetyEventMock).toHaveBeenCalledTimes(1);
+    } finally {
+      teardownObserver();
+    }
   });
 
   it('keeps preview viewport selection scoped to each HTML file', async () => {
@@ -3798,9 +7538,8 @@ describe('FileViewer tweaks toolbar', () => {
     clickAgentTool('draw-overlay-toggle');
     const note = screen.getByPlaceholderText('Add a note for this mark');
     fireEvent.change(note, { target: { value: 'mark this' } });
-    // Queue is a choice in the submit dropdown.
-    fireEvent.click(screen.getByRole('button', { name: 'Submit options' }));
-    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Queue' }));
+    // Queue is its own button on the bar.
+    fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
 
     expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Click' })).toBeNull();
@@ -3836,6 +7575,862 @@ describe('FileViewer tweaks toolbar', () => {
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(frame.srcdoc);
   });
 
+  it('uses a project-scoped preview base for runtime-created relative assets in srcDoc', async () => {
+    const context = teamWorkspaceContext();
+    const file = htmlPreviewFile({ name: 'brand.html', path: 'brand.html' });
+    const srcDocHtml = '<!doctype html><html><head></head><body><script>location.reload(); const img = document.createElement("img"); img.src = "logos/mark.png";</script></body></html>';
+    const urlLoadHtml = '<!doctype html><html><body>URL loaded</body></html>';
+    const renderViewer = (liveHtml: string) => (
+      <CollabProvider value={projectWorkspaceCollabValue(context)}>
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          liveHtml={liveHtml}
+        />
+      </CollabProvider>
+    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/projects/project-1/preview-url')) {
+        return new Response(JSON.stringify({
+          url: '/api/projects/project-1/preview/scope-1/brand.html',
+          file: 'brand.html',
+          csp: "default-src 'none'",
+          iframeSandbox: 'allow-scripts allow-forms',
+          opaqueOrigin: true,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(renderViewer(srcDocHtml));
+
+    const frame = await waitFor(() => {
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(activeFrame.srcdoc).toContain(
+        '<base href="/api/projects/project-1/preview/scope-1/">',
+      );
+      return activeFrame;
+    });
+    expect(frame.srcdoc).toContain('img.src = "logos/mark.png"');
+    expect(frame.srcdoc).not.toContain('/api/projects/project-1/raw/?workspaceId=');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/preview-url?file=brand.html',
+      { cache: 'no-store' },
+    );
+
+    rerender(renderViewer(urlLoadHtml));
+    await waitFor(() => {
+      expect(
+        (screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement)
+          .getAttribute('data-od-render-mode'),
+      ).toBe('url-load');
+    });
+    await act(async () => {
+      rerender(renderViewer(srcDocHtml));
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(activeFrame.srcdoc).toContain(
+        '<base href="/api/projects/project-1/preview/scope-1/">',
+      );
+    });
+    expect(fetchMock.mock.calls.filter(([input]) => (
+      String(input).includes('/api/projects/project-1/preview-url')
+    ))).toHaveLength(1);
+  });
+
+  it('recovers when an asynchronously scoped base replaces an already verified srcDoc navigation', async () => {
+    vi.useFakeTimers();
+    const context = teamWorkspaceContext();
+    const previewBaseResponse = deferredResponse();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/projects/project-1/preview-url')) {
+        return previewBaseResponse.promise;
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      renderWithProjectWorkspace(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'brand.html', path: 'brand.html' })}
+          liveHtml={'<!doctype html><html><body><script>location.reload()</script></body></html>'}
+        />,
+        context,
+      );
+
+      const initialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const initialGeneration = initialFrame.srcdoc.match(
+        /data-od-srcdoc-transport-activation>[\s\S]*?var generation = "([^"]+)";/,
+      )?.[1];
+      expect(initialGeneration).toBeTruthy();
+
+      const postMessage = vi.spyOn(initialFrame.contentWindow!, 'postMessage');
+      fireEvent.load(initialFrame);
+      const initialProbe = postMessage.mock.calls.find(
+        ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
+      )?.[0] as { probeId?: string } | undefined;
+      expect(initialProbe?.probeId).toBeTruthy();
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: initialFrame.contentWindow,
+          data: {
+            type: 'od:srcdoc-transport-activated',
+            generation: initialGeneration,
+            probeId: initialProbe!.probeId,
+            bodyComplete: true,
+          },
+        }));
+      });
+
+      await act(async () => {
+        previewBaseResponse.resolve(new Response(JSON.stringify({
+          url: '/api/projects/project-1/preview/scope-1/brand.html',
+          file: 'brand.html',
+          csp: "default-src 'none'",
+          iframeSandbox: 'allow-scripts allow-forms',
+          opaqueOrigin: true,
+        }), { status: 200 }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const scopedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(scopedFrame).toBe(initialFrame);
+      expect(scopedFrame.srcdoc).toContain(
+        '<base href="/api/projects/project-1/preview/scope-1/">',
+      );
+      const scopedGeneration = scopedFrame.srcdoc.match(
+        /data-od-srcdoc-transport-activation>[\s\S]*?var generation = "([^"]+)";/,
+      )?.[1];
+      expect(scopedGeneration).toBeTruthy();
+      expect(scopedGeneration).not.toBe(initialGeneration);
+
+      act(() => {
+        // Model Electron's aborted second about:srcdoc navigation: the new
+        // document sends neither load nor activation, so recovery must not
+        // trust the verified witness from the pre-base document.
+        vi.runAllTimers();
+      });
+
+      const recoveredFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(recoveredFrame).not.toBe(scopedFrame);
+      expect(recoveredFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+    } finally {
+      previewBaseResponse.resolve(new Response('', { status: 404 }));
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels an in-flight srcDoc recovery probe when the viewer unmounts', () => {
+    vi.useFakeTimers();
+    try {
+      const { unmount } = render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'sandbox.html', path: 'sandbox.html' })}
+          liveHtml={'<!doctype html><html><body><script>location.reload()</script></body></html>'}
+        />,
+      );
+
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+      fireEvent.load(frame);
+      expect(postMessage.mock.calls.some(
+        ([message]) => (
+          (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe'
+        ),
+      )).toBe(true);
+
+      safetyEventMock.mockClear();
+      unmount();
+      act(() => {
+        vi.runAllTimers();
+      });
+
+      expect(safetyEventMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restarts srcDoc verification after a retained viewer rapidly reactivates', () => {
+    vi.useFakeTimers();
+    try {
+      const renderViewer = (workspaceActive: boolean) => (
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'sandbox.html', path: 'sandbox.html' })}
+          liveHtml={'<!doctype html><html><body><script>location.reload()</script></body></html>'}
+          workspaceActive={workspaceActive}
+        />
+      );
+      const { rerender } = render(renderViewer(true));
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+      fireEvent.load(frame);
+      const probes = () => postMessage.mock.calls
+        .map(([message]) => message as { type?: unknown; generation?: string; probeId?: string })
+        .filter((message) => message.type === 'od:srcdoc-transport-ready-probe');
+      expect(probes()).toHaveLength(1);
+
+      safetyEventMock.mockClear();
+      rerender(renderViewer(false));
+      rerender(renderViewer(true));
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+      expect(probes()).toHaveLength(2);
+      const reactivationProbe = probes()[1]!;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od:srcdoc-transport-activated',
+            generation: reactivationProbe.generation,
+            probeId: reactivationProbe.probeId,
+            bodyComplete: true,
+          },
+        }));
+        vi.runAllTimers();
+      });
+
+      expect(safetyEventMock).not.toHaveBeenCalled();
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('preserves a verified srcDoc witness across retained viewer reactivation', () => {
+    vi.useFakeTimers();
+    try {
+      const renderViewer = (workspaceActive: boolean) => (
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'sandbox.html', path: 'sandbox.html' })}
+          liveHtml={'<!doctype html><html><body><script>location.reload()</script></body></html>'}
+          workspaceActive={workspaceActive}
+        />
+      );
+      const { rerender } = render(renderViewer(true));
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+      fireEvent.load(frame);
+      const probes = () => postMessage.mock.calls
+        .map(([message]) => message as { type?: unknown; generation?: string; probeId?: string })
+        .filter((message) => message.type === 'od:srcdoc-transport-ready-probe');
+      const initialProbe = probes()[0]!;
+      expect(initialProbe.probeId).toBeTruthy();
+
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od:srcdoc-transport-activated',
+            generation: initialProbe.generation,
+            probeId: initialProbe.probeId,
+            bodyComplete: true,
+          },
+        }));
+      });
+
+      safetyEventMock.mockClear();
+      rerender(renderViewer(false));
+      rerender(renderViewer(true));
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+      expect(probes()).toHaveLength(1);
+
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+      expect(safetyEventMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('allows one fresh recovery when an unverified generation is reactivated', () => {
+    vi.useFakeTimers();
+    try {
+      const renderViewer = (workspaceActive: boolean) => (
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'sandbox.html', path: 'sandbox.html' })}
+          liveHtml={'<!doctype html><html><body><script>location.reload()</script></body></html>'}
+          workspaceActive={workspaceActive}
+        />
+      );
+      const { rerender } = render(renderViewer(true));
+      const initialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      fireEvent.load(initialFrame);
+
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+
+      const recoveredFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(recoveredFrame).not.toBe(initialFrame);
+      expect(safetyEventMock).toHaveBeenCalledTimes(1);
+
+      rerender(renderViewer(false));
+      rerender(renderViewer(true));
+      const reactivatedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(reactivatedFrame).not.toBe(recoveredFrame);
+      expect(safetyEventMock).toHaveBeenCalledTimes(2);
+      const postMessage = vi.spyOn(reactivatedFrame.contentWindow!, 'postMessage');
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+
+      expect(postMessage.mock.calls.filter(
+        ([message]) => (
+          (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe'
+        ),
+      )).toHaveLength(1);
+
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(reactivatedFrame);
+      expect(safetyEventMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a verified srcDoc frame visible when Electron reports a late ERR_ABORTED', () => {
+    vi.useFakeTimers();
+    let latestNavigationFailure: OpenDesignHostPreviewNavigationFailure | null = null;
+    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
+    const emitNavigationFailure = (failure: OpenDesignHostPreviewNavigationFailure) => {
+      latestNavigationFailure = failure;
+      navigationFailureListener?.(failure);
+    };
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        preview: {
+          getLatestNavigationFailure: () => latestNavigationFailure,
+          subscribeNavigationFailure: (listener) => {
+            navigationFailureListener = listener;
+            return () => undefined;
+          },
+        },
+      },
+    });
+    try {
+      const renderViewer = (workspaceActive: boolean) => (
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'deck.html', path: 'deck.html' })}
+          liveHtml={'<!doctype html><html><body><main>Deck</main><script>location.reload()</script></body></html>'}
+          workspaceActive={workspaceActive}
+        />
+      );
+      const { rerender } = render(renderViewer(true));
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.name).toMatch(/^od-artifact-preview-srcdoc-[a-f0-9]+$/);
+      const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+      fireEvent.load(frame);
+      const probe = postMessage.mock.calls.find(
+        ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
+      )?.[0] as { generation?: string; probeId?: string } | undefined;
+      expect(probe?.generation).toBeTruthy();
+      expect(probe?.probeId).toBeTruthy();
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od:srcdoc-transport-activated',
+            generation: probe!.generation,
+            probeId: probe!.probeId,
+            bodyComplete: true,
+          },
+        }));
+      });
+      const probesBeforeFailure = postMessage.mock.calls.filter(
+        ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
+      ).length;
+
+      act(() => {
+        emitNavigationFailure({
+          errorCode: -3,
+          eventId: 1,
+          frameName: frame.name,
+          occurredAtMs: Date.now(),
+          validatedUrl: 'about:srcdoc',
+        });
+        vi.runAllTimers();
+      });
+
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+      expect(frame.style.display).toBe('');
+      expect(postMessage.mock.calls.filter(
+        ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
+      )).toHaveLength(probesBeforeFailure);
+      expect(safetyEventMock).not.toHaveBeenCalled();
+
+      rerender(renderViewer(false));
+      rerender(renderViewer(true));
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+      expect(frame.style.display).toBe('');
+    } finally {
+      restoreHost();
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses an exact active ERR_ABORTED to probe an unverified generation once', () => {
+    vi.useFakeTimers();
+    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        preview: {
+          subscribeNavigationFailure: (listener) => {
+            navigationFailureListener = listener;
+            return () => undefined;
+          },
+        },
+      },
+    });
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'deck.html', path: 'deck.html' })}
+          liveHtml={'<!doctype html><html><body><main>Deck</main><script>location.reload()</script></body></html>'}
+          workspaceActive
+        />,
+      );
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+      act(() => {
+        navigationFailureListener?.({
+          errorCode: -3,
+          eventId: 1,
+          frameName: frame.name,
+          occurredAtMs: Date.now(),
+          validatedUrl: 'about:srcdoc',
+        });
+      });
+      expect(postMessage.mock.calls.filter(
+        ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
+      )).toHaveLength(1);
+
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+      expect(screen.getByTestId('artifact-preview-frame')).not.toBe(frame);
+      expect(safetyEventMock).toHaveBeenCalledTimes(1);
+    } finally {
+      restoreHost();
+      vi.useRealTimers();
+    }
+  });
+
+  it('immediately recovers an exact active Open Design blob navigation abort', () => {
+    vi.useFakeTimers();
+    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        preview: {
+          subscribeNavigationFailure: (listener) => {
+            navigationFailureListener = listener;
+            return () => undefined;
+          },
+        },
+      },
+    });
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'blob-deck.html', path: 'blob-deck.html' })}
+          liveHtml={'<!doctype html><html><body><main>Deck</main><script>location.reload()</script></body></html>'}
+          workspaceActive
+        />,
+      );
+      const failedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const failedUrl = 'blob:od://app/failed-preview-document';
+      failedFrame.setAttribute('src', failedUrl);
+
+      act(() => {
+        navigationFailureListener?.({
+          errorCode: -3,
+          eventId: 1,
+          frameName: failedFrame.name,
+          occurredAtMs: Date.now(),
+          validatedUrl: failedUrl,
+        });
+      });
+
+      const recoveredFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(recoveredFrame).not.toBe(failedFrame);
+      expect(recoveredFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+      expect(safetyEventMock).toHaveBeenCalledTimes(1);
+    } finally {
+      restoreHost();
+      vi.useRealTimers();
+    }
+  });
+
+  it('probes the active unverified frame when Electron loses the aborted frame name', () => {
+    vi.useFakeTimers();
+    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        preview: {
+          subscribeNavigationFailure: (listener) => {
+            navigationFailureListener = listener;
+            return () => undefined;
+          },
+        },
+      },
+    });
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'deck.html', path: 'deck.html' })}
+          liveHtml={'<!doctype html><html><body><main>Deck</main><script>location.reload()</script></body></html>'}
+          workspaceActive
+        />,
+      );
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+      act(() => {
+        navigationFailureListener?.({
+          errorCode: -3,
+          eventId: 1,
+          occurredAtMs: Date.now(),
+          validatedUrl: 'about:srcdoc',
+        });
+      });
+
+      expect(postMessage.mock.calls.filter(
+        ([message]) => (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe',
+      )).toHaveLength(1);
+
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+      expect(screen.getByTestId('artifact-preview-frame')).not.toBe(frame);
+      expect(safetyEventMock).toHaveBeenCalledTimes(1);
+    } finally {
+      restoreHost();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps live edit styles on the replacement frame and replays them when its bridge becomes ready', async () => {
+    vi.useFakeTimers();
+    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
+    const restoreHost = installMockOpenDesignHost({
+      host: {
+        preview: {
+          subscribeNavigationFailure: (listener) => {
+            navigationFailureListener = listener;
+            return () => undefined;
+          },
+        },
+      },
+    });
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'deck.html', path: 'deck.html' })}
+          liveHtml={'<!doctype html><html><body><main data-od-id="hero">Deck</main><script>location.reload()</script></body></html>'}
+          workspaceActive
+        />,
+      );
+      const initialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      act(() => {
+        navigationFailureListener?.({
+          errorCode: -3,
+          eventId: 1,
+          occurredAtMs: Date.now(),
+          validatedUrl: 'about:srcdoc',
+        });
+        vi.advanceTimersByTime(1_500);
+      });
+      const replacementFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(replacementFrame).not.toBe(initialFrame);
+      const replacementPostMessage = vi.spyOn(replacementFrame.contentWindow!, 'postMessage');
+
+      fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: replacementFrame.contentWindow,
+          data: { type: 'od-edit-background' },
+        }));
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Pick Background' }));
+      fireEvent.click(screen.getByRole('button', { name: '#3b82f6' }));
+      const expectedStyleMessage = expect.objectContaining({
+        type: 'od-edit-preview-style',
+        id: '__body__',
+        styles: { backgroundColor: '#3b82f6' },
+      });
+      expect(replacementPostMessage).toHaveBeenCalledWith(expectedStyleMessage, '*');
+
+      replacementPostMessage.mockClear();
+      fireEvent.load(replacementFrame);
+      expect(replacementPostMessage).toHaveBeenCalledWith(expectedStyleMessage, '*');
+    } finally {
+      restoreHost();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the srcDoc iframe mounted across Code and Preview switches', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'sandbox.html', path: 'sandbox.html' })}
+          liveHtml={'<!doctype html><html><body><script>location.reload()</script></body></html>'}
+        />,
+      );
+
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+      fireEvent.load(frame);
+      const probes = () => postMessage.mock.calls
+        .map(([message]) => message as { type?: unknown; generation?: string; probeId?: string })
+        .filter((message) => message.type === 'od:srcdoc-transport-ready-probe');
+      expect(probes()).toHaveLength(1);
+
+      safetyEventMock.mockClear();
+      fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+      expect(frame.closest<HTMLElement>('[hidden]')).toHaveStyle({ display: 'none' });
+      expect(screen.getByText(/location\.reload/)).toBeVisible();
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+      expect(safetyEventMock).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+      const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(previewFrame).toBe(frame);
+      expect(previewFrame.closest<HTMLElement>('[hidden]')).toBeNull();
+      const previewPostMessage = vi.spyOn(previewFrame.contentWindow!, 'postMessage');
+      const previewProbes = () => previewPostMessage.mock.calls
+        .map(([message]) => message as { type?: unknown; generation?: string; probeId?: string })
+        .filter((message) => message.type === 'od:srcdoc-transport-ready-probe');
+      const probeCountBeforeRecoveryCheck = previewProbes().length;
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+      });
+      expect(previewProbes()).toHaveLength(probeCountBeforeRecoveryCheck + 1);
+      const previewProbe = previewProbes().at(-1)!;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: previewFrame.contentWindow,
+          data: {
+            type: 'od:srcdoc-transport-activated',
+            generation: previewProbe.generation,
+            probeId: previewProbe.probeId,
+            bodyComplete: true,
+          },
+        }));
+        vi.runAllTimers();
+      });
+
+      expect(safetyEventMock).not.toHaveBeenCalled();
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(previewFrame);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('updates the retained srcDoc iframe when an agent edits the file in Code mode', () => {
+    const fileV1 = htmlPreviewFile({
+      name: 'agent-edit.html',
+      path: 'agent-edit.html',
+      mtime: 1_000,
+    });
+    const renderViewer = (mtime: number, liveHtml: string) => (
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{ ...fileV1, mtime }}
+        liveHtml={liveHtml}
+        workspaceActive
+      />
+    );
+    const { rerender } = render(renderViewer(
+      1_000,
+      '<!doctype html><html><body><main>Agent V1</main><script>location.reload()</script></body></html>',
+    ));
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+    expect(frame.dataset.odActive).toBe('false');
+
+    rerender(renderViewer(
+      2_000,
+      '<!doctype html><html><body><main>Agent V2</main><script>location.reload()</script></body></html>',
+    ));
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+    expect(frame.srcdoc).toContain('Agent V2');
+    expect(frame.srcdoc).not.toContain('Agent V1');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+    expect(frame.dataset.odActive).toBe('true');
+    expect(frame.srcdoc).toContain('Agent V2');
+  });
+
+  it('defers hidden file-tab srcDoc updates and commits only the latest generation on activation', () => {
+    const fileV1 = htmlPreviewFile({
+      name: 'retained-agent-edit.html',
+      path: 'retained-agent-edit.html',
+      mtime: 1_000,
+    });
+    const renderViewer = (
+      workspaceActive: boolean,
+      mtime: number,
+      version: string,
+    ) => (
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{ ...fileV1, mtime }}
+        liveHtml={`<!doctype html><html><body><main>${version}</main><script>location.reload()</script></body></html>`}
+        workspaceActive={workspaceActive}
+      />
+    );
+    const { rerender } = render(renderViewer(true, 1_000, 'Retained V1'));
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const initialSrcDoc = frame.srcdoc;
+    expect(initialSrcDoc).toContain('Retained V1');
+
+    rerender(renderViewer(false, 2_000, 'Retained V2'));
+    expect(screen.getByTestId('artifact-preview-frame-srcdoc-retained-retained-agent-edit.html')).toBe(frame);
+    expect(frame.srcdoc).toBe(initialSrcDoc);
+
+    rerender(renderViewer(false, 3_000, 'Retained V3'));
+    expect(frame.srcdoc).toBe(initialSrcDoc);
+
+    rerender(renderViewer(true, 3_000, 'Retained V3'));
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
+    expect(frame.srcdoc).toContain('Retained V3');
+    expect(frame.srcdoc).not.toContain('Retained V2');
+    expect(frame.srcdoc).not.toBe(initialSrcDoc);
+  });
+
+  it('preserves an authored base without minting a project-scoped preview capability', async () => {
+    const context = teamWorkspaceContext();
+    const authoredBase = '<base href="https://cdn.example/assets/">';
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => (
+      new Response(JSON.stringify({ deployments: [] }), { status: 200 })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <CollabProvider value={projectWorkspaceCollabValue(context)}>
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: 'brand.html', path: 'brand.html' })}
+          liveHtml={`<!doctype html><html><head>${authoredBase}</head><body><script>location.reload()</script></body></html>`}
+        />
+      </CollabProvider>,
+    );
+
+    await waitFor(() => {
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(activeFrame.srcdoc).toContain(authoredBase);
+      expect(fetchMock.mock.calls.some(([input]) => (
+        String(input).includes('/api/projects/project-1/files')
+      ))).toBe(true);
+    });
+    expect(fetchMock.mock.calls.some(([input]) => (
+      String(input).includes('/api/projects/project-1/preview-url')
+    ))).toBe(false);
+  });
+
+  it('does not mint from the previous file source while switching to an authored-base srcDoc', async () => {
+    const context = teamWorkspaceContext();
+    const authoredBase = '<base href="https://cdn.example/brand/">';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/projects/project-1/preview-url')) {
+        return new Response(JSON.stringify({
+          url: '/api/projects/project-1/preview/scope-1/first.html',
+          file: 'first.html',
+          csp: "default-src 'none'",
+          iframeSandbox: 'allow-scripts allow-forms',
+          opaqueOrigin: true,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const renderViewer = (fileName: string, liveHtml: string) => (
+      <CollabProvider value={projectWorkspaceCollabValue(context)}>
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile({ name: fileName, path: fileName })}
+          liveHtml={liveHtml}
+        />
+      </CollabProvider>
+    );
+    const firstHtml = '<!doctype html><html><body><script>location.reload()</script></body></html>';
+    const secondHtml = `<!doctype html><html><head>${authoredBase}</head><body><script>location.reload()</script></body></html>`;
+    const { rerender } = render(renderViewer('first.html', firstHtml));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([input]) => (
+        String(input).includes('/api/projects/project-1/preview-url')
+      ))).toHaveLength(1);
+    });
+    fetchMock.mockClear();
+
+    rerender(renderViewer('second.html', secondHtml));
+    await waitFor(() => {
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(activeFrame.srcdoc).toContain(authoredBase);
+    });
+    expect(fetchMock.mock.calls.some(([input]) => (
+      String(input).includes('/api/projects/project-1/preview-url')
+    ))).toBe(false);
+  });
+
   it('keeps the URL-loaded iframe active when opening Draw after the URL preview bridge is ready', async () => {
     const { container } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
@@ -3852,7 +8447,10 @@ describe('FileViewer tweaks toolbar', () => {
     act(() => {
       window.dispatchEvent(new MessageEvent('message', {
         source: urlFrame.contentWindow,
-        data: { type: 'od:url-selection-bridge-ready' },
+        data: {
+          type: 'od:url-selection-bridge-ready',
+          href: new URL(urlFrame.getAttribute('src') ?? '', window.location.href).href,
+        },
       }));
     });
 
@@ -4048,6 +8646,57 @@ describe('FileViewer tweaks toolbar', () => {
     expect(hiddenAfterExit.srcdoc).toContain('Materialize me');
   });
 
+  it('surfaces raw-route security failures for preview assets without leaking the symlink target', async () => {
+    const source = '<html><body><img src="assets/hero.png" alt="Hero"></body></html>';
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files')) {
+        return new Response(JSON.stringify({
+          files: [
+            htmlPreviewFile(),
+            baseFile({
+              name: 'assets/hero.png',
+              path: 'assets/hero.png',
+              type: 'file',
+              kind: 'image',
+              mime: 'image/png',
+            }),
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/assets/hero.png')) {
+        return new Response(JSON.stringify({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Error: path escapes project dir via symlink /Users/me/.ssh/id_rsa',
+          },
+        }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    const warning = await screen.findByTestId('preview-asset-warning');
+    expect(warning.textContent).toContain('assets/hero.png');
+    expect(warning.textContent).toContain('Replace external symlinks');
+    expect(warning.textContent).not.toContain('/Users/me/.ssh');
+  });
+
   it('always injects the manual-edit bridge into the preview srcDoc so entering Edit after materialization does not reload', async () => {
     const { container } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
@@ -4059,6 +8708,7 @@ describe('FileViewer tweaks toolbar', () => {
     // happens only after the user enters an interactive mode.
     const initialSrcDocFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
     expect(initialSrcDocFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+    const postMessage = vi.spyOn(initialSrcDocFrame.contentWindow!, 'postMessage');
 
     // Materialize once via Draw. The manual-edit bridge must already be present
     // even though Edit is NOT active — it boots dormant and only acts on the
@@ -4070,6 +8720,34 @@ describe('FileViewer tweaks toolbar', () => {
       expect(f.srcdoc).toContain('Stable doc');
       expect(f.srcdoc).toContain('data-od-edit-bridge');
       return f.srcdoc;
+    });
+    const materializedFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+    const materializedGeneration = materializedFrame.srcdoc.match(
+      /data-od-srcdoc-transport-activation>[\s\S]*?var generation = "([^"]+)";/,
+    )?.[1];
+    expect(materializedGeneration).toBeTruthy();
+    fireEvent.load(materializedFrame);
+    const probe = await waitFor(() => {
+      const value = postMessage.mock.calls.find(
+        ([message]) => (
+          (message as { type?: unknown }).type === 'od:srcdoc-transport-ready-probe'
+          && (message as { generation?: unknown }).generation === materializedGeneration
+        ),
+      )?.[0] as { generation?: string; probeId?: string } | undefined;
+      expect(value?.generation).toBeTruthy();
+      expect(value?.probeId).toBeTruthy();
+      return value!;
+    });
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: materializedFrame.contentWindow,
+        data: {
+          type: 'od:srcdoc-transport-activated',
+          generation: probe.generation,
+          probeId: probe.probeId,
+          bodyComplete: true,
+        },
+      }));
     });
 
     // Leave Draw and enter Edit. Because the edit bridge was already in the
@@ -4088,6 +8766,53 @@ describe('FileViewer tweaks toolbar', () => {
     });
     const srcDocAfter = (container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement).srcdoc;
     expect(srcDocAfter).toBe(materializedSrcDoc);
+  });
+
+  it('does not restore a stale edit snapshot when Edit is entered again', async () => {
+    const renderViewer = (liveHtml: string) => (
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml={liveHtml}
+      />
+    );
+    const firstSource = '<html><body><main data-od-id="hero">Before edit</main></body></html>';
+    const savedSource = '<html><body><main data-od-id="hero" style="color: red">Saved edit</main></body></html>';
+    const { container, rerender } = render(renderViewer(firstSource));
+
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      const frame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(frame.srcdoc).toContain('Before edit');
+    });
+    clickAgentTool('draw-overlay-toggle');
+    clickAgentTool('manual-edit-mode-toggle');
+    await waitFor(() => {
+      const frame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-active')).toBe('true');
+      expect(frame.srcdoc).toContain('Before edit');
+    });
+
+    // A saved style updates host source while the active edit document stays
+    // frozen and receives its visual patch over postMessage.
+    rerender(renderViewer(savedSource));
+    expect((container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement).srcdoc)
+      .toContain('Before edit');
+
+    clickAgentTool('manual-edit-mode-toggle');
+    await waitFor(() => {
+      const frame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(frame.srcdoc).toContain('Saved edit');
+    });
+    const savedSrcDoc = (container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement).srcdoc;
+
+    clickAgentTool('manual-edit-mode-toggle');
+    await waitFor(() => {
+      const frame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-active')).toBe('true');
+      expect(frame.srcdoc).toBe(savedSrcDoc);
+    });
   });
 
   // The freeze / deferred-flush logic covers every interactive preview mode
@@ -4209,7 +8934,10 @@ describe('FileViewer tweaks toolbar', () => {
     act(() => {
       window.dispatchEvent(new MessageEvent('message', {
         source: urlFrame.contentWindow,
-        data: { type: 'od:url-selection-bridge-ready' },
+        data: {
+          type: 'od:url-selection-bridge-ready',
+          href: new URL(urlFrame.getAttribute('src') ?? '', window.location.href).href,
+        },
       }));
     });
 
@@ -4247,6 +8975,261 @@ describe('FileViewer tweaks toolbar', () => {
     expect(srcDocFrame.srcdoc).toContain('data-od-selection-bridge');
   });
 
+  it('ignores stale URL selection bridge readiness after the preview URL changes and falls back to srcDoc comments', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1710000001 })}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    const srcA = urlFrame.getAttribute('src') ?? '';
+    expect(srcA).toContain('odPreviewBridge=selection');
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: urlFrame.contentWindow,
+        data: {
+          type: 'od:url-selection-bridge-ready',
+          href: new URL(srcA, window.location.href).href,
+        },
+      }));
+    });
+
+    // Same file with a new mtime keeps the pooled iframe element and its
+    // WindowProxy; only the src (v=/odPreviewEpoch cache bust) changes.
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1710000002 })}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    await waitFor(() => {
+      expect(urlFrame.getAttribute('src')).not.toBe(srcA);
+    });
+
+    // The real navigation onLoad clears the latch and re-probes.
+    fireEvent.load(urlFrame);
+
+    // A ready posted by the PREVIOUS document (href A) must not re-latch the
+    // bridge for the currently committed document.
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: urlFrame.contentWindow,
+        data: {
+          type: 'od:url-selection-bridge-ready',
+          href: new URL(srcA, window.location.href).href,
+        },
+      }));
+    });
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const srcDocFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return frame;
+    });
+    expect(srcDocFrame.srcdoc).toContain('data-od-selection-bridge');
+  });
+
+  it('accepts a URL selection bridge ready matching the current preview URL', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1710000001 })}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const srcA = urlFrame.getAttribute('src') ?? '';
+
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1710000002 })}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+    await waitFor(() => {
+      expect(urlFrame.getAttribute('src')).not.toBe(srcA);
+    });
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: urlFrame.contentWindow,
+        data: {
+          type: 'od:url-selection-bridge-ready',
+          href: new URL(urlFrame.getAttribute('src') ?? '', window.location.href).href,
+        },
+      }));
+    });
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    // A matching-href ready keeps Comment on the URL-load engine instead of
+    // falling back to srcdoc. od:comment-mode delivery to the URL frame is
+    // covered by the "keeps the URL-loaded preview mounted when opening
+    // comments" test.
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(urlFrame);
+      expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    });
+  });
+
+  it('rejects a URL selection bridge ready without href and falls back to srcDoc comments', async () => {
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: urlFrame.contentWindow,
+        data: { type: 'od:url-selection-bridge-ready' },
+      }));
+    });
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const srcDocFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return frame;
+    });
+    expect(srcDocFrame.srcdoc).toContain('data-od-selection-bridge');
+  });
+
+  it('does not expose unresolved relative assets while a team srcDoc preview is materializing', async () => {
+    const filesResponse = deferredResponse();
+    const projectId = 'scoped-assets-project';
+    const fontPath = 'fonts/inter-variable-400.woff2';
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (url === `/api/projects/${projectId}/files`) return filesResponse.promise;
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      renderWithProjectWorkspace(
+        <FileViewer
+          projectId={projectId}
+          projectKind="prototype"
+          file={htmlPreviewFile({
+            name: 'system/artifacts/poster.html',
+            path: 'system/artifacts/poster.html',
+          })}
+          liveHtml={'<html><head><style>@font-face{src:url("../../fonts/inter-variable-400.woff2")}</style></head><body>Poster</body></html>'}
+        />,
+        teamWorkspaceContext(),
+      );
+
+      fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+      const pendingFrame = await waitFor(() => {
+        const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+        expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+        return frame;
+      });
+      expect(pendingFrame.srcdoc).not.toContain('../../fonts/inter-variable-400.woff2');
+
+      filesResponse.resolve(new Response(JSON.stringify({
+        files: [
+          htmlPreviewFile({
+            name: 'system/artifacts/poster.html',
+            path: 'system/artifacts/poster.html',
+          }),
+          baseFile({
+            name: fontPath,
+            path: fontPath,
+            mime: 'font/woff2',
+          }),
+        ],
+      }), { status: 200 }));
+
+      await waitFor(() => {
+        const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+        expect(frame.srcdoc).toContain(
+          `/api/projects/${projectId}/raw/${fontPath}`,
+        );
+        expect(frame.srcdoc).not.toContain('workspaceMemberId=');
+        expect(frame.srcdoc).not.toContain('../../fonts/inter-variable-400.woff2');
+      });
+    } finally {
+      filesResponse.resolve(new Response(JSON.stringify({ files: [] }), { status: 200 }));
+    }
+  });
+
+  it('materializes Team deck relative assets into server-authorized raw URLs before showing srcDoc', async () => {
+    const filesResponse = deferredResponse();
+    const projectId = 'scoped-deck-assets-project';
+    const deckPath = 'system/deck.html';
+    const imagePath = 'images/hero.png';
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (url === `/api/projects/${projectId}/files`) return filesResponse.promise;
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      renderWithProjectWorkspace(
+        <FileViewer
+          projectId={projectId}
+          projectKind="prototype"
+          file={htmlPreviewFile({
+            name: deckPath,
+            path: deckPath,
+            artifactManifest: {
+              version: 1,
+              kind: 'deck',
+              title: 'Scoped deck',
+              entry: deckPath,
+              renderer: 'deck-html',
+              exports: ['html'],
+            },
+          })}
+          isDeck
+          liveHtml={'<html><body><section class="slide"><img src="../images/hero.png"></section></body></html>'}
+        />,
+        teamWorkspaceContext(),
+      );
+
+      const pendingFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(pendingFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(pendingFrame.srcdoc).not.toContain('../images/hero.png');
+
+      filesResponse.resolve(new Response(JSON.stringify({
+        files: [
+          htmlPreviewFile({ name: deckPath, path: deckPath }),
+          baseFile({ name: imagePath, path: imagePath }),
+        ],
+      }), { status: 200 }));
+
+      await waitFor(() => {
+        const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+        expect(frame.srcdoc).toContain(
+          `/api/projects/${projectId}/raw/${imagePath}`,
+        );
+        expect(frame.srcdoc).not.toContain('workspaceMemberId=');
+        expect(frame.srcdoc).not.toContain('../images/hero.png');
+      });
+    } finally {
+      filesResponse.resolve(new Response(JSON.stringify({ files: [] }), { status: 200 }));
+    }
+  });
+
   it('lets Draw direct send emit a queued annotation while a task is running', async () => {
     const annotationSpy = vi.fn();
     installCanvasSnapshotMocks();
@@ -4275,9 +9258,8 @@ describe('FileViewer tweaks toolbar', () => {
     // so the annotation is staged for the next turn rather than sent mid-run.
     const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
-    // Queue now lives in the submit dropdown; open it to reach the fallback.
-    fireEvent.click(screen.getByRole('button', { name: 'Submit options' }));
-    const queue = screen.getByRole('menuitemradio', { name: 'Queue' }) as HTMLButtonElement;
+    // Queue is its own always-visible button next to Send.
+    const queue = screen.getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
     expect(queue.disabled).toBe(false);
 
     fireEvent.click(send);
@@ -4332,10 +9314,10 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Already sent to Claude')).toBeNull();
   });
 
-  it('does not render the comments drawer over the preview while waiting for a configured dock portal', () => {
+  it('keeps the mobile preview centered while waiting for a configured comments dock portal', () => {
     const { container } = render(
       <FileViewer
-        projectId="project-1"
+        projectId="project-mobile-comment-portal"
         projectKind="prototype"
         file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
@@ -4343,9 +9325,100 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Mobile' }));
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
 
+    expect(screen.getByTestId('comment-preview-layout').classList).not.toContain(
+      'comment-preview-layer-with-side-dock',
+    );
     expect(container.querySelector('.comment-preview-layer > .comment-side-panel')).toBeNull();
+  });
+
+  it('closes a floating comment card in one action and restores focus for button and Escape dismissals', async () => {
+    const portalId = 'project-comments-float';
+    render(
+      <>
+        <div id={portalId} data-testid="comment-float-host" />
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+          commentPortalId={portalId}
+        />
+      </>,
+    );
+
+    const trigger = screen.getByTestId('comment-panel-toggle');
+    fireEvent.click(trigger);
+
+    const firstDismiss = await screen.findByRole('button', { name: /hide comments/i });
+    firstDismiss.focus();
+    fireEvent.click(firstDismiss);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    // The close path must also clear create/board mode: one click reopens the
+    // floating card instead of being consumed by a stale pressed state.
+    fireEvent.click(trigger);
+    const secondDismiss = await screen.findByRole('button', { name: /hide comments/i });
+    secondDismiss.focus();
+    fireEvent.keyDown(secondDismiss, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
+  it('keeps the comment popover open and restores focus when View all comments closes', async () => {
+    const portalId = 'project-comments-view-all';
+    render(
+      <>
+        <div id={portalId} data-testid="comment-float-host" />
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+          commentPortalId={portalId}
+        />
+      </>,
+    );
+
+    clickAgentTool('board-mode-toggle');
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        hoverPoint: { x: 12, y: 16 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const viewAll = await screen.findByTestId('comment-popover-view-all');
+    fireEvent.click(viewAll);
+
+    const panel = await screen.findByTestId('comment-side-panel');
+    const dismiss = within(panel).getByRole('button', { name: /hide comments/i });
+    dismiss.focus();
+    fireEvent.click(dismiss);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+      expect(screen.getByTestId('comment-popover')).toBeTruthy();
+      expect(document.activeElement).toBe(viewAll);
+    });
   });
 
   it('shows the open comment count beside the comments icon', () => {
@@ -4483,6 +9556,483 @@ describe('FileViewer tweaks toolbar', () => {
       expect(layout.className).not.toContain('comment-preview-layer-with-side-dock');
       expect(Number(layout.style.getPropertyValue('--preview-scale'))).toBeCloseTo((700 - 48) / 1180);
     });
+  });
+
+  it('auto-fits wide desktop HTML previews until the user manually zooms', async () => {
+    let viewerBodyWidth = 900;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, viewerBodyWidth, 700);
+        if (this instanceof HTMLIFrameElement || this.classList.contains('comment-preview-canvas')) {
+          return testRect(0, 0, viewerBodyWidth, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile({
+          name: 'wide-autofit-preview.html',
+          path: 'wide-autofit-preview.html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Wide autofit preview',
+            entry: 'wide-autofit-preview.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><main style="min-width:1440px">Wide landing page</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(frame);
+    fireEvent.load(frame);
+    const neutralRequest = latestPreviewContentSizeRequest(previewWindow);
+    expect(neutralRequest.measurementId).toMatch(/^preview-host-\d+:measurement-\d+$/);
+    expect(neutralRequest.generation).toMatch(/^preview-host-\d+:generation-\d+$/);
+    expect(neutralRequest.documentEpoch).toMatch(/^preview-document-\d+$/);
+    expect(JSON.stringify(neutralRequest)).not.toContain('project-1');
+    act(() => postPreviewContentSizeResponse(previewWindow, neutralRequest, 1440, 900));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+    let scaledRequest = latestPreviewContentSizeRequest(previewWindow);
+    await waitFor(() => {
+      scaledRequest = latestPreviewContentSizeRequest(previewWindow);
+      expect(scaledRequest.measurementId).not.toBe(neutralRequest.measurementId);
+    });
+    act(() => {
+      postPreviewContentSizeResponse(previewWindow, neutralRequest, 90_000, 90_000);
+      postPreviewContentSizeResponse(previewWindow, scaledRequest, 90_000, 90_000);
+    });
+    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    const scaledShell = Array.from(container.querySelectorAll('div')).find(
+      (node) => node.style.transform === 'scale(0.625)',
+    );
+    expect(scaledShell).toBeTruthy();
+
+    viewerBodyWidth = 720;
+    window.dispatchEvent(new Event('resize'));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '50%' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '50%' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '75%' }));
+
+    viewerBodyWidth = 1000;
+    window.dispatchEvent(new Event('resize'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '75%' })).toBeTruthy();
+    });
+  });
+
+  it('updates auto-fit when the overflow witness changes at the same measured width', async () => {
+    let viewerBodyWidth = 900;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, viewerBodyWidth, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile({
+          name: 'breakpoint-overflow-preview.html',
+          path: 'breakpoint-overflow-preview.html',
+        })}
+        liveHtml="<html><body><main>Breakpoint-sensitive page</main></body></html>"
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(frame);
+    fireEvent.load(frame);
+    const responsiveRequest = latestPreviewContentSizeRequest(previewWindow);
+    act(() => postPreviewContentSizeResponse(previewWindow, responsiveRequest, 900, 900));
+    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+
+    viewerBodyWidth = 720;
+    window.dispatchEvent(new Event('resize'));
+    let overflowRequest = latestPreviewContentSizeRequest(previewWindow);
+    await waitFor(() => {
+      overflowRequest = latestPreviewContentSizeRequest(previewWindow);
+      expect(overflowRequest.canvasWidth).toBe(720);
+      expect(overflowRequest.measurementId).not.toBe(responsiveRequest.measurementId);
+    });
+    // The resize schedules several legitimate follow-up measurements (rAF,
+    // then 80/260ms). Under a loaded full-suite worker, one can supersede the
+    // request observed by waitFor before this continuation resumes. Reply to
+    // the latest witnessed request synchronously so the test exercises the
+    // overflow-state rerender instead of intentionally sending a stale nonce.
+    act(() => {
+      overflowRequest = latestPreviewContentSizeRequest(previewWindow);
+      expect(overflowRequest.canvasWidth).toBe(720);
+      postPreviewContentSizeResponse(previewWindow, overflowRequest, 900, 720);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '80%' })).toBeTruthy();
+    });
+  });
+
+  it('requests the content-size bridge for powered desktop previews before auto-fitting', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        if (this instanceof HTMLIFrameElement || this.classList.contains('comment-preview-canvas')) {
+          return testRect(0, 0, 900, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/preview/isolation') {
+        return new Response(JSON.stringify({
+          supported: true,
+          baseOrigin: 'http://127.0.0.1:48123',
+          pathPrefix: 'powered',
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects/project-1/files') {
+        return new Response(JSON.stringify({ files: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile({
+          name: 'powered-wide.html',
+          path: 'powered-wide.html',
+          mtime: 1710000000,
+        })}
+        liveHtml='<html><body><script>new SharedArrayBuffer(8)</script><main style="min-width:1440px">Wide powered page</main></body></html>'
+      />,
+    );
+
+    await screen.findByTestId('artifact-preview-frame');
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-powered')).toBe('true');
+      const src = new URL(frame.getAttribute('src') ?? '');
+      expect(`${src.origin}${src.pathname}`).toBe(
+        'http://localhost:48123/api/projects/project-1/powered/powered-wide.html',
+      );
+      expect(src.searchParams.get('v')).toBe('1710000000');
+      expect(src.searchParams.get('r')).toBe('0');
+      expect(src.searchParams.getAll('odPreviewBridge')).toEqual(['scroll', 'selection', 'snapshot', 'observability']);
+      expect(src.searchParams.get('odPreviewEpoch')).toMatch(/^preview-document-\d+$/);
+    });
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(frame);
+    fireEvent.load(frame);
+    act(() => postPreviewContentWidth(previewWindow, 1440, 900));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+  });
+
+  it('keeps desktop HTML previews at 100% when measured content already fits', async () => {
+    let viewerBodyWidth = 900;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, viewerBodyWidth, 700);
+        if (this instanceof HTMLIFrameElement || this.classList.contains('comment-preview-canvas')) {
+          return testRect(0, 0, viewerBodyWidth, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile({
+          name: 'responsive-preview.html',
+          path: 'responsive-preview.html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Responsive preview',
+            entry: 'responsive-preview.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><main style="width:100%">Responsive landing page</main></body></html>'
+      />,
+    );
+
+    const responsiveFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(responsiveFrame);
+    fireEvent.load(responsiveFrame);
+    act(() => postPreviewContentWidth(previewWindow, 900));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    });
+    viewerBodyWidth = 720;
+    window.dispatchEvent(new Event('resize'));
+    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    });
+    const scaledShell = Array.from(container.querySelectorAll('div')).find(
+      (node) => node.style.transform === 'scale(1)',
+    );
+    expect(scaledShell).toBeTruthy();
+  });
+
+  it('reuses a confirmed fixed-width witness only for the same file revision', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, 900, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+    const file = htmlPreviewFile({
+      name: 'cached-fixed-width.html',
+      path: 'cached-fixed-width.html',
+      mtime: 1710000000,
+    });
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      file,
+      liveHtml: '<html><body><main style="min-width:1440px">Fixed</main></body></html>',
+    };
+
+    const first = render(<FileViewer {...props} />);
+    const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const firstWindow = installSandboxedPreviewWindow(firstFrame);
+    fireEvent.load(firstFrame);
+    act(() => postPreviewContentWidth(firstWindow, 1440, 900));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+    const preReloadRequest = latestPreviewContentSizeRequest(firstWindow);
+    const preReloadRequestCount = previewContentSizeRequests(firstWindow).length;
+    fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    });
+    await Promise.resolve();
+    expect(previewContentSizeRequests(firstWindow)).toHaveLength(preReloadRequestCount);
+    act(() => {
+      postPreviewContentSizeResponse(firstWindow, preReloadRequest, 96_400, 96_400);
+    });
+    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    first.unmount();
+
+    const sameRevision = render(<FileViewer {...props} />);
+    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    const remountedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const remountedWindow = installSandboxedPreviewWindow(remountedFrame);
+    fireEvent.load(remountedFrame);
+    const remountedRequest = latestPreviewContentSizeRequest(remountedWindow);
+    expect(remountedRequest.measurementId).not.toBe(preReloadRequest.measurementId);
+    expect(remountedRequest.generation).not.toBe(preReloadRequest.generation);
+    expect(remountedRequest.documentEpoch).toBe(preReloadRequest.documentEpoch);
+    sameRevision.unmount();
+
+    render(<FileViewer {...props} file={{ ...file, mtime: 1710000001 }} />);
+    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+  });
+
+  it.each([
+    ['Comment', 'board-mode-toggle'],
+    ['Draw', 'draw-overlay-toggle'],
+    ['Edit', 'manual-edit-mode-toggle'],
+  ])('keeps fixed-width auto-fit stable while %s freezes an older revision', async (_mode, toggleTestId) => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, 900, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+    const file = htmlPreviewFile({
+      name: `annotation-frozen-width-${toggleTestId}.html`,
+      path: `annotation-frozen-width-${toggleTestId}.html`,
+      mtime: 1710000000,
+    });
+    const view = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main style="min-width:1440px">Frozen V1</main></body></html>'
+      />,
+    );
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(frame);
+    fireEvent.load(frame);
+    act(() => postPreviewContentWidth(previewWindow, 1440, 900));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId(toggleTestId));
+    await waitFor(() => {
+      expect(screen.getByTestId(toggleTestId).getAttribute('aria-pressed')).toBe('true');
+    });
+    view.rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{ ...file, mtime: 1710000001 }}
+        filesRefreshKey={7}
+        liveHtml='<html><body><main style="min-width:1920px">Frozen V2</main></body></html>'
+      />,
+    );
+    await Promise.resolve();
+
+    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    fireEvent.click(screen.getByTestId(toggleTestId));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    });
+  });
+
+  it('portals the comment composer to the preview viewport instead of the clipped canvas', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        if (this.dataset.testid === 'comment-preview-layout') return testRect(0, 0, 900, 700);
+        if (this.dataset.testid === 'comment-preview-canvas') return testRect(260, 32, 390, 640);
+        if (this.dataset.testid === 'comment-popover') return testRect(0, 0, 320, 320);
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    clickAgentTool('board-mode-toggle');
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        hoverPoint: { x: 12, y: 16 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const layout = screen.getByTestId('comment-preview-layout');
+    const canvas = screen.getByTestId('comment-preview-canvas');
+    await screen.findByTestId('comment-popover');
+
+    await waitFor(() => {
+      const popover = screen.getByTestId('comment-popover');
+      expect(layout.contains(popover)).toBe(true);
+      expect(canvas.contains(popover)).toBe(false);
+    });
+  });
+
+  it('keeps the Comment CTA for a new element annotation in a viewer-only team project', async () => {
+    const collab: CollabContextValue = {
+      workspaceContext: teamWorkspaceContext(),
+      workspaceContextLoading: false,
+      enabled: true,
+      member: { memberId: 'wm-1', name: 'Member', role: 'member' },
+      present: [],
+      publishedVersion: 1,
+      syncState: 'synced',
+      viewerOnly: true,
+      writerAuthority: 'denied',
+      isOwner: false,
+      isEffectiveOwner: false,
+      isSharedNonOwner: true,
+      ownerDisplayName: 'Owner',
+      ownerRole: 'owner',
+      downloadPending: false,
+      reportChange: () => {},
+      requestPublish: () => {},
+      refreshPresence: () => {},
+      checkStatusNow: () => {},
+    };
+
+    render(
+      <CollabProvider value={collab}>
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+          viewerOnly
+          onSavePreviewComment={vi.fn()}
+        />
+      </CollabProvider>,
+    );
+
+    clickAgentTool('board-mode-toggle');
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        hoverPoint: { x: 12, y: 16 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const input = await screen.findByTestId('comment-popover-input');
+    fireEvent.change(input, { target: { value: 'Please tighten this heading.' } });
+
+    expect(input).not.toHaveAttribute('readonly');
+    expect(screen.getByTestId('comment-popover-save')).toHaveTextContent('Comment');
+    expect(screen.queryByTestId('comment-add-send')).toBeNull();
   });
 
   it('docks the comment side panel outside the clickable preview canvas', () => {
@@ -4705,6 +10255,135 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.getByTestId('comment-active-pin').textContent).toBe('1');
   });
 
+  it('does not reuse a surviving pin number for a new comment after a deletion', async () => {
+    // One comment left whose server-assigned pinSeq is 2 (pin 1 was deleted).
+    // Pin numbers are permanent — the daemon assigns MAX(pin_seq)+1, never
+    // count+1 — so the provisional pin for a brand-new comment must read 3,
+    // not collide with the surviving marker 2.
+    const survivingComment: PreviewComment = {
+      id: 'comment-surviving',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'Hero',
+      text: 'Hero',
+      htmlHint: '<main data-od-id="hero">Hero</main>',
+      position: { x: 8, y: 12, width: 120, height: 48 },
+      note: 'Surviving note',
+      status: 'open',
+      createdAt: 10,
+      updatedAt: 10,
+      pinSeq: 2,
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main><button data-od-id="mood">Mood</button></body></html>'
+        previewComments={[survivingComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-targets',
+        targets: [{
+          elementId: 'hero',
+          selector: '[data-od-id="hero"]',
+          label: 'Hero',
+          text: 'Hero',
+          position: { x: 8, y: 12, width: 120, height: 48 },
+          htmlHint: '<main data-od-id="hero">Hero</main>',
+        }],
+      },
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-saved-marker-hero').textContent).toBe('2');
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'mood',
+        selector: '[data-od-id="mood"]',
+        label: 'Mood',
+        text: 'Mood',
+        position: { x: 8, y: 80, width: 90, height: 32 },
+        hoverPoint: { x: 12, y: 84 },
+        htmlHint: '<button data-od-id="mood">Mood</button>',
+      },
+    }));
+
+    expect((await screen.findByTestId('comment-active-pin')).textContent).toBe('3');
+    // The surviving marker keeps its permanent number.
+    expect(screen.getByTestId('comment-saved-marker-hero').textContent).toBe('2');
+  });
+
+  it('does not reuse a retired pin number held by a non-open comment', async () => {
+    // A resolved comment keeps its pin_seq row in the daemon DB, so the
+    // daemon's MAX(pin_seq)+1 counts it even though the canvas renders no
+    // marker for it. The provisional pin for a brand-new comment must skip
+    // that retired number (here: resolved pinSeq 2 -> new pin reads 3, not 1).
+    const resolvedComment: PreviewComment = {
+      id: 'comment-resolved',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'Hero',
+      text: 'Hero',
+      htmlHint: '<main data-od-id="hero">Hero</main>',
+      position: { x: 8, y: 12, width: 120, height: 48 },
+      note: 'Resolved note',
+      status: 'resolved',
+      createdAt: 10,
+      updatedAt: 10,
+      pinSeq: 2,
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main><button data-od-id="mood">Mood</button></body></html>'
+        previewComments={[resolvedComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'mood',
+        selector: '[data-od-id="mood"]',
+        label: 'Mood',
+        text: 'Mood',
+        position: { x: 8, y: 80, width: 90, height: 32 },
+        hoverPoint: { x: 12, y: 84 },
+        htmlHint: '<button data-od-id="mood">Mood</button>',
+      },
+    }));
+
+    expect((await screen.findByTestId('comment-active-pin')).textContent).toBe('3');
+    // Resolved comments render no saved marker — their number is simply retired.
+    expect(screen.queryByTestId('comment-saved-marker-hero')).toBeNull();
+  });
+
   it('keeps comment marker numbers global across deck slides', async () => {
     const slideOneComment: PreviewComment = {
       id: 'comment-slide-one',
@@ -4790,7 +10469,13 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByTestId('comment-saved-marker-slide-one-title')).toBeNull();
   });
 
-  it('orders side comments by creation time while keeping activity timestamps', () => {
+  it('orders side comments by creation time (newest first) while keeping activity timestamps', () => {
+    // recvq5BVsolIxi: default sidebar order is "newest CREATED first", not
+    // "most recently ACTIVE first" — the comment updated most recently
+    // (`createdFirstUpdatedLast`, note "Latest edit") is actually the OLDER
+    // of the two by creation time, so it must sort SECOND despite its
+    // updatedAt being the most recent ("just now" still renders on it, just
+    // not first in the list).
     const createdFirstUpdatedLast: PreviewComment = {
       id: 'comment-updated-last',
       projectId: 'project-1',
@@ -4834,9 +10519,13 @@ describe('FileViewer tweaks toolbar', () => {
     const [firstItem, secondItem] = items;
     expect(firstItem).toBeDefined();
     expect(secondItem).toBeDefined();
-    expect(firstItem!.textContent).toContain('Latest edit');
-    expect(firstItem!.textContent).toContain('just now');
-    expect(secondItem!.textContent).toContain('Older edit');
+    // Created most recently (5 minutes ago) → shows first by default, even
+    // though ITS OWN last activity ("Older edit"'s updatedAt) is older.
+    expect(firstItem!.textContent).toContain('Older edit');
+    // Created earliest (20 minutes ago) → sorts second, despite being the
+    // most recently ACTIVE comment ("just now").
+    expect(secondItem!.textContent).toContain('Latest edit');
+    expect(secondItem!.textContent).toContain('just now');
   });
 
   it('does not preload non-open element comments into the picker composer', async () => {
@@ -5017,7 +10706,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByTestId('annotation-style-summary')).toBeNull();
   });
 
-  it('switches to the comment panel after saving an annotation comment', async () => {
+  it('keeps the comment panel closed after saving an annotation comment', async () => {
     function Harness() {
       const [comments, setComments] = useState<PreviewComment[]>([]);
       return (
@@ -5058,7 +10747,7 @@ describe('FileViewer tweaks toolbar', () => {
     render(<Harness />);
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    clickAgentTool('board-mode-toggle');
 
     window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
@@ -5074,20 +10763,21 @@ describe('FileViewer tweaks toolbar', () => {
     }));
 
     const input = await screen.findByTestId('comment-popover-input');
-    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
     fireEvent.change(input, { target: { value: '加大字号' } });
     fireEvent.click(screen.getByTestId('comment-popover-save'));
 
     await waitFor(() => expect(screen.queryByTestId('comment-popover')).toBeNull());
-    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('加大字号')).toBeTruthy();
-    const activeItem = document.querySelector('[data-comment-id="comment-saved"]');
-    expect(activeItem?.className).toContain('active');
-    expect(activeItem?.getAttribute('aria-current')).toBe('true');
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(screen.getByText('Comment saved')).toBeTruthy();
   });
 
   it('keeps saved marker numbers stable after saving another comment', async () => {
+    // pinSeq is what actually pins the marker number now (recvq5BVsolIxi) —
+    // set explicitly here exactly as the daemon would assign it at creation
+    // (1, 2, then 3), independent of each fixture's deliberately-out-of-order
+    // createdAt below (which exists only to prove the number does NOT
+    // recompute from creation time or array position).
     const olderComment: PreviewComment = {
       id: 'comment-older',
       projectId: 'project-1',
@@ -5103,6 +10793,7 @@ describe('FileViewer tweaks toolbar', () => {
       status: 'open',
       createdAt: 10,
       updatedAt: 10,
+      pinSeq: 1,
     };
     const newerComment: PreviewComment = {
       ...olderComment,
@@ -5114,6 +10805,7 @@ describe('FileViewer tweaks toolbar', () => {
       note: 'Newer comment',
       createdAt: 20,
       updatedAt: 20,
+      pinSeq: 2,
     };
 
     function Harness() {
@@ -5145,6 +10837,7 @@ describe('FileViewer tweaks toolbar', () => {
               status: 'open',
               createdAt: 5,
               updatedAt: 30,
+              pinSeq: 3,
             };
             setComments((current) => [saved, ...current]);
             return saved;
@@ -5187,7 +10880,10 @@ describe('FileViewer tweaks toolbar', () => {
   });
 
   it('lets element comments queue to chat while a task is running', async () => {
-    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue(undefined);
+    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue({
+      status: 'queued',
+      commentIds: ['hero-board-1'],
+    });
     render(
       <FileViewer
         projectId="project-1"
@@ -5232,7 +10928,10 @@ describe('FileViewer tweaks toolbar', () => {
   });
 
   it('keeps the comment draft when chat queueing declines the send', async () => {
-    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue(false);
+    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue({
+      status: 'rejected',
+      commentIds: [],
+    });
     render(
       <FileViewer
         projectId="project-1"
@@ -5543,6 +11242,220 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Do not recreate this stale comment')).toBeNull();
   });
 
+  it('keeps a saved comment open when deletion is rejected', async () => {
+    const comment: PreviewComment = {
+      id: 'comment-delete-rejected',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-delete-rejected',
+      selector: '[data-od-pin="pin-delete-rejected"]',
+      label: 'pin-delete-rejected',
+      text: '',
+      htmlHint: '',
+      position: { x: 40, y: 52, width: 18, height: 18 },
+      note: 'Retain me',
+      status: 'open',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const onRemovePreviewComment = vi.fn().mockResolvedValue(false);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[comment]}
+        onRemovePreviewComment={onRemovePreviewComment}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Open comment for pin-delete-rejected',
+    }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(onRemovePreviewComment).toHaveBeenCalledWith(comment.id));
+    expect(screen.getByTestId('comment-popover-input')).toBeTruthy();
+    expect(screen.getByTestId('comment-saved-marker-pin-delete-rejected')).toBeTruthy();
+  });
+
+  it('keeps a saved comment when send is rejected and removes it only after queue acceptance', async () => {
+    const comment: PreviewComment = {
+      id: 'comment-send-result',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-send-result',
+      selector: '[data-od-pin="pin-send-result"]',
+      label: 'pin-send-result',
+      text: '',
+      htmlHint: '',
+      position: { x: 40, y: 52, width: 18, height: 18 },
+      note: 'Send me safely',
+      status: 'open',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const onSendBoardCommentAttachments = vi.fn()
+      .mockResolvedValueOnce({ status: 'rejected', commentIds: [] })
+      .mockResolvedValueOnce({ status: 'queued', commentIds: [comment.id] });
+    const onRemovePreviewComment = vi.fn().mockResolvedValue(true);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[comment]}
+        onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+        onRemovePreviewComment={onRemovePreviewComment}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Open comment for pin-send-result',
+    }));
+    fireEvent.click(screen.getByTestId('comment-add-send'));
+
+    await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(1));
+    expect(onRemovePreviewComment).not.toHaveBeenCalled();
+    expect(screen.getByTestId('comment-popover-input')).toBeTruthy();
+
+    await waitFor(() => {
+      expect((screen.getByTestId('comment-add-send') as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('comment-add-send'));
+    await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onRemovePreviewComment).toHaveBeenCalledWith(comment.id));
+    await waitFor(() => expect(screen.queryByTestId('comment-popover')).toBeNull());
+  });
+
+  it('keeps a queued saved comment visible when no persistence removal callback exists', async () => {
+    const comment: PreviewComment = {
+      id: 'comment-send-without-removal',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-send-without-removal',
+      selector: '[data-od-pin="pin-send-without-removal"]',
+      label: 'pin-send-without-removal',
+      text: '',
+      htmlHint: '',
+      position: { x: 40, y: 52, width: 18, height: 18 },
+      note: 'Keep until persistence can remove me',
+      status: 'open',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue({
+      status: 'queued',
+      commentIds: [comment.id],
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[comment]}
+        onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Open comment for pin-send-without-removal',
+    }));
+    fireEvent.click(screen.getByTestId('comment-add-send'));
+
+    await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('comment-popover-input')).toBeTruthy();
+    expect(screen.getByTestId('comment-saved-marker-pin-send-without-removal')).toBeTruthy();
+  });
+
+  it('removes only comments that were queued before a later selected send is rejected', async () => {
+    const comments: PreviewComment[] = [
+      {
+        id: 'comment-partial-first',
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+        filePath: 'preview.html',
+        elementId: 'pin-partial-first',
+        selector: '[data-od-pin="pin-partial-first"]',
+        label: 'pin-partial-first',
+        text: '',
+        htmlHint: '',
+        position: { x: 20, y: 24, width: 18, height: 18 },
+        note: 'First queued comment',
+        status: 'open',
+        createdAt: 10,
+        updatedAt: 10,
+      },
+      {
+        id: 'comment-partial-second',
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+        filePath: 'preview.html',
+        elementId: 'pin-partial-second',
+        selector: '[data-od-pin="pin-partial-second"]',
+        label: 'pin-partial-second',
+        text: '',
+        htmlHint: '',
+        position: { x: 48, y: 24, width: 18, height: 18 },
+        note: 'Second rejected comment',
+        status: 'open',
+        createdAt: 20,
+        updatedAt: 20,
+      },
+    ];
+    const removed: string[] = [];
+    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue({
+      status: 'rejected',
+      commentIds: [comments[0]!.id],
+    });
+
+    function Harness() {
+      const [previewComments, setPreviewComments] = useState(comments);
+      return (
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+          previewComments={previewComments}
+          onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+          onRemovePreviewComment={async (commentId) => {
+            removed.push(commentId);
+            setPreviewComments((current) => (
+              current.filter((comment) => comment.id !== commentId)
+            ));
+            return true;
+          }}
+        />
+      );
+    }
+
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    const selectButtons = screen.getAllByRole('button', { name: 'Select' });
+    expect(selectButtons).toHaveLength(2);
+    for (const button of selectButtons) fireEvent.click(button);
+    fireEvent.click(screen.getByTestId('comment-side-send-claude'));
+
+    await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(removed).toEqual([comments[0]!.id]));
+    expect(screen.queryByText('First queued comment')).toBeNull();
+    expect(screen.getByText('Second rejected comment')).toBeTruthy();
+    expect(screen.getByTestId('comment-side-selectbar').textContent).toContain('1 selected');
+  });
+
   it('moves focus between comment side panel toggles when collapsing and expanding without a pre-focused click target', async () => {
     const onCollapseChange = vi.fn();
     const onSelectAll = vi.fn();
@@ -5655,6 +11568,119 @@ describe('FileViewer tweaks toolbar', () => {
     expect(showComments.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('renders the signed-in user own avatar and name on their comment when the member roster is empty', async () => {
+    // A personal workspace (and the cold window before a team roster lands)
+    // answers `/api/workspace/members` 200 with an empty list, so NOTHING
+    // resolves through the directory — including the viewer themselves. The
+    // viewer's own identity must still render: it comes from the workspace
+    // context the caller already holds, not from this roster.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.includes('/api/workspace/members')) {
+          return new Response(JSON.stringify({ members: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+
+    const comment: PreviewComment = {
+      id: 'comment-mine',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'hero-copy',
+      selector: '[data-od-id="hero-copy"]',
+      label: 'Hero copy',
+      text: 'Hero copy',
+      htmlHint: '<p data-od-id="hero-copy">',
+      position: { x: 16, y: 24, width: 320, height: 48 },
+      note: 'Tighten this headline.',
+      status: 'open',
+      authorMemberId: 'wm-self',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(
+      <CommentSidePanel
+        comments={[comment]}
+        currentUser={{ memberId: 'wm-self', displayName: '琼羽', role: 'owner' }}
+        selectedIds={new Set()}
+        activeCommentId={null}
+        collapsed={false}
+        onCollapsedChange={() => {}}
+        onToggleSelect={() => {}}
+        onSelectAll={() => {}}
+        onClearSelection={() => {}}
+        onReply={() => {}}
+        onSendSelected={() => {}}
+        sending={false}
+        t={t}
+      />,
+    );
+
+    const item = await screen.findByTestId('comment-side-item');
+    await waitFor(() => {
+      expect(item.querySelector('.comment-side-avatar')?.textContent).toBe('琼');
+    });
+    expect(within(item).getByText(/琼羽/)).toBeTruthy();
+  });
+
+  it('leaves a comment by an unresolved other member on its id-only rendering', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.includes('/api/workspace/members')) {
+          return new Response(JSON.stringify({ members: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+
+    const comment: PreviewComment = {
+      id: 'comment-theirs',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'hero-copy',
+      selector: '[data-od-id="hero-copy"]',
+      label: 'Hero copy',
+      text: 'Hero copy',
+      htmlHint: '<p data-od-id="hero-copy">',
+      position: { x: 16, y: 24, width: 320, height: 48 },
+      note: 'Tighten this headline.',
+      status: 'open',
+      authorMemberId: 'wm-someone-else',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(
+      <CommentSidePanel
+        comments={[comment]}
+        currentUser={{ memberId: 'wm-self', displayName: '琼羽', role: 'owner' }}
+        selectedIds={new Set()}
+        activeCommentId={null}
+        collapsed={false}
+        onCollapsedChange={() => {}}
+        onToggleSelect={() => {}}
+        onSelectAll={() => {}}
+        onClearSelection={() => {}}
+        onReply={() => {}}
+        onSendSelected={() => {}}
+        sending={false}
+        t={t}
+      />,
+    );
+
+    const item = await screen.findByTestId('comment-side-item');
+    expect(item.querySelector('.comment-side-avatar')).toBeNull();
+    expect(within(item).queryByText(/琼羽/)).toBeNull();
+  });
+
   it('lets the inspect panel shrink inside narrow preview layouts', () => {
     const css = readFileSync(join(process.cwd(), 'src/styles/viewer/core.css'), 'utf8');
     const rule = css.match(/\.inspect-panel\s*\{[^}]+\}/)?.[0] ?? '';
@@ -5734,33 +11760,161 @@ describe('FileViewer tweaks toolbar', () => {
     fireDragEventWithClientY('dragOver', items[0]!, { dataTransfer, clientY: 0 });
     fireDragEventWithClientY('drop', items[0]!, { dataTransfer, clientY: 0 });
 
-    expect(onReorder).toHaveBeenCalledWith(['comment-2', 'comment-1']);
+    // recvq5BVsolIxi Phase 2: onReorder now also reports WHICH comment moved,
+    // so the caller can persist just that one row's sort_key.
+    expect(onReorder).toHaveBeenCalledWith(['comment-2', 'comment-1'], 'comment-2');
   });
 
-  it('appends a newly saved comment to the current visible comment order', () => {
-    expect(
-      appendSavedPreviewCommentOrder(
-        [],
-        [{ id: 'comment-1' }, { id: 'comment-2' }],
-        'comment-3',
-      ),
-    ).toEqual(['comment-1', 'comment-2', 'comment-3']);
+  it('computes a persisted sort_key for a drag-reorder as a midpoint between the new neighbors', () => {
+    const older: PreviewComment = {
+      id: 'comment-older',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'a',
+      selector: '[data-od-id="a"]',
+      label: 'A',
+      text: '',
+      htmlHint: '',
+      position: { x: 0, y: 0, width: 0, height: 0 },
+      note: 'Older',
+      status: 'open',
+      createdAt: 10,
+      updatedAt: 10,
+      sortKey: 10,
+    };
+    const middle: PreviewComment = { ...older, id: 'comment-middle', note: 'Middle', createdAt: 20, updatedAt: 20, sortKey: 20 };
+    const newest: PreviewComment = { ...older, id: 'comment-newest', note: 'Newest', createdAt: 30, updatedAt: 30, sortKey: 30 };
+    // Sidebar's current (pre-drag) display order is sortKey descending.
+    const comments = [newest, middle, older];
 
+    // Drag "older" (sortKey 10) between "newest" (30) and "middle" (20) —
+    // a midpoint, and neither existing sortKey is disturbed.
     expect(
-      appendSavedPreviewCommentOrder(
-        ['comment-2', 'comment-1'],
-        [{ id: 'comment-1' }, { id: 'comment-2' }],
-        'comment-3',
-      ),
-    ).toEqual(['comment-2', 'comment-1', 'comment-3']);
+      computeReorderedSortKey(comments, ['comment-newest', 'comment-older', 'comment-middle'], 'comment-older'),
+    ).toBe(25);
 
+    // Drag "middle" to the very front (past "newest", the new sole neighbor
+    // below it) — one past the current max, so it's now the front-most.
     expect(
-      appendSavedPreviewCommentOrder(
-        ['comment-1', 'comment-2'],
-        [{ id: 'comment-1' }, { id: 'comment-2' }],
-        'comment-2',
-      ),
-    ).toEqual(['comment-1', 'comment-2']);
+      computeReorderedSortKey(comments, ['comment-middle', 'comment-newest', 'comment-older'], 'comment-middle'),
+    ).toBe(31);
+
+    // Drag "newest" to the very back (past "older", its new sole neighbor
+    // above) — one below the current min.
+    expect(
+      computeReorderedSortKey(comments, ['comment-middle', 'comment-older', 'comment-newest'], 'comment-newest'),
+    ).toBe(9);
+  });
+
+  it('shows the newest comment first by default (recvq5BVsolIxi)', () => {
+    const older: PreviewComment = {
+      id: 'comment-older',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'a',
+      selector: '[data-od-id="a"]',
+      label: 'A',
+      text: '',
+      htmlHint: '',
+      position: { x: 0, y: 0, width: 0, height: 0 },
+      note: 'First comment ever',
+      status: 'open',
+      createdAt: 10,
+      updatedAt: 10,
+    };
+    const newer: PreviewComment = { ...older, id: 'comment-newer', note: 'Just posted', createdAt: 20, updatedAt: 20 };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[older, newer]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const items = screen.getAllByTestId('comment-side-item');
+    // Neither fixture sets `sortKey` — the default falls back to createdAt,
+    // so the more-recently-created comment ("Just posted") leads the list
+    // even though it was passed SECOND in `previewComments`.
+    expect(items[0]!.textContent).toContain('Just posted');
+    expect(items[1]!.textContent).toContain('First comment ever');
+  });
+
+  it('persists a drag reorder via sort_key and keeps it after the comment list refreshes (recvq5BVsolIxi)', async () => {
+    const onReorderPreviewComment = vi.fn().mockResolvedValue(undefined);
+    const commentA: PreviewComment = {
+      id: 'comment-a',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'a',
+      selector: '[data-od-id="a"]',
+      label: 'A',
+      text: '',
+      htmlHint: '',
+      position: { x: 0, y: 0, width: 0, height: 0 },
+      note: 'Comment A',
+      status: 'open',
+      createdAt: 10,
+      updatedAt: 10,
+      sortKey: 10,
+    };
+    const commentB: PreviewComment = { ...commentA, id: 'comment-b', note: 'Comment B', createdAt: 20, updatedAt: 20, sortKey: 20 };
+
+    const { rerender } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[commentA, commentB]}
+        onReorderPreviewComment={onReorderPreviewComment}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    // Default order: B (sortKey 20) first, A (sortKey 10) second.
+    let items = screen.getAllByTestId('comment-side-item');
+    expect(items[0]!.getAttribute('data-comment-id')).toBe('comment-b');
+    expect(items[1]!.getAttribute('data-comment-id')).toBe('comment-a');
+
+    // Drag A (currently second, the drag handle at index 1) above B.
+    items[0]!.getBoundingClientRect = vi.fn(() => ({
+      x: 0, y: 0, top: 0, left: 0, right: 300, bottom: 40, width: 300, height: 40, toJSON: () => ({}),
+    }));
+    const dataTransfer = createDragDataTransfer();
+    // FileViewer renders through the real i18n default (English), unlike the
+    // CommentSidePanel-direct tests above that inject a key-echoing `t` stub —
+    // so the accessible label is the actual translated copy, not the raw key.
+    fireEvent.dragStart(screen.getAllByLabelText('Drag to reorder')[1]!, { dataTransfer });
+    fireDragEventWithClientY('dragOver', items[0]!, { dataTransfer, clientY: 0 });
+    fireDragEventWithClientY('drop', items[0]!, { dataTransfer, clientY: 0 });
+
+    // No neighbor above A's new (front) position, so its sort_key becomes
+    // one past B's — a PATCH request, not a whole-list renumber.
+    await waitFor(() => expect(onReorderPreviewComment).toHaveBeenCalledWith('comment-a', 21));
+
+    // Simulate the daemon having persisted it and the parent re-fetching:
+    // re-render with the updated sortKey already applied, standing in for a
+    // refresh/tab-switch. The dragged order must survive it.
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[{ ...commentA, sortKey: 21 }, commentB]}
+        onReorderPreviewComment={onReorderPreviewComment}
+      />,
+    );
+    items = screen.getAllByTestId('comment-side-item');
+    expect(items[0]!.getAttribute('data-comment-id')).toBe('comment-a');
+    expect(items[1]!.getAttribute('data-comment-id')).toBe('comment-b');
   });
 
   it('does not classify text labels containing a standalone article as links', () => {
@@ -5851,6 +12005,7 @@ describe('FileViewer tweaks toolbar', () => {
           onRemovePreviewComment={async (commentId) => {
             removed.push(commentId);
             setComments((current) => current.filter((comment) => comment.id !== commentId));
+            return true;
           }}
         />
       );
@@ -6428,13 +12583,13 @@ describe('LiveArtifactViewer', () => {
     expect(rule).toContain('display: none;');
   });
 
-  it('keeps the presentation exit button aligned with preview chrome spacing', () => {
+  it('keeps the legacy presentation exit affordance hidden for deck presentation', () => {
     const css = readExpandedIndexCss();
     const rule = css.match(/\.present-exit\s*\{[^}]+\}/)?.[0] ?? '';
 
+    expect(rule).toContain('display: none;');
     expect(rule).toContain('top: calc(env(safe-area-inset-top, 0px) + 20px);');
     expect(rule).toContain('right: calc(env(safe-area-inset-right, 0px) + 20px);');
-    expect(rule).toContain('display: inline-flex;');
     expect(rule).toContain('align-items: center;');
   });
 
@@ -6455,12 +12610,12 @@ describe('LiveArtifactViewer', () => {
     expect(rule).toContain('outline-offset: 2px');
   });
 
-  it('keeps in-tab presentation overlays anchored to the inherited workspace tab height', () => {
+  it('lets in-tab presentation overlays cover the full window', () => {
     const css = readExpandedIndexCss();
     const overlayRule = css.match(/\.present-overlay\s*\{[^}]+\}/)?.[0] ?? '';
 
     expect(overlayRule).toContain('position: fixed;');
-    expect(overlayRule).toContain('top: var(--workspace-tabs-chrome-height, 38px);');
+    expect(overlayRule).toContain('top: 0;');
     expect(overlayRule).toContain('right: 0;');
     expect(overlayRule).toContain('bottom: 0;');
     expect(overlayRule).toContain('left: 0;');

@@ -1,25 +1,32 @@
 ---
 name: huashu-golden-circle
+en_name: "Present a Brand-Repositioning Strategy like a Top Consulting Principal"
+zh_name: "像顶级咨询董事一样讲品牌重塑战略"
 description: |
-  Golden Circle Diagram (黄金圆环图解) — Sinek/TED-school diagrammatic
-  minimalism, generated from the 中性派「单图母图概念图解 / Diagrammatic
-  Minimalism」spec of 花叔 (alchaincyf)'s huashu-design. Warm-white paper,
-  ink, and exactly one gold accent (#E8860C); a single nested concentric
-  WHY/HOW/WHAT circle — pure border-radius divs — carries every page through
-  fill / highlight / grey / outline modes; uppercase Jost labels embedded in
-  the figure, Manrope headlines, zero charts and zero images. Use when the
-  user wants a methodology deck, framework explainer, TED-style talk,
-  manifesto, 方法论 PPT, 理论框架讲解, 黄金圆环, or a one-diagram concept
-  keynote.
+  A brand-repositioning strategy for a heritage coffee chain — why, how, what — the governing idea and the moves to prove it. Built as a decision-grade consulting deck for client CMO, board.
+en_description: |
+  A brand-repositioning strategy for a heritage coffee chain — why, how, what — the governing idea and the moves to prove it. Built as a decision-grade consulting deck for client CMO, board.
+zh_description: |
+  像顶级咨询董事一样讲品牌重塑战略——一份可商业交付的咨询交付 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "consulting"
+  - "consulting-final-deck"
+  - "strategy"
+  - "consulting-deliverable"
+  - "client"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "huashu-golden-circle"
 triggers:
-  - "golden circle"
-  - "diagrammatic minimalism"
-  - "concept diagram deck"
-  - "methodology deck"
-  - "黄金圆环"
-  - "方法论 PPT"
-  - "同心圆图解"
-  - "理论框架幻灯片"
+  - "consulting-final-deck"
+  - "consulting"
+  - "Present a Brand-Repositioning Strategy like a Top Consulting Principal"
+  - "像顶级咨询董事一样讲品牌重塑战略"
+  - "consulting-deliverable"
+  - "strategy"
+  - "client"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
@@ -28,9 +35,11 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Use the Golden Circle Diagram template to turn my framework into a one-diagram HTML deck: warm-white paper, a single gold accent #E8860C, and one nested concentric-circle master figure reused across every page in fill, highlight, grey, and outline modes, with uppercase Jost labels embedded in the rings and Manrope headlines. Start from example.html, replace the content only, and keep the design system intact."
   example_prompt_i18n:
     zh-CN: "用「黄金圆环图解」模板把我的方法论做成单图母图 HTML 幻灯片：暖白纸底、唯一金色强调 #E8860C、一个嵌套同心圆母图以填充/高亮/灰化/描边四种模式贯穿全场，大写 Jost 标签嵌入圆环、Manrope 标题。从 example.html 出发只换内容，不要重写设计。"
+  category: "consulting"
+  scenario: "strategy"
+  example_prompt: "Create \"Present a Brand-Repositioning Strategy like a Top Consulting Principal\" as a decision-grade Consulting deck in this template's own visual system. Subject: A brand-repositioning strategy for a heritage coffee chain — why, how, what — the governing idea and the moves to prove it. Audience: client CMO, board. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a client know what to do Monday morning."
 ---
 
 # Golden Circle Diagram · 黄金圆环图解

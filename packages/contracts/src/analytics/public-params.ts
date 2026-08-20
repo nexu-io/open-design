@@ -7,9 +7,39 @@
 // triplet (has_available_configure_cli / configure_type /
 // configure_availability) is promoted to a globally registered property so
 // every event inherits it.
-export const EVENT_SCHEMA_VERSION = 2;
+// v3 (2026-07-27): local MCP and external-plugin entry attribution became
+// first-class. Existing v2 events remain queryable; v3 producers add only the
+// bounded source fields below and never treat self-reported plugin metadata as
+// an authorization or billing signal.
+// v4 (2026-08-04): run_created/run_finished add stable task lineage and
+// domain-grouped payloads while dual-writing the selected v2/v3 flat aliases.
+// Older app versions keep sending their original schema version; historical
+// events are not rewritten.
+export const EVENT_SCHEMA_VERSION = 4;
 
-export type AnalyticsClientType = 'web' | 'desktop';
+export type AnalyticsClientType = 'web' | 'desktop' | 'external_mcp';
+export type AnalyticsEntrySurface =
+  | 'open_design_ui'
+  | 'od_cli'
+  | 'external_mcp';
+export type AnalyticsHostProduct =
+  | 'codex_desktop'
+  | 'codex_cli'
+  | 'codex_unknown'
+  | 'claude_code'
+  | 'unknown';
+export type AnalyticsDistributionMechanism =
+  | 'git_marketplace'
+  | 'local_repo'
+  | 'manual'
+  | 'unknown';
+export type AnalyticsPublisherClass =
+  | 'open_design_first_party'
+  | 'third_party'
+  | 'unknown';
+export type AnalyticsAttributionQuality =
+  | 'self_reported'
+  | 'session_correlated';
 
 export interface AnalyticsPublicParams {
   event_id: string;
@@ -24,6 +54,13 @@ export interface AnalyticsPublicParams {
   device_id: string;
   user_id?: string;
   client_type: AnalyticsClientType;
+  entry_surface?: AnalyticsEntrySurface;
+  host_product?: AnalyticsHostProduct;
+  external_plugin_id?: string;
+  external_plugin_version?: string;
+  distribution_mechanism?: AnalyticsDistributionMechanism;
+  publisher_class?: AnalyticsPublisherClass;
+  attribution_quality?: AnalyticsAttributionQuality;
   app_version: string;
   locale: string;
 }
@@ -103,6 +140,20 @@ export const ANALYTICS_HEADER_SESSION_ID = 'x-od-analytics-session-id';
 export const ANALYTICS_HEADER_CLIENT_TYPE = 'x-od-analytics-client-type';
 export const ANALYTICS_HEADER_LOCALE = 'x-od-analytics-locale';
 export const ANALYTICS_HEADER_REQUEST_ID = 'x-od-analytics-request-id';
+export const ANALYTICS_HEADER_ENTRY_SURFACE = 'x-od-analytics-entry-surface';
+export const ANALYTICS_HEADER_HOST_PRODUCT = 'x-od-analytics-host-product';
+export const ANALYTICS_HEADER_EXTERNAL_PLUGIN_ID =
+  'x-od-analytics-external-plugin-id';
+export const ANALYTICS_HEADER_EXTERNAL_PLUGIN_VERSION =
+  'x-od-analytics-external-plugin-version';
+export const ANALYTICS_HEADER_DISTRIBUTION_MECHANISM =
+  'x-od-analytics-distribution-mechanism';
+export const ANALYTICS_HEADER_PUBLISHER_CLASS =
+  'x-od-analytics-publisher-class';
+export const ANALYTICS_HEADER_ATTRIBUTION_QUALITY =
+  'x-od-analytics-attribution-quality';
+export const ANALYTICS_HEADER_MCP_SESSION_ID =
+  'x-od-analytics-mcp-session-id';
 
 // Daemon serves the PostHog public config so the web bundle never embeds the
 // key at build time; loading via /api/analytics/config keeps POSTHOG_KEY /

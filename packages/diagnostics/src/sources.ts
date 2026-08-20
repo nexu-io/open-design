@@ -3,14 +3,18 @@ import { join } from "node:path";
 
 import { redactJsonText, redactText, type RedactionOptions } from "./redaction.js";
 
-export type LogSourceKind = "json" | "text";
+export type LogSourceKind = "json" | "text" | "binary";
 
 export interface LogSource {
   /** Relative path inside the export zip (forward-slash). */
   name: string;
   /** Absolute path on disk to read from. */
   absolutePath: string;
-  /** Whether the file should be parsed/redacted as JSON or plain text. */
+  /**
+   * How to read the file: `json`/`text` are read as UTF-8 and redacted;
+   * `binary` is copied verbatim (no text decode, no redaction) so an opaque
+   * artifact like a Chromium crash minidump reaches the bundle intact.
+   */
   kind: LogSourceKind;
   /** Optional max bytes to read from the file tail; omit for whole file. */
   tailBytes?: number;
@@ -19,11 +23,46 @@ export interface LogSource {
 export interface CollectedFile {
   name: string;
   absolutePath: string;
-  /** Redacted contents to put into the zip. Null when the file could not be read. */
-  content: string | null;
+  /**
+   * Contents to put into the zip: a redacted string for text/json sources, a
+   * raw Buffer for binary sources, or null when the file could not be read.
+   */
+  content: string | Buffer | null;
   bytes: number;
   /** Reason the file is missing or unreadable. */
   error?: string;
+}
+
+const NEWLINE_BYTE = 0x0a;
+
+/**
+ * Drop the leading partial line of a tail window read from mid-file.
+ *
+ * INVARIANT: every line in a truncated text source is a COMPLETE line. The
+ * sources this matters most for are jsonl event logs (`runs/<id>/events.jsonl`)
+ * — a byte-exact cut almost always lands mid-object, so the bundle's first
+ * line was half a JSON value and any consumer streaming the file through a
+ * jsonl parser fell over on line 1. Ordinary line-oriented logs get the same
+ * benefit: no half-line noise at the top of the captured tail.
+ *
+ * `data` must start ONE byte before the intended cut (the guard byte): when
+ * that byte is a newline the cut already begins a fresh line and only the
+ * guard byte is dropped, so an aligned cut never loses a complete line.
+ *
+ * Returns null when NO complete line fits in the window — a single record
+ * longer than the whole tail budget, so there is nothing to align to. The
+ * bytes there are the interior of one record; exporting them would put a
+ * fragment on line 1, which is precisely the breakage this alignment exists
+ * to prevent. The caller surfaces that as an unreadable source instead, so
+ * the bundle explains the omission rather than shipping half a JSON object
+ * that dies in the consumer's parser.
+ */
+function alignTailToLineStart(data: Buffer): Buffer | null {
+  if (data.length === 0) return data;
+  if (data[0] === NEWLINE_BYTE) return data.subarray(1);
+  const firstNewline = data.indexOf(NEWLINE_BYTE);
+  if (firstNewline === -1 || firstNewline + 1 >= data.length) return null;
+  return data.subarray(firstNewline + 1);
 }
 
 async function readMaybeTail(absolutePath: string, tailBytes: number | undefined): Promise<{ text: string; bytes: number }> {
@@ -41,10 +80,20 @@ async function readMaybeTail(absolutePath: string, tailBytes: number | undefined
   // directly. Long-running daemon logs can be multi-GB.
   const fd = await open(absolutePath, "r");
   try {
-    const start = info.size - tailBytes;
-    const buffer = Buffer.alloc(tailBytes);
-    const { bytesRead } = await fd.read(buffer, 0, tailBytes, start);
-    return { text: buffer.subarray(0, bytesRead).toString("utf8"), bytes: bytesRead };
+    // Read one extra guard byte before the cut so alignTailToLineStart can
+    // tell an already line-aligned cut apart from a mid-line one.
+    const start = info.size - tailBytes - 1;
+    const buffer = Buffer.alloc(tailBytes + 1);
+    const { bytesRead } = await fd.read(buffer, 0, tailBytes + 1, start);
+    const aligned = alignTailToLineStart(buffer.subarray(0, bytesRead));
+    if (aligned === null) {
+      throw new Error(
+        `no complete line fits the ${tailBytes}-byte tail window (the trailing ` +
+          `record is larger than the cap); omitted rather than exporting a ` +
+          `partial record`,
+      );
+    }
+    return { text: aligned.toString("utf8"), bytes: aligned.byteLength };
   } finally {
     await fd.close();
   }
@@ -52,6 +101,12 @@ async function readMaybeTail(absolutePath: string, tailBytes: number | undefined
 
 export async function collectLogSource(source: LogSource, opts: RedactionOptions = {}): Promise<CollectedFile> {
   try {
+    if (source.kind === "binary") {
+      // Copy the bytes verbatim — a minidump is opaque binary; decoding it as
+      // UTF-8 and running text redaction would corrupt it.
+      const buf = await readFile(source.absolutePath);
+      return { name: source.name, absolutePath: source.absolutePath, content: buf, bytes: buf.byteLength };
+    }
     const { text, bytes } = await readMaybeTail(source.absolutePath, source.tailBytes);
     const redacted = source.kind === "json" ? redactJsonText(text, opts) : redactText(text, opts);
     return { name: source.name, absolutePath: source.absolutePath, content: redacted, bytes };
@@ -126,5 +181,54 @@ export async function findMacOSCrashReports(lookup: CrashReportLookup): Promise<
     name: `crash-reports/${name}`,
     absolutePath,
     kind: "text",
+  }));
+}
+
+export interface CrashDumpLookup {
+  /** Root crashDumps directory (Electron's `app.getPath('crashDumps')`). */
+  dir: string;
+  /** Only include dumps modified within this many days. */
+  withinDays?: number;
+  /** Limit how many dumps to include (newest first). */
+  maxDumps?: number;
+}
+
+/**
+ * Collect Chromium/Electron crash minidumps as BINARY sources. `crashReporter`
+ * writes `.dmp` files under `<crashDumps>/completed` (and `pending` before
+ * upload; with `uploadToServer:false` they stay there). These carry the native
+ * renderer/main crash stack — the only reliable way to root-cause an opaque
+ * abort like `0x80000003` (a V8/Chromium CHECK), which no text log records.
+ */
+export async function findCrashDumps(lookup: CrashDumpLookup): Promise<LogSource[]> {
+  const within = (lookup.withinDays ?? 14) * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - within;
+  const max = lookup.maxDumps ?? 10;
+  const dirs = [lookup.dir, join(lookup.dir, "completed"), join(lookup.dir, "pending"), join(lookup.dir, "reports")];
+  const found: { absolutePath: string; mtimeMs: number; name: string }[] = [];
+  for (const dir of dirs) {
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.toLowerCase().endsWith(".dmp")) continue;
+      const absolutePath = join(dir, entry);
+      try {
+        const info = await stat(absolutePath);
+        if (!info.isFile() || info.mtimeMs < cutoff) continue;
+        found.push({ absolutePath, mtimeMs: info.mtimeMs, name: entry });
+      } catch {
+        continue;
+      }
+    }
+  }
+  found.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return found.slice(0, max).map(({ absolutePath, name }) => ({
+    name: `crash-dumps/${name}`,
+    absolutePath,
+    kind: "binary",
   }));
 }

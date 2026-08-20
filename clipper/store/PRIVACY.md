@@ -1,22 +1,22 @@
-# Open Design Web Clipper — Privacy Policy
+# OpenDesign Web Clipper — Privacy Policy
 
 _Last updated: 2026-06-16_
 
-**Short version: the Open Design Web Clipper does not collect, store, or transmit
+**Short version: the OpenDesign Web Clipper does not collect, store, or transmit
 your data to us or to any third party. Everything you clip goes only to the
-Open Design app running on your own computer.**
+OpenDesign app running on your own computer.**
 
 ## What the extension does
 
 When you trigger a capture (a page snapshot, screenshot, picked images, a picked
 element, or a Figma capture), the extension reads the content of the page you are
-viewing and sends it to the Open Design application running locally on your own
+viewing and sends it to the OpenDesign application running locally on your own
 machine over the loopback address `http://127.0.0.1` (the local daemon). That is
 the only network destination the extension sends captured content to.
 
 ## What we collect
 
-Nothing. The developer (Open Design / nexu-io) operates **no servers** that
+Nothing. The developer (OpenDesign / nexu-io) operates **no servers** that
 receive your captures, browsing activity, or any personal information from this
 extension. There is **no analytics, no telemetry, no tracking, and no
 advertising** in the extension.
@@ -25,11 +25,11 @@ advertising** in the extension.
 
 - **Access to websites you clip (`<all_urls>`)** — to read and screenshot the
   active page and inline its resources into a self-contained snapshot, and to
-  reach your local Open Design app. The extension acts only on the page you
+  reach your local OpenDesign app. The extension acts only on the page you
   explicitly choose to capture.
 - **Scripting / tabs** — to run the capture and on-page picker in the active tab
   when you start a capture.
-- **Context menus** — the right-click "Save image to Open Design Library" entry.
+- **Context menus** — the right-click "Save image to OpenDesign Library" entry.
 - **Downloads** — to save a "Download Figma (.json)" import file to your disk when you ask.
 - **Storage** — to remember local preferences only (the daemon URL if you changed
   it, and whether the on-page bar is shown). Stored locally in your browser; never
@@ -37,7 +37,7 @@ advertising** in the extension.
 
 ## Where your data lives
 
-All captured content is stored by the Open Design app in its local Library on your
+All captured content is stored by the OpenDesign app in its local Library on your
 device. Managing, exporting, or deleting that content is done inside the Open
 Design app. Uninstalling the extension removes its local preferences.
 

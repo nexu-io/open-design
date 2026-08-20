@@ -1,0 +1,157 @@
+/* Manus-style color picker used inside the manual-edit text toolbar's color
+   popover: SV area + hue/alpha sliders + hex/opacity inputs + common colors. */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 216px;
+}
+
+.svArea {
+  position: relative;
+  height: 140px;
+  border-radius: 8px;
+  /* White→hue horizontally, transparent→black vertically. */
+  background-image:
+    linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
+    linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.svThumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.3), 0 1px 4px rgba(15, 23, 42, 0.3);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.slidersRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sliders {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hueTrack,
+.alphaTrack {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.hueTrack {
+  background: linear-gradient(
+    to right,
+    #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00
+  );
+}
+
+.alphaTrack {
+  /* Checkerboard behind the alpha gradient. */
+  background-image:
+    linear-gradient(45deg, rgba(15, 23, 42, 0.12) 25%, transparent 25%, transparent 75%, rgba(15, 23, 42, 0.12) 75%),
+    linear-gradient(45deg, rgba(15, 23, 42, 0.12) 25%, transparent 25%, transparent 75%, rgba(15, 23, 42, 0.12) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+}
+
+.alphaGradient {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.trackThumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.3), 0 1px 4px rgba(15, 23, 42, 0.3);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.preview {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.inputsRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hexInput {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.alphaInput {
+  width: 58px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: right;
+}
+
+.commonBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.commonLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.commonRow {
+  display: flex;
+  gap: 6px;
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.swatch:hover {
+  transform: scale(1.1);
+}

@@ -36,6 +36,9 @@ describe('annotation → memory distillation', () => {
     await fsp.rm(memoryDir(dataDir), { recursive: true, force: true });
     __resetExtractionsForTests();
     await writeMemoryConfig(dataDir, {
+      // Chat auto-extraction defaults OFF product-wide; these specs cover
+      // the distillation mechanics themselves, so opt in explicitly.
+      chatExtractionEnabled: true,
       extraction: { provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o-mini' },
     });
   });

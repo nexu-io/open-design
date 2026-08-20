@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.14.1",
+  "version": "0.19.2",
   "private": true,
   "type": "module",
   "exports": {
@@ -41,6 +41,7 @@
     "@open-design/sidecar-proto": "workspace:*",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/xterm": "5.5.0",
+    "dompurify": "3.4.2",
     "jspdf": "4.2.1",
     "lexical": "0.36.2",
     "lucide-react": "1.16.0",
@@ -52,7 +53,8 @@
     "posthog-js": "1.374.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "shiki": "4.1.0"
+    "shiki": "4.1.0",
+    "three": "0.185.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.0",
@@ -62,6 +64,7 @@
     "@types/node": "20.19.39",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
+    "@types/three": "0.185.1",
     "jsdom": "29.1.1",
     "postcss": "8.5.15",
     "tailwindcss": "4.3.0",

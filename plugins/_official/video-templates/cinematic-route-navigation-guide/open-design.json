@@ -24,6 +24,7 @@
     "en": "Cinematic Route Navigation Guide"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A structured multi-scene prompt designed for Seedance to create a consistent walking navigation video featuring a recurring tour guide character and smooth transitions between real-world locations.",
   "description_i18n": {
     "zh-CN": "为 Seedance 设计的多场景结构化提示词，用于创建具有一致导游角色和真实地点间流畅过渡的步行导航视频。",

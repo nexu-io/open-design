@@ -24,6 +24,7 @@
     "en": "Sequence and Movement Instruction for Martial Arts Video"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A video prompt for Seedance 2.0 that instructs the model to animate a sequence based on a character sheet, focusing on specific movements and steps.",
   "description_i18n": {
     "zh-CN": "为 Seedance 2.0 提供的视频提示词，根据角色表指导模型生成特定动作和步骤的动画序列。",

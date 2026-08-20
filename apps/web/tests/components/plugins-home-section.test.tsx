@@ -3,7 +3,7 @@
 // Plugins home section — UI contract.
 //
 // The section renders artifact-kind filters for the starter grid:
-// Prototype / Live Artifact / Slides / Image / Video / HyperFrames / Audio.
+// Slides / Prototype / Live Artifact / Image / Video / HyperFrames / Audio.
 // Prototype, Slides, Image, and Video expose a second row of scene buckets;
 // the smaller Live Artifact, HyperFrames, and Audio slices stay flat. Saved is an
 // orthogonal user collection override, and sparse buckets should fall
@@ -131,7 +131,7 @@ const sample: InstalledPluginRecord[] = [
     tags: ['live-artifacts'],
   }),
   makePlugin({ id: 'example-live-artifact', mode: 'prototype', tags: ['live-artifact'] }),
-  makePlugin({ id: 'deck-pitch', mode: 'deck', tags: ['pitch-deck'], featured: true }),
+  makePlugin({ id: 'deck-pitch', mode: 'deck', tags: ['fundraising-pitch'], featured: true }),
   makePlugin({ id: 'image-logo', mode: 'image', tags: ['logo'] }),
   makePlugin({ id: 'video-short', mode: 'video', tags: ['short-form'] }),
   makePlugin({ id: 'video-cinematic', mode: 'video', tags: ['cinematic'] }),
@@ -214,7 +214,39 @@ describe('PluginsHomeSection (community gallery)', () => {
   it('keeps the inline Use menu on the rich management layout (PluginsView)', () => {
     renderSection(sample, { cardLayout: 'rich' });
 
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     expect(screen.getByTestId('plugins-home-use-prototype-dashboard')).toBeTruthy();
+  });
+
+  it('shows all Community types by default on the lightweight gallery layout', () => {
+    const first = renderSection(sample, { cardLayout: 'gallery' });
+
+    expect(screen.getByTestId('plugins-home-pill-category-all').getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe(
+      'false',
+    );
+    expect(screen.queryByTestId('plugins-home-row-subcategory-deck')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-deck'));
+    expect(screen.getByTestId('plugins-home-pill-category-all').getAttribute('aria-selected')).toBe(
+      'false',
+    );
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(pluginIds()).toEqual(['deck-pitch']);
+
+    first.unmount();
+    renderSection(sample, { cardLayout: 'gallery' });
+
+    expect(screen.getByTestId('plugins-home-pill-category-all').getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe(
+      'false',
+    );
   });
 });
 
@@ -228,7 +260,7 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(onBrowseRegistry).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the artifact category row and the default Prototype scene row', () => {
+  it('renders the artifact category row and the default Slides scene row', () => {
     renderSection();
 
     expect(screen.getByTestId('plugins-home-row-category')).toBeTruthy();
@@ -245,10 +277,8 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(screen.queryByTestId('plugins-home-pill-category-create')).toBeNull();
     expect(screen.queryByTestId('plugins-home-pill-category-export')).toBeNull();
 
-    expect(screen.getByTestId('plugins-home-row-subcategory-prototype')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-business-dashboards')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-app-prototypes')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-developer-tools')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-row-subcategory-deck')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-subcategory-deck-fundraising-pitch')).toBeTruthy();
   });
 
   it('filters Video separately from HyperFrames', () => {
@@ -268,12 +298,13 @@ describe('PluginsHomeSection (category bar)', () => {
 
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-live-artifact'));
 
-    expect(pluginIds()).toEqual([
+    // Order is now usage/sink-driven (OPEND-449); assert grouping membership.
+    expect(pluginIds().sort()).toEqual([
+      'example-live-artifact',
       'example-live-dashboard',
-      'image-template-notion-team-dashboard-live-artifact',
       'example-social-media-matrix-tracker-template',
       'example-trading-analysis-dashboard-template',
-      'example-live-artifact',
+      'image-template-notion-team-dashboard-live-artifact',
     ]);
     expect(screen.queryByTestId('plugins-home-row-subcategory-live-artifact')).toBeNull();
   });
@@ -292,6 +323,7 @@ describe('PluginsHomeSection (category bar)', () => {
   it('saves a plugin, updates the Saved chip, and shows a toast', () => {
     renderSection();
 
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     fireEvent.click(screen.getByTestId('plugins-home-save-prototype-dashboard'));
 
     expect(screen.getByTestId('plugins-home-save-prototype-dashboard').textContent).toContain('Saved');
@@ -374,6 +406,7 @@ describe('PluginsHomeSection (category bar)', () => {
   it('Saved chip overrides the category selection and shows only saved plugins', () => {
     renderSection();
 
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
     fireEvent.click(screen.getByTestId('plugins-home-save-prototype-dashboard'));
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
     fireEvent.click(screen.getByTestId('plugins-home-chip-saved'));

@@ -67,18 +67,21 @@ function htmlFile(): ProjectFile {
   };
 }
 
-function renderHtmlPreview() {
+function renderHtmlPreview(
+  liveHtml = '<html><body><main>Workspace</main></body></html>',
+  expectedRenderMode: 'url-load' | 'srcdoc' = 'url-load',
+) {
   const view = render(
     <FileViewer
       projectId="project-1"
       projectKind="prototype"
       file={htmlFile()}
-      liveHtml="<html><body><main>Workspace</main></body></html>"
+      liveHtml={liveHtml}
     />,
   );
   const { container } = view;
   const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-  expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+  expect(activeFrame.getAttribute('data-od-render-mode')).toBe(expectedRenderMode);
   const srcDocFrame = container.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="srcdoc"]');
   expect(srcDocFrame).toBeTruthy();
   fireEvent.load(srcDocFrame as HTMLIFrameElement);
@@ -86,7 +89,7 @@ function renderHtmlPreview() {
 }
 
 async function openImageExportDialog() {
-  fireEvent.click(screen.getByRole('button', { name: /download/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /export/i }));
   fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
   expect(await screen.findByRole('dialog', { name: /export as image/i })).toBeTruthy();
 }
@@ -148,7 +151,7 @@ describe('FileViewer image export', () => {
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
 
     renderHtmlPreview();
-    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /export/i }));
     expect(screen.getByRole('menu')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
@@ -192,7 +195,7 @@ describe('FileViewer image export', () => {
     await clickSave();
 
     await waitFor(() => {
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500, undefined);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,ok', 'jpeg');
       expect(prepareImageExportTargetMock).toHaveBeenCalledWith('workspace', 'jpeg', { useNativePicker: false });
     });
@@ -243,8 +246,8 @@ describe('FileViewer image export', () => {
     await clickSave();
 
     await waitFor(() => {
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 1500);
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 3000);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 1500, undefined);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 3000, undefined);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,recovered', 'png');
     }, { timeout: 4000 });
   });
@@ -268,10 +271,10 @@ describe('FileViewer image export', () => {
     await clickSave();
 
     await waitFor(() => {
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500, undefined);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,visible', 'png');
     });
-    expect(requestPreviewSnapshotMock).not.toHaveBeenCalledWith(srcDocFrame, 1500);
+    expect(requestPreviewSnapshotMock).not.toHaveBeenCalledWith(srcDocFrame, 1500, undefined);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -299,6 +302,105 @@ describe('FileViewer image export', () => {
     });
     expect(saveImageBlobMock).not.toHaveBeenCalled();
     expect(await screen.findByText('Download started')).toBeTruthy();
+  });
+
+  it('passes the selected mobile viewport to the off-screen image exporter', async () => {
+    isOpenDesignHostAvailableMock.mockReturnValue(true);
+    exportProjectImageDataUrlMock.mockResolvedValueOnce({
+      ok: true,
+      snapshot: {
+        dataUrl: 'data:image/png;base64,mobile',
+        w: 390,
+        h: 844,
+      },
+    });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
+    prepareImageExportTargetMock.mockResolvedValueOnce({
+      filename: 'workspace.png',
+      method: 'download',
+      save: saveImageBlobMock,
+    });
+
+    renderHtmlPreview();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
+    fireEvent.click(screen.getByRole('option', { name: /mobile/i }));
+    await openImageExportDialog();
+    await clickSave();
+
+    await waitFor(() => {
+      expect(exportProjectImageDataUrlMock).toHaveBeenCalledWith(expect.objectContaining({
+        projectId: 'project-1',
+        fileName: 'workspace.html',
+        deck: false,
+        width: 390,
+        height: 844,
+      }));
+    });
+  });
+
+  it('keeps desktop page exports on the renderer defaults', async () => {
+    isOpenDesignHostAvailableMock.mockReturnValue(true);
+    exportProjectImageDataUrlMock.mockResolvedValueOnce({
+      ok: true,
+      snapshot: {
+        dataUrl: 'data:image/png;base64,desktop',
+        w: 1440,
+        h: 900,
+      },
+    });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
+
+    renderHtmlPreview();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
+    fireEvent.click(screen.getByRole('option', { name: /desktop/i }));
+    await openImageExportDialog();
+    await clickSave();
+
+    await waitFor(() => {
+      expect(exportProjectImageDataUrlMock).toHaveBeenCalled();
+    });
+    const exportOptions = exportProjectImageDataUrlMock.mock.calls.at(-1)?.[0];
+    expect(exportOptions).toEqual(expect.objectContaining({
+      projectId: 'project-1',
+      fileName: 'workspace.html',
+      deck: false,
+    }));
+    expect(exportOptions).not.toHaveProperty('width');
+    expect(exportOptions).not.toHaveProperty('height');
+  });
+
+  it('keeps deck exports on the renderer defaults when mobile preview is selected', async () => {
+    isOpenDesignHostAvailableMock.mockReturnValue(true);
+    exportProjectImageDataUrlMock.mockResolvedValueOnce({
+      ok: true,
+      snapshot: {
+        dataUrl: 'data:image/png;base64,deck',
+        w: 1440,
+        h: 1800,
+      },
+    });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
+
+    renderHtmlPreview(
+      '<html><body><div class="deck"><section class="slide">Cover</section></div></body></html>',
+      'srcdoc',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
+    fireEvent.click(screen.getByRole('option', { name: /mobile/i }));
+    await openImageExportDialog();
+    await clickSave();
+
+    await waitFor(() => {
+      expect(exportProjectImageDataUrlMock).toHaveBeenCalled();
+    });
+    const exportOptions = exportProjectImageDataUrlMock.mock.calls.at(-1)?.[0];
+    expect(exportOptions).toEqual(expect.objectContaining({
+      projectId: 'project-1',
+      fileName: 'workspace.html',
+      deck: true,
+    }));
+    expect(exportOptions).not.toHaveProperty('width');
+    expect(exportOptions).not.toHaveProperty('height');
   });
 
   it('does not create a save target when snapshot capture fails', async () => {
@@ -346,12 +448,17 @@ describe('FileViewer image export', () => {
     expect(saveImageBlobMock).not.toHaveBeenCalled();
   });
 
-  it('Copy screenshot of a runtime-managed deck uses the visible snapshot, not off-screen slide 0', async () => {
+  it('screenshot of a runtime-managed deck uses the visible snapshot, not off-screen slide 0', async () => {
     // A `<deck-stage>` / `data-screen-label` deck is exportable, but the viewer
     // doesn't track its active slide (no `class="slide"` → no slide-state
     // bridge). A current-slide capture must therefore use the visible host
     // snapshot (= the slide on screen), NOT off-screen-render slide 0 — otherwise
-    // Copy screenshot always returns the cover regardless of where the user is.
+    // a screenshot always returns the cover regardless of where the user is.
+    //
+    // Driven through screenshot-to-chat, which is now the viewer's only capture
+    // affordance: the export menu's 截图 row was removed (export produces files
+    // and links; a capture is a different job). Both always shared this one
+    // `captureExportImageSnapshot` path, which is what this test pins.
     isOpenDesignHostAvailableMock.mockReturnValue(true);
     captureHostIframeSnapshotMock.mockResolvedValue({ dataUrl: 'data:image/png;base64,host', w: 1280, h: 720 });
 
@@ -367,7 +474,7 @@ describe('FileViewer image export', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('screenshot-copy-button'));
+    fireEvent.click(screen.getByTestId('edit-screenshot-to-chat-button'));
 
     await waitFor(() => {
       expect(captureHostIframeSnapshotMock).toHaveBeenCalled();

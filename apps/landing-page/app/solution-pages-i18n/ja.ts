@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const JA: SolutionLocaleCopy = {
   aiWireframeGenerator: {
-    title: 'AI ワイヤーフレームジェネレーター — Open Design でプロンプトからワイヤーフレームへ',
+    title: 'AI ワイヤーフレームジェネレーター — OpenDesign でプロンプトからワイヤーフレームへ',
     description:
-      'プロンプトを、編集可能なマルチスクリーンのワイヤーフレームに変え、そのまま出荷できるコードまで運ぶ、無料でオープンソースの AI ワイヤーフレームジェネレーター。Open Design はあなたがすでに使っているコーディングエージェントの中で動くので、ワイヤーフレームと実際のプロダクトが一つの情報源を共有します。',
+      'プロンプトを、編集可能なマルチスクリーンのワイヤーフレームに変え、そのまま出荷できるコードまで運ぶ、無料でオープンソースの AI ワイヤーフレームジェネレーター。OpenDesign はあなたがすでに使っているコーディングエージェントの中で動くので、ワイヤーフレームと実際のプロダクトが一つの情報源を共有します。',
     breadcrumb: 'AI ワイヤーフレームジェネレーター',
     label: 'ツール · AI ワイヤーフレームジェネレーター',
     heading: 'プロンプトの速さでワイヤーフレームを',
@@ -13,12 +13,12 @@ export const JA: SolutionLocaleCopy = {
       'プロンプトが編集可能なワイヤーフレームになり、さらに完成した UI へと変わる様子を、緑の選択ボックスで囲って描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'たいていの AI ワイヤーフレームジェネレーターは、後で作り直す絵を渡してくるだけです。Open Design はワイヤーフレームをコーディングエージェントの中で生成し、プロンプトから出荷できるコードまで運びます — エクスポート工程も、引き継ぎの断絶も、シート単位の課金もありません。',
+      'たいていの AI ワイヤーフレームジェネレーターは、後で作り直す絵を渡してくるだけです。OpenDesign はワイヤーフレームをコーディングエージェントの中で生成し、プロンプトから出荷できるコードまで運びます — エクスポート工程も、引き継ぎの断絶も、シート単位の課金もありません。',
     stepsTitle: 'AI ワイヤーフレームジェネレーターの仕組み',
     steps: [
       {
         title: '画面を説明する',
-        body: 'ワイヤーフレームにしたいものを普通の言葉でエージェントに伝えます。「サイドバー、統計の行、最近のアクティビティのテーブルがあるダッシュボード」のように。Open Design がワイヤーフレームスキルを読み込むので、エージェントは単一の静止画ではなく、構造と階層をレイアウトします。',
+        body: 'ワイヤーフレームにしたいものを普通の言葉でエージェントに伝えます。「サイドバー、統計の行、最近のアクティビティのテーブルがあるダッシュボード」のように。OpenDesign がワイヤーフレームスキルを読み込むので、エージェントは単一の静止画ではなく、構造と階層をレイアウトします。',
         imageAlt: '普通の言葉で書いた画面の説明がターミナルに打ち込まれるイラスト',
       },
       {
@@ -37,9 +37,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'ワイヤーフレームが、緑の選択フレームに収まった出荷コードへと流れ込むイラスト',
       },
     ],
-    tableTitle: 'Open Design vs 一般的な AI ワイヤーフレームジェネレーター',
+    tableTitle: 'OpenDesign vs 一般的な AI ワイヤーフレームジェネレーター',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '一般的な AI ワイヤーフレームジェネレーター',
     tableRows: [
       {
@@ -101,7 +101,7 @@ export const JA: SolutionLocaleCopy = {
         thumb: 'example-kami-landing',
       },
     ],
-    galleryTitle: 'Open Design で作られたワイヤーフレーム',
+    galleryTitle: 'OpenDesign で作られたワイヤーフレーム',
     galleryLead:
       'どれもプロンプトから始まり、編集可能でクリック可能な成果物にレンダリングされました。アイデアに近いテンプレートを選び、あなたのバリエーションを説明すれば、エージェントがそれを適応させます — ワイヤーフレームから出荷できるコードまで。',
     gallery: [
@@ -116,7 +116,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI ワイヤーフレームジェネレーターは無料ですか？',
-        a: 'はい。Open Design はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — ワイヤーフレームジェネレーター自体にシート単位やクレジット単位の課金はありません。',
+        a: 'はい。OpenDesign はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — ワイヤーフレームジェネレーター自体にシート単位やクレジット単位の課金はありません。',
       },
       {
         q: 'ワイヤーフレームは編集可能ですか、それともただの画像ですか？',
@@ -128,24 +128,24 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: 'どのエージェントで動きますか？',
-        a: 'Open Design は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
+        a: 'OpenDesign は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
       },
     ],
     ctaTitle: '今夜、最初のワイヤーフレームを生成する',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、次の画面のアイデアを、すでに使っているエージェントの中で、編集可能なワイヤーフレームに — そして出荷できるコードに — 変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、次の画面のアイデアを、すでに使っているエージェントの中で、編集可能なワイヤーフレームに — そして出荷できるコードに — 変えましょう。',
     relatedTitle: '関連ツールとガイド',
     related: [
       { href: '/solutions/ai-ui-generator/', label: 'AI UI ジェネレーター' },
-      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign でデザインからコードへ' },
       { href: '/blog/design-to-code-tools/', label: '最高のデザイン・トゥ・コードツール' },
-      { href: '/solutions/prototype/', label: 'Open Design でのプロトタイピング' },
+      { href: '/solutions/prototype/', label: 'OpenDesign でのプロトタイピング' },
     ],
   },
   aiUiGenerator: {
-    title: 'AI UI ジェネレーター — Open Design でプロンプトから本番 UI へ',
+    title: 'AI UI ジェネレーター — OpenDesign でプロンプトから本番 UI へ',
     description:
-      'プロンプトを、本物のコンポーネントベースのインターフェースに変え、そのまま出荷できるコードまで運ぶ、無料でオープンソースの AI UI ジェネレーター。Open Design はあなたがすでに使っているコーディングエージェントの中で動くので、生成された UI と本番コードが同じ成果物です。',
+      'プロンプトを、本物のコンポーネントベースのインターフェースに変え、そのまま出荷できるコードまで運ぶ、無料でオープンソースの AI UI ジェネレーター。OpenDesign はあなたがすでに使っているコーディングエージェントの中で動くので、生成された UI と本番コードが同じ成果物です。',
     breadcrumb: 'AI UI ジェネレーター',
     label: 'ツール · AI UI ジェネレーター',
     heading: '本当に出荷できる UI を生成する',
@@ -154,12 +154,12 @@ export const JA: SolutionLocaleCopy = {
       'プロンプトがコンポーネントベースの UI になり、さらに本番コードへと変わる様子を、緑の選択ボックスで囲って描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'たいていの AI UI ジェネレーターは、モックアップか使い捨ての React スニペットを渡してくるだけです。Open Design は UI をコーディングエージェントの中で生成し、プロンプトから出荷できるコードまで運びます — 本物のコンポーネント、あなたのデザインシステム、エクスポート工程なし、シート単位の課金なし。',
+      'たいていの AI UI ジェネレーターは、モックアップか使い捨ての React スニペットを渡してくるだけです。OpenDesign は UI をコーディングエージェントの中で生成し、プロンプトから出荷できるコードまで運びます — 本物のコンポーネント、あなたのデザインシステム、エクスポート工程なし、シート単位の課金なし。',
     stepsTitle: 'AI UI ジェネレーターの仕組み',
     steps: [
       {
         title: 'インターフェースを説明する',
-        body: '作りたいものを普通の言葉でエージェントに伝えます。「サイドバー、タブ分けされたセクション、保存バーがある設定ページ」のように。Open Design が UI スキルを読み込むので、エージェントは一度きりの画面ではなく、本物のコンポーネントとデザインシステムに手を伸ばします。',
+        body: '作りたいものを普通の言葉でエージェントに伝えます。「サイドバー、タブ分けされたセクション、保存バーがある設定ページ」のように。OpenDesign が UI スキルを読み込むので、エージェントは一度きりの画面ではなく、本物のコンポーネントとデザインシステムに手を伸ばします。',
         imageAlt: '普通の言葉で書いた UI の説明がターミナルに打ち込まれるイラスト',
       },
       {
@@ -178,9 +178,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '生成された UI が、緑の選択フレームに収まった出荷コードへと流れ込むイラスト',
       },
     ],
-    tableTitle: 'Open Design vs 一般的な AI UI ジェネレーター',
+    tableTitle: 'OpenDesign vs 一般的な AI UI ジェネレーター',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '一般的な AI UI ジェネレーター',
     tableRows: [
       {
@@ -242,7 +242,7 @@ export const JA: SolutionLocaleCopy = {
         thumb: 'example-kami-landing',
       },
     ],
-    galleryTitle: 'Open Design で作られた UI',
+    galleryTitle: 'OpenDesign で作られた UI',
     galleryLead:
       'どれもプロンプトから始まり、本物のコンポーネントベースの成果物にレンダリングされました。アイデアに近いテンプレートを選び、あなたのバリエーションを説明すれば、エージェントがそれを適応させます — UI から出荷できるコードまで。',
     gallery: [
@@ -257,7 +257,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI UI ジェネレーターは無料ですか？',
-        a: 'はい。Open Design はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — UI ジェネレーター自体にシート単位やクレジット単位の課金はありません。',
+        a: 'はい。OpenDesign はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — UI ジェネレーター自体にシート単位やクレジット単位の課金はありません。',
       },
       {
         q: '本物のコンポーネントを生成しますか、それともただのモックアップですか？',
@@ -269,22 +269,22 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: 'どのエージェントで動きますか？',
-        a: 'Open Design は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
+        a: 'OpenDesign は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
       },
     ],
     ctaTitle: '今夜、最初の UI を生成する',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、次のインターフェースのアイデアを、すでに使っているエージェントの中で、本物のコンポーネントベースの UI に — そして出荷できるコードに — 変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、次のインターフェースのアイデアを、すでに使っているエージェントの中で、本物のコンポーネントベースの UI に — そして出荷できるコードに — 変えましょう。',
     relatedTitle: '関連ツールとガイド',
     related: [
       { href: '/solutions/ai-wireframe-generator/', label: 'AI ワイヤーフレームジェネレーター' },
-      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign でデザインからコードへ' },
       { href: '/blog/best-ai-design-tools/', label: '最高の AI デザインツール' },
-      { href: '/solutions/designer/', label: 'デザイナーのための Open Design' },
+      { href: '/solutions/designer/', label: 'デザイナーのための OpenDesign' },
     ],
   },
   designToCode: {
-    title: 'デザイン・トゥ・コード — Open Design でデザインを出荷できるコードに変える',
+    title: 'デザイン・トゥ・コード — OpenDesign でデザインを出荷できるコードに変える',
     description:
       'プロンプトやデザインを、本物で編集可能なコードに変える、無料でオープンソースのデザイン・トゥ・コードのワークフロー — あなたがすでに使っているコーディングエージェントの中で。エクスポートも引き継ぎもなし。デザインと本番コードは、あなたが所有して出荷する一つの成果物です。',
     breadcrumb: 'デザイン・トゥ・コード',
@@ -295,12 +295,12 @@ export const JA: SolutionLocaleCopy = {
       'デザインがきれいな本番コードに変わる様子を、緑の選択ボックスで囲って描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'たいていのデザイン・トゥ・コードツールは、その後あなたが世話をする一度きりのスナップショットをエクスポートします。Open Design はデザインとコードを、エージェントの中で一つの生きた成果物として保ちます — 話しながら反復し、自分のものになるコードを出荷し、シート単位の課金はありません。',
+      'たいていのデザイン・トゥ・コードツールは、その後あなたが世話をする一度きりのスナップショットをエクスポートします。OpenDesign はデザインとコードを、エージェントの中で一つの生きた成果物として保ちます — 話しながら反復し、自分のものになるコードを出荷し、シート単位の課金はありません。',
     stepsTitle: 'デザイン・トゥ・コードの仕組み',
     steps: [
       {
         title: 'プロンプトかデザインから始める',
-        body: '画面を普通の言葉で説明するか、デザインの方向性をエージェントに指し示します。Open Design が適切なスキルを読み込むので、エージェントは脆い一度きりの変換ではなく、構造とコンポーネントを構築します。',
+        body: '画面を普通の言葉で説明するか、デザインの方向性をエージェントに指し示します。OpenDesign が適切なスキルを読み込むので、エージェントは脆い一度きりの変換ではなく、構造とコンポーネントを構築します。',
         imageAlt: 'デザインとプロンプトがターミナルに送り込まれるイラスト',
       },
       {
@@ -319,9 +319,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '完成したコードが、緑の選択フレームに収まり、出荷の準備が整ったイラスト',
       },
     ],
-    tableTitle: 'Open Design vs 一般的なデザイン・トゥ・コードツール',
+    tableTitle: 'OpenDesign vs 一般的なデザイン・トゥ・コードツール',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '一般的なデザイン・トゥ・コードツール',
     tableRows: [
       {
@@ -383,7 +383,7 @@ export const JA: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design でデザインから出荷',
+    galleryTitle: 'OpenDesign でデザインから出荷',
     galleryLead:
       'どれもプロンプトかデザインから始まり、出荷できるコードになりました。アイデアに近いテンプレートを選び、あなたのバリエーションを説明すれば、エージェントがそれを変換します — 引き継ぎのない、デザインからコードへ。',
     gallery: [
@@ -398,7 +398,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'デザイン・トゥ・コードのワークフローは無料ですか？',
-        a: 'はい。Open Design はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — デザイン・トゥ・コードのワークフロー自体にシート単位やクレジット単位の課金はありません。',
+        a: 'はい。OpenDesign はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — デザイン・トゥ・コードのワークフロー自体にシート単位やクレジット単位の課金はありません。',
       },
       {
         q: 'どんな種類のコードを生み出しますか？',
@@ -410,24 +410,24 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: 'どのエージェントで動きますか？',
-        a: 'Open Design は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
+        a: 'OpenDesign は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
       },
     ],
     ctaTitle: '今夜、次のデザインをコードに変える',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、次の画面を — プロンプト、ワイヤーフレーム、デザインのいずれでも — すでに使っているエージェントの中で、きれいで出荷できるコードに変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、次の画面を — プロンプト、ワイヤーフレーム、デザインのいずれでも — すでに使っているエージェントの中で、きれいで出荷できるコードに変えましょう。',
     relatedTitle: '関連ツールとガイド',
     related: [
       { href: '/solutions/ai-wireframe-generator/', label: 'AI ワイヤーフレームジェネレーター' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI ジェネレーター' },
       { href: '/blog/design-to-code-tools/', label: '最高のデザイン・トゥ・コードツール' },
-      { href: '/solutions/engineering/', label: 'エンジニアリングのための Open Design' },
+      { href: '/solutions/engineering/', label: 'エンジニアリングのための OpenDesign' },
     ],
   },
   aiLandingPageGenerator: {
     title: 'AI ランディングページジェネレーター — プロンプトから出荷できるランディングページへ',
     description:
-      'プロンプトを、本物でレスポンシブなランディングページに変え、そのまま出荷できるコードまで運ぶ、無料でオープンソースの AI ランディングページジェネレーター。Open Design はあなたがすでに使っているコーディングエージェントの中で動くので、生成されたページとデプロイされたページが、あなたの所有する同じ成果物です。',
+      'プロンプトを、本物でレスポンシブなランディングページに変え、そのまま出荷できるコードまで運ぶ、無料でオープンソースの AI ランディングページジェネレーター。OpenDesign はあなたがすでに使っているコーディングエージェントの中で動くので、生成されたページとデプロイされたページが、あなたの所有する同じ成果物です。',
     breadcrumb: 'AI ランディングページジェネレーター',
     label: 'ツール · AI ランディングページジェネレーター',
     heading: '出荷できるランディングページを生成する',
@@ -436,12 +436,12 @@ export const JA: SolutionLocaleCopy = {
       'プロンプトがレスポンシブなランディングページになり、さらに本番コードへと変わる様子を、緑の選択ボックスで囲って描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'たいていの AI ランディングページビルダーは、あなたのページを彼らのエディター内に閉じ込め、シート単位で課金します。Open Design はランディングページをコーディングエージェントの中で生成し、プロンプトから出荷できるコードまで運びます — 本物のセクション、あなたのブランド、エクスポート工程なし、シート単位の課金なし。',
+      'たいていの AI ランディングページビルダーは、あなたのページを彼らのエディター内に閉じ込め、シート単位で課金します。OpenDesign はランディングページをコーディングエージェントの中で生成し、プロンプトから出荷できるコードまで運びます — 本物のセクション、あなたのブランド、エクスポート工程なし、シート単位の課金なし。',
     stepsTitle: 'AI ランディングページジェネレーターの仕組み',
     steps: [
       {
         title: 'ページを説明する',
-        body: '作りたいものを普通の言葉でエージェントに伝えます。「メモアプリのローンチページ：ヒーロー、3 つの機能、料金、ウェイトリストのフォーム」のように。Open Design がランディングページスキルを読み込むので、エージェントは明確な階層を備えた本物のセクションをレイアウトします。',
+        body: '作りたいものを普通の言葉でエージェントに伝えます。「メモアプリのローンチページ：ヒーロー、3 つの機能、料金、ウェイトリストのフォーム」のように。OpenDesign がランディングページスキルを読み込むので、エージェントは明確な階層を備えた本物のセクションをレイアウトします。',
         imageAlt: '普通の言葉で書いたランディングページの要件がターミナルに打ち込まれるイラスト',
       },
       {
@@ -460,9 +460,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'ランディングページが、緑の選択フレームに収まった出荷コードへと流れ込むイラスト',
       },
     ],
-    tableTitle: 'Open Design vs 一般的な AI ランディングページビルダー',
+    tableTitle: 'OpenDesign vs 一般的な AI ランディングページビルダー',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '一般的な AI ランディングページビルダー',
     tableRows: [
       {
@@ -524,7 +524,7 @@ export const JA: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design で作られたランディングページ',
+    galleryTitle: 'OpenDesign で作られたランディングページ',
     galleryLead:
       'どれもプロンプトから始まり、本物でレスポンシブな成果物にレンダリングされました。アイデアに近いテンプレートを選び、あなたのバリエーションを説明すれば、エージェントがそれを適応させます — ランディングページから出荷できるコードまで。',
     gallery: [
@@ -539,7 +539,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI ランディングページジェネレーターは無料ですか？',
-        a: 'はい。Open Design はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — ランディングページジェネレーター自体にシート単位やページ単位の課金はありません。',
+        a: 'はい。OpenDesign はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — ランディングページジェネレーター自体にシート単位やページ単位の課金はありません。',
       },
       {
         q: 'ページはどこにでもホストできますか？',
@@ -551,22 +551,22 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: 'どのエージェントで動きますか？',
-        a: 'Open Design は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
+        a: 'OpenDesign は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
       },
     ],
     ctaTitle: '今夜、最初のランディングページを生成する',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、次のローンチのアイデアを、すでに使っているエージェントの中で、本物でレスポンシブなランディングページに — そして出荷できるコードに — 変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、次のローンチのアイデアを、すでに使っているエージェントの中で、本物でレスポンシブなランディングページに — そして出荷できるコードに — 変えましょう。',
     relatedTitle: '関連ツールとガイド',
     related: [
       { href: '/solutions/ai-ui-generator/', label: 'AI UI ジェネレーター' },
-      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
-      { href: '/solutions/marketing/', label: 'マーケティングのための Open Design' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign でデザインからコードへ' },
+      { href: '/solutions/marketing/', label: 'マーケティングのための OpenDesign' },
       { href: '/blog/best-ai-design-tools/', label: '最高の AI デザインツール' },
     ],
   },
   figmaToCode: {
-    title: 'Figma・トゥ・コード — Open Design で Figma のデザインを出荷できるコードに変える',
+    title: 'Figma・トゥ・コード — OpenDesign で Figma のデザインを出荷できるコードに変える',
     description:
       'Figma のデザインを、きれいでコンポーネントベースのコードに変える、無料でオープンソースの Figma・トゥ・コードのワークフロー — あなたがすでに使っているコーディングエージェント、Claude Code から Codex まで、その中で。Figma MCP を通じてデザインを引き込み、あなたが所有して出荷する本物のコードをエージェントに構築させます。縛られたエクスポートはありません。',
     breadcrumb: 'Figma・トゥ・コード',
@@ -577,12 +577,12 @@ export const JA: SolutionLocaleCopy = {
       'Figma のデザインが、コーディングエージェントの中できれいな本番コードに変わる様子を、緑の選択ボックスで囲って描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'たいていの Figma・トゥ・コードのプラグインは、その後あなたが書き直す絶対配置マークアップの一度きりのスナップショットをエクスポートします。Open Design はデザインとコードを、エージェントの中で一つの生きた成果物として保ちます — Figma MCP を通じてフレームを引き込み、話しながら反復し、自分のものになるコードを出荷します。',
+      'たいていの Figma・トゥ・コードのプラグインは、その後あなたが書き直す絶対配置マークアップの一度きりのスナップショットをエクスポートします。OpenDesign はデザインとコードを、エージェントの中で一つの生きた成果物として保ちます — Figma MCP を通じてフレームを引き込み、話しながら反復し、自分のものになるコードを出荷します。',
     stepsTitle: 'Figma・トゥ・コードの仕組み',
     steps: [
       {
         title: 'Figma をエージェントに接続する',
-        body: 'Figma MCP を設定すれば、あなたのコーディングエージェント — Claude Code、Codex、Cursor Agent — が Figma ファイルや選択したフレームを直接読めます。Open Design が適切なスキルを読み込むので、エージェントは脆いピクセルコピーではなく、デザインの意図を構造に変えます。',
+        body: 'Figma MCP を設定すれば、あなたのコーディングエージェント — Claude Code、Codex、Cursor Agent — が Figma ファイルや選択したフレームを直接読めます。OpenDesign が適切なスキルを読み込むので、エージェントは脆いピクセルコピーではなく、デザインの意図を構造に変えます。',
         imageAlt: 'Figma のフレームが、MCP リンクを通じてターミナルに接続されるイラスト',
       },
       {
@@ -601,9 +601,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '完成したコードが、緑の選択フレームに収まり、出荷の準備が整ったイラスト',
       },
     ],
-    tableTitle: 'Open Design vs 一般的な Figma・トゥ・コードツール',
+    tableTitle: 'OpenDesign vs 一般的な Figma・トゥ・コードツール',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '一般的な Figma・トゥ・コードツール',
     tableRows: [
       {
@@ -665,7 +665,7 @@ export const JA: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design で Figma から出荷',
+    galleryTitle: 'OpenDesign で Figma から出荷',
     galleryLead:
       'どれも Figma のフレームから始まり、出荷できるコードになりました。デザインに近いテンプレートを選び、あなたのバリエーションを説明すれば、エージェントがそれを変換します — 縛られたエクスポートのない、Figma からコードへ。',
     gallery: [
@@ -679,7 +679,7 @@ export const JA: SolutionLocaleCopy = {
     faqTitle: 'Figma・トゥ・コード FAQ',
     faq: [
       {
-        q: 'Open Design はどうやって Figma をコードに変えますか？',
+        q: 'OpenDesign はどうやって Figma をコードに変えますか？',
         a: 'Figma MCP を通じて、あなたのコーディングエージェント — Claude Code、Codex、Cursor Agent — が Figma ファイルや選択したフレームを直接読み、プラグインから一度きりのスナップショットをエクスポートするのではなく、きれいでコンポーネントベースのコードを生成します。',
       },
       {
@@ -688,26 +688,26 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: '無料ですか？',
-        a: 'はい。Open Design はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — Figma・トゥ・コードのワークフロー自体にシート単位やエクスポート単位の課金はありません。',
+        a: 'はい。OpenDesign はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — Figma・トゥ・コードのワークフロー自体にシート単位やエクスポート単位の課金はありません。',
       },
       {
         q: 'どのエージェントで動きますか？',
-        a: 'Open Design は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵と自分の Figma MCP のセットアップは自分で持ち込み、何もホストされません。',
+        a: 'OpenDesign は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵と自分の Figma MCP のセットアップは自分で持ち込み、何もホストされません。',
       },
     ],
     ctaTitle: '今夜、次の Figma フレームをコードに変える',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールし、Figma MCP を接続して、次の Figma のデザインを、すでに使っているエージェントの中で、きれいで出荷できるコードに変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールし、Figma MCP を接続して、次の Figma のデザインを、すでに使っているエージェントの中で、きれいで出荷できるコードに変えましょう。',
     relatedTitle: '関連ツールとガイド',
     related: [
-      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign でデザインからコードへ' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI ジェネレーター' },
-      { href: '/agents/claude-code-design/', label: 'Claude Code のための Open Design' },
-      { href: '/solutions/engineering/', label: 'エンジニアリングのための Open Design' },
+      { href: '/agents/claude-code-design/', label: 'Claude Code のための OpenDesign' },
+      { href: '/solutions/engineering/', label: 'エンジニアリングのための OpenDesign' },
     ],
   },
   screenshotToCode: {
-    title: 'スクリーンショット・トゥ・コード — Open Design でスクリーンショットをコードに変える',
+    title: 'スクリーンショット・トゥ・コード — OpenDesign でスクリーンショットをコードに変える',
     description:
       'あらゆる UI のスクリーンショットを、きれいでコンポーネントベースのコードに変える、無料でオープンソースのスクリーンショット・トゥ・コードのワークフロー — あなたがすでに使っているコーディングエージェントの中で。画像をドロップし、何が欲しいかを説明すれば、エージェントがそれを、あなたが所有して出荷する本物のコードとして再構築します。縛られたエクスポートはありません。',
     breadcrumb: 'スクリーンショット・トゥ・コード',
@@ -718,12 +718,12 @@ export const JA: SolutionLocaleCopy = {
       'UI のスクリーンショットが、コーディングエージェントの中できれいな本番コードに変わる様子を、緑の選択ボックスで囲って描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'たいていのスクリーンショット・トゥ・コードツールは、その後あなたが書き直す一度きりの絶対配置マークアップを吐き出します。Open Design はスクリーンショットを、コーディングエージェントの中できれいでコンポーネントベースのコードとして再構築します — 本物の構造、あなたのデザインシステム、エクスポート工程なし、シート単位の課金なし。',
+      'たいていのスクリーンショット・トゥ・コードツールは、その後あなたが書き直す一度きりの絶対配置マークアップを吐き出します。OpenDesign はスクリーンショットを、コーディングエージェントの中できれいでコンポーネントベースのコードとして再構築します — 本物の構造、あなたのデザインシステム、エクスポート工程なし、シート単位の課金なし。',
     stepsTitle: 'スクリーンショット・トゥ・コードの仕組み',
     steps: [
       {
         title: 'スクリーンショットをドロップする',
-        body: '欲しい画面の画像をエージェントに渡します — アプリ、ウェブサイト、デザインのスクリーンショット。Open Design が適切なスキルを読み込むので、エージェントは単なるピクセルではなく、レイアウトと意図を読み取ります。',
+        body: '欲しい画面の画像をエージェントに渡します — アプリ、ウェブサイト、デザインのスクリーンショット。OpenDesign が適切なスキルを読み込むので、エージェントは単なるピクセルではなく、レイアウトと意図を読み取ります。',
         imageAlt: 'UI のスクリーンショットがターミナルにドロップされるイラスト',
       },
       {
@@ -742,9 +742,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '完成したコードが、緑の選択フレームに収まり、出荷の準備が整ったイラスト',
       },
     ],
-    tableTitle: 'Open Design vs 一般的なスクリーンショット・トゥ・コードツール',
+    tableTitle: 'OpenDesign vs 一般的なスクリーンショット・トゥ・コードツール',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '一般的なスクリーンショット・トゥ・コードツール',
     tableRows: [
       {
@@ -806,7 +806,7 @@ export const JA: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design でスクリーンショットから再構築',
+    galleryTitle: 'OpenDesign でスクリーンショットから再構築',
     galleryLead:
       'どれも画像から始まり、出荷できるコードになりました。スクリーンショットに近いテンプレートを選び、あなたのバリエーションを説明すれば、エージェントがそれを再構築します — 縛られたエクスポートのない、スクリーンショットからコードへ。',
     gallery: [
@@ -820,8 +820,8 @@ export const JA: SolutionLocaleCopy = {
     faqTitle: 'スクリーンショット・トゥ・コード FAQ',
     faq: [
       {
-        q: 'Open Design はどうやってスクリーンショットをコードに変えますか？',
-        a: 'コーディングエージェントに画面の画像を渡すと、Open Design が適切なスキルを読み込むので、エージェントはそれをきれいでコンポーネントベースのコードとして再構築します — 単にピクセルをなぞるのではなく、レイアウトと意図を読み取ります。',
+        q: 'OpenDesign はどうやってスクリーンショットをコードに変えますか？',
+        a: 'コーディングエージェントに画面の画像を渡すと、OpenDesign が適切なスキルを読み込むので、エージェントはそれをきれいでコンポーネントベースのコードとして再構築します — 単にピクセルをなぞるのではなく、レイアウトと意図を読み取ります。',
       },
       {
         q: 'どんな種類のコードを生み出しますか？',
@@ -829,26 +829,26 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: '無料ですか？',
-        a: 'はい。Open Design はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — スクリーンショット・トゥ・コードのワークフロー自体にシート単位やクレジット単位の課金はありません。',
+        a: 'はい。OpenDesign はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — スクリーンショット・トゥ・コードのワークフロー自体にシート単位やクレジット単位の課金はありません。',
       },
       {
         q: 'どのエージェントで動きますか？',
-        a: 'Open Design は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
+        a: 'OpenDesign は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
       },
     ],
     ctaTitle: '今夜、次のスクリーンショットをコードに変える',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、欲しい画面のスクリーンショットを、すでに使っているエージェントの中で、きれいで出荷できるコードに変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、欲しい画面のスクリーンショットを、すでに使っているエージェントの中で、きれいで出荷できるコードに変えましょう。',
     relatedTitle: '関連ツールとガイド',
     related: [
-      { href: '/solutions/figma-to-code/', label: 'Open Design で Figma からコードへ' },
-      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
+      { href: '/solutions/figma-to-code/', label: 'OpenDesign で Figma からコードへ' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign でデザインからコードへ' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI ジェネレーター' },
-      { href: '/solutions/engineering/', label: 'エンジニアリングのための Open Design' },
+      { href: '/solutions/engineering/', label: 'エンジニアリングのための OpenDesign' },
     ],
   },
   htmlToPpt: {
-    title: 'HTML to PPT — Open Design で HTML を編集可能な PowerPoint に変える',
+    title: 'HTML to PPT — OpenDesign で HTML を編集可能な PowerPoint に変える',
     description:
       '無料でオープンソースの HTML-to-PPT ワークフロー。コーディングエージェントが洗練された HTML 資料を組み立て、本物の編集可能な .pptx をエクスポートします。すべてはすでに使っているエージェントの中で完結します。クラウドコンバーターも、フラットなスライド画像も、ロックされたエクスポートもありません。HTML も PowerPoint も、あなたが所有するファイルです。',
     breadcrumb: 'HTML to PPT',
@@ -859,12 +859,12 @@ export const JA: SolutionLocaleCopy = {
       'コーディングエージェントの中で HTML 資料が編集可能な PowerPoint ファイルに変換される様子を、緑の選択ボックスで囲んで描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'ほとんどの HTML-to-PPT コンバーターは、ページを編集できない静的なスライド画像に潰してしまいます。Open Design はコーディングエージェントの中で資料を HTML として組み立て、本物の編集可能な .pptx をエクスポートします。ネイティブなテキストと図形、あなたのデザインシステム、シート単位の課金なし、ベンダーロックなし。',
+      'ほとんどの HTML-to-PPT コンバーターは、ページを編集できない静的なスライド画像に潰してしまいます。OpenDesign はコーディングエージェントの中で資料を HTML として組み立て、本物の編集可能な .pptx をエクスポートします。ネイティブなテキストと図形、あなたのデザインシステム、シート単位の課金なし、ベンダーロックなし。',
     stepsTitle: 'HTML to PPT の仕組み',
     steps: [
       {
         title: 'HTML、ドキュメント、またはプロンプトから始める',
-        body: 'エージェントに HTML ページ、markdown ドキュメント、あるいは資料の説明を渡します。Open Design が適切なスキルを読み込み、エージェントは生のマークアップだけでなく、見出し・セクション・データといった構造と意図を読み取ります。',
+        body: 'エージェントに HTML ページ、markdown ドキュメント、あるいは資料の説明を渡します。OpenDesign が適切なスキルを読み込み、エージェントは生のマークアップだけでなく、見出し・セクション・データといった構造と意図を読み取ります。',
         imageAlt: 'HTML と markdown ドキュメントがコーディングエージェントに手渡されるイラスト',
       },
       {
@@ -874,7 +874,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         title: '編集可能な .pptx をエクスポートする',
-        body: 'Open Design の pptx-generator が HTML 資料を本物の PowerPoint に変換します。ネイティブな図形、編集可能なテキスト、変更し続けられるチャートを備え、スライドごとのフラットな画像ではなく HTML-to-PPTX の忠実度を監査します。',
+        body: 'OpenDesign の pptx-generator が HTML 資料を本物の PowerPoint に変換します。ネイティブな図形、編集可能なテキスト、変更し続けられるチャートを備え、スライドごとのフラットな画像ではなく HTML-to-PPTX の忠実度を監査します。',
         imageAlt: 'HTML 資料が編集可能な PowerPoint ファイルにエクスポートされるイラスト',
       },
       {
@@ -883,9 +883,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '緑の選択フレームに収まり、引き渡しの準備が整った完成スライドのイラスト',
       },
     ],
-    tableTitle: 'Open Design と一般的な HTML-to-PPT コンバーターの比較',
+    tableTitle: 'OpenDesign と一般的な HTML-to-PPT コンバーターの比較',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '一般的な HTML-to-PPT コンバーター',
     tableRows: [
       {
@@ -930,7 +930,7 @@ export const JA: SolutionLocaleCopy = {
     ],
     galleryTitle: '始められるスライドテンプレート',
     galleryLead:
-      'Open Design がレンダリングした本物の資料で、編集可能な .pptx にエクスポートできる状態です。コンテンツに近いテーマを選び、あなたのバリエーションを説明すると、エージェントが資料を組み立て、所有できる PowerPoint を手渡します。',
+      'OpenDesign がレンダリングした本物の資料で、編集可能な .pptx にエクスポートできる状態です。コンテンツに近いテーマを選び、あなたのバリエーションを説明すると、エージェントが資料を組み立て、所有できる PowerPoint を手渡します。',
     gallery: [
       { thumb: 'deck-pitch', caption: 'ピッチデック' },
       { thumb: 'deck-product-launch', caption: 'プロダクトローンチ資料' },
@@ -944,8 +944,8 @@ export const JA: SolutionLocaleCopy = {
     faqTitle: 'HTML to PPT に関するよくある質問',
     faq: [
       {
-        q: 'Open Design はどうやって HTML を PPT に変えますか？',
-        a: 'コーディングエージェントがコンテンツをきれいな HTML 資料に組み立て、次に Open Design の pptx-generator スキルがそれを本物の編集可能な .pptx にエクスポートします。スライドごとのフラットな画像ではなく、ネイティブな図形とテキストで、HTML-to-PPTX の忠実度を監査済みです。',
+        q: 'OpenDesign はどうやって HTML を PPT に変えますか？',
+        a: 'コーディングエージェントがコンテンツをきれいな HTML 資料に組み立て、次に OpenDesign の pptx-generator スキルがそれを本物の編集可能な .pptx にエクスポートします。スライドごとのフラットな画像ではなく、ネイティブな図形とテキストで、HTML-to-PPTX の忠実度を監査済みです。',
       },
       {
         q: 'HTML を編集可能な PowerPoint に変換できますか？',
@@ -957,22 +957,22 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: '無料ですか？',
-        a: 'はい。Open Design はオープンソースで、あなたがすでに使っているコーディングエージェントの中で自分の鍵を使って動きます。HTML-to-PPT ワークフローにファイル単位・クレジット単位の課金はありません。',
+        a: 'はい。OpenDesign はオープンソースで、あなたがすでに使っているコーディングエージェントの中で自分の鍵を使って動きます。HTML-to-PPT ワークフローにファイル単位・クレジット単位の課金はありません。',
       },
       {
         q: 'スライドを生成することとの違いは何ですか？',
-        a: '資料の生成はふつうプロンプトやアウトラインから始まりますが、HTML to PPT はすでに手元にある HTML や markdown から始まり、編集可能な .pptx エクスポートに重点を置きます。どちらも同じ Open Design の資料エンジンを使います。アウトラインを起点とするフローについてはスライドのユースケースをご覧ください。',
+        a: '資料の生成はふつうプロンプトやアウトラインから始まりますが、HTML to PPT はすでに手元にある HTML や markdown から始まり、編集可能な .pptx エクスポートに重点を置きます。どちらも同じ OpenDesign の資料エンジンを使います。アウトラインを起点とするフローについてはスライドのユースケースをご覧ください。',
       },
     ],
     ctaTitle: '次の HTML 資料を編集可能な PPT に変える',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、HTML — あるいはプロンプト — を、すでに使っているエージェントの中で、きれいな資料と本物の編集可能な .pptx に変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、HTML — あるいはプロンプト — を、すでに使っているエージェントの中で、きれいな資料と本物の編集可能な .pptx に変えましょう。',
     relatedTitle: '関連ツールとガイド',
     related: [
       { href: '/solutions/slides/', label: 'プレゼン資料を生成する' },
-      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign でデザインからコードへ' },
       { href: '/plugins/templates/', label: '資料テンプレートを見る' },
-      { href: '/solutions/marketing/', label: 'マーケティングのための Open Design' },
+      { href: '/solutions/marketing/', label: 'マーケティングのための OpenDesign' },
     ],
   },
   aiPrototypeGenerator: {
@@ -982,17 +982,17 @@ export const JA: SolutionLocaleCopy = {
     breadcrumb: 'AI プロトタイプジェネレーター',
     label: 'ツール · AI プロトタイプジェネレーター',
     heading: 'コードを出荷する AI プロトタイプジェネレーター',
-    lead: 'フローを説明するだけで、エージェントが本物でクリック可能なプロトタイプを生成します — リンクされた画面、一貫したスタイル、動作するインタラクション。モックアップで止まるプロトタイプジェネレーターとは違い、Open Design は同じ成果物を、すでに動かしているエージェントの中で出荷できるコードまで運びます。',
+    lead: 'フローを説明するだけで、エージェントが本物でクリック可能なプロトタイプを生成します — リンクされた画面、一貫したスタイル、動作するインタラクション。モックアップで止まるプロトタイプジェネレーターとは違い、OpenDesign は同じ成果物を、すでに動かしているエージェントの中で出荷できるコードまで運びます。',
     heroImageAlt:
       'プロンプトが、クリック可能なマルチスクリーンのプロトタイプになり、さらに本番コードへと変わる様子を、緑の選択ボックスで囲って描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'たいていの AI プロトタイプジェネレーター（Figma、Cursor、Penpot）は、その後あなたが作り直すクリック可能なモックアップで止まります。Open Design はプロトタイプをコーディングエージェントの中で生成し、プロンプトから出荷できるコードまで運びます — エクスポート工程も、引き継ぎの断絶も、シート単位の課金もありません。',
+      'たいていの AI プロトタイプジェネレーター（Figma、Cursor、Penpot）は、その後あなたが作り直すクリック可能なモックアップで止まります。OpenDesign はプロトタイプをコーディングエージェントの中で生成し、プロンプトから出荷できるコードまで運びます — エクスポート工程も、引き継ぎの断絶も、シート単位の課金もありません。',
     stepsTitle: 'AI プロトタイプジェネレーターの仕組み',
     steps: [
       {
         title: 'フローを説明する',
-        body: 'その道のりを普通の言葉でエージェントに伝えます — 「オンボーディングフロー：サインアップ、プラン選択、そしてダッシュボード」のように。Open Design がプロトタイプスキルを読み込むので、エージェントは単一の静止フレームではなく、リンクされた画面をレイアウトします。',
+        body: 'その道のりを普通の言葉でエージェントに伝えます — 「オンボーディングフロー：サインアップ、プラン選択、そしてダッシュボード」のように。OpenDesign がプロトタイプスキルを読み込むので、エージェントは単一の静止フレームではなく、リンクされた画面をレイアウトします。',
         imageAlt: 'フローの説明を普通の言葉でターミナルに打ち込むイラスト',
       },
       {
@@ -1011,9 +1011,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'プロトタイプが、緑の選択フレームに収まった出荷コードへと流れ込むイラスト',
       },
     ],
-    tableTitle: 'Open Design vs 一般的な AI プロトタイプジェネレーター',
+    tableTitle: 'OpenDesign vs 一般的な AI プロトタイプジェネレーター',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: 'Figma / Cursor / Penpot のプロトタイプジェネレーター',
     tableRows: [
       {
@@ -1075,7 +1075,7 @@ export const JA: SolutionLocaleCopy = {
         thumb: 'example-kami-landing',
       },
     ],
-    galleryTitle: 'Open Design で作られたプロトタイプ',
+    galleryTitle: 'OpenDesign で作られたプロトタイプ',
     galleryLead:
       'どれもプロンプトから始まり、クリック可能で編集可能な成果物にレンダリングされました。アイデアに近いテンプレートを選び、あなたのバリエーションを説明すれば、エージェントがそれを適応させます — プロトタイプから出荷できるコードまで。',
     gallery: [
@@ -1090,11 +1090,11 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI プロトタイプジェネレーターは無料ですか？',
-        a: 'はい。Open Design はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — プロトタイプジェネレーター自体にシート単位やクレジット単位の課金はありません。',
+        a: 'はい。OpenDesign はオープンソースで、あなたがすでに使っているコーディングエージェントの中で、自分のプロバイダーの鍵を使って動きます — プロトタイプジェネレーター自体にシート単位やクレジット単位の課金はありません。',
       },
       {
         q: 'Figma、Cursor、Penpot のプロトタイプジェネレーターと何が違いますか？',
-        a: 'それらは彼らのアプリの中のクリック可能なモックアップで止まります。Open Design はプロトタイプをあなたのコーディングエージェントの中で生成し、同じ成果物を、あなたが所有する出荷できるコードまで運びます — エクスポートも、本番用の作り直しもありません。',
+        a: 'それらは彼らのアプリの中のクリック可能なモックアップで止まります。OpenDesign はプロトタイプをあなたのコーディングエージェントの中で生成し、同じ成果物を、あなたが所有する出荷できるコードまで運びます — エクスポートも、本番用の作り直しもありません。',
       },
       {
         q: 'プロトタイプはクリック可能でマルチスクリーンですか？',
@@ -1102,24 +1102,24 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: 'どのエージェントで動きますか？',
-        a: 'Open Design は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
+        a: 'OpenDesign は Claude Code、Codex、Cursor Agent、Gemini CLI、その他十数種のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
       },
     ],
     ctaTitle: '今夜、最初のプロトタイプを生成する',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、次のフローを、すでに使っているエージェントの中で、クリック可能なプロトタイプに — そして出荷できるコードに — 変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、次のフローを、すでに使っているエージェントの中で、クリック可能なプロトタイプに — そして出荷できるコードに — 変えましょう。',
     relatedTitle: '関連ツールとガイド',
     related: [
-      { href: '/solutions/prototype/', label: 'Open Design でのプロトタイピング' },
+      { href: '/solutions/prototype/', label: 'OpenDesign でのプロトタイピング' },
       { href: '/solutions/ai-wireframe-generator/', label: 'AI ワイヤーフレームジェネレーター' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI ジェネレーター' },
-      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign でデザインからコードへ' },
     ],
   },
   prototype: {
-    title: 'Open Design + Claude Code でインタラクティブなプロトタイプを作る',
+    title: 'OpenDesign + Claude Code でインタラクティブなプロトタイプを作る',
     description:
-      'プロンプトを、ターミナルから離れることなくクリック可能なマルチスクリーンのプロトタイプに変えます。Open Design はコーディングエージェントに、デザインスキル、テンプレート、デザインシステムを与え、ブラウザで開ける本物のプロトタイプを出力します。',
+      'プロンプトを、ターミナルから離れることなくクリック可能なマルチスクリーンのプロトタイプに変えます。OpenDesign はコーディングエージェントに、デザインスキル、テンプレート、デザインシステムを与え、ブラウザで開ける本物のプロトタイプを出力します。',
     breadcrumb: 'プロトタイプ',
     label: 'ユースケース · プロトタイプ',
     heading: 'プロンプトの速さでプロトタイピング',
@@ -1128,18 +1128,18 @@ export const JA: SolutionLocaleCopy = {
       '手がワイヤーフレームをスケッチし、それがクリック可能なマルチスクリーンのアプリプロトタイプに変わる様子を描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design は、あなたがすでに使っているコーディングエージェントのためのデザインレイヤーです。プロトタイピングにおいては、一段落のアイデアから、操作可能でスタイルの整ったプロトタイプを一度のセッションで生み出せるということ。デザインツールも、エクスポート工程も、引き継ぎの断絶もありません。',
-    stepsTitle: 'Open Design でのプロトタイピングの流れ',
+      'OpenDesign は、あなたがすでに使っているコーディングエージェントのためのデザインレイヤーです。プロトタイピングにおいては、一段落のアイデアから、操作可能でスタイルの整ったプロトタイプを一度のセッションで生み出せるということ。デザインツールも、エクスポート工程も、引き継ぎの断絶もありません。',
+    stepsTitle: 'OpenDesign でのプロトタイピングの流れ',
     steps: [
       {
         title: 'フローを説明する',
-        body: '作りたいものを普通の言葉で伝えます。「ウェルカム画面、プラン選択、確認画面のあるオンボーディングフロー」のように。Open Design がプロトタイプスキルを読み込み、エージェントは単一ページではなく複数の画面を生み出すべきだと理解します。',
+        body: '作りたいものを普通の言葉で伝えます。「ウェルカム画面、プラン選択、確認画面のあるオンボーディングフロー」のように。OpenDesign がプロトタイプスキルを読み込み、エージェントは単一ページではなく複数の画面を生み出すべきだと理解します。',
         imageAlt:
           'アプリフローの説明を普通の言葉でターミナルに打ち込む人物のイラスト',
       },
       {
         title: 'スタイル付きの画面を生成する',
-        body: 'エージェントは Open Design のデザインシステムとプロトタイプテンプレートを適用するため、どの画面もタイポグラフィ、余白、コンポーネントを共有し、ラフな下書きには見えません。バラバラのモックアップではなく、まとまりのある画面群が手に入ります。',
+        body: 'エージェントは OpenDesign のデザインシステムとプロトタイプテンプレートを適用するため、どの画面もタイポグラフィ、余白、コンポーネントを共有し、ラフな下書きには見えません。バラバラのモックアップではなく、まとまりのある画面群が手に入ります。',
         imageAlt:
           '複数のアプリ画面が順番に現れ、すべてが一貫したビジュアルスタイルを共有しているイラスト',
       },
@@ -1156,9 +1156,9 @@ export const JA: SolutionLocaleCopy = {
           'プロトタイプが修正され、その後エンジニアに渡され、デザインとコードが一つのファイルに統合されるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのプロトタイピング vs これまでのやり方',
+    tableTitle: 'OpenDesign でのプロトタイピング vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '従来のプロトタイピングツール',
     tableRows: [
       {
@@ -1225,7 +1225,7 @@ export const JA: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design で作られたプロトタイプ',
+    galleryTitle: 'OpenDesign で作られたプロトタイプ',
     galleryLead:
       'どれもプロンプトから始まり、クリック可能な成果物へとレンダリングされました。アイデアに近いテンプレートを選び、あなたのバリエーションを説明すれば、エージェントがそれを適応させます。',
     gallery: [
@@ -1239,8 +1239,8 @@ export const JA: SolutionLocaleCopy = {
     faqTitle: 'プロトタイピング FAQ',
     faq: [
       {
-        q: 'Open Design でプロトタイプを作るのに Figma のようなデザインツールは必要ですか？',
-        a: 'いいえ。Open Design はコーディングエージェントの中で動き、プロトタイプを HTML にレンダリングします。フローを言葉で説明すれば、エージェントが画面を生み出します。学んだり料金を払ったりする別のキャンバスツールはありません。',
+        q: 'OpenDesign でプロトタイプを作るのに Figma のようなデザインツールは必要ですか？',
+        a: 'いいえ。OpenDesign はコーディングエージェントの中で動き、プロトタイプを HTML にレンダリングします。フローを言葉で説明すれば、エージェントが画面を生み出します。学んだり料金を払ったりする別のキャンバスツールはありません。',
       },
       {
         q: 'プロトタイプはインタラクティブですか、それともただの静的なモックアップですか？',
@@ -1248,7 +1248,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: 'どのエージェントを使えますか？',
-        a: 'Open Design は Claude Code、Codex、Cursor Agent、Gemini CLI、その他10種以上のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
+        a: 'OpenDesign は Claude Code、Codex、Cursor Agent、Gemini CLI、その他10種以上のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
       },
       {
         q: 'プロトタイプは本物のプロダクトになれますか？',
@@ -1257,22 +1257,22 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '次のアイデアを今夜プロトタイプに',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、次の「もし〜だったら」を、すでに使っているエージェントの中で、クリックできる形に変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、次の「もし〜だったら」を、すでに使っているエージェントの中で、クリックできる形に変えましょう。',
   },
   dashboard: {
-    title: 'Open Design + Claude Code でデータダッシュボードを生成する',
+    title: 'OpenDesign + Claude Code でデータダッシュボードを生成する',
     description:
       '追跡している指標を説明するだけで、コーディングエージェントがスタイルの整ったレスポンシブなダッシュボードを構築します。チャート、KPI カード、テーブルがどこにでもホストできる HTML にレンダリングされます。BI ツールのシートも、ドラッグ&ドロップのビルダーも不要です。',
     breadcrumb: 'ダッシュボード',
     label: 'ユースケース · ダッシュボード',
     heading: 'ドラッグ&ドロップのビルダーではなく、説明からダッシュボードを',
-    lead: '何を見せたいか、どう感じさせたいかをエージェントに伝えます。Open Design がチャートのパターン、レイアウトシステム、ビジュアル言語を供給するので、デフォルトスタイルのウィジェットの壁ではなく、まとまりのある見栄えの良いダッシュボードが手に入ります。',
+    lead: '何を見せたいか、どう感じさせたいかをエージェントに伝えます。OpenDesign がチャートのパターン、レイアウトシステム、ビジュアル言語を供給するので、デフォルトスタイルのウィジェットの壁ではなく、まとまりのある見栄えの良いダッシュボードが手に入ります。',
     heroImageAlt:
       '左側の生の数値が、右側のチャートと KPI カードのきれいなダッシュボードへと流れ込むエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design は指標を普通の言葉で書いた仕様を、エージェントが HTML にレンダリングするスタイルの整ったダッシュボードに変えます。リポジトリでバージョン管理され、どこにでもホストでき、シート単位の BI サブスクは不要です。',
-    stepsTitle: 'Open Design でのダッシュボードの流れ',
+      'OpenDesign は指標を普通の言葉で書いた仕様を、エージェントが HTML にレンダリングするスタイルの整ったダッシュボードに変えます。リポジトリでバージョン管理され、どこにでもホストでき、シート単位の BI サブスクは不要です。',
+    stepsTitle: 'OpenDesign でのダッシュボードの流れ',
     steps: [
       {
         title: '指標を説明する',
@@ -1281,7 +1281,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         title: 'チャートのパターンを選ぶ',
-        body: 'Open Design はチャートとレイアウトのテンプレートを備えているので、トレンドは折れ線グラフに、内訳は棒グラフに、比率は適切なビジュアルになります。ちぐはぐなデフォルトではなく、一貫したタイポグラフィと余白が全体を通ります。',
+        body: 'OpenDesign はチャートとレイアウトのテンプレートを備えているので、トレンドは折れ線グラフに、内訳は棒グラフに、比率は適切なビジュアルになります。ちぐはぐなデフォルトではなく、一貫したタイポグラフィと余白が全体を通ります。',
         imageAlt: 'いくつかのチャートタイプがまとまりのあるグリッドに配置されたイラスト',
       },
       {
@@ -1295,9 +1295,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'ダッシュボードが磨かれ、その後デプロイされるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのダッシュボード vs これまでのやり方',
+    tableTitle: 'OpenDesign でのダッシュボード vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: 'BI ツール / 手書きコード',
     tableRows: [
       {
@@ -1340,7 +1340,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "ソーシャルとマーケティング", body: "チャネルのパフォーマンスとキャンペーンのトラッキングを一つのビューに。", thumb: "example-social-media-dashboard" },
       { title: "ドメインレポート", body: "あらゆる分野の構造化されたレポート — 臨床からトレーディングまで。", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: 'Open Design で作られたダッシュボード',
+    galleryTitle: 'OpenDesign で作られたダッシュボード',
     galleryLead:
       'プロンプトとデータソースからレンダリングされた本物のダッシュボード。自分に近いものから始め、追跡している指標を説明してください。',
     gallery: [
@@ -1355,7 +1355,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Tableau や Looker のような BI ツールは必要ですか？',
-        a: 'いいえ。Open Design はコーディングエージェントの中でダッシュボードを HTML にレンダリングします。指標を説明してデータに向けるだけで、ライセンスや習得が必要な別の BI プラットフォームはありません。',
+        a: 'いいえ。OpenDesign はコーディングエージェントの中でダッシュボードを HTML にレンダリングします。指標を説明してデータに向けるだけで、ライセンスや習得が必要な別の BI プラットフォームはありません。',
       },
       {
         q: 'データはどこから来ますか？',
@@ -1372,22 +1372,22 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜あなたのダッシュボードを構築',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、あなたの指標を、すでに使っているエージェントの中で、どこにでもホストできるダッシュボードに変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、あなたの指標を、すでに使っているエージェントの中で、どこにでもホストできるダッシュボードに変えましょう。',
   },
   slides: {
-    title: 'Open Design + Claude Code でプレゼンテーション資料を生成する',
+    title: 'OpenDesign + Claude Code でプレゼンテーション資料を生成する',
     description:
-      'アウトラインを、プレゼンアプリを開かずにデザインされたブランドに沿ったスライド資料に変えます。Open Design はコーディングエージェントに資料テンプレートとビジュアルシステムを与え、プレゼン・エクスポート・共有できる HTML にスライドをレンダリングします。',
+      'アウトラインを、プレゼンアプリを開かずにデザインされたブランドに沿ったスライド資料に変えます。OpenDesign はコーディングエージェントに資料テンプレートとビジュアルシステムを与え、プレゼン・エクスポート・共有できる HTML にスライドをレンダリングします。',
     breadcrumb: 'スライド',
     label: 'ユースケース · スライド',
     heading: 'デザインされて見える資料を、プロンプトで書く',
-    lead: 'エージェントにアウトラインとトーンを渡します。Open Design が資料テンプレートとビジュアルシステムを適用するので、どのスライドもレイアウトされ、組版され、ブランドに沿います。空白の背景に箇条書きが並ぶだけではありません。',
+    lead: 'エージェントにアウトラインとトーンを渡します。OpenDesign が資料テンプレートとビジュアルシステムを適用するので、どのスライドもレイアウトされ、組版され、ブランドに沿います。空白の背景に箇条書きが並ぶだけではありません。',
     heroImageAlt:
       '左側のアウトラインが、右側のデザインされたプレゼンスライドの連なりに変わるエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design はアウトラインを、エージェントが一度のセッションでレンダリングするデザインされた HTML 資料に変えます。ブラウザでプレゼンし、PDF や PPTX にエクスポートし、ソースはリポジトリに保持できます。',
-    stepsTitle: 'Open Design での資料作成の流れ',
+      'OpenDesign はアウトラインを、エージェントが一度のセッションでレンダリングするデザインされた HTML 資料に変えます。ブラウザでプレゼンし、PDF や PPTX にエクスポートし、ソースはリポジトリに保持できます。',
+    stepsTitle: 'OpenDesign での資料作成の流れ',
     steps: [
       {
         title: 'アウトラインを渡す',
@@ -1396,7 +1396,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         title: '資料のスタイルを選ぶ',
-        body: 'Open Design は資料テンプレートを備えています — エディトリアル、スイス・インターナショナル、ダークなテクニカルなど。エージェントが一つを適用し、タイポグラフィ、グリッド、アクセントがすべてのスライドで一貫します。',
+        body: 'OpenDesign は資料テンプレートを備えています — エディトリアル、スイス・インターナショナル、ダークなテクニカルなど。エージェントが一つを適用し、タイポグラフィ、グリッド、アクセントがすべてのスライドで一貫します。',
         imageAlt: 'いくつかの資料スタイルの選択肢が横並びに配置されたイラスト',
       },
       {
@@ -1410,9 +1410,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '資料がプレゼンされ、複数の形式にエクスポートされるイラスト',
       },
     ],
-    tableTitle: 'Open Design での資料 vs これまでのやり方',
+    tableTitle: 'OpenDesign での資料 vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: 'PowerPoint / Keynote / AI スライドツール',
     tableRows: [
       {
@@ -1455,7 +1455,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "プレゼンターモード", body: "ブラウザでライブにプレゼンするために作られた Reveal 風の資料。", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "技術ブループリント", body: "複雑なシステムを図解する、アーキテクチャと知識の資料。", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: 'Open Design で作られた資料',
+    galleryTitle: 'OpenDesign で作られた資料',
     galleryLead:
       'アウトラインからレンダリングされた本物の資料。あなたの話に近いスタイルを選び、内容を説明してください。',
     gallery: [
@@ -1470,7 +1470,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'PowerPoint や Keynote は必要ですか？',
-        a: 'いいえ。Open Design はコーディングエージェントの中で資料を HTML にレンダリングし、PDF や PPTX にエクスポートできます。ブラウザからプレゼンするかファイルを渡すだけで、作るためにプレゼンアプリは要りません。',
+        a: 'いいえ。OpenDesign はコーディングエージェントの中で資料を HTML にレンダリングし、PDF や PPTX にエクスポートできます。ブラウザからプレゼンするかファイルを渡すだけで、作るためにプレゼンアプリは要りません。',
       },
       {
         q: 'これは単なる AI 生成の箇条書きですか？',
@@ -1478,7 +1478,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: '編集可能な PowerPoint にエクスポートできますか？',
-        a: 'はい。Open Design の pptx-generator が資料を本物の .pptx にエクスポートします。ネイティブで編集可能なテキストと図形を備え、フラットなスライド画像ではなく HTML-to-PPTX の忠実度を監査済みです。加えて PDF と、プレゼン元となる HTML も得られます。変換を起点とするフローについては HTML to PPT ツールをご覧ください。',
+        a: 'はい。OpenDesign の pptx-generator が資料を本物の .pptx にエクスポートします。ネイティブで編集可能なテキストと図形を備え、フラットなスライド画像ではなく HTML-to-PPTX の忠実度を監査済みです。加えて PDF と、プレゼン元となる HTML も得られます。変換を起点とするフローについては HTML to PPT ツールをご覧ください。',
       },
       {
         q: 'どのエージェントを使えますか？',
@@ -1487,29 +1487,29 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '次の資料を今夜作る',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、あなたのアウトラインを、すでに使っているエージェントの中で、デザインされた資料に変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、あなたのアウトラインを、すでに使っているエージェントの中で、デザインされた資料に変えましょう。',
     relatedTitle: '関連ツールとガイド',
     related: [
-      { href: '/solutions/html-to-ppt/', label: 'Open Design で HTML から PPT へ' },
-      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
+      { href: '/solutions/html-to-ppt/', label: 'OpenDesign で HTML から PPT へ' },
+      { href: '/solutions/design-to-code/', label: 'OpenDesign でデザインからコードへ' },
       { href: '/plugins/templates/', label: '資料テンプレートを見る' },
-      { href: '/solutions/marketing/', label: 'マーケティングのための Open Design' },
+      { href: '/solutions/marketing/', label: 'マーケティングのための OpenDesign' },
     ],
   },
   image: {
-    title: 'Open Design + Claude Code でブランドに沿ったグラフィックを生成する',
+    title: 'OpenDesign + Claude Code でブランドに沿ったグラフィックを生成する',
     description:
       'ソーシャルカード、記事のカバー、マーケティンググラフィックをプロンプトから生み出します。本物のタイポグラフィとブランドシステムでレイアウトされ、PNG にエクスポートできる鮮明な HTML にレンダリングされます。デザインアプリも、テンプレートのサブスクも不要です。',
     breadcrumb: '画像',
     label: 'ユースケース · 画像',
     heading: 'ブランドに沿ったグラフィックを、生成しレイアウトまで',
-    lead: '必要なカードやカバーを説明します。Open Design が本物の文字組み、グリッド、ブランドカラーで構成し、画像としてエクスポートできる HTML にレンダリングします。デザインアプリと格闘したり、ありきたりなテンプレートを使ったりする必要はありません。',
+    lead: '必要なカードやカバーを説明します。OpenDesign が本物の文字組み、グリッド、ブランドカラーで構成し、画像としてエクスポートできる HTML にレンダリングします。デザインアプリと格闘したり、ありきたりなテンプレートを使ったりする必要はありません。',
     heroImageAlt:
       'プロンプトが、レイアウトされたソーシャルカードと記事カバーの一式に変わるエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design はプロンプトを、エージェントが HTML にレンダリングして PNG にエクスポートする、組版されたブランドに沿ったグラフィックに変えます。繰り返し可能で、バージョン管理され、シート単位のデザインツールから解放されます。',
-    stepsTitle: 'Open Design でのグラフィック作成の流れ',
+      'OpenDesign はプロンプトを、エージェントが HTML にレンダリングして PNG にエクスポートする、組版されたブランドに沿ったグラフィックに変えます。繰り返し可能で、バージョン管理され、シート単位のデザインツールから解放されます。',
+    stepsTitle: 'OpenDesign でのグラフィック作成の流れ',
     steps: [
       {
         title: 'グラフィックを説明する',
@@ -1518,7 +1518,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         title: 'ブランドシステムを適用する',
-        body: 'Open Design があなたの色、文字組み、余白を再利用可能なデザインシステムから引き出すので、どのカードも一度きりのものに見えるのではなく、ブランドの他の部分と揃います。',
+        body: 'OpenDesign があなたの色、文字組み、余白を再利用可能なデザインシステムから引き出すので、どのカードも一度きりのものに見えるのではなく、ブランドの他の部分と揃います。',
         imageAlt: 'ブランドカラーと文字組みがカードレイアウトに適用されるイラスト',
       },
       {
@@ -1532,9 +1532,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '一つのカードテンプレートが一貫した一連のグラフィックを生み出すイラスト',
       },
     ],
-    tableTitle: 'Open Design でのグラフィック vs これまでのやり方',
+    tableTitle: 'OpenDesign でのグラフィック vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: 'デザインアプリ / ありきたりなテンプレート',
     tableRows: [
       {
@@ -1577,7 +1577,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "カルーセル", body: "フレーム間で一貫性を保つ、複数スライドのソーシャルカルーセル。", thumb: "example-social-carousel" },
       { title: "UI モックフレーム", body: "プロダクトのストーリーテリング向けの通知・デバイスフレーム。", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: 'Open Design で作られたグラフィック',
+    galleryTitle: 'OpenDesign で作られたグラフィック',
     galleryLead:
       'プロンプトからレンダリングされた本物のカードとカバー。必要なものに近いものを選び、あなたのコピーに差し替えてください。',
     gallery: [
@@ -1592,7 +1592,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'これは Midjourney のような AI 画像ジェネレーターですか？',
-        a: 'いいえ。Open Design は本物のレイアウトとタイポグラフィでグラフィックを構成します — あなたの見出し、あなたのブランド、ちょうどの寸法で — そして PNG としてエクスポートする HTML にレンダリングします。ピクセル生成ではなく、デザインの構成です。',
+        a: 'いいえ。OpenDesign は本物のレイアウトとタイポグラフィでグラフィックを構成します — あなたの見出し、あなたのブランド、ちょうどの寸法で — そして PNG としてエクスポートする HTML にレンダリングします。ピクセル生成ではなく、デザインの構成です。',
       },
       {
         q: '一貫した一連のカードを作れますか？',
@@ -1609,22 +1609,22 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '次のグラフィックを今夜作る',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、プロンプトを、すでに使っているエージェントの中で、ブランドに沿ったグラフィックに変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、プロンプトを、すでに使っているエージェントの中で、ブランドに沿ったグラフィックに変えましょう。',
   },
   video: {
-    title: 'Open Design + Claude Code でモーショングラフィックとショート動画を生成する',
+    title: 'OpenDesign + Claude Code でモーショングラフィックとショート動画を生成する',
     description:
       'スクリプトを、アニメーションフレームとショート動画に変えます — タイトルカード、モーション背景、アウトロが、あなたのブランドシステムで構成され、HTML からレンダリングされます。モーショングラフィックスイートも、タイムラインのスクラブも不要です。',
     breadcrumb: '動画',
     label: 'ユースケース · 動画',
     heading: 'タイムラインではなく、スクリプトからモーショングラフィックを',
-    lead: '欲しい瞬間を説明します — タイトルの登場、データのアニメーション、ロゴのアウトロ。Open Design があなたのブランドシステムでアニメーションフレームを構成し、動画にレンダリングします。モーショングラフィックスイートは要りません。',
+    lead: '欲しい瞬間を説明します — タイトルの登場、データのアニメーション、ロゴのアウトロ。OpenDesign があなたのブランドシステムでアニメーションフレームを構成し、動画にレンダリングします。モーショングラフィックスイートは要りません。',
     heroImageAlt:
       'スクリプトが、アニメーションする動画フレームの連なりに変わるエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design はスクリプトを、エージェントがショート動画にレンダリングする、アニメーションするブランドに沿ったフレームに変えます。HTML から構成され、リポジトリでバージョン管理され、習得すべきタイムラインエディターはありません。',
-    stepsTitle: 'Open Design でのモーションの流れ',
+      'OpenDesign はスクリプトを、エージェントがショート動画にレンダリングする、アニメーションするブランドに沿ったフレームに変えます。HTML から構成され、リポジトリでバージョン管理され、習得すべきタイムラインエディターはありません。',
+    stepsTitle: 'OpenDesign でのモーションの流れ',
     steps: [
       {
         title: '瞬間を説明する',
@@ -1633,7 +1633,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         title: 'ブランドとモーションのスタイルを適用する',
-        body: 'Open Design がフレームテンプレートを供給します — 映画的なライトリーク、グリッチのタイトル、ロゴのアウトロ — そしてあなたの色と文字組みを適用するので、モーションは意図的でブランドに沿って見えます。',
+        body: 'OpenDesign がフレームテンプレートを供給します — 映画的なライトリーク、グリッチのタイトル、ロゴのアウトロ — そしてあなたの色と文字組みを適用するので、モーションは意図的でブランドに沿って見えます。',
         imageAlt: 'ブランドのスタイリングがアニメーションフレームに適用されるイラスト',
       },
       {
@@ -1647,9 +1647,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '動画クリップが磨かれ、ソーシャル向けにエクスポートされるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのモーション vs これまでのやり方',
+    tableTitle: 'OpenDesign でのモーション vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: 'After Effects / モーションスイート',
     tableRows: [
       {
@@ -1692,7 +1692,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "グリッチタイトル", body: "モーションとテクスチャを伴うタイトルの登場。", thumb: "example-frame-glitch-title" },
       { title: "ロゴアウトロ", body: "どんなクリップにも合うブランドの締めアニメーション。", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: 'Open Design で作られたモーション',
+    galleryTitle: 'OpenDesign で作られたモーション',
     galleryLead:
       'プロンプトからレンダリングされた本物のアニメーションフレームとクリップ。アイデアに近いものを選び、モーションを説明してください。',
     gallery: [
@@ -1707,7 +1707,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'After Effects やモーショングラフィックスイートは必要ですか？',
-        a: 'いいえ。Open Design はコーディングエージェントの中でアニメーションフレームを HTML で構成し、動画にレンダリングします。習得やライセンスが必要なタイムラインエディターはありません。',
+        a: 'いいえ。OpenDesign はコーディングエージェントの中でアニメーションフレームを HTML で構成し、動画にレンダリングします。習得やライセンスが必要なタイムラインエディターはありません。',
       },
       {
         q: 'これはどんな種類の動画に向いていますか？',
@@ -1724,31 +1724,31 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '次のアイデアを今夜アニメーションに',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、スクリプトを、すでに使っているエージェントの中で、モーションに変えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、スクリプトを、すでに使っているエージェントの中で、モーションに変えましょう。',
   },
   designSystem: {
-    title: 'Open Design + Claude Code でデザインシステムを構築し適用する',
+    title: 'OpenDesign + Claude Code でデザインシステムを構築し適用する',
     description:
       'ブランドを、コーディングエージェントがあらゆる成果物に適用する再利用可能なデザインシステムとして捉えます — 色、文字組み、コンポーネント、トーンを一つの DESIGN.md に。一度定義すれば、どのプロトタイプ、資料、ダッシュボードもブランドに沿ったままです。',
     breadcrumb: 'デザインシステム',
     label: 'ユースケース · デザインシステム',
     heading: '一つのデザインシステムを、エージェントが作るすべてに適用',
-    lead: 'ブランドを一度定義すれば、Open Design がそれをすべての出力に持ち込みます — プロトタイプ、資料、ダッシュボード、グラフィック。システムはエージェントが読む DESIGN.md としてリポジトリ内にあるので、一貫性は手作業ではなく自動です。',
+    lead: 'ブランドを一度定義すれば、OpenDesign がそれをすべての出力に持ち込みます — プロトタイプ、資料、ダッシュボード、グラフィック。システムはエージェントが読む DESIGN.md としてリポジトリ内にあるので、一貫性は手作業ではなく自動です。',
     heroImageAlt:
       '一つのデザインシステムが、多くのブランドに沿った成果物へと放射状に広がるエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design はブランドを、エージェントがあらゆる成果物に適用する持ち運び可能なデザインシステムとして捉えます — リポジトリ内で一度定義し、どこでも強制され、それを管理する中央のデザインツールはありません。',
-    stepsTitle: 'Open Design でのデザインシステムの流れ',
+      'OpenDesign はブランドを、エージェントがあらゆる成果物に適用する持ち運び可能なデザインシステムとして捉えます — リポジトリ内で一度定義し、どこでも強制され、それを管理する中央のデザインツールはありません。',
+    stepsTitle: 'OpenDesign でのデザインシステムの流れ',
     steps: [
       {
         title: 'システムを捉える',
-        body: 'ブランドを説明します — 色、文字組み、余白、声 — または既存のサイトをエージェントに指して抽出させます。Open Design がそれをプロジェクト内にある DESIGN.md に書き込みます。',
+        body: 'ブランドを説明します — 色、文字組み、余白、声 — または既存のサイトをエージェントに指して抽出させます。OpenDesign がそれをプロジェクト内にある DESIGN.md に書き込みます。',
         imageAlt: 'ブランドが一つのデザインシステムファイルに捉えられるイラスト',
       },
       {
         title: '実証済みのベースから始める',
-        body: 'Open Design は140以上の参照デザインシステムを備えています — Apple や Linear からエディトリアル、ブルータリストまで。白紙から始めるのではなく、自分のブランドに近いものをフォークしましょう。',
+        body: 'OpenDesign は140以上の参照デザインシステムを備えています — Apple や Linear からエディトリアル、ブルータリストまで。白紙から始めるのではなく、自分のブランドに近いものをフォークしましょう。',
         imageAlt: '参照デザインシステムのギャラリーが閲覧されるイラスト',
       },
       {
@@ -1762,9 +1762,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'デザインシステムが更新され、すべての出力に伝播するイラスト',
       },
     ],
-    tableTitle: 'Open Design でのデザインシステム vs これまでのやり方',
+    tableTitle: 'OpenDesign でのデザインシステム vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: 'デザインツールのライブラリ / スタイルガイド',
     tableRows: [
       {
@@ -1807,7 +1807,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "OpenAI", body: "ミニマルで、ニュートラルで、研究グレード。", thumb: "design-system-openai" },
       { title: "GitHub", body: "密度が高く、テクニカルで、開発者ネイティブ。", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Open Design のデザインシステム',
+    galleryTitle: 'OpenDesign のデザインシステム',
     galleryLead:
       '出発点としてフォークできる140以上の参照システムのほんの一部。自分のブランドに近いものを選び、適応させてください。',
     gallery: [
@@ -1822,11 +1822,11 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'ここで言うデザインシステムとは正確には何ですか？',
-        a: '色、文字組み、余白、コンポーネント、声を捉えた、リポジトリ内の DESIGN.md ファイルです。Open Design のすべてのスキルがそれを読むので、あなたのブランドがエージェントの生み出すものに自動的に適用されます。',
+        a: '色、文字組み、余白、コンポーネント、声を捉えた、リポジトリ内の DESIGN.md ファイルです。OpenDesign のすべてのスキルがそれを読むので、あなたのブランドがエージェントの生み出すものに自動的に適用されます。',
       },
       {
         q: 'ゼロから始めなければなりませんか？',
-        a: 'いいえ。Open Design はフォークできる140以上の参照デザインシステムを備えています — Apple や Linear からエディトリアル、ブルータリストまで — そこから自分のブランドに適応させます。',
+        a: 'いいえ。OpenDesign はフォークできる140以上の参照デザインシステムを備えています — Apple や Linear からエディトリアル、ブルータリストまで — そこから自分のブランドに適応させます。',
       },
       {
         q: '資料、ダッシュボード、プロトタイプをまたいでどう一貫性を保つのですか？',
@@ -1839,12 +1839,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: 'あなたのデザインシステムを今夜定義する',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、すでに使っているエージェントに、どこにでも適用できる一つのブランドを与えましょう。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、すでに使っているエージェントに、どこにでも適用できる一つのブランドを与えましょう。',
   },
   roleSoloBuilder: {
-    title: 'ソロビルダーとインディーハッカーのための Open Design',
+    title: 'ソロビルダーとインディーハッカーのための OpenDesign',
     description:
-      '一人でもチームのように出荷しよう。Open Design はあなたのコーディングエージェントを、スタートアップのデザイン担当に変えます。プロトタイプ、ランディングページ、ダッシュボード、ブランドビジュアルまで、すべてプロンプトから、すべてブランドに沿って、すべてあなたのリポジトリの中で。',
+      '一人でもチームのように出荷しよう。OpenDesign はあなたのコーディングエージェントを、スタートアップのデザイン担当に変えます。プロトタイプ、ランディングページ、ダッシュボード、ブランドビジュアルまで、すべてプロンプトから、すべてブランドに沿って、すべてあなたのリポジトリの中で。',
     breadcrumb: 'ソロビルダー',
     label: '対象 · ソロビルダー',
     heading: 'あなたのデザインチームは、すでに動かしているエージェントだ',
@@ -1853,8 +1853,8 @@ export const JA: SolutionLocaleCopy = {
       '一貫したスタイルのランディングページ、アプリ、ダッシュボード、ソーシャルカードに囲まれて机に向かう一人の人物を描いたエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design は、ソロ創業者がこれまで持てなかったデザイン部門です。プロダクトに必要なあらゆる面で、プロンプトから成果物へ。ひとつのブランドで、引き継ぎゼロ、追加ツールなし。',
-    stepsTitle: 'ソロビルダーは Open Design をこう使う',
+      'OpenDesign は、ソロ創業者がこれまで持てなかったデザイン部門です。プロダクトに必要なあらゆる面で、プロンプトから成果物へ。ひとつのブランドで、引き継ぎゼロ、追加ツールなし。',
+    stepsTitle: 'ソロビルダーは OpenDesign をこう使う',
     steps: [
       {
         title: 'ブランドを一度だけ定義する',
@@ -1872,9 +1872,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '成果物がプロンプトから公開まで一直線に進むイラスト',
       },
     ],
-    tableTitle: 'Open Design でのソロ開発 vs. 手作業でやり抜く道',
+    tableTitle: 'OpenDesign でのソロ開発 vs. 手作業でやり抜く道',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '今、一人でやると',
     tableRows: [
       { capability: 'あらゆるデザイン面をカバー', withOd: '一つのエージェントがプロトタイプ、ランディング、ダッシュボード、ブランドを担当', without: '五つの SaaS ツールとチュートリアルを継ぎ接ぎ' },
@@ -1892,7 +1892,7 @@ export const JA: SolutionLocaleCopy = {
       { title: 'モバイルフロー', body: 'Web を超えるときのアプリ画面。', thumb: 'example-mobile-app' },
       { title: 'ソーシャルカード', body: 'あらゆるチャネル向けのローンチ・更新カード。', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: 'Open Design で一人で作った',
+    galleryTitle: 'OpenDesign で一人で作った',
     galleryLead:
       '一人のスタートアップに必要なあらゆる面を、プロンプトから。次の一手に近いものを選んで、それを説明してください。',
     gallery: [
@@ -1912,12 +1912,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、すべてを作り上げよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、一つのエージェントをあなたのデザインチームにしよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、一つのエージェントをあなたのデザインチームにしよう。すでに使っているそのエージェントの中で。',
   },
   roleDesigner: {
-    title: 'デザイナーのための Open Design',
+    title: 'デザイナーのための OpenDesign',
     description:
-      '時間をセンスに使い、雑務には使わない。Open Design は、繰り返しの制作作業（バリエーション、状態、デザインシステム全体）をエージェントに任せ、あなたは見た目をディレクションし、最終判断を握ります。',
+      '時間をセンスに使い、雑務には使わない。OpenDesign は、繰り返しの制作作業（バリエーション、状態、デザインシステム全体）をエージェントに任せ、あなたは見た目をディレクションし、最終判断を握ります。',
     breadcrumb: 'デザイナー',
     label: '対象 · デザイナー',
     heading: 'デザインをディレクションし、制作はエージェントに任せる',
@@ -1926,8 +1926,8 @@ export const JA: SolutionLocaleCopy = {
       'デザイナーがディレクションし、エージェントが画面、バリエーション、デザインシステムを埋めていくエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design は決して疲れない制作アシスタントです。あなたがデザインシステムを定義しセンスを判断し、エージェントが残りをシステムに沿って、あなたのリポジトリの中で生成します。',
-    stepsTitle: 'デザイナーは Open Design をこう使う',
+      'OpenDesign は決して疲れない制作アシスタントです。あなたがデザインシステムを定義しセンスを判断し、エージェントが残りをシステムに沿って、あなたのリポジトリの中で生成します。',
+    stepsTitle: 'デザイナーは OpenDesign をこう使う',
     steps: [
       {
         title: 'システムをコード化する',
@@ -1945,9 +1945,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'デザイナーが指示を出し、デザインが更新されるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのデザイン vs. 手作業のやり方',
+    tableTitle: 'OpenDesign でのデザイン vs. 手作業のやり方',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '手作業のデザインツール',
     tableRows: [
       { capability: 'デザインシステムを構築', withOd: 'エージェントがどこにでも適用する DESIGN.md', without: 'ツールごとに手で保守するライブラリ' },
@@ -1965,7 +1965,7 @@ export const JA: SolutionLocaleCopy = {
       { title: 'アプリ画面', body: 'ハイフィデリティのモバイル・Web 画面。', thumb: 'example-mobile-app' },
       { title: 'ダッシュボード', body: 'あなたのシステムを尊重するデータ UI。', thumb: 'example-dashboard' },
     ],
-    galleryTitle: 'Open Design でディレクションした',
+    galleryTitle: 'OpenDesign でディレクションした',
     galleryLead:
       'ディレクションからエージェントが生み出した、システムに沿ったハイフィデリティの作品。あなたのスタイルに近いものを選んで磨きましょう。',
     gallery: [
@@ -1985,12 +1985,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、次のデザインをディレクションしよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、制作はエージェントに任せ、センスはあなたが判断しよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、制作はエージェントに任せ、センスはあなたが判断しよう。すでに使っているそのエージェントの中で。',
   },
   roleEngineering: {
-    title: 'エンジニアのための Open Design',
+    title: 'エンジニアのための OpenDesign',
     description:
-      'デザインの引き継ぎを飛ばそう。Open Design は DESIGN.md を、あなたのコーディングエージェントが直接書く本物のフロントエンドに変えます。システムに沿った UI、プロトタイプ、ダッシュボードを、リポジトリの中で、Figma の往復なしに。',
+      'デザインの引き継ぎを飛ばそう。OpenDesign は DESIGN.md を、あなたのコーディングエージェントが直接書く本物のフロントエンドに変えます。システムに沿った UI、プロトタイプ、ダッシュボードを、リポジトリの中で、Figma の往復なしに。',
     breadcrumb: 'エンジニアリング',
     label: '対象 · エンジニアリング',
     heading: '仕様からフロントエンドへ、間に引き継ぎなし',
@@ -1999,8 +1999,8 @@ export const JA: SolutionLocaleCopy = {
       'DESIGN.md が引き継ぎ工程を飛ばして、直接フロントエンドコードとレンダリングされた UI に流れ込むエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design はデザインシステムを機械可読にすることで、デザイナーからエンジニアへのギャップを埋めます。あなたのコードを書く同じエージェントが、システムを適用し本物の UI をレンダリングします。',
-    stepsTitle: 'エンジニアは Open Design をこう使う',
+      'OpenDesign はデザインシステムを機械可読にすることで、デザイナーからエンジニアへのギャップを埋めます。あなたのコードを書く同じエージェントが、システムを適用し本物の UI をレンダリングします。',
+    stepsTitle: 'エンジニアは OpenDesign をこう使う',
     steps: [
       {
         title: 'レッドラインではなく、システムを読む',
@@ -2018,9 +2018,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '生成された UI がレビュー可能な PR として着地するイラスト',
       },
     ],
-    tableTitle: 'Open Design でのフロントエンド vs. 引き継ぎのやり方',
+    tableTitle: 'OpenDesign でのフロントエンド vs. 引き継ぎのやり方',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: 'デザインから開発への引き継ぎ',
     tableRows: [
       { capability: '実装の元になるデザインを得る', withOd: 'エージェントが直接読む DESIGN.md', without: '手で再解釈する Figma ファイル' },
@@ -2038,7 +2038,7 @@ export const JA: SolutionLocaleCopy = {
       { title: 'ランディングページ', body: 'デザイン待ちなしのマーケティングページ。', thumb: 'example-saas-landing' },
       { title: 'Kanban / ボード', body: '社内ワークフロー UI。', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: 'エンジニアが Open Design で作った',
+    galleryTitle: 'エンジニアが OpenDesign で作った',
     galleryLead:
       'リポジトリの中で直接生成された、システムに沿った本物のフロントエンド。作っているものに近いものを選んで説明してください。',
     gallery: [
@@ -2058,12 +2058,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、次の UI を生成しよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、DESIGN.md をフロントエンドに変えよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、DESIGN.md をフロントエンドに変えよう。すでに使っているそのエージェントの中で。',
   },
   roleProductManagers: {
-    title: 'プロダクトマネージャーのための Open Design',
+    title: 'プロダクトマネージャーのための OpenDesign',
     description:
-      'アイデアを伝えるために、デザインのリソースを待つのはもう終わり。Open Design は PM がプロンプトを、クリック可能なプロトタイプやワイヤーフレームに変えられるようにします。ステークホルダーの足並みを揃え、チームにブリーフィングするために、デザインチケットなしで。',
+      'アイデアを伝えるために、デザインのリソースを待つのはもう終わり。OpenDesign は PM がプロンプトを、クリック可能なプロトタイプやワイヤーフレームに変えられるようにします。ステークホルダーの足並みを揃え、チームにブリーフィングするために、デザインチケットなしで。',
     breadcrumb: 'プロダクトマネージャー',
     label: '対象 · プロダクトマネージャー',
     heading: 'キックオフの前に、アイデアをクリック可能にする',
@@ -2072,8 +2072,8 @@ export const JA: SolutionLocaleCopy = {
       'PM が書かれたアイデアを、ステークホルダーに見せるクリック可能なプロトタイプに変えるエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design は PM にデザイン不要の方法でアイデアを形にする手段を与えます。足並みを揃えるためのブリーフのための、プロンプトからプロトタイプへ。チームのデザイン予算を使わずに。',
-    stepsTitle: 'PM は Open Design をこう使う',
+      'OpenDesign は PM にデザイン不要の方法でアイデアを形にする手段を与えます。足並みを揃えるためのブリーフのための、プロンプトからプロトタイプへ。チームのデザイン予算を使わずに。',
+    stepsTitle: 'PM は OpenDesign をこう使う',
     steps: [
       {
         title: 'フローを説明する',
@@ -2091,9 +2091,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'プロトタイプが足並みを揃えるために共有され、それからチームに渡されるイラスト',
       },
     ],
-    tableTitle: 'Open Design での PM 業務 vs. デザイン待ち',
+    tableTitle: 'OpenDesign での PM 業務 vs. デザイン待ち',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '今、それなしだと',
     tableRows: [
       { capability: 'アイデアを形にする', withOd: 'プロンプト → 自分でクリック可能なプロトタイプ', without: 'デザインチケットを起票してリソースを待つ' },
@@ -2111,7 +2111,7 @@ export const JA: SolutionLocaleCopy = {
       { title: 'Web プロトタイプ', body: 'レビュー用のマルチスクリーン Web フロー。', thumb: 'example-web-prototype' },
       { title: 'トレンドビュー', body: '文脈のための 30 日間・トレンドのスナップショット。', thumb: 'example-last30days' },
     ],
-    galleryTitle: 'PM が Open Design でプロトタイプ化した',
+    galleryTitle: 'PM が OpenDesign でプロトタイプ化した',
     galleryLead:
       '説明からレンダリングされた、ステークホルダーレビューに使えるクリック可能なフロー。あなたのアイデアに近いものを選んで説明してください。',
     gallery: [
@@ -2131,12 +2131,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、あなたのアイデアをクリック可能にしよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、次の仕様を人がクリックできるものに変えよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、次の仕様を人がクリックできるものに変えよう。すでに使っているそのエージェントの中で。',
   },
   roleMarketing: {
-    title: 'マーケティングチームのための Open Design',
+    title: 'マーケティングチームのための OpenDesign',
     description:
-      'コンテンツのスピードでキャンペーンを出荷しよう。Open Design はあなたのエージェントが、ランディングページ、ソーシャルカード、キャンペーンビジュアルをプロンプトから作れるようにします。ブランドに沿って、オンデマンドで、デザインの順番待ちなしに。',
+      'コンテンツのスピードでキャンペーンを出荷しよう。OpenDesign はあなたのエージェントが、ランディングページ、ソーシャルカード、キャンペーンビジュアルをプロンプトから作れるようにします。ブランドに沿って、オンデマンドで、デザインの順番待ちなしに。',
     breadcrumb: 'マーケティング',
     label: '対象 · マーケティング',
     heading: 'プロンプトのスピードのキャンペーンビジュアル',
@@ -2145,8 +2145,8 @@ export const JA: SolutionLocaleCopy = {
       'マーケターがブリーフを、ランディングページとブランドに沿った一連のソーシャルカードに変えるエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design はマーケティングの常時稼働のデザインリソースです。ランディングページとソーシャルのための、プロンプトからアセットへ。ブランドに沿って。だからキャンペーンはコピーを書くスピードで出荷されます。',
-    stepsTitle: 'マーケティングチームは Open Design をこう使う',
+      'OpenDesign はマーケティングの常時稼働のデザインリソースです。ランディングページとソーシャルのための、プロンプトからアセットへ。ブランドに沿って。だからキャンペーンはコピーを書くスピードで出荷されます。',
+    stepsTitle: 'マーケティングチームは OpenDesign をこう使う',
     steps: [
       {
         title: 'ブランドを固める',
@@ -2164,9 +2164,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'キャンペーンアセットが素早く出荷され反復されるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのマーケティング vs. いつものドタバタ',
+    tableTitle: 'OpenDesign でのマーケティング vs. いつものドタバタ',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'OpenDesign なら',
     tableColWithout: '今、それなしだと',
     tableRows: [
       { capability: 'ランディングページを公開', withOd: 'プロンプト → ブランドに沿ったページ、デプロイ可能', without: 'デザインに依頼するか、サイトビルダーと格闘' },
@@ -2184,7 +2184,7 @@ export const JA: SolutionLocaleCopy = {
       { title: '記事カバー', body: 'ブログとニュースレターのカバー。', thumb: 'example-article-magazine' },
       { title: 'Web ページ', body: 'マイクロサイトとキャンペーンページ。', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: 'マーケティングが Open Design で出荷した',
+    galleryTitle: 'マーケティングが OpenDesign で出荷した',
     galleryLead:
       'プロンプトからレンダリングされた、ブランドに沿ったキャンペーンアセット。あなたのキャンペーンに近いものを選んで、コピーを差し替えてください。',
     gallery: [
@@ -2204,6 +2204,6 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、次のキャンペーンを出荷しよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、ブリーフをブランドに沿ったアセットに変えよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、OpenDesign をインストールして、ブリーフをブランドに沿ったアセットに変えよう。すでに使っているそのエージェントの中で。',
   },
 };

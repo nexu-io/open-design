@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-hps-academic-paper",
-  "title": "Academic Paper",
+  "title": "Write an Academic Review Deck like a Top-Journal Survey Author",
   "title_i18n": {
-    "en": "Academic Paper",
-    "zh-CN": "学术论文风"
+    "en": "Write an Academic Review Deck like a Top-Journal Survey Author",
+    "zh-CN": "像顶刊综述作者一样写学术报告",
+    "zh-TW": "像顶刊综述作者一样写学术报告"
   },
   "version": "1.0.0",
-  "description": "LaTeX-paper deck theme: paper-white #fdfcf8 ground, all-serif type (Latin Modern Roman with Playfair Display fallback), ink-black body, link-blue #1a3a7a underlined citation anchors, italic kickers, zero radius and near-zero shadow, double-rule title page, numbered Figure/Table captions and booktabs three-line tables. Single-file HTML deck with keyboard navigation and hash deep links — for conference talks, thesis defenses, research reviews and journal clubs. Based on lewislulu/html-ppt-skill academic-paper.",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "A review deck on compositional generalization in large language models — the field map, the gap, the evidence, and open questions. Built as a decision-grade academic research deck for PI, lab group, reviewers.",
   "description_i18n": {
-    "en": "LaTeX-paper deck theme: paper-white #fdfcf8 ground, all-serif type (Latin Modern Roman with Playfair Display fallback), ink-black body, link-blue #1a3a7a underlined citation anchors, italic kickers, zero radius and near-zero shadow, double-rule title page, numbered Figure/Table captions and booktabs three-line tables. Single-file HTML deck with keyboard navigation and hash deep links — for conference talks, thesis defenses, research reviews and journal clubs. Based on lewislulu/html-ppt-skill academic-paper.",
-    "zh-CN": "「学术论文风」幻灯片主题：纸白 #fdfcf8 底色全衬线排印（Latin Modern Roman，Playfair Display 兜底），墨黑正文 + 链接蓝 #1a3a7a 下划线引用锚点 + 斜体 kicker，零圆角近零阴影，双规则线扉页、带编号的 Figure/Table 图注与 booktabs 三线表。零依赖单文件 HTML，键盘导航 + hash 直达——适合学术会议报告、论文答辩、研究评审与组会分享。移植自 lewislulu/html-ppt-skill 的 academic-paper 主题。"
+    "en": "A review deck on compositional generalization in large language models — the field map, the gap, the evidence, and open questions. Built as a decision-grade academic research deck for PI, lab group, reviewers.",
+    "zh-CN": "像顶刊综述作者一样写学术报告——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像顶刊综述作者一样写学术报告——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -31,7 +34,19 @@
     "paper",
     "serif",
     "latex",
-    "light"
+    "light",
+    "ai",
+    "copilot",
+    "workflow",
+    "hps-academic-paper",
+    "enterprise-ai-literacy",
+    "research",
+    "grant",
+    "review",
+    "academic-research",
+    "academic-review-deck",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -44,7 +59,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "research",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -53,16 +68,17 @@
     },
     "useCase": {
       "query": {
-        "en": "Create an Academic Paper deck about {{topic}} for {{audience}} ({{slideCount}}, {{density}}): a conference-talk presentation in the locked academic-paper theme from lewislulu/html-ppt-skill. Output one self-contained single-file HTML deck with zero dependencies — all CSS/JS inline, no build step, no external JS libraries, no CDN scripts, no remote images; only Google Fonts @import (Playfair Display incl. italics, Noto Serif SC, JetBrains Mono) is allowed. THEME IS LOCKED — reproduce exactly: (a) Tokens: --bg:#fdfcf8; --bg-soft:#f7f5ed; --surface:#ffffff; --surface-2:#f5f3ea; --border:rgba(20,20,20,.14); --border-strong:rgba(20,20,20,.35); --text-1:#0a0a0a; --text-2:#333333; --text-3:#707070; --accent:#1a3a7a (link blue — citations, 'ours' data, best numbers); --accent-2:#0a0a0a (ink); --accent-3:#8a1a1a (sparing dark red, errata/negative only); --good:#1a5a2a; --warn:#8a6a1a; --bad:#8a1a1a; --grad:linear-gradient(135deg,#1a3a7a,#0a0a0a); --grad-soft:linear-gradient(135deg,#e8edf8,#f5f3ea); --radius/--radius-sm/--radius-lg:0px; --shadow:none; --shadow-lg:0 1px 2px rgba(0,0,0,.1); all three font slots serif: 'Latin Modern Roman','Playfair Display','Noto Serif SC',Georgia,serif; --font-mono:'JetBrains Mono'; --letter-tight:-.01em; --letter-normal:0; --ease:cubic-bezier(.4,0,.2,1). Zero rounded corners, no shadows, no colors outside this palette. (b) Typographic register: headings weight 700 sentence case (never uppercase), body 400 line-height 1.6, .kicker is the signature — italic, link blue, sentence case, letter-spacing 0, weight 400; links and [n] .cite anchors are link-blue underlined; tabular-nums for all data. (c) Academic devices on the right pages: .rule-double LaTeX titlepage double rule on the cover; .abstract italic block between hairline rules with a bold lead word; numbered captions on EVERY figure and table (.figure/.figcaption 'Figure 1: …', booktabs 'Table 1: …'); .booktabs three-line tables (2px top/bottom, 1px header rule, never vertical rules, .best winners bold blue); .footnote dagger small print under a hairline rule; .references hanging-[n] bibliography on the closing page. (d) Slide system: <div class=\"deck\" id=\"deck\"> horizontal scroll-snap strip of <section class=\"slide\" data-title=\"…\">, each exactly 100vw×100vh (16:9, 1280×720 baseline, clamp() fluid type), padding 72px 96px, one screen per slide, no internal scrolling; fixed chrome .deck-header (italic running head) / .deck-footer (attribution + N/total counter) / 2px link-blue .progress-bar. (e) Navigation: keep the seed script verbatim — arrows/Space/PageUp/PageDown/Home/End, #/N hash routing via history.replaceState in try/catch, dual capture-phase key listeners with Event-identity dedupe, scroll sync, body auto-focus; this variant is theme-locked with no T cycling. (f) Visuals: diagrams are ink-line inline SVG (1.5px strokes, serif labels, 'ours' boxes tinted #e8edf8/link blue); charts are pure CSS bars on a heavy ink axis — muted --surface-2 baselines and exactly one link-blue 'ours' bar; no Chart.js/mermaid, no external images, icons inline SVG only. (g) Layout masters to compose from (all in example.html): double-rule title page with superscript author affiliations, .toc-list numbered outline, ghost-numeral section divider, abstract+contributions two-column, giant link-blue stat with CI footnote, SVG method figure, CSS results bar chart, booktabs comparison table, italic epigraph quote with precise attribution, two-card conclusions, references closer. (h) Motion restraint: at most one rise/fade hero plus one stagger list per slide — no 3D, no glitch, no confetti. Write real content with real numbers and plausibly formatted citations — no lorem ipsum; 1–3 sentences of speaker notes per slide in a hidden .notes div. Start from the example.html seed shipped in this plugin: keep its token sheet, base CSS, academic device classes, chrome and navigation script verbatim; replace only the slide content. Do not introduce any color or font outside this specification and do not redesign the theme.",
-        "zh-CN": "用「学术论文风 Academic Paper」主题为 {{audience}} 创作一套关于 {{topic}} 的学术报告（{{slideCount}}，{{density}}）：LaTeX 论文质感——纸白 #fdfcf8 底全衬线（Latin Modern Roman / Playfair Display 兜底），墨黑正文 + 链接蓝 #1a3a7a 下划线引用锚点 + 斜体 kicker，零圆角近零阴影；封面双规则线扉页，每个图表必须带编号图注（Figure 1 / Table 1），表格用 booktabs 三线表，结尾页悬挂 [n] 参考文献。零依赖单文件 HTML：横向 scroll-snap 的 section.slide 一屏一页，键盘翻页 + #/N hash 直达，图示用墨线 inline SVG、图表用纯 CSS 条形图（唯一一根链接蓝 'ours' 柱），动效克制。从插件内 example.html 种子出发：保留全部设计 token、学术装置类、页面骨架和导航脚本，只替换内容；禁止引入规格之外的颜色和字体。完整硬性规格以英文 prompt 为准。"
+        "en": "Create \"Write an Academic Review Deck like a Top-Journal Survey Author\" as a decision-grade Academic research deck in this template's own visual system. Subject: A review deck on compositional generalization in large language models — the field map, the gap, the evidence, and open questions. Audience: PI, lab group, reviewers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck prove novelty without overclaiming.",
+        "zh-CN": "像顶刊综述作者一样写学术报告。像顶刊综述作者一样写学术报告——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。 主题：A review deck on compositional generalization in large language models — the field map, the gap, the evidence, and open questions. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "DAMC conference talk — Academic Paper deck",
+          "title": "Write an Academic Review Deck like a Top-Journal Survey Author",
           "title_i18n": {
-            "en": "DAMC conference talk — Academic Paper deck",
-            "zh-CN": "DAMC 学术会议报告 · 学术论文风"
+            "en": "Write an Academic Review Deck like a Top-Journal Survey Author",
+            "zh-CN": "像顶刊综述作者一样写学术报告",
+            "zh-TW": "像顶刊综述作者一样写学术报告"
           }
         }
       ]
@@ -138,6 +154,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "academic-research"
   }
 }

@@ -3,6 +3,7 @@ import type {
   ChatCommentSelectionKind,
   ChatMessage,
   PreviewAnnotationStyle,
+  PreviewCommentAnchorState,
   PreviewCommentAttachment,
   PreviewCommentMember,
   PreviewComment,
@@ -48,7 +49,10 @@ export interface VisualAnnotationTarget {
 export interface VisualAnnotationAttachmentInput {
   order: number;
   idSeed?: string;
-  screenshotPath: string;
+  /** Absent when the preview screenshot could not be captured (#4080); the
+   *  attachment then carries only the structured location (file/position/
+   *  markKind) so the agent can still find the marked region (#4084). */
+  screenshotPath?: string;
   markKind: PreviewVisualMarkKind;
   note: string;
   bounds: { x: number; y: number; width: number; height: number };
@@ -217,19 +221,158 @@ export function liveSnapshotForComment(
   comment: PreviewComment,
   snapshots: Map<string, PreviewCommentSnapshot>,
 ): PreviewCommentSnapshot | null {
+  // Legacy single-user behavior — exact elementId match, plus free-pin fallback.
+  // The team-collab drift ladder lives in resolveCommentAnchor (opted into by the
+  // collab UI) so this path is unchanged for existing single-user callers.
   const snapshot = snapshots.get(comment.elementId);
   if (snapshot && snapshot.filePath === comment.filePath && isValidCommentOverlayPosition(snapshot.position)) {
     return snapshot;
   }
-  if (!comment.elementId.startsWith('pin-')) return null;
-  if (!isValidCommentOverlayPosition(comment.position)) return null;
+  if (comment.elementId.startsWith('pin-') && isValidCommentOverlayPosition(comment.position)) {
+    return ghostSnapshotFromComment(comment);
+  }
+  return null;
+}
+
+export interface CommentAnchorResolution {
+  /** Where the ladder landed. See {@link PreviewCommentAnchorState}. */
+  state: PreviewCommentAnchorState;
+  /**
+   * Overlay to render: the live snapshot for anchored/reanchored/stale, or a
+   * ghost pin (at last-good position) for `lost`. Null only when there is no
+   * position at all to render even a ghost.
+   */
+  snapshot: PreviewCommentSnapshot | null;
+}
+
+/**
+ * Team collaboration comment drift ladder. Resolves a stored comment against
+ * the live DOM snapshots without relying on an injected stable id:
+ *   0. exact anchor hit + matching version → `anchored` (older version → `reanchored`)
+ *   1. content-based fuzzy match (selector / htmlHint / text, position tie-break) → `stale`
+ *   2. nothing found → `lost` (ghost pin at lastGoodPosition, explicitly badged by the UI)
+ * The explicit stale/lost states are the safety net: drift is surfaced, never
+ * silently mis-pointed.
+ */
+export function resolveCommentAnchor(
+  comment: PreviewComment,
+  snapshots: Map<string, PreviewCommentSnapshot>,
+  currentVersion?: number,
+): CommentAnchorResolution {
+  const exact = snapshots.get(comment.elementId);
+  if (exact && exact.filePath === comment.filePath && isValidCommentOverlayPosition(exact.position)) {
+    return { state: anchoredOrReanchored(comment, currentVersion), snapshot: exact };
+  }
+  if (comment.elementId.startsWith('pin-') && isValidCommentOverlayPosition(comment.position)) {
+    return { state: anchoredOrReanchored(comment, currentVersion), snapshot: ghostSnapshotFromComment(comment) };
+  }
+  const fuzzy = fuzzyFindSnapshot(comment, snapshots);
+  if (fuzzy) return { state: 'stale', snapshot: fuzzy };
+  const ghostPos = validPosition(comment.lastGoodPosition) ?? validPosition(comment.position);
+  return { state: 'lost', snapshot: ghostPos ? ghostSnapshotFromComment(comment, ghostPos) : null };
+}
+
+export interface AnchorWriteBack {
+  commentId: string;
+  anchorState: PreviewCommentAnchorState;
+  lastGoodPosition: PreviewCommentSnapshot['position'];
+}
+
+/**
+ * The only durable fact the drift ladder needs to persist: when a comment first
+ * becomes `lost`, capture its last-good position so the ghost pin keeps a stable
+ * spot even after the anchoring content is gone. The anchored /
+ * reanchored / stale states are derived per-viewer against that viewer's live
+ * snapshots, so they are intentionally NOT written back — persisting them would
+ * let one member's view overwrite another's. This is idempotent: a comment that
+ * already carries a stored lastGoodPosition is skipped, so re-renders of the
+ * same lost comment never produce a write storm.
+ */
+export function planLostAnchorWriteBacks(
+  entries: Array<{ comment: PreviewComment; resolution: CommentAnchorResolution }>,
+): AnchorWriteBack[] {
+  const out: AnchorWriteBack[] = [];
+  for (const { comment, resolution } of entries) {
+    if (resolution.state !== 'lost') continue;
+    if (validPosition(comment.lastGoodPosition)) continue; // already durable — idempotent
+    const lastGoodPosition = resolution.snapshot ? validPosition(resolution.snapshot.position) : undefined;
+    if (!lastGoodPosition) continue; // no ghost position to anchor even a lost pin
+    out.push({ commentId: comment.id, anchorState: 'lost', lastGoodPosition });
+  }
+  return out;
+}
+
+function anchoredOrReanchored(
+  comment: PreviewComment,
+  currentVersion: number | undefined,
+): PreviewCommentAnchorState {
+  if (
+    typeof currentVersion === 'number'
+    && typeof comment.anchoredVersion === 'number'
+    && comment.anchoredVersion !== currentVersion
+  ) {
+    return 'reanchored';
+  }
+  return 'anchored';
+}
+
+// Content-based recovery: find the live snapshot that best matches the comment's
+// selector / htmlHint / text. A weak position-proximity bonus only breaks ties;
+// a match must carry a real content signal (score >= 2), never position alone.
+function fuzzyFindSnapshot(
+  comment: PreviewComment,
+  snapshots: Map<string, PreviewCommentSnapshot>,
+): PreviewCommentSnapshot | null {
+  const wantSelector = String(comment.selector || '').trim();
+  const wantHint = trimHtmlHint(comment.htmlHint || '');
+  const wantText = trimContextText(comment.text || '');
+  const wantPos = validPosition(comment.lastGoodPosition) ?? validPosition(comment.position);
+  let best: PreviewCommentSnapshot | null = null;
+  let bestScore = 0;
+  for (const snap of snapshots.values()) {
+    if (snap.filePath !== comment.filePath) continue;
+    if ((snap.slideIndex ?? -1) !== (comment.slideIndex ?? -1)) continue;
+    if (!isValidCommentOverlayPosition(snap.position)) continue;
+    let score = 0;
+    if (wantSelector && String(snap.selector || '').trim() === wantSelector) score += 4;
+    if (wantHint && trimHtmlHint(snap.htmlHint) === wantHint) score += 3;
+    if (wantText && trimContextText(snap.text) === wantText) score += 2;
+    if (wantPos) score += positionProximityScore(snap.position, wantPos);
+    if (score > bestScore) {
+      bestScore = score;
+      best = snap;
+    }
+  }
+  return bestScore >= 2 ? best : null;
+}
+
+function positionProximityScore(
+  a: PreviewCommentSnapshot['position'],
+  b: PreviewCommentSnapshot['position'],
+): number {
+  const na = normalizePosition(a);
+  const nb = normalizePosition(b);
+  const dist = Math.hypot(na.x + na.width / 2 - (nb.x + nb.width / 2), na.y + na.height / 2 - (nb.y + nb.height / 2));
+  return Math.max(0, 1 - dist / 400);
+}
+
+function validPosition(
+  position: PreviewComment['position'] | undefined,
+): PreviewCommentSnapshot['position'] | undefined {
+  return position && isValidCommentOverlayPosition(position) ? normalizePosition(position) : undefined;
+}
+
+function ghostSnapshotFromComment(
+  comment: PreviewComment,
+  position?: PreviewCommentSnapshot['position'],
+): PreviewCommentSnapshot {
   return {
     filePath: comment.filePath,
     elementId: comment.elementId,
     selector: comment.selector,
     label: comment.label,
     text: trimContextText(comment.text),
-    position: normalizePosition(comment.position),
+    position: normalizePosition(position ?? comment.position),
     htmlHint: trimHtmlHint(comment.htmlHint),
     style: normalizeStyle(comment.style),
     selectionKind: comment.selectionKind === 'pod' ? 'pod' : 'element',
@@ -275,6 +418,33 @@ export function commentToAttachment(
 
 export function commentsToAttachments(comments: PreviewComment[]): ChatCommentAttachment[] {
   return comments.map((comment, index) => commentToAttachment(comment, index + 1));
+}
+
+/**
+ * Provisional canvas pin number for a comment that has not been saved yet.
+ *
+ * Invariant: a new pin gets one past the HIGHEST pin number the daemon could
+ * already have handed out for this file — mirroring its `MAX(pin_seq)+1`
+ * assignment rule (`upsertPreviewComment` in apps/daemon/src/db.ts), which
+ * scans every row for the project/file regardless of status — never
+ * `count + 1`. Pin numbers are permanent: deleting a comment retires its
+ * number, and a non-open comment (resolved / attached / applying /
+ * needs_review / failed) keeps its row — and therefore its number — even
+ * though the canvas renders no marker for it. Callers must therefore pass
+ * the file's comments across ALL statuses, not just the open ones on screen.
+ *
+ * A comment without a server-assigned `pinSeq` yet (legacy row / test
+ * fixture) contributes its creation rank (`index + 1` — callers pass
+ * `comments` in creation order), matching the daemon's creation-ordered
+ * `pin_seq` backfill for pre-`pin_seq` rows.
+ */
+export function provisionalNextPinNumber(comments: readonly PreviewComment[]): number {
+  let highest = 0;
+  comments.forEach((comment, index) => {
+    const rendered = typeof comment.pinSeq === 'number' ? comment.pinSeq : index + 1;
+    if (rendered > highest) highest = rendered;
+  });
+  return highest + 1;
 }
 
 export function buildBoardCommentAttachments(input: {
@@ -325,15 +495,17 @@ export function buildBoardCommentAttachments(input: {
 
 export function buildVisualAnnotationAttachment(input: VisualAnnotationAttachmentInput): ChatCommentAttachment {
   const target = input.target ?? null;
-  const intent = visualAnnotationIntent(input.markKind);
+  const intent = input.screenshotPath
+    ? visualAnnotationIntent(input.markKind)
+    : visualAnnotationIntentWithoutScreenshot();
   const visualId = sanitizeVisualAttachmentId(input.idSeed || input.screenshotPath || String(input.order));
   const elementId = target?.elementId?.trim() || `visual-mark-${visualId}`;
-  const label = target?.label?.trim() || 'Marked screenshot region';
+  const label = target?.label?.trim() || (input.screenshotPath ? 'Marked screenshot region' : 'Marked preview region');
   const comment = input.note.trim() || intent;
   return {
     id: `${elementId}-visual-${visualId}`,
     order: input.order,
-    filePath: target?.filePath?.trim() || input.screenshotPath,
+    filePath: target?.filePath?.trim() || input.screenshotPath || '',
     elementId,
     selector: target?.selector?.trim() || '',
     label,
@@ -441,7 +613,7 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
     '',
     '',
     '<attached-preview-comments>',
-    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot and modify the marked region first.",
+    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot when one is provided (otherwise locate the region from the structured fields) and modify the marked region first.",
   ];
   commentAttachments.forEach((item) => {
     const position = normalizePosition(item.pagePosition);
@@ -462,11 +634,18 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
       lines.push(`comment: ${item.comment}`);
     }
     if (selectionKind === 'visual') {
-      lines.push(
-        `screenshot: ${item.screenshotPath || '(missing)'}`,
-        `markKind: ${item.markKind || 'stroke'}`,
-        `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
-      );
+      if (item.screenshotPath) {
+        lines.push(
+          `screenshot: ${item.screenshotPath}`,
+          `markKind: ${item.markKind || 'stroke'}`,
+          `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
+        );
+      } else {
+        lines.push(
+          `markKind: ${item.markKind || 'stroke'}`,
+          `intent: ${item.intent || visualAnnotationIntentWithoutScreenshot()}`,
+        );
+      }
       if (item.selector) lines.push(`selector: ${item.selector}`);
     } else {
       lines.splice(lines.length - 4, 0, `selector: ${item.selector}`);
@@ -508,6 +687,13 @@ function visualAnnotationIntent(markKind: PreviewVisualMarkKind): string {
     return 'The screenshot has a blue focus box and red strokes; together they identify the part the user wants changed.';
   }
   return 'The screenshot has red strokes that identify the visual region the user wants changed.';
+}
+
+// Screenshot-less variant (#4084): the capture failed (#4080), so pointing the
+// agent at a screenshot would point at nothing. The structured fields are the
+// only anchor.
+function visualAnnotationIntentWithoutScreenshot(): string {
+  return 'The user marked a region of the live preview; no screenshot was captured, so locate the region using file, position, and currentText.';
 }
 
 function normalizePosition(input: PreviewComment['position']): PreviewComment['position'] {

@@ -9,6 +9,18 @@ import {
 } from '../../src/integrations/vela-errors.js';
 
 describe('AMR account failure classification', () => {
+  // The recharge link the daemon hands to the client is a real destination a
+  // user clicks. Product retired the console's wallet page — balance and manual
+  // top-up report on its dashboard now (vela #1055) — so pin the literal here:
+  // every other assertion in this file references the constant symbolically and
+  // would keep passing while pointing users at a surface the product no longer
+  // navigates to.
+  it('points the recharge link at the console dashboard, not a wallet page', () => {
+    expect(DEFAULT_AMR_RECHARGE_URL).toBe(
+      'https://open-design.ai/amr/dashboard?source=open_design',
+    );
+  });
+
   it('classifies insufficient_balance JSON-RPC failures as rechargeable AMR balance errors', () => {
     const failure = classifyAmrAccountFailure(
       'JSON-RPC error -32000: {"code":"insufficient_balance","message":"insufficient balance"}',
@@ -80,6 +92,51 @@ describe('AMR account failure classification', () => {
       action: 'upgrade',
     });
     expect(failure?.message).toContain('request type');
+  });
+
+  it('classifies structured Vela ACP auth-required details without relying on message text', () => {
+    const failure = classifyAmrAccountFailureDetails({
+      kind: 'opencode_prompt_error',
+      runtime: 'opencode',
+      phase: 'event_stream',
+      code: 'auth_required',
+      accountAction: 'relogin',
+      openCodeSessionId: 'ses_test',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_AUTH_REQUIRED',
+      action: 'relogin',
+    });
+  });
+
+  it('classifies structured Vela ACP relogin actions even when code is absent', () => {
+    const failure = classifyAmrAccountFailureDetails({
+      kind: 'opencode_prompt_error',
+      accountAction: 'relogin',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_AUTH_REQUIRED',
+      action: 'relogin',
+    });
+  });
+
+  it('classifies structured auth-required details through the signal path when the protocol message is generic', () => {
+    const failure = classifyAmrAccountFailureSignal({
+      details: {
+        kind: 'opencode_prompt_error',
+        code: 'auth_required',
+        accountAction: 'relogin',
+      },
+      message: 'json-rpc id 3: Internal error',
+      stderrTail: '',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_AUTH_REQUIRED',
+      action: 'relogin',
+    });
   });
 
   it('does not classify unrelated structured ACP details as AMR balance errors', () => {

@@ -17,6 +17,7 @@
 // var. `PUBLIC_POSTHOG_KEY` / `PUBLIC_POSTHOG_HOST` override these.
 const DEFAULT_KEY = 'phc_u5dHWkwdqN626opkbbjDKk7xNzxR2UsJbdQqx3DncbjU';
 const DEFAULT_HOST = 'https://us.i.posthog.com';
+const DEFAULT_DOWNLOAD_ATTRIBUTION_URL = 'https://download.open-design.ai/api/attribution/mint';
 
 /**
  * The delegated tracker installed after `posthog.init`. Plain DOM, no bundler
@@ -24,7 +25,7 @@ const DEFAULT_HOST = 'https://us.i.posthog.com';
  * the same source ships to every page). Anchors to hooks that already exist
  * in the markup; the only added attribute is `data-carousel-dir`.
  */
-function buildTrackerScript(pageName: string): string {
+function buildTrackerScript(pageName: string, downloadAttributionUrl: string): string {
   return `
   (function () {
     if (typeof window.posthog === 'undefined') return;
@@ -37,8 +38,57 @@ function buildTrackerScript(pageName: string): string {
       try { if (window.posthog) window.posthog.capture(name, props || {}); } catch (e) {}
     };
 
+    // Cross-product campaign attribution is minted on the first click that
+    // enters a conversion path. Later Pricing clicks preserve that first-touch
+    // id/source and add a separate conversion source, allowing Vela's final
+    // payment event to report both entry and checkout placement.
+    window.__odRecordCampaignEntry = function (sourceDetail, campaignId) {
+      var inbound = null;
+      try { inbound = new URLSearchParams(window.location.search || ''); } catch (e) {}
+      var inboundEntryId = inbound && inbound.get('od_entry_id');
+      var inboundEntrySource = inbound && inbound.get('od_entry_source');
+      var inboundEntryAt = inbound && inbound.get('od_entry_at');
+      // Consent-gated device id survives desktop → Pricing → Cloud. Only the
+      // inbound query is a source of truth here; callers never mint a device id.
+      var inboundDeviceId = inbound && inbound.get('od_device_id');
+      var random = '';
+      try {
+        random = window.crypto && typeof window.crypto.randomUUID === 'function'
+          ? window.crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
+      } catch (e) { random = Math.random().toString(36).slice(2) + Date.now().toString(36); }
+      return {
+        entry_id: inboundEntryId || ('od-campaign-' + random),
+        source_product: 'open_design',
+        source_detail: inboundEntrySource || String(sourceDetail || 'unknown'),
+        entry_occurred_at: inboundEntryAt || new Date().toISOString(),
+        conversion_source: String(sourceDetail || 'unknown'),
+        // Explicit only: do not inherit a stale inbound od_campaign_id. Pricing
+        // passes undefined once the window closes so post-window CTAs stay clean.
+        campaign_id: campaignId || undefined,
+        device_id: inboundDeviceId || undefined,
+      };
+    };
+
+    window.__odAttributedUrl = function (href, attribution) {
+      try {
+        var target = new URL(href, window.location.href);
+        if (attribution) {
+          target.searchParams.set('od_origin', attribution.source_product || 'open_design');
+          target.searchParams.set('od_entry_id', attribution.entry_id || '');
+          target.searchParams.set('od_entry_source', attribution.source_detail || 'unknown');
+          target.searchParams.set('od_entry_at', attribution.entry_occurred_at || new Date().toISOString());
+          target.searchParams.set('od_conversion_source', attribution.conversion_source || attribution.source_detail || 'unknown');
+          if (attribution.campaign_id) target.searchParams.set('od_campaign_id', attribution.campaign_id);
+          if (attribution.device_id) target.searchParams.set('od_device_id', attribution.device_id);
+        }
+        return target.toString();
+      } catch (e) { return href; }
+    };
+
     var REPO = 'github.com/nexu-io/open-design';
     var PAGE = ${JSON.stringify(pageName)};
+    var DOWNLOAD_ATTRIBUTION_URL = ${JSON.stringify(downloadAttributionUrl)};
 
     var localeNow = function () {
       return (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
@@ -52,6 +102,83 @@ function buildTrackerScript(pageName: string): string {
       if (/linux/.test(p) || (/linux/.test(ua) && !/android/.test(ua))) return 'linux';
       return 'other';
     };
+
+    var collectUtms = function () {
+      var out = {};
+      try {
+        var params = new URLSearchParams(window.location.search || '');
+        ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].forEach(function (key) {
+          var value = params.get(key);
+          if (value) out[key] = value;
+        });
+      } catch (e) {}
+      return out;
+    };
+
+    window.__odPrepareDownloadLink = function (link, href) {
+      if (!DOWNLOAD_ATTRIBUTION_URL || !link || link.__odAttributionInFlight) return false;
+      var lower = String(href || '').toLowerCase();
+      if (lower.indexOf(REPO + '/releases') === -1 && lower.indexOf('download.open-design.ai/') === -1) return false;
+      link.__odAttributionInFlight = true;
+      var fallback = function () {
+        try { window.location.href = href; } catch (e) {}
+      };
+      var distinctId = '';
+      try {
+        distinctId = window.posthog && typeof window.posthog.get_distinct_id === 'function'
+          ? String(window.posthog.get_distinct_id() || '')
+          : '';
+      } catch (e) {}
+      fetch(DOWNLOAD_ATTRIBUTION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          webDistinctId: distinctId,
+          landingUrl: window.location.href,
+          referrer: document.referrer || '',
+          assetUrl: href,
+          pageName: PAGE,
+          platform: platformNow(),
+          utm: collectUtms(),
+        }),
+      })
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .then(function (body) {
+          var next = body && (body.downloadUrl || body.url);
+          if (typeof next === 'string' && next) {
+            window.location.href = next;
+            return;
+          }
+          fallback();
+        })
+        .catch(fallback);
+      return true;
+    };
+
+    // A desktop-originated first-party navigation carries a short-lived,
+    // single-use token. Resolve it only on our own Pages origin, then ask
+    // PostHog to identify the current browser person as that installation.
+    // Third-party links never receive this parameter.
+    var bridgeToken = '';
+    try { bridgeToken = new URLSearchParams(window.location.search || '').get('od_bridge') || ''; } catch (e) {}
+    if (bridgeToken) {
+      fetch('/api/attribution/bridge/consume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ token: bridgeToken }),
+      })
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .then(function (body) {
+          var installationId = body && body.installationId;
+          if (typeof installationId === 'string' && installationId && window.posthog && typeof window.posthog.identify === 'function') {
+            window.posthog.identify(installationId, {
+              od_source_resolution: 'client_web_bridge',
+              od_source_bound_at: new Date().toISOString(),
+            });
+          }
+        })
+        .catch(function () {});
+    }
 
     // The section (area) an element lives in. Header chrome reports 'header';
     // otherwise the nearest [data-od-id] section id, matching the埋点文档
@@ -129,6 +256,9 @@ function buildTrackerScript(pageName: string): string {
       var placementOf = function (el) { return (el.getAttribute && el.getAttribute('data-download-placement')) || areaOf(el); };
       if (lowerHref.indexOf(REPO + '/releases') !== -1 || /\\.(dmg|exe|appimage|deb|zip)(\\?|$)/.test(lowerHref)) {
         click(link, 'download_desktop', { platform: platformNow(), link_url: href, download_target: 'direct', placement: placementOf(link) });
+        if (window.__odPrepareDownloadLink && window.__odPrepareDownloadLink(link, href)) {
+          event.preventDefault();
+        }
         return;
       }
       // Download CTAs that route to the /download/ installer-matrix page instead
@@ -169,6 +299,9 @@ export function posthogHeadHtml(
   const key = apiKey || DEFAULT_KEY;
   if (!key) return '';
   const apiHost = host || DEFAULT_HOST;
+  const downloadAttributionUrl =
+    ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.PUBLIC_DOWNLOAD_ATTRIBUTION_URL)
+    || DEFAULT_DOWNLOAD_ATTRIBUTION_URL;
 
   return `<!-- PostHog -->
 <script>
@@ -181,7 +314,7 @@ export function posthogHeadHtml(
     disable_session_recording: true,
     persistence: 'localStorage+cookie'
   });
-${buildTrackerScript(pageName)}
+${buildTrackerScript(pageName, downloadAttributionUrl)}
 </script>`;
 }
 

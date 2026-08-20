@@ -1,19 +1,36 @@
 ---
 name: hps-bauhaus
-description: Bauhaus Primary — design-history geometric deck style from the lewislulu/html-ppt-skill bauhaus theme. Aged canvas #f4efe3, red/yellow/blue primaries, hard three-band gradient, zero radius, 2px ink strokes, hard offset shadows, Archivo Black + Space Grotesk. Use when the user wants a presentation with a Bauhaus, geometric-modernist, primary-color, or design-history poster look.
+en_name: "Teach Design Fundamentals like a World-Class Studio Mentor"
+zh_name: "像世界级工作室导师一样教设计基础"
+description: |
+  A visual-design fundamentals course for new brand designers — grid, type, color, and the exercises that build the eye. Built as a decision-grade professional training deck for junior designers, new hires.
+en_description: |
+  A visual-design fundamentals course for new brand designers — grid, type, color, and the exercises that build the eye. Built as a decision-grade professional training deck for junior designers, new hires.
+zh_description: |
+  像世界级工作室导师一样教设计基础——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "professional-training"
+  - "employee-onboarding-deck"
+  - "education"
+  - "training-deck"
+  - "workshop"
+  - "course-module"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "hps-bauhaus"
 triggers:
-  - "bauhaus"
-  - "包豪斯"
-  - "三原色"
-  - "primary colors"
-  - "geometric deck"
-  - "design history"
-  - "modernist slides"
-  - "几何主义"
+  - "employee-onboarding-deck"
+  - "professional-training"
+  - "Teach Design Fundamentals like a World-Class Studio Mentor"
+  - "像世界级工作室导师一样教设计基础"
+  - "training-deck"
+  - "workshop"
+  - "course-module"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  scenario: product
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -22,9 +39,11 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "Use Bauhaus Primary to turn my content into a single-file HTML deck. Confirm topic, audience and page count first, then start from the seed example.html — keep its token sheet, slide scaffold and keyboard runtime exactly as-is, replace slide content only, and stay strictly inside the red/yellow/blue + ink + aged-canvas palette."
   example_prompt_i18n:
     zh-CN: "用「包豪斯三原色」把我的内容做成单文件 HTML 幻灯片。先确认主题、观众和页数，然后从种子 example.html 出发——完整保留 token 表、slide 骨架和键盘运行时，只替换幻灯片内容，严格停留在红黄蓝三原色 + 墨色 + 做旧画布的色域内。"
+  category: "professional-training"
+  scenario: "education"
+  example_prompt: "Create \"Teach Design Fundamentals like a World-Class Studio Mentor\" as a decision-grade Professional training deck in this template's own visual system. Subject: A visual-design fundamentals course for new brand designers — grid, type, color, and the exercises that build the eye. Audience: junior designers, new hires. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day."
 ---
 
 # Bauhaus Primary (hps-bauhaus)

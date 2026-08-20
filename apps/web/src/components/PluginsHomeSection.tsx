@@ -16,7 +16,10 @@
 
 import { Button, Input } from '@open-design/components';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type {
+  InstalledPluginRecord,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { useI18n, useT } from '../i18n';
 import type { PluginShareAction } from '../state/projects';
 import { Icon } from './Icon';
@@ -58,6 +61,7 @@ interface Props {
   // 'gallery' renders each card as a minimal live example.html preview
   // tile (Community); 'rich' keeps the hover-overlay metadata card.
   cardLayout?: 'rich' | 'gallery';
+  workspaceContext?: WorkspaceCollabContext | null;
 }
 
 export function PluginsHomeSection({
@@ -77,6 +81,7 @@ export function PluginsHomeSection({
   subtitle,
   emptyMessage,
   cardLayout = 'rich',
+  workspaceContext = null,
 }: Props) {
   const { locale, t } = useI18n();
   const { savedPluginIds, savePluginId } = useSavedPluginIds();
@@ -107,7 +112,7 @@ export function PluginsHomeSection({
   } = usePluginFacets({
     plugins,
     savedPluginIds,
-    preferDefaultFacet,
+    preferDefaultFacet: cardLayout === 'gallery' ? false : preferDefaultFacet,
     locale,
   });
   const renderedPlugins = useMemo(
@@ -115,6 +120,9 @@ export function PluginsHomeSection({
     [filtered, renderLimit],
   );
   const hasMorePlugins = renderLimit < filtered.length;
+  const handlePickCategory = (slug: string | null): void => {
+    pickCategory(slug);
+  };
 
   useEffect(() => {
     setRenderLimit(initialRenderLimit);
@@ -193,7 +201,6 @@ export function PluginsHomeSection({
               options={catalog.category}
               selectedSlug={selection.category}
               totalVisible={totalVisible}
-              onPick={pickCategory}
               // The Saved collection lives on the rich management surface
               // (PluginsView). The minimal Community gallery has no per-card
               // save affordance, so the orthogonal Saved chip is hidden there.
@@ -203,10 +210,12 @@ export function PluginsHomeSection({
               onToggleSaved={() =>
                 setMode(mode === 'saved' ? 'all' : 'saved')
               }
+              showAll
               query={query}
               onQueryChange={setQuery}
               sortOrder={sortOrder}
               onSortOrderChange={setSortOrder}
+              onPick={handlePickCategory}
             />
             {selection.category ? (
               <SubcategoryRow
@@ -252,6 +261,7 @@ export function PluginsHomeSection({
                   onSave={handleSavePlugin}
                   onShareAction={onPluginShareAction}
                   layout={cardLayout}
+                  workspaceContext={workspaceContext}
                 />
               ))}
               {hasMorePlugins ? (
@@ -289,6 +299,7 @@ interface CategoryRowProps {
   savedCount: number;
   savedActive: boolean;
   onToggleSaved: () => void;
+  showAll: boolean;
   query: string;
   onQueryChange: (next: string) => void;
   sortOrder: PluginSortOrder;
@@ -309,6 +320,7 @@ function CategoryRow({
   savedCount,
   savedActive,
   onToggleSaved,
+  showAll,
   query,
   onQueryChange,
   sortOrder,
@@ -340,19 +352,21 @@ function CategoryRow({
             aria-pressed={savedActive}
             data-testid="plugins-home-chip-saved"
           >
-            <Icon name="star" size={11} />
+            <Icon name="star" size={14} />
             <span>{t('pluginsHome.featured')}</span>
             <span className="plugins-home__chip-count">{savedCount}</span>
           </button>
         ) : null}
-        <CategoryPill
-          slug={null}
-          label={t('common.all')}
-          count={totalVisible}
-          active={selectedSlug === null}
-          onPick={onPick}
-          variant="all"
-        />
+        {showAll ? (
+          <CategoryPill
+            slug={null}
+            label={t('common.all')}
+            count={totalVisible}
+            active={selectedSlug === null}
+            onPick={onPick}
+            variant="all"
+          />
+        ) : null}
         {options.map((opt) => (
           <CategoryPill
             key={opt.slug}
@@ -546,7 +560,7 @@ function SearchInput({ value, onChange }: SearchInputProps) {
   const t = useT();
   return (
     <div className="plugins-home__search">
-      <Icon name="search" size={12} className="plugins-home__search-icon" />
+      <Icon name="search" size={14} className="plugins-home__search-icon" />
       <Input
         type="search"
         className="plugins-home__search-input"
@@ -566,7 +580,7 @@ function SearchInput({ value, onChange }: SearchInputProps) {
           aria-label={t('pluginsHome.clearSearch')}
           data-testid="plugins-home-search-clear"
         >
-          <Icon name="close" size={12} />
+          <Icon name="close" size={14} />
         </Button>
       ) : null}
     </div>

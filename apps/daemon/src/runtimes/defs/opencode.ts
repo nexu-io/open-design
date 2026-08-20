@@ -1,8 +1,9 @@
 import { DEFAULT_MODEL_OPTION, parseLineSeparatedModels } from './shared.js';
-import { agentCapabilities } from '../capabilities.js';
+import {
+  OPENCODE_PERMISSION_CAPABILITY,
+  appendOpenCodePermissionBypass,
+} from '../opencode-permissions.js';
 import type { RuntimeAgentDef } from '../types.js';
-
-const SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
 export const opencodeAgentDef = {
     id: 'opencode',
@@ -10,10 +11,7 @@ export const opencodeAgentDef = {
     bin: 'opencode-cli',
     fallbackBins: ['opencode'],
     versionArgs: ['--version'],
-    helpArgs: ['run', '--help'],
-    capabilityFlags: {
-      [SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
-    },
+    ...OPENCODE_PERMISSION_CAPABILITY,
     // `opencode models` prints `provider/model` per line. Real-world
     // `opencode models` calls can take >8s (network round-trip to the
     // provider registry), so the previous 8s budget timed out and fell back
@@ -50,9 +48,7 @@ export const opencodeAgentDef = {
         '--format',
         'json',
       ];
-      if (agentCapabilities.get('opencode')?.skipPermissions) {
-        args.push(SKIP_PERMISSIONS_FLAG);
-      }
+      appendOpenCodePermissionBypass(args, 'opencode');
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
       // daemon continues that session with `-s <id>` instead of re-sending the

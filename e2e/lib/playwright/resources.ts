@@ -32,7 +32,7 @@ export interface UiScenario {
     | 'design-files-delete'
     | 'design-files-tab-persistence'
     | 'conversation-delete-recovery'
-    | 'question-form-selection-limit'
+    | 'question-form-single-selection'
     | 'question-form-submit-persistence'
     | 'generation-does-not-create-extra-file'
     | 'comment-attachment-flow'

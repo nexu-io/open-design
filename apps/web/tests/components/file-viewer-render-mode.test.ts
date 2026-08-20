@@ -5,6 +5,7 @@ import {
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
   htmlNeedsPoweredPreview,
+  htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
@@ -66,6 +67,13 @@ describe('shouldUrlLoadHtmlPreview', () => {
 
   it('falls back to srcDoc when the HTML source needs a focus guard', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, needsFocusGuard: true })).toBe(false);
+  });
+
+  it('falls back to srcDoc when the HTML source needs a redirect guard (issue #710)', () => {
+    // URL-load serves the document raw with no guard, so a self-redirect loops
+    // the iframe forever and freezes the workspace. The srcDoc path carries
+    // buildSrcdoc's redirect-loop guard.
+    expect(shouldUrlLoadHtmlPreview({ ...base, needsRedirectGuard: true })).toBe(false);
   });
 
   it('falls back to srcDoc when the source references project files by site-root path', () => {
@@ -366,5 +374,56 @@ describe('htmlNeedsPoweredPreview', () => {
   it('does NOT match unrelated prose that mentions the words', () => {
     expect(htmlNeedsPoweredPreview('<p>Our web worker culture is great</p>')).toBe(false);
     expect(htmlNeedsPoweredPreview('<p>A workshop about 3D printing</p>')).toBe(false);
+  });
+});
+
+describe('htmlNeedsRedirectGuard (issue #710)', () => {
+  it('returns false for empty / null / undefined input', () => {
+    expect(htmlNeedsRedirectGuard('')).toBe(false);
+    expect(htmlNeedsRedirectGuard(null)).toBe(false);
+    expect(htmlNeedsRedirectGuard(undefined)).toBe(false);
+  });
+
+  it('returns false for plain static HTML', () => {
+    expect(htmlNeedsRedirectGuard('<!doctype html><h1>hello</h1>')).toBe(false);
+  });
+
+  it('detects <meta http-equiv="refresh"> in any quoting / attribute order', () => {
+    expect(htmlNeedsRedirectGuard('<meta http-equiv="refresh" content="0">')).toBe(true);
+    expect(htmlNeedsRedirectGuard("<meta http-equiv='refresh' content='0; url=./self'>")).toBe(true);
+    expect(htmlNeedsRedirectGuard('<meta content="5" http-equiv=refresh>')).toBe(true);
+    expect(htmlNeedsRedirectGuard('<META HTTP-EQUIV="REFRESH" CONTENT="0">')).toBe(true);
+    expect(htmlNeedsRedirectGuard('<meta   http-equiv = "refresh"  content="0">')).toBe(true);
+  });
+
+  it('detects load-time location.reload / replace / assign calls', () => {
+    expect(htmlNeedsRedirectGuard('<script>location.reload()</script>')).toBe(true);
+    expect(htmlNeedsRedirectGuard('<script>window.location.reload(true)</script>')).toBe(true);
+    expect(htmlNeedsRedirectGuard('<script>location.replace("/")</script>')).toBe(true);
+    expect(htmlNeedsRedirectGuard('<script>location .assign(url)</script>')).toBe(true);
+  });
+
+  it('detects load-time location assignment (href and object forms)', () => {
+    expect(htmlNeedsRedirectGuard('<script>location.href = "./"</script>')).toBe(true);
+    expect(htmlNeedsRedirectGuard('<script>window.location = "./page"</script>')).toBe(true);
+    expect(htmlNeedsRedirectGuard('<script>document.location="x"</script>')).toBe(true);
+    expect(htmlNeedsRedirectGuard('<script>top.location = url</script>')).toBe(true);
+  });
+
+  it('does NOT match reads of location or equality comparisons', () => {
+    // Reading the current URL is not a redirect.
+    expect(htmlNeedsRedirectGuard('<script>const u = window.location.href;</script>')).toBe(false);
+    expect(htmlNeedsRedirectGuard('<script>console.log(location.pathname)</script>')).toBe(false);
+    // Comparisons (== / ===) must not be read as an assignment.
+    expect(htmlNeedsRedirectGuard('<script>if (location.href === target) {}</script>')).toBe(false);
+    expect(htmlNeedsRedirectGuard('<script>window.location == other</script>')).toBe(false);
+  });
+
+  it('does NOT match unrelated "location" identifiers or attributes', () => {
+    expect(htmlNeedsRedirectGuard('<input name="location" value="NYC">')).toBe(false);
+    expect(htmlNeedsRedirectGuard('<div data-location="hq"></div>')).toBe(false);
+    expect(htmlNeedsRedirectGuard('<p>The office location changed.</p>')).toBe(false);
+    // A meta tag that is not a refresh directive.
+    expect(htmlNeedsRedirectGuard('<meta http-equiv="content-type" content="text/html">')).toBe(false);
   });
 });

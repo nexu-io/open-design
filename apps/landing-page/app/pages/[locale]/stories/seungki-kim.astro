@@ -1,0 +1,20 @@
+---
+/*
+ * Locale variants of the Seungki Kim / FABOR user story (`/<locale>/stories/seungki-kim/`).
+ *
+ * Re-renders the canonical page once per non-default locale so the hreflang
+ * alternates SeoHead emits resolve to real URLs. The article body is localized
+ * per locale (chrome + prose translated); the customer's headline and verdict
+ * quote stay in English in every locale.
+ */
+import StoryPage from '../../stories/seungki-kim.astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../i18n';
+
+export function getStaticPaths() {
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).map(
+    (locale) => ({ params: { locale: locale.code } }),
+  );
+}
+---
+
+<StoryPage />

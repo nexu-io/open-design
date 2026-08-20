@@ -24,6 +24,7 @@
     "en": "Ollama"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Run LLMs locally. Terminal-first, monochrome simplicity.",
   "description_i18n": {
     "zh-CN": "本地运行大语言模型。终端优先，简约单色风格。",
