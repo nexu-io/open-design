@@ -1660,29 +1660,6 @@ a.nav-mega-col-head.is-active {
   height: 100%;
   border: 0;
 }
-/* ABOUT: value-promise paragraph + product shot (moved down from the hero). */
-.about-sub {
-  max-width: 820px;
-  margin: 0 auto 44px;
-  font-family: var(--sans);
-  font-size: 18px;
-  line-height: 1.45;
-  font-weight: 400;
-  color: var(--ink-mute);
-  text-align: center;
-}
-.about-shot {
-  width: min(1080px, 92vw);
-  margin: 0 auto 72px;
-}
-.about-shot-img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  box-shadow: 0 30px 80px -40px rgba(38, 38, 38, 0.28);
-}
 .hero-discord-pill {
   align-self: center;
   display: inline-flex;
@@ -2589,6 +2566,22 @@ section.tight { padding: 90px 0; }
   line-height: 1.5;
   font-weight: 500;
   color: var(--ink);
+}
+/* Panel 1 now shows the real product window (the former hero shot) instead of
+   the painted card, so the caption gets its own white card floated over the
+   bottom of the screenshot rather than sitting in a baked-in blank zone. */
+.about-panel-img-shot img { aspect-ratio: 2508 / 1450; }
+.about-panel-img-captioned.about-panel-img-shot .about-panel-caption {
+  top: auto;
+  bottom: 4.5%;
+  width: 78%;
+  padding: 2cqw 2.6cqw;
+  border-radius: 1.4cqw;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  font-size: 2.1cqw;
 }
 /* The 3rd panel (越用越懂你 / self-evolution) centers the caption in its image's
    white-card blank zone (above the divider + chips row baked into the art). */

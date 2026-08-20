@@ -28,7 +28,6 @@ import {
   heroBgImage,
   heroBgSrcset,
   heroProductImage,
-  heroProductSrcset,
   PRECISE_LAZY_PLACEHOLDER,
 } from './image-assets';
 import { getHomeExtra, getHomeCta } from './home-translations';
@@ -640,7 +639,7 @@ export default function Page({
                 <div className='about-reveal' data-about-reveal>
                   <div className='about-reveal-sticky'>
                     <h2 className='display about-reveal-text'>
-                      {tokenizeReveal(t.aboutStatement).map((tok, i) =>
+                      {tokenizeReveal(t.aboutStatement.replace('{systems}', systems)).map((tok, i) =>
                         tok.type === 'space' ? (
                           <span className='reveal-space' key={i}>
                             {' '}
@@ -653,29 +652,6 @@ export default function Page({
                       )}
                     </h2>
                   </div>
-                </div>
-                {/* Value-promise paragraph (moved down from the hero so the
-                    first screen stays clean). `{systems}` is substituted with
-                    the live getCatalogCounts() total, same as the meta copy. */}
-                <p className='about-sub' data-reveal>
-                  <HighlightedBreakText
-                    text={t.heroSub.replace('{systems}', systems)}
-                    highlight={t.heroSubHighlight}
-                  />
-                </p>
-                {/* Product shot — previously the hero's first-screen window. */}
-                <div className='about-shot' data-reveal>
-                  <img
-                    src={heroProductImage}
-                    srcSet={heroProductSrcset}
-                    sizes='(max-width: 768px) 100vw, 60vw'
-                    width={2508}
-                    height={1450}
-                    alt='OpenDesign desktop — design files & index.html preview'
-                    decoding='async'
-                    loading='lazy'
-                    className='about-shot-img'
-                  />
                 </div>
                 <div className='about-scrolly' data-about-scrolly>
                 <div className='about-sticky'>
@@ -713,9 +689,9 @@ export default function Page({
                   <div className='about-panels'>
                     <div className='about-track'>
                     <div className='about-panel'>
-                      <div className='about-panel-img about-panel-img-bare about-panel-img-captioned'>
+                      <div className='about-panel-img about-panel-img-bare about-panel-img-captioned about-panel-img-shot'>
                         <LazyImg
-                          src='/about/desktop-native.webp'
+                          src={heroProductImage}
                           alt={t.aboutCap1.replace(/\n/g, ' ')}
                         />
                         <p className='about-panel-caption'>

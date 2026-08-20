@@ -84,7 +84,7 @@ const en: HomeExtra = {
     'OpenDesign is the open-source, local vibe design workspace — it turns the coding agents you already run into a design engine that carries you from idea to prototype, web, slides, and HTML video, all finished on your own machine. Agent-native, with 21 coding agents, {systems} design systems, and an Apache-2.0 license.',
   aboutKicker: 'Why OpenDesign?',
   aboutStatement:
-    'OpenDesign is the open-source, agentic vibe design workspace — it turns the coding agent you already run into a design engine whose output you fully own. When an LLM first proved it can truly design — real design work, not just copy — that capability arrived closed, hosted, and model-locked. OpenDesign opens it up: local, BYOK, Apache-2.0.',
+    'OpenDesign is the open-source, local vibe design workspace — it turns the coding agents you already run into a design engine that carries you from idea to prototype, web, slides, and HTML video, all on your own machine, with output you fully own. When an LLM first proved it can truly design — real design work, not just copy — that capability arrived closed, hosted, and model-locked. OpenDesign opens it up: 21 coding agents, {systems} design systems, BYOK, Apache-2.0.',
   aboutTab1: 'Desktop-native',
   aboutTab2: 'We don’t build agents, we plug them in',
   aboutTab3: 'It learns you over time',
@@ -140,7 +140,7 @@ const zh: HomeExtra = {
     'OpenDesign 是开源、本地运行的设计工作台——把你已有的 Coding Agent 变成设计引擎，从想法到原型、网页、演示文稿和 HTML 视频，全流程在你自己的设备上完成。\n支持 21 款编程助手、{systems} 套设计系统，采用 Apache-2.0 许可证。',
   aboutKicker: '为什么选择 OpenDesign？',
   aboutStatement:
-    'OpenDesign 是开源、本地运行的智能设计工作台——把你已经在用的编程助手变成设计引擎，成果文件完全归你。当大语言模型第一次证明它能真正完成设计，而不只是撰写文案时，这项能力却被封装在闭源、云端托管且绑定模型的产品里。OpenDesign 将它开放出来：本地运行、可自由选择模型，并采用 Apache-2.0 许可证。',
+    'OpenDesign 是开源、本地运行的智能设计工作台——把你已有的 Coding Agent 变成设计引擎，从想法到原型、网页、演示文稿和 HTML 视频，全流程在你自己的设备上完成，成果文件完全归你。当大语言模型第一次证明它能真正完成设计而不只是撰写文案时，这项能力却被封装在闭源、云端托管且绑定模型的产品里。OpenDesign 将它开放出来：支持 21 款编程助手、{systems} 套设计系统，可自由选择模型，采用 Apache-2.0 许可证。',
   aboutTab1: '桌面端原生',
   aboutTab2: '不另造助手，接入你已有的工具',
   aboutTab3: '越用越懂你',
@@ -184,7 +184,7 @@ const zhTw: HomeExtra = {
     'Figma 與 Claude Design 的 Agent-native 替代方案。\n桌面用戶端優先，接入 21 個 Coding Agent、{systems} 個 Design System，Apache-2.0。',
   aboutKicker: '為什麼選擇 OpenDesign？',
   aboutStatement:
-    '2026 年 4 月，Claude Design 首次證明 LLM 能真正做設計，不是寫文章，而是直接產出設計稿。但它閉源、付費、只跑在雲端，模型鎖 Anthropic，換 Agent、自部署、BYOK 全做不到。OpenDesign 讓這套能力變得開放。',
+    'OpenDesign 是開源、本地執行的智慧設計工作台——把你已有的 Coding Agent 變成設計引擎，從想法到原型、網頁、簡報和 HTML 影片，全流程在你自己的裝置上完成，成果檔案完全歸你。當大型語言模型第一次證明它能真正完成設計而不只是撰寫文案時，這項能力卻被封裝在閉源、雲端託管且綁定模型的產品裡。OpenDesign 將它開放出來：支援 21 款 Coding Agent、{systems} 套設計系統，可自由選擇模型，採用 Apache-2.0 授權。',
   aboutTab1: '桌面端原生',
   aboutTab2: '不造 Agent，接入 Agent',
   aboutTab3: '越用越懂你',
@@ -234,7 +234,7 @@ const ja: HomeExtra = {
     'OpenDesign は、オープンソースでローカル動作するデザインワークスペースです。すでに使っているコーディングエージェントを設計エンジンに変え、アイデアからプロトタイプ、Webサイト、スライド、HTML 動画まで、すべて自分のマシン上で完結します。\n21 種類のコーディングエージェントと {systems} 種類のデザインシステムに対応し、Apache-2.0 で公開しています。',
   aboutKicker: 'なぜ OpenDesign なのか？',
   aboutStatement:
-    'OpenDesign は、オープンソースでローカル動作するエージェント型のデザインワークスペースです。すでに使っているコーディングエージェントを、成果物が完全に自分のものになる設計エンジンへ変えます。大規模言語モデルが文章だけでなく本物のデザインも作れると証明された一方、その力はクローズドでクラウド依存、特定モデルに固定されていました。OpenDesign はそれを開放します。ローカルで動き、モデルを自由に選べ、Apache-2.0 で公開されています。',
+    'OpenDesign は、オープンソースでローカル動作するデザインワークスペースです。すでに使っているコーディングエージェントを設計エンジンに変え、アイデアからプロトタイプ、Web サイト、スライド、HTML 動画まで、すべて自分のマシン上で完結し、成果物は完全に自分のものになります。大規模言語モデルが文章だけでなく本物のデザインも作れると証明された一方、その力はクローズドでクラウド依存、特定モデルに固定されていました。OpenDesign はそれを開放します。21 種類のコーディングエージェントと {systems} 種類のデザインシステムに対応し、モデルを自由に選べ、Apache-2.0 で公開されています。',
   aboutTab1: 'デスクトップネイティブ',
   aboutTab2: 'エージェントは作らず、つなぐ',
   aboutTab3: '使うほどあなたを理解する',
@@ -289,7 +289,7 @@ const ko: HomeExtra = {
     'OpenDesign는 오픈소스이자 로컬로 동작하는 vibe design workspace입니다——이미 사용 중인 코딩 에이전트를 디자인 엔진으로 바꿔, 아이디어에서 프로토타입, 웹, 슬라이드, HTML 비디오까지 전 과정을 내 컴퓨터에서 끝냅니다.\n에이전트 네이티브, 21개 코딩 에이전트, {systems}개 디자인 시스템, Apache-2.0.',
   aboutKicker: '왜 OpenDesign인가?',
   aboutStatement:
-    'OpenDesign은 오픈소스이자 agentic한 vibe design workspace입니다. 이미 쓰는 코딩 에이전트를, 결과물이 온전히 내 것이 되는 디자인 엔진으로 바꿉니다. LLM이 처음으로 진짜 디자인을——카피가 아니라 실제 디자인을——해낼 수 있음을 증명했을 때, 그 능력은 폐쇄적이고 호스팅형이며 모델에 묶여 있었습니다. OpenDesign은 그것을 엽니다: 로컬, BYOK, Apache-2.0.',
+    'OpenDesign은 오픈소스이자 로컬로 동작하는 vibe design workspace입니다——이미 사용 중인 코딩 에이전트를 디자인 엔진으로 바꿔, 아이디어에서 프로토타입, 웹, 슬라이드, HTML 비디오까지 전 과정을 내 컴퓨터에서 끝내고 결과물은 온전히 내 것이 됩니다. LLM이 처음으로 카피가 아닌 진짜 디자인을 해낼 수 있음을 증명했을 때, 그 능력은 폐쇄적이고 호스팅형이며 모델에 묶여 있었습니다. OpenDesign은 그것을 엽니다: 21개 코딩 에이전트, {systems}개 디자인 시스템, BYOK, Apache-2.0.',
   aboutTab1: '데스크톱 네이티브',
   aboutTab2: '에이전트를 만들지 않고, 연결합니다',
   aboutTab3: '쓸수록 당신을 이해합니다',
@@ -344,7 +344,7 @@ const de: HomeExtra = {
     'OpenDesign ist der quelloffene, lokale vibe design workspace — er verwandelt die Coding-Agents, die du bereits nutzt, in eine Design-Engine, die dich von der Idee bis zu Prototyp, Web, Slides und HTML-Video bringt, alles auf deinem eigenen Rechner.\nAgent-native, mit 21 Coding-Agents, {systems} Design-Systemen und Apache-2.0-Lizenz.',
   aboutKicker: 'Warum OpenDesign?',
   aboutStatement:
-    'OpenDesign ist der quelloffene, agentische Vibe Design Workspace – er verwandelt den Coding-Agent, den du bereits nutzt, in eine Design-Engine, deren Ergebnisse ganz dir gehören. Als ein LLM erstmals bewies, dass es wirklich gestalten kann – echte Designarbeit, nicht nur Text –, kam diese Fähigkeit geschlossen, gehostet und modellgebunden. OpenDesign öffnet sie: lokal, BYOK, Apache-2.0.',
+    'OpenDesign ist der quelloffene, lokale Vibe Design Workspace – er verwandelt die Coding-Agents, die du bereits nutzt, in eine Design-Engine, die dich von der Idee bis zu Prototyp, Web, Slides und HTML-Video bringt, alles auf deinem eigenen Rechner, mit Ergebnissen, die ganz dir gehören. Als ein LLM erstmals bewies, dass es wirklich gestalten kann – echte Designarbeit, nicht nur Text –, kam diese Fähigkeit geschlossen, gehostet und modellgebunden. OpenDesign öffnet sie: 21 Coding-Agents, {systems} Design-Systeme, BYOK, Apache-2.0.',
   aboutTab1: 'Desktop-nativ',
   aboutTab2: 'Wir bauen keine Agents, wir binden sie ein',
   aboutTab3: 'Es lernt dich mit der Zeit',
@@ -399,7 +399,7 @@ const fr: HomeExtra = {
     'OpenDesign est le vibe design workspace open source et local — il transforme les agents de code que vous utilisez déjà en moteur de design, de l’idée au prototype, au web, aux slides et à la vidéo HTML, le tout sur votre propre machine.\nAgent-native, avec 21 agents de code, {systems} design systems et une licence Apache-2.0.',
   aboutKicker: 'Pourquoi OpenDesign ?',
   aboutStatement:
-    'OpenDesign est le vibe design workspace open source et agentique — il transforme l’agent de code que vous utilisez déjà en un moteur de design dont vous possédez entièrement le résultat. Quand un LLM a prouvé pour la première fois qu’il pouvait vraiment concevoir — du vrai design, pas juste du texte —, cette capacité est arrivée fermée, hébergée et verrouillée à un modèle. OpenDesign l’ouvre : local, BYOK, Apache-2.0.',
+    'OpenDesign est le vibe design workspace open source et local — il transforme les agents de code que vous utilisez déjà en un moteur de design qui vous mène de l’idée au prototype, au web, aux slides et à la vidéo HTML, le tout sur votre propre machine, avec un résultat qui vous appartient entièrement. Quand un LLM a prouvé pour la première fois qu’il pouvait vraiment concevoir — du vrai design, pas juste du texte —, cette capacité est arrivée fermée, hébergée et verrouillée à un modèle. OpenDesign l’ouvre : 21 agents de code, {systems} design systems, BYOK, Apache-2.0.',
   aboutTab1: 'Natif desktop',
   aboutTab2: 'On ne crée pas d’agents, on les branche',
   aboutTab3: 'Il vous comprend avec le temps',
@@ -454,7 +454,7 @@ const ru: HomeExtra = {
     'OpenDesign — это открытый локальный vibe design workspace: он превращает кодинг-агентов, которыми вы уже пользуетесь, в движок дизайна, ведущий от идеи к прототипу, вебу, слайдам и HTML-видео — всё на вашей машине.\nAgent-native, 21 кодинг-агент, {systems} дизайн-систем, лицензия Apache-2.0.',
   aboutKicker: 'Почему OpenDesign?',
   aboutStatement:
-    'OpenDesign — это открытый, агентный vibe design workspace: он превращает кодинг-агента, которым вы уже пользуетесь, в движок дизайна, результат которого полностью принадлежит вам. Когда LLM впервые доказал, что действительно умеет проектировать — настоящий дизайн, а не просто текст, — эта способность пришла закрытой, облачной и привязанной к модели. OpenDesign открывает её: локально, BYOK, Apache-2.0.',
+    'OpenDesign — это открытый локальный vibe design workspace: он превращает кодинг-агентов, которыми вы уже пользуетесь, в движок дизайна, ведущий от идеи к прототипу, вебу, слайдам и HTML-видео — всё на вашей машине, и результат полностью принадлежит вам. Когда LLM впервые доказал, что действительно умеет проектировать — настоящий дизайн, а не просто текст, — эта способность пришла закрытой, облачной и привязанной к модели. OpenDesign открывает её: 21 кодинг-агент, {systems} дизайн-систем, BYOK, Apache-2.0.',
   aboutTab1: 'Нативно для десктопа',
   aboutTab2: 'Мы не создаём агентов, мы их подключаем',
   aboutTab3: 'Со временем он понимает вас',
@@ -509,7 +509,7 @@ const es: HomeExtra = {
     'OpenDesign es el vibe design workspace open source y local: convierte los agentes de código que ya usas en un motor de diseño que te lleva de la idea al prototipo, la web, las slides y el vídeo HTML, todo en tu propia máquina.\nAgent-native, con 21 agentes de código, {systems} design systems y licencia Apache-2.0.',
   aboutKicker: '¿Por qué OpenDesign?',
   aboutStatement:
-    'OpenDesign es el vibe design workspace open source y agéntico: convierte el agente de código que ya usas en un motor de diseño cuyo resultado es totalmente tuyo. Cuando un LLM demostró por primera vez que podía diseñar de verdad —diseño real, no solo texto—, esa capacidad llegó cerrada, alojada y atada a un modelo. OpenDesign la abre: local, BYOK, Apache-2.0.',
+    'OpenDesign es el vibe design workspace open source y local: convierte los agentes de código que ya usas en un motor de diseño que te lleva de la idea al prototipo, la web, las slides y el vídeo HTML, todo en tu propia máquina y con un resultado totalmente tuyo. Cuando un LLM demostró por primera vez que podía diseñar de verdad —diseño real, no solo texto—, esa capacidad llegó cerrada, alojada y atada a un modelo. OpenDesign la abre: 21 agentes de código, {systems} design systems, BYOK, Apache-2.0.',
   aboutTab1: 'Nativo de escritorio',
   aboutTab2: 'No creamos agentes, los conectamos',
   aboutTab3: 'Te entiende con el tiempo',
@@ -564,7 +564,7 @@ const ptBr: HomeExtra = {
     'OpenDesign é o vibe design workspace open source e local: transforma os agentes de código que você já usa em um motor de design que vai da ideia ao protótipo, web, slides e vídeo HTML, tudo na sua própria máquina.\nAgent-native, com 21 agentes de código, {systems} design systems e licença Apache-2.0.',
   aboutKicker: 'Por que OpenDesign?',
   aboutStatement:
-    'O OpenDesign é o vibe design workspace open source e agêntico: transforma o coding agent que você já usa em um motor de design cujo resultado é totalmente seu. Quando um LLM provou pela primeira vez que sabia projetar de verdade — design real, não só texto —, essa capacidade chegou fechada, hospedada e presa a um modelo. O OpenDesign a abre: local, BYOK, Apache-2.0.',
+    'O OpenDesign é o vibe design workspace open source e local: transforma os agentes de código que você já usa em um motor de design que vai da ideia ao protótipo, web, slides e vídeo HTML, tudo na sua própria máquina e com um resultado totalmente seu. Quando um LLM provou pela primeira vez que sabia projetar de verdade — design real, não só texto —, essa capacidade chegou fechada, hospedada e presa a um modelo. O OpenDesign a abre: 21 agentes de código, {systems} design systems, BYOK, Apache-2.0.',
   aboutTab1: 'Nativo de desktop',
   aboutTab2: 'Não criamos agentes, nós os conectamos',
   aboutTab3: 'Ele entende você com o tempo',
@@ -619,7 +619,7 @@ const it: HomeExtra = {
     'OpenDesign è il vibe design workspace open source e locale: trasforma i coding agent che già usi in un motore di design che ti porta dall’idea al prototipo, al web, alle slide e al video HTML, tutto sulla tua macchina.\nAgent-native, con 21 coding agent, {systems} design system e licenza Apache-2.0.',
   aboutKicker: 'Perché OpenDesign?',
   aboutStatement:
-    'OpenDesign è il vibe design workspace open source e agentico: trasforma il coding agent che già usi in un motore di design il cui risultato è interamente tuo. Quando un LLM ha dimostrato per la prima volta di saper progettare davvero — vero design, non solo testo —, quella capacità è arrivata chiusa, ospitata e legata a un modello. OpenDesign la apre: locale, BYOK, Apache-2.0.',
+    'OpenDesign è il vibe design workspace open source e locale: trasforma i coding agent che già usi in un motore di design che ti porta dall’idea al prototipo, al web, alle slide e al video HTML, tutto sulla tua macchina e con un risultato interamente tuo. Quando un LLM ha dimostrato per la prima volta di saper progettare davvero — vero design, non solo testo —, quella capacità è arrivata chiusa, ospitata e legata a un modello. OpenDesign la apre: 21 coding agent, {systems} design system, BYOK, Apache-2.0.',
   aboutTab1: 'Nativo desktop',
   aboutTab2: 'Non costruiamo agenti, li colleghiamo',
   aboutTab3: 'Ti capisce col tempo',
@@ -666,7 +666,7 @@ const vi: HomeExtra = {
     'Giải pháp agent-native thay thế cho Figma và Claude Design.\nƯu tiên desktop, với 21 coding agent, {systems} design system và giấy phép Apache-2.0.',
   aboutKicker: 'Vì sao chọn OpenDesign?',
   aboutStatement:
-    'Tháng 4 năm 2026, Claude Design lần đầu chứng minh rằng LLM có thể thực sự thiết kế — không phải viết chữ, mà tạo ra sản phẩm thiết kế thật. Nhưng nó đóng mã nguồn, trả phí và chỉ chạy trên đám mây, khóa vào mô hình Anthropic — không đổi agent, không self-host, không BYOK. OpenDesign mở khả năng đó ra.',
+    'OpenDesign là vibe design workspace mã nguồn mở, chạy cục bộ: biến các coding agent bạn đang dùng thành một cỗ máy thiết kế đưa bạn từ ý tưởng đến prototype, web, slide và video HTML — tất cả ngay trên máy của bạn, với thành phẩm hoàn toàn thuộc về bạn. Khi LLM lần đầu chứng minh rằng nó có thể thực sự thiết kế — không phải viết chữ, mà là sản phẩm thiết kế thật — khả năng đó lại đóng mã nguồn, chỉ chạy trên đám mây và khóa vào một mô hình. OpenDesign mở khả năng đó ra: 21 coding agent, {systems} design system, BYOK, Apache-2.0.',
   aboutTab1: 'Gốc desktop',
   aboutTab2: 'Chúng tôi không tạo agent, mà kết nối chúng',
   aboutTab3: 'Càng dùng càng hiểu bạn',
@@ -711,7 +711,7 @@ const pl: HomeExtra = {
     'Agent-native alternatywa dla Figmy i Claude Design.\nDesktop-first, z 21 agentami kodu, {systems} design systemami i licencją Apache-2.0.',
   aboutKicker: 'Dlaczego OpenDesign?',
   aboutStatement:
-    'W kwietniu 2026 Claude Design po raz pierwszy udowodnił, że LLM potrafi naprawdę projektować — nie pisać teksty, lecz tworzyć prawdziwą pracę projektową. Ale jest zamknięty, płatny i tylko w chmurze, przywiązany do modeli Anthropic — bez zmiany agenta, bez self-hostingu, bez BYOK. OpenDesign otwiera tę możliwość.',
+    'OpenDesign to otwartoźródłowy, lokalny vibe design workspace: zamienia agentów kodu, których już używasz, w silnik projektowy prowadzący od pomysłu do prototypu, strony, slajdów i wideo HTML — wszystko na Twoim komputerze, a efekt należy w całości do Ciebie. Gdy LLM po raz pierwszy udowodnił, że potrafi naprawdę projektować — prawdziwą pracę projektową, nie tylko teksty — ta możliwość pojawiła się jako zamknięta, chmurowa i przywiązana do modelu. OpenDesign ją otwiera: 21 agentów kodu, {systems} design systemów, BYOK, Apache-2.0.',
   aboutTab1: 'Natywny na desktopie',
   aboutTab2: 'Nie budujemy agentów, podłączamy je',
   aboutTab3: 'Z czasem rozumie Ciebie',
@@ -756,7 +756,7 @@ const id: HomeExtra = {
     'Alternatif agent-native untuk Figma dan Claude Design.\nDesktop-first, dengan 21 coding agent, {systems} design system, dan lisensi Apache-2.0.',
   aboutKicker: 'Mengapa OpenDesign?',
   aboutStatement:
-    'Pada April 2026, Claude Design pertama kali membuktikan bahwa LLM benar-benar bisa mendesain — bukan menulis teks, melainkan menghasilkan karya desain nyata. Tapi ia tertutup, berbayar, dan hanya cloud, terkunci pada model Anthropic — tanpa ganti agen, tanpa self-hosting, tanpa BYOK. OpenDesign membuka kemampuan itu.',
+    'OpenDesign adalah vibe design workspace open source yang berjalan lokal: mengubah coding agent yang sudah kamu pakai menjadi mesin desain yang membawamu dari ide ke prototipe, web, slide, dan video HTML — semuanya di mesinmu sendiri, dengan hasil yang sepenuhnya milikmu. Saat LLM pertama kali membuktikan bahwa ia benar-benar bisa mendesain — karya desain nyata, bukan sekadar teks — kemampuan itu hadir tertutup, hanya cloud, dan terkunci pada satu model. OpenDesign membukanya: 21 coding agent, {systems} design system, BYOK, Apache-2.0.',
   aboutTab1: 'Native desktop',
   aboutTab2: 'Kami tidak membuat agen, kami menyambungkannya',
   aboutTab3: 'Makin dipakai, makin paham Anda',
@@ -801,7 +801,7 @@ const nl: HomeExtra = {
     'Een agent-native alternatief voor Figma en Claude Design.\nDesktop-first, met 21 coding agents, {systems} design systems en een Apache-2.0-licentie.',
   aboutKicker: 'Waarom OpenDesign?',
   aboutStatement:
-    'In april 2026 bewees Claude Design voor het eerst dat een LLM echt kan ontwerpen — geen teksten schrijven, maar echt designwerk maken. Maar het is closed-source, betaald en alleen cloud, vastgezet op Anthropic-modellen — geen agent wisselen, geen self-hosting, geen BYOK. OpenDesign opent die mogelijkheid.',
+    'OpenDesign is de open-source, lokale vibe design workspace: het verandert de coding agents die je al gebruikt in een design-engine die je van idee naar prototype, web, slides en HTML-video brengt — allemaal op je eigen machine, met output die volledig van jou is. Toen een LLM voor het eerst bewees dat het echt kan ontwerpen — echt designwerk, geen teksten — kwam die mogelijkheid closed-source, alleen cloud en vastgezet op één model. OpenDesign opent haar: 21 coding agents, {systems} design systems, BYOK, Apache-2.0.',
   aboutTab1: 'Desktop-native',
   aboutTab2: 'We bouwen geen agents, we koppelen ze',
   aboutTab3: 'Het leert je na verloop van tijd kennen',
@@ -846,7 +846,7 @@ const ar: HomeExtra = {
     'بديل أصيل للوكلاء عن Figma و Claude Design.\nالأولوية لسطح المكتب، مع 21 وكيل برمجة و{systems} نظام تصميم ورخصة Apache-2.0.',
   aboutKicker: 'لماذا OpenDesign؟',
   aboutStatement:
-    'في أبريل 2026، أثبت Claude Design لأول مرة أن نموذج اللغة يمكنه التصميم فعلاً — لا كتابة النصوص، بل إنتاج عمل تصميمي حقيقي. لكنه مغلق المصدر ومدفوع وسحابي فقط، مقيّد بنماذج Anthropic — لا تبديل للوكيل، ولا استضافة ذاتية، ولا BYOK. يفتح OpenDesign هذه القدرة.',
+    'OpenDesign هو مساحة عمل vibe design مفتوحة المصدر تعمل محلياً: يحوّل وكلاء البرمجة الذين تستخدمهم بالفعل إلى محرّك تصميم يأخذك من الفكرة إلى النموذج الأولي والويب والشرائح وفيديو HTML — كل ذلك على جهازك، والنتيجة ملكك بالكامل. حين أثبت نموذج اللغة لأول مرة أنه يستطيع التصميم فعلاً — عمل تصميمي حقيقي لا مجرد نصوص — جاءت هذه القدرة مغلقة المصدر وسحابية ومقيّدة بنموذج واحد. يفتح OpenDesign هذه القدرة: 21 وكيل برمجة، {systems} نظام تصميم، BYOK، ورخصة Apache-2.0.',
   aboutTab1: 'أصيل لسطح المكتب',
   aboutTab2: 'لا نصنع الوكلاء، بل نوصّلهم',
   aboutTab3: 'يفهمك أكثر مع الاستخدام',
@@ -899,7 +899,7 @@ const tr: HomeExtra = {
     'OpenDesign, açık kaynaklı ve yerel çalışan vibe design workspace’tir — hâlihazırda kullandığın kodlama ajanlarını, fikirden prototipe, web’e, slaytlara ve HTML videoya kadar her şeyi kendi makinende tamamlayan bir tasarım motoruna dönüştürür.\nAgent-native; 21 kodlama ajanı, {systems} tasarım sistemi ve Apache-2.0 lisansı.',
   aboutKicker: 'Neden OpenDesign?',
   aboutStatement:
-    'OpenDesign, açık kaynaklı ve agentic bir vibe design workspace’tir: hâlihazırda kullandığın kodlama ajanını, çıktısı tamamen sana ait olan bir tasarım motoruna dönüştürür. Bir LLM ilk kez gerçekten tasarlayabildiğini — metin değil, gerçek tasarım — kanıtladığında, bu yetenek kapalı, barındırılan ve modele kilitli geldi. OpenDesign onu açar: yerel, BYOK, Apache-2.0.',
+    'OpenDesign, açık kaynaklı ve yerel çalışan vibe design workspace’tir — hâlihazırda kullandığın kodlama ajanlarını, fikirden prototipe, web’e, slaytlara ve HTML videoya kadar her şeyi kendi makinende tamamlayan ve çıktısı tamamen sana ait olan bir tasarım motoruna dönüştürür. Bir LLM ilk kez gerçekten tasarlayabildiğini — metin değil, gerçek tasarım — kanıtladığında, bu yetenek kapalı, barındırılan ve modele kilitli geldi. OpenDesign onu açar: 21 kodlama ajanı, {systems} tasarım sistemi, BYOK, Apache-2.0.',
   aboutTab1: 'Masaüstü yerel',
   aboutTab2: 'Ajan üretmiyoruz, onları bağlıyoruz',
   aboutTab3: 'Kullandıkça seni anlar',
@@ -946,7 +946,7 @@ const uk: HomeExtra = {
     'Agent-native альтернатива Figma та Claude Design.\nDesktop-first, з 21 кодинг-агентами, {systems} дизайн-системами та ліцензією Apache-2.0.',
   aboutKicker: 'Чому OpenDesign?',
   aboutStatement:
-    'У квітні 2026 року Claude Design уперше довів, що LLM може справді проєктувати — не писати тексти, а створювати реальну дизайн-роботу. Але він закритий, платний і лише в хмарі, прив’язаний до моделей Anthropic — без зміни агента, без self-hosting, без BYOK. OpenDesign відкриває цю можливість.',
+    'OpenDesign — це відкритий локальний vibe design workspace: він перетворює кодинг-агентів, якими ви вже користуєтеся, на дизайн-рушій, що веде від ідеї до прототипу, вебу, слайдів і HTML-відео — усе на вашій машині, а результат повністю належить вам. Коли LLM уперше довів, що може справді проєктувати — реальну дизайн-роботу, а не тексти, — ця можливість прийшла закритою, хмарною та прив’язаною до моделі. OpenDesign відкриває її: 21 кодинг-агент, {systems} дизайн-систем, BYOK, Apache-2.0.',
   aboutTab1: 'Нативний для десктопа',
   aboutTab2: 'Ми не створюємо агентів, ми їх під’єднуємо',
   aboutTab3: 'З часом він розуміє вас',
