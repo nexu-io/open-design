@@ -77,6 +77,11 @@ export async function prepareResourceTree(
         });
       }
       await mkdir(join(resourceRoot, "bin"), { recursive: true });
+      // Mirror the Linux pack step (tools/pack/src/linux.ts copyResourceTree):
+      // ship the Node executable used to build the pack as the packaged
+      // `bin/node.exe` so `OD_NODE_BIN` resolves to a real Node runtime instead
+      // of falling back to `process.execPath` → `Open Design.exe` (#7148).
+      await cp(process.execPath, join(resourceRoot, "bin", "node.exe"));
       await cp(winResources.sevenZipExe, join(resourceRoot, "bin", "7z.exe"));
       await cp(winResources.sevenZipDll, join(resourceRoot, "bin", "7z.dll"));
       await copyOptionalVelaCliBinary({
