@@ -1845,6 +1845,104 @@ function injectSelectionBridge(
   // brackets (close the <style> tag), and newlines (defense in depth).
   var UNSAFE_VALUE = /[;{}<>\\n\\r]/;
   function active(){ return commentEnabled || inspectEnabled; }
+  // #7008: child documents are eligible only when their resolved URL stays
+  // beneath this srcdoc's daemon-minted project preview scope. Artifact markup
+  // never gets to opt itself into the relay with a data attribute.
+  function projectFramePath(frame){
+    try {
+      var base = new URL(document.baseURI);
+      var baseMatch = base.pathname.match(/^\\/api\\/projects\\/([^/]+)\\/preview\\/([^/]+)\\//);
+      var child = new URL(frame.src, document.baseURI);
+      if (!baseMatch || child.origin !== base.origin) return null;
+      var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
+      if (child.pathname.indexOf(prefix) !== 0) return null;
+      var path = decodeURIComponent(child.pathname.slice(prefix.length));
+      return path && path.indexOf('..') < 0 ? path : null;
+    } catch (_) { return null; }
+  }
+  function projectFrameForSource(source){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      if (frames[i].contentWindow === source && projectFramePath(frames[i])) return frames[i];
+    }
+    return null;
+  }
+  function markProjectFrames(){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      frames[i].toggleAttribute('data-od-project-frame', !!projectFramePath(frames[i]));
+    }
+  }
+  markProjectFrames();
+  try { new MutationObserver(markProjectFrames).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] }); } catch (_) {}
+  function parseProjectFrameTarget(elementId){
+    var raw = String(elementId || '');
+    if (raw.indexOf('frame:') !== 0) return null;
+    var split = raw.indexOf('::', 6);
+    if (split < 0) return null;
+    var framePath = raw.slice(6, split);
+    var localElementId = raw.slice(split + 2);
+    return framePath && localElementId ? { framePath: framePath, localElementId: localElementId } : null;
+  }
+  function projectFrameForPath(framePath){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      if (projectFramePath(frames[i]) === framePath) return frames[i];
+    }
+    return null;
+  }
+  function routeProjectFrameCommand(data){
+    if (!data || !data.type) return false;
+    var allowed = { 'od:comment-active-target': true, 'od:inspect-set': true, 'od:inspect-reset': true };
+    if (!allowed[data.type]) return false;
+    var target = parseProjectFrameTarget(data.elementId);
+    if (!target) return false;
+    var frame = projectFrameForPath(target.framePath);
+    if (!frame || !frame.contentWindow) return true;
+    var message = { type: data.type, elementId: target.localElementId };
+    if (typeof data.selector === 'string') message.selector = data.selector;
+    if (typeof data.prop === 'string') message.prop = data.prop;
+    if (typeof data.value === 'string') message.value = data.value;
+    try { frame.contentWindow.postMessage(message, '*'); } catch (_) {}
+    return true;
+  }
+  function broadcastProjectFrameMode(data){
+    if (!data || (data.type !== 'od:comment-mode' && data.type !== 'od:inspect-mode')) return;
+    var frames = document.querySelectorAll('iframe[data-od-project-frame]');
+    for (var i = 0; i < frames.length; i++) {
+      try { frames[i].contentWindow && frames[i].contentWindow.postMessage(data, '*'); } catch (_) {}
+    }
+  }
+  function safeRelayPosition(position, frame){
+    if (!position || !Number.isFinite(Number(position.x)) || !Number.isFinite(Number(position.y)) ||
+      !Number.isFinite(Number(position.width)) || !Number.isFinite(Number(position.height))) return null;
+    var rect = frame.getBoundingClientRect();
+    var width = Number(frame.clientWidth || 0);
+    var height = Number(frame.clientHeight || 0);
+    if (!(width > 0) || !(height > 0)) return null;
+    var sx = rect.width / width;
+    var sy = rect.height / height;
+    return { x: Math.round(rect.x + Number(position.x) * sx), y: Math.round(rect.y + Number(position.y) * sy),
+      width: Math.round(Number(position.width) * sx), height: Math.round(Number(position.height) * sy) };
+  }
+  function relayProjectFrameSelection(ev){
+    if (!active()) return;
+    var data = ev && ev.data;
+    var allowed = { 'od:comment-target': true, 'od:comment-hover': true, 'od:comment-active-target-update': true };
+    if (!data || !allowed[data.type] || !data.position || !data.elementId || !data.selector) return;
+    var frame = projectFrameForSource(ev.source);
+    if (!frame) return;
+    var framePath = projectFramePath(frame);
+    var position = safeRelayPosition(data.position, frame);
+    if (!framePath || !position) return;
+    var localElementId = String(data.elementId);
+    var message = { type: data.type, elementId: 'frame:' + framePath + '::' + localElementId,
+      localElementId: localElementId, framePath: framePath, selector: String(data.selector),
+      label: typeof data.label === 'string' ? data.label : '', text: typeof data.text === 'string' ? data.text : '',
+      position: position, htmlHint: typeof data.htmlHint === 'string' ? data.htmlHint : '', style: data.style || null };
+    window.parent.postMessage(message, '*');
+  }
+  window.addEventListener('message', relayProjectFrameSelection);
   function deckSlideIndexForPayload(){
     try {
       var state = window.__odDeckSlideState && window.__odDeckSlideState();
@@ -2477,6 +2575,7 @@ function meaningfulDomFallbackTarget(el) {
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
+    if (routeProjectFrameCommand(data)) return;
     if (data.type === 'od:preview-runtime-state-restore') {
       scheduleRuntimeStateRestore(data.state);
       return;
@@ -2490,6 +2589,7 @@ function meaningfulDomFallbackTarget(el) {
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+      broadcastProjectFrameMode(data);
       if (active()) setTimeout(postTargets, 0);
       else {
         hoveredId = null;
@@ -2525,6 +2625,7 @@ function meaningfulDomFallbackTarget(el) {
     if (data.type === 'od:inspect-mode') {
       inspectEnabled = !!data.enabled;
       document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);
+      broadcastProjectFrameMode(data);
       if (active()) setTimeout(postTargets, 0);
       else hoveredId = null;
       return;
@@ -2734,8 +2835,8 @@ html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cel
 /* Nested iframes (e.g. shared device frames) consume clicks in their own browsing context.
    While picker modes are on, disable pointer events on outer-document iframes so the
    hit target resolves to an annotated ancestor (card, shell) in this document. */
-html[data-od-comment-mode] body iframe,
-html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
+html[data-od-comment-mode] body iframe:not([data-od-project-frame]),
+html[data-od-inspect-mode] body iframe:not([data-od-project-frame]) { pointer-events: none !important; }
 </style>`;
   return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
 }

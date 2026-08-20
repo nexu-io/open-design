@@ -5423,6 +5423,12 @@ const HOST_UNSAFE_INSPECT_VALUE = /[;{}<>\n\r]/;
 // dropped on the way to the persisted overrides block.
 const HOST_UNSAFE_INSPECT_ID = /["\\<>\u0000-\u001f\u007f]/;
 
+// `frame:` identities name an element in a different project-local HTML
+// document. They are transport identities, not DOM ids in the file currently
+// open in FileViewer. Do not serialize them into this file until the save path
+// resolves the owning file and performs a scoped write there.
+const FRAME_QUALIFIED_INSPECT_ID = /^frame:/;
+
 // Build the inspect overrides CSS body the host will persist, from the
 // structured `overrides` field of an od:inspect-overrides message. The host
 // MUST NOT trust the sibling `css` string — it is attacker-controlled when
@@ -5435,7 +5441,7 @@ export function serializeInspectOverrides(overrides: unknown): string {
   const map = overrides as Record<string, unknown>;
   const lines: string[] = [];
   for (const elementId of Object.keys(map)) {
-    if (!elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) continue;
+    if (!elementId || FRAME_QUALIFIED_INSPECT_ID.test(elementId) || HOST_UNSAFE_INSPECT_ID.test(elementId)) continue;
     const entry = map[elementId] as InspectOverridePayload | null | undefined;
     if (!entry || typeof entry !== 'object') continue;
     const props = entry.props;
@@ -5479,7 +5485,7 @@ export function updateInspectOverride(
   prop: string,
   value: string,
 ): InspectOverrideMap {
-  if (!elementId || HOST_UNSAFE_INSPECT_ID.test(elementId)) return map;
+  if (!elementId || FRAME_QUALIFIED_INSPECT_ID.test(elementId) || HOST_UNSAFE_INSPECT_ID.test(elementId)) return map;
   const propName = String(prop || '').toLowerCase();
   if (!HOST_ALLOWED_INSPECT_PROPS.has(propName)) return map;
   const trimmed = String(value ?? '').trim();

@@ -12764,6 +12764,20 @@ describe('serializeInspectOverrides', () => {
     expect(out).toContain('font-size: 20px !important');
   });
 
+  it('does not serialize a frame-qualified target into the current file', () => {
+    const out = serializeInspectOverrides({
+      'frame:slides/detail.html::hero': {
+        selector: '[data-od-id="hero"]',
+        props: { color: '#ff0000' },
+      },
+    });
+
+    // A nested frame owns a different project file. Until save resolves that
+    // owner explicitly, emitting this rule into the currently open source
+    // file would create a selector that cannot match anything there.
+    expect(out).toBe('');
+  });
+
   it('rejects non-allow-listed properties', () => {
     const out = serializeInspectOverrides({
       hero: { selector: '[data-od-id="hero"]', props: { position: 'absolute', color: '#fff' } },

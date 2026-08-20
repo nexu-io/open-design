@@ -715,6 +715,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   if (window.__odUrlSelectionBridge) return;
   window.__odUrlSelectionBridge = true;
   var commentEnabled = false;
+  var inspectEnabled = false;
   var mode = 'picker';
   var hoveredId = null;
   var drawing = false;
@@ -725,6 +726,16 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var activeCommentElementId = null;
   var activeCommentSelector = null;
   var activeTargetPending = false;
+  var inspectOverrides = Object.create(null);
+  var inspectStyle = null;
+  var ALLOWED_INSPECT_PROPS = {
+    'color': true, 'background-color': true, 'font-size': true,
+    'font-weight': true, 'font-family': true, 'line-height': true,
+    'text-align': true, 'padding': true, 'padding-top': true,
+    'padding-right': true, 'padding-bottom': true, 'padding-left': true,
+    'border-radius': true
+  };
+  var UNSAFE_INSPECT_VALUE = /[;{}<>\\n\\r]/;
   function postReady(){
     window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href }, '*');
   }
@@ -738,15 +749,73 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     style.setAttribute('data-od-url-selection-style', '');
     style.textContent =
       'html[data-od-comment-mode] body * { cursor: crosshair !important; }' +
+      'html[data-od-inspect-mode] body * { cursor: crosshair !important; }' +
       'html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }' +
       'html[data-od-comment-mode] body iframe,html[data-od-comment-mode] body object,html[data-od-comment-mode] body embed { pointer-events: none !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
-  function active(){ return commentEnabled; }
+  function active(){ return commentEnabled || inspectEnabled; }
   function annotatedSelectorFor(el){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     if (!id) return null;
     return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
+  }
+  function inspectSelectorFor(elementId, hint){
+    var id = String(elementId || '');
+    var attr = typeof hint === 'string' && hint.indexOf('[data-screen-label=') === 0
+      ? 'data-screen-label'
+      : 'data-od-id';
+    try {
+      var exact = document.querySelector('[' + attr + '="' + esc(id) + '"]');
+      if (exact) return '[' + attr + '="' + esc(id) + '"]';
+      var fallback = attr === 'data-od-id' ? 'data-screen-label' : 'data-od-id';
+      if (document.querySelector('[' + fallback + '="' + esc(id) + '"]')) {
+        return '[' + fallback + '="' + esc(id) + '"]';
+      }
+    } catch (_) {}
+    return null;
+  }
+  function ensureInspectStyle(){
+    if (inspectStyle && inspectStyle.isConnected) return inspectStyle;
+    inspectStyle = document.querySelector('style[data-od-inspect-overrides]');
+    if (!inspectStyle) {
+      inspectStyle = document.createElement('style');
+      inspectStyle.setAttribute('data-od-inspect-overrides', '');
+      (document.head || document.documentElement).appendChild(inspectStyle);
+    }
+    return inspectStyle;
+  }
+  function rebuildInspectStyle(){
+    var lines = [];
+    Object.keys(inspectOverrides).forEach(function(id){
+      var entry = inspectOverrides[id];
+      var props = entry && entry.props;
+      if (!props || !Object.keys(props).length) return;
+      var body = Object.keys(props).map(function(prop){
+        return prop + ': ' + props[prop] + ' !important';
+      }).join('; ');
+      lines.push(entry.selector + ' { ' + body + ' }');
+    });
+    ensureInspectStyle().textContent = lines.join('\\n');
+  }
+  function applyInspectOverride(elementId, selector, prop, value){
+    if (!elementId || !Object.prototype.hasOwnProperty.call(ALLOWED_INSPECT_PROPS, prop)) return;
+    var safeSelector = inspectSelectorFor(elementId, selector);
+    if (!safeSelector) return;
+    var safeValue = value == null ? '' : String(value).trim();
+    if (safeValue && UNSAFE_INSPECT_VALUE.test(safeValue)) return;
+    var entry = inspectOverrides[elementId];
+    if (!entry) entry = inspectOverrides[elementId] = { selector: safeSelector, props: Object.create(null) };
+    entry.selector = safeSelector;
+    if (safeValue) entry.props[prop] = safeValue;
+    else delete entry.props[prop];
+    if (!Object.keys(entry.props).length) delete inspectOverrides[elementId];
+    rebuildInspectStyle();
+  }
+  function resetInspectOverrides(elementId){
+    if (elementId) delete inspectOverrides[String(elementId)];
+    else inspectOverrides = Object.create(null);
+    rebuildInspectStyle();
   }
   function domSelectorFor(el){
     if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
@@ -861,7 +930,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     return payload;
   }
   function allTargets(){
-    var includeDomFallback = commentEnabled && mode === 'picker';
+    var includeDomFallback = commentEnabled && !inspectEnabled && mode === 'picker';
     var nodes = includeDomFallback ? document.querySelectorAll('body *') : document.querySelectorAll('[data-od-id], [data-screen-label]');
     var items = [];
     var seen = Object.create(null);
@@ -907,7 +976,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     if (!active() || !activeCommentElementId) return;
     var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
     if (!el) return;
-    var payload = targetFrom(el, commentEnabled && mode === 'picker');
+    var payload = targetFrom(el, commentEnabled && !inspectEnabled && mode === 'picker');
     if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
   }
   function schedulePostActiveCommentTarget(){
@@ -944,7 +1013,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   }
   function closestTarget(event){
     var candidates = eventCandidateElements(event);
-    var allowDomFallback = commentEnabled && mode === 'picker';
+    var allowDomFallback = commentEnabled && !inspectEnabled && mode === 'picker';
     var annotatedFallback = null;
     for (var i = 0; i < candidates.length; i++) {
       var clicked = candidates[i];
@@ -1089,7 +1158,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
-      if (commentEnabled) setTimeout(postTargets, 0);
+      if (active()) setTimeout(postTargets, 0);
       else {
         hoveredId = null;
         activeCommentElementId = null;
@@ -1102,6 +1171,21 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       }
       return;
     }
+    if (data.type === 'od:inspect-mode') {
+      inspectEnabled = !!data.enabled;
+      document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);
+      if (active()) setTimeout(postTargets, 0);
+      else hoveredId = null;
+      return;
+    }
+    if (data.type === 'od:inspect-set') {
+      applyInspectOverride(data.elementId, data.selector, data.prop, data.value);
+      return;
+    }
+    if (data.type === 'od:inspect-reset') {
+      resetInspectOverrides(data.elementId);
+      return;
+    }
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
@@ -1109,16 +1193,16 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     }
   });
   document.addEventListener('mouseover', function(ev){
-    if (!commentEnabled || mode !== 'picker') return;
+    if (!active() || mode !== 'picker') return;
     var result = closestTarget(ev);
     if (!result) return;
-    var payload = targetFrom(result.target, true);
+    var payload = targetFrom(result.target, commentEnabled && !inspectEnabled);
     if (!payload || payload.elementId === hoveredId) return;
     hoveredId = payload.elementId;
     window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
   }, true);
   document.addEventListener('mouseout', function(ev){
-    if (!commentEnabled || mode !== 'picker') return;
+    if (!active() || mode !== 'picker') return;
     var result = closestTarget(ev);
     if (!result) return;
     var next = ev.relatedTarget;
@@ -1130,17 +1214,24 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     window.parent.postMessage({ type: 'od:comment-leave' }, '*');
   }, true);
   document.addEventListener('click', function(ev){
-    if (!commentEnabled || mode !== 'picker') return;
+    if (!active() || mode !== 'picker') return;
     var result = closestTarget(ev);
     if (result) {
       ev.preventDefault();
       ev.stopPropagation();
-      var payload = targetFrom(result.target, true, result.clicked, { x: ev.clientX, y: ev.clientY });
+      var payload = targetFrom(result.target, commentEnabled && !inspectEnabled, result.clicked, { x: ev.clientX, y: ev.clientY });
       if (payload) {
         activeCommentElementId = payload.elementId || activeCommentElementId;
         activeCommentSelector = payload.selector || activeCommentSelector;
         window.parent.postMessage(payload, '*');
       }
+      return;
+    }
+    // Inspect has no free-pin fallback: it must resolve an annotated target
+    // so a later override command has a stable selector to route back here.
+    if (inspectEnabled) {
+      ev.preventDefault();
+      ev.stopPropagation();
       return;
     }
     var t = ev.target;
@@ -6026,14 +6117,22 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         relPath,
         project.metadata,
         () => setProjectPreviewHeaders(res),
-        async (file) => maybeResolveVitePreviewHtml({
-          file,
-          projectId: project.id,
-          relPath,
-          metadata: project.metadata,
-          projectsRoot: PROJECTS_DIR,
-          readProjectFile,
-        }),
+        async (file) => {
+          const transformed = await maybeResolveVitePreviewHtml({
+            file,
+            projectId: project.id,
+            relPath,
+            metadata: project.metadata,
+            projectsRoot: PROJECTS_DIR,
+            readProjectFile,
+          });
+          // Every document served beneath a minted preview scope is a
+          // server-known project file. This is the one safe place to add the
+          // child-side picker bridge: relative iframe navigation remains on
+          // this route through the injected preview <base>, while raw and
+          // cross-origin URLs retain the old outer-frame fallback.
+          return applyUrlPreviewBridgesToHtml(transformed, file.mime, 'selection');
+        },
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;

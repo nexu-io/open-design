@@ -476,6 +476,12 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('html[data-od-comment-mode] body iframe');
     expect(srcdoc).toContain('html[data-od-inspect-mode] body iframe');
     expect(srcdoc).toContain('pointer-events: none !important');
+    expect(srcdoc).toContain('function projectFramePath(frame)');
+    expect(srcdoc).toContain('function relayProjectFrameSelection(ev)');
+    expect(srcdoc).toContain("'od:comment-target': true");
+    expect(srcdoc).toContain('function routeProjectFrameCommand(data)');
+    expect(srcdoc).toContain("'od:inspect-set': true");
+    expect(srcdoc).toContain('iframe:not([data-od-project-frame])');
   });
 
   it('emits free-pin fallback coordinates in viewport space', () => {
