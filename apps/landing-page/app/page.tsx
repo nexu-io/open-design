@@ -439,10 +439,10 @@ export default function Page({
   // hand-written; every other locale falls back to English.
   const heroTags =
     locale === 'zh'
-      ? ['开源 · Apache-2.0', 'BYOK 自带模型', '本地运行', '多人设计协作', '品牌设计系统', '支持 21 款 Coding Agent 接入']
+      ? ['开源 · Apache-2.0', 'BYOK 自带模型', '本地运行 · 数据不出设备', '多人设计协作', '品牌设计系统', '支持 21 款 Coding Agent 接入']
       : locale === 'zh-tw'
-        ? ['開源 · Apache-2.0', 'BYOK 自帶模型', '本地執行', '多人設計協作', '品牌設計系統', '支援 21 款 Coding Agent 接入']
-        : ['Open source · Apache-2.0', 'BYOK', 'Runs locally', 'Team collaboration', 'Brand design systems', 'Plugs into 21 coding agents'];
+        ? ['開源 · Apache-2.0', 'BYOK 自帶模型', '本地執行 · 資料不出裝置', '多人設計協作', '品牌設計系統', '支援 21 款 Coding Agent 接入']
+        : ['Open source · Apache-2.0', 'BYOK', 'Local-first · your data stays on-device', 'Team collaboration', 'Brand design systems', 'Plugs into 21 coding agents'];
   const heroVideoPoster = `https://i.ytimg.com/vi/${HERO_VIDEO_ID}/maxresdefault.jpg`;
 
   /**
