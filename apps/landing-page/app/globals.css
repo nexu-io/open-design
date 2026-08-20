@@ -1665,7 +1665,6 @@ a.nav-mega-col-head.is-active {
   box-shadow: 0 30px 80px -40px rgba(38, 38, 38, 0.28);
   cursor: pointer;
 }
-.hero-video-frame:focus-visible { outline: 2px solid var(--coral); outline-offset: 4px; }
 .hero-video-poster {
   display: block;
   width: 100%;

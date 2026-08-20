@@ -669,7 +669,6 @@ export default function Page({
                   className='hero-video-frame'
                   data-hero-video
                   data-video-id={HERO_VIDEO_ID}
-                  tabIndex={0}
                 >
                   <img
                     className='hero-video-poster'
@@ -680,11 +679,13 @@ export default function Page({
                     decoding='async'
                     fetchPriority='low'
                   />
+                  {/* The labelled button is the single focus target: native
+                      Enter / Space activate it, the frame only mirrors the
+                      click for pointer users who hit the poster. */}
                   <button
                     type='button'
                     className='hero-video-play'
                     aria-label='Play the OpenDesign walkthrough video'
-                    tabIndex={-1}
                   >
                     <svg viewBox='0 0 24 24' width='30' height='30' aria-hidden='true'>
                       <path d='M8 5.5v13l11-6.5z' fill='currentColor' />

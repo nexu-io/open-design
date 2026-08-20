@@ -2306,13 +2306,9 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           frame.classList.add('is-playing');
           frame.appendChild(iframe);
         };
+        // Pointer: anywhere on the poster. Keyboard: the labelled <button> is
+        // the only focusable control and its native activation fires `click`.
         frame.addEventListener('click', play);
-        frame.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            play();
-          }
-        });
       })();
     </script>
   </body>
