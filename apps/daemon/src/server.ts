@@ -736,6 +736,7 @@ import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFi
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
+import { registerScene3dRoutes } from './routes/scene3d.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
@@ -8214,6 +8215,14 @@ export async function startServer({
     http: httpDeps,
     deploy: deployDeps,
     projectStore: projectStoreDeps,
+    authorizeProjectRequest,
+  });
+  registerScene3dRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    validation: validationDeps,
     authorizeProjectRequest,
   });
   app.use('/frames', express.static(FRAMES_DIR));

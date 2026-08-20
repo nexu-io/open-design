@@ -409,6 +409,7 @@ const SUBCOMMAND_MAP = {
   diagnostics: runDiagnostics,
   export: runExport,
   lint: runLint,
+  scene3d: runScene3d,
   status: runStatus,
   version: runVersion,
   'whats-new': runWhatsNew,
@@ -609,6 +610,28 @@ async function runExport(args) {
   console.log(`wrote ${out} (${buffer.length} bytes)`);
 }
 
+// `od scene3d …` mirrors the Scene 3D viewer. Same surface, same
+// /api/projects/:id/scene3d/compile endpoint. The CLI form is the
+// embeddability contract: an external agent (hermes-agent, openclaw, a
+// scripted render job) drives the deterministic scene compiler headlessly,
+// which is the whole point of making the compile one call instead of a
+// chain of check tools.
+const SCENE3D_STRING_FLAGS = new Set([
+  'daemon-url', 'project', 'scene', 'stages', 'engine', 'resolution',
+  'turntable-steps', 'fail-on',
+  // `od scene3d tweaks`: the edits the viewer's gizmo writes. --set takes
+  // JSON inline, --set-file takes a path or `-` for stdin, matching the
+  // --prompt-file convention the rest of the CLI uses for long input.
+  'set', 'set-file',
+]);
+const SCENE3D_BOOLEAN_FLAGS = new Set([
+  'help', 'h', 'json', 'agent-message', 'no-turntable', 'no-cache',
+  'merge', 'clear',
+]);
+const SCENE3D_ACTIONS = ['compile', 'manifest', 'tweaks'];
+const SCENE3D_FAIL_ON_VALUES = ['error', 'warning', 'none'];
+const SCENE3D_STAGE_IDS = ['parse', 'build', 'lint', 'proof', 'export', 'manifest'];
+
 const LINT_STRING_FLAGS = new Set(['daemon-url', 'file', 'html-file', 'fail-on']);
 const LINT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'agent-message']);
 const LINT_FAIL_ON_VALUES = ['p0', 'p1', 'p2', 'none'];
@@ -722,6 +745,336 @@ async function runLint(args) {
     if (flags['agent-message'] && agentMessage) console.log(`\n${agentMessage}`);
   }
   if (failed) process.exitCode = 1;
+}
+
+function printScene3dHelp() {
+  console.log(`Usage:
+  od scene3d compile [options]
+  od scene3d manifest [options]
+  od scene3d tweaks [options]
+
+Compile a 3D scene project the way a build tool compiles code: parse, build
+through headless Blender, lint deterministically, render proof frames,
+export USD/GLB, and emit a manifest — in ONE call. Issues carry stable codes
+(S3D-E-324 z-fighting, S3D-W-341 default material, ...) so a driving agent
+learns the codes instead of re-reading prose.
+
+\`manifest\` reads the last compile's manifest without spending a Blender run.
+
+Exit codes: 0 clean at threshold · 1 issues at/above --fail-on ·
+2 usage · 3 daemon unreachable.
+
+Options:
+  --project <id>           Project id (default: OD_PROJECT_ID)
+  --scene <path>           Project-relative scene directory (default: project root)
+  --stages <a,b,c>         Restrict the pipeline (${SCENE3D_STAGE_IDS.join(', ')})
+  --engine <e>             BLENDER_EEVEE | CYCLES
+  --resolution <px>        Proof render resolution (64-4096)
+  --turntable-steps <n>    Turntable frame count (1-64)
+  --no-turntable           Render one still instead of a turntable
+  --no-cache               Bypass the per-stage content-hash cache
+  --fail-on <sev>          error | warning | none — exit 1 threshold (default error)
+  --agent-message          Also print the <scene3d-report> block for agent splicing
+
+Tweaks (per-part placement edits, the same file the viewer's gizmo saves):
+  --set <json>             Write these edits, e.g. '{"prp_lid":{"translate":[0,0.1,0]}}'
+  --set-file <path|->      Read the same JSON from a file, or - for stdin
+  --merge                  Compose with what is already saved instead of replacing
+  --clear                  Remove all saved edits for the scene
+  --json                   Print a machine-readable result envelope
+  --daemon-url <url>       Override daemon URL
+
+Examples:
+  od scene3d compile --project p1 --scene scenes/crate
+  od scene3d compile --stages parse,lint --json | jq '.issues[].code'
+  od scene3d compile --scene scenes/crate --fail-on warning --agent-message
+  od scene3d manifest --project p1 --scene scenes/crate --json
+  od scene3d tweaks --scene scenes/crate --json
+  od scene3d tweaks --scene scenes/crate --set '{"prp_lid":{"translate":[0,0.02,0]}}' --merge
+  od scene3d tweaks --scene scenes/crate --merge \
+    --set '{"prp_lid":{"material":{"assign":"mtl_gold","roughness":0.2}}}'
+  jq '.tweaks' saved.json | od scene3d tweaks --scene scenes/crate --set-file -`);
+}
+
+async function runScene3d(args) {
+  let flags;
+  try {
+    flags = parseFlags(args, { string: SCENE3D_STRING_FLAGS, boolean: SCENE3D_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const pos = positionalArgs(args, SCENE3D_STRING_FLAGS);
+  const action = pos[0];
+  // Asking for help is a successful request (`od scene3d compile --help`
+  // exits 0); arriving with no action at all is a usage error.
+  const askedForHelp = Boolean(flags.help || flags.h || action === 'help');
+  if (askedForHelp || !action) {
+    printScene3dHelp();
+    process.exit(askedForHelp ? 0 : 2);
+  }
+  if (!SCENE3D_ACTIONS.includes(action)) {
+    console.error(`unknown scene3d action: ${action} (expected ${SCENE3D_ACTIONS.join(' | ')})`);
+    process.exit(2);
+  }
+
+  const projectId = flags.project || process.env.OD_PROJECT_ID;
+  if (!projectId) {
+    console.error(
+      'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
+    );
+    process.exit(2);
+  }
+  const scenePath = flags.scene || '.';
+  const failOn = flags['fail-on'] || 'error';
+  if (!SCENE3D_FAIL_ON_VALUES.includes(failOn)) {
+    console.error(`invalid --fail-on: ${failOn} (expected ${SCENE3D_FAIL_ON_VALUES.join(' | ')})`);
+    process.exit(2);
+  }
+
+  const base = await cliDaemonBaseUrl(flags);
+
+  if (action === 'manifest') {
+    const query = `?scenePath=${encodeURIComponent(scenePath)}`;
+    let resp;
+    try {
+      resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/scene3d/manifest${query}`);
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+    const result = await resp.json();
+    if (flags.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (!result.manifest) {
+      console.log(`${scenePath}: never compiled`);
+      return;
+    }
+    printScene3dManifest(result.manifest, scenePath);
+    return;
+  }
+
+  /*
+   * `od scene3d tweaks` — the per-part edits the viewer's gizmo writes.
+   *
+   * This existed as two HTTP endpoints and a Save button and nothing else,
+   * which is the dual-track rule in AGENTS.md being broken rather than an
+   * omission of convenience: an external agent driving Open Design through
+   * `od` could compile a scene and read its manifest, but could not see or
+   * author a single placement edit. Same endpoints as the viewer, so there
+   * is one shape of truth rather than a CLI dialect.
+   */
+  if (action === 'tweaks') {
+    const url = `${base}/api/projects/${encodeURIComponent(projectId)}/scene3d/tweaks`;
+    const inline = typeof flags.set === 'string' ? flags.set : null;
+    const fromFile = await readFileFlagOrStdin(flags['set-file']);
+    if (inline !== null && fromFile !== null) {
+      console.error('pass either --set or --set-file, not both');
+      process.exit(2);
+    }
+    const writing = inline !== null || fromFile !== null || flags.clear === true;
+
+    if (!writing) {
+      let resp;
+      try {
+        resp = await fetch(`${url}?scenePath=${encodeURIComponent(scenePath)}`);
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const result = await resp.json();
+      if (flags.json) {
+        process.stdout.write(`${JSON.stringify(result, null, 2)}
+`);
+        return;
+      }
+      // A file the daemon could not parse is reported, not silently shown
+      // as "no edits" — those are different situations for the reader.
+      if (result.unreadable) {
+        console.error(`${scenePath}: tweaks.json exists but could not be parsed`);
+        process.exitCode = 1;
+        return;
+      }
+      const names = Object.keys(result.tweaks || {}).sort();
+      if (names.length === 0) {
+        console.log(`${scenePath}: no saved edits`);
+        return;
+      }
+      for (const name of names) {
+        const t = result.tweaks[name] || {};
+        const parts = [];
+        if (t.translate) parts.push(`move ${t.translate.map((n) => n.toFixed(4)).join(', ')}`);
+        if (t.quat) parts.push(`turn ${t.quat.map((n) => n.toFixed(4)).join(', ')}`);
+        if (t.scale) parts.push(`scale ${t.scale.map((n) => n.toFixed(4)).join(', ')}`);
+        console.log(`${name}	${parts.join('  ') || '(identity)'}`);
+      }
+      return;
+    }
+
+    let tweaks;
+    if (flags.clear === true) {
+      // Clearing is an empty map, which is exactly what the route already
+      // treats as "remove the file" — no second endpoint, no delete verb.
+      tweaks = {};
+    } else {
+      const raw = inline !== null ? inline : fromFile;
+      try {
+        tweaks = JSON.parse(raw);
+      } catch (err) {
+        console.error(`could not parse tweaks JSON: ${err.message}`);
+        process.exit(2);
+      }
+    }
+    if (flags.clear === true && flags.merge === true) {
+      console.error('--clear and --merge contradict each other');
+      process.exit(2);
+    }
+
+    let resp;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ scenePath, tweaks, merge: flags.merge === true }),
+      });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+    const result = await resp.json();
+    if (flags.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}
+`);
+      return;
+    }
+    if (result.cleared) console.log(`${scenePath}: cleared saved edits`);
+    else {
+      console.log(
+        `${scenePath}: ${result.parts} part${result.parts === 1 ? '' : 's'} saved` +
+          (result.merged ? ' (merged into existing)' : ''),
+      );
+    }
+    // Edits are not live until the scene recompiles; saying so here saves
+    // the reader the round trip of wondering why nothing changed.
+    if (!flags.json && !result.cleared) {
+      console.log(`run: od scene3d compile --scene ${scenePath} --no-cache`);
+    }
+    return;
+  }
+
+  // Stage/proof options are validated by the daemon too; parsing them here
+  // means a typo fails before a Blender process is ever spawned.
+  const body = { scenePath, noCache: flags['no-cache'] === true };
+  if (flags.stages) {
+    const stages = String(flags.stages).split(',').map((s) => s.trim()).filter(Boolean);
+    const unknown = stages.filter((s) => !SCENE3D_STAGE_IDS.includes(s));
+    if (stages.length === 0 || unknown.length > 0) {
+      console.error(`invalid --stages: ${unknown.join(', ') || '(empty)'} (expected ${SCENE3D_STAGE_IDS.join(', ')})`);
+      process.exit(2);
+    }
+    body.stages = stages;
+  }
+  const proof = {};
+  if (flags.engine) {
+    if (flags.engine !== 'BLENDER_EEVEE' && flags.engine !== 'CYCLES') {
+      console.error(`invalid --engine: ${flags.engine} (expected BLENDER_EEVEE | CYCLES)`);
+      process.exit(2);
+    }
+    proof.engine = flags.engine;
+  }
+  if (flags.resolution) {
+    const resolution = Number(flags.resolution);
+    if (!Number.isInteger(resolution) || resolution < 64 || resolution > 4096) {
+      console.error(`invalid --resolution: ${flags.resolution} (expected an integer 64-4096)`);
+      process.exit(2);
+    }
+    proof.resolution = resolution;
+  }
+  if (flags['turntable-steps']) {
+    const steps = Number(flags['turntable-steps']);
+    if (!Number.isInteger(steps) || steps < 1 || steps > 64) {
+      console.error(`invalid --turntable-steps: ${flags['turntable-steps']} (expected an integer 1-64)`);
+      process.exit(2);
+    }
+    proof.turntableSteps = steps;
+  }
+  if (flags['no-turntable'] === true) proof.turntable = false;
+  if (Object.keys(proof).length > 0) body.proof = proof;
+
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/scene3d/compile`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+  const result = await resp.json();
+  const { summary } = result;
+  const failed =
+    failOn === 'error' ? summary.errors > 0
+    : failOn === 'warning' ? summary.errors + summary.warnings > 0
+    : false;
+
+  if (flags.json) {
+    const envelope = {
+      ok: !failed,
+      projectId,
+      scenePath: result.scenePath,
+      failOn,
+      summary,
+      stages: result.stages,
+      issues: result.issues,
+      proofImages: result.proofImages.map((a) => a.path),
+      exportedAssets: result.exportedAssets.map((a) => a.path),
+      manifest: result.manifest,
+    };
+    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  } else {
+    for (const stage of result.stages) {
+      console.log(`  ${stage.id.padEnd(8)} ${stage.status.padEnd(7)} ${stage.durationMs}ms`);
+    }
+    for (const issue of result.issues) {
+      const target = issue.target ? ` [${issue.target}]` : '';
+      console.log(`${issue.code}${target} ${issue.message}`);
+      if (issue.hint) console.log(`      fix: ${issue.hint}`);
+    }
+    const counts = `${summary.errors} error${summary.errors === 1 ? '' : 's'} · ${summary.warnings} warning${summary.warnings === 1 ? '' : 's'}`;
+    console.log(result.ok ? `compiles clean — ${counts}` : `compile failed — ${counts}`);
+    if (result.proofImages.length > 0) {
+      console.log(`proof: ${result.proofImages.length} frame(s) — ${result.proofImages[0].path}`);
+    }
+    if (result.exportedAssets.length > 0) {
+      console.log(`assets: ${result.exportedAssets.map((a) => a.path).join(', ')}`);
+    }
+    if (flags['agent-message'] && result.agentMessage) console.log(`\n${result.agentMessage}`);
+  }
+  if (failed) process.exitCode = 1;
+}
+
+function printScene3dManifest(manifest, scenePath) {
+  console.log(`${scenePath}: ${manifest.source.kind} (${manifest.source.files.join(', ')})`);
+  console.log(`blender: ${manifest.blender.version ?? 'not used'}`);
+  for (const part of manifest.partTree) {
+    const mesh = part.mesh ? ` ${part.mesh.verts}v/${part.mesh.faces}f` : '';
+    console.log(`  ${'  '.repeat(part.depth)}${part.name} (${part.type.toLowerCase()})${mesh}`);
+  }
+  for (const material of manifest.materials) {
+    console.log(`  mat ${material.name} metallic=${material.metallic} roughness=${material.roughness}`);
+  }
+  console.log(
+    `issues: ${manifest.issues.errors} error(s) · ${manifest.issues.warnings} warning(s)` +
+      (manifest.issueCodes.length ? ` — ${manifest.issueCodes.join(', ')}` : ''),
+  );
 }
 
 if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {

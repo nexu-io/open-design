@@ -29,6 +29,7 @@ const ALLOWED_KINDS = new Set<string>([
   'code-snippet',
   'mini-app',
   'design-system',
+  'scene3d',
 ]);
 
 const ALLOWED_RENDERERS = new Set<string>([
@@ -41,9 +42,23 @@ const ALLOWED_RENDERERS = new Set<string>([
   'code',
   'mini-app',
   'design-system',
+  'scene3d',
 ]);
 
-const ALLOWED_EXPORTS = new Set<string>(['html', 'pdf', 'zip', 'jsx', 'md', 'svg', 'txt']);
+const ALLOWED_EXPORTS = new Set<string>([
+  'html',
+  'pdf',
+  'zip',
+  'jsx',
+  'md',
+  'svg',
+  'txt',
+  // scene3d deliverables.
+  'glb',
+  'usd',
+  'obj',
+  'png',
+]);
 const ALLOWED_STATUS = new Set<string>(['streaming', 'complete', 'error']);
 
 function isPlainObject(value: unknown): value is JsonRecord {

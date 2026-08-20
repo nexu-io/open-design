@@ -19,7 +19,7 @@
 
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -84,7 +84,7 @@ describe('same-run retry stale turnCompletedCleanly (review red spec)', () => {
     // `turn_end` and set run.turnCompletedCleanly — otherwise (e.g. a cold
     // module import) the watchdog can fire first, the flag never gets set, and
     // the run fails for the wrong reason (a false green that hides a regression).
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '1200';
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '3000';
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     await putConfig(started.url, {
@@ -99,15 +99,27 @@ describe('same-run retry stale turnCompletedCleanly (review red spec)', () => {
     // Attempt 1 finished a clean-but-empty turn (retryable no-output timeout);
     // attempt 2 crashed with exit code 1 and produced nothing. The run must
     // NOT report success off the stale attempt-1 turn_end flag.
+    // Guard the guard: if the scripted timeline did not actually run twice
+    // (e.g. a pre-turn probe burned a counter tick), the run would fail for
+    // an unrelated reason and this spec would pass without ever touching the
+    // stale-flag path.
+    const attemptsPath = path.join(binDir!, 'claude-staleflag-attempts');
+    expect(Number(await readFile(attemptsPath, 'utf8'))).toBe(2);
     expect(run.status).toBe('failed');
     expect(run.exitCode).toBe(1);
-  });
+  }, 60_000);
 });
 
 async function writeEmptyTurnThenCrashClaude(dir: string, name: string): Promise<string> {
-  const bin = path.join(dir, name);
+  // The fake CLI is a Node script plus a platform-appropriate launcher. On
+  // win32 an extensionless shebang file is NOT executable: executableFilePath()
+  // (runtimes/executables.ts) rejects any CLAUDE_BIN whose extension isn't in
+  // PATHEXT, the override resolves to null, and the daemon silently falls back
+  // to the real `claude` on PATH — the run then never terminates and the test
+  // times out instead of exercising the retry path.
+  const script = path.join(dir, `${name}.js`);
   const counterPath = path.join(dir, `${name}-attempts`);
-  await writeFile(bin, `#!/usr/bin/env node
+  await writeFile(script, `#!/usr/bin/env node
 const fs = require('node:fs');
 const counterPath = ${JSON.stringify(counterPath)};
 if (process.argv.includes('--version')) {
@@ -118,6 +130,17 @@ if (process.argv.includes('--help')) {
   console.log('Usage: claude -p [--include-partial-messages] [--add-dir DIR]');
   process.exit(0);
 }
+// The daemon runs an auth probe (claude auth status) and a capability
+// probe (claude -p --help) before the turn. Neither is an attempt: if
+// they burn a counter tick, the real attempt 1 takes the crash branch, the
+// run fails as a plain non-retryable exit_nonzero, no retry ever spawns and
+// the stale-flag path is never exercised (a false green).
+if (process.argv[2] === 'auth') {
+  console.log('Logged in as test@example.com');
+  process.exit(0);
+}
+const isTurn = process.argv.includes('-p') && !process.argv.includes('--help');
+if (!isTurn) { process.exit(0); }
 let attempts = 0;
 try { attempts = Number(fs.readFileSync(counterPath, 'utf8')) || 0; } catch {}
 fs.writeFileSync(counterPath, String(attempts + 1));
@@ -138,7 +161,27 @@ if (attempts === 0) {
   setTimeout(() => process.exit(1), 20);
 }
 `, 'utf8');
-  await chmod(bin, 0o755);
+  // Launch the script through the platform's carrier, invoking THIS process's
+  // node (not a `node` that may not be on the spawn PATH). Convention follows
+  // codex-model-capability-preflight.test.ts.
+  const bin = path.join(dir, process.platform === 'win32' ? `${name}.cmd` : name);
+  if (process.platform === 'win32') {
+    const crlf = String.fromCharCode(13, 10);
+    const payload = [
+      '@echo off',
+      `"${process.execPath}" "${script}" %*`,
+      'exit /b %ERRORLEVEL%',
+      '',
+    ].join(crlf);
+    await writeFile(bin, payload, 'utf8');
+  } else {
+    await writeFile(
+      bin,
+      `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`,
+      'utf8',
+    );
+    await chmod(bin, 0o755);
+  }
   return bin;
 }
 
@@ -186,11 +229,22 @@ async function createAndWaitForRun(url: string): Promise<RunStatus> {
   expect(runResponse.status).toBe(202);
   const body = await runResponse.json() as { runId: string };
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 10_000) {
+  while (Date.now() - startedAt < 30_000) {
     const response = await fetch(`${url}/api/runs/${encodeURIComponent(body.runId)}`);
     expect(response.status).toBe(200);
     const run = await response.json() as RunStatus;
-    if (['failed', 'succeeded', 'canceled'].includes(run.status)) return run;
+    if (['failed', 'succeeded', 'canceled'].includes(run.status)) {
+      console.log('[repro] terminal run', JSON.stringify(run));
+      try {
+        const fsp = await import('node:fs/promises');
+        const log = await fsp.readFile(run.eventsLogPath, 'utf8');
+        const lines = log.split(String.fromCharCode(10)).filter((l) => /retry|turn_end|status|error/.test(l));
+        console.log('[repro] events', lines.slice(-40).join(String.fromCharCode(10)));
+      } catch (err) {
+        console.log('[repro] events unreadable', String(err));
+      }
+      return run;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`run ${body.runId} did not finish`);
