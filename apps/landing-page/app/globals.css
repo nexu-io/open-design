@@ -1692,6 +1692,7 @@ a.nav-mega-col-head.is-active {
 }
 .hero-video-play svg { margin-left: 3px; }
 .hero-video-frame:hover .hero-video-play { transform: scale(1.06); background: #fff; }
+.hero-video-play:focus-visible { outline: 2px solid var(--coral); outline-offset: 4px; }
 .hero-video-frame.is-playing .hero-video-poster,
 .hero-video-frame.is-playing .hero-video-play { display: none; }
 .hero-video-frame iframe {
