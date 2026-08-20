@@ -106,6 +106,103 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(actionMenu.getByRole('menuitem', { name: /Export as PDF/i })).toBeVisible();
 });
 
+test('[P0] nested Inspect merges and resets a persisted child rule without changing root', async ({ page }) => {
+  test.setTimeout(60_000);
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Nested inspect safety');
+  const root = '<!doctype html><html><body><iframe title="child" src="child.html"></iframe></body></html>';
+  const child = '<!doctype html><html><head><style data-od-inspect-overrides>\n[data-od-id="hero"] { color: #123456 !important; font-weight: 700 !important }\n</style></head><body><h2 data-od-id="hero">Child Hero</h2></body></html>';
+  await seedProjectFile(page, projectId, 'child.html', child);
+  await seedHtmlArtifact(page, projectId, 'root.html', root);
+  await page.goto(`/projects/${projectId}/files/root.html`);
+  await openDesignFile(page, 'root.html');
+  await page.getByTestId('inspect-mode-toggle').click();
+  const nested = artifactPreviewFrame(page).frameLocator('iframe[title="child"]');
+  await expect(nested.getByRole('heading', { name: 'Child Hero' })).toBeVisible();
+  await nested.locator('[data-od-id="hero"]').click();
+  await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  await page.getByTestId('inspect-font-size').fill('20');
+  await page.getByTestId('inspect-save').click();
+  await expectFileSource(page, projectId, 'child.html', ['color: #123456', 'font-weight: 700', 'font-size: 20px']);
+  expect(await (await page.request.get(`/api/projects/${projectId}/files/root.html`)).text()).toBe(root);
+  await page.getByRole('button', { name: /Reset element/i }).click();
+  await page.getByTestId('inspect-save').click();
+  await expectFileSourceExcludes(page, projectId, 'child.html', ['data-od-inspect-overrides']);
+});
+
+test('[P0] nested child hover overlay aligns at 150 percent host zoom with iframe scale', async ({ page }) => {
+  test.setTimeout(60_000);
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Nested coordinate alignment');
+  await seedProjectFile(page, projectId, 'child.html', '<!doctype html><html><body><div data-od-id="target" style="margin:30px;width:160px;height:70px;background:#38bdf8">Target</div></body></html>');
+  await seedHtmlArtifact(page, projectId, 'root.html', '<!doctype html><html><body><iframe title="scaled child" src="child.html" style="width:500px;height:300px;border:0;transform:scale(.8);transform-origin:top left"></iframe></body></html>');
+  await page.goto(`/projects/${projectId}/files/root.html`);
+  await openDesignFile(page, 'root.html');
+  const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
+  await zoomButton.click();
+  await page.locator('.zoom-menu-popover[role="menu"]').getByRole('menuitem', { name: '150%' }).click();
+  await page.getByTestId('board-mode-toggle').click();
+  const nested = artifactPreviewFrame(page).frameLocator('iframe[title="scaled child"]');
+  const target = nested.locator('[data-od-id="target"]');
+  await target.hover();
+  const overlay = page.getByTestId('comment-target-overlay');
+  await expect(overlay).toBeVisible();
+  const [targetBox, overlayBox] = await Promise.all([target.boundingBox(), overlay.boundingBox()]);
+  expect(targetBox).not.toBeNull();
+  expect(overlayBox).not.toBeNull();
+  for (const key of ['x', 'y', 'width', 'height'] as const) {
+    expect(Math.abs(targetBox![key] - overlayBox![key])).toBeLessThanOrEqual(4);
+  }
+  // v1 deliberately excludes rotation/skew; this covers axis-aligned scale only.
+});
+
+test('[P0] forged nested Inspect identity cannot select or write an unlisted project file', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Forged nested identity');
+  const root = '<!doctype html><html><body><div data-od-id="root">Root</div></body></html>';
+  const unrelated = '<!doctype html><html><body>Must not change</body></html>';
+  await seedProjectFile(page, projectId, 'unrelated.html', unrelated);
+  await seedHtmlArtifact(page, projectId, 'root.html', root);
+  await page.goto(`/projects/${projectId}/files/root.html`);
+  await openDesignFile(page, 'root.html');
+  await page.getByTestId('inspect-mode-toggle').click();
+  const forgedId = `frame:${encodeURIComponent(JSON.stringify(['unrelated.html', 'target']))}`;
+  await artifactPreviewFrame(page).locator('body').evaluate((elementId) => {
+    window.parent.postMessage({
+      type: 'od:comment-target', elementId, selector: '[data-od-id="target"]',
+      label: 'forged', text: 'forged', position: { x: 1, y: 1, width: 20, height: 20 },
+    }, '*');
+  }, forgedId);
+  await expect(page.getByTestId('inspect-panel')).toHaveCount(0);
+  expect(await (await page.request.get(`/api/projects/${projectId}/files/root.html`)).text()).toBe(root);
+  expect(await (await page.request.get(`/api/projects/${projectId}/files/unrelated.html`)).text()).toBe(unrelated);
+});
+
+test('[P0] child element comment re-anchors after root reload', async ({ page }) => {
+  test.setTimeout(60_000);
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Nested comment re-anchor');
+  await seedProjectFile(page, projectId, 'child.html', '<!doctype html><html><body><h2 data-od-id="child-hero">Child Hero</h2></body></html>');
+  await seedHtmlArtifact(page, projectId, 'root.html', '<!doctype html><html><body><iframe title="comment child" src="child.html"></iframe></body></html>');
+  await page.goto(`/projects/${projectId}/files/root.html`);
+  await openDesignFile(page, 'root.html');
+  await page.getByTestId('board-mode-toggle').click();
+  const nested = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
+  await nested.locator('[data-od-id="child-hero"]').click();
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+  await page.getByTestId('comment-popover-input').fill('Child anchored comment');
+  await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
+  await page.getByTestId('comment-panel-toggle').click();
+  await expect(page.getByTestId('comment-side-panel')).toContainText('Child anchored comment');
+  await page.reload();
+  await waitForLoadingToClear(page);
+  await expect(page.getByTestId('board-mode-toggle')).toBeVisible();
+  await page.getByTestId('board-mode-toggle').click();
+  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
+  const reloadedChild = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
+  await expect(reloadedChild.getByRole('heading', { name: 'Child Hero' })).toBeVisible();
+});
+
 test('[P0] manual edit mode preserves the current page in a multi-page mobile app', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Multi-page mobile edit');

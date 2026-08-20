@@ -1860,6 +1860,7 @@ function injectSelectionBridge(
       return path && path.indexOf('..') < 0 ? path : null;
     } catch (_) { return null; }
   }
+  function isProjectHtmlPath(path){ return /\.html?$/i.test(String(path || '')); }
   function projectFrameForSource(source){
     var frames = document.querySelectorAll('iframe');
     for (var i = 0; i < frames.length; i++) {
@@ -1870,7 +1871,9 @@ function injectSelectionBridge(
   function markProjectFrames(){
     var frames = document.querySelectorAll('iframe');
     for (var i = 0; i < frames.length; i++) {
-      frames[i].toggleAttribute('data-od-project-frame', !!projectFramePath(frames[i]));
+      var path = projectFramePath(frames[i]);
+      var eligible = !!path && isProjectHtmlPath(path);
+      frames[i].toggleAttribute('data-od-project-frame', eligible);
     }
   }
   markProjectFrames();
@@ -1878,11 +1881,18 @@ function injectSelectionBridge(
   function parseProjectFrameTarget(elementId){
     var raw = String(elementId || '');
     if (raw.indexOf('frame:') !== 0) return null;
-    var split = raw.indexOf('::', 6);
-    if (split < 0) return null;
-    var framePath = raw.slice(6, split);
-    var localElementId = raw.slice(split + 2);
-    return framePath && localElementId ? { framePath: framePath, localElementId: localElementId } : null;
+    try {
+      var parts = JSON.parse(decodeURIComponent(raw.slice(6)));
+      return Array.isArray(parts) && parts.length === 2 &&
+        typeof parts[0] === 'string' && parts[0] &&
+        typeof parts[1] === 'string' && parts[1]
+        ? { framePath: parts[0], localElementId: parts[1] }
+        : null;
+    } catch (_) { return null; }
+  }
+  function projectFrameTargetId(framePath, localElementId){
+    try { return 'frame:' + encodeURIComponent(JSON.stringify([framePath, localElementId])); }
+    catch (_) { return null; }
   }
   function projectFrameForPath(framePath){
     var frames = document.querySelectorAll('iframe');
@@ -1936,7 +1946,9 @@ function injectSelectionBridge(
     var position = safeRelayPosition(data.position, frame);
     if (!framePath || !position) return;
     var localElementId = String(data.elementId);
-    var message = { type: data.type, elementId: 'frame:' + framePath + '::' + localElementId,
+    var targetId = projectFrameTargetId(framePath, localElementId);
+    if (!targetId) return;
+    var message = { type: data.type, elementId: targetId,
       localElementId: localElementId, framePath: framePath, selector: String(data.selector),
       label: typeof data.label === 'string' ? data.label : '', text: typeof data.text === 'string' ? data.text : '',
       position: position, htmlHint: typeof data.htmlHint === 'string' ? data.htmlHint : '', style: data.style || null };

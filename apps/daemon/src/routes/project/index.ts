@@ -648,6 +648,7 @@ const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
+    if (routeProjectFrameCommand(data)) return;
     if (data.type === 'od:preview-scroll-restore') {
       scrollTo(document.scrollingElement || document.documentElement, data.frameLeft, data.frameTop);
       scrollTo(scrollElement(), data.canvasLeft, data.canvasTop);
@@ -751,10 +752,99 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       'html[data-od-comment-mode] body * { cursor: crosshair !important; }' +
       'html[data-od-inspect-mode] body * { cursor: crosshair !important; }' +
       'html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }' +
-      'html[data-od-comment-mode] body iframe,html[data-od-comment-mode] body object,html[data-od-comment-mode] body embed { pointer-events: none !important; }';
+      'html[data-od-comment-mode] body iframe:not([data-od-project-frame]),html[data-od-comment-mode] body object,html[data-od-comment-mode] body embed,html[data-od-inspect-mode] body iframe:not([data-od-project-frame]) { pointer-events: none !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   function active(){ return commentEnabled || inspectEnabled; }
+  // Keep the URL-load bridge on the same one-depth project-frame contract as
+  // srcdoc: only direct HTML children served under this minted preview scope
+  // may receive input or identify a child source file.
+  function projectFramePath(frame){
+    try {
+      var base = new URL(document.baseURI);
+      var baseMatch = base.pathname.match(/^\/api\/projects\/([^/]+)\/preview\/([^/]+)\//);
+      var child = new URL(frame.src, document.baseURI);
+      if (!baseMatch || child.origin !== base.origin) return null;
+      var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
+      if (child.pathname.indexOf(prefix) !== 0) return null;
+      var path = decodeURIComponent(child.pathname.slice(prefix.length));
+      return path && path.indexOf('..') < 0 && /\.html?$/i.test(path) ? path : null;
+    } catch (_) { return null; }
+  }
+  function projectFrameForSource(source){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      if (frames[i].contentWindow === source && projectFramePath(frames[i])) return frames[i];
+    }
+    return null;
+  }
+  function markProjectFrames(){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      var path = projectFramePath(frames[i]);
+      frames[i].toggleAttribute('data-od-project-frame', !!path);
+    }
+  }
+  markProjectFrames();
+  try { new MutationObserver(markProjectFrames).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] }); } catch (_) {}
+  function parseProjectFrameTarget(elementId){
+    var raw = String(elementId || '');
+    if (raw.indexOf('frame:') !== 0) return null;
+    try {
+      var parts = JSON.parse(decodeURIComponent(raw.slice(6)));
+      return Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string' && parts[0] &&
+        typeof parts[1] === 'string' && parts[1] ? { framePath: parts[0], localElementId: parts[1] } : null;
+    } catch (_) { return null; }
+  }
+  function projectFrameTargetId(framePath, localElementId){
+    try { return 'frame:' + encodeURIComponent(JSON.stringify([framePath, localElementId])); } catch (_) { return null; }
+  }
+  function projectFrameForPath(framePath){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) if (projectFramePath(frames[i]) === framePath) return frames[i];
+    return null;
+  }
+  function routeProjectFrameCommand(data){
+    if (!data || !data.type) return false;
+    var allowed = { 'od:comment-active-target': true, 'od:inspect-set': true, 'od:inspect-reset': true };
+    if (!allowed[data.type]) return false;
+    var target = parseProjectFrameTarget(data.elementId);
+    if (!target) return false;
+    var frame = projectFrameForPath(target.framePath);
+    if (!frame || !frame.contentWindow) return true;
+    var message = { type: data.type, elementId: target.localElementId };
+    if (typeof data.selector === 'string') message.selector = data.selector;
+    if (typeof data.prop === 'string') message.prop = data.prop;
+    if (typeof data.value === 'string') message.value = data.value;
+    try { frame.contentWindow.postMessage(message, '*'); } catch (_) {}
+    return true;
+  }
+  function broadcastProjectFrameMode(data){
+    if (!data || (data.type !== 'od:comment-mode' && data.type !== 'od:inspect-mode')) return;
+    var frames = document.querySelectorAll('iframe[data-od-project-frame]');
+    for (var i = 0; i < frames.length; i++) try { frames[i].contentWindow && frames[i].contentWindow.postMessage(data, '*'); } catch (_) {}
+  }
+  function relayProjectFrameSelection(ev){
+    if (!active()) return;
+    var data = ev && ev.data;
+    var allowed = { 'od:comment-target': true, 'od:comment-hover': true, 'od:comment-active-target-update': true };
+    if (!data || !allowed[data.type] || !data.position || !data.elementId || !data.selector) return;
+    var frame = projectFrameForSource(ev.source);
+    if (!frame) return;
+    var rect = frame.getBoundingClientRect();
+    var width = Number(frame.clientWidth || 0), height = Number(frame.clientHeight || 0);
+    if (!(width > 0) || !(height > 0)) return;
+    var path = projectFramePath(frame);
+    var targetId = path && projectFrameTargetId(path, String(data.elementId));
+    if (!targetId) return;
+    var position = data.position;
+    if (![position.x, position.y, position.width, position.height].every(function(v){ return Number.isFinite(Number(v)); })) return;
+    window.parent.postMessage({ type: data.type, elementId: targetId, localElementId: String(data.elementId), framePath: path,
+      selector: String(data.selector), label: typeof data.label === 'string' ? data.label : '', text: typeof data.text === 'string' ? data.text : '',
+      position: { x: Math.round(rect.x + Number(position.x) * rect.width / width), y: Math.round(rect.y + Number(position.y) * rect.height / height), width: Math.round(Number(position.width) * rect.width / width), height: Math.round(Number(position.height) * rect.height / height) },
+      htmlHint: typeof data.htmlHint === 'string' ? data.htmlHint : '', style: data.style || null }, '*');
+  }
+  window.addEventListener('message', relayProjectFrameSelection);
   function annotatedSelectorFor(el){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     if (!id) return null;
@@ -1158,6 +1248,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+      broadcastProjectFrameMode(data);
       if (active()) setTimeout(postTargets, 0);
       else {
         hoveredId = null;
@@ -1174,6 +1265,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     if (data.type === 'od:inspect-mode') {
       inspectEnabled = !!data.enabled;
       document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);
+      broadcastProjectFrameMode(data);
       if (active()) setTimeout(postTargets, 0);
       else hoveredId = null;
       return;

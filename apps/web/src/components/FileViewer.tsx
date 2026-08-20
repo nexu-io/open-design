@@ -5429,6 +5429,113 @@ const HOST_UNSAFE_INSPECT_ID = /["\\<>\u0000-\u001f\u007f]/;
 // resolves the owning file and performs a scoped write there.
 const FRAME_QUALIFIED_INSPECT_ID = /^frame:/;
 
+export type FrameQualifiedInspectId = {
+  filePath: string;
+  localElementId: string;
+};
+
+// Frame targets are an opaque protocol value. Encoding the two author-owned
+// strings as one escaped JSON payload avoids a delimiter grammar where a file
+// name or data-od-id containing `::` changes which file an edit targets.
+export function parseFrameQualifiedInspectId(value: string): FrameQualifiedInspectId | null {
+  if (!FRAME_QUALIFIED_INSPECT_ID.test(value)) return null;
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value.slice('frame:'.length)));
+    if (!Array.isArray(parsed) || parsed.length !== 2) return null;
+    const [filePath, localElementId] = parsed;
+    if (
+      typeof filePath !== 'string' || !filePath ||
+      typeof localElementId !== 'string' || !localElementId
+    ) return null;
+    return { filePath, localElementId };
+  } catch {
+    return null;
+  }
+}
+
+// The host holds a combined preview map while the inspector is open. Source
+// persistence is deliberately narrower: each project file receives only its
+// own local element ids, never another frame's transport identity.
+export function inspectOverridesForFile(
+  overrides: InspectOverrideMap,
+  filePath: string,
+  rootFilePath: string,
+): InspectOverrideMap {
+  const selected: InspectOverrideMap = {};
+  for (const [elementId, entry] of Object.entries(overrides)) {
+    const frame = parseFrameQualifiedInspectId(elementId);
+    if (frame) {
+      if (frame.filePath === filePath) selected[frame.localElementId] = entry;
+      continue;
+    }
+    if (filePath === rootFilePath) selected[elementId] = entry;
+  }
+  return selected;
+}
+
+// Merge a file's freshly-read persisted block with only the edits made in
+// this session. The outer map is keyed by element, but the user edits CSS
+// properties independently, so replacing a whole element entry would erase
+// already-saved properties. An empty local props map is an explicit reset
+// tombstone and removes the persisted rule.
+export function mergeInspectOverridesForSave(
+  persisted: InspectOverrideMap,
+  local: InspectOverrideMap,
+): InspectOverrideMap {
+  const merged: InspectOverrideMap = { ...persisted };
+  for (const [elementId, localEntry] of Object.entries(local)) {
+    if (Object.keys(localEntry.props).length === 0) {
+      delete merged[elementId];
+      continue;
+    }
+    const existing = merged[elementId];
+    merged[elementId] = {
+      selector: localEntry.selector || existing?.selector || '',
+      props: { ...(existing?.props ?? {}), ...localEntry.props },
+    };
+  }
+  return merged;
+}
+
+// The host derives this registry from the server-read root source rather than
+// accepting a same-window postMessage assertion. Dynamic frames are outside
+// v1; only static project-relative HTML children are eligible for persistence.
+export function projectPreviewChildHtmlPaths(source: string, rootFilePath: string): Set<string> {
+  const paths = new Set<string>();
+  if (!source || typeof DOMParser === 'undefined') return paths;
+  try {
+    const doc = new DOMParser().parseFromString(source, 'text/html');
+    const base = new URL(rootFilePath, 'https://open-design.preview/');
+    for (const frame of doc.querySelectorAll('iframe[src]')) {
+      const raw = frame.getAttribute('src');
+      if (!raw) continue;
+      const url = new URL(raw, base);
+      if (url.origin !== base.origin) continue;
+      const path = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+      if (!/\.html?$/i.test(path) || path.split('/').some((part) => !part || part === '.' || part === '..')) continue;
+      paths.add(path);
+    }
+  } catch {
+    // Malformed author HTML is simply not eligible to authorize a child save.
+  }
+  return paths;
+}
+
+export function previewTargetFilePath(
+  elementId: unknown,
+  rootFilePath: string,
+  projectFramePaths: ReadonlySet<string>,
+): string | null {
+  if (typeof elementId !== 'string') return rootFilePath;
+  if (!FRAME_QUALIFIED_INSPECT_ID.test(elementId)) return rootFilePath;
+  const frame = parseFrameQualifiedInspectId(elementId);
+  // A structured value is merely parseable input. It becomes a file identity
+  // only after the top-level preview bridge has discovered that exact child
+  // from the daemon-minted project-preview scope during this preview session.
+  if (!frame || !projectFramePaths.has(frame.filePath)) return null;
+  return frame.filePath;
+}
+
 // Build the inspect overrides CSS body the host will persist, from the
 // structured `overrides` field of an od:inspect-overrides message. The host
 // MUST NOT trust the sibling `css` string — it is attacker-controlled when
@@ -5485,7 +5592,11 @@ export function updateInspectOverride(
   prop: string,
   value: string,
 ): InspectOverrideMap {
-  if (!elementId || FRAME_QUALIFIED_INSPECT_ID.test(elementId) || HOST_UNSAFE_INSPECT_ID.test(elementId)) return map;
+  if (
+    !elementId ||
+    (FRAME_QUALIFIED_INSPECT_ID.test(elementId) && !parseFrameQualifiedInspectId(elementId)) ||
+    HOST_UNSAFE_INSPECT_ID.test(elementId)
+  ) return map;
   const propName = String(prop || '').toLowerCase();
   if (!HOST_ALLOWED_INSPECT_PROPS.has(propName)) return map;
   const trimmed = String(value ?? '').trim();
@@ -9027,6 +9138,12 @@ function HtmlViewer({
   useEffect(() => cancelHoverCardDismiss, [cancelHoverCardDismiss]);
   const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
+  // Frame identities never authorize reads/writes by themselves. This set is
+  // derived from the server-read root source, never from artifact postMessage.
+  const projectFramePaths = useMemo(
+    () => projectPreviewChildHtmlPaths(typeof source === 'string' ? source : '', file.name),
+    [file.name, source],
+  );
   const liveCommentTargetsRef = useRef(liveCommentTargets);
   const [commentDraft, setCommentDraft] = useState('');
   // Inspect mode shares the iframe selection bridge with comment mode but
@@ -11870,6 +11987,8 @@ function HtmlViewer({
       data.targets.forEach((item) => {
         const elementId = String(item?.elementId || '');
         if (!elementId) return;
+        const ownerFile = previewTargetFilePath(elementId, file.name, projectFramePaths);
+        if (!ownerFile) return;
         const position = {
           x: clampBridgeCoordinate(item?.position?.x),
           y: clampBridgeCoordinate(item?.position?.y),
@@ -11878,7 +11997,7 @@ function HtmlViewer({
         };
         if (!isValidCommentOverlayPosition(position)) return;
         next.set(elementId, {
-          filePath: file.name,
+          filePath: ownerFile,
           elementId,
           selector: String(item?.selector || ''),
           label: String(item?.label || ''),
@@ -11897,7 +12016,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [inspectMode, boardMode, file.name, isOurPreviewIframeSource, workspaceActive]);
+  }, [inspectMode, boardMode, file.name, isOurPreviewIframeSource, projectFramePaths, workspaceActive]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
@@ -11979,8 +12098,11 @@ function HtmlViewer({
       setStrokePoints((current) => (current.length > 0 ? [] : current));
       return;
     }
-    const snapshotFromData = (data: Partial<PreviewCommentSnapshot>): PreviewCommentSnapshot => ({
-      filePath: file.name,
+  const snapshotFromData = (data: Partial<PreviewCommentSnapshot>): PreviewCommentSnapshot | null => {
+    const filePath = previewTargetFilePath(data.elementId, file.name, projectFramePaths);
+    if (!filePath) return null;
+    return {
+      filePath,
       elementId: String(data.elementId || ''),
       selector: String(data.selector || ''),
       label: String(data.label || ''),
@@ -12003,7 +12125,8 @@ function HtmlViewer({
       memberCount: finiteBridgeInteger(data.memberCount),
       podMembers: Array.isArray(data.podMembers) ? data.podMembers : undefined,
       ...(typeof data.slideIndex === 'number' ? { slideIndex: data.slideIndex } : {}),
-    });
+    };
+  };
     function onMessage(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as (Partial<PreviewCommentSnapshot> & {
@@ -12016,7 +12139,7 @@ function HtmlViewer({
         const next = new Map<string, PreviewCommentSnapshot>();
         data.targets.forEach((item) => {
           const snapshot = snapshotFromData(item);
-          if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+          if (!snapshot?.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
           next.set(snapshot.elementId, snapshot);
         });
         setLiveCommentTargets((current) => (
@@ -12040,7 +12163,7 @@ function HtmlViewer({
       }
       if (data.type === 'od:comment-active-target-update') {
         const snapshot = snapshotFromData(data);
-        if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        if (!snapshot?.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
         // Fires on every pointermove while a target is active — skip the Map
         // clone and the active/hovered state writes when nothing changed, so a
         // steady hover doesn't re-render the whole overlay each frame.
@@ -12074,7 +12197,7 @@ function HtmlViewer({
       }
       if (data.type === 'od:comment-hover') {
         const snapshot = snapshotFromData(data);
-        if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        if (!snapshot?.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
         // Pointer landed on an element — cancel any deferred dismiss so moving
         // from the card back onto the element it describes keeps the card.
         cancelHoverCardDismiss();
@@ -12094,7 +12217,7 @@ function HtmlViewer({
       }
       if (data.type === 'od:comment-target') {
         const snapshot = snapshotFromData(data);
-        if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        if (!snapshot?.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
         const shouldOpenComposer = boardMode || commentCreateMode;
         cancelHoverCardDismiss();
         setActiveCommentTarget((current) => (shouldOpenComposer ? snapshot : current));
@@ -12151,7 +12274,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments, scheduleHoverCardDismiss, workspaceActive]);
+  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments, projectFramePaths, scheduleHoverCardDismiss, workspaceActive]);
 
   useEffect(() => {
     if (!workspaceActive || !boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
@@ -13065,6 +13188,7 @@ function HtmlViewer({
         | null;
       if (!data || data.type !== 'od:comment-target') return;
       if (!data.elementId || !data.selector) return;
+      if (!previewTargetFilePath(data.elementId, file.name, projectFramePaths)) return;
       const clickedDescendant =
         data.clickedDescendant && typeof data.clickedDescendant === 'object'
           ? {
@@ -13085,7 +13209,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [inspectMode, isOurPreviewIframeSource, workspaceActive]);
+  }, [file.name, inspectMode, isOurPreviewIframeSource, projectFramePaths, workspaceActive]);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last' | 'go', index?: number) {
     // Track prev/next here so every entry point (top toolbar, floating nav,
@@ -13308,16 +13432,34 @@ function HtmlViewer({
     setSavingInspect(true);
     setInspectError(null);
     try {
-      const css = serializeInspectOverrides(inspectOverrides).trim();
-      const next = applyInspectOverridesToSource(source, css);
-      const saved = await writeProjectTextFileDetailed(projectId, file.name, next, {
+      const frameTarget = activeInspectTarget
+        ? parseFrameQualifiedInspectId(activeInspectTarget.elementId)
+        : null;
+      if (activeInspectTarget?.elementId.startsWith('frame:') && (!frameTarget || !projectFramePaths.has(frameTarget.filePath))) {
+        throw new Error('The selected nested preview is no longer an allowed project HTML frame. Refresh and select it again.');
+      }
+      const ownerFile = frameTarget?.filePath ?? file.name;
+      const ownerSource = frameTarget
+        ? await fetchProjectFileText(projectId, ownerFile, { workspaceContext, cache: 'no-store' })
+        : source;
+      if (ownerSource == null) throw new Error(`Could not read ${ownerFile} before saving`);
+      // Child sources are not part of the root hydration map. Read and parse
+      // their latest source on every save, then layer only this session's
+      // local child changes over it so unrelated persisted rules survive.
+      const persistedOverrides = parseInspectOverridesFromSource(ownerSource);
+      const ownedOverrides = inspectOverridesForFile(inspectOverrides, ownerFile, file.name);
+      const css = serializeInspectOverrides(
+        mergeInspectOverridesForSave(persistedOverrides, ownedOverrides),
+      ).trim();
+      const next = applyInspectOverridesToSource(ownerSource, css);
+      const saved = await writeProjectTextFileDetailed(projectId, ownerFile, next, {
         versionSource: 'manual',
         versionLabel: t('fileViewer.edit'),
       }, workspaceContext);
       if (!saved.ok) {
         throw new Error(saved.message || `Save failed (${saved.status ?? ''})`);
       }
-      setSource(next);
+      if (!frameTarget) setSource(next);
       setInspectSavedAt(Date.now());
       setReloadKey((k) => k + 1);
     } catch (err) {
@@ -14198,6 +14340,30 @@ function HtmlViewer({
     activateComment();
   }
 
+  function activateInspectTool() {
+    if (viewerOnly) return;
+    if (inspectMode) {
+      setInspectMode(false);
+      setActiveInspectTarget(null);
+      return;
+    }
+    const activate = () => {
+      setCommentPanelOpen(false);
+      setCommentCreateMode(false);
+      setBoardMode(false);
+      clearBoardComposer();
+      setDrawOverlayOpen(false);
+      setMode('preview');
+      setInspectMode(true);
+      closeArtifactToolMenus();
+    };
+    if (manualEditMode) {
+      void exitManualEditModeAfterFlush().then((ok) => { if (ok) activate(); });
+      return;
+    }
+    activate();
+  }
+
   function activateCommentCreateTool(returnFocusTarget?: HTMLElement | null) {
     if (returnFocusTarget) commentPanelReturnFocusRef.current = returnFocusTarget;
     fireArtifactToolbarClick('comment');
@@ -14301,7 +14467,7 @@ function HtmlViewer({
     if (!activePreviewCommentId) return null;
     return previewComments.find((comment) => (
       comment.id === activePreviewCommentId &&
-      comment.filePath === file.name &&
+      (comment.filePath === file.name || projectFramePaths.has(comment.filePath)) &&
       comment.status === 'open'
     )) ?? null;
   }
@@ -14996,9 +15162,9 @@ function HtmlViewer({
   // order the sidebar happens to display things in.
   const creationSortedSideComments = useMemo(
     () => previewComments
-      .filter((comment) => comment.filePath === file.name && comment.status === 'open')
+      .filter((comment) => (comment.filePath === file.name || projectFramePaths.has(comment.filePath)) && comment.status === 'open')
       .sort((a, b) => commentCreatedAt(a) - commentCreatedAt(b)),
-    [file.name, previewComments],
+    [file.name, previewComments, projectFramePaths],
   );
   // Provisional number for the next (not-yet-saved) pin. Computed over the
   // file's comments across ALL statuses — a resolved/attached/failed comment
@@ -15007,10 +15173,10 @@ function HtmlViewer({
   const nextProvisionalPinNumber = useMemo(
     () => provisionalNextPinNumber(
       previewComments
-        .filter((comment) => comment.filePath === file.name)
+        .filter((comment) => comment.filePath === file.name || projectFramePaths.has(comment.filePath))
         .sort((a, b) => commentCreatedAt(a) - commentCreatedAt(b)),
     ),
-    [file.name, previewComments],
+    [file.name, previewComments, projectFramePaths],
   );
   // Sidebar display order: descending by `sortKey` (a fresh comment gets the
   // largest sortKey, so it shows first by default — "newest at the front").
@@ -15881,6 +16047,20 @@ function HtmlViewer({
                   <RemixIcon name="chat-new-line" size={15} />
                 </button>
               </div>
+              <button
+                type="button"
+                className={`viewer-action viewer-action-icon od-tooltip${inspectMode ? ' active' : ''}`}
+                data-testid="inspect-mode-toggle"
+                data-tooltip="Inspect"
+                data-tooltip-placement="bottom"
+                title="Inspect"
+                aria-label="Inspect"
+                aria-pressed={inspectMode}
+                disabled={viewerOnly}
+                onClick={activateInspectTool}
+              >
+                <RemixIcon name="search-line" size={15} />
+              </button>
               <button
                 className={`viewer-action viewer-action-icon od-tooltip${drawOverlayOpen ? ' active' : ''}`}
                 type="button"
@@ -17242,10 +17422,14 @@ function HtmlViewer({
                 }}
                 onResetElement={(elementId) => {
                   setInspectOverrides((current) => {
-                    if (!(elementId in current)) return current;
-                    const next = { ...current };
-                    delete next[elementId];
-                    return next;
+                    const existing = current[elementId];
+                    return {
+                      ...current,
+                      // Empty props is a durable reset instruction. Deleting
+                      // the entry would let save-time merge resurrect the
+                      // child's persisted rule.
+                      [elementId]: { selector: existing?.selector ?? activeInspectTarget.selector, props: {} },
+                    };
                   });
                   postInspectReset(elementId);
                   setActiveInspectTarget((current) => current && current.elementId === elementId

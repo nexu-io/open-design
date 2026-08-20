@@ -80,6 +80,11 @@ import {
   parseInspectOverridesFromSource,
   previewOverlayTransform,
   previewMeasurementFrameIsUsable,
+  inspectOverridesForFile,
+  mergeInspectOverridesForSave,
+  parseFrameQualifiedInspectId,
+  previewTargetFilePath,
+  projectPreviewChildHtmlPaths,
   resolveDesktopPreviewContentMeasurement,
   resolveDesktopPreviewZoomPercent,
   serializeInspectOverrides,
@@ -7755,7 +7760,7 @@ describe('FileViewer tweaks toolbar', () => {
     });
   }
 
-  it('renders Annotation, Edit, and Draw as the primary preview tools', async () => {
+  it('renders Comment, Inspect, Edit, and Draw as the primary preview tools', async () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
@@ -7763,7 +7768,7 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
-    expect(screen.queryByTestId('inspect-mode-toggle')).toBeNull();
+    expect(screen.getByTestId('inspect-mode-toggle')).toBeTruthy();
     expect(screen.getByTestId('board-mode-toggle')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'More annotation tools' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Pick element' })).toBeNull();
@@ -12852,6 +12857,79 @@ describe('serializeInspectOverrides', () => {
     expect(serializeInspectOverrides(undefined)).toBe('');
     expect(serializeInspectOverrides('</style><script>alert(1)</script>')).toBe('');
     expect(serializeInspectOverrides(42)).toBe('');
+  });
+});
+
+describe('parseFrameQualifiedInspectId', () => {
+  it('round-trips a structured frame identity with delimiter-like path and id text', () => {
+    expect(parseFrameQualifiedInspectId(
+      'frame:%5B%22slides%2Fa%3A%3Ab.html%22%2C%22hero%3A%3Ax%20%5C%22quoted%5C%22%22%5D',
+    )).toEqual({
+      filePath: 'slides/a::b.html',
+      localElementId: 'hero::x "quoted"',
+    });
+  });
+
+  it('rejects the old delimiter-based frame identity', () => {
+    expect(parseFrameQualifiedInspectId('frame:slides/detail.html::hero')).toBeNull();
+  });
+});
+
+describe('inspectOverridesForFile', () => {
+  it('selects only the local overrides owned by the requested project file', () => {
+    const childId = 'frame:%5B%22slides%2Fdetail.html%22%2C%22hero%22%5D';
+    const overrides = {
+      root: { selector: '[data-od-id="root"]', props: { color: '#111' } },
+      [childId]: { selector: '[data-od-id="hero"]', props: { color: '#222' } },
+    };
+
+    expect(inspectOverridesForFile(overrides, 'index.html', 'index.html')).toEqual({
+      root: overrides.root,
+    });
+    expect(inspectOverridesForFile(overrides, 'slides/detail.html', 'index.html')).toEqual({
+      hero: overrides[childId],
+    });
+  });
+});
+
+describe('mergeInspectOverridesForSave', () => {
+  it('merges same-element properties and applies an explicit reset tombstone', () => {
+    const persisted = {
+      hero: { selector: '[data-od-id="hero"]', props: { color: '#111', 'font-weight': '700' } },
+    };
+    expect(mergeInspectOverridesForSave(persisted, {
+      hero: { selector: '[data-od-id="hero"]', props: { 'font-size': '20px' } },
+    })).toEqual({
+      hero: { selector: '[data-od-id="hero"]', props: { color: '#111', 'font-weight': '700', 'font-size': '20px' } },
+    });
+    expect(mergeInspectOverridesForSave(persisted, {
+      hero: { selector: '[data-od-id="hero"]', props: {} },
+    })).toEqual({});
+  });
+});
+
+describe('projectPreviewChildHtmlPaths', () => {
+  it('derives only static, project-relative HTML children from the root source', () => {
+    expect(projectPreviewChildHtmlPaths(
+      '<iframe src="slides/child.html"></iframe><iframe src="https://elsewhere.test/x.html"></iframe>',
+      'index.html',
+    )).toEqual(new Set(['slides/child.html']));
+  });
+});
+
+describe('previewTargetFilePath', () => {
+  const childId = 'frame:%5B%22slides%2Fdetail.html%22%2C%22hero%22%5D';
+
+  it('resolves a frame identity only when the root preview discovered that child', () => {
+    expect(previewTargetFilePath(childId, 'index.html', new Set(['slides/detail.html'])))
+      .toBe('slides/detail.html');
+    expect(previewTargetFilePath(childId, 'index.html', new Set()))
+      .toBeNull();
+  });
+
+  it('does not treat malformed frame identities as root targets', () => {
+    expect(previewTargetFilePath('frame:slides/detail.html::hero', 'index.html', new Set()))
+      .toBeNull();
   });
 });
 
