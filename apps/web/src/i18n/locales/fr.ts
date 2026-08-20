@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const fr: Dict = {
+  'settings.byokSupportsImageInput': 'This model or deployment supports image input.',
+  'settings.byokSupportsImageInputHint': 'Enable only when the provider confirms image support. Text-only models will reject image payloads.',
   'invite.header.eyebrow': "Invitation d'équipe",
   'invite.loading': "Chargement de l'invitation…",
   'invite.landing.title': "Rejoindre l'équipe",

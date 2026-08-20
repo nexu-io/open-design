@@ -394,6 +394,7 @@ describe('SettingsDialog API protocol switching', () => {
       baseUrl: 'https://openai-proxy.example.com',
       model: 'openai-model',
       apiProviderBaseUrl: null,
+      supportsImageInput: true,
     });
     const google = switchApiProtocolConfig(openaiEdited, 'google');
     const googleEdited = updateCurrentApiProtocolConfig(google, {
@@ -412,13 +413,30 @@ describe('SettingsDialog API protocol switching', () => {
       baseUrl: 'https://openai-proxy.example.com',
       model: 'openai-model',
       apiProviderBaseUrl: null,
+      supportsImageInput: true,
     });
     expect(restoredOpenai.apiProtocolConfigs?.google).toMatchObject({
       apiKey: 'google-key',
       baseUrl: 'https://google-proxy.example.com',
       model: 'google-model',
       apiProviderBaseUrl: null,
+      supportsImageInput: false,
     });
+  });
+
+  it('keeps image support off for legacy settings and stores it per provider draft', () => {
+    const legacyOpenAi = switchApiProtocolConfig(baseConfig, 'openai');
+    expect(legacyOpenAi.supportsImageInput).toBe(false);
+
+    const enabled = updateCurrentApiProtocolConfig(legacyOpenAi, {
+      supportsImageInput: true,
+    });
+    const google = switchApiProtocolConfig(enabled, 'google');
+    const restored = switchApiProtocolConfig(google, 'openai');
+
+    expect(google.supportsImageInput).toBe(false);
+    expect(restored.supportsImageInput).toBe(true);
+    expect(restored.apiProtocolConfigs?.openai?.supportsImageInput).toBe(true);
   });
 
   it('loads the new protocol default on first visit', () => {

@@ -43,6 +43,72 @@ describe('byok-opencode runtime config', () => {
     expect(opencodeByokModelId('default')).toBeNull();
   });
 
+  it('passes only absolute image paths to OpenCode as repeated file arguments', () => {
+    expect(byokOpenCodeAgentDef.buildArgs(
+      '',
+      ['/project/first.png', 'relative.png', '/project/second.webp'],
+      [],
+      {},
+    )).toEqual([
+      'run',
+      '--format',
+      'json',
+      '-f',
+      '/project/first.png',
+      '-f',
+      '/project/second.webp',
+    ]);
+  });
+
+  it('adds image capability metadata only for explicitly enabled models', () => {
+    const enabled = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://example.com/openai/v1',
+        supportsImageInput: true,
+      },
+      'vision-model',
+    );
+    const disabled = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://example.com/openai/v1',
+        supportsImageInput: false,
+      },
+      'text-model',
+    );
+    const legacy = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://example.com/openai/v1',
+      },
+      'legacy-model',
+    );
+
+    expect(enabled?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          models: {
+            'vision-model': {
+              attachment: true,
+              modalities: { input: ['text', 'image'], output: ['text'] },
+            },
+          },
+        },
+      },
+    });
+    for (const result of [disabled, legacy]) {
+      expect(result).not.toBeNull();
+      const models = (result!.config.provider as Record<string, { models: Record<string, unknown> }>)[BYOK_OPENCODE_PROVIDER_ID]!.models;
+      const model = Object.values(models)[0] as Record<string, unknown>;
+      expect(model).not.toHaveProperty('attachment');
+      expect(model).not.toHaveProperty('modalities');
+    }
+  });
+
   it('builds OpenAI-compatible provider config without embedding the secret in JSON', () => {
     const out = buildOpenCodeByokProviderConfig(
       {

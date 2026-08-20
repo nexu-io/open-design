@@ -79,6 +79,15 @@ export function buildOpenCodeByokProviderConfig(
         models: {
           [rawModel]: {
             name: rawModel,
+            ...(provider.supportsImageInput === true
+              ? {
+                  attachment: true,
+                  modalities: {
+                    input: ['text', 'image'],
+                    output: ['text'],
+                  },
+                }
+              : {}),
             limit: {
               context: DEFAULT_CONTEXT_TOKEN_LIMIT,
               output: DEFAULT_OUTPUT_TOKEN_LIMIT,

@@ -251,6 +251,8 @@ export interface ApiProtocolConfig {
   model: string;
   apiVersion?: string;
   apiProviderBaseUrl?: string | null;
+  /** Explicit per-provider/model opt-in for image input. */
+  supportsImageInput?: boolean;
   /** SenseAudio BYOK only — default image model the daemon-side
    *  `generate_image` tool uses when the LLM doesn't pass one. Carries
    *  one of the SenseAudio image model ids (`senseaudio-image-2.0-260319`,
@@ -390,6 +392,8 @@ export interface AppConfig {
   model: string;
   apiProtocol?: ApiProtocol;
   apiVersion?: string;
+  /** Active BYOK provider/model image-input capability projection. */
+  supportsImageInput?: boolean;
   /** SenseAudio BYOK only — default image model for the daemon-side
    *  generate_image tool. Mirrors apiProtocolConfigs.senseaudio.byokImageModel
    *  so the active protocol's value lives at the top level (consistent

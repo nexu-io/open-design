@@ -2941,6 +2941,7 @@ describe('ProjectView conversation run isolation', () => {
       apiKey: 'byok-test-key',
       baseUrl: 'https://api.openai.com/v1',
       model: 'api-model',
+      supportsImageInput: true,
     });
 
     await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
@@ -2956,6 +2957,7 @@ describe('ProjectView conversation run isolation', () => {
         apiKey: 'byok-test-key',
         baseUrl: 'https://api.openai.com/v1',
         model: 'api-model',
+        supportsImageInput: true,
       }),
       model: 'api-model',
     }));

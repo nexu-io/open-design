@@ -946,6 +946,7 @@ function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
     model: defaultKnownProviderModel(provider),
     apiVersion: '',
     apiProviderBaseUrl: provider ? provider.baseUrl : null,
+    supportsImageInput: false,
   };
 }
 
@@ -998,6 +999,7 @@ function nextApiProtocolConfig(
       apiKey: '',
       apiVersion: protocol === 'azure' ? currentConfig.apiVersion : '',
       apiProviderBaseUrl: null,
+      supportsImageInput: false,
     };
   }
 
@@ -1013,6 +1015,7 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     model: config.model,
     apiVersion: config.apiVersion ?? '',
     apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+    supportsImageInput: config.supportsImageInput === true,
     byokImageModel: config.byokImageModel ?? '',
     byokVideoModel: config.byokVideoModel ?? '',
     byokSpeechModel: config.byokSpeechModel ?? '',
@@ -1097,6 +1100,7 @@ export function resolveSettingsAutosavePayload(
     apiProtocol: active.apiProtocol,
     apiVersion: active.apiVersion,
     apiProviderBaseUrl: active.apiProviderBaseUrl,
+    supportsImageInput: active.supportsImageInput,
     apiProtocolConfigs: active.apiProtocolConfigs,
     baseUrl: active.baseUrl,
     model: active.model,
@@ -1150,6 +1154,7 @@ function applyApiProtocolConfig(
     baseUrl: resolveFixedOriginBaseUrl(protocol, apiConfig.baseUrl),
     model: apiConfig.model,
     apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
+    supportsImageInput: apiConfig.supportsImageInput === true,
     apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
     // byokImageModel applies to the protocols that inject the daemon-side
     // generate_image tool (SenseAudio, AIHubMix) — flipping to another BYOK
@@ -1205,9 +1210,20 @@ export function updateCurrentApiProtocolConfig(
     !patch.apiKey.trim() &&
     Boolean(currentApiProtocolConfig(config).apiKey.trim());
   const defaultModel = defaultApiProtocolConfig(protocol).model;
+  const currentApiConfig = currentApiProtocolConfig(config);
+  const providerIdentityChanged =
+    (patch.baseUrl !== undefined && patch.baseUrl !== currentApiConfig.baseUrl)
+    || (patch.model !== undefined && patch.model !== currentApiConfig.model)
+    || (
+      patch.apiProviderBaseUrl !== undefined
+      && patch.apiProviderBaseUrl !== currentApiConfig.apiProviderBaseUrl
+    );
   const nextApiConfig: ApiProtocolConfig = {
-    ...currentApiProtocolConfig(config),
+    ...currentApiConfig,
     ...patch,
+    ...(providerIdentityChanged && patch.supportsImageInput === undefined
+      ? { supportsImageInput: false }
+      : {}),
     ...(clearedApiKey && defaultModel && patch.model === undefined
       ? { model: defaultModel }
       : {}),
@@ -1454,6 +1470,7 @@ export function sanitizeSettingsSavePayload(
     byokProviderConfigDrafts: initial.byokProviderConfigDrafts,
     byokPendingProviderKey: initial.byokPendingProviderKey,
     apiProviderBaseUrl: initial.apiProviderBaseUrl,
+    supportsImageInput: initial.supportsImageInput,
     baseUrl: initial.baseUrl,
     model: initial.model,
     agentId: initial.agentId,
@@ -5659,6 +5676,30 @@ export function SettingsDialog({
                   updateApiConfig({ model: nextValue });
                 }}
               />
+              {apiProtocol !== 'bedrock' ? (
+                <button
+                  type="button"
+                  className={`toggle-row${cfg.supportsImageInput === true ? ' on' : ''}`}
+                  role="switch"
+                  aria-checked={cfg.supportsImageInput === true}
+                  data-testid="settings-byok-supports-image-input"
+                  onClick={() =>
+                    updateApiConfig({
+                      supportsImageInput: cfg.supportsImageInput !== true,
+                    })
+                  }
+                >
+                  <span className="toggle-row-text">
+                    <span className="toggle-row-label">
+                      {t('settings.byokSupportsImageInput')}
+                    </span>
+                    <span className="toggle-row-hint">
+                      {t('settings.byokSupportsImageInputHint')}
+                    </span>
+                  </span>
+                  <span className="toggle-row-switch" aria-hidden="true" />
+                </button>
+              ) : null}
               <details className="agent-cli-env settings-memory-advanced">
                 <summary className="agent-cli-env-summary">
                   <span className="agent-cli-env-summary-title">

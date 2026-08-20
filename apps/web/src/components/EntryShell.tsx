@@ -2534,10 +2534,24 @@ function OnboardingView({
       model: config.model,
       apiVersion: config.apiVersion ?? '',
       apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+      supportsImageInput: config.supportsImageInput === true,
     };
     const nextProtocolConfig: ApiProtocolConfig = {
       ...currentConfig,
       ...patch,
+      ...(
+        patch.supportsImageInput === undefined
+        && (
+          (patch.baseUrl !== undefined && patch.baseUrl !== currentConfig.baseUrl)
+          || (patch.model !== undefined && patch.model !== currentConfig.model)
+          || (
+            patch.apiProviderBaseUrl !== undefined
+            && patch.apiProviderBaseUrl !== currentConfig.apiProviderBaseUrl
+          )
+        )
+          ? { supportsImageInput: false }
+          : {}
+      ),
     };
     const nextConfig: AppConfig = {
       ...config,
@@ -2548,6 +2562,7 @@ function OnboardingView({
       model: nextProtocolConfig.model,
       apiVersion: protocol === 'azure' ? (nextProtocolConfig.apiVersion ?? '') : '',
       apiProviderBaseUrl: nextProtocolConfig.apiProviderBaseUrl ?? null,
+      supportsImageInput: nextProtocolConfig.supportsImageInput === true,
       apiProtocolConfigs: {
         ...(config.apiProtocolConfigs ?? {}),
         [protocol]: nextProtocolConfig,

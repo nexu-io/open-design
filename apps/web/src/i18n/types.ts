@@ -386,6 +386,8 @@ export interface Dict {
   'settings.cloudCalloutButton': string;
   'settings.modeApiMeta': string;
   'settings.byokNoFileToolsNotice': string;
+  'settings.byokSupportsImageInput': string;
+  'settings.byokSupportsImageInputHint': string;
   'settings.byokDraftNotice': string;
   'settings.codeAgent': string;
   'settings.codeAgentHint': string;

@@ -92,6 +92,7 @@ import {
   formatProjectAttachmentHint,
   normalizeCommentAttachments,
   renderCommentAttachmentHint,
+  resolveByokOpenCodeImagePaths,
   resolveChatExtraAllowedDirs,
   describeStablePromptCache,
   designSystemIdFromPluginSnapshot,
@@ -148,6 +149,8 @@ export {
   formatProjectAttachmentHint,
   normalizeCommentAttachments,
   renderCommentAttachmentHint,
+  resolveAbsoluteProjectImageAttachments,
+  resolveByokOpenCodeImagePaths,
   resolveChatExtraAllowedDirs,
   describeStablePromptCache,
   designSystemIdFromPluginSnapshot,
@@ -9872,6 +9875,15 @@ export async function startServer({
       ? resolveSafeProjectAttachments(cwd, attachments)
       : [];
     run.projectAttachmentPaths = safeAttachments;
+    const byokImageInputEnabled =
+      def.id === 'byok-opencode'
+      && byokProvider?.supportsImageInput === true;
+    const byokImagePaths = resolveByokOpenCodeImagePaths({
+      enabled: byokImageInputEnabled,
+      cwd,
+      attachments: safeAttachments,
+      promptImagePaths: safeImages,
+    });
 
     // Local code agents don't accept a separate "system" channel the way the
     // Messages API does — we fold the skill + design-system prompt into the
@@ -11663,7 +11675,7 @@ export async function startServer({
     try {
       args = def.buildArgs(
         composed,
-        safeImages,
+        def.id === 'byok-opencode' ? byokImagePaths : safeImages,
         extraAllowedDirs,
         agentOptions,
         {

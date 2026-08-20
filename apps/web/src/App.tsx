@@ -400,6 +400,7 @@ export function resetExecutionConfigAfterSignOut(config: AppConfig): AppConfig {
     apiProtocol: DEFAULT_CONFIG.apiProtocol,
     apiKey: DEFAULT_CONFIG.apiKey,
     apiVersion: DEFAULT_CONFIG.apiVersion,
+    supportsImageInput: DEFAULT_CONFIG.supportsImageInput,
     baseUrl: DEFAULT_CONFIG.baseUrl,
     model: DEFAULT_CONFIG.model,
     byokImageModel: DEFAULT_CONFIG.byokImageModel,
