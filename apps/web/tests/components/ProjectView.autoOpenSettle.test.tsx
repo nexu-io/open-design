@@ -328,20 +328,37 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     };
   }
 
-  const turnStart = Date.now();
+  // Anchored per test, not once when this describe body runs. The auto-open
+  // candidate filter drops any file whose mtime predates the REAL turn start
+  // (`Date.now()` at send time) by more than its grace window, so fixtures
+  // pinned to module-evaluation time go stale the moment the suite is slow
+  // enough for a test to start seconds after the file was loaded. Every
+  // candidate then gets filtered out and the assertions read as "the guard
+  // blocked the open" — which is how this file went red roughly one full-suite
+  // run in three while passing every time it ran alone.
+  let turnStart = Date.now();
   // Pre-turn files. `other.md` is where the user moves in the focus test; its
   // mtime sits well before the turn, so it can never be selected as the turn's
   // artifact and confuse the assertions.
-  const NOTES = projectFile('notes.md', 'text', turnStart - 60_000);
-  const OTHER = projectFile('other.md', 'text', turnStart - 60_000);
+  let NOTES = projectFile('notes.md', 'text', turnStart - 60_000);
+  let OTHER = projectFile('other.md', 'text', turnStart - 60_000);
   // The only file the turn's own post-run read carries. Deliberately a plain
   // `.txt`: the auto-open ranking opens markdown but leaves `.txt` alone, so
   // the turn-end pass selects nothing and the watcher's later pick is the ONLY
   // thing that can move focus. With a previewable file here instead, the
   // turn-end pass opens it and closes the watch in the same breath — and both
   // guard tests below pass whether or not the guards exist.
-  const RUN_LOG = projectFile('run.txt', 'text', turnStart + 10);
-  const INDEX = projectFile('index.html', 'html', turnStart + 20);
+  let RUN_LOG = projectFile('run.txt', 'text', turnStart + 10);
+  let INDEX = projectFile('index.html', 'html', turnStart + 20);
+
+  beforeEach(() => {
+    turnStart = Date.now();
+    NOTES = projectFile('notes.md', 'text', turnStart - 60_000);
+    OTHER = projectFile('other.md', 'text', turnStart - 60_000);
+    RUN_LOG = projectFile('run.txt', 'text', turnStart + 10);
+    INDEX = projectFile('index.html', 'html', turnStart + 20);
+    TURN_A_HTML = projectFile('turn-a.html', 'html', turnStart + 20);
+  });
 
   // Positive control. If this stops opening index.html the two guard tests
   // prove nothing: they would pass simply because the watcher never fires here.
@@ -509,7 +526,7 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
   // The turn's own post-run read already carries a previewable artifact, so the
   // completion pass opens it directly and never arms the watcher. That path is
   // parked behind the same awaits, so it needs the same owner token.
-  const TURN_A_HTML = projectFile('turn-a.html', 'html', turnStart + 20);
+  let TURN_A_HTML = projectFile('turn-a.html', 'html', turnStart + 20);
 
   // Positive control for the two completion-path assertions below: with nobody
   // superseding the turn, releasing the read must actually open turn-a.html.
@@ -809,7 +826,13 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     await landSettledFileList();
     await turn.releaseCompletionRead();
 
-    expect(openRequestKeys().map((key) => key.name)).toContain('index.html');
+    // Polled for the same reason as the per-write test below: the release only
+    // awaits a fixed number of microtasks, which does not guarantee the
+    // continuation behind it has reached its open. Under full-suite load the
+    // bare assertion ran early and read as "the guard blocked it".
+    await waitFor(() =>
+      expect(openRequestKeys().map((key) => key.name)).toContain('index.html'),
+    );
   });
 
   it('retires at the arming site too when the user has left the conversation', async () => {
@@ -909,7 +932,9 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     await landSettledFileList();
 
     expect(openRequestKeys().map((key) => key.name)).toContain('index.html');
-  });
+    // The 10s poll bound above is only reachable if the test itself outlives
+    // it; the default 5s case timeout used to fire first and report a hang.
+  }, 20_000);
 
   // Drives one turn to terminal status with no produced files but a standalone
   // HTML answer, so the completion path falls through to `persistArtifact`, and
