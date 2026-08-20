@@ -257,7 +257,18 @@ async function execute(
   output: Output,
   onHandle: (handle: AgentHandle | undefined) => void,
   signal: AbortSignal,
+  terminalWritten?: { value: boolean },
 ): Promise<void> {
+  // Tracks whether a terminal result frame was already emitted for this
+  // execute. `serve` shares this object so its defense-in-depth fallback can
+  // avoid emitting a second result frame (the DSH protocol requires exactly
+  // one terminal result; the daemon treats any frame after `finished` as
+  // fatal). Every result frame emitted below goes through emitResult().
+  const terminal = terminalWritten ?? { value: false };
+  const emitResult = (frame: Record<string, unknown>): void => {
+    terminal.value = true;
+    writeFrame(output, frame);
+  };
   // Model selection derivation (provider/id/resume-id → resolved selection)
   // runs before the try below, so a host-supplied value that the harness
   // rejects (e.g. an unknown reasoning_effort) would throw OUTSIDE the
@@ -276,7 +287,20 @@ async function execute(
       ? { ...baseSelection, reasoningEffort: ReasoningEffortId(request.reasoning_effort) }
       : baseSelection;
   } catch (error: unknown) {
-    writeFrame(output, {
+    // Cancellation stays authoritative: if the selection derivation throws
+    // while the abort signal is already set (e.g. the default-model service
+    // is unavailable during an immediate cancel), report `cancelled`, not
+    // `failed` — a user cancellation must never surface as a failed run.
+    if (signal.aborted) {
+      terminal.value = true;
+      writeCancelledResult(
+        output,
+        request.request_id,
+        String(SessionId(request.resume_session_id ?? `od-${randomUUID()}`)),
+      );
+      return;
+    }
+    emitResult({
       v: 1,
       type: 'result',
       request_id: request.request_id,
@@ -320,13 +344,14 @@ async function execute(
       onHandle(handle);
     } catch (error: unknown) {
       if (signal.aborted) {
+        terminal.value = true;
         writeCancelledResult(output, request.request_id, String(sessionId));
         return;
       }
       const facts = errorFacts(error, request.resume_session_id
         ? 'DSH_PROFILE_RESUME_REJECTED'
         : 'DSH_PROFILE_SESSION_CREATE_FAILED');
-      writeFrame(output, {
+      emitResult({
         v: 1,
         type: 'result',
         request_id: request.request_id,
@@ -347,6 +372,7 @@ async function execute(
     });
     await handle.agent.whenIdle();
     if (signal.aborted) {
+      terminal.value = true;
       writeCancelledResult(output, request.request_id, String(sessionId));
       return;
     }
@@ -359,6 +385,7 @@ async function execute(
     await handle.agent.whenIdle();
     await ctx.sessions.flush(handle.agent.session);
     if (signal.aborted) {
+      terminal.value = true;
       writeCancelledResult(output, request.request_id, String(sessionId));
       return;
     }
@@ -366,7 +393,7 @@ async function execute(
     const reason = turnEnd?.data.reason;
     const status = resultStatus(reason);
     const failed = resultError(reason);
-    writeFrame(output, {
+    emitResult({
       v: 1,
       type: 'result',
       request_id: request.request_id,
@@ -379,10 +406,11 @@ async function execute(
     });
   } catch (error: unknown) {
     if (signal.aborted) {
+      terminal.value = true;
       writeCancelledResult(output, request.request_id, String(sessionId));
       return;
     }
-    writeFrame(output, {
+    emitResult({
       v: 1,
       type: 'result',
       request_id: request.request_id,
@@ -392,9 +420,22 @@ async function execute(
       error: errorFacts(error, 'DSH_PROFILE_EXECUTION_FAILED'),
     });
   } finally {
-    disposeEvent();
+    // Cleanup must never reject `execute`: the terminal result frame has
+    // already been emitted at this point (or the error path above returned),
+    // so a throw here would reject the task promise and `serve`'s fallback
+    // would synthesize a SECOND result frame, violating the exactly-one
+    // contract and turning a completed run into a fatal protocol error.
+    try {
+      disposeEvent();
+    } catch {
+      // Cleanup errors are non-rejecting by design (see above).
+    }
     await handle?.dispose().catch(() => undefined);
-    onHandle(undefined);
+    try {
+      onHandle(undefined);
+    } catch {
+      // Same as disposeEvent: never reject after a terminal frame.
+    }
   }
 }
 
@@ -454,20 +495,33 @@ async function serve(
       requestId = command.request_id;
       const taskAbort = new AbortController();
       cancellation.activate(requestId, taskAbort);
+      // Shared with `execute`: once a terminal result frame has been written
+      // for this request, `serve` must NOT synthesize another one.
+      const terminalWritten: { value: boolean } = { value: false };
       task = execute(
         ctx,
         command,
         output,
         (nextHandle) => { handle = nextHandle; },
         taskAbort.signal,
+        terminalWritten,
       );
       // Defense in depth: `execute` reports every failure via a result frame
-      // and resolves, so a rejection here would mean a bug in that contract.
-      // Still convert it into an explicit failed frame instead of an
-      // unhandled rejection (which would make the process exit silently and
-      // leave the host waiting on a result that never arrives).
+      // and resolves, so a rejection here would mean a bug in that contract
+      // (e.g. an unguarded cleanup throw). Still convert it into an explicit
+      // failed frame instead of an unhandled rejection (which would make the
+      // process exit silently and leave the host waiting on a result that
+      // never arrives) — but only when no terminal frame was already emitted:
+      // a second result frame would violate the exactly-one-result protocol
+      // contract and be marked fatal by the daemon.
       void task
         .catch((error: unknown) => {
+          if (terminalWritten.value) {
+            process.stderr.write(
+              `open-design-runtime: execute rejected after its result frame was emitted (${error instanceof Error ? error.message : String(error)})\n`,
+            );
+            return;
+          }
           writeFrame(output, {
             v: 1,
             type: 'result',

@@ -366,4 +366,113 @@ describe('@open-design/dsh-runtime protocol', () => {
     assert.equal(frames.at(-1)?.status, 'failed');
     assert.equal(frames.at(-1)?.error?.code, 'DSH_PROFILE_INVALID_MODEL_SELECTION');
   });
+
+  test('serve emits exactly one result frame when cleanup throws after a terminal frame', async () => {
+    // Regression: `execute`'s finally runs cleanup (disposeEvent / dispose /
+    // onHandle) AFTER the terminal result frame has been written. If a
+    // disposer throws, `execute` must not reject — otherwise `serve`'s
+    // defense-in-depth fallback would synthesize a SECOND result frame,
+    // violating the exactly-one-terminal-result protocol contract and being
+    // marked fatal by the daemon.
+    let disposeCalls = 0;
+    const handle = {
+      agent: {
+        session: { seq: 0 },
+        whenIdle: async () => {},
+        followup: async () => {},
+        cancel: () => {},
+      },
+      dispose: async () => { disposeCalls += 1; },
+    };
+    const ctx = {
+      agentDefaultModel: {
+        currentSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      },
+      agents: {
+        create: async () => handle,
+      },
+      on: () => () => {
+        throw new Error('disposeEvent failed');
+      },
+      sessions: { flush: async () => {} },
+    };
+    const input = new PassThrough();
+    const chunks: string[] = [];
+    const exitCodes: number[] = [];
+    const serving = internals.serve(
+      ctx as never,
+      { write: (chunk: string) => chunks.push(chunk) },
+      (code) => exitCodes.push(code),
+      input,
+      (exit) => exit(0),
+    );
+
+    input.write(`${JSON.stringify({
+      v: 1,
+      type: 'execute',
+      request_id: 'run-cleanup-throw',
+      cwd: '/project',
+      prompt: 'hi',
+      mcp_servers: [],
+    })}\n`);
+    await serving;
+
+    assert.equal(disposeCalls, 1);
+    assert.deepEqual(exitCodes, [0]);
+    const frames = chunks.map((chunk) => JSON.parse(chunk) as { type: string; status?: string });
+    // The key protocol assertion: exactly ONE terminal result frame despite
+    // the cleanup throw — a second frame (from serve's fallback) would be
+    // fatal. (Status is 'failed' here only because this mock never delivers a
+    // turn/end event; the bug under test is the duplicate frame, not status.)
+    assert.equal(frames.filter((frame) => frame.type === 'result').length, 1);
+  });
+
+  test('reports cancelled, not failed, when selection derivation throws during an active cancel', async () => {
+    // Regression: the model-selection error branch must respect cancellation
+    // semantics. If currentSelection() throws while the abort signal is
+    // already set (e.g. the default-model service is unavailable during an
+    // immediate cancel), the execute must emit `cancelled` — a user
+    // cancellation reported as a failed run would be wrong on the wire.
+    const ctx = {
+      agentDefaultModel: {
+        currentSelection: () => {
+          throw new Error('default model unavailable during cancel');
+        },
+      },
+    };
+    const input = new PassThrough();
+    const chunks: string[] = [];
+    const exitCodes: number[] = [];
+    const serving = internals.serve(
+      ctx as never,
+      { write: (chunk: string) => chunks.push(chunk) },
+      (code) => exitCodes.push(code),
+      input,
+      (exit) => exit(0),
+    );
+
+    // Cancel lands before execute initializes its AbortController, exactly
+    // like the pre-existing handshake-cancel test — but here the selection
+    // derivation ALSO throws, so both conditions collide.
+    input.write(`${JSON.stringify({
+      v: 1,
+      type: 'cancel',
+      request_id: 'run-select-cancel',
+    })}\n`);
+    input.write(`${JSON.stringify({
+      v: 1,
+      type: 'execute',
+      request_id: 'run-select-cancel',
+      cwd: '/project',
+      prompt: 'hi',
+      mcp_servers: [],
+    })}\n`);
+    await serving;
+
+    assert.deepEqual(exitCodes, [0]);
+    const frames = chunks.map((chunk) => JSON.parse(chunk) as { type: string; status?: string; error?: { code?: string } });
+    assert.equal(frames.filter((frame) => frame.type === 'result').length, 1);
+    assert.equal(frames.at(-1)?.status, 'cancelled');
+    assert.equal(frames.at(-1)?.error, undefined);
+  });
 });
