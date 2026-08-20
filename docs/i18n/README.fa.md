@@ -1,3 +1,5 @@
+<div dir="rtl">
+
 <h1 align="center">OpenDesign: جایگزین متن‌باز Claude Design</h1>
 
 > ⚡ **[OpenDesign Cloud — سرویس رسمی مدل.](https://open-design.ai/zh/pricing/)** یک‌بار شارژ کنید تا از هر دو مدل agent و تصویر داخل OpenDesign استفاده کنید: GPT، Claude و DeepSeek برای agentها؛ GPT Image 2.0، Seedream 5.0 Pro و Nano Banana 2.0 برای تصاویر.
@@ -770,3 +772,5 @@ SVG بالا هر روز توسط [`.github/workflows/metrics.yml`](../../.githu
 ## مجوز
 
 Apache-2.0. مهارت‌ها و الگوهای بسته‌بندی شده با فایل‌های `LICENSE` خودشان آن مجوزها را حفظ می‌کنند، از جمله `design-templates/guizang-ppt/` (MIT، [@op7418](https://github.com/op7418))، `design-templates/html-ppt/` (MIT، [@lewislulu](https://github.com/lewislulu))، و `skills/web-clone/` (MIT، [@Jane-xiaoer](https://github.com/Jane-xiaoer)).
+
+</div>
