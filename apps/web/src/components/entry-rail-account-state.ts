@@ -1,5 +1,5 @@
 import type { WorkspaceContextState } from '../collab/useWorkspaceContext';
-import { planUnlimitedTier } from '../state/plan-unlimited-models';
+import { planUnlimitedTier } from '../runtime/amr-unlimited-models';
 
 export type EntryRailAccountFooterState = 'hidden' | 'syncing' | 'recovering' | 'sign-in';
 

@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 const PRICING_PAGE = `${repoRoot}apps/landing-page/app/_components/pricing-individual-plans.astro`;
-const RUNTIME_TABLE = `${repoRoot}apps/web/src/state/plan-unlimited-models.ts`;
+const RUNTIME_TABLE = `${repoRoot}apps/web/src/runtime/amr-unlimited-models.ts`;
 
 /** Pricing display name → the AMR model id the workbench receives. */
 const MODEL_ID_BY_DISPLAY_NAME: Record<string, string> = {
@@ -103,24 +103,46 @@ async function pricingUnlimitedIdsByTier(): Promise<Record<Tier, string[]>> {
 /** The workbench's own table, read as source so this guard stays dependency-free. */
 async function runtimeUnlimitedIdsByTier(): Promise<Record<Tier, string[]>> {
   const source = stripLineComments(await readFile(RUNTIME_TABLE, 'utf8'));
-  const popular = captureAll(
-    captureOne(
-      source,
-      /export const POPULAR_MODEL_IDS = \[([\s\S]*?)\] as const;/,
-      'POPULAR_MODEL_IDS in the runtime table',
-    ),
-    /'([^']+)'/g,
-  );
+
+  // `const PLUS_UNLIMITED_MODELS = [...GO_UNLIMITED_MODELS, 'kimi-k2.7-code']`
+  // — each list may spread an earlier one, so they resolve in declaration
+  // order and a spread is replaced by what it names.
+  const lists = new Map<string, string[]>();
+  for (const match of source.matchAll(
+    /const (\w+_UNLIMITED_MODELS) = \[([\s\S]*?)\] as const;/g,
+  )) {
+    const name = match[1];
+    const body = match[2];
+    if (name === undefined || body === undefined) continue;
+    const models: string[] = [];
+    for (const entry of body.split(',')) {
+      const spread = entry.match(/\.\.\.(\w+_UNLIMITED_MODELS)/)?.[1];
+      if (spread) {
+        models.push(...(lists.get(spread) ?? []));
+        continue;
+      }
+      models.push(...captureAll(entry, /'([^']+)'/g));
+    }
+    lists.set(name, models);
+  }
+
   const body = captureOne(
     source,
-    /export const PLAN_UNLIMITED_MODEL_IDS[^=]*= \{([\s\S]*?)\n\};/,
-    'PLAN_UNLIMITED_MODEL_IDS in the runtime table',
+    /const UNLIMITED_MODELS_BY_PLAN[^=]*= \{([\s\S]*?)\n\};/,
+    'UNLIMITED_MODELS_BY_PLAN in the runtime table',
   );
-
   const out = {} as Record<Tier, string[]>;
   for (const tier of TIERS) {
-    const raw = tierEntry(body, tier, 'PLAN_UNLIMITED_MODEL_IDS');
-    out[tier] = raw.includes('POPULAR_MODEL_IDS') ? popular : captureAll(raw, /'([^']+)'/g);
+    const listName = captureOne(
+      body,
+      new RegExp(`\\n  ${tier}: new Set\\((\\w+_UNLIMITED_MODELS)\\)`),
+      `tier ${tier} in UNLIMITED_MODELS_BY_PLAN`,
+    );
+    const models = lists.get(listName);
+    if (models === undefined) {
+      throw new Error(`${listName} is referenced but never declared`);
+    }
+    out[tier] = models;
   }
   return out;
 }

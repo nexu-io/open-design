@@ -1,17 +1,20 @@
 // The 「无限使用」 badge asks exactly one question — is this model unlimited on
 // the plan the user is actually on — and the answer has to match what the
-// public Pricing page promises per tier. Before this table existed the badge
+// public Pricing page promises per tier. Before this rule existed the badge
 // was hard-wired to the DeepSeek V4 campaign, so a Pro subscriber saw nothing
 // on Kimi K2.7 Code even though their plan covers it.
+//
+// The per-tier SETS themselves are covered by `amr-unlimited-models.test.ts`
+// (the balance-preflight view of the same table). What is pinned here is the
+// tier resolution the badge adds on top: team-namespaced ids, unknown tiers
+// failing closed, and model-id normalization.
 
 import { describe, expect, it } from 'vitest';
 
 import {
-  PLAN_UNLIMITED_MODEL_IDS,
   isUnlimitedModelForPlanTier,
   planUnlimitedTier,
-  unlimitedModelIdsForPlanTier,
-} from '../../src/state/plan-unlimited-models';
+} from '../../src/runtime/amr-unlimited-models';
 
 describe('planUnlimitedTier', () => {
   it.each([
@@ -35,22 +38,36 @@ describe('planUnlimitedTier', () => {
     'answers null for %s, which carries no unlimited set',
     (raw) => {
       expect(planUnlimitedTier(raw)).toBeNull();
-      expect(unlimitedModelIdsForPlanTier(raw)).toEqual([]);
+      expect(isUnlimitedModelForPlanTier('deepseek-v4-flash', raw)).toBe(false);
     },
   );
 });
 
-describe('PLAN_UNLIMITED_MODEL_IDS', () => {
+const POPULAR_MODEL_IDS = [
+  'deepseek-v4-flash',
+  'deepseek-v4-pro',
+  'glm-5.2',
+  'kimi-k2.7-code',
+  'mimo-v2.5-pro',
+  'minimax-m2.7',
+  'kimi-k2.6',
+  'glm-5.1',
+] as const;
+
+const unlimitedOn = (tier: string) =>
+  POPULAR_MODEL_IDS.filter((modelId) => isUnlimitedModelForPlanTier(modelId, tier));
+
+describe('per-tier unlimited sets, as the badge sees them', () => {
   it('matches the model counts the Pricing page advertises per tier', () => {
-    expect(PLAN_UNLIMITED_MODEL_IDS.go).toHaveLength(3);
-    expect(PLAN_UNLIMITED_MODEL_IDS.plus).toHaveLength(4);
-    expect(PLAN_UNLIMITED_MODEL_IDS.pro).toHaveLength(5);
-    expect(PLAN_UNLIMITED_MODEL_IDS.max).toHaveLength(8);
+    expect(unlimitedOn('go')).toHaveLength(3);
+    expect(unlimitedOn('plus')).toHaveLength(4);
+    expect(unlimitedOn('pro')).toHaveLength(5);
+    expect(unlimitedOn('max')).toHaveLength(8);
   });
 
   it('keeps GLM-5.2 unlimited on Pro and MiniMax M2.7 metered', () => {
-    expect(PLAN_UNLIMITED_MODEL_IDS.pro).toContain('glm-5.2');
-    expect(PLAN_UNLIMITED_MODEL_IDS.pro).not.toContain('minimax-m2.7');
+    expect(unlimitedOn('pro')).toContain('glm-5.2');
+    expect(unlimitedOn('pro')).not.toContain('minimax-m2.7');
   });
 
   it('grows monotonically — every lower tier is a subset of the next', () => {
@@ -59,16 +76,21 @@ describe('PLAN_UNLIMITED_MODEL_IDS', () => {
       ['plus', 'pro'],
       ['pro', 'max'],
     ] as const) {
-      for (const modelId of PLAN_UNLIMITED_MODEL_IDS[lower]) {
-        expect(PLAN_UNLIMITED_MODEL_IDS[higher]).toContain(modelId);
+      for (const modelId of unlimitedOn(lower)) {
+        expect(unlimitedOn(higher)).toContain(modelId);
       }
     }
+  });
+
+  it('gives a team-namespaced id the same set as its personal tier', () => {
+    expect(unlimitedOn('team_pro')).toEqual(unlimitedOn('pro'));
+    expect(unlimitedOn('team_max_yearly')).toEqual(unlimitedOn('max'));
   });
 });
 
 describe('isUnlimitedModelForPlanTier', () => {
   it('badges a Pro subscriber on every model their plan covers', () => {
-    for (const modelId of PLAN_UNLIMITED_MODEL_IDS.pro) {
+    for (const modelId of unlimitedOn('pro')) {
       expect(isUnlimitedModelForPlanTier(modelId, 'pro')).toBe(true);
     }
   });
