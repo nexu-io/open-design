@@ -1491,4 +1491,70 @@ describe('run event log persistence', () => {
     expect(after - before).toBeLessThan(15);
     expect(kept.length).toBe(ITER);
   });
+
+  it('recovers a run event that was lost to a transient log-stream failure', async () => {
+    // Regression for #5292: a write to a destroyed fs.WriteStream does not
+    // throw synchronously — it returns false and surfaces the failure as an
+    // async 'error'. The on('error') handler (runs.ts) destroys + nulls the
+    // stream, so EVERY record emitted while the stream is broken is silently
+    // dropped from events.jsonl even though the run later reaches a terminal
+    // status with its `end` record persisted on a freshly-reopened stream.
+    // The run's in-memory ring retains the lost records; the fix reconciles the
+    // file from the ring on the next emit so "end present on disk" implies
+    // every earlier record is present too. We drop TWO records in one burst
+    // (a second 'start' plus the retry telemetry that follows it) to pin the
+    // id-diff reconcile: a fix that only replays the single most-recent record
+    // would restore the retry telemetry but leave the second 'start' missing.
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+
+    runs.emit(run, 'start', { model: 'x' }); // lazily opens the write stream
+    expect(run.eventsLogStream).toBeDefined();
+    // Wait until the underlying fd is actually open so the destroy below is a
+    // clean destroy of an OPEN stream (deterministic 'error' emission) rather
+    // than a race with the stream's async open().
+    await new Promise<void>((resolve) => run.eventsLogStream.once('open', resolve));
+
+    // Simulate a transient fs failure: destroy the stream with an error.
+    // write() on the destroyed stream returns false + surfaces an async error
+    // instead of throwing, so every record emitted while it is broken is
+    // silently lost from the file (but stays in run.events).
+    const broken = run.eventsLogStream;
+    broken.destroy(new Error('simulated io failure'));
+
+    runs.emit(run, 'start', { model: 'y' }); // on the buggy code this write is LOST
+    runs.emit(run, 'run_retry_attempted', { retry_attempt_index: 1 }); // …and this one too
+    // Wait for destroy()'s async fs.close to complete so the run's on('error')
+    // handler has nulled the broken stream (and, on the fix, set
+    // eventsLogReplayNeeded) before the next emit re-opens a fresh stream.
+    await new Promise<void>((resolve) => broken.once('close', resolve));
+    runs.finish(run, 'succeeded', 0, null);
+
+    const logPath = path.join(tmpDir, run.id, 'events.jsonl');
+    let lines: string[] = [];
+    for (let i = 0; i < 150; i++) {
+      if (fs.existsSync(logPath)) {
+        const text = fs.readFileSync(logPath, 'utf8').trim();
+        lines = text ? text.split('\n') : [];
+        if (lines.some((line) => {
+          try { return JSON.parse(line).event === 'end'; } catch { return false; }
+        })) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    const events = lines.map((line) => JSON.parse(line));
+    const starts = events.filter((event) => event.event === 'start');
+    const retries = events.filter((event) => event.event === 'run_retry_attempted');
+    const ends = events.filter((event) => event.event === 'end');
+    expect(ends).toHaveLength(1);
+    expect(ends[0]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
+    expect(retries).toHaveLength(1);
+    expect(retries[0]).toMatchObject({
+      event: 'run_retry_attempted',
+      data: { retry_attempt_index: 1 },
+    });
+    expect(starts).toHaveLength(2);
+    expect(new Set(starts.map((event) => event.id)).size).toBe(2);
+  });
 });

@@ -878,6 +878,10 @@ export function createChatRunService({
       // Set once finish() has closed the log stream, so a late post-finish emit
       // can't lazily re-open a stream nothing will ever close (FD leak).
       eventsLogClosed: false,
+      // Set when the log stream errors, meaning a record queued on the broken
+      // stream may have been dropped from events.jsonl; the next emit / finish
+      // reconciles the file from the in-memory ring (#5292).
+      eventsLogReplayNeeded: false,
       cleanupGeneration: 0,
       manualResumeAttemptCount: 0,
       rechargeWaitDurationMs: 0,
@@ -1027,6 +1031,7 @@ export function createChatRunService({
     run.stdinOpen = false;
     run.eventsLogStream = null;
     run.eventsLogClosed = false;
+    run.eventsLogReplayNeeded = false;
     run.manualResumeAttemptCount = (run.manualResumeAttemptCount ?? 0) + 1;
     run.rechargeWaitDurationMs =
       (run.rechargeWaitDurationMs ?? 0) + rechargeWaitDurationMs;
@@ -1065,6 +1070,11 @@ export function createChatRunService({
       run.eventsLogStream.on('error', () => {
         try { run.eventsLogStream?.destroy(); } catch { /* ignore */ }
         run.eventsLogStream = null;
+        // The write that triggered this error (and any writes already queued
+        // on the broken stream) were dropped from events.jsonl. Flag the run
+        // so the next emit / finish repairs the file from the in-memory ring
+        // before new writes land (#5292).
+        run.eventsLogReplayNeeded = true;
       });
       return run.eventsLogStream;
     } catch {
@@ -1072,7 +1082,55 @@ export function createChatRunService({
     }
   };
 
+  // Repair events.jsonl after a transient log-stream failure. The stream's
+  // on('error') nulled the broken stream and flagged the run; a record queued
+  // on that stream was dropped from the file, so re-append every in-memory
+  // record whose id is missing, keeping the file self-consistent ("end"
+  // present implies every earlier record present). Everything here is
+  // synchronous + best-effort: it opens/closes its own fd via appendFileSync,
+  // so it never depends on the (possibly nulled) stream, and a hard-disk
+  // failure must never crash the run or block emit.
+  const reconcileEventLog = (run) => {
+    if (!run.eventsLogPath || run.eventsLogReplayNeeded !== true) return;
+    try {
+      let content = '';
+      try {
+        content = fs.readFileSync(run.eventsLogPath, 'utf8');
+      } catch {
+        // No file yet (the stream never opened successfully) — treat as empty
+        // so every in-memory record is re-appended below.
+      }
+      // A torn partial trailing line (a write cut mid-record) would corrupt
+      // later reads; truncate the file back to the last complete line first.
+      const lastNewline = content.lastIndexOf('\n');
+      if (lastNewline >= 0 && lastNewline < content.length - 1) {
+        const completeBytes = Buffer.byteLength(content.slice(0, lastNewline + 1), 'utf8');
+        fs.truncateSync(run.eventsLogPath, completeBytes);
+        content = content.slice(0, lastNewline + 1);
+      }
+      const present = new Set();
+      for (const line of content.split('\n')) {
+        if (!line) continue;
+        try {
+          const record = JSON.parse(line);
+          if (record && Number.isFinite(record.id)) present.add(record.id);
+        } catch { /* skip malformed line */ }
+      }
+      for (const record of run.events) {
+        if (!present.has(record.id)) {
+          fs.appendFileSync(run.eventsLogPath, JSON.stringify(record) + '\n', 'utf8');
+          present.add(record.id);
+        }
+      }
+    } catch {
+      // Hard-disk failure: keep the run alive; the memory ring + SSE still work.
+    } finally {
+      run.eventsLogReplayNeeded = false;
+    }
+  };
+
   const emit = (run, event, data) => {
+    if (run.eventsLogReplayNeeded) reconcileEventLog(run);
     if (event === 'error') {
       const details = extractErrorDetails(data);
       if (details.error) run.error = details.error;
@@ -1218,6 +1276,10 @@ export function createChatRunService({
     run.clients.clear();
     for (const waiter of run.waiters) waiter(statusBody(run));
     run.waiters.clear();
+    // If the last emit(s) hit a broken stream, repair the log from the
+    // in-memory ring BEFORE closing it, so 'end' and every earlier record are
+    // on disk for tail/grep even when the final write failed (#5292).
+    if (run.eventsLogReplayNeeded) reconcileEventLog(run);
     // Close the event log stream now that no more events will be
     // emitted for this run. The file stays on disk for tail/grep.
     try { run.eventsLogStream?.end(); } catch { /* ignore */ }
