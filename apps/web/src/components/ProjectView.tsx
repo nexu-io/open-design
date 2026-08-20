@@ -333,7 +333,7 @@ import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
-import { effectiveAgentModelChoice } from './agentModelSelection';
+import { effectiveAgentModelChoice, effectiveAgentModelId } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
 import { byokProviderRequiresApiKey } from '../utils/byokProvider';
@@ -6703,6 +6703,10 @@ export function ProjectView({
               persistedWorkspaceId.length > 0
               || projectWorkspaceScopeState.scope?.kind === 'unbound'
             );
+          const amrModelId = effectiveAgentModelId(
+            agentsById.get('amr'),
+            config.agentModels?.amr,
+          );
           const gate =
             deferAmrPreflightToDaemon
               ? { kind: 'allow' as const }
@@ -6715,6 +6719,7 @@ export function ProjectView({
                           projectRunPreflightContext.workspaceMemberId,
                       }
                     : undefined,
+                  amrModelId,
                 );
           // A blocked send parks in the conversation queue with its FULL
           // payload (prompt, attachments, comment context) — the composer
