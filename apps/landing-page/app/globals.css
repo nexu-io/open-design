@@ -1749,33 +1749,15 @@ a.nav-mega-col-head.is-active {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  /* Shifted down 30px (top margin) to sit lower under the lead line. */
+  gap: 14px;
   margin: 30px auto 8px;
-  /* Frame hugs the text: shrink-wrap to the widest line (brand vs tagline) plus
-     padding, instead of spanning the full hero column. Stays centred. */
   width: fit-content;
   max-width: 100%;
   line-height: 1;
-  /* Blueprint-style selection frame around the brand title (reference comp):
-     a thin accent border with a small filled square sitting on each corner. */
   position: relative;
-  /* Fluid frame padding so the blueprint border hugs the title at every
-     width instead of pushing the oversized line off-screen on mobile. */
-  padding: clamp(16px, 3.2vw, 28px) clamp(18px, 5vw, 48px);
-  border: 1px solid var(--coral);
+  padding: 0;
+  border: 0;
 }
-/* Small filled squares centred on each corner of the title frame. */
-.hero-title-corner {
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  background: var(--coral);
-}
-.hero-title-corner.tl { top: 0; left: 0; transform: translate(-50%, -50%); }
-.hero-title-corner.tr { top: 0; right: 0; transform: translate(50%, -50%); }
-.hero-title-corner.bl { bottom: 0; left: 0; transform: translate(-50%, 50%); }
-.hero-title-corner.br { bottom: 0; right: 0; transform: translate(50%, 50%); }
 .hero-title-brand {
   /* Editorial slab/serif treatment for the brand line only — system serif
      stack (no webfont load) so it costs zero extra requests. The CJK tagline
@@ -1792,19 +1774,22 @@ a.nav-mega-col-head.is-active {
   text-decoration: none;
 }
 .hero-title-position {
-  /* Canonical product category. It stays visible in every locale, but is a
-     supporting layer so the concrete task line remains the strongest claim. */
+  /* Headline: "The Vibe Design Workspace for your brand." One line on desktop
+     (fluid size keeps the longest locale on a single row); wraps only on phones. */
+  display: block;
   font-family: var(--sans);
-  font-weight: 700;
-  font-size: clamp(18px, 2.8vw, 27px);
+  font-weight: 800;
+  font-size: clamp(26px, 3.3vw, 50px);
   line-height: 1.08;
-  letter-spacing: -0.015em;
-  color: var(--ink-soft);
-  margin-top: 0.12em;
-  text-wrap: balance;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  white-space: nowrap;
   background: none;
   box-shadow: none;
   text-decoration: none;
+}
+@media (max-width: 640px) {
+  .hero-title-position { white-space: normal; text-wrap: balance; }
 }
 .hero-title-main {
   /* Localized task positioning: each active locale supplies two deliberate

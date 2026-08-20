@@ -555,16 +555,9 @@ export default function Page({
                   kept in the SEO layer only (title / description / JSON-LD);
                   the first screen leads straight with the brand + positioning. */}
               <h1 className='hero-title' data-reveal>
-                <span className='hero-title-corner tl' aria-hidden='true' />
-                <span className='hero-title-corner tr' aria-hidden='true' />
-                <span className='hero-title-corner bl' aria-hidden='true' />
-                <span className='hero-title-corner br' aria-hidden='true' />
-                <span className='hero-title-brand'>
-                  <BlurText text='OpenDesign' by='words' start={0} />
-                </span>
-                {/* Two-layer message: canonical category, then the strongest
-                    localized design-system and output claim. The agent value
-                    promise lives once in the supporting paragraph below. */}
+                {/* Two-layer message: the brand-positioning headline, then the
+                    design-system + scenario claim. The agent value promise
+                    lives in the ABOUT statement below. */}
                 <span className='hero-title-position'>
                   <BlurText
                     text={t.heroPositionTitle ?? 'Vibe Design Workspace'}

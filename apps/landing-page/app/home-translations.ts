@@ -68,13 +68,13 @@ export interface HomeExtra {
 }
 
 const en: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: 'The Vibe Design Workspace for your brand.',
   heroSubHighlight: 'turns the coding agents you already run into a design engine',
   heroTaskTitle:
-    'One design system. Every website, slide, prototype, dashboard, image, and video stays on-brand.',
+    'One design system. Every prototype, slide, marketing image, video, and dashboard stays on-brand.',
   heroTaskLines: [
-    'One design system. Every website, slide, prototype,',
-    'dashboard, image, and video stays on-brand.',
+    'One design system. Every prototype, slide, marketing image,',
+    'video, and dashboard stays on-brand.',
   ],
   heroTaskEmphasis: 'One design system.',
   heroLead:
@@ -126,12 +126,12 @@ const en: HomeExtra = {
 };
 
 const zh: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: '为你的品牌而生的 Vibe Design Workspace。',
   heroSubHighlight: '把你已有的 Coding Agent 变成设计引擎',
-  heroTaskTitle: '一套设计系统，让网页、PPT、原型、数据看板、图像与视频保持品牌一致',
+  heroTaskTitle: '一套设计系统，让原型、演示文稿、营销图片、视频、数据看板保持品牌一致',
   heroTaskLines: [
-    '一套设计系统，让网页、PPT、原型、',
-    '数据看板、图像与视频保持品牌一致',
+    '一套设计系统，让原型、演示文稿、营销图片、',
+    '视频、数据看板保持品牌一致',
   ],
   heroTaskEmphasis: '一套设计系统',
   heroLead: '从想法到原型、网页、演示文稿和 HTML 视频——产品设计全流程，在你自己的设备上完成。',
@@ -179,6 +179,7 @@ const zh: HomeExtra = {
 
 const zhTw: HomeExtra = {
   heroLead: '從想法到原型、網頁、Slides、HTML 影片——產品設計全流程，在你自己的裝置上完成。',
+  heroPositionTitle: '為你的品牌而生的 Vibe Design Workspace。',
   heroTitleSub: 'Claude Design 最佳開源替代方案',
   heroSub:
     'Figma 與 Claude Design 的 Agent-native 替代方案。\n桌面用戶端優先，接入 21 個 Coding Agent、{systems} 個 Design System，Apache-2.0。',
@@ -219,7 +220,7 @@ const zhTw: HomeExtra = {
 };
 
 const ja: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: 'あなたのブランドのための Vibe Design Workspace。',
   heroSubHighlight: 'すでに使っているコーディングエージェントを設計エンジンに変え',
   heroTaskTitle: 'ひとつのデザインシステムで、Web、スライド、プロトタイプ、ダッシュボード、画像、動画までブランドを統一',
   heroTaskLines: [
@@ -274,7 +275,7 @@ const ja: HomeExtra = {
 };
 
 const ko: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: '당신의 브랜드를 위한 Vibe Design Workspace.',
   heroSubHighlight: '이미 사용 중인 코딩 에이전트를 디자인 엔진으로 바꿔',
   heroTaskTitle: '하나의 디자인 시스템으로 웹, 슬라이드, 프로토타입, 대시보드, 이미지, 영상까지 브랜드 일관성 유지',
   heroTaskLines: [
@@ -329,7 +330,7 @@ const ko: HomeExtra = {
 };
 
 const de: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: 'Der Vibe Design Workspace für deine Marke.',
   heroSubHighlight: 'verwandelt die Coding-Agents, die du bereits nutzt, in eine Design-Engine',
   heroTaskTitle: 'Ein Designsystem für markenkonsistente Websites, Slides, Prototypen, Dashboards, Bilder und Videos',
   heroTaskLines: [
@@ -384,7 +385,7 @@ const de: HomeExtra = {
 };
 
 const fr: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: 'Le Vibe Design Workspace pour votre marque.',
   heroSubHighlight: 'transforme les agents de code que vous utilisez déjà en moteur de design',
   heroTaskTitle: 'Un seul design system pour des sites, slides, prototypes, dashboards, images et vidéos cohérents avec votre marque',
   heroTaskLines: [
@@ -439,7 +440,7 @@ const fr: HomeExtra = {
 };
 
 const ru: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: 'Vibe Design Workspace для вашего бренда.',
   heroSubHighlight: 'превращает кодинг-агентов, которыми вы уже пользуетесь, в движок дизайна',
   heroTaskTitle: 'Одна дизайн-система — единый стиль бренда для сайтов, слайдов, прототипов, дашбордов, изображений и видео',
   heroTaskLines: [
@@ -494,7 +495,7 @@ const ru: HomeExtra = {
 };
 
 const es: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: 'El Vibe Design Workspace para tu marca.',
   heroSubHighlight: 'convierte los agentes de código que ya usas en un motor de diseño',
   heroTaskTitle: 'Un sistema de diseño para sitios, presentaciones, prototipos, dashboards, imágenes y vídeos fieles a tu marca',
   heroTaskLines: [
@@ -549,7 +550,7 @@ const es: HomeExtra = {
 };
 
 const ptBr: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: 'O Vibe Design Workspace para a sua marca.',
   heroSubHighlight: 'transforma os agentes de código que você já usa em um motor de design',
   heroTaskTitle: 'Um design system para sites, apresentações, protótipos, dashboards, imagens e vídeos consistentes com a sua marca',
   heroTaskLines: [
@@ -604,7 +605,7 @@ const ptBr: HomeExtra = {
 };
 
 const it: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: 'Il Vibe Design Workspace per il tuo brand.',
   heroSubHighlight: 'trasforma i coding agent che già usi in un motore di design',
   heroTaskTitle: 'Un unico design system per siti, presentazioni, prototipi, dashboard, immagini e video coerenti con il brand',
   heroTaskLines: [
@@ -661,6 +662,7 @@ const it: HomeExtra = {
 const vi: HomeExtra = {
   heroLead:
     'Từ ý tưởng đến prototype, web, slide và video HTML — toàn bộ quy trình thiết kế sản phẩm, hoàn tất ngay trên máy của bạn.',
+  heroPositionTitle: 'Vibe Design Workspace dành cho thương hiệu của bạn.',
   heroTitleSub: 'Lựa chọn mã nguồn mở tốt nhất thay Claude Design',
   heroSub:
     'Giải pháp agent-native thay thế cho Figma và Claude Design.\nƯu tiên desktop, với 21 coding agent, {systems} design system và giấy phép Apache-2.0.',
@@ -706,6 +708,7 @@ const vi: HomeExtra = {
 const pl: HomeExtra = {
   heroLead:
     'Od pomysłu po prototyp, web, slajdy i wideo HTML — cały proces projektowania produktu, ukończony na własnej maszynie.',
+  heroPositionTitle: 'Vibe Design Workspace dla Twojej marki.',
   heroTitleSub: 'Najlepsza open-source alternatywa dla Claude Design',
   heroSub:
     'Agent-native alternatywa dla Figmy i Claude Design.\nDesktop-first, z 21 agentami kodu, {systems} design systemami i licencją Apache-2.0.',
@@ -751,6 +754,7 @@ const pl: HomeExtra = {
 const id: HomeExtra = {
   heroLead:
     'Dari ide ke prototipe, web, slide, dan video HTML — seluruh alur desain produk, selesai di mesin Anda sendiri.',
+  heroPositionTitle: 'Vibe Design Workspace untuk brand kamu.',
   heroTitleSub: 'Alternatif open source terbaik untuk Claude Design',
   heroSub:
     'Alternatif agent-native untuk Figma dan Claude Design.\nDesktop-first, dengan 21 coding agent, {systems} design system, dan lisensi Apache-2.0.',
@@ -796,6 +800,7 @@ const id: HomeExtra = {
 const nl: HomeExtra = {
   heroLead:
     'Van idee tot prototype, web, slides en HTML-video — de hele productdesign-flow, afgerond op je eigen machine.',
+  heroPositionTitle: 'De Vibe Design Workspace voor jouw merk.',
   heroTitleSub: 'Het beste open-source alternatief voor Claude Design',
   heroSub:
     'Een agent-native alternatief voor Figma en Claude Design.\nDesktop-first, met 21 coding agents, {systems} design systems en een Apache-2.0-licentie.',
@@ -841,6 +846,7 @@ const nl: HomeExtra = {
 const ar: HomeExtra = {
   heroLead:
     'من الفكرة إلى النموذج الأولي والويب والشرائح وفيديو HTML — مسار تصميم المنتج كاملاً، منجَزاً على جهازك.',
+  heroPositionTitle: 'Vibe Design Workspace لعلامتك التجارية.',
   heroTitleSub: 'أفضل بديل مفتوح المصدر لـ Claude Design',
   heroSub:
     'بديل أصيل للوكلاء عن Figma و Claude Design.\nالأولوية لسطح المكتب، مع 21 وكيل برمجة و{systems} نظام تصميم ورخصة Apache-2.0.',
@@ -884,7 +890,7 @@ const ar: HomeExtra = {
 };
 
 const tr: HomeExtra = {
-  heroPositionTitle: 'Vibe Design Workspace',
+  heroPositionTitle: 'Markan için Vibe Design Workspace.',
   heroSubHighlight: 'bir tasarım motoruna dönüştürür',
   heroTaskTitle: 'Tek bir tasarım sistemiyle web, sunum, prototip, pano, görsel ve videolarda tutarlı marka deneyimi',
   heroTaskLines: [
@@ -941,6 +947,7 @@ const tr: HomeExtra = {
 const uk: HomeExtra = {
   heroLead:
     'Від ідеї до прототипу, вебу, слайдів і HTML-відео — увесь процес продуктового дизайну, завершений на вашій машині.',
+  heroPositionTitle: 'Vibe Design Workspace для вашого бренду.',
   heroTitleSub: 'Найкраща open-source альтернатива Claude Design',
   heroSub:
     'Agent-native альтернатива Figma та Claude Design.\nDesktop-first, з 21 кодинг-агентами, {systems} дизайн-системами та ліцензією Apache-2.0.',
