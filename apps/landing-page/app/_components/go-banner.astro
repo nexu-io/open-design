@@ -1,0 +1,338 @@
+---
+/*
+ * Go plan launch banner — marketing touchpoint #1 (官网首页 Banner).
+ *
+ * Audience: UNPAID ONLY. Paid visitors keep the DeepSeek campaign that is
+ * already live, so this banner removes itself the moment the session probe
+ * reports a paid plan. It ships server-rendered and hidden, then reveals
+ * itself once the probe answers — never the other way round, so a paid
+ * visitor cannot catch a frame of Go marketing.
+ *
+ * Analytics (per the requirement doc's 四触点埋点方案):
+ *   surface_view  page_name=landing_home area=go_banner audience=unpaid
+ *                 — fired when the banner actually scrolls into view, not on mount
+ *   ui_click      same triple, element=cta | close
+ * The CTA click IS the conversion for this touchpoint, so there is no separate
+ * result event; it carries entry_id into Pricing for the purchase funnel.
+ */
+import { getGoBannerCopy } from '../go-banner-i18n';
+import { localeFromPath, localizedHref, type LandingLocaleCode } from '../i18n';
+
+interface Props {
+  locale?: LandingLocaleCode;
+  /** Cloud API origin used for the session probe; same source as the header. */
+  apiOrigin?: string;
+}
+
+const locale = Astro.props.locale ?? localeFromPath(Astro.url.pathname);
+const copy = getGoBannerCopy(locale);
+const pricingHref = `${localizedHref('/pricing/', locale)}?source=go_banner`;
+// Same source the header account menu uses; the inline script cannot read
+// import.meta.env itself, so it arrives through a data-* attribute.
+const env = import.meta.env as Record<string, string | undefined>;
+const apiOrigin =
+  Astro.props.apiOrigin ??
+  env.PUBLIC_CLOUD_API_BASE ??
+  env.PUBLIC_AMR_API_BASE ??
+  'https://amr-api.open-design.ai';
+
+// Campaign window (Asia/Shanghai). Outside it the banner never renders — the
+// Go PLAN stays on sale, only this promo surface is time-boxed.
+const WINDOW_START = '2026-08-20T20:00:00+08:00';
+const WINDOW_END = '2026-09-03T20:00:00+08:00';
+---
+
+<aside
+  class="go-banner"
+  data-go-banner
+  data-window-start={WINDOW_START}
+  data-window-end={WINDOW_END}
+  data-api={apiOrigin}
+  hidden
+>
+  <a class="go-banner__link" href={pricingHref} data-go-banner-cta aria-label={copy.ariaLabel}>
+    <span class="go-banner__badge">{copy.badge}</span>
+    <span class="go-banner__divider" aria-hidden="true">|</span>
+    <strong class="go-banner__headline">{copy.headline}</strong>
+    <span class="go-banner__divider" aria-hidden="true">|</span>
+    <span class="go-banner__detail">{copy.detail}</span>
+    <span class="go-banner__cta" aria-hidden="true">→</span>
+  </a>
+  <button class="go-banner__close" type="button" data-go-banner-close aria-label={copy.closeLabel}>
+    ×
+  </button>
+</aside>
+
+<style>
+  /* 对齐评审通过的原型（marketing/touchpoints.css 的 .gp-announce）：
+     fixed 定位、44px 高、柠檬绿 8% 染白的底、标题两侧竖分隔线、
+     深色 CTA 胶囊。数值不要凭感觉调，改了要和原型一起改。 */
+  .go-banner {
+    position: fixed;
+    z-index: 70;
+    top: 0;
+    right: 0;
+    left: 0;
+    min-height: 44px;
+    border-bottom: 1px solid color-mix(in srgb, #68f22e 36%, var(--line, #d9d9d9));
+    color: var(--ink, #262626);
+    background: color-mix(in srgb, #68f22e 8%, #fff);
+    box-shadow: 0 6px 24px rgb(38 38 38 / 6%);
+    font-size: 13px;
+    line-height: 1.25;
+  }
+  .go-banner[hidden] { display: none !important; }
+
+  .go-banner__link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 44px;
+    padding: 8px 64px 8px 24px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .go-banner__badge {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 4px 9px;
+    border-radius: 999px;
+    color: #102b05;
+    background: #68f22e;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .go-banner__divider { color: color-mix(in srgb, var(--ink, #262626) 26%, transparent); }
+
+  .go-banner__headline { font-weight: 700; }
+
+  .go-banner__detail { color: var(--ink-mute, #666); }
+
+  .go-banner__cta {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    border-radius: 999px;
+    color: #f7f7f3;
+    background: var(--ink, #262626);
+    font-weight: 750;
+    white-space: nowrap;
+    transition: transform 0.15s ease;
+  }
+  .go-banner__link:hover .go-banner__cta { transform: translateX(1px); }
+
+  .go-banner__close {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    right: 14px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: var(--ink, #262626);
+    background: transparent;
+    font-size: 19px;
+    line-height: 1;
+    opacity: 0.72;
+    cursor: pointer;
+    transform: translateY(-50%);
+  }
+  .go-banner__close:hover { background: rgb(38 38 38 / 7%); opacity: 1; }
+  .go-banner__close:focus-visible {
+    outline: 2px solid var(--ink, #262626);
+    outline-offset: 2px;
+    opacity: 1;
+  }
+
+  /* Banner 是 fixed，脱离文档流，所以固定导航和首屏都要整体下推。
+     用 body 上的类名而不是 :has()——原型即如此，且 :has() 在 Astro
+     scoped 样式里会被追加作用域属性，匹配不到 React 渲染的 .site-chrome。 */
+  :global(body.go-has-announce .site-chrome) { top: 44px; }
+  /* 需求：未付费用户的 DS 触点被 Go 替换（GMK-010）。Go banner 只对未付费
+     渲染，所以它一出现就压掉同页的 DS 活动条——重叠期（8/20–8/27）两条
+     不叠放。付费用户看不到 Go banner，DS 条不受影响。 */
+  :global(html.go-banner-suppresses-campaign .home-campaign-banner) { display: none !important; }
+  :global(html.go-banner-suppresses-campaign) { --home-campaign-banner-height: 0px !important; }
+  /* 与 PR #6881 的版本发布条（.hm-announce）互斥：活动条在时发布条让位，
+     头部只保留一条。该元素来自尚未合入的分支——选择器匹配不到就是 no-op，
+     两个 PR 的合并顺序无关。 */
+  :global(body.go-has-announce .hm-announce) { display: none !important; }
+  :global(body.go-has-announce .hero) { padding-top: calc(92px + 44px); }
+</style>
+
+<script is:inline>
+  (() => {
+    const banner = document.querySelector('[data-go-banner]');
+    if (!banner) return;
+
+    const DISMISS_KEY = 'od.goBanner.dismissed';
+    const track = (event, props) => {
+      try {
+        if (typeof window.__odTrack === 'function') {
+          window.__odTrack(
+            event,
+            Object.assign(
+              {
+                page_name: 'landing_home',
+                area: 'go_banner',
+                audience: 'unpaid',
+                // 固定活动 ID，四个触点必须一致；看板按活动筛选靠它。
+                campaign_id: 'go_plan_launch',
+                locale: (document.documentElement.getAttribute('lang') || 'en').toLowerCase(),
+              },
+              props || {},
+            ),
+          );
+        }
+      } catch (e) {}
+    };
+
+    const remove = () => {
+      banner.setAttribute('hidden', '');
+      document.body.classList.remove('go-has-announce');
+      document.documentElement.classList.remove('go-banner-suppresses-campaign');
+    };
+
+    /* 评审预览：?campaign=go-plan 可以在活动窗口之外看到 Banner。
+       沿用现网 DS 活动 ?campaign=deepseek-v4-pro 的既有约定（需求文档 F-05）。
+       只放开时间门禁，不放开受众门禁——付费用户仍然不该看到 Go 触点，
+       否则预览会掩盖「付费态不渲染」这条最容易做错的规则。
+       上线时间规则本身不受影响。 */
+    let reviewPreview = false;
+    try {
+      reviewPreview =
+        new URLSearchParams(window.location.search).get('campaign') === 'go-plan';
+    } catch (e) {}
+
+    // 1) Campaign window. Outside it this surface is off entirely — no render,
+    //    no events (the badge entry elsewhere stays, only loses its NEW dot).
+    if (!reviewPreview) {
+      const now = Date.now();
+      const start = Date.parse(banner.getAttribute('data-window-start') || '');
+      const end = Date.parse(banner.getAttribute('data-window-end') || '');
+      if (Number.isFinite(start) && now < start) return;
+      if (Number.isFinite(end) && now >= end) return;
+    }
+
+    // 2) Dismissed before? Stays dismissed for this browser.
+    try {
+      if (!reviewPreview && window.localStorage.getItem(DISMISS_KEY) === '1') return;
+    } catch (e) {}
+
+    /* 3) Audience. Paid visitors must never see Go marketing, so the default
+     *    is "don't show" and we only reveal once the probe says unpaid.
+     *    `plan` is what the session endpoint is expected to return; until the
+     *    backend ships it, a signed-in visitor of unknown plan is treated as
+     *    PAID (conservative — better to under-show than to show a paying
+     *    customer an ad for a cheaper plan). Signed-out is always unpaid. */
+    const PAID_PLANS = ['go', 'plus', 'pro', 'max'];
+    const isUnpaid = (user) => {
+      if (!user) return true; // signed out
+      const plan = String(user.plan || user.subscriptionTier || user.planId || '')
+        .trim()
+        .toLowerCase();
+      if (!plan) return false; // signed in, plan unknown → treat as paid
+      if (plan === 'free' || plan === 'none') return true;
+      return !PAID_PLANS.some((p) => plan === p || plan.startsWith(p + '_'));
+    };
+
+    const reveal = () => {
+      banner.removeAttribute('hidden');
+      // fixed 定位需要宿主页面让出高度
+      document.body.classList.add('go-has-announce');
+      document.documentElement.classList.add('go-banner-suppresses-campaign');
+
+      // surface_view fires on real visibility, not on mount: the banner sits at
+      // the top of the document, so this is normally immediate, but the guard
+      // keeps the contract honest if it is ever moved below the fold.
+      let seen = false;
+      const markSeen = () => {
+        if (seen) return;
+        seen = true;
+        track('surface_view', {});
+      };
+      if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                markSeen();
+                io.disconnect();
+              }
+            });
+          },
+          { threshold: 0.5 },
+        );
+        io.observe(banner);
+      } else {
+        markSeen();
+      }
+
+      const cta = banner.querySelector('[data-go-banner-cta]');
+      if (cta) {
+        cta.addEventListener('click', () => {
+          /* 每次点击生成唯一 entry_id，既进事件也进跳转 URL。
+             没有它就只能算"点了多少次"，算不出"这个入口带来多少付费"——
+             需求文档 T-03/T-04 要求 entry_id 贯穿到支付。
+             参数名是 Cloud 侧的既有契约（od_origin / od_entry_id /
+             od_entry_source / od_entry_at），不能自己另起一套，
+             否则 Cloud 校验不通过会把整条归因丢掉。 */
+          var entryId = 'od-go-banner-' + Date.now().toString(36) + '-' +
+            Math.random().toString(36).slice(2, 10);
+          var entryAt = new Date().toISOString();
+          track('ui_click', { element: 'cta', entry_id: entryId });
+          try {
+            var url = new URL(cta.getAttribute('href'), window.location.origin);
+            url.searchParams.set('od_origin', 'open_design');
+            url.searchParams.set('od_entry_id', entryId);
+            url.searchParams.set('od_entry_source', 'landing_go_banner');
+            url.searchParams.set('od_entry_at', entryAt);
+            url.searchParams.set('od_campaign_id', 'go_plan_launch');
+            cta.setAttribute('href', url.pathname + url.search);
+          } catch (e) {}
+        });
+      }
+      const close = banner.querySelector('[data-go-banner-close]');
+      if (close) {
+        close.addEventListener('click', () => {
+          track('ui_click', { element: 'close' });
+          try {
+            window.localStorage.setItem(DISMISS_KEY, '1');
+          } catch (e) {}
+          remove();
+        });
+      }
+    };
+
+    const api = (banner.getAttribute('data-api') || '').replace(/\/$/, '');
+    if (!api) {
+      // No cloud API configured on this build — nobody is signed in here.
+      reveal();
+      return;
+    }
+    fetch(api + '/api/auth/get-session', {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const user = data && data.user ? data.user : null;
+        if (isUnpaid(user) || reviewPreview) reveal();
+      })
+      .catch(() => {
+        /* 探测失败：证明不了访客未付费，正常情况下保持沉默——宁可少展示，
+           也不能把降价广告推给正在付费的用户。
+           但评审预览是显式带参数访问的，本地没有云端会话可探，
+           这时沉默会让人误以为 Banner 没做出来。 */
+        if (reviewPreview) reveal();
+      });
+  })();
+</script>

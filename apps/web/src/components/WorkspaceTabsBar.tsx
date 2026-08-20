@@ -91,6 +91,13 @@ interface Props {
   route: Route;
   projects: Project[];
   /**
+   * Right end of the top chrome. Marketing entries mount here rather than in
+   * the left rail's account area: the requirement calls for the workbench's
+   * top-right corner, and the rail moved to the left in #5517 — an entry there
+   * disappears whenever the rail collapses, which a persistent entry must not.
+   */
+  trailingSlot?: ReactNode;
+  /**
    * Persisted Workspace binding for the project currently named by `route`.
    * `null` is an authoritative unbound/local project; `undefined` means the
    * current route is not a resolved project and must not relax scope resets.
@@ -663,6 +670,7 @@ export function WorkspaceTabsBar({
   activeProjectWorkspaceId,
   onboardingCompleted = false,
   identityScopeKey,
+  trailingSlot,
 }: Props) {
   const t = useT();
   const [persistedTabsStore] = useState(readPersistedTabsStore);
@@ -1866,6 +1874,13 @@ export function WorkspaceTabsBar({
       </div>
       </>,
       )}
+      {/* 顶部工具条右端。营销入口挂这里而不是左侧 rail 的账户区：需求写的是
+          「工作台右上角」，rail 在 #5517 之后已移到左侧，挂在那里会随 rail
+          折叠一起消失——常驻入口不该这样。刻意放在 dockPortal 之外：项目路由
+          下 strip 会被传送进聊天列的 dock，这个入口必须留在 header 原位。 */}
+      {trailingSlot ? (
+        <div className="workspace-tabs-trailing">{trailingSlot}</div>
+      ) : null}
       {radialMenu ? createPortal(
         <div className="workspace-radial-layer" onMouseDown={() => setRadialMenu(null)}>
           <div

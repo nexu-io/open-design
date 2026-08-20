@@ -84,6 +84,18 @@
 .workspace-tabs-chrome .workspace-tabs-traffic {
   margin-right: var(--app-chrome-traffic-margin);
 }
+
+/* 顶部工具条右端（营销入口的宿主）。
+   `margin-left: auto` 把它顶到最右；`app-region: no-drag` 是必须的——
+   整条 chrome 是桌面端的窗口拖拽区，不解除的话按钮在桌面端点不动。 */
+.workspace-tabs-chrome .workspace-tabs-trailing {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+  -webkit-app-region: no-drag;
+}
 .workspace-tabs-new-btn {
   width: 30px;
   height: 30px;

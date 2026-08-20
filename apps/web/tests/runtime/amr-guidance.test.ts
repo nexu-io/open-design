@@ -400,12 +400,31 @@ describe('resolveRunFailureUi', () => {
       'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z. This request was not charged to Wallet Credits.',
     );
     expect(ui).toMatchObject({
-      primaryAction: 'retry',
+      // 2026-08-19 口径：按钮统一「升级套餐」，重试对滚动窗口没有意义
+      primaryAction: 'upgrade',
       titleKey: 'chat.runError.title.modelWindowLimit',
       messageKey: 'chat.runError.modelWindowLimitMessage',
       showSwitchCard: false,
     });
     expect(ui.messageVars?.retryAt).toBe('2026-08-12T06:34:47Z');
+  });
+
+  // 需求文档「客户端进行排队提示」：两档文案不同。Plus 及以上有池外模型
+  // 可切，文案追加「可切换其他模型继续」；Go / 未知档位不提切换——
+  // 承诺一个不存在的退路比不承诺更糟。
+  it('appends the switch hint for Plus and above, never for Go', () => {
+    const raw =
+      'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z.';
+    for (const tier of ['plus', 'pro', 'max']) {
+      const ui = resolveRunFailureUi('RATE_LIMITED', 'model_window_limit', 'amr', raw, tier);
+      expect(ui.messageKey).toBe('chat.runError.modelWindowLimitSwitchMessage');
+      expect(ui.primaryAction).toBe('upgrade');
+    }
+    for (const tier of ['go', 'free', null, undefined]) {
+      const ui = resolveRunFailureUi('RATE_LIMITED', 'model_window_limit', 'amr', raw, tier);
+      expect(ui.messageKey).toBe('chat.runError.modelWindowLimitMessage');
+      expect(ui.primaryAction).toBe('upgrade');
+    }
   });
 
   // Same classification without a readable instant (older CLI, or upstream

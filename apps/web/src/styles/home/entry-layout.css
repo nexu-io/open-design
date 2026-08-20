@@ -5696,6 +5696,46 @@
 .entry-nav-rail__account-updater:empty {
   display: none;
 }
+
+/* Go plan 营销入口（工作台右上角）。规格对齐评审通过的原型 .gp-badge：
+   全圆角药丸、浅绿底、深绿字、尾部箭头、hover 上浮 1px。 */
+.entry-nav-rail__go-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 11px 7px 13px;
+  border: 1px solid color-mix(in srgb, var(--brand) 42%, var(--border, rgb(0 0 0 / 12%)));
+  border-radius: var(--radius-pill, 999px);
+  color: var(--brand-text);
+  background: color-mix(in srgb, var(--brand-soft) 82%, var(--bg-panel, #fff));
+  box-shadow: 0 1px 2px rgb(20 22 18 / 6%);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.entry-nav-rail__go-entry:hover {
+  border-color: color-mix(in srgb, var(--brand) 70%, var(--border, rgb(0 0 0 / 12%)));
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+}
+.entry-nav-rail__go-entry:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.entry-nav-rail__go-entry-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-nav-rail__go-entry-arrow {
+  flex: none;
+  color: var(--brand-text);
+}
 /* Unread-messages red dot riding the account avatar's top-right corner. */
 .entry-nav-rail__account-avatar-dot {
   position: absolute;

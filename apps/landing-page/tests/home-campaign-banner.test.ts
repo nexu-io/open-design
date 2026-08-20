@@ -23,11 +23,9 @@ test('home campaign banner keeps only the arrow visible while preserving an acce
   assert.doesNotMatch(source, /限时抢购/);
   assert.match(campaign, /linkLabel: '查看活动权益'/);
   assert.match(campaign, /windowLabel: '活动倒计时'/);
-  assert.match(source, /home-campaign-banner__badge/);
-  assert.match(source, /data-home-campaign-countdown/);
-  assert.match(source, /data-campaign-window-label/);
+  assert.doesNotMatch(source, /home-campaign-banner__badge/);
+  assert.doesNotMatch(source, /data-home-campaign-countdown/);
   assert.doesNotMatch(source, /距开始/);
-  assert.match(source, /background:\s*#68f22e/);
   assert.match(source, /home-campaign-banner__cta/);
   assert.match(source, /<span class="home-campaign-banner__cta" aria-hidden="true">→<\/span>/);
   assert.doesNotMatch(source, /\{campaignCopy\.cta\}/);
@@ -61,11 +59,12 @@ test('home campaign banner uses the fixed two-week activity window', () => {
   assert.match(source, /now >= startAt && now < endAt/);
   assert.match(source, /data-home-campaign-banner[^>]*hidden/);
   assert.match(source, /home-campaign-banner-active/);
-  assert.match(homeCampaign, /这次，顶级智能放开用。/);
-  assert.match(homeCampaign, /這次，頂級智能放開用。/);
-  assert.match(homeCampaign, /DeepSeek V4 Pro 与 V4 Flash · 两周免费用/);
+  assert.match(homeCampaign, /这次，顶级智能无限用。/);
+  assert.match(homeCampaign, /這次，頂級智能無限用。/);
+  assert.match(homeCampaign, /DeepSeek V4 Pro 与 V4 Flash 等模型无限用/);
   assert.match(homeCampaign, /最高峰の知性/);
   assert.match(campaign, /DeepSeek V4 Pro and V4 Flash · FREE for two weeks/);
+  assert.match(homeCampaign, /DeepSeek V4 Pro, V4 Flash and more — unlimited/);
   for (const locale of ['en', 'zh', 'ja', 'ko', 'de', 'fr', 'ru', 'es', 'pt-br', 'it', 'tr']) {
     assert.match(campaign, new RegExp(`^  ['"]?${locale.replace('-', '\\-')}['"]?: \\{`, 'm'));
   }

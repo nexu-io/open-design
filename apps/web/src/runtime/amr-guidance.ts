@@ -203,6 +203,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.rateLimitedMessage'
   | 'chat.runError.modelWindowLimitMessage'
   | 'chat.runError.modelWindowLimitMessageNoTime'
+  | 'chat.runError.modelWindowLimitSwitchMessage'
+  | 'chat.runError.modelWindowLimitSwitchMessageNoTime'
   | 'chat.runError.upstreamUnavailableMessage'
   | 'chat.runError.toolLoopMessage'
   | 'chat.runError.outputInvalidMessage'
@@ -270,7 +272,9 @@ export interface RunFailureUi {
  */
 export type ModelWindowLimitMessageKey =
   | 'chat.runError.modelWindowLimitMessage'
-  | 'chat.runError.modelWindowLimitMessageNoTime';
+  | 'chat.runError.modelWindowLimitMessageNoTime'
+  | 'chat.runError.modelWindowLimitSwitchMessage'
+  | 'chat.runError.modelWindowLimitSwitchMessageNoTime';
 
 /**
  * The copy a rolling model-window rejection should render, or null when the
@@ -498,6 +502,12 @@ export function resolveRunFailureUi(
   detail: string | null | undefined,
   agentId: string | null | undefined,
   rawMessage?: string | null,
+  /**
+   * 当前 workspace 的套餐档位。只有 model_window_limit 分支读它：两档的
+   * 文案与含义不同（需求文档「客户端进行排队提示」，2026-08-19 口径）。
+   * 可选参数，缺省走 Go 的保守文案——没有池外模型可切的档位适用。
+   */
+  planTier?: string | null,
 ): RunFailureUi {
   // Agent-agnostic codes resolve first so an AMR/Antigravity run that hits one
   // of them still gets the specific guidance instead of the generic fallback.
@@ -515,12 +525,24 @@ export function resolveRunFailureUi(
     // that the daemon still classified must not silently lose the card.
     const parsed = readModelWindowResetAt(rawMessage);
     const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
+    /* 两档提示（需求文档「客户端进行排队提示」）：
+       - Go（及未知档位）：等待重置或升级——没有池外模型可切，文案不提切换
+       - Plus 及以上：同文案 + 「可切换其他模型继续」，切换由用户自己做
+         （产品口径 2026-08-17，不代替用户切换）
+       按钮统一为「升级套餐」（2026-08-19 口径）；点击埋点在 ChatPane 侧
+       以 tier_has_fallback 区分两档。 */
+    const hasFallbackModels =
+      planTier === 'plus' || planTier === 'pro' || planTier === 'max';
     return {
-      primaryAction: 'retry',
+      primaryAction: 'upgrade',
       titleKey: 'chat.runError.title.modelWindowLimit',
       messageKey: retryAt
-        ? 'chat.runError.modelWindowLimitMessage'
-        : 'chat.runError.modelWindowLimitMessageNoTime',
+        ? (hasFallbackModels
+          ? 'chat.runError.modelWindowLimitSwitchMessage'
+          : 'chat.runError.modelWindowLimitMessage')
+        : (hasFallbackModels
+          ? 'chat.runError.modelWindowLimitSwitchMessageNoTime'
+          : 'chat.runError.modelWindowLimitMessageNoTime'),
       ...(retryAt ? { messageVars: { retryAt } } : {}),
       secondaryRetry: false,
       showSwitchCard: false,

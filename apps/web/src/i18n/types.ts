@@ -2852,6 +2852,19 @@ export interface Dict {
   'chat.amrError.balanceMessage': string;
   'chat.amrError.authorizeCta': string;
   'chat.amrError.rechargeCta': string;
+  /* Go plan launch modal on the workbench home (marketing touchpoint #3).
+     Unpaid workspaces only; paid ones keep the DeepSeek campaign modal. */
+  'home.goUpsell.title': string;
+  'home.goUpsell.message': string;
+  'home.goUpsell.benefitsTitle': string;
+  'home.goUpsell.benefit1': string;
+  'home.goUpsell.benefit2': string;
+  'home.goUpsell.benefit3': string;
+  'home.goUpsell.benefit4': string;
+  'home.goUpsell.primaryCta': string;
+  'home.goBadge.label': string;
+  'home.goBadge.labelPromo': string;
+  'home.goBadge.aria': string;
   'chat.amrBalanceGate.title': string;
   'chat.amrBalanceGate.message': string;
   'chat.amrBalanceGate.benefitsTitle': string;
@@ -2916,6 +2929,8 @@ export interface Dict {
   'chat.runError.rateLimitedMessage': string;
   'chat.runError.modelWindowLimitMessage': string;
   'chat.runError.modelWindowLimitMessageNoTime': string;
+  'chat.runError.modelWindowLimitSwitchMessage': string;
+  'chat.runError.modelWindowLimitSwitchMessageNoTime': string;
   'chat.runError.upstreamUnavailableMessage': string;
   'chat.runError.toolLoopMessage': string;
   'chat.runError.outputInvalidMessage': string;

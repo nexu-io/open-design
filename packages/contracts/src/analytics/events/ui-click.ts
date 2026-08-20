@@ -1624,7 +1624,68 @@ export interface SettingsExternalMcpClickProps {
 }
 
 // Discriminated union of every supported ui_click payload.
+/**
+ * Clicks inside the Go plan upsell modal (marketing touchpoint #3).
+ *
+ * `primary_cta` is the conversion for this touchpoint — it routes to the plan
+ * chooser, where the existing purchase funnel takes over, so no separate result
+ * event is emitted here. `method` distinguishes how a dismissal happened; it is
+ * only present on `element: 'close'`.
+ */
+export interface GoUpsellModalClickProps {
+  page_name: 'home';
+  area: 'go_upsell_modal';
+  element: 'primary_cta' | 'close';
+  audience: 'unpaid';
+  method?: 'close_button' | 'backdrop' | 'esc';
+  /** 固定活动 ID（`go_plan_launch`）。看板按活动筛选靠它，缺失即整条漏掉。 */
+  campaign_id: string;
+}
+
+/**
+ * Click on the Go plan entry in the nav rail's account area (marketing
+ * touchpoint #4, 「工作台右上角入口」).
+ *
+ * UNPAID ONLY, same split as the modal: a paying workspace keeps the DeepSeek
+ * entry that is already live and never mounts this one.
+ *
+ * `has_new_badge` records whether the NEW dot was still on the entry at click
+ * time. It is the dimension that answers whether the dot is doing any work —
+ * without it, first-sight clicks and later deliberate returns collapse into one
+ * undifferentiated number and the dot can never be evaluated or retired.
+ */
+export interface GoNavEntryClickProps {
+  page_name: 'home';
+  area: 'go_badge';
+  element: 'badge';
+  audience: 'unpaid';
+  /** 固定活动 ID（`go_plan_launch`）。看板按活动筛选靠它，缺失即整条漏掉。 */
+  campaign_id: string;
+}
+
+/**
+ * Clicks on the 5-hour popular-model limit card in chat（需求文档触点 ⑤⑥）.
+ *
+ * `tier_has_fallback` 是唯一能把两档拆开的维度：false = Go（阻断式，没有
+ * 池外模型可切），true = Plus 及以上（告知式，可自行切换）。两档的升级
+ * 点击含义相反，混在一个桶里谁都评估不了。
+ * `switch_retry` 预留给告知卡未来的重试信号，当前实现只发 `upgrade`。
+ */
+export interface GoLimitCardClickProps {
+  page_name: 'chat_panel';
+  area: 'go_limit_card';
+  element: 'upgrade' | 'switch_retry';
+  tier_has_fallback: boolean;
+  project_id: string;
+  conversation_id: string | null;
+  assistant_message_id: string;
+  run_id: string | null;
+}
+
 export type UiClickProps =
+  | GoLimitCardClickProps
+  | GoNavEntryClickProps
+  | GoUpsellModalClickProps
   | EntryNavigationClickProps
   | AccountMenuClickProps
   | WorkspaceSwitcherClickProps

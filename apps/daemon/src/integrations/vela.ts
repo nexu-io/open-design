@@ -59,6 +59,11 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'avatar_amr_agent_card',
   'artifact_success_upgrade',
   'home_artifact_upgrade',
+  // Go plan 营销触点。fail-closed：不在这张表里的来源，整条 entry 判 null
+  // 丢弃且不报错——Open Design 侧新增 entry source 必须同步这里。
+  'home_go_upsell_modal',
+  'home_go_badge',
+  'chat_go_limit_upgrade',
 ]);
 
 function isCanonicalAmrAuthAttemptId(value: unknown): value is string {
@@ -92,6 +97,7 @@ const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
 const AMR_ENTRY_CAMPAIGN_IDS: ReadonlySet<TrackingCampaignId> = new Set([
   'deepseek_v4_flash',
   'deepseek_v4_pro',
+  'go_plan_launch',
 ]);
 
 const AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES: ReadonlySet<TrackingCampaignConversionSource> =
@@ -140,6 +146,10 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   avatar_amr_agent_card: 'chat_panel',
   artifact_success_upgrade: 'artifact',
   home_artifact_upgrade: 'home',
+  // Go plan 营销触点（工作台弹窗 / 右上角入口），都在 home 面上
+  home_go_upsell_modal: 'home',
+  home_go_badge: 'home',
+  chat_go_limit_upgrade: 'chat_panel',
 };
 
 const AMR_ANALYTICS_EVENTS_URL =

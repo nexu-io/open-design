@@ -9,6 +9,11 @@ import type {
   PageViewProps,
   HelpPopoverSurfaceViewProps,
   SettingsPopoverSurfaceViewProps,
+  GoUpsellModalSurfaceViewProps,
+  GoUpsellModalClickProps,
+  GoNavEntrySurfaceViewProps,
+  GoNavEntryClickProps,
+  GoLimitCardClickProps,
   NewProjectModalSurfaceViewProps,
   PluginReplacementModalSurfaceViewProps,
   PluginDetailModalSurfaceViewProps,
@@ -293,6 +298,37 @@ export function trackNewProjectModalSurfaceView(
   props: NewProjectModalSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
+}
+
+/** Go plan upsell modal impression — unpaid workspaces only (touchpoint #3). */
+export function trackGoUpsellModalSurfaceView(
+  track: Track,
+  props: GoUpsellModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+/** Clicks inside the Go plan upsell modal: primary CTA or dismissal. */
+export function trackGoUpsellModalClick(track: Track, props: GoUpsellModalClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+/** Go plan nav-rail entry impression — unpaid workspaces only (touchpoint #4). */
+export function trackGoNavEntrySurfaceView(
+  track: Track,
+  props: GoNavEntrySurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+/** Click on the Go plan nav-rail entry; routes to the console plan chooser. */
+export function trackGoNavEntryClick(track: Track, props: GoNavEntryClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+/** 5 小时限额卡的点击（Go 阻断卡 / Plus+ 告知卡共用，tier_has_fallback 拆档）。 */
+export function trackGoLimitCardClick(track: Track, props: GoLimitCardClickProps): void {
+  send(track, 'ui_click', props);
 }
 
 export function trackPluginReplacementModalSurfaceView(

@@ -39,6 +39,9 @@ vi.mock('../../src/components/EntryNavRail', () => ({
   WorkspaceTopRightAccountCluster: ({ updaterSlot }: { updaterSlot?: ReactNode }) => (
     <div data-testid="project-top-right-account-cluster">{updaterSlot}</div>
   ),
+  // App.tsx 直接 import 这个工具函数给 Go 入口用；mock 掉模块后必须补导出，
+  // 返回 null 即可——null 让 GoNavEntry 直接不渲染，与这些用例无关。
+  workspaceUpgradeUrl: () => null,
 }));
 
 vi.mock('../../src/components/EntryView', () => ({

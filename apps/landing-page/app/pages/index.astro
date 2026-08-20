@@ -10,6 +10,7 @@ import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
 import DownloadEngagementPrompt from '../_components/download-engagement-prompt.astro';
+import GoBanner from '../_components/go-banner.astro';
 import HomeLaunchWeekFloat from '../_components/home-launch-week-float.astro';
 import {
   heroBgImage,
@@ -125,11 +126,8 @@ const campaignPricingHref = localePath(locale, '/pricing/');
 const campaignContent = getPricingCampaignContent(locale);
 const homeCampaignContent = getHomeCampaignContent(locale);
 const campaignCopy = {
-  badge: campaignContent.windowLabel,
   title: homeCampaignContent.title,
   detail: homeCampaignContent.detail,
-  windowLabel: campaignContent.windowLabel,
-  dayUnit: campaignContent.dayUnit,
   linkLabel: campaignContent.linkLabel,
   closeLabel: campaignContent.closeLabel,
 };
@@ -230,10 +228,11 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     <script is:inline type="application/ld+json" set:html={JSON.stringify(homepageGraph)} />
   </head>
   <body>
-    <div class="home-campaign-banner" data-home-campaign-banner data-campaign-window-label={campaignCopy.windowLabel} data-campaign-day-unit={campaignCopy.dayUnit} data-campaign-start-at={DEEPSEEK_V4_PRO_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive} hidden>
+    <GoBanner locale={locale} />
+    <div class="home-campaign-banner" data-home-campaign-banner data-campaign-start-at={DEEPSEEK_V4_PRO_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive} hidden>
       <a class="home-campaign-banner__link" href={campaignPricingHref} aria-label={`${campaignCopy.title} · ${campaignCopy.linkLabel}`}>
-        <span class="home-campaign-banner__badge" data-home-campaign-countdown>{campaignCopy.badge}</span>
-        <span class="home-campaign-banner__divider" aria-hidden="true">|</span>
+        {/* 倒计时已按 2026-08-19 口径移除；脚本对 countdown 缺失有空值
+            保护，活动起止仍由 data-campaign-*-at 控制显示与下线。 */}
         <strong>{campaignCopy.title}</strong>
         <span class="home-campaign-banner__divider" aria-hidden="true">|</span>
         <span class="home-campaign-banner__detail">{campaignCopy.detail}</span>
@@ -247,6 +246,9 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     <style is:global>
       :root { --home-campaign-banner-height: 0px; }
       html.home-campaign-banner-active { --home-campaign-banner-height: 44px; }
+      /* 与 PR #6881 的版本发布条互斥（同 go-banner 内的规则）：
+         活动期头部只保留活动条，发布条让位；活动下线后自动恢复。 */
+      html.home-campaign-banner-active .hm-announce { display: none !important; }
       .home-campaign-banner {
         position: fixed;
         z-index: 70;
@@ -272,18 +274,6 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         padding: 8px 64px 8px 24px;
         color: inherit;
         text-decoration: none;
-      }
-      .home-campaign-banner__badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 4px 9px;
-        border-radius: 999px;
-        color: #102b05;
-        background: #68f22e;
-        font-size: 11px;
-        font-weight: 800;
-        font-variant-numeric: tabular-nums;
-        white-space: nowrap;
       }
       .home-campaign-banner__divider { color: color-mix(in srgb, var(--ink) 26%, transparent); }
       .home-campaign-banner__detail { color: var(--ink-mute); }
@@ -341,22 +331,9 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         const dismissKey = 'open-design:home-campaign-banner-dismissed:deepseek-v4-pro-fixed-window-countdown-v1';
         const banner = document.querySelector('[data-home-campaign-banner]');
         const campaignLink = banner?.querySelector('.home-campaign-banner__link');
-        const countdown = document.querySelector('[data-home-campaign-countdown]');
         const close = document.querySelector('[data-home-campaign-close]');
-        const windowLabel = banner?.getAttribute('data-campaign-window-label') || 'Ends in';
-        const dayUnit = banner?.getAttribute('data-campaign-day-unit') || 'd';
         const startAt = Date.parse(banner?.getAttribute('data-campaign-start-at') || '');
         const endAt = Date.parse(banner?.getAttribute('data-campaign-end-at') || '');
-
-        const formatRemaining = (remainingMs) => {
-          const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
-          const days = Math.floor(totalSeconds / 86400);
-          const hours = Math.floor((totalSeconds % 86400) / 3600);
-          const minutes = Math.floor((totalSeconds % 3600) / 60);
-          const seconds = totalSeconds % 60;
-          const time = `${days}${dayUnit} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-          return time;
-        };
 
         let dismissed = false;
         try {
@@ -372,9 +349,10 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           const visible = active && !dismissed;
           if (banner) banner.hidden = !visible;
           document.documentElement.classList.toggle('home-campaign-banner-active', visible);
-          if (!active || !countdown) return active;
-          const remainingMs = endAt - now;
-          countdown.textContent = `${windowLabel} ${formatRemaining(remainingMs)}`;
+          if (!active) return active;
+          /* 倒计时 DOM 已移除（2026-08-19 口径）。曝光上报原先挂在倒计时
+             更新之后、被 !countdown 的早退挡着——DOM 一删曝光就静默消失，
+             所以这里把两者解耦：倒计时节点存在才更新文本，曝光独立触发。 */
           if (visible && !impressionTracked && typeof window.__odTrack === 'function') {
             impressionTracked = true;
             window.__odTrack('surface_view', {

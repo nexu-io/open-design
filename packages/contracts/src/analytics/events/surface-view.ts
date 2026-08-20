@@ -112,6 +112,14 @@ export interface RunFailedToastSurfaceViewProps {
   area: 'chat_panel';
   element: 'run_failed_toast';
   error_code: string;
+  /**
+   * daemon 的细分类。加它是因为 error_code 太粗：5 小时限额卡与普通 429
+   * 同为 RATE_LIMITED，不带 detail 的话限额卡的曝光拆不出来，
+   * 点击率（触点 ⑤⑥ 漏斗的分母）就无从计算。
+   */
+  failure_detail?: string;
+  /** 仅 failure_detail=model_window_limit 时上报：false=Go 阻断卡 / true=Plus+ 告知卡。 */
+  tier_has_fallback?: boolean;
   project_id: string;
   project_kind: TrackingProjectKind | null;
   conversation_id: string | null;
@@ -265,7 +273,41 @@ export interface StudioOnboardingHintSurfaceViewProps {
   feature_id?: string;
 }
 
+/**
+ * Go plan upsell modal on the workbench home (marketing touchpoint #3).
+ *
+ * UNPAID ONLY: paid workspaces keep the DeepSeek campaign modal that is already
+ * live, so `audience` is pinned to `unpaid` — a paid workspace never renders
+ * this surface and therefore never emits this event.
+ */
+export interface GoUpsellModalSurfaceViewProps {
+  page_name: 'home';
+  area: 'go_upsell_modal';
+  audience: 'unpaid';
+  /** 固定活动 ID（`go_plan_launch`）。看板按活动筛选靠它，缺失即整条漏掉。 */
+  campaign_id: string;
+}
+
+/**
+ * Impression of the Go plan entry in the nav rail account area (touchpoint #4).
+ *
+ * Fires once per mount, which for this surface means once per workbench session
+ * — the entry is persistent chrome, not a popup, so a per-render event would
+ * count scroll and re-render noise rather than exposure. Pairs with
+ * `GoNavEntryClickProps` to give the entry its own CTR, separate from the
+ * modal's.
+ */
+export interface GoNavEntrySurfaceViewProps {
+  page_name: 'home';
+  area: 'go_badge';
+  audience: 'unpaid';
+  /** 固定活动 ID（`go_plan_launch`）。看板按活动筛选靠它，缺失即整条漏掉。 */
+  campaign_id: string;
+}
+
 export type SurfaceViewProps =
+  | GoNavEntrySurfaceViewProps
+  | GoUpsellModalSurfaceViewProps
   | WorkspaceSurfaceViewProps
   | RunFailedToastSurfaceViewProps
   | RunRecoveryActionSurfaceViewProps

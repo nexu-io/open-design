@@ -34,6 +34,8 @@ import type {
   WorkspaceProjectSummary,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
+import { GoNavEntry } from './components/GoNavEntry';
+import { workspaceUpgradeUrl } from './components/EntryNavRail';
 import { EntryView } from './components/EntryView';
 import type { ProjectTitleHint } from './components/EntryShell';
 import type { IntegrationTab } from './components/IntegrationsView';
@@ -110,6 +112,7 @@ import {
   amrLoginStatusEventReason,
   isAmrSessionAuthenticated,
 } from './components/amrLoginPolling';
+import { resolvePlanLabelTier } from './collab/team-plan';
 import { CollabDemoView } from './collab/CollabDemoView';
 import {
   WorkspaceMemberDirectoryPreloader,
@@ -5384,6 +5387,19 @@ function AppInner() {
           }
           onboardingCompleted={config.onboardingCompleted === true}
           identityScopeKey={workspaceTabsIdentityScopeKey}
+          trailingSlot={(
+            <GoNavEntry
+              upgradeUrl={workspaceUpgradeUrl(workspaceContext, workspaceBilling)}
+              isUnpaid={
+                resolvePlanLabelTier({
+                  billing: workspaceBilling,
+                  context: workspaceContext,
+                }) === 'free'
+              }
+              metricsConsent={config.telemetry?.metrics === true}
+              installationId={config.installationId}
+            />
+          )}
         />
         {/* Avatar + credits keep their home-view spot (the fixed top-right
             corner over the tabs chrome) while a project tab is open, even

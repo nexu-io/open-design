@@ -95,7 +95,8 @@ import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { BrandsTab } from './BrandsTab';
-import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
+import { EntryNavRail, workspaceUpgradeUrl, type EntryView as EntryViewKind } from './EntryNavRail';
+import { resolvePlanLabelTier } from '../collab/team-plan';
 import {
   buildProjectSearchCatalog,
   ProjectSearchModal,
@@ -114,6 +115,7 @@ import { UpdaterPopup } from './UpdaterPopup';
 import { WhatsNewPopup } from './WhatsNewPopup';
 import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
+import { GoUpsellModal, useGoUpsellModal } from './GoUpsellModal';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
@@ -158,7 +160,6 @@ import {
   workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
-import { resolvePlanLabelTier } from '../collab/team-plan';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
 import {
@@ -692,6 +693,18 @@ export function EntryShell({
     workspaceBillingResponse,
     workspaceContext,
   );
+
+  /* Go plan launch modal (marketing touchpoint #3) — UNPAID workspaces only.
+     `resolvePlanLabelTier` answers 'free' exactly when no plan is in force, so
+     it is the same source the rail's plan nameplate reads; anything else means
+     the workspace already pays and must keep the DeepSeek campaign instead. */
+  const goPlanLabelTier = resolvePlanLabelTier({
+    billing: workspaceBilling,
+    context: workspaceContext,
+  });
+  const goUpsellUnpaid = goPlanLabelTier === 'free';
+  const goUpsell = useGoUpsellModal(goUpsellUnpaid, view === 'home');
+  const goUpsellUpgradeUrl = workspaceUpgradeUrl(workspaceContext, workspaceBilling);
   // Team-wide shared-project discovery for the "全部项目" view. The member's own
   // `projects` prop is only their LOCAL list; team-shared projects come from the
   // resource hub through the daemon. Empty off-team / when the hub is unconfigured.
@@ -1703,6 +1716,14 @@ export function EntryShell({
               lives in the rail footer, and everything below is fixed-position
               or portalled so it occupies no layout space here. */}
           <WhatsNewPopup active={view === 'home'} />
+          {goUpsell.open ? (
+            <GoUpsellModal
+              upgradeUrl={goUpsellUpgradeUrl}
+              metricsConsent={config.telemetry?.metrics === true}
+              installationId={config.installationId}
+              onClose={goUpsell.close}
+            />
+          ) : null}
           {/* DeepSeek campaign badge moved into EntryNavRail's top-right
               cluster (topRightSlot above) so it sits beside the account
               module in one flex row. */}
