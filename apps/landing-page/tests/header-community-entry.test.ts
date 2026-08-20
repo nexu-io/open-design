@@ -13,45 +13,46 @@ const headerSource = readFileSync(
 );
 const stylesSource = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
 
-const ukrainianHeader = renderToStaticMarkup(
-  createElement(Header, {
-    counts: { skills: 100, systems: 10, templates: 20, craft: 5 },
-    github: { starsLabel: '83K+' },
-    locale: 'uk',
-    localeSwitcher: {
-      label: 'Змінити мову',
-      prefix: '',
-      shortLabel: 'UK',
-      options: [
-        {
-          code: 'uk',
-          href: '/uk/',
-          htmlLang: 'uk',
-          label: 'Українська',
-        },
-      ],
-    },
-  }),
-);
-
-test('community entry moves into the drawer without overflowing long localized labels', () => {
-  assert.match(
-    headerSource,
-    /<li className='nav-community-mobile-entry'>[\s\S]*?className='nav-community-mobile-cta'[\s\S]*?className='nav-community-mobile-benefits'/,
+const counts = { skills: 100, systems: 10, templates: 20, craft: 5 };
+const render = (locale: 'zh' | 'zh-tw' | 'en' | 'uk') =>
+  renderToStaticMarkup(
+    createElement(Header, { counts, github: { starsLabel: '83K+' }, locale }),
   );
-  assert.match(headerSource, /cta: 'Приєднатися до Discord'/);
+
+test('community entry is a plain word: Feishu group (zh / zh-tw) with a hover QR, Discord elsewhere', () => {
+  const zh = render('zh');
+  assert.match(zh, /class="nav-community-cta"[^>]*data-community-platform="feishu"[^>]*>飞书群</);
+  assert.match(zh, /class="nav-community-qr-card"/);
+  assert.match(zh, /src="\/community\/feishu-group-qr\.png"/);
+
+  const zhTw = render('zh-tw');
+  assert.match(zhTw, />飛書群</);
+  assert.match(zhTw, /class="nav-community-qr-card"/);
+
+  const en = render('en');
+  assert.match(en, /class="nav-community-cta"[^>]*data-community-platform="discord"[^>]*>Discord</);
+  assert.doesNotMatch(en, /nav-community-qr-card/);
+
+  // No persistent benefit list, no framed pill, no header language switcher.
+  assert.doesNotMatch(headerSource, /benefits/);
+  assert.doesNotMatch(zh, /locale-switch/);
+  assert.doesNotMatch(stylesSource, /\.nav-community-cta\s*\{[^}]*border-radius:\s*999px/s);
+  assert.match(stylesSource, /\.nav-community-entry:hover \.nav-community-qr-card/);
+});
+
+test('Discord / Feishu no longer duplicate inside the Community dropdown', () => {
+  const en = render('en');
+  assert.doesNotMatch(en, /<span class="dropdown-name">Discord<\/span>/);
+  assert.doesNotMatch(en, /<span class="dropdown-name">Feishu<\/span>/);
+});
+
+test('community entry moves into the drawer at compact widths', async (t) => {
   assert.match(stylesSource, /\.nav-community-mobile-entry\s*\{\s*display:\s*none;/);
   assert.match(
     stylesSource,
     /@media \(max-width: 1366px\)[\s\S]*?\.nav-side \.nav-community-entry\s*\{\s*display:\s*none;\s*\}[\s\S]*?\.nav-links \.nav-community-mobile-entry\s*\{[^}]*display:\s*grid;/,
   );
-  assert.match(
-    stylesSource,
-    /\.nav-links \.nav-community-mobile-cta\s*\{[^}]*max-width:\s*100%;[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s,
-  );
-});
 
-test('longest-label community entry stays inside the rendered header at its boundary widths', async (t) => {
   const localChrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   const browser = await chromium.launch({
     headless: true,
@@ -62,7 +63,7 @@ test('longest-label community entry stays inside the rendered header at its boun
   const context = await browser.newContext({ viewport: { width: 1081, height: 900 } });
   const page = await context.newPage();
   await page.setContent(
-    `<!doctype html><html lang="uk"><head><style>${stylesSource}</style></head><body><div class="site-chrome is-condensed">${ukrainianHeader}</div></body></html>`,
+    `<!doctype html><html lang="uk"><head><style>${stylesSource}</style></head><body><div class="site-chrome is-condensed">${render('uk')}</div></body></html>`,
   );
 
   const readLayout = async (width: number) => {
@@ -70,36 +71,18 @@ test('longest-label community entry stays inside the rendered header at its boun
     await page.evaluate(`document.querySelector('header.nav').classList.add('is-open')`);
     await page.waitForTimeout(250);
     return page.evaluate(`(() => {
-      const nav = document.querySelector('header.nav');
-      const inner = document.querySelector('.nav-inner');
       const toggle = document.querySelector('.nav-toggle');
       const desktopEntry = document.querySelector('.nav-side .nav-community-entry');
       const drawerEntry = document.querySelector('.nav-community-mobile-entry');
-      if (!nav || !inner || !toggle || !desktopEntry || !drawerEntry) {
-        throw new Error('header layout fixture is incomplete');
-      }
-
+      if (!toggle || !desktopEntry || !drawerEntry) throw new Error('header layout fixture is incomplete');
       const isVisible = (element) => {
         const style = getComputedStyle(element);
-        const rect = element.getBoundingClientRect();
-        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0;
+        return style.display !== 'none' && style.visibility !== 'hidden' && element.getBoundingClientRect().width > 0;
       };
-      const innerRect = inner.getBoundingClientRect();
-      const rowChildren = Array.from(inner.children).filter((element) => {
-        return isVisible(element) && getComputedStyle(element).position !== 'absolute';
-      });
-      const rowRects = rowChildren
-        .map((element) => element.getBoundingClientRect())
-        .sort((a, b) => a.left - b.left);
-      const rowFits =
-        rowRects.every((rect) => rect.left >= innerRect.left - 1 && rect.right <= innerRect.right + 1) &&
-        rowRects.every((rect, index) => index === 0 || rowRects[index - 1].right <= rect.left + 1);
-
       return {
         desktopEntryVisible: isVisible(desktopEntry),
         drawerEntryText: drawerEntry.innerText,
         drawerEntryVisible: isVisible(drawerEntry),
-        rowFits,
         toggleVisible: isVisible(toggle),
       };
     })()`);
@@ -109,12 +92,10 @@ test('longest-label community entry stays inside the rendered header at its boun
   assert.equal(compact.toggleVisible, true);
   assert.equal(compact.desktopEntryVisible, false);
   assert.equal(compact.drawerEntryVisible, true);
-  assert.match(compact.drawerEntryText, /Приєднатися до Discord/);
-  assert.equal(compact.rowFits, true);
+  assert.match(compact.drawerEntryText, /Discord/);
 
   const desktop = await readLayout(1367);
   assert.equal(desktop.toggleVisible, false);
   assert.equal(desktop.desktopEntryVisible, true);
   assert.equal(desktop.drawerEntryVisible, false);
-  assert.equal(desktop.rowFits, true);
 });

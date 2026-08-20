@@ -1197,96 +1197,81 @@ a.nav-mega-col-head.is-active {
 .nav-community-mobile-entry {
   display: none;
 }
+/* Plain text entry — reads like the other nav words, no pill / border. */
 .nav-community-cta {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 8px 12px;
-  border: 1px solid rgba(26, 26, 26, 0.16);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 2px 7px rgba(17, 17, 26, 0.06);
+  padding: 6px 2px;
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  border-bottom: 1px solid transparent;
+  transition: color 160ms ease, border-color 160ms ease;
 }
-.nav-community-cta:hover {
-  border-color: rgba(26, 26, 26, 0.3);
-  background: #fff;
-  box-shadow: 0 4px 11px rgba(17, 17, 26, 0.09);
-  transform: translateY(-1px);
+.nav-community-cta:hover,
+.nav-community-entry:focus-within .nav-community-cta {
+  color: var(--coral);
+  border-bottom-color: var(--coral);
 }
 .nav-community-cta:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 3px;
 }
-.nav-community-cta-icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  color: #3370ff;
-}
-.nav-community-cta-icon path:first-child {
-  fill: color-mix(in srgb, currentColor 10%, transparent);
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-}
-.nav-community-cta-icon path:last-child {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-}
-.nav-community-benefits-card {
+/* Feishu group QR — hidden until the entry is hovered / focused. A hover
+   bridge (::before) covers the gap so the cursor can travel down to the card. */
+.nav-community-qr-card {
   position: absolute;
   z-index: 60;
-  top: calc(100% + 11px);
-  right: 0;
-  width: 278px;
-  max-width: calc(100vw - 24px);
-  padding: 12px 14px;
+  top: calc(100% + 10px);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 196px;
+  padding: 14px 14px 12px;
   border: 1px solid rgba(26, 26, 26, 0.11);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.94);
+  background: #fff;
   box-shadow:
     0 8px 24px rgba(17, 17, 26, 0.08),
     0 2px 5px rgba(17, 17, 26, 0.04);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  color: var(--ink);
+  color: var(--ink-soft);
   font-family: var(--sans);
   font-size: 11.5px;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
+  pointer-events: none;
 }
-.nav-community-benefits-card ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.nav-community-qr-card::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
 }
-.nav-community-benefits-card li {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
+.nav-community-entry:hover .nav-community-qr-card,
+.nav-community-entry:focus-within .nav-community-qr-card {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
 }
-.nav-community-benefits-dot {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 6px;
-  margin-top: 4.5px;
-  border-radius: 50%;
-  background: var(--coral);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--coral) 16%, transparent);
+.nav-community-qr-img {
+  display: block;
+  width: 168px;
+  height: 168px;
+  border-radius: 8px;
 }
 .nav-cta {
   display: inline-flex;
@@ -1619,6 +1604,78 @@ a.nav-mega-col-head.is-active {
   margin: 48px 0 0;
 }
 .hero-shot-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 80px -40px rgba(38, 38, 38, 0.28);
+}
+/* First-screen video facade (YouTube, click-to-play). Same frame treatment
+   as the product shot it replaced; the iframe is injected on demand. */
+.hero-video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #0b0b0b;
+  box-shadow: 0 30px 80px -40px rgba(38, 38, 38, 0.28);
+  cursor: pointer;
+}
+.hero-video-frame:focus-visible { outline: 2px solid var(--coral); outline-offset: 4px; }
+.hero-video-poster {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 400ms ease;
+}
+.hero-video-frame:hover .hero-video-poster { transform: scale(1.015); }
+.hero-video-play {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  transition: transform 160ms ease, background 160ms ease;
+}
+.hero-video-play svg { margin-left: 3px; }
+.hero-video-frame:hover .hero-video-play { transform: scale(1.06); background: #fff; }
+.hero-video-frame.is-playing .hero-video-poster,
+.hero-video-frame.is-playing .hero-video-play { display: none; }
+.hero-video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+/* ABOUT: value-promise paragraph + product shot (moved down from the hero). */
+.about-sub {
+  max-width: 820px;
+  margin: 0 auto 44px;
+  font-family: var(--sans);
+  font-size: 18px;
+  line-height: 1.45;
+  font-weight: 400;
+  color: var(--ink-mute);
+  text-align: center;
+}
+.about-shot {
+  width: min(1080px, 92vw);
+  margin: 0 auto 72px;
+}
+.about-shot-img {
   display: block;
   width: 100%;
   height: auto;
@@ -5532,6 +5589,38 @@ footer .container {
   display: inline-flex;
 }
 .foot-social a:hover { color: var(--ink, #262626); }
+.foot-locale {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-soft, #595959);
+}
+.foot-locale .foot-locale-trigger {
+  gap: 7px;
+  padding: 4px 0;
+  border-bottom: 0;
+  color: var(--ink-soft, #595959);
+}
+.foot-locale .locale-trigger-icon { color: var(--ink-mute, #8c8c8c); }
+.foot-locale .locale-trigger-icon::before { font-size: 16px; }
+.foot-locale-label { font-weight: 500; }
+.foot-locale .foot-locale-trigger:hover,
+.foot-locale[open] > .foot-locale-trigger,
+.foot-locale .foot-locale-trigger:hover .locale-trigger-icon,
+.foot-locale[open] > .foot-locale-trigger .locale-trigger-icon {
+  color: var(--ink, #262626);
+}
+/* Opens upward: the switcher sits at the bottom of the page. */
+.foot-locale .locale-menu {
+  top: auto;
+  bottom: calc(100% + 10px);
+  right: auto;
+  left: 0;
+  animation: none;
+}
+.foot-locale .locale-menu::before {
+  top: auto;
+  bottom: -12px;
+}
 
 /* Tablet: 7 columns get cramped — drop to a 4-wide grid. */
 @media (max-width: 1080px) {
@@ -5791,46 +5880,19 @@ footer .container {
   .nav-links .nav-community-mobile-cta {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-start;
     width: fit-content;
     max-width: 100%;
-    gap: 8px;
-    padding: 10px 14px;
-    border: 1px solid rgba(26, 26, 26, 0.16);
-    border-radius: 999px;
-    background: #fff;
-    box-shadow: 0 2px 7px rgba(17, 17, 26, 0.06);
+    padding: 6px 0;
     color: var(--ink);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     line-height: 1.3;
+    text-decoration: none;
     white-space: normal;
     overflow-wrap: anywhere;
   }
   .nav-links .nav-community-mobile-cta:hover {
-    border-color: rgba(26, 26, 26, 0.3);
-    background: rgba(26, 26, 26, 0.025);
-  }
-  .nav-community-mobile-benefits {
-    display: grid;
-    gap: 9px;
-    min-width: 0;
-    padding: 12px 14px;
-    border: 1px solid rgba(26, 26, 26, 0.09);
-    border-radius: 14px;
-    background: rgba(26, 26, 26, 0.025);
-  }
-  .nav-community-mobile-benefit {
-    display: flex;
-    align-items: flex-start;
-    min-width: 0;
-    gap: 9px;
-    color: var(--ink);
-    font-family: var(--sans);
-    font-size: 13px;
-    font-weight: 550;
-    line-height: 1.4;
-    overflow-wrap: anywhere;
+    color: var(--coral);
   }
   .nav-links a .num {
     position: static;

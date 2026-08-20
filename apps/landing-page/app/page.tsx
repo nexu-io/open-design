@@ -422,6 +422,11 @@ export default function Page({
     href: localePath(entry.code, '/'),
   }));
   const href = (path: string) => localizedHref(path, locale);
+  // First-screen product walkthrough. Rendered as a click-to-play facade
+  // (poster + play button); the inline hero-video script in pages/index.astro
+  // swaps in the YouTube iframe on demand so the hero ships no third-party code.
+  const HERO_VIDEO_ID = 'fZbCLD9PZBo';
+  const heroVideoPoster = `https://i.ytimg.com/vi/${HERO_VIDEO_ID}/maxresdefault.jpg`;
 
   /**
    * Capability cards. The zh homepage renders the five-step flow verbatim
@@ -497,17 +502,7 @@ export default function Page({
         <div className='site-chrome' data-chrome-headroom>
         {/* ====== NAV ====== */}
         {/* Headroom slide handled by `.site-chrome` wrapper above. */}
-        <Header
-          counts={counts}
-          github={github}
-          locale={locale}
-          localeSwitcher={{
-            label: commonCopy.topbar.languageSwitcherLabel,
-            prefix: commonCopy.topbar.languageSwitcherPrefix ?? 'Lang',
-            shortLabel: localeDef.shortLabel,
-            options: localeOptions,
-          }}
-        />
+        <Header counts={counts} github={github} locale={locale} />
         </div>{/* /site-chrome */}
 
         {/* ====== HERO ====== */}
@@ -529,12 +524,9 @@ export default function Page({
           />
           <div className='container hero-grid'>
             <div className='hero-copy'>
-              {/* Product proof, not competitor framing: the reference homepage
-                  leads with a compact capability line before naming the
-                  product. Keep this crawlable and localized. */}
-              <p className='hero-lead' data-reveal>
-                {t.heroTitleSub}
-              </p>
+              {/* The "best open-source Claude Design alternative" entry term is
+                  kept in the SEO layer only (title / description / JSON-LD);
+                  the first screen leads straight with the brand + positioning. */}
               <h1 className='hero-title' data-reveal>
                 <span className='hero-title-corner tl' aria-hidden='true' />
                 <span className='hero-title-corner tr' aria-hidden='true' />
@@ -594,30 +586,37 @@ export default function Page({
                   <u className='hm-sheen' aria-hidden='true' />
                 </a>
               </div>
-              {/* `{systems}` in heroSub is substituted with the live
-                  getCatalogCounts() total (same source as the meta description
-                  and stat cards) so the design-systems count never drifts. */}
-              <p className='hero-sub' data-reveal>
-                <HighlightedBreakText
-                  text={t.heroSub.replace('{systems}', systems)}
-                  highlight={t.heroSubHighlight}
-                />
-              </p>
-              {/* Product shot sits just under the hero copy. fetchPriority=low
-                  lets the full-bleed hero-bg (the LCP element, fetchpriority
-                  high) win the connection first; this still loads, just yields. */}
-              <div className='hero-shot' data-reveal>
-                <img
-                  src={heroProductImage}
-                  srcSet={heroProductSrcset}
-                  sizes='(max-width: 768px) 100vw, 60vw'
-                  width={2508}
-                  height={1450}
-                  alt='OpenDesign desktop — design files & index.html preview'
-                  decoding='async'
-                  fetchPriority='low'
-                  className='hero-shot-img'
-                />
+              {/* Product walkthrough sits just under the hero copy, in the
+                  slot the static product shot used to occupy (that shot now
+                  lives in the ABOUT section). Click-to-play facade: poster
+                  image + button, iframe injected on demand. */}
+              <div className='hero-shot hero-video' data-reveal>
+                <div
+                  className='hero-video-frame'
+                  data-hero-video
+                  data-video-id={HERO_VIDEO_ID}
+                  tabIndex={0}
+                >
+                  <img
+                    className='hero-video-poster'
+                    src={heroVideoPoster}
+                    width={1280}
+                    height={720}
+                    alt='OpenDesign product walkthrough video'
+                    decoding='async'
+                    fetchPriority='low'
+                  />
+                  <button
+                    type='button'
+                    className='hero-video-play'
+                    aria-label='Play the OpenDesign walkthrough video'
+                    tabIndex={-1}
+                  >
+                    <svg viewBox='0 0 24 24' width='30' height='30' aria-hidden='true'>
+                      <path d='M8 5.5v13l11-6.5z' fill='currentColor' />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -654,6 +653,29 @@ export default function Page({
                       )}
                     </h2>
                   </div>
+                </div>
+                {/* Value-promise paragraph (moved down from the hero so the
+                    first screen stays clean). `{systems}` is substituted with
+                    the live getCatalogCounts() total, same as the meta copy. */}
+                <p className='about-sub' data-reveal>
+                  <HighlightedBreakText
+                    text={t.heroSub.replace('{systems}', systems)}
+                    highlight={t.heroSubHighlight}
+                  />
+                </p>
+                {/* Product shot — previously the hero's first-screen window. */}
+                <div className='about-shot' data-reveal>
+                  <img
+                    src={heroProductImage}
+                    srcSet={heroProductSrcset}
+                    sizes='(max-width: 768px) 100vw, 60vw'
+                    width={2508}
+                    height={1450}
+                    alt='OpenDesign desktop — design files & index.html preview'
+                    decoding='async'
+                    loading='lazy'
+                    className='about-shot-img'
+                  />
                 </div>
                 <div className='about-scrolly' data-about-scrolly>
                 <div className='about-sticky'>
@@ -1369,6 +1391,39 @@ export default function Page({
                 <span className='foot-dot' aria-hidden='true'>·</span>
                 <a href={href('/terms/')}>{footL.terms}</a>
               </div>
+              {/* Language switcher — lives in the footer (not the header) so
+                  the fixed bar stays minimal. Same `[data-locale-switch]`
+                  contract as before: locale-switcher-script.astro binds it. */}
+              <details className='locale-switch foot-locale' data-locale-switch>
+                <summary
+                  className='locale-trigger locale-trigger-iconic foot-locale-trigger'
+                  aria-label={commonCopy.topbar.languageSwitcherLabel}
+                  title={commonCopy.topbar.languageSwitcherLabel}
+                >
+                  <span className='locale-trigger-icon' aria-hidden='true' />
+                  <span className='foot-locale-label'>{localeDef.label}</span>
+                  <span className='locale-trigger-caret ri-glyph' aria-hidden='true'>
+                    {'\uEA4E'}
+                  </span>
+                </summary>
+                <div className='locale-menu' role='menu'>
+                  {localeOptions.map((entry) => (
+                    <a
+                      className={`locale-menu-item${entry.code === locale ? ' is-active' : ''}`}
+                      role='menuitem'
+                      data-locale-link
+                      data-locale-code={entry.code}
+                      href={entry.href}
+                      lang={entry.htmlLang}
+                      aria-current={entry.code === locale ? 'true' : undefined}
+                      key={entry.code}
+                    >
+                      <span className='locale-menu-code'>{entry.code.toUpperCase()}</span>
+                      <span className='locale-menu-label'>{entry.label}</span>
+                    </a>
+                  ))}
+                </div>
+              </details>
               <div className='foot-social'>
                 <a href={X_TWITTER} target='_blank' rel='noopener' aria-label='X'>
                   <svg viewBox='0 0 24 24' width='18' height='18' fill='currentColor' aria-hidden='true'><path d='M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z' /></svg>

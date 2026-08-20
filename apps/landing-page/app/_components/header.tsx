@@ -25,157 +25,23 @@ const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const FEISHU = 'https://od.kokiai.net/community/website';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
 
+const FEISHU_GROUP_QR = '/community/feishu-group-qr.png';
+
 type CommunityEntryCopy = {
+  /** Plain-text label in the header — no framing, no benefit list. */
   cta: string;
-  benefits: readonly [string, string, string];
+  /** Hover-card caption under the Feishu group QR (zh / zh-tw only). */
+  qrHint?: string;
 };
 
-const COMMUNITY_ENTRY_COPY = {
-  en: {
-    cta: 'Join Discord',
-    benefits: [
-      'Model × design scenario arenas',
-      'Weekly Hackathon: credits + promotion',
-      'Super Thursday: weekly prize draws',
-    ],
-  },
-  zh: {
-    cta: '加入飞书社群',
-    benefits: [
-      '模型 × 设计场景竞技场',
-      'Weekly Hackathon：Credits + 流量扶持',
-      'Super Thursday：每周抽奖',
-    ],
-  },
-  'zh-tw': {
-    cta: '加入飛書社群',
-    benefits: [
-      '模型 × 設計場景競技場',
-      'Weekly Hackathon：Credits + 流量扶持',
-      'Super Thursday：每週抽獎',
-    ],
-  },
-  ja: {
-    cta: 'Discordに参加',
-    benefits: [
-      'モデル × デザインシーンのアリーナ',
-      'Weekly Hackathon：クレジット＋露出支援',
-      'Super Thursday：毎週抽選',
-    ],
-  },
-  ko: {
-    cta: 'Discord 참여',
-    benefits: [
-      '모델 × 디자인 시나리오 아레나',
-      'Weekly Hackathon: 크레딧 + 홍보 지원',
-      'Super Thursday: 매주 추첨',
-    ],
-  },
-  de: {
-    cta: 'Discord beitreten',
-    benefits: [
-      'Arenen für Modelle × Designszenarien',
-      'Weekly Hackathon: Credits + Reichweite',
-      'Super Thursday: wöchentliche Verlosung',
-    ],
-  },
-  fr: {
-    cta: 'Rejoindre Discord',
-    benefits: [
-      'Arènes modèles × scénarios de design',
-      'Weekly Hackathon : crédits + mise en avant',
-      'Super Thursday : tirage hebdomadaire',
-    ],
-  },
-  ru: {
-    cta: 'Вступить в Discord',
-    benefits: [
-      'Арены: модели × дизайн-сценарии',
-      'Weekly Hackathon: кредиты + продвижение',
-      'Super Thursday: еженедельный розыгрыш',
-    ],
-  },
-  es: {
-    cta: 'Unirse a Discord',
-    benefits: [
-      'Arenas de modelos × escenarios de diseño',
-      'Weekly Hackathon: créditos + promoción',
-      'Super Thursday: sorteo semanal',
-    ],
-  },
-  'pt-br': {
-    cta: 'Entrar no Discord',
-    benefits: [
-      'Arenas de modelos × cenários de design',
-      'Weekly Hackathon: créditos + divulgação',
-      'Super Thursday: sorteio semanal',
-    ],
-  },
-  it: {
-    cta: 'Unisciti a Discord',
-    benefits: [
-      'Arene modelli × scenari di design',
-      'Weekly Hackathon: crediti + promozione',
-      'Super Thursday: estrazione settimanale',
-    ],
-  },
-  vi: {
-    cta: 'Tham gia Discord',
-    benefits: [
-      'Đấu trường mô hình × bối cảnh thiết kế',
-      'Weekly Hackathon: credit + hỗ trợ quảng bá',
-      'Super Thursday: quay thưởng hằng tuần',
-    ],
-  },
-  pl: {
-    cta: 'Dołącz do Discorda',
-    benefits: [
-      'Areny modeli × scenariuszy projektowych',
-      'Weekly Hackathon: kredyty + promocja',
-      'Super Thursday: cotygodniowe losowanie',
-    ],
-  },
-  id: {
-    cta: 'Gabung Discord',
-    benefits: [
-      'Arena model × skenario desain',
-      'Weekly Hackathon: kredit + dukungan promosi',
-      'Super Thursday: undian mingguan',
-    ],
-  },
-  nl: {
-    cta: 'Word lid van Discord',
-    benefits: [
-      'Arena’s voor modellen × ontwerpscenario’s',
-      'Weekly Hackathon: credits + promotie',
-      'Super Thursday: wekelijkse loting',
-    ],
-  },
-  ar: {
-    cta: 'انضم إلى Discord',
-    benefits: [
-      'ساحات النماذج × سيناريوهات التصميم',
-      'Weekly Hackathon: أرصدة + دعم الترويج',
-      'Super Thursday: سحب أسبوعي',
-    ],
-  },
-  tr: {
-    cta: "Discord'a katıl",
-    benefits: [
-      'Model × tasarım senaryosu arenaları',
-      'Weekly Hackathon: kredi + tanıtım desteği',
-      'Super Thursday: haftalık çekiliş',
-    ],
-  },
-  uk: {
-    cta: 'Приєднатися до Discord',
-    benefits: [
-      'Арени: моделі × дизайн-сценарії',
-      'Weekly Hackathon: кредити + промопідтримка',
-      'Super Thursday: щотижневий розіграш',
-    ],
-  },
-} as const satisfies Record<LandingLocaleCode, CommunityEntryCopy>;
+// Simplified / Traditional Chinese visitors get the Feishu group (with a
+// hover QR card); every other locale gets Discord. Kept deliberately terse:
+// the entry is a single word beside the nav, not a campaign pill.
+function getCommunityEntryCopy(locale: LandingLocaleCode): CommunityEntryCopy {
+  if (locale === 'zh') return { cta: '飞书群', qrHint: '扫码加入 OpenDesign 飞书群' };
+  if (locale === 'zh-tw') return { cta: '飛書群', qrHint: '掃碼加入 OpenDesign 飛書群' };
+  return { cta: 'Discord' };
+}
 
 // OpenDesign Cloud endpoints for the header account module.
 // Production defaults; overridable at build time via PUBLIC_* env so a
@@ -301,6 +167,10 @@ export interface HeaderProps {
   github?: {
     starsLabel: string;
   };
+  /**
+   * Accepted for call-site compatibility but no longer rendered: the language
+   * switcher lives in the footer (site-footer.astro / page.tsx footer).
+   */
   localeSwitcher?: {
     label: string;
     prefix: string;
@@ -323,7 +193,6 @@ export interface HeaderProps {
 export function Header({
   active = 'home',
   github,
-  localeSwitcher,
   locale = DEFAULT_LOCALE,
   copy,
   brandHref = '#top',
@@ -333,7 +202,7 @@ export function Header({
   const homeBrandHref = brandHref === '/' ? href('/') : brandHref;
   const productMenuCopy = getHeaderProductMenuCopy(locale);
   const usesFeishuCommunity = locale === 'zh' || locale === 'zh-tw';
-  const communityCopy = COMMUNITY_ENTRY_COPY[locale];
+  const communityCopy = getCommunityEntryCopy(locale);
 
   return (
     <header className='nav' data-od-id='nav'>
@@ -654,16 +523,6 @@ export function Header({
                   </a>
                 </li>
                 <li>
-                  <a href={DISCORD} {...ext}>
-                    <span className='dropdown-name'>Discord</span>
-                  </a>
-                </li>
-                <li>
-                  <a href={FEISHU} {...ext}>
-                    <span className='dropdown-name'>Feishu</span>
-                  </a>
-                </li>
-                <li>
                   <a href={REPO_DISCUSSIONS} {...ext}>
                     <span className='dropdown-name'>
                       {productMenuCopy.communityItems.discussions}
@@ -689,30 +548,17 @@ export function Header({
                 data-community-cta
                 data-community-platform={usesFeishuCommunity ? 'feishu' : 'discord'}
               >
-                <svg
-                  className='nav-community-cta-icon'
-                  viewBox='0 0 20 20'
-                  aria-hidden='true'
-                >
-                  <path d='M4 4.75h12v8.5H9l-3.8 2.5v-2.5H4z' />
-                  <path d='M7 8h6M7 10.5h4' />
-                </svg>
-                <span>{communityCopy.cta}</span>
+                {communityCopy.cta}
               </a>
-              <div className='nav-community-mobile-benefits'>
-                {communityCopy.benefits.map((benefit) => (
-                  <div className='nav-community-mobile-benefit' key={benefit}>
-                    <span className='nav-community-benefits-dot' aria-hidden='true' />
-                    <span>{benefit}</span>
-                  </div>
-                ))}
-              </div>
             </li>
 
           </ul>
         </nav>
         <div className='nav-side'>
-          <div className='nav-community-entry'>
+          <div
+            className='nav-community-entry'
+            data-community-platform={usesFeishuCommunity ? 'feishu' : 'discord'}
+          >
             <a
               className='nav-community-cta'
               href={usesFeishuCommunity ? FEISHU : DISCORD}
@@ -720,66 +566,25 @@ export function Header({
               data-community-cta
               data-community-platform={usesFeishuCommunity ? 'feishu' : 'discord'}
             >
-              <svg
-                className='nav-community-cta-icon'
-                viewBox='0 0 20 20'
-                aria-hidden='true'
-              >
-                <path d='M4 4.75h12v8.5H9l-3.8 2.5v-2.5H4z' />
-                <path d='M7 8h6M7 10.5h4' />
-              </svg>
               {communityCopy.cta}
             </a>
-            <div className='nav-community-benefits-card'>
-              <ul>
-                {communityCopy.benefits.map((benefit) => (
-                  <li key={benefit}>
-                    <span className='nav-community-benefits-dot' aria-hidden='true' />
-                    <span>{benefit}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          {localeSwitcher ? (
-            <details className='locale-switch nav-locale-switch' data-locale-switch>
-              <summary
-                className='locale-trigger locale-trigger-iconic'
-                aria-label={localeSwitcher.label}
-                title={localeSwitcher.label}
-              >
-                {/* Language switcher rendered as the skill's Remix Icon
-                    "translate-2" glyph (\f226) instead of the 语言 · 简中 text. */}
-                <span className='locale-trigger-icon' aria-hidden='true' />
-                {/* Dropdown caret as the skill's Remix Icon "arrow-down-s-line"
-                    glyph () instead of an inline SVG path. */}
-                <span className='locale-trigger-caret ri-glyph' aria-hidden='true'>
-                  {''}
-                </span>
-              </summary>
-              <div className='locale-menu' role='menu'>
-                {localeSwitcher.options.map((entry) => (
-                  <a
-                    className={`locale-menu-item${
-                      entry.code === locale ? ' is-active' : ''
-                    }`}
-                    role='menuitem'
-                    data-locale-link
-                    data-locale-code={entry.code}
-                    href={entry.href}
-                    lang={entry.htmlLang}
-                    aria-current={entry.code === locale ? 'true' : undefined}
-                    key={entry.code}
-                  >
-                    <span className='locale-menu-code'>
-                      {entry.code.toUpperCase()}
-                    </span>
-                    <span className='locale-menu-label'>{entry.label}</span>
-                  </a>
-                ))}
+            {usesFeishuCommunity ? (
+              /* Hover / focus reveals the Feishu group QR so a desktop visitor
+                 can scan straight from the header without leaving the page. */
+              <div className='nav-community-qr-card' role='tooltip'>
+                <img
+                  className='nav-community-qr-img'
+                  src={FEISHU_GROUP_QR}
+                  alt={communityCopy.qrHint}
+                  width={168}
+                  height={168}
+                  loading='lazy'
+                  decoding='async'
+                />
+                <span className='nav-community-qr-hint'>{communityCopy.qrHint}</span>
               </div>
-            </details>
-          ) : null}
+            ) : null}
+          </div>
           {/* GitHub star chip — quiet pill so Download stays the only
               strong CTA in the bar. [data-github-stars] is refreshed by the
               header enhancers (homepage inline script / header-enhancer). */}

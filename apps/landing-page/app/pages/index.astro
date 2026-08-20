@@ -2285,5 +2285,37 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         containers.forEach((container) => io.observe(container));
       })();
     </script>
+    <script is:inline>
+      // Hero video facade: swap the poster for the YouTube iframe on demand so
+      // the first screen ships no third-party script until the visitor asks.
+      (() => {
+        const frame = document.querySelector('[data-hero-video]');
+        if (!frame) return;
+        const id = frame.getAttribute('data-video-id');
+        if (!id) return;
+        const play = () => {
+          if (frame.classList.contains('is-playing')) return;
+          const iframe = document.createElement('iframe');
+          iframe.src =
+            'https://www.youtube-nocookie.com/embed/' +
+            encodeURIComponent(id) +
+            '?autoplay=1&rel=0&playsinline=1&modestbranding=1';
+          iframe.title = 'OpenDesign product walkthrough';
+          iframe.allow =
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+          iframe.setAttribute('allowfullscreen', '');
+          iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+          frame.classList.add('is-playing');
+          frame.appendChild(iframe);
+        };
+        frame.addEventListener('click', play);
+        frame.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            play();
+          }
+        });
+      })();
+    </script>
   </body>
 </html>
