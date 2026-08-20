@@ -39,40 +39,49 @@ od:
   design_system:
     requires: false
   example_prompt: |
-    Model a wooden shipping crate with a separate metal-banded lid, named
-    parts, a three-quarter hero camera, and a key light.
+    Model a tide-worn harbor beacon: a rough stone base, a tapering iron
+    tower, and a warm glass lamp room that actually glows.
 ---
 
 # Scene 3D
 
-A 3D scene is a **code project**, not a chat transcript. You write the
-source, the daemon compiles it, and the compiler tells you what is wrong in
-stable codes. You do not eyeball geometry and hope.
+A 3D scene is a **code project**, and you are its fabricator. You design
+and write the source; the compiler builds it through headless Blender,
+lights it, photographs it, measures every part, and reports back in
+stable issue codes. Nothing is eyeballed and hoped — the facts arrive,
+you refine, and the piece gets provably better every pass. That freedom
+is the point: the pipeline carries the physics so your attention can
+stay on the design.
+
+**Design before fabrication.** The brief is your only source of form:
+derive every silhouette, dimension, material, and name from what the
+user actually asked for. The examples in this reference are teaching
+skeletons — they demonstrate grammar, never vocabulary. A scene that
+resembles a doc example is a scene that wasn't designed yet.
 
 ## The loop
 
 ```
-write / edit sources   →   od scene3d compile   →   read <scene3d-report>   →   fix by code   →   compile again
+design   →   write / edit sources   →   od scene3d compile   →   read <scene3d-report>   →   refine by code   →   compile again
 ```
 
-There is **one** command. `compile` already parses, builds through headless
-Blender, lints naming / topology / PBR / units / integrity, renders proof
-frames, measures those frames, exports every deliverable the contract
-declares, and writes the manifest. **You never choose or mention file
-formats** — you write geometry and materials; which containers ship is the
-project's delivery policy (`export.formats` in `scene3d.json`), not yours.
-
-**Do not** look for separate "check z-fighting", "validate naming", or
-"render preview" tools. They do not exist on purpose. Asking for them is the
-prompt-engineering habit this surface replaces — a compiler reports its own
-diagnostics.
+There is **one** command, and it is enough. `compile` parses, builds
+through headless Blender, lints naming / topology / PBR / units /
+integrity, renders proof frames, measures those frames, exports every
+deliverable the contract declares, and writes the manifest — all in one
+pass, every pass. No separate "check z-fighting", "validate naming", or
+"render preview" tools exist because none are needed; the compiler
+watches all of it at once, which is exactly what frees you to think
+about the asset instead of the checklist. **You never choose or mention
+file formats** — you write geometry and materials; which containers ship
+is the project's delivery policy (`export.formats` in `scene3d.json`).
 
 ## 1. Lay out the scene
 
 One scene is one directory. A project may hold several.
 
 ```
-scenes/pavilion/
+scenes/<name>/
 ├── scene.json       # the source: declarative parts + relations + claims
 ├── scene3d.json     # the conventions contract the linter is configured from
 └── .scene3d/        # generated — cache and the compiled build script
@@ -107,35 +116,40 @@ placement coordinate, and you never do arithmetic.
 {
   "schemaVersion": 1,
   "materials": {
-    "mtl_stone": { "baseColor": [0.62, 0.6, 0.55], "roughness": 0.9 },
-    "mtl_lamp": {
-      "baseColor": [1, 0.92, 0.75],
-      "emission": [1, 0.85, 0.6], "emissionStrength": 4
+    "mtl_hull": { "baseColor": [0.24, 0.28, 0.3], "roughness": 0.55, "metallic": 1 },
+    "mtl_signal": {
+      "baseColor": [0.9, 0.35, 0.2],
+      "emission": [1, 0.4, 0.15], "emissionStrength": 5
     }
   },
   "parts": [
-    { "id": "prp_plinth", "size": [2.4, 1.6, 0.12], "material": "mtl_stone" },
-    { "id": "prp_column", "size": [0.12, 0.12, 1.4], "shape": "cylinder", "material": "mtl_stone" },
-    { "id": "prp_lamp", "size": [0.16, 0.16, 0.16], "shape": "sphere", "material": "mtl_lamp" }
+    { "id": "prp_deck", "size": [1.8, 1.1, 0.1], "material": "mtl_hull" },
+    { "id": "prp_vent", "size": [0.14, 0.14, 0.5], "shape": "cylinder", "material": "mtl_hull" },
+    { "id": "prp_mast", "size": [0.08, 0.08, 0.7], "shape": "cylinder", "material": "mtl_hull" },
+    { "id": "prp_beacon", "size": [0.2, 0.2, 0.2], "shape": "sphere", "material": "mtl_signal" }
   ],
   "relations": [
-    { "type": "at", "part": "prp_plinth", "center": [0, 0, 0.06] },
-    { "type": "sits_on", "part": "prp_column", "on": "prp_plinth" },
-    { "type": "inset_from", "part": "prp_column", "from": "prp_plinth", "faces": ["x-", "y-"], "by": 0.15 },
-    { "type": "repeat", "part": "prp_column", "count": 2, "along": "x", "every": 1.98 },
-    { "type": "repeat", "part": "prp_column", "count": 2, "along": "y", "every": 1.18 },
-    { "type": "sits_on", "part": "prp_lamp", "on": "prp_plinth" },
-    { "type": "align", "part": "prp_lamp", "to": "prp_plinth", "axes": ["x", "y"] }
+    { "type": "at", "part": "prp_deck", "center": [0, 0, 0.05] },
+    { "type": "sits_on", "part": "prp_vent", "on": "prp_deck" },
+    { "type": "inset_from", "part": "prp_vent", "from": "prp_deck", "faces": ["x-", "y-"], "by": 0.12 },
+    { "type": "repeat", "part": "prp_vent", "count": 3, "along": "x", "every": 0.55 },
+    { "type": "sits_on", "part": "prp_mast", "on": "prp_deck" },
+    { "type": "inset_from", "part": "prp_mast", "from": "prp_deck", "faces": ["x+", "y+"], "by": 0.2 },
+    { "type": "sits_on", "part": "prp_beacon", "on": "prp_mast", "embed": 0.03 },
+    { "type": "align", "part": "prp_beacon", "to": "prp_mast", "axes": ["x", "y"] }
   ],
   "light": "studio",
-  "claims": { "parts": 6, "grounded": true, "watertight": true, "maxHeight": 1.6 }
+  "claims": { "parts": 6, "grounded": true, "watertight": true, "maxHeight": 1.05 }
 }
 ```
 
-That is a complete scene: one authored column becomes a 2×2 colonnade via
-the two `repeat`s, the camera and key light are derived from the solved
-bounds, and the compile fails unless the built artifact really has 6
-watertight, grounded parts under 1.6 m.
+That is a complete scene — one authored vent becomes a row of three via
+the `repeat`, the beacon seats into its mast by a stated 3cm, the camera
+and key light derive from the solved bounds, and the compile fails
+unless the built artifact really has 6 watertight, grounded parts under
+1.05 m. It is also deliberately generic: a grammar demo, not a design.
+Your parts, names, proportions, and palette come from the brief in front
+of you.
 
 **Parts.** `size` is the part's axis-aligned box in metres; `shape` says
 what fills it — `box` (default), `cylinder`, `sphere`, `cone`, `torus` —
@@ -261,36 +275,38 @@ import bpy, math
 
 bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, 0, 0))
 body = bpy.context.object
-body.name = "prp_crate_body"          # name every object; defaults are errors
-body.scale = (1.0, 1.0, 0.8)
+body.name = "prp_press_frame"         # name every object for what it is
+body.scale = (0.6, 0.5, 1.2)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
-mat = bpy.data.materials.new("mtl_crate_wood")
+mat = bpy.data.materials.new("mtl_press_iron")
 mat.use_nodes = True
 bsdf = mat.node_tree.nodes["Principled BSDF"]
-bsdf.inputs["Base Color"].default_value = (0.55, 0.35, 0.15, 1.0)
-bsdf.inputs["Roughness"].default_value = 0.75
-bsdf.inputs["Metallic"].default_value = 0.0       # 0 or 1, never in between
+bsdf.inputs["Base Color"].default_value = (0.16, 0.17, 0.19, 1.0)
+bsdf.inputs["Roughness"].default_value = 0.45
+bsdf.inputs["Metallic"].default_value = 1.0       # conductor or dielectric
 body.data.materials.append(mat)
 
-bpy.ops.object.camera_add(location=(5.5, -5.0, 3.5))
+bpy.ops.object.camera_add(location=(4.0, -3.6, 2.4))
 cam = bpy.context.object
-cam.name = "cam_crate_shot"
-cam.rotation_euler = (math.radians(63), 0, math.radians(45))
-bpy.context.scene.camera = cam                     # a scene with no camera fails
+cam.name = "cam_press_shot"
+cam.rotation_euler = (math.radians(68), 0, math.radians(48))
+bpy.context.scene.camera = cam                     # the proofs are your eyes
 
 bpy.ops.object.light_add(type="AREA", location=(4, 4, 6))
 light = bpy.context.object
 light.name = "lgt_key"
-light.data.energy = 200
+light.data.energy = 150
 ```
 
-Rules that come straight from the linter:
+The floor the linter holds for this path:
 
-- **Name everything.** `Cube.001`, `Empty`, `Collection` are hard errors.
-- **Apply scale** after resizing, so exported transforms are clean.
-- **Metallic is 0 or 1.** Values in between are not physically meaningful and
-  are a hard error.
+- **Every object carries its name.** A name is design information;
+  `Cube.001`, `Empty`, `Collection` mark geometry nobody finished
+  thinking about, and the gate returns them to you.
+- **Apply scale** after resizing, so exported transforms stay clean.
+- **Metallic is 0 or 1** — a surface is a conductor or a dielectric; put
+  the expressive range into roughness.
 - **Ship a camera and at least one light.** The proof render is your only
   eyes on the model.
 
@@ -333,7 +349,7 @@ Every section is optional; omitted sections fall back to the defaults.
 ## 4. Compile
 
 ```bash
-od scene3d compile --project "$OD_PROJECT_ID" --scene scenes/crate --agent-message
+od scene3d compile --project "$OD_PROJECT_ID" --scene scenes/<name> --agent-message
 ```
 
 Useful flags while iterating:
@@ -353,12 +369,12 @@ instantly and only the stages whose inputs moved re-run.
 <scene3d-report ok="false" errors="2" warnings="1">
 source: bpy (build.py)
 stages: parse ran 1ms · build ran 1446ms · proof ran 6554ms · lint ran 2ms · export ran 1805ms · manifest ran 2ms
-parts (4): cam_crate_shot(camera), lgt_key(light), prp_crate_body(mesh:8v/6f), prp_crate_lid(mesh:8v/6f)
+parts (4): cam_press_shot(camera), lgt_key(light), prp_press_frame(mesh:8v/6f), prp_press_platen(mesh:8v/6f)
 
 errors:
-  S3D-E-324 [prp_crate_body <-> prp_crate_lid] coplanar overlap (6 face pair(s))
+  S3D-E-324 [prp_press_frame <-> prp_press_platen] coplanar overlap (6 face pair(s))
     fix: offset one surface by at least 1e-3
-  S3D-E-341 [mtl_crate_metal] metallic 0.5 is not in 0, 1
+  S3D-E-341 [mtl_press_brass] metallic 0.5 is not in 0, 1
 
 verdict: fix every error above, then compile again.
 </scene3d-report>
