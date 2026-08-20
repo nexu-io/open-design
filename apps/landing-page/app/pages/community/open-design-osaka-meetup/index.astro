@@ -210,7 +210,7 @@ const headerHtml = renderToStaticMarkup(
         <Fragment set:html={headerHtml} />
       </div>
       <Fragment set:html={storyMain} />
-      <SiteFooter counts={counts} locale={locale} />
+      <SiteFooter counts={counts} locale={locale} localeCanonicalOnly />
     </div>
     <HeaderEnhancer />
     <LocaleSwitcherScript />

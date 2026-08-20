@@ -1194,6 +1194,20 @@ a.nav-mega-col-head.is-active {
   gap: 16px;
   flex-shrink: 0;
 }
+/* Phones: the bar keeps brand + hamburger + Download only. The secondary
+   icon cluster (community / X / language) would otherwise squeeze the
+   shrinkable brand to 0px at 320–375px; community lives in the hero button
+   and the footer, and the language switcher lives in the footer. */
+@media (max-width: 640px) {
+  .nav-inner { gap: 10px; }
+  .nav-inner > .brand { flex: 0 0 auto; min-width: 0; }
+  .brand-logo,
+  .site-chrome.is-condensed .brand-logo { height: 32px; }
+  .nav-side { gap: 10px; }
+  .nav-side .nav-social { display: none; }
+  .nav-cta.ghost { padding: 9px 14px; font-size: 13px; }
+}
+
 .nav-social-item {
   position: relative;
   display: inline-flex;

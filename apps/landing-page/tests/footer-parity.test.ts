@@ -66,3 +66,35 @@ describe("footer parity", () => {
     }
   });
 });
+
+// Canonical-only pages (no per-locale variant) build their header language
+// switcher with `canonicalOnly: true` so every option keeps the single URL.
+// The footer switcher must receive the same flag, or it would emit
+// `/zh/<page>/` links that are never generated (404 on language switch).
+describe("footer locale switcher on canonical-only pages", () => {
+  it("threads localeCanonicalOnly into every direct SiteFooter call on a canonical-only page", async () => {
+    const { readdir } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const root = new URL("../app/pages/", import.meta.url).pathname;
+    const files: string[] = [];
+    const walk = async (dir: string) => {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) await walk(full);
+        else if (entry.name.endsWith(".astro")) files.push(full);
+      }
+    };
+    await walk(root);
+
+    const offenders: string[] = [];
+    for (const file of files) {
+      const source = await readFile(file, "utf8");
+      const canonicalOnly = /canonicalOnly:\s*(true|[A-Za-z_$][\w$]*)/.test(source) || /data-locale-canonical/.test(source);
+      if (!canonicalOnly) continue;
+      for (const call of source.match(/<SiteFooter\b[^>]*\/>/g) ?? []) {
+        if (!/localeCanonicalOnly/.test(call)) offenders.push(`${file.replace(root, "")}: ${call}`);
+      }
+    }
+    assert.deepEqual(offenders, [], "canonical-only pages must pass localeCanonicalOnly to SiteFooter");
+  });
+});
