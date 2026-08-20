@@ -39,7 +39,13 @@ export type ChipScenarioPluginId =
   // their own bundled example plugins under plugins/_official/examples/, so —
   // like example-hyperframes — they carry their plugin id directly rather than
   // routing through the default kind→plugin table.
-  | 'example-webgl-experience';
+  | 'example-webgl-experience'
+  // Deterministic-asset scenario: 3D models, scenes, textures, sprite
+  // sheets/flipbooks, and skyboxes authored as code and compiled through
+  // headless Blender (`packages/scene3d`). Like the two above it carries
+  // its own bundled plugin id rather than routing through the default
+  // kind→plugin table, because no ProjectKind models "asset" yet.
+  | 'example-scene3d';
 
 export type ChipAction =
   | {
@@ -271,6 +277,30 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
+    id: 'scene3d',
+    label: '3D scene',
+    icon: 'scene3d',
+    group: 'create',
+    description: 'Models, textures, sprite sheets & flipbooks',
+    hint: 'Author a 3D asset as code and compile it through headless Blender — turntable proofs, convention linting, GLB + USD export.',
+    // The asset class is deliberately broad: props, full scenes, textures,
+    // sprite-sheet flipbooks, and skyboxes all compile through the same
+    // `od scene3d compile` boundary, so one chip covers the surface rather
+    // than fragmenting it into five near-identical scenarios. The project
+    // stores `kind: 'prototype'` for preview behavior; `intent: 'scene3d'`
+    // routes the scenario plugin and splits the analytics `project_kind`.
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'example-scene3d',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'scene3d',
+        fidelity: 'high-fidelity',
+      },
+    },
+  },
+  {
     id: 'live-artifact',
     label: 'Live artifact',
     icon: 'bar-chart-box',
@@ -398,6 +428,7 @@ export const CREATE_RAIL_ORDER = [
   'document',
   'hyperframes',
   'webgl',
+  'scene3d',
   'live-artifact',
   'image',
   'video',

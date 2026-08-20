@@ -1,0 +1,532 @@
+/* Compiled-asset panel.
+   Component-owned styles per the web CSS ownership rule: no global
+   selectors, no additions to index.css. The two global classes the
+   component does use — `.viewer` and `.viewer-toolbar` — are the app's
+   shared viewer layout contract, deliberately not re-implemented here. */
+
+/* `.viewer` already supplies flex-fill, min-height:0, and overflow
+   containment. This adds only what is specific to this panel. */
+.viewer {
+  container-type: inline-size;
+}
+
+/* The stage owns the pane the way the kit viewport owns its page: the
+   body fills the viewer and never scrolls, the picture flexes to the
+   space that remains, and the scrubber stays anchored under it. Only the
+   side rail scrolls. Scrolling the whole report to reach the turntable
+   controls is what made this surface feel bolted-on. */
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The narrow-pane variant of every rule lives in ONE @container block at
+   the end of the file: same-specificity ties resolve by source order even
+   inside a container query, so overrides scattered above their base rules
+   silently lose. */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---- toolbar ----------------------------------------------------- */
+
+/* The asset's category, stated once. A compiled deliverable is not always
+   a "scene", and a panel that says so everywhere is a panel that lies
+   about flipbooks and textures. */
+.kindBadge {
+  padding: 2px 7px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #667081);
+  white-space: nowrap;
+}
+
+.assetName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.verdictChip {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.verdictPass {
+  color: var(--status-success, #1f8a5f);
+}
+
+.verdictFail {
+  color: var(--status-danger, #c0392b);
+}
+
+/* ---- export menu ------------------------------------------------- */
+
+.exportWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.exportTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.exportTrigger:hover:not(:disabled) {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.exportTrigger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.exportMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 240px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 12%);
+}
+
+/* One row: scene name left, format links right — mirrors the host Export
+   menu's model rows so both surfaces read identically. */
+.exportRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+}
+
+.exportRowName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.exportRowFormats {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+
+.exportFormat {
+  padding: 2px 6px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 6px;
+  color: var(--text-secondary, #667081);
+  font: 600 10.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-decoration: none;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.exportFormat:hover {
+  background: var(--surface-subtle, #f6f7f9);
+  color: inherit;
+}
+
+/* ---- stage ------------------------------------------------------- */
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 10px;
+  background: var(--surface-subtle, #f6f7f9);
+  /* The frames are a turntable, so the picture is a rotation surface:
+     horizontal drags scrub the orbit. touch-action keeps a finger drag
+     from scrolling the pane instead. */
+  user-select: none;
+}
+
+.rotatable {
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.dragging {
+  cursor: grabbing;
+}
+
+/* Absolutely positioned rather than a grid item: a percentage height on
+   a grid item in an auto row resolves against the item's own content
+   contribution (the image's natural size), so a 1024px frame quietly
+   overflowed a shorter stage and read as a crop. inset: 0 sizes against
+   the stage box, full stop. */
+.frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* The img must not eat the pointer stream or start a ghost-image drag. */
+  pointer-events: none;
+}
+
+.stageEmpty {
+  padding: 24px;
+  color: var(--text-secondary, #667081);
+  text-align: center;
+}
+
+/* One quiet affordance pill; it retires after the first successful drag
+   because a hint that keeps hinting is chrome. */
+.dragHint {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 11px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised, #fff) 82%, transparent);
+  backdrop-filter: blur(4px);
+  color: var(--text-secondary, #667081);
+  font-size: 11.5px;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.dragHintHidden {
+  opacity: 0;
+}
+
+.scrub {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.playButton {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary, #667081);
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.playButton:hover {
+  background: var(--surface-subtle, #f6f7f9);
+  color: inherit;
+}
+
+.scrubInput {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--accent, #353535);
+}
+
+.counter {
+  flex: none;
+  color: var(--text-secondary, #667081);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 4ch;
+  text-align: right;
+}
+
+/* ---- side rail --------------------------------------------------- */
+
+/* The rail scrolls as one column; the lists inside it do not scroll
+   themselves. Two nested scrollbars in a 300px rail is how the old
+   layout read as a debug panel. */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #667081);
+}
+
+.sectionCount {
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #667081);
+  opacity: 0.75;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.part {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 7px;
+  border-radius: 6px;
+}
+
+.part:hover {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.partName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.partMeta {
+  flex: none;
+  color: var(--text-secondary, #667081);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* One issue = one finding: severity is the left rail's colour, the code
+   is the handle, the message is the sentence. */
+.issue {
+  padding: 5px 9px;
+  border-left: 2px solid var(--border-subtle, #e3e6ea);
+  margin-bottom: 8px;
+}
+
+.issue:last-child {
+  margin-bottom: 0;
+}
+
+.severityError {
+  border-left-color: var(--status-danger, #c0392b);
+}
+
+.severityWarning {
+  border-left-color: var(--status-warning, #b7791f);
+}
+
+.issueCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.severityError .issueCode {
+  color: var(--status-danger, #c0392b);
+}
+
+.severityWarning .issueCode {
+  color: var(--status-warning, #b7791f);
+}
+
+.severityInfo .issueCode {
+  color: var(--text-secondary, #667081);
+}
+
+.issueMessage {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.issueHint {
+  display: block;
+  color: var(--text-secondary, #667081);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.error {
+  grid-column: 1 / -1;
+  color: var(--status-danger, #c0392b);
+}
+
+/* ---- proven badge + scene stats ---------------------------------- */
+
+/* The claims ledger's payoff: shown ONLY when the scene declared claims and
+   none failed. A failure shows nothing — the badge cannot be cheapened, and
+   the failure already surfaces as an E-701 in the issue list. */
+.provenBadge {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--status-success, #1f8a5f);
+}
+
+/* One muted line of measured facts a render hides: world size and the
+   Blender that measured it, beside the parts/tris already shown. */
+.statLine {
+  font-size: 11.5px;
+  color: var(--text-secondary, #667081);
+}
+
+/* Domain grouping with zero strings: issues sort by code (which orders by
+   severity then domain for free), and the first row of each new domain gets
+   a hairline + breathing room so a long list scans by section. */
+.issueGroupStart {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle, #e3e6ea);
+}
+
+/* Narrow pane: the rail folds under the stage and the body scrolls
+   again. Rows are pinned to max-content — leaving them implicit let the
+   grid resolve them to equal fractions of the pane, which sheared the
+   scrubber across the parts list. The stage stops flexing and caps
+   itself so the scrubber stays in reach, and the rail stops owning its
+   own scrollbar because the body scrolls again. */
+@container (max-width: 860px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: max-content;
+    grid-auto-rows: max-content;
+    align-content: start;
+    overflow: auto;
+  }
+
+  .stage {
+    flex: none;
+    aspect-ratio: 1 / 1;
+    max-height: 64vh;
+  }
+
+  .side {
+    overflow: visible;
+  }
+}
+
+.muted {
+  color: var(--text-secondary, #667081);
+}
+
+.mutedSmall {
+  margin: 6px 0 0;
+  color: var(--text-secondary, #667081);
+  font-size: 11.5px;
+}
+
+/* ---- kit ---------------------------------------------------------- */
+
+/* The kit page renders the real, orbitable mesh. It stays an iframe on
+   purpose: a live WebGL viewport is not something the host chrome can or
+   should reimplement. What moved out of it is the chrome around it. */
+.kitStage {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 10px;
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.sceneRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.sceneRow:hover {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.sceneName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sceneError {
+  color: var(--status-danger, #c0392b);
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px 3px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #667081);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.backButton:hover {
+  background: var(--surface-subtle, #f6f7f9);
+  color: inherit;
+}

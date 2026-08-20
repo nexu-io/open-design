@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { Fragment, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { CenteredLoader } from './Loading';
@@ -12,6 +12,8 @@ import {
   buildSocialSharePayload,
   OPEN_DESIGN_GITHUB_REPO_URL,
   workspaceContextHasTeamIdentity,
+  isScene3dTweaksRequestMessage,
+  scene3dIssueTitle,
   type CollabCloudMemberDirectoryEntry,
   type CollabMemberRole,
   type AgentInfo,
@@ -141,6 +143,7 @@ import {
   exportProjectAsPdf,
   exportProjectAsPptx,
   exportProjectAsZip,
+  exportScene3dArchive,
   exportProjectImageDataUrl,
   exportProjectScreenshotPdf,
   exportSnapshotAsPdf,
@@ -215,6 +218,12 @@ import type {
 } from '../types';
 import { Icon } from './Icon';
 import { RemixIcon } from './RemixIcon';
+import { Scene3dPanel } from './Scene3dPanel';
+import { scene3dScenePathForFile } from '../hooks/useScene3dCompile';
+import {
+  modelRowsFromArtifactManifest,
+  scenePathFromArtifactManifest,
+} from '../runtime/scene3d-assets';
 import { projectIsSharedWithWorkspace } from '../collab/project-shared-status';
 import { HandoffButton } from './HandoffButton';
 import { SocialShareGrid } from './SocialShareGrid';
@@ -1858,6 +1867,24 @@ export const FileViewer = memo(function FileViewer({
     return <FileViewerLoadingSkeleton />;
   }
 
+  // A compiled asset declares itself through its own `.artifact.json`, so the
+  // manifest decides before any file-kind or filename heuristic gets a turn.
+  // This is what keeps the compiled kit page — which is HTML — out of the
+  // prototype viewer and its viewport switcher.
+  if (rendererMatch?.renderer.id === 'scene3d') {
+    return (
+      <Scene3dPanel
+        projectId={projectId}
+        scenePath={
+          scenePathFromArtifactManifest(rendererMatch.manifest)
+          ?? scene3dScenePathForFile(file.path ?? file.name)
+          ?? '.'
+        }
+        file={file}
+      />
+    );
+  }
+
   if (rendererMatch?.renderer.id === 'html' || rendererMatch?.renderer.id === 'deck-html') {
     return (
       <HtmlViewer
@@ -1944,6 +1971,13 @@ export const FileViewer = memo(function FileViewer({
       return <SketchViewer projectId={projectId} file={file} />;
     }
     return <ImageViewer projectId={projectId} file={file} />;
+  }
+  // 3D scene sources and deliverables open on the scene3d compile report:
+  // the turntable, the part tree, and the linter's issue codes. The raw
+  // bytes of a `.glb` or a `.usda` layer tell a user nothing on their own.
+  const scene3dScenePath = scene3dScenePathForFile(file.path ?? file.name);
+  if (scene3dScenePath !== null) {
+    return <Scene3dPanel projectId={projectId} scenePath={scene3dScenePath} file={file} />;
   }
   if (file.kind === 'text' || file.kind === 'code') {
     return <TextViewer projectId={projectId} file={file} />;
@@ -7776,17 +7810,24 @@ function HtmlViewer({
   // across revisions, but an intrinsic-width witness must not.
   const previewContentWidthCacheBaseKey =
     `${fileViewportKey}:${sourceSnapshotRefreshKey}:${sourceAuthorizationScopeKey ?? ''}`;
+  // A compiled 3D/asset page (the scene3d kit viewer) — the artifact KIND
+  // from the compiler's sidecar. Declared above the zoom/viewport state on
+  // purpose: a live 3D viewport owns its own camera, so the host must never
+  // scale it (the two zooms would fight) and device-width presets carry no
+  // meaning for it. That also means cached zoom/viewport prefs — possibly
+  // written before this gate existed — are deliberately not restored here.
+  const isScene3dArtifact = (file.artifactManifest?.kind ?? file.artifactKind) === 'scene3d';
   // Lazily seed from the cache (not a hardcoded 100/'auto') so a remount that
   // lands back on a file the user already zoomed doesn't flash the wrong
   // value for a frame before the reset effect below corrects it.
   const [zoom, setZoom] = useState<number>(
-    () => htmlPreviewZoomState.get(fileViewportKey)?.zoom ?? 100,
+    () => (isScene3dArtifact ? 100 : htmlPreviewZoomState.get(fileViewportKey)?.zoom ?? 100),
   );
   const [zoomMode, setZoomMode] = useState<'auto' | 'manual'>(
-    () => htmlPreviewZoomState.get(fileViewportKey)?.zoomMode ?? 'auto',
+    () => (isScene3dArtifact ? 'auto' : htmlPreviewZoomState.get(fileViewportKey)?.zoomMode ?? 'auto'),
   );
   const [previewViewport, setPreviewViewportState] = useState<PreviewViewportId>(
-    () => htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop',
+    () => (isScene3dArtifact ? 'desktop' : htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop'),
   );
   const setPreviewViewport = useCallback((viewport: PreviewViewportId) => {
     setPreviewViewportCached(fileViewportKey, viewport);
@@ -7834,6 +7875,14 @@ function HtmlViewer({
   const [templateName, setTemplateName] = useState('');
 
   useEffect(() => {
+    // scene3d pages never restore cached zoom/viewport — see the declaration
+    // of `isScene3dArtifact` above for why the host must not scale them.
+    if (isScene3dArtifact) {
+      setPreviewViewportState('desktop');
+      setZoom(100);
+      setZoomMode('auto');
+      return;
+    }
     setPreviewViewportState(htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop');
     // Restore this file's last zoom instead of hard-resetting to 100/auto —
     // this effect also fires on every HtmlViewer remount (e.g. switching to
@@ -7844,7 +7893,7 @@ function HtmlViewer({
     const cachedZoom = htmlPreviewZoomState.get(fileViewportKey);
     setZoom(cachedZoom?.zoom ?? 100);
     setZoomMode(cachedZoom?.zoomMode ?? 'auto');
-  }, [fileViewportKey]);
+  }, [fileViewportKey, isScene3dArtifact]);
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
   const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
@@ -8268,6 +8317,136 @@ function HtmlViewer({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
+  // Identity of the scene the kit page currently shows: name, verdict, and
+  // the stats line for the hover title. Posted by the page (`od:scene3d-
+  // ident`) on every scene switch; the host acks so the page hides its own
+  // in-page chip — one identity line, owned by whoever is outermost.
+  const [scene3dIdent, setScene3dIdent] = useState<{
+    name: string;
+    ok: boolean;
+    known: boolean;
+    /** "53 parts · 2,464 tris" — visible beside the name, not hover-only. */
+    meta: string;
+    /** Verdict phrase / issue codes — the colour says it, hover spells it. */
+    detail: string;
+  } | null>(null);
+  useEffect(() => {
+    setScene3dIdent(null);
+    if (!isScene3dArtifact) return undefined;
+    const onMessage = (event: MessageEvent) => {
+      // Accept either mounted preview iframe, same as the deck bridge —
+      // but never a foreign window.
+      const fromOurs =
+        event.source === urlPreviewIframeRef.current?.contentWindow ||
+        event.source === srcDocPreviewIframeRef.current?.contentWindow;
+      if (!fromOurs) return;
+      // Tweaks bridge: the srcdoc-mounted kit page has an opaque origin and
+      // the daemon rejects Origin: null API calls by design, so the page
+      // asks the host to read/write its tweaks from the app origin. The
+      // guard validates every field — this turns a posted message into a
+      // real API call against the open project.
+      if (isScene3dTweaksRequestMessage(event.data)) {
+        const request = event.data;
+        const source = event.source as Window;
+        const reply = (payload: Record<string, unknown>) => {
+          try {
+            source.postMessage(
+              { type: 'od:scene3d-tweaks-result', requestId: request.requestId, ...payload },
+              '*',
+            );
+          } catch {
+            // A vanished window mid-request needs no answer.
+          }
+        };
+        const scenePath = typeof request.scenePath === 'string' ? request.scenePath : null;
+        const url = `/api/projects/${encodeURIComponent(projectId)}/scene3d/tweaks`;
+        if (request.op === 'compile') {
+          // The bake half of the tweak loop: saved edits only reach the
+          // geometry through a compile, and the page cannot call that
+          // endpoint itself. Long-running by nature; the reply lands when
+          // the compile does, and the refreshed artifacts reach the viewer
+          // through the normal file-change reload. A 409 (compile already
+          // running) is reported as its own message, not a bare status.
+          void fetch(`/api/projects/${encodeURIComponent(projectId)}/scene3d/compile`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(scenePath ? { scenePath } : {}),
+          })
+            .then(async (resp) => {
+              if (resp.status === 409) throw new Error('a compile is already running');
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+              const body = (await resp.json()) as { ok?: unknown };
+              reply({ ok: body?.ok !== false });
+            })
+            .catch((err) =>
+              reply({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+            );
+          return;
+        }
+        if (request.op === 'load') {
+          void fetch(scenePath ? `${url}?scenePath=${encodeURIComponent(scenePath)}` : url)
+            .then(async (resp) => {
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+              const body = (await resp.json()) as { tweaks?: unknown };
+              reply({
+                ok: true,
+                tweaks:
+                  body && typeof body.tweaks === 'object' && body.tweaks !== null
+                    ? body.tweaks
+                    : {},
+              });
+            })
+            .catch((err) =>
+              reply({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+            );
+        } else {
+          const body: Record<string, unknown> = { tweaks: request.tweaks ?? {} };
+          if (request.merge === true) body.merge = true;
+          if (scenePath) body.scenePath = scenePath;
+          void fetch(url, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+            .then((resp) => {
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+              reply({ ok: true });
+            })
+            .catch((err) =>
+              reply({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+            );
+        }
+        return;
+      }
+      const data = event.data as
+        | { type?: string; name?: unknown; ok?: unknown; known?: unknown; meta?: unknown; detail?: unknown }
+        | null;
+      if (!data || data.type !== 'od:scene3d-ident' || typeof data.name !== 'string') return;
+      setScene3dIdent({
+        name: data.name,
+        ok: data.ok !== false,
+        known: data.known === true,
+        meta: typeof data.meta === 'string' ? data.meta : '',
+        // The page sends bare S3D-* codes (it has no title catalog);
+        // the host is where a code becomes a sentence, so expand each
+        // one here before the tooltip renders it.
+        detail:
+          typeof data.detail === 'string'
+            ? data.detail.replace(/S3D-[EWI]-\d+/g, (code) => {
+                const title = scene3dIssueTitle(code);
+                return title ? `${code} ${title}` : code;
+              })
+            : '',
+      });
+      try {
+        (event.source as Window).postMessage({ type: 'od:scene3d-ident-ack' }, '*');
+      } catch {
+        // A vanished window mid-message is fine; the page keeps its chip.
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [isScene3dArtifact, file.name]);
   const previewContentMeasurementSequenceRef = useRef(0);
   const previewContentMeasurementGenerationSequenceRef = useRef(0);
   const previewContentMeasurementHostInstanceRef = useRef<string | null>(null);
@@ -9430,7 +9609,9 @@ function HtmlViewer({
     return sourceLooksLikeDeckPreview(s);
   }, [routingHtmlSource]);
   const effectiveDeck = isDeck || (!passiveLargeHtmlPreview && looksLikeDeck);
-  const previewZoomPercent = resolveDesktopPreviewZoomPercent({
+  // A 3D viewport always renders at natural size: its own camera is the only
+  // zoom, so the host contributes exactly 100% — no auto-fit, no manual scale.
+  const previewZoomPercent = isScene3dArtifact ? 100 : resolveDesktopPreviewZoomPercent({
     zoomMode,
     viewport: previewViewport,
     isDeck: effectiveDeck,
@@ -13542,6 +13723,22 @@ function HtmlViewer({
     artifactKind === 'markdown-document' ||
     rendererId === 'markdown' ||
     file.kind === 'text' && /\.mdx?$/i.test(file.name);
+  // Model downloads for the Export menu, one row PER SCENE with the formats
+  // as inline links. Grouping by format collapses for a kit — every scene's
+  // compiler output is literally named `scene.glb`, so a format-grouped list
+  // shows four identical rows with nothing saying which scene each belongs
+  // to. The sidecar's `metadata.scenes`/`deliverables` carry the identity;
+  // no round trip. (`isScene3dArtifact` itself is declared up with the
+  // zoom/viewport state, which it has to precede.)
+  const scene3dModelRows = useMemo(
+    () =>
+      isScene3dArtifact
+        ? modelRowsFromArtifactManifest(projectId, file.artifactManifest, t('scene3d.exportAllScenes'))
+        : [],
+    [isScene3dArtifact, file.artifactManifest, projectId, t],
+  );
+  /* Which row's archive is being fetched, so only that chip shows it. */
+  const [scene3dArchiveBusy, setScene3dArchiveBusy] = useState<string | null>(null);
   const isShareableArtifact =
     file.kind === 'html' ||
     isDeckArtifact ||
@@ -14857,7 +15054,25 @@ function HtmlViewer({
               </button>
             ))}
           </div>
-          {showPreviewToolbarControls ? (
+          {/* The compiled asset's identity, on the same line as Preview/Code
+              — the page hands it up so the viewport keeps its corner. Name
+              only; the verdict is the colour; parts/tris/codes ride the
+              hover title. */}
+          {isScene3dArtifact && scene3dIdent ? (
+            <span className="viewer-scene3d-ident" title={scene3dIdent.detail}>
+              <span
+                className={`viewer-scene3d-ident-name${
+                  scene3dIdent.known ? (scene3dIdent.ok ? ' is-ok' : ' is-bad') : ''
+                }`}
+              >
+                {scene3dIdent.name}
+              </span>
+              {scene3dIdent.meta ? (
+                <span className="viewer-scene3d-ident-meta">{scene3dIdent.meta}</span>
+              ) : null}
+            </span>
+          ) : null}
+          {showPreviewToolbarControls && !isScene3dArtifact ? (
             <span className="viewer-preview-toolbar-inline">
               <PreviewViewportControls
                 viewport={previewViewport}
@@ -14985,7 +15200,7 @@ function HtmlViewer({
                 <RemixIcon name="message-3-line" size={15} />
                 <span className="viewer-comment-count" aria-hidden>{visibleSideComments.length}</span>
               </button>
-              {source !== null && mode === 'preview' ? (
+              {source !== null && mode === 'preview' && !isScene3dArtifact ? (
                 <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
                   <button
                     type="button"
@@ -15682,6 +15897,125 @@ function HtmlViewer({
                       <span>{t('fileViewer.exportPptx')}</span>
                     </button>
                   ) : null}
+                  {/* Compiled models belong in Export, not in a second download
+                      control inside the artifact. One row per SCENE with the
+                      formats as inline links: the scene is what the user asks
+                      for ("the crate as GLB"), and per-format rows for a kit
+                      degrade into N identical `scene.glb` lines. Direct file
+                      links — the bytes already exist on disk. The `download`
+                      name is `<scene>.<ext>` so a kit's files don't all save
+                      as colliding `scene.glb`s. */}
+                  {scene3dModelRows.length > 0 ? (
+                    <Fragment>
+                      <div className="share-menu-section-label" role="presentation">
+                        {t('scene3d.exportModels')}
+                      </div>
+                      {scene3dModelRows.map((row) => (
+                        <div
+                          key={row.label}
+                          className={`share-menu-model-row${row.bulk ? ' share-menu-model-row--all' : ''}`}
+                        >
+                          <span className="share-menu-model-name" title={row.label}>
+                            {row.label}
+                          </span>
+                          <span className="share-menu-model-formats">
+                            {row.items.map((item) => {
+                              /* A chip is a direct link when the bytes are
+                                 already one file on disk, and a button when
+                                 the answer is an archive — "every scene as
+                                 GLB" cannot arrive as a single mesh. Same
+                                 chip either way: what a person picks is the
+                                 FORMAT, and the delivery mechanism is our
+                                 problem, not a second vocabulary for them to
+                                 learn. */
+                              if (!item.archive) {
+                                return (
+                                  <a
+                                    key={item.ref.path}
+                                    className="share-menu-model-format"
+                                    role="menuitem"
+                                    href={item.ref.url}
+                                    download={item.downloadName}
+                                    title={item.downloadName}
+                                    onClick={() => setDeployMenuOpen(false)}
+                                  >
+                                    {item.ext.toUpperCase()}
+                                  </a>
+                                );
+                              }
+                              const busyKey = `${row.label}:${item.ext}`;
+                              return (
+                                <button
+                                  key={item.ref.path}
+                                  type="button"
+                                  className="share-menu-model-format share-menu-model-format--archive"
+                                  role="menuitem"
+                                  disabled={scene3dArchiveBusy !== null}
+                                  title={item.downloadName}
+                                  onClick={() => {
+                                    setScene3dArchiveBusy(busyKey);
+                                    fireShareExport('zip', async () => {
+                                      try {
+                                        await exportScene3dArchive({
+                                          files: item.archive ?? [],
+                                          fileName: item.downloadName,
+                                          workspaceContext,
+                                        });
+                                      } finally {
+                                        setScene3dArchiveBusy(null);
+                                        setDeployMenuOpen(false);
+                                      }
+                                    });
+                                  }}
+                                >
+                                  {scene3dArchiveBusy === busyKey ? '…' : item.ext.toUpperCase()}
+                                </button>
+                              );
+                            })}
+                            {/* "Every format at once", as one more chip on
+                                the row it belongs to — not a separate menu
+                                line. The row already reads "crate: GLB USDA
+                                USDZ OBJ FBX"; the natural end of that
+                                sentence is ALL, and a full-width entry
+                                underneath restates the same idea in a
+                                different shape for no reason. */}
+                            {row.archive.length > 1 ? (
+                              <button
+                                type="button"
+                                className="share-menu-model-format share-menu-model-format--archive"
+                                role="menuitem"
+                                disabled={scene3dArchiveBusy !== null}
+                                title={t('scene3d.exportAll', { count: row.archive.length })}
+                                onClick={() => {
+                                  /* Busy is tracked per row: fireShareExport
+                                     reports an export, it does not hand back
+                                     the work, and fetching a scene's meshes
+                                     takes long enough that a chip which looks
+                                     idle invites a second click and a second
+                                     archive. */
+                                  setScene3dArchiveBusy(row.label);
+                                  fireShareExport('zip', async () => {
+                                    try {
+                                      await exportScene3dArchive({
+                                        files: row.archive,
+                                        fileName: row.archiveName,
+                                        workspaceContext,
+                                      });
+                                    } finally {
+                                      setScene3dArchiveBusy(null);
+                                      setDeployMenuOpen(false);
+                                    }
+                                  });
+                                }}
+                              >
+                                {scene3dArchiveBusy === row.label ? '…' : 'ZIP'}
+                              </button>
+                            ) : null}
+                          </span>
+                        </div>
+                      ))}
+                    </Fragment>
+                  ) : null}
                   {showImageExport ? (
                     <button
                       type="button"
@@ -15699,6 +16033,18 @@ function HtmlViewer({
                       "produce a file/link out of this artifact" menu; a capture
                       that only lands on the clipboard is a different job and the
                       toolbar's screenshot-to-chat already leads with it. */}
+                  {/* Both of the page-oriented exports below are withheld for
+                      a compiled 3D asset, because neither can produce a
+                      working file. The kit page references its meshes by
+                      RELATIVE url (`scenes/<name>/out/scene.glb`), which
+                      resolves against the daemon while the page is served and
+                      against nothing at all once the HTML is detached — so a
+                      standalone copy opens to an empty viewport. Offering a
+                      download that cannot load its own model is worse than
+                      not offering it; "give me everything" is answered by the
+                      models archive above, which ships the actual asset. */}
+                  {!isScene3dArtifact ? (
+                  <>
                   <button
                     type="button"
                     className="share-menu-item"
@@ -15738,6 +16084,8 @@ function HtmlViewer({
                     <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
                     <span>{t('fileViewer.exportHtml')}</span>
                   </button>
+                  </>
+                  ) : null}
                   {showMarkdownExport ? (
                     <button
                       type="button"

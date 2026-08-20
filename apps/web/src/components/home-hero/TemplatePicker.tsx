@@ -9,7 +9,7 @@
 // (the same handler the rail uses). Clearing the selected type was removed.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { HomeHeroChip } from './chips';
+import { HOME_HERO_CHIPS, type HomeHeroChip } from './chips';
 import { Icon } from '../Icon';
 import { useT } from '../../i18n';
 
@@ -44,7 +44,17 @@ const MENU_MIN_USABLE_H = 56;
 
 // Per product: the menu lists at most this many kinds (rows beyond it are
 // simply not shown — the catalog stays whole for the rail/carousel).
-const MAX_MENU_KINDS = 12;
+//
+// The floor is sized from the scenario catalog rather than written as a
+// literal, because the picker is also the only surface that must offer
+// *every* scenario template (pinned by `HomeHero.rail.test.tsx`). The
+// previous literal `12` happened to equal the scenario count exactly, so
+// the first scenario added after it would have been silently truncated out
+// of the picker while every other surface still showed it.
+const SCENARIO_TEMPLATE_COUNT = HOME_HERO_CHIPS.filter(
+  (chip) => chip.group === 'create' && chip.action.kind === 'apply-scenario',
+).length;
+const MAX_MENU_KINDS = Math.max(12, SCENARIO_TEMPLATE_COUNT);
 
 export function TemplatePicker({
   templates,

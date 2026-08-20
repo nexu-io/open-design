@@ -353,6 +353,41 @@ ${list(assetFiles)}
 `;
 }
 
+/**
+ * Pack every compiled deliverable of a 3D asset into one archive.
+ *
+ * The Export menu lists each scene's formats individually, which is the
+ * right answer to "give me the crate as a GLB" and the wrong one to "give me
+ * everything" — a kit with a dozen scenes and five formats each is sixty
+ * clicks and sixty files named `scene.glb`.
+ *
+ * Bytes, not text. These are binary containers, and the archive writer takes
+ * a Uint8Array precisely so they survive the trip; reading them as strings
+ * would replace every non-UTF-8 byte and produce an archive full of files no
+ * importer can open.
+ *
+ * Fetched in parallel but reported as one unit: a partial archive that looks
+ * complete is worse than a failure, so anything that could not be read fails
+ * the whole export rather than quietly shipping without it.
+ */
+export async function exportScene3dArchive(opts: {
+  files: ReadonlyArray<{ url: string; zipPath: string }>;
+  /** Exact archive filename, chosen by the chip that names the format. */
+  fileName: string;
+  workspaceContext?: WorkspaceCollabContext | null;
+}): Promise<void> {
+  if (opts.files.length === 0) return;
+  const headers = opts.workspaceContext ? workspaceProjectHeaders(opts.workspaceContext) : undefined;
+  const entries = await Promise.all(
+    opts.files.map(async (file) => {
+      const resp = headers ? await fetch(file.url, { headers }) : await fetch(file.url);
+      if (!resp.ok) throw new Error(`${file.zipPath} (${resp.status})`);
+      return { path: file.zipPath, content: new Uint8Array(await resp.arrayBuffer()) };
+    }),
+  );
+  triggerDownload(buildZip(entries), opts.fileName || 'scene3d.zip');
+}
+
 export function exportAsZip(html: string, title: string): void {
   const doc = buildSrcdoc(html);
   const slug = safeFilename(title, 'artifact');

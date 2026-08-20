@@ -1598,6 +1598,10 @@
 .composer-inline-mention--file       { --m-hue: var(--blue);    --m-tint: var(--blue-bg); }
 .composer-inline-mention--connector  { --m-hue: var(--green);   --m-tint: var(--green-bg); }
 .composer-inline-mention--asset      { --m-hue: var(--text-soft); --m-tint: var(--bg-subtle); }
+/* A part of the 3D asset open in the viewer. Green, matching the world axis
+   the editor paints vertical — the mention and the thing it names should
+   read as the same object across the two surfaces. */
+.composer-inline-mention--part       { --m-hue: var(--green);   --m-tint: var(--green-bg); }
 /* Working-directory picker row, directly below the input and above the
    controls — mirrors the Home composer's placement. */
 /* Design-system picker rendered as a text-free palette icon button that sits

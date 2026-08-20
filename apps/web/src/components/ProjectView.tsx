@@ -3782,7 +3782,20 @@ export function ProjectView({
   const refreshPreviewCommentsRef = useRef<(() => Promise<void>) | null>(null);
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
-      iframeKeepAlivePool.evictProject(project.id);
+      /* Editor-state sidecars are not rendered by any iframe, so their
+         writes must not evict the keep-alive pool. The concrete case:
+         the kit viewer saves its tweaks (scene3d tweaks.json) through
+         the daemon, the write echoes back as file-changed, and the
+         eviction reloaded the very srcdoc iframe that asked for the
+         save — camera, selection and undo history gone the moment the
+         user pressed Save. The file rail still refreshes; only the
+         iframe teardown is skipped. */
+      if (!isEditorStateSidecarPath(evt.path)) {
+        iframeKeepAlivePool.evictProject(project.id);
+      }
+      /* Snapshot invalidation stays UNCONDITIONAL: it only forces the next
+         mount to refetch, which is cheap and always correct — the thing a
+         sidecar write must not do is tear down the LIVE iframe. */
       invalidateHtmlSourceSnapshotProject(project.id);
       coalescedFileChangedRefresh();
       void recoverMaterializedConversations(project.id, projectRunAuthorityKey);
@@ -12319,6 +12332,33 @@ export function extractTouchedFilePathsFromEvents(events: ChatMessage['events'])
     }
   }
   return touched;
+}
+
+/**
+ * Files no iframe renders, so a change to one must never tear down the
+ * keep-alive iframe pool. Two families:
+ *
+ * - Editor-state sidecars (scene3d tweaks.json): the kit viewer's save
+ *   round-trips through the daemon and echoes back as a file-changed
+ *   event addressed at the very viewer that saved it — evicting reloaded
+ *   the page mid-edit, camera and undo history gone on Save.
+ * - Compiler scratch (`.scene3d/` stage cache and work dir): a running
+ *   compile writes dozens of these, and each one evicted the viewer that
+ *   was showing "Compiling…". The deliverables that DO end a compile
+ *   (out/*.glb, out/proof frames, kit.html, sidecars) live outside
+ *   `.scene3d/`, so the one reload that matters still happens when they
+ *   land.
+ *
+ * Known tradeoff: the tweaks.json match is by basename, so a project that
+ * ships its own unrelated tweaks.json keeps its live iframes across writes
+ * to it. Snapshot invalidation still runs (the caller keeps it
+ * unconditional), so the next mount is fresh either way.
+ */
+export function isEditorStateSidecarPath(filePath: unknown): boolean {
+  if (typeof filePath !== 'string') return false;
+  const base = filePath.split('/').pop() ?? filePath;
+  if (base === 'tweaks.json') return true;
+  return filePath.split('/').includes('.scene3d');
 }
 
 function isFileWriteToolName(value: unknown): boolean {

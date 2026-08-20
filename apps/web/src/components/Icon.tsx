@@ -82,6 +82,7 @@ export type IconName =
   | 'refresh'
   | 'reload'
   | 'robot'
+  | 'scene3d'
   | 'search'
   | 'send'
   | 'settings'
@@ -890,6 +891,24 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       return (
         <svg {...common} className={`od-icon icon-spin${strokeClassName ? ` ${strokeClassName}` : ''}`}>
           <path d="M21 12a9 9 0 1 1-6.22-8.56" />
+        </svg>
+      );
+    case 'scene3d':
+      // Isometric cube (three visible faces meeting at the center Y-junction)
+      // resting on a turntable ellipse — the scene3d signature: a compiled 3D
+      // asset shown on its turntable proof. No other glyph in the set is a
+      // cube, so it reads unmistakably as "3D scene" and is distinct from
+      // `orbit` (planet/ellipse) and `sparkles` (WebGL) at chip size.
+      return (
+        <svg {...common}>
+          {/* cube silhouette (regular hexagon) */}
+          <path d="M12 3 17 5.75V11.25L12 14 7 11.25V5.75Z" />
+          {/* top face split — from the two upper corners into the front junction */}
+          <path d="M7 5.75 12 8 17 5.75" />
+          {/* near vertical edge down to the bottom corner */}
+          <path d="M12 8v6" />
+          {/* turntable the asset rests on */}
+          <ellipse cx="12" cy="16.8" rx="6.5" ry="2.1" />
         </svg>
       );
     case 'sparkles':

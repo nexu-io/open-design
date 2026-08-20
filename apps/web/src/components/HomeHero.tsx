@@ -3745,6 +3745,7 @@ function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): st
     case 'audio': return t('homeHero.chip.audioDesc');
     case 'hyperframes': return t('homeHero.chip.hyperframesDesc');
     case 'webgl': return t('homeHero.chip.webglDesc');
+    case 'scene3d': return t('homeHero.chip.scene3dChipDesc');
     case 'live-artifact': return t('homeHero.chip.liveArtifactDesc');
     case 'create-brand-kit': return t('homeHero.chip.createBrandKitDesc');
     default: return '';
@@ -3786,6 +3787,7 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
     case 'audio': return t('homeHero.chip.audioNext');
     case 'live-artifact': return t('homeHero.chip.liveArtifactHint');
     case 'hyperframes': return t('homeHero.chip.hyperframesHint');
+    case 'scene3d': return t('homeHero.chip.scene3dChipHint');
     case 'create-brand-kit': return t('homeHero.chip.createBrandKitHint');
     case 'create-plugin': return t('homeHero.chip.createPluginHint');
     case 'figma': return t('homeHero.chip.figmaHint');

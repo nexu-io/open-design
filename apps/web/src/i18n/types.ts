@@ -30,6 +30,68 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  'scene3d.replay': string;
+  'scene3d.stop': string;
+  // Scene 3D composer chip (create rail).
+  'homeHero.chip.scene3dChip': string;
+  'homeHero.chip.scene3dChipDesc': string;
+  'homeHero.chip.scene3dChipHint': string;
+  // Scene 3D — deterministic scene compile surface (packages/scene3d).
+  'scene3d.title': string;
+  'scene3d.compile': string;
+  'scene3d.compiling': string;
+  'scene3d.recompile': string;
+  'scene3d.verdict': string;
+  'scene3d.verdictClean': string;
+  'scene3d.verdictFailed': string;
+  'scene3d.neverCompiled': string;
+  'scene3d.parts': string;
+  'scene3d.noParts': string;
+  'scene3d.issues': string;
+  'scene3d.noIssues': string;
+  'scene3d.assets': string;
+  'scene3d.noAssets': string;
+  'scene3d.noProof': string;
+  'scene3d.frameAlt': string;
+  'scene3d.frameSlider': string;
+  'scene3d.dragHint': string;
+  'scene3d.issuesStoredHint': string;
+  'scene3d.meshCounts': string;
+  'scene3d.fixPrefix': string;
+  // Compiled-asset chrome: the export menu, the asset-kind label, and the
+  // toolbar counts. `partsCount` / `trisCount` take a `{count}` variable.
+  'scene3d.exportMenu': string;
+  'scene3d.exportEmpty': string;
+  'scene3d.exportAll': string;
+  'scene3d.exportAllScenes': string;
+  'scene3d.exportAllChip': string;
+  'scene3d.exportAllBusy': string;
+  'scene3d.exportModels': string;
+  'scene3d.formatGlb': string;
+  'scene3d.formatUsd': string;
+  'scene3d.formatObj': string;
+  'scene3d.formatImage': string;
+  'scene3d.formatOther': string;
+  'scene3d.kindScene': string;
+  'scene3d.kindProp': string;
+  'scene3d.kindKit': string;
+  'scene3d.kindAnimation': string;
+  'scene3d.kindSprite': string;
+  'scene3d.kindFlipbook': string;
+  'scene3d.kindVfx': string;
+  'scene3d.kindSkybox': string;
+  'scene3d.kindTexture': string;
+  'scene3d.partsCount': string;
+  'scene3d.trisCount': string;
+  'scene3d.claimsProven': string;
+  'scene3d.blenderVersion': string;
+  // Kit chrome: a kit is a view over compiled scenes, so it lists them
+  // and drills into one rather than compiling anything itself.
+  'scene3d.scenes': string;
+  'scene3d.kitScenes': string;
+  'scene3d.kitStageTitle': string;
+  'scene3d.kitTruncated': string;
+  'scene3d.backToKit': string;
   // Workspace invite acceptance (C lane)
   'invite.header.eyebrow': string;
   'invite.loading': string;
@@ -3471,6 +3533,7 @@ export interface Dict {
   'chat.mentionTabSkills': string;
   'chat.mentionTabMcp': string;
   'chat.mentionTabConnectors': string;
+  'chat.mentionTabParts': string;
   'chat.mentionTabFiles': string;
   'chat.mentionNoResults': string;
   'chat.mentionSearchPrompt': string;
@@ -3479,6 +3542,7 @@ export interface Dict {
   'chat.mentionSectionSkills': string;
   'chat.mentionSectionMcp': string;
   'chat.mentionSectionConnectors': string;
+  'chat.mentionSectionParts': string;
   'chat.mentionSectionFiles': string;
   'chat.mentionActiveSkill': string;
   'chat.mentionUseMcpTitle': string;

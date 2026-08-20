@@ -1,0 +1,144 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-scene3d",
+  "title": "3D Scene & Assets",
+  "title_i18n": {
+    "zh-CN": "3D 场景与资产",
+    "zh-TW": "3D 場景與資產",
+    "ja": "3D シーンとアセット",
+    "ko": "3D 장면 및 에셋",
+    "de": "3D-Szene & Assets",
+    "fr": "Scène 3D et assets",
+    "ru": "3D-сцена и ассеты",
+    "es": "Escena 3D y assets",
+    "pt-BR": "Cena 3D e assets",
+    "it": "Scena 3D e asset",
+    "vi": "Cảnh 3D và tài nguyên",
+    "pl": "Scena 3D i zasoby",
+    "id": "Adegan 3D & Aset",
+    "nl": "3D-scène & assets",
+    "ar": "مشهد ثلاثي الأبعاد وأصول",
+    "tr": "3D Sahne ve Varlıklar",
+    "uk": "3D-сцена та ассети",
+    "en": "3D Scene & Assets"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-17T00:00:00Z",
+  "description": "Author 3D models, scenes, textures, sprite sheets, flipbook animations, skyboxes, and vector assets as code, then compile them deterministically through headless Blender: one call parses, builds, renders turntable proof frames, lints against your conventions, and exports USD + GLB with a part manifest. Trigger when the user asks for a 3D model, prop, scene, asset kit, texture, sprite sheet, flipbook, skybox, or GLB/USD/OBJ export.",
+  "description_i18n": {
+    "zh-CN": "用代码创作 3D 模型、场景、纹理、精灵图、翻页动画、天空盒与矢量资产，然后通过无头 Blender 确定性编译：一次调用完成解析、构建、转台校样渲染、按约定检查，并导出带零件清单的 USD 与 GLB。当用户需要 3D 模型、道具、场景、资产套件、纹理、精灵图、翻页动画、天空盒或 GLB/USD/OBJ 导出时触发。",
+    "zh-TW": "用程式碼創作 3D 模型、場景、紋理、精靈圖、翻頁動畫、天空盒與向量資產，再透過無頭 Blender 確定性編譯：一次呼叫完成解析、建構、轉台校樣渲染、依約定檢查，並匯出帶零件清單的 USD 與 GLB。",
+    "ja": "3D モデル、シーン、テクスチャ、スプライトシート、フリップブックアニメ、スカイボックス、ベクターアセットをコードとして書き、ヘッドレス Blender で決定的にコンパイルします。1 回の呼び出しで解析・ビルド・ターンテーブル校正レンダリング・規約リント・USD/GLB 書き出しまで行います。",
+    "ko": "3D 모델, 장면, 텍스처, 스프라이트 시트, 플립북 애니메이션, 스카이박스, 벡터 에셋을 코드로 작성하고 헤드리스 Blender로 결정적으로 컴파일합니다. 한 번의 호출로 파싱, 빌드, 턴테이블 프루프 렌더, 규칙 린트, USD/GLB 내보내기를 수행합니다.",
+    "de": "Erstellen Sie 3D-Modelle, Szenen, Texturen, Sprite-Sheets, Daumenkino-Animationen, Skyboxen und Vektor-Assets als Code und kompilieren Sie sie deterministisch über headless Blender: ein Aufruf parst, baut, rendert Drehteller-Proofs, lintet gegen Ihre Konventionen und exportiert USD + GLB mit Teile-Manifest.",
+    "fr": "Créez modèles 3D, scènes, textures, feuilles de sprites, animations en folioscope, skyboxes et assets vectoriels sous forme de code, puis compilez-les de façon déterministe via Blender headless : un seul appel analyse, construit, rend les images de tourne-disque, applique vos conventions et exporte USD + GLB avec un manifeste de pièces.",
+    "ru": "Создавайте 3D-модели, сцены, текстуры, спрайт-листы, флипбук-анимации, скайбоксы и векторные ассеты как код и детерминированно компилируйте их через headless Blender: один вызов разбирает, собирает, рендерит контрольные кадры, проверяет соглашения и экспортирует USD + GLB с манифестом деталей.",
+    "es": "Crea modelos 3D, escenas, texturas, hojas de sprites, animaciones de folioscopio, skyboxes y assets vectoriales como código, y compílalos de forma determinista con Blender headless: una llamada analiza, construye, renderiza fotogramas de prueba, aplica tus convenciones y exporta USD + GLB con un manifiesto de piezas.",
+    "pt-BR": "Crie modelos 3D, cenas, texturas, sprite sheets, animações de flipbook, skyboxes e assets vetoriais como código e compile-os deterministicamente com Blender headless: uma chamada analisa, constrói, renderiza quadros de prova, aplica suas convenções e exporta USD + GLB com manifesto de peças.",
+    "it": "Crea modelli 3D, scene, texture, sprite sheet, animazioni flipbook, skybox e asset vettoriali come codice, poi compilali in modo deterministico con Blender headless: una chiamata analizza, costruisce, renderizza i fotogrammi di prova, applica le tue convenzioni ed esporta USD + GLB con un manifesto delle parti.",
+    "vi": "Tạo mô hình 3D, cảnh, texture, sprite sheet, hoạt hình flipbook, skybox và tài nguyên vector dưới dạng mã, rồi biên dịch tất định qua Blender headless: một lệnh gọi phân tích, dựng, render khung kiểm chứng, lint theo quy ước và xuất USD + GLB kèm danh mục bộ phận.",
+    "pl": "Twórz modele 3D, sceny, tekstury, arkusze sprite'ów, animacje flipbook, skyboxy i zasoby wektorowe jako kod, a następnie kompiluj je deterministycznie przez headless Blender: jedno wywołanie parsuje, buduje, renderuje klatki próbne, sprawdza konwencje i eksportuje USD + GLB z manifestem części.",
+    "id": "Buat model 3D, adegan, tekstur, sprite sheet, animasi flipbook, skybox, dan aset vektor sebagai kode, lalu kompilasi secara deterministik lewat Blender headless: satu panggilan mengurai, membangun, merender bingkai bukti turntable, memeriksa konvensi, dan mengekspor USD + GLB dengan manifes bagian.",
+    "nl": "Maak 3D-modellen, scènes, textures, sprite sheets, flipbook-animaties, skyboxes en vector-assets als code en compileer ze deterministisch via headless Blender: één aanroep parseert, bouwt, rendert proefbeelden, lint tegen je conventies en exporteert USD + GLB met een onderdelenmanifest.",
+    "ar": "أنشئ نماذج ومشاهد ثلاثية الأبعاد وخامات وأوراق سبرايت ورسوم متحركة متتابعة وصناديق سماء وأصولًا متجهة على هيئة كود، ثم ترجمها بشكل حتمي عبر Blender بلا واجهة: استدعاء واحد يحلّل ويبني ويعرض لقطات إثبات ويفحص الاصطلاحات ويصدّر USD وGLB مع بيان بالأجزاء.",
+    "tr": "3D modelleri, sahneleri, dokuları, sprite sayfalarını, flipbook animasyonlarını, skybox'ları ve vektör varlıklarını kod olarak yazın ve headless Blender ile deterministik biçimde derleyin: tek çağrı ayrıştırır, derler, döner tabla kanıt kareleri üretir, kurallarınızı denetler ve parça manifestiyle USD + GLB dışa aktarır.",
+    "uk": "Створюйте 3D-моделі, сцени, текстури, спрайт-аркуші, флипбук-анімації, скайбокси та векторні ассети як код і детерміновано компілюйте їх через headless Blender: один виклик розбирає, збирає, рендерить контрольні кадри, перевіряє домовленості та експортує USD + GLB з маніфестом деталей.",
+    "en": "Author 3D models, scenes, textures, sprite sheets, flipbook animations, skyboxes, and vector assets as code, then compile them deterministically through headless Blender: one call parses, builds, renders turntable proof frames, lints against your conventions, and exports USD + GLB with a part manifest."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/scene3d",
+  "tags": [
+    "example",
+    "first-party",
+    "3d",
+    "asset",
+    "model",
+    "blender",
+    "openusd",
+    "usd",
+    "glb",
+    "texture",
+    "sprite-sheet",
+    "flipbook",
+    "skybox",
+    "turntable",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Model {{subject}} as a 3D scene project: write the build script, compile it through `od scene3d compile`, and fix every issue code until it compiles clean with a turntable and a GLB + USD export.",
+        "zh-CN": "把{{subject}}建模为一个 3D 场景工程：编写构建脚本，通过 `od scene3d compile` 编译，并逐条修复问题代码，直到编译通过并产出转台校样图与 GLB + USD 导出。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "subject",
+        "label": "What should it be?",
+        "type": "text",
+        "required": false,
+        "default": "a wooden shipping crate with a separate metal-banded lid",
+        "placeholder": "e.g. a low-poly creature kit, a night skybox, a flame sprite sheet"
+      },
+      {
+        "name": "assetClass",
+        "label": "Asset class",
+        "type": "select",
+        "required": false,
+        "default": "model",
+        "options": [
+          "3D model / prop",
+          "Full scene",
+          "Texture / material",
+          "Sprite sheet / flipbook",
+          "Skybox / cubemap"
+        ]
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": false
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

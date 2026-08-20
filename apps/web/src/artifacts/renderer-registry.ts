@@ -54,6 +54,29 @@ export const DeckHtmlRenderer: ArtifactRenderer = {
   },
 };
 
+/**
+ * A deterministically compiled 3D/asset deliverable from `packages/scene3d`.
+ *
+ * Matched on the manifest ONLY. The compiler writes its own `.artifact.json`
+ * sidecar next to everything it emits, so there is nothing to sniff for: if a
+ * file claims to be a compiled asset, the compiler put that claim there. This
+ * is the difference between this renderer and the deck one, which still needs
+ * a prose heuristic because decks can be written freehand by the agent.
+ *
+ * Matches on `renderer`, NOT on `kind`, and the split is load-bearing. A
+ * compiled asset's KIND says what it is — that is what labels it and what
+ * gates its chrome. Its RENDERER says how to draw it, and not every compiled
+ * asset draws the same way: the proof-frame player is a host panel, while the
+ * kit page is a live WebGL viewport that belongs in the HTML viewer with a
+ * scene3d-aware toolbar. Matching on kind would drag the kit into the panel
+ * and wrap a full editor in a second, redundant frame.
+ */
+export const Scene3dRenderer: ArtifactRenderer = {
+  id: 'scene3d',
+  supportsStreaming: false,
+  canRender: ({ file }) => resolveManifest(file)?.renderer === 'scene3d',
+};
+
 export const ReactComponentRenderer: ArtifactRenderer = {
   id: 'react-component',
   supportsStreaming: false,
@@ -100,6 +123,7 @@ export class RendererRegistry {
 }
 
 export const artifactRendererRegistry = new RendererRegistry([
+  Scene3dRenderer,
   ReactComponentRenderer,
   DeckHtmlRenderer,
   HtmlRenderer,

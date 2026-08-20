@@ -969,6 +969,171 @@
   letter-spacing: 0;
 }
 
+/* scene3d model rows inside the Export menu (owner: FileViewer scene3d
+   export section). One row per compiled scene: name on the left, format
+   links on the right. Global because they extend the shared share-menu
+   contract; everything scene3d-panel-local stays in its CSS Module. */
+.share-menu-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 10px;
+  /* The menu owns its width; this row lives inside it. Anything here that
+     cannot shrink turns a narrow menu into an overflow, so nothing here is
+     allowed a fixed size. */
+  min-width: 0;
+}
+.share-menu-model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+/* The gathered row is a SUMMARY of the rows above it, not another scene.
+   Styled identically it read as one — a kit of two would appear to contain
+   a third asset called "All scenes". A hairline separates it from the
+   things it is summing, and the label steps back to the muted weight the
+   section heading uses, so the eye reads it as a total rather than an
+   item. */
+.share-menu-model-row--all {
+  /* Full-bleed rule. The row is inset by the menu's own padding, so a border
+     on the row alone stops short at both ends and reads as an underline
+     belonging to the row above rather than as a divider between two kinds of
+     thing. */
+  position: relative;
+  /* Even air on both sides of the rule. Three above and eight below made the
+     line look attached to the row it separates from rather than sitting
+     between the two groups. */
+  margin-top: 6px;
+  padding-top: 7px;
+}
+.share-menu-model-row--all::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border-subtle, #e3e6ea);
+}
+.share-menu-model-row--all .share-menu-model-name {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.share-menu-model-formats {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  /*
+   * Shrinkable and wrapping — NOT `flex: none`.
+   *
+   * This is the property that decides whether the row can overflow at all.
+   * A non-shrinking group of fixed-width chips inside a fixed-width menu
+   * will spill out of it the moment the label, the locale or the format
+   * count grows; widening some ancestor only moves the point at which that
+   * happens. Letting the group shrink and wrap means the row fits any menu
+   * width by construction, and a long scene name pushes chips onto a second
+   * line instead of pushing them out of the panel.
+   */
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.share-menu-model-format {
+  /*
+   * A deliberately sized chip: 36x22, text centred.
+   *
+   * Both dimensions have to be stated. The height, because these sit in a
+   * flex line whose default alignment is stretch — left to itself a chip
+   * grew to the full 36px height of the row and became a large empty box
+   * with 10.5px text adrift in the middle. `align-self` stops the stretch
+   * whatever an ancestor asks for, rather than relying on every ancestor
+   * continuing to say `center`.
+   *
+   * The width, because format names are three or four characters (GLB /
+   * USDA); hugging chips give every row a different rag and the columns
+   * stop lining up between rows. One min-width sized to the longest label
+   * keeps the set reading as a grid, and 36x22 is close enough to the
+   * proportions of the text inside that the box reads as a label rather
+   * than as a container.
+   */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  height: 22px;
+  /*
+   * Sized by its own text, with no minimum.
+   *
+   * Forcing every chip to the width of the longest label made the group a
+   * rigid block that the menu could not accommodate. It also solved a
+   * problem that does not exist: each row carries the same formats in the
+   * same order, so content-sized chips already line up column to column —
+   * and where two scenes genuinely produce different formats, pretending
+   * they align would be the wrong answer anyway.
+   */
+  padding: 0 7px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-decoration: none;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.share-menu-model-format:hover {
+  background: var(--surface-subtle, #f6f7f9);
+  color: inherit;
+}
+/* Chips that deliver an ARCHIVE rather than a single file — the per-format
+   bulk downloads and the row's ZIP.
+   They are <button> where their neighbours are <a>, so every button default
+   has to be unset or they sit on a different baseline with a different font
+   and read as a separate control. They are not: ZIP is a format like GLB is
+   a format, and what a person picks in this row is always "which format",
+   never "which delivery mechanism". So they are styled identically and the
+   only thing that distinguishes them is the label. */
+.share-menu-model-format--archive {
+  appearance: none;
+  background: none;
+  cursor: pointer;
+  font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.share-menu-model-format--archive:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* scene3d identity chip on the viewer toolbar (owner: FileViewer scene3d
+   toolbar). The kit page posts its active scene's name/verdict up and hides
+   its own in-page chip; name only, verdict as colour, stats on hover. */
+.viewer-scene3d-ident {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: 8px;
+  min-width: 0;
+  cursor: default;
+}
+.viewer-scene3d-ident-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+.viewer-scene3d-ident-name.is-ok { color: var(--status-success, #1f8a5f); }
+.viewer-scene3d-ident-name.is-bad { color: var(--status-danger, #c0392b); }
+.viewer-scene3d-ident-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .button-like {
   display: inline-flex;
   align-items: center;
