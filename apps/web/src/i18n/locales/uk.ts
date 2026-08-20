@@ -2082,7 +2082,7 @@ export const uk: Dict = {
   'inlineSwitcher.missingApiKey': 'Не задано API-ключ — відкрийте Налаштування.',
   'inlineSwitcher.openFullSettings': 'Відкрити налаштування виконання',
   'inlineSwitcher.customSuffix': '(власна)',
-  'inlineSwitcher.unlimitedBadge': 'Без обмежень',
+  'inlineSwitcher.unlimitedBadge': 'Безліміт',
   'project.backToProjects': 'Назад до проектів',
   'project.brandReadyTitle': 'Дизайн-система {name} готова',
   'project.brandReadyTitleGeneric': 'Ваша дизайн-система готова',

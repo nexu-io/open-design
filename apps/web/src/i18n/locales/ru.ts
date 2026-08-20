@@ -2082,7 +2082,7 @@ export const ru: Dict = {
   'inlineSwitcher.missingApiKey': 'API-ключ не задан — откройте Настройки.',
   'inlineSwitcher.openFullSettings': 'Открыть настройки выполнения',
   'inlineSwitcher.customSuffix': '(пользовательская)',
-  'inlineSwitcher.unlimitedBadge': 'Без лимитов',
+  'inlineSwitcher.unlimitedBadge': 'Безлимит',
   'project.backToProjects': 'Назад к проектам',
   'project.brandReadyTitle': 'Дизайн-система {name} готова',
   'project.brandReadyTitleGeneric': 'Ваша дизайн-система готова',
