@@ -42,37 +42,59 @@ function stripLineComments(source: string): string {
   return source.replace(/^[ \t]*\/\/.*\n?/gm, '');
 }
 
+/** First capture group, or a failure naming what could not be found. */
+function captureOne(source: string, pattern: RegExp, what: string): string {
+  const captured = source.match(pattern)?.[1];
+  if (captured === undefined) throw new Error(`${what} not found — did it get renamed?`);
+  return captured;
+}
+
+/** Every first capture group across all matches. */
+function captureAll(source: string, pattern: RegExp): string[] {
+  return [...source.matchAll(pattern)].flatMap((match) =>
+    match[1] === undefined ? [] : [match[1]],
+  );
+}
+
+/** The `tier: …` entry inside an object literal body, up to the next entry. */
+function tierEntry(body: string, tier: Tier, what: string): string {
+  return captureOne(
+    body,
+    new RegExp(`\\n  ${tier}: ([\\s\\S]*?),(?=\\n  [a-z]+:|$)`),
+    `tier ${tier} in ${what}`,
+  );
+}
+
 /** Every `{ name: '…' }` entry in the page's `popularModels` list, in order. */
 async function pricingPopularModelNames(): Promise<string[]> {
   const source = stripLineComments(await readFile(PRICING_PAGE, 'utf8'));
-  const block = source.match(/const popularModels: ModelItem\[\] = \[([\s\S]*?)\n\];/);
-  expect(block, 'popularModels list not found on the Pricing page').toBeTruthy();
-  return [...block![1].matchAll(/name: '([^']+)'/g)].map((match) => match[1]);
+  const block = captureOne(
+    source,
+    /const popularModels: ModelItem\[\] = \[([\s\S]*?)\n\];/,
+    'popularModels on the Pricing page',
+  );
+  return captureAll(block, /name: '([^']+)'/g);
 }
 
 /** The page's per-tier unlimited sets, resolved to AMR model ids. */
 async function pricingUnlimitedIdsByTier(): Promise<Record<Tier, string[]>> {
   const source = stripLineComments(await readFile(PRICING_PAGE, 'utf8'));
-  const block = source.match(
+  const body = captureOne(
+    source,
     /const unlimitedByTier: Record<TierId, Set<string>> = \{([\s\S]*?)\n\};/,
+    'unlimitedByTier on the Pricing page',
   );
-  expect(block, 'unlimitedByTier not found on the Pricing page').toBeTruthy();
-  const body = block![1];
   const popular = await pricingPopularModelNames();
 
   const out = {} as Record<Tier, string[]>;
   for (const tier of TIERS) {
-    const entry = body.match(new RegExp(`\\n  ${tier}: ([\\s\\S]*?),(?=\\n  [a-z]+:|$)`));
-    expect(entry, `tier ${tier} missing from unlimitedByTier`).toBeTruthy();
-    const raw = entry![1];
+    const raw = tierEntry(body, tier, 'unlimitedByTier');
     // `max` is written as "every popular model" rather than a literal list.
-    const names = raw.includes('popularModels.map')
-      ? popular
-      : [...raw.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+    const names = raw.includes('popularModels.map') ? popular : captureAll(raw, /'([^']+)'/g);
     out[tier] = names.map((name) => {
       const id = MODEL_ID_BY_DISPLAY_NAME[name];
       expect(id, `no AMR model id mapped for the Pricing name "${name}"`).toBeTruthy();
-      return id;
+      return id ?? name;
     });
   }
   return out;
@@ -81,25 +103,24 @@ async function pricingUnlimitedIdsByTier(): Promise<Record<Tier, string[]>> {
 /** The workbench's own table, read as source so this guard stays dependency-free. */
 async function runtimeUnlimitedIdsByTier(): Promise<Record<Tier, string[]>> {
   const source = stripLineComments(await readFile(RUNTIME_TABLE, 'utf8'));
-  const popular = [
-    ...(source
-      .match(/export const POPULAR_MODEL_IDS = \[([\s\S]*?)\] as const;/)?.[1] ?? '')
-      .matchAll(/'([^']+)'/g),
-  ].map((match) => match[1]);
-  const block = source.match(
-    /export const PLAN_UNLIMITED_MODEL_IDS[^=]*= \{([\s\S]*?)\n\};/,
+  const popular = captureAll(
+    captureOne(
+      source,
+      /export const POPULAR_MODEL_IDS = \[([\s\S]*?)\] as const;/,
+      'POPULAR_MODEL_IDS in the runtime table',
+    ),
+    /'([^']+)'/g,
   );
-  expect(block, 'PLAN_UNLIMITED_MODEL_IDS not found in the runtime table').toBeTruthy();
-  const body = block![1];
+  const body = captureOne(
+    source,
+    /export const PLAN_UNLIMITED_MODEL_IDS[^=]*= \{([\s\S]*?)\n\};/,
+    'PLAN_UNLIMITED_MODEL_IDS in the runtime table',
+  );
 
   const out = {} as Record<Tier, string[]>;
   for (const tier of TIERS) {
-    const entry = body.match(new RegExp(`\\n  ${tier}: ([\\s\\S]*?),(?=\\n  [a-z]+:|$)`));
-    expect(entry, `tier ${tier} missing from PLAN_UNLIMITED_MODEL_IDS`).toBeTruthy();
-    const raw = entry![1];
-    out[tier] = raw.includes('POPULAR_MODEL_IDS')
-      ? popular
-      : [...raw.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+    const raw = tierEntry(body, tier, 'PLAN_UNLIMITED_MODEL_IDS');
+    out[tier] = raw.includes('POPULAR_MODEL_IDS') ? popular : captureAll(raw, /'([^']+)'/g);
   }
   return out;
 }
