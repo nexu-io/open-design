@@ -126,8 +126,23 @@ export interface ProjectMetadata {
   // `other`-kind project reports `project_kind: 'document'` instead of generic
   // `other`. `webgl-experience` and `worker-visualizer`: the powered-preview
   // GPU / off-main-thread scenario cards — analytics-only discriminators for the
-  // powered-artifact chips.
-  intent?: 'live-artifact' | 'web-clone' | 'document' | 'webgl-experience' | 'worker-visualizer';
+  // powered-artifact chips. `scene3d`: deterministic 3D/asset projects from the
+  // Home `3D scene` card — stored as prototypes for preview behavior, with the
+  // intent tagging which card created them.
+  //
+  // Not every member here splits `project_kind`. `web-clone`, `live-artifact`,
+  // and `document` have cases in `projectKindToTracking`; `webgl-experience`,
+  // `worker-visualizer`, and `scene3d` do not, so those report as plain
+  // `prototype`. Adding a split means adding a `TrackingProjectKind` member,
+  // which is a dashboard/CSV enum change — make it deliberately, not as a
+  // side effect of adding a chip.
+  intent?:
+    | 'live-artifact'
+    | 'web-clone'
+    | 'document'
+    | 'webgl-experience'
+    | 'worker-visualizer'
+    | 'scene3d';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;

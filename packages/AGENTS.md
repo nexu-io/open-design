@@ -13,6 +13,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `packages/launcher-proto`: launcher protocol and path/state primitives. Owns channel/version/namespace validation, launcher directory derivation, runtime and cleanup descriptors, target selection, and after-quit argument parsing without owning launcher process orchestration.
 - `packages/metatool`: internal metadata helpers for repo-local tool build outputs. Keep reusable hash/check/write mechanics here; each concrete tool owns its own `meta.json`.
 - `packages/plugin-runtime`: pure TypeScript plugin manifest/marketplace parsers, source adapters, merge/ref resolution, validation, digesting, and pipeline-fallback selection. Daemon, web, and CI inject I/O rather than adding filesystem access here.
+- `packages/scene3d`: deterministic 3D scene compiler. Owns the `parse → build → proof → export → lint → manifest` pipeline (export precedes lint so the rules can read the shipped stage back), the declarative `scene.json` language and solver (`src/solve/`), the GPU shader bake pipeline (`src/shade/`), the pure-TS USDA structure parser, the stable `S3D-*` issue taxonomy, the contract normalizer, and the headless-Blender runner protocol (`scripts/blender/runner.py`, one sentinel-framed JSON line per job). Lint rules are pure functions over the census, the USDA parse tree, the exported stage text, the measured 2D sheets, the spec's claims, and the proof-frame statistics — never model calls. Keep daemon/web concerns out: the package takes a project directory and returns a `CompileResult`. The runner is resolved through `resolveScriptsDir`, which probes both the `src/` and bundled `dist/` layouts; a hard-coded depth silently breaks every consumer while this package's own tests still pass.
 - `packages/registry-protocol`: pure TypeScript plugin-registry backend protocol and schemas. Owns backend list/search/resolve/manifest/doctor plus optional publish/yank interfaces, not concrete network or storage integrations.
 - `packages/release`: pure release-domain primitives. Owns release channel names, version parsing/formatting, metadata field derivation, storage prefixes, release namespaces, and app identity data. It must not read/write files, call GitHub/R2, spawn build tools, or own workflow execution.
 - `packages/sidecar-proto`: Open Design sidecar business protocol. Owns app/mode/source constants, namespace validation, stamp descriptor/fields/flags, IPC message schema, status shapes, error semantics, and default product path constants.
@@ -31,6 +32,8 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - Do not let app packages depend directly on sidecar control-plane details.
 - Do not hard-code Open Design app/source/mode constants in `sidecar` or `platform`.
 - Keep stamp fields limited to five: `app`, `mode`, `namespace`, `ipc`, and `source`.
+- `scene3d` lint rules stay deterministic and model-free, and every rule is pinned by a fixture in `packages/scene3d/tests/fixtures/` — a good scene that passes it and a poisoned scene that fails it with the exact code. Adding a rule without both is how a gate silently stops gating.
+- A `scene3d` stage that caches must cache everything its consumers read, not just its file artifacts. The proof stage caches its frame statistics alongside the PNG paths precisely because a cached recompile would otherwise drop `S3D-E-383` and report a black render as clean.
 
 ## Common package commands
 
@@ -54,6 +57,8 @@ pnpm --filter @open-design/registry-protocol typecheck
 pnpm --filter @open-design/registry-protocol test
 pnpm --filter @open-design/release typecheck
 pnpm --filter @open-design/release test
+pnpm --filter @open-design/scene3d typecheck
+pnpm --filter @open-design/scene3d test
 pnpm --filter @open-design/sidecar-proto typecheck
 pnpm --filter @open-design/sidecar-proto test
 pnpm --filter @open-design/sidecar typecheck

@@ -44,6 +44,8 @@ export * from './api/routines.js';
 export * from './api/registry.js';
 export * from './api/research.js';
 export * from './api/run-completeness.js';
+export * from './api/scene3d.js';
+export * from './api/scene3d-codes.js';
 export * from './api/reasoningExecution.js';
 export * from './api/social-share.js';
 export * from './api/terminals.js';
