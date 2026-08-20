@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "ready-to-send-full-technical-brief-for-open-design-ai-mt1ym05o",
+  "title": "Ready to Send — Full Technical Brief for Open Design AI",
+  "version": "0.1.0",
+  "description": "A fullstack web app for a NYC real estate agent (Bond New York) to manage rental listing units — write them up, toggle status (App/Rented/Flex/Free Rent), confirm availability, sort, filter, and eventually blast them to ",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

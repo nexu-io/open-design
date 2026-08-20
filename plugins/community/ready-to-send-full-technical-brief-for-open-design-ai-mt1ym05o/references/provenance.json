@@ -1,0 +1,75 @@
+{
+  "candidateId": "8e1e16fb-afe3-4593-90d5-5b39b86915b6",
+  "projectId": "f702e558-d7bf-4447-90aa-c709a495dc16",
+  "runId": "02c54322-02f5-45f1-967d-c67e9606d4c1",
+  "conversationId": "99d82b16-9082-4379-8260-74d8a26dcc9c",
+  "provenance": {
+    "summary": "Detected from Ready-to-Send-_-Technical-Brief-for-Open-Design-1.md, ready-to-send-brief-2.md, Ready-to-Send-_-Technical-Brief-for-Open-Design.md, ready-to-send-brief-1.md, ready-to-send-brief.md, email-blast.md, tenant-rep-blast.md, write-up.md, pull-from-drive.md after a successful run.",
+    "detectedAt": 1787255759212
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "Ready-to-Send-_-Technical-Brief-for-Open-Design-1.md",
+      "label": "Ready-to-Send-_-Technical-Brief-for-Open-Design-1.md",
+      "size": 27354,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ready-to-send-brief-2.md",
+      "label": "ready-to-send-brief-2.md",
+      "size": 19261,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "Ready-to-Send-_-Technical-Brief-for-Open-Design.md",
+      "label": "Ready-to-Send-_-Technical-Brief-for-Open-Design.md",
+      "size": 27354,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ready-to-send-brief-1.md",
+      "label": "ready-to-send-brief-1.md",
+      "size": 19261,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ready-to-send-brief.md",
+      "label": "ready-to-send-brief.md",
+      "size": 22631,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "email-blast.md",
+      "label": "email-blast.md",
+      "size": 12174,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "tenant-rep-blast.md",
+      "label": "tenant-rep-blast.md",
+      "size": 6126,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "write-up.md",
+      "label": "write-up.md",
+      "size": 6560,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "pull-from-drive.md",
+      "label": "pull-from-drive.md",
+      "size": 1357,
+      "copied": true
+    }
+  ]
+}
