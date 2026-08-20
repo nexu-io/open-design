@@ -309,6 +309,7 @@ export function planAgentInstall(
         keyPath: ['mcpServers'],
         serverKey: serverName,
         entry: jsonEntry(spec),
+      };
     case 'claude-desktop':
       if (platform !== 'darwin' && platform !== 'win32') {
         return {
