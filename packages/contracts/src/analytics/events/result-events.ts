@@ -220,6 +220,11 @@ export interface RunTimingProps {
   time_to_first_visible_output_ms?: number;
   time_to_first_artifact_ms?: number;
   generation_duration_ms?: number;
+  // Model-active window: first model event of any kind (tool call, thinking,
+  // text, artifact) to run end. Prefer this over `generation_duration_ms` when
+  // comparing agents -- the latter starts at the first text token, so a
+  // tool-first run reports only its closing message.
+  model_active_duration_ms?: number;
   finalize_duration_ms?: number;
   collection_status?: TrackingRunPhaseTimingStatus;
 }
@@ -509,6 +514,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   time_to_first_token_ms?: number;
   time_to_first_visible_output_ms?: number;
   runtime_init_to_first_token_ms?: number;
+  // Runtime init measured to the first model event of any kind rather than to
+  // the first text token. On a tool-first run the first-token variant absorbs
+  // the whole tool loop and reads as slow startup.
+  runtime_init_to_first_model_response_ms?: number;
   spawn_to_first_token_ms?: number;
   time_to_first_artifact_ms?: number;
   // `spawn_to_first_token_ms` split into auditable subsegments so dashboards
@@ -520,6 +529,8 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   model_first_token_ms?: number;
   spawn_to_first_token_remainder_ms?: number;
   generation_duration_ms?: number;
+  // See `RunTimingProps.model_active_duration_ms`.
+  model_active_duration_ms?: number;
   tool_call_count?: number;
   tool_duration_ms?: number;
   artifact_write_duration_ms?: number;
@@ -533,6 +544,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   diagnostics?: RunDiagnosticsProps;
   langfuse_delivery?: RunLangfuseDeliveryProps;
   bottleneck_phase?: TrackingRunLifecyclePhase;
+  // Which phase-boundary definition produced `bottleneck_phase`. Absent on
+  // rows written before the definition was versioned. Rows from different
+  // versions are not comparable -- filter to one, do not average across.
+  phase_schema_version?: number;
   last_observed_phase?: TrackingRunLifecyclePhase;
   phase_timing_status?: TrackingRunPhaseTimingStatus;
   // E-lite root-cause discriminators. `last_observed_phase` tells us WHICH phase

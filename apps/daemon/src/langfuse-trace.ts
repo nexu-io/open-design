@@ -31,6 +31,7 @@ import {
 import {
   canonicalizeToolAnalyticsName,
   type RunTelemetryTimestamps,
+  phaseAnchorFromMarks,
   type RunTimingAnalytics,
 } from './run-analytics-observability.js';
 import type { RunFailureClassification } from './run-failure-classification.js';
@@ -1021,6 +1022,17 @@ function buildSemanticPhaseDiagnostics(ctx: ReportContext): Record<string, unkno
   addMeasured('runtime-init-to-first-token', marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt, marks.firstTokenAt);
   addMeasured('agent-call', marks.modelCallStartAt, ctx.run.endedAt);
   addMeasured('stream-output', marks.firstTokenAt, marks.finalizeStartAt ?? ctx.run.endedAt);
+  // `stream-output` starts at the first text token, so a tool-first run shows
+  // only its closing message here. `model-active` is the same window anchored
+  // on the first model event of any kind. Kept as a diagnostics entry rather
+  // than a second span: this map rides along in existing metadata, while a new
+  // span would add an observation row per run.
+  //
+  // Boundaries mirror `model_active_duration_ms` in run-analytics-observability
+  // exactly -- earliest of the two marks, through run end -- because the whole
+  // point of this entry is to be compared against that number. Deliberately
+  // unlike its neighbours above, which end at `finalizeStartAt`.
+  addMeasured('model-active', phaseAnchorFromMarks(marks), ctx.run.endedAt);
   addMeasured('artifact-write', marks.firstArtifactWriteAt, marks.finalizeStartAt ?? ctx.run.endedAt);
   addMeasured('finalize', marks.finalizeStartAt, ctx.run.endedAt);
   return {

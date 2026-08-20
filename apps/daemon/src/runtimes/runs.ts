@@ -1027,6 +1027,18 @@ export function createChatRunService({
     run.stdinOpen = false;
     run.eventsLogStream = null;
     run.eventsLogClosed = false;
+    // A resumed attempt is a fresh execution, so it must not inherit the prior
+    // attempt's lifecycle marks. Keeping them makes every phase boundary
+    // measure from before the recharge pause, putting the wait time inside the
+    // new attempt's model-active window. Only the logical run start survives,
+    // so queue time is still measured from when the user asked for the run.
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry?.startRequestedAt !== undefined
+        ? { startRequestedAt: run.analyticsTelemetry.startRequestedAt }
+        : {}),
+      attemptStartedAt: resumedAt,
+      attemptIndex: 0,
+    };
     run.manualResumeAttemptCount = (run.manualResumeAttemptCount ?? 0) + 1;
     run.rechargeWaitDurationMs =
       (run.rechargeWaitDurationMs ?? 0) + rechargeWaitDurationMs;

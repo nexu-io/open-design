@@ -381,6 +381,51 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('clears the prior attempt\'s lifecycle marks when reopening for recharge', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-20T00:00:00.000Z'));
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      clientRequestId: 'brief-recharge-marks',
+      requestFingerprint: 'same-logical-request',
+      agentId: 'amr',
+    });
+    const runStartedAt = Date.now();
+    (run as any).analyticsTelemetry = {
+      startRequestedAt: runStartedAt,
+      startChatRunStartedAt: runStartedAt + 10,
+      processSpawnedAt: runStartedAt + 100,
+      stdinWriteEndAt: runStartedAt + 150,
+      firstModelEventAt: runStartedAt + 400,
+      firstModelEventType: 'text_delta',
+      firstTokenAt: runStartedAt + 400,
+      attemptStartedAt: runStartedAt,
+      attemptIndex: 0,
+    };
+    (run as any).failureAction = 'recharge';
+    runs.finish(run, 'failed', 1, null);
+    vi.advanceTimersByTime(600_000);
+
+    runs.prepareRestart(run);
+
+    // The resumed attempt is a fresh execution. Keeping attempt 1's marks
+    // makes every phase boundary measure from before the recharge pause, so
+    // the wait time lands inside the new attempt's model-active window.
+    const telemetry = (run as any).analyticsTelemetry ?? {};
+    expect(telemetry.firstModelEventAt).toBeUndefined();
+    expect(telemetry.firstTokenAt).toBeUndefined();
+    expect(telemetry.stdinWriteEndAt).toBeUndefined();
+    expect(telemetry.processSpawnedAt).toBeUndefined();
+    // The logical run start survives -- queue time is still measured from
+    // when the user asked for this run, not from the resume.
+    expect(telemetry.startRequestedAt).toBe(runStartedAt);
+    // The attempt boundary moves to the resume, which is what scopes
+    // outstanding tool spans to the current attempt.
+    expect(telemetry.attemptStartedAt).toBe(runStartedAt + 600_000);
+  });
+
   it('reopens the same logical run for an explicit recharge recovery attempt', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-27T00:00:00.000Z'));

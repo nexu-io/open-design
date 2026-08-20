@@ -10688,7 +10688,14 @@ export async function startServer({
     const send = (event, data) => {
       const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
       if (lifecycleMarkers.firstModelEventType) {
-        lifecycle.markFirstModelEvent(lifecycleMarkers.firstModelEventType);
+        // Second argument is the PRODUCER's start, used only for the phase
+        // anchor. ACP emits `tool_use` at terminal status, so without it the
+        // anchor lands at tool completion. `time_to_first_model_event_ms`
+        // still measures to arrival and is unaffected.
+        lifecycle.markFirstModelEvent(
+          lifecycleMarkers.firstModelEventType,
+          lifecycleMarkers.firstModelEventAt,
+        );
       }
       if (lifecycleMarkers.firstVisibleOutput) {
         lifecycle.mark('first_visible_output');
@@ -10853,7 +10860,13 @@ export async function startServer({
       run.turnCompletedCleanly = false;
       run.terminalTrigger = null;
       lifecycle.resetForAttempt(run.retryAttemptCount ?? 0);
+      // Spread, not replace: `resetForAttempt` has just stamped this attempt's
+      // `attemptStartedAt`/`attemptIndex`, and replacing the object wholesale
+      // dropped them, so nothing downstream could tell which attempt a run
+      // event belonged to. Only the `run.createdAt` fallback for the logical
+      // run start is added on top.
       run.analyticsTelemetry = {
+        ...run.analyticsTelemetry,
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
     };
