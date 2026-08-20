@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "naming": {
+      "objectPattern": "^.+$",
+      "forbidDefaultNames": false
+    },
+    "units": {
+      "metersPerUnit": 1,
+      "upAxis": "Y"
+    },
+    "pbr": {
+      "metallicValues": [
+        0,
+        1
+      ],
+      "roughnessRange": [
+        0,
+        1
+      ]
+    },
+    "geometry": {
+      "allowOpenMeshes": true,
+      "allowLooseGeometry": true,
+      "allowDoubleVertices": true,
+      "allowInconsistentWinding": true,
+      "requireAppliedScale": false
+    }
+  }
+}

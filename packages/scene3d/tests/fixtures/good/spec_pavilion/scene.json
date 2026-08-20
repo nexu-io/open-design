@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "name": "pavilion",
+  "materials": {
+    "mtl_stone": { "baseColor": [0.62, 0.6, 0.55], "roughness": 0.9, "metallic": 0 },
+    "mtl_wood": { "baseColor": [0.45, 0.3, 0.18], "roughness": 0.65, "metallic": 0 },
+    "mtl_lamp": {
+      "baseColor": [1, 0.92, 0.75],
+      "roughness": 0.4,
+      "emission": [1, 0.85, 0.6],
+      "emissionStrength": 4
+    }
+  },
+  "parts": [
+    { "id": "prp_plinth", "size": [2.4, 1.6, 0.12], "material": "mtl_stone", "role": "base" },
+    {
+      "id": "prp_column",
+      "size": [0.12, 0.12, 1.4],
+      "shape": "cylinder",
+      "material": "mtl_stone",
+      "role": "column"
+    },
+    { "id": "prp_roof", "size": [2.3, 1.5, 0.08], "material": "mtl_wood", "role": "roof" },
+    {
+      "id": "prp_lamp",
+      "size": [0.16, 0.16, 0.16],
+      "shape": "sphere",
+      "material": "mtl_lamp",
+      "role": "lamp"
+    },
+    {
+      "id": "prp_ring",
+      "size": [0.5, 0.5, 0.08],
+      "shape": "torus",
+      "material": "mtl_wood",
+      "role": "ornament"
+    },
+    {
+      "id": "prp_finial",
+      "size": [0.14, 0.14, 0.2],
+      "shape": "cone",
+      "material": "mtl_wood",
+      "role": "ornament"
+    }
+  ],
+  "relations": [
+    { "type": "at", "part": "prp_plinth", "center": [0, 0, 0.06] },
+    { "type": "sits_on", "part": "prp_column", "on": "prp_plinth" },
+    { "type": "inset_from", "part": "prp_column", "from": "prp_plinth", "faces": ["x-", "y-"], "by": 0.15 },
+    { "type": "repeat", "part": "prp_column", "count": 2, "along": "x", "every": 1.98 },
+    { "type": "repeat", "part": "prp_column", "count": 2, "along": "y", "every": 1.18 },
+    { "type": "above", "part": "prp_roof", "over": "prp_column", "clearance": 0.002 },
+    { "type": "align", "part": "prp_roof", "to": "prp_plinth", "axes": ["x", "y"] },
+    { "type": "sits_on", "part": "prp_lamp", "on": "prp_roof" },
+    { "type": "align", "part": "prp_lamp", "to": "prp_plinth", "axes": ["x", "y"] },
+    { "type": "sits_on", "part": "prp_ring", "on": "prp_plinth" },
+    { "type": "align", "part": "prp_ring", "to": "prp_plinth", "axes": ["x", "y"] },
+    { "type": "sits_on", "part": "prp_finial", "on": "prp_roof" },
+    { "type": "inset_from", "part": "prp_finial", "from": "prp_roof", "faces": ["x+", "y+"], "by": 0.2 }
+  ],
+  "light": "studio",
+  "claims": {
+    "parts": 9,
+    "maxTriangles": 6000,
+    "grounded": true,
+    "maxHeight": 1.81,
+    "footprint": [2.41, 1.61],
+    "watertight": true,
+    "materialsUsed": ["mtl_stone", "mtl_wood", "mtl_lamp"]
+  }
+}

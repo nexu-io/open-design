@@ -1,0 +1,227 @@
+/**
+ * scene3d issue taxonomy.
+ *
+ * Every issue carries a stable code. The codes are the contract between the
+ * pipeline and the agent: the agent learns the codes, the linter emits them,
+ * and the test corpus pins them. Codes never drift without a versioned
+ * change in this file and the fixtures that assert them.
+ *
+ * Ranges:
+ *   E1xx  parse   — source discovery and USDA structure
+ *   E2xx  build   — Blender execution, census, export, proof
+ *   E3xx  lint    — 300 naming, 320 topology, 340 pbr, 360 units, 380 integrity
+ *   W3xx  warnings (same subranges as lint)
+ *   I5xx  info
+ */
+
+// NOTE: an E-3xx and a W-3xx sharing a number are DIFFERENT codes for
+// different rules (E-321 non-manifold vs W-321 ngons) — the severity prefix
+// is part of the identity. A numeric-only collision scan false-positives
+// here; do not "fix" these.
+export const ISSUE_CODES = {
+  /* parse */
+  NO_SOURCES: "S3D-E-101",
+  AMBIGUOUS_SOURCES: "S3D-E-102",
+  USDA_PARSE_ERROR: "S3D-E-103",
+  INVALID_CONTRACT: "S3D-E-104",
+  /* The declarative scene.json failed schema validation — reported with
+     JSON paths BEFORE any geometry exists, never as a Blender traceback. */
+  SPEC_INVALID: "S3D-E-105",
+  /* The relation graph could not place every part (unresolved axis, cycle,
+     conflicting constraints, unknown reference, expansion over a limit). */
+  SPEC_UNRESOLVED: "S3D-E-106",
+  /* The solver adjusted an authored offset (contact floor, repeat pitch)
+     to keep coplanar faces structurally impossible. The scene builds; this
+     names what was changed and why. */
+  SPEC_ADJUSTED: "S3D-W-106",
+
+  /* build */
+  BLENDER_NOT_FOUND: "S3D-E-201",
+  BLENDER_FAILED: "S3D-E-202",
+  STAGE_TIMEOUT: "S3D-E-203",
+  INVALID_CENSUS: "S3D-E-204",
+  EXPORT_FAILED: "S3D-E-205",
+  /* One requested container could not be written, but the rest were. The
+     export as a whole succeeded — this names what is missing from it. */
+  EXPORT_FORMAT_UNAVAILABLE: "S3D-W-205",
+  PROOF_FAILED: "S3D-E-206",
+  /* A real asset file imported, but degraded: a missing .mtl companion, a
+     file with no geometry. Detect-and-name, never mutate-and-guess. */
+  IMPORT_DEGRADED: "S3D-W-207",
+
+  /* lint: naming */
+  NAME_DEFAULT: "S3D-E-301",
+  NAME_PATTERN: "S3D-E-302",
+  NAME_PREFIX: "S3D-E-303",
+  COLLECTION_NAME_DEFAULT: "S3D-E-304",
+  COLLECTION_NAME_PATTERN: "S3D-E-305",
+  DEPTH_LIMIT: "S3D-E-306",
+  NAME_DEFAULT_WARN: "S3D-W-301",
+
+  /* lint: topology */
+  NON_MANIFOLD: "S3D-E-321",
+  NAN_TRANSFORM: "S3D-E-322",
+  DEGENERATE_SCALE: "S3D-E-323",
+  Z_FIGHTING: "S3D-E-324",
+  NGONS: "S3D-W-321",
+  ZERO_AREA_FACES: "S3D-W-322",
+  /* Engine hygiene (327-330): facts Blender's viewport hides and every
+     importer punishes. */
+  NEGATIVE_SCALE: "S3D-E-327",
+  LOOSE_GEOMETRY: "S3D-W-327",
+  DOUBLE_VERTICES: "S3D-W-328",
+  INCONSISTENT_WINDING: "S3D-W-329",
+  UNAPPLIED_SCALE: "S3D-W-330",
+  /* The coplanar search hit a cap, so silence about z-fighting is not
+     evidence of its absence for this scene. */
+  Z_FIGHTING_UNCHECKED: "S3D-W-323",
+
+  /* lint: uv (440-459) — UV facts measured by the census, judged by
+     conventions.uv. The one place "compiles clean" was blind to the thing
+     game assets live or die on. */
+  UV_MISSING: "S3D-E-441",
+  UV_OVERLAP: "S3D-W-441",
+  UV_FLIPPED: "S3D-W-442",
+  UV_OUT_OF_BOUNDS: "S3D-W-443",
+  TEXEL_DENSITY_SPREAD: "S3D-W-444",
+  TEXEL_DENSITY_TARGET: "S3D-W-445",
+  /* The raster budget was exceeded, so silence about this mesh's UVs is
+     not evidence they are fine — same discipline as Z_FIGHTING_UNCHECKED. */
+  UV_UNCHECKED: "S3D-W-446",
+
+  /* lint: pbr */
+  METALLIC_VALUE: "S3D-E-341",
+  ROUGHNESS_RANGE: "S3D-E-342",
+  UNTOUCHED_DEFAULT_MATERIAL: "S3D-W-341",
+  IOR_RANGE: "S3D-W-342",
+  TEXTURE_WITHOUT_UV: "S3D-W-343",
+  MATERIAL_UNUSED: "S3D-W-344",
+  OBJECT_WITHOUT_MATERIAL: "S3D-W-345",
+  /* Textures as FILES: a node graph can reference an image that renders
+     magenta in Blender and fails outright on engine import. */
+  TEXTURE_FILE_MISSING: "S3D-E-346",
+  TEXTURE_NOT_POWER_OF_TWO: "S3D-W-346",
+  TEXTURE_TOO_LARGE: "S3D-W-347",
+  DUPLICATE_MATERIALS: "S3D-W-348",
+  FACES_WITHOUT_MATERIAL: "S3D-W-349",
+
+  /* lint: units */
+  UNITS_MISMATCH: "S3D-E-361",
+  UP_AXIS_MISMATCH: "S3D-E-362",
+  NON_UNIFORM_SCALE: "S3D-W-361",
+
+  /* lint: integrity */
+  MISSING_CAMERA: "S3D-E-381",
+  MISSING_LIGHTS: "S3D-W-381",
+  EMPTY_MESH: "S3D-E-382",
+  OFF_CAMERA: "S3D-W-382",
+  EMPTY_PROOF: "S3D-E-383",
+  SPARSE_PROOF: "S3D-W-383",
+  STATIC_TURNTABLE: "S3D-W-384",
+  OVEREXPOSED_PROOF: "S3D-W-385",
+
+  /* lint: world placement + budgets (325-339) */
+  NOT_GROUNDED: "S3D-W-325",
+  SUNK_BELOW_GROUND: "S3D-E-325",
+  MESH_BUDGET: "S3D-E-326",
+  SCENE_BUDGET: "S3D-W-326",
+
+  /* lint: exported stage (400-419) — checks the artifact we SHIP, not the
+     scene we built. Everything above validates the Blender scene; these
+     validate the USD that actually leaves the building. */
+  STAGE_NO_KIND: "S3D-E-401",
+  STAGE_UPAXIS_MISMATCH: "S3D-E-402",
+  STAGE_UNITS_MISMATCH: "S3D-E-403",
+  STAGE_PRIM_DEFAULT_NAME: "S3D-E-404",
+  STAGE_NO_DEFAULT_PRIM: "S3D-E-405",
+  STAGE_NO_ASSET_INFO: "S3D-W-401",
+  STAGE_MISSING_EXTENT: "S3D-W-402",
+  STAGE_PRIM_NAME_MISMATCH: "S3D-W-403",
+  /* The compiler's own proof rig — camera, key light, environment — leaking
+     into the asset. USD has a word for "present but not part of what
+     renders", and using it is strictly better than the GLB's answer of
+     deleting the rig outright: the framing stays readable. */
+  STAGE_RIG_NOT_GUIDE: "S3D-W-404",
+  /* The model hierarchy disagrees with what was shipped: a component that
+     contains models, or an arrangement claiming to be one atomic asset. */
+  STAGE_MODEL_HIERARCHY: "S3D-W-405",
+
+  /* lint: 2D sheets (600-619) — sprite sheets, flipbooks, particles,
+     tileable strips, and skybox faces. Pixel facts, same discipline as the
+     proof-frame rules: measured, not assumed. */
+  SHEET_MISSING: "S3D-E-601",
+  SHEET_UNREADABLE: "S3D-E-602",
+  SHEET_NOT_POWER_OF_TWO: "S3D-E-603",
+  SHEET_TOO_LARGE: "S3D-E-604",
+  SHEET_EMPTY: "S3D-E-605",
+  SHEET_NO_FULL_ALPHA: "S3D-E-606",
+  SHEET_TINTABLE_HAS_HUE: "S3D-E-607",
+  SHEET_GRID_MISMATCH: "S3D-E-608",
+  SHEET_BLANK_FRAMES: "S3D-E-609",
+  SHEET_CELL_BLEED: "S3D-E-610",
+  SHEET_BORDER_TOUCH: "S3D-E-611",
+  SHEET_NOT_TILEABLE: "S3D-E-612",
+  SHEET_LONG_EDGE_TOUCH: "S3D-E-613",
+  SHEET_SKY_NOT_OPAQUE: "S3D-E-614",
+  SHEET_SEAM_BREAK: "S3D-E-615",
+  SHEET_CUBE_INCOMPLETE: "S3D-E-616",
+  SHEET_STATIC_FLIPBOOK: "S3D-W-601",
+  SHEET_SKY_CLIPPED: "S3D-W-602",
+  SHEET_SPARSE: "S3D-W-603",
+  SHEET_CELL_NOT_POWER_OF_TWO: "S3D-W-604",
+  SHEET_ADDITIVE_BRIGHT_BORDER: "S3D-W-605",
+
+  /* shaders (800-819) — raw GPU kernels as compiled sources. Structural
+     verdicts come from the pure validator; 802-804 come from the actual
+     GPU driver, because the driver is the only authority on GPU code. */
+  SHADER_INVALID: "S3D-E-801",
+  /* The driver rejected the assembled program; the message carries the
+     driver's own compile log. */
+  SHADER_COMPILE_FAILED: "S3D-E-802",
+  SHADER_BAKE_FAILED: "S3D-E-803",
+  /* The kernel executed but produced NaN/Inf pixels — the GPU equivalent
+     of a plausible-looking script with broken output. Counted, located,
+     and failed loudly. */
+  SHADER_NONFINITE: "S3D-E-804",
+  /* A declared shader no material references — authored but unreachable. */
+  SHADER_UNUSED: "S3D-W-801",
+
+  /* master parity (900-919) — USD is the core format: the stage is
+     authored first and every delivery container is lowered from a
+     re-import of it. These codes police that inversion. */
+  /* Something the build contained did not survive into the master stage —
+     the writer failed to author it. The master must be TOTAL. */
+  MASTER_INCOMPLETE: "S3D-E-901",
+  /* The lowering parity check could not run (master unreadable, importer
+     missing). Unchecked is never passed. */
+  MASTER_UNCHECKED: "S3D-W-901",
+  /* The set of bones/morph-targets survived the round-trip but their ORDER
+     changed. Counts and names match (so E-901 stays silent), yet animation
+     that indexes joints/shapekeys by position may bind to the wrong one.
+     A warning, not an error: whether it actually misaligns depends on
+     whether skin weights / morph drivers were remapped in step, which is
+     downstream of what the fingerprint can see. Surfaced so a rigged or
+     morph asset is never silently reordered. */
+  MASTER_ORDER_DRIFT: "S3D-W-902",
+
+  /* lint: claims (700-719) — the spec's own contract with reality. A claim
+     is adjudicated against the CENSUS, never against the spec that made it:
+     the author is not the authority on whether the build succeeded. */
+  CLAIM_FAILED: "S3D-E-701",
+  /* A claim the census could not adjudicate. Reported, never silently
+     passed — a check that silently did not run is worse than no check. */
+  CLAIM_UNCHECKED: "S3D-W-701",
+
+  /* info */
+  STAGE_SKIPPED: "S3D-I-501",
+} as const;
+
+export type IssueCode = (typeof ISSUE_CODES)[keyof typeof ISSUE_CODES];
+
+export function summarize(issues: { severity: "error" | "warning" | "info" }[]) {
+  return {
+    errors: issues.filter((i) => i.severity === "error").length,
+    warnings: issues.filter((i) => i.severity === "warning").length,
+    infos: issues.filter((i) => i.severity === "info").length,
+  };
+}

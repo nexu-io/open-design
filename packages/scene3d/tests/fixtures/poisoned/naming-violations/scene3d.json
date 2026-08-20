@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "naming": {
+      "objectPattern": "^[A-Za-z][A-Za-z0-9_]{2,63}$",
+      "forbidDefaultNames": true,
+      "partPrefixes": ["prp_", "cam_", "lgt_"]
+    }
+  }
+}

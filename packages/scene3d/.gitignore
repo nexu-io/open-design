@@ -1,0 +1,10 @@
+# Integration tests copy each fixture into a scratch directory and compile it
+# there, so `.work/` fills with rendered PNGs, exported GLB/USD, and stage
+# cache entries. It is regenerated on every run — the committed corpus is
+# `tests/fixtures/`.
+tests/.work/
+
+# Viewer harness output: generated fixtures and their screenshots. The
+# harness itself is committed; what it renders is not.
+scripts/harness/.out/
+scripts/harness/.shots/

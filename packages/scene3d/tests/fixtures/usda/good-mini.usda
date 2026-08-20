@@ -1,0 +1,25 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "Root"
+{
+    def Mesh "prp_bench_seat"
+    {
+        float3[] extent = [(-1, -1, -0.1), (1, 1, 0.1)]
+        int[] faceVertexCounts = [4, 4, 4]
+        int[] faceVertexIndices = [0, 1, 2, 3]
+        rel material:binding = </Root/Materials/mtl_wood>
+    }
+
+    def Scope "Materials"
+    {
+        def Material "mtl_wood"
+        {
+            token outputs:surface.connect = </Root/Materials/mtl_wood/Shader.outputs:surface>
+        }
+    }
+}

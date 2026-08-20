@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "name": "rock-garden",
+  "materials": {
+    "mtl_gravel": { "baseColor": [0.55, 0.53, 0.5], "roughness": 0.95, "metallic": 0 },
+    "mtl_rock": { "baseColor": [0.42, 0.4, 0.38], "roughness": 0.85, "metallic": 0 },
+    "mtl_moss": { "baseColor": [0.25, 0.45, 0.2], "roughness": 0.8, "metallic": 0 }
+  },
+  "parts": [
+    { "id": "prp_bed", "size": [3, 3, 0.1], "material": "mtl_gravel", "role": "ground" },
+    {
+      "id": "prp_rock",
+      "size": [0.25, 0.25, 0.18],
+      "shape": "sphere",
+      "material": "mtl_rock",
+      "role": "rock"
+    },
+    {
+      "id": "prp_shoot",
+      "size": [0.08, 0.08, 0.22],
+      "shape": "cone",
+      "material": "mtl_moss",
+      "role": "plant"
+    }
+  ],
+  "relations": [
+    { "type": "at", "part": "prp_bed", "center": [0, 0, 0.05] },
+    {
+      "type": "scatter",
+      "part": "prp_rock",
+      "on": "prp_bed",
+      "count": 12,
+      "seed": 7,
+      "minGap": 0.03,
+      "sizeJitter": 0.3
+    },
+    {
+      "type": "scatter",
+      "part": "prp_shoot",
+      "on": "prp_bed",
+      "count": 8,
+      "seed": 11,
+      "minGap": 0.02,
+      "sizeJitter": 0.2
+    }
+  ],
+  "light": "sun",
+  "camera": { "elevationDeg": 35, "distance": 2.6 },
+  "claims": {
+    "parts": 21,
+    "grounded": true,
+    "watertight": true,
+    "maxTriangles": 30000,
+    "footprint": [3.01, 3.01],
+    "materialsUsed": ["mtl_gravel", "mtl_rock", "mtl_moss"]
+  }
+}
