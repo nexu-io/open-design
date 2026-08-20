@@ -555,6 +555,10 @@ export default function Page({
                   kept in the SEO layer only (title / description / JSON-LD);
                   the first screen leads straight with the brand + positioning. */}
               <h1 className='hero-title' data-reveal>
+                <span className='hero-title-corner tl' aria-hidden='true' />
+                <span className='hero-title-corner tr' aria-hidden='true' />
+                <span className='hero-title-corner bl' aria-hidden='true' />
+                <span className='hero-title-corner br' aria-hidden='true' />
                 {/* Two-layer message: the brand-positioning headline, then the
                     design-system + scenario claim. The agent value promise
                     lives in the ABOUT statement below. */}

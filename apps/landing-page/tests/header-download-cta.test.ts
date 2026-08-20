@@ -110,8 +110,8 @@ describe('landing header account and download entry', () => {
     assert.match(enhancer, /navPlatform\.match\(entry\.name\)/);
     assert.match(enhancer, /navNeedsLiveRefresh = navPlatform && !downloadPrompt/);
     assert.doesNotMatch(header, /data-amr-signin|className='nav-signin'/);
-    assert.match(header, /data-amr-menu hidden/);
-    assert.match(header, /data-amr-console-link/);
+    // The signed-in avatar module is gone from the marketing header entirely.
+    assert.doesNotMatch(header, /data-amr-account|nav-account/);
   });
 
   it('silently reveals the avatar for an existing session without wiring login', async () => {

@@ -1226,7 +1226,25 @@ a.nav-mega-col-head.is-active {
 .nav-social-link:hover,
 .nav-social-item:focus-within .nav-social-link { color: var(--ink); transform: translateY(-1px); }
 .nav-social-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
-.nav-social-icon-feishu { display: block; width: 22px; height: auto; }
+/* Brand marks sit monochrome at rest and light up in brand colour on
+   hover / focus (Feishu via filter on the PNG, Discord via currentColor). */
+.nav-social-icon-feishu {
+  display: block;
+  width: 22px;
+  height: auto;
+  filter: grayscale(1) brightness(0.55) contrast(1.1);
+  opacity: 0.85;
+  transition: filter 160ms ease, opacity 160ms ease;
+}
+.nav-social-link:hover .nav-social-icon-feishu,
+.nav-social-item:focus-within .nav-social-icon-feishu {
+  filter: none;
+  opacity: 1;
+}
+.nav-social-link[data-community-platform='discord']:hover,
+.nav-social-item:focus-within .nav-social-link[data-community-platform='discord'] {
+  color: #5865f2;
+}
 /* Language switcher as a plain icon in the same cluster. */
 .nav-social .nav-locale-switch { display: inline-flex; align-items: center; }
 .nav-social .nav-locale-trigger {
@@ -1262,16 +1280,23 @@ a.nav-mega-col-head.is-active {
   60% { box-shadow: 0 0 0 2px #fff, 0 0 0 6px transparent; }
 }
 @media (prefers-reduced-motion: reduce) { .nav-social-badge { animation: none; } }
-.nav-community-perk {
+/* Hover card copy: a bold title line ("Join Discord" / scan-to-join) and a
+   quiet one-line perk underneath with a single accent dot. */
+.nav-community-card-title {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.nav-community-card-sub {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--coral) 22%, #fff);
-  color: var(--ink);
+  color: var(--ink-mute, #8c8c8c);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   white-space: nowrap;
 }
 .nav-community-perk-dot {
@@ -1279,6 +1304,7 @@ a.nav-mega-col-head.is-active {
   height: 6px;
   border-radius: 50%;
   background: var(--coral);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--coral) 22%, transparent);
 }
 /* Feishu group QR — hover / focus card under the icon. */
 .nav-community-qr-card {
@@ -1288,9 +1314,11 @@ a.nav-mega-col-head.is-active {
   left: 50%;
   display: grid;
   justify-items: center;
-  gap: 8px;
-  width: 200px;
-  padding: 14px 14px 12px;
+  gap: 4px;
+  width: max-content;
+  min-width: 168px;
+  max-width: 260px;
+  padding: 12px 16px 11px;
   border: 1px solid rgba(26, 26, 26, 0.11);
   border-radius: 14px;
   background: #fff;
@@ -1315,7 +1343,7 @@ a.nav-mega-col-head.is-active {
   transform: translate(-50%, 0);
   pointer-events: auto;
 }
-.nav-community-qr-img { display: block; width: 168px; height: 168px; border-radius: 8px; }
+.nav-community-qr-img { display: block; width: 168px; height: 168px; margin-bottom: 6px; border-radius: 8px; }
 .nav-cta {
   display: inline-flex;
   align-items: center;
@@ -1585,7 +1613,7 @@ a.nav-mega-col-head.is-active {
   z-index: 1;
 }
 .hero-copy {
-  padding: calc(12vw - 12px) 0 4vh;
+  padding: max(48px, calc(12vw - 52px)) 0 4vh;
   display: flex;
   flex-direction: column;
   /* Centered hero — every first-screen module (eyebrow, manifesto, actions,
@@ -1765,14 +1793,32 @@ a.nav-mega-col-head.is-active {
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  /* Shifted down 30px (top margin) to sit lower under the lead line. */
   margin: 30px auto 8px;
+  /* Frame hugs the text: shrink-wrap to the widest line (brand vs tagline) plus
+     padding, instead of spanning the full hero column. Stays centred. */
   width: fit-content;
   max-width: 100%;
   line-height: 1;
+  /* Blueprint-style selection frame around the brand title (reference comp):
+     a thin accent border with a small filled square sitting on each corner. */
   position: relative;
-  padding: 0;
-  border: 0;
+  /* Fluid frame padding so the blueprint border hugs the title at every
+     width instead of pushing the oversized line off-screen on mobile. */
+  padding: clamp(16px, 3.2vw, 28px) clamp(18px, 5vw, 48px);
+  border: 1px solid var(--coral);
 }
+/* Small filled squares centred on each corner of the title frame. */
+.hero-title-corner {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: var(--coral);
+}
+.hero-title-corner.tl { top: 0; left: 0; transform: translate(-50%, -50%); }
+.hero-title-corner.tr { top: 0; right: 0; transform: translate(50%, -50%); }
+.hero-title-corner.bl { bottom: 0; left: 0; transform: translate(-50%, 50%); }
+.hero-title-corner.br { bottom: 0; right: 0; transform: translate(50%, 50%); }
 .hero-title-brand {
   /* Editorial slab/serif treatment for the brand line only — system serif
      stack (no webfont load) so it costs zero extra requests. The CJK tagline
@@ -1941,9 +1987,9 @@ a.nav-mega-col-head.is-active {
 .hero-community-cta {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  height: 52px;
-  padding: 0 20px;
+  gap: 8px;
+  height: 48px;
+  padding: 0 18px;
   border: 1px solid rgba(26, 26, 26, 0.18);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.86);
@@ -1973,7 +2019,7 @@ a.nav-mega-col-head.is-active {
   stroke-linejoin: round;
 }
 .hero-community-icon path:last-child { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-.hero-community-icon-feishu { width: 22px; height: auto; flex-basis: 22px; }
+.hero-community-icon-feishu { width: 20px; height: auto; flex-basis: 20px; }
 .hero-community-perk {
   margin-left: 2px;
   padding: 3px 8px;
@@ -1998,12 +2044,11 @@ a.nav-mega-col-head.is-active {
 .hero-tag {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   padding: 6px 13px;
-  border: 1px solid rgba(26, 26, 26, 0.14);
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--coral) 26%, #fff);
+  color: var(--ink);
   font-family: var(--sans);
   font-size: 13px;
   font-weight: 600;
@@ -2012,14 +2057,14 @@ a.nav-mega-col-head.is-active {
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
-.hero-tag::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--coral);
+.hero-tags + .hero-actions { margin-top: 32px; }
+/* Hero CTA pair: one notch smaller than the default .hm-dl treatment. */
+.hero-actions .hm-dl-hero {
+  padding: 11px 24px 11px 11px;
+  font-size: 15px;
+  gap: 11px;
 }
-.hero-tags + .hero-actions { margin-top: 22px; }
+.hero-actions .hm-dl-hero .hm-di { width: 30px; height: 30px; font-size: 15px; }
 
 .hero-community-icon-discord path { fill: currentColor; stroke: none; }
 .hero-community-qr-card {
@@ -2059,7 +2104,7 @@ a.nav-mega-col-head.is-active {
 .hero-community-qr-img { display: block; width: 168px; height: 168px; border-radius: 8px; }
 @media (max-width: 640px) {
   .hero-actions { flex-wrap: wrap; }
-  .hero-community-cta { height: 46px; padding: 0 16px; font-size: 14px; }
+  .hero-community-cta { height: 42px; padding: 0 14px; font-size: 13px; }
 }
 .hero-download-attention {
   position: relative;
