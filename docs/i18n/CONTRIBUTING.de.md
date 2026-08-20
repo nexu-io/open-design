@@ -1,4 +1,4 @@
-# Zu Open Design beitragen
+# Zu OpenDesign beitragen
 
 Danke, dass Sie über einen Beitrag nachdenken. OD ist bewusst klein gehalten — der größte Teil des Werts steckt in **Dateien** (Skills, Designsysteme, Prompt-Fragmente) statt in Framework-Code. Die wirkungsvollsten Beiträge sind deshalb oft ein Ordner, eine Markdown-Datei oder ein PR-großer Adapter.
 

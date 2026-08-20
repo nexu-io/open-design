@@ -136,6 +136,25 @@ const claudeAgent: AgentInfo = {
   ],
 };
 
+const deepSeekHarnessAgent: AgentInfo = {
+  id: 'deepseek-harness',
+  name: 'DeepSeek Harness',
+  bin: 'dsh',
+  available: true,
+  version: '0.1.0-rc.6',
+  models: [
+    {
+      id: 'deepseek/deepseek-v4-flash',
+      label: 'DeepSeek-V4-Flash · DeepSeek',
+      reasoningOptions: [
+        { id: 'off', label: 'Off' },
+        { id: 'high', label: 'High', default: true },
+        { id: 'max', label: 'Max' },
+      ],
+    },
+  ],
+};
+
 const baseConfig: AppConfig = {
   mode: 'daemon',
   apiKey: '',
@@ -277,14 +296,14 @@ describe('AvatarMenu', () => {
   });
 
   // Product decision (2026-07-24): the popover is a model picker only. The
-  // Open Design account row — plan badge, balance, upgrade/console links —
+  // OpenDesign account row — plan badge, balance, upgrade/console links —
   // was removed entirely (account/billing surfaces live in the nav rail and
   // Settings), so none of it may render even with a fully signed-in AMR
   // status. This is the guard for that invariant.
   it('never renders the account row, plan badge or balance in the popover', async () => {
     const amrAgent: AgentInfo = {
       id: 'amr',
-      name: 'Open Design AMR',
+      name: 'OpenDesign AMR',
       bin: 'vela',
       available: true,
       models: [{ id: 'default', label: 'Default (CLI config)' }],
@@ -326,21 +345,35 @@ describe('AvatarMenu', () => {
     expect(screen.queryByRole('link', { name: 'settings.amrUpgrade' })).toBeNull();
   });
 
-  it('renders the active reasoning effort as a read-only readout', () => {
-    renderMenu();
+  it('changes reasoning effort from the composer popover', () => {
+    const { onAgentModelChange } = renderMenu({
+      config: {
+        ...baseConfig,
+        agentId: 'deepseek-harness',
+        agentModels: {
+          'deepseek-harness': {
+            model: 'deepseek/deepseek-v4-flash',
+            reasoning: 'high',
+          },
+        },
+      },
+      agents: [deepSeekHarnessAgent],
+    });
 
     const menu = openMenu();
-    const rows = Array.from(menu.querySelectorAll('.avatar-select-row'));
-    const reasoningRow = rows.find((row) =>
-      row.querySelector('.avatar-select-label')?.textContent ===
+    const reasoningSelect = within(menu).getByLabelText(
       'avatar.reasoningLabel',
     );
-    expect(reasoningRow).toBeTruthy();
+    expect(reasoningSelect).toHaveValue('high');
     expect(
-      reasoningRow!.querySelector('.avatar-static-value')?.textContent,
-    ).toBe('Default');
-    // Read-only: no control to change it from the composer.
-    expect(reasoningRow!.querySelector('select')).toBeNull();
+      within(reasoningSelect).getAllByRole('option').map((option) => option.textContent),
+    ).toEqual(['Off', 'High', 'Max']);
+
+    fireEvent.change(reasoningSelect, { target: { value: 'max' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('deepseek-harness', {
+      reasoning: 'max',
+    });
   });
 
   it('selects a model from the inline list and dismisses the popover', () => {
@@ -425,7 +458,7 @@ describe('AvatarMenu', () => {
       agents: [
         {
           id: 'amr',
-          name: 'Open Design AMR',
+          name: 'OpenDesign AMR',
           bin: 'vela',
           available: true,
           models: [
@@ -499,7 +532,7 @@ describe('AvatarMenu', () => {
       },
       agents: [{
         id: 'amr',
-        name: 'Open Design AMR',
+        name: 'OpenDesign AMR',
         bin: 'vela',
         available: true,
         models: [{ id: 'default', label: 'Default (CLI config)' }],
@@ -642,7 +675,7 @@ describe('AvatarMenu', () => {
       },
       agents: [{
         id: 'amr',
-        name: 'Open Design AMR',
+        name: 'OpenDesign AMR',
         bin: 'vela',
         available: true,
         models: [{ id: 'paid-model', label: 'Paid model', enabled: false }],

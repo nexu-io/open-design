@@ -26,14 +26,14 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   });
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   // Execution-source selection is intentionally gated behind Cloud identity.
   // The signed-out landing exposes only the authentication action.
   await expect(
-    page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i }),
+    page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
   ).toBeVisible({ timeout: T.medium });
   await expect(
-    page.getByRole('button', { name: /Sign in to Open Design|登录 Open Design/i }),
+    page.getByRole('button', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: /Local coding agent|本地 Coding Agent/i }),

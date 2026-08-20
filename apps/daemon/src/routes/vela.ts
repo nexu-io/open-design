@@ -146,6 +146,8 @@ export interface RegisterVelaRoutesDeps {
     getPublicBaseUrl?: PublicBaseUrlResolver;
   };
   env?: NodeJS.ProcessEnv;
+  /** Reconcile account-scoped caches/streams after credential observation. */
+  onCredentialStateObserved?: () => void;
 }
 
 interface AmrModelProbe {
@@ -403,6 +405,8 @@ function proxyVelaMessageCenterRequest(
 
 export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): void {
   const env = deps.env ?? process.env;
+  const onCredentialStateObserved =
+    deps.onCredentialStateObserved ?? (() => undefined);
   const { RUNTIME_DATA_DIR } = deps.paths;
   const { readAppConfig } = deps.appConfig;
   const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? ((req: Request) => {
@@ -514,6 +518,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      onCredentialStateObserved();
       const amrDef = getAgentDef('amr');
       const amrLaunch = amrDef ? resolveAgentLaunch(amrDef, configuredEnv) : null;
       if (!(amrLaunch?.launchPath ?? amrLaunch?.selectedPath)) {
@@ -524,9 +529,10 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       const status = readVelaLoginStatus(mergeVelaEnv(env, configuredEnv));
       // Reported on every response, signed in or not: the client builds console
       // links (wallet, plans, upgrade) from it and must not have to carry a
-      // hostname table for internal AMR environments. Absent for prod/fork
-      // builds, where the client keeps using the public product console.
-      const consoleOrigin = resolveVelaConsoleOrigin(env);
+      // hostname table for internal AMR environments. The resolver also sees
+      // the settings-selected profile, so this cannot retain the package's
+      // console origin after an environment switch.
+      const consoleOrigin = resolveVelaConsoleOrigin(env, configuredEnv);
       if (consoleOrigin) status.consoleOrigin = consoleOrigin;
       if (status.loggedIn && status.sessionState === 'authenticated') {
         // Key the live-account cache by the full credential revision (not just
@@ -833,6 +839,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         delete agentCliEnv.amr;
       }
       await writeAppConfig(RUNTIME_DATA_DIR, { agentCliEnv });
+      onCredentialStateObserved();
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });

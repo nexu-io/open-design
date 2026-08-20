@@ -60,6 +60,7 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "http_proxy",
   "https_proxy",
   "no_proxy",
+  "OD_ALLOWED_INTERNAL_HOSTS",
 ] as const;
 
 // The daemon owns the historical-outer compatibility handoff. Preserve the
@@ -671,6 +672,7 @@ export type PackagedDaemonSpawnEnvOptions = {
    * the workspace-team gate — see {@link workspaceTeamTransportEnv}.
    */
   velaWebUrl?: string | null;
+  velaWebUrls?: Record<string, string>;
 };
 
 /**
@@ -706,6 +708,9 @@ export function buildPackagedDaemonSpawnEnv(
       ? {}
       : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
     ...workspaceTeamTransportEnv(options.amrProfile, options.velaWebUrl),
+    ...(options.velaWebUrls == null || Object.keys(options.velaWebUrls).length === 0
+      ? {}
+      : { OD_VELA_WEB_URLS: JSON.stringify(options.velaWebUrls) }),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
     ...(options.mcpBootstrapCommand == null
       || options.mcpBootstrapCommand.length === 0
@@ -882,6 +887,7 @@ export async function startPackagedSidecars(
     posthogKey: string | null;
     posthogHost: string | null;
     velaWebUrl: string | null;
+    velaWebUrls?: Record<string, string>;
     /**
      * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
      * runtime is being started in this packaged process group. The
@@ -961,6 +967,7 @@ export async function startPackagedSidecars(
         posthogKey: options.posthogKey,
         posthogHost: options.posthogHost,
         velaWebUrl: options.velaWebUrl,
+        velaWebUrls: options.velaWebUrls,
       }),
       electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,

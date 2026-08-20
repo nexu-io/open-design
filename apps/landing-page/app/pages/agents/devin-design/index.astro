@@ -2,7 +2,7 @@
 /*
  * /agents/devin-design/ — agent detail page (industrial long-form).
  *
- * Captures "devin design" intent and drives to Open Design. Renders the
+ * Captures "devin design" intent and drives to OpenDesign. Renders the
  * rich how-to layout from copy.agentGuides['devin'].rich. Linked from /agents/.
  * Never fabricate URLs or facts here.
  */
@@ -45,7 +45,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: homeUrl },
       { '@type': 'ListItem', position: 2, name: copy.agents.breadcrumb, item: agentsHubUrl },
       { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
     ],
@@ -72,7 +72,7 @@ const jsonLd = [
 
 <Layout title={page.title} description={page.description} active="agent" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <a href={href('/agents/')}>{copy.agents.breadcrumb}</a>
     <span>/</span>

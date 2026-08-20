@@ -24,7 +24,7 @@ sequencing are historical context, not the current wire contract.
 
 ## Why this exists
 
-Open Design is local-first: **every user runs their own daemon** on their own
+OpenDesign is local-first: **every user runs their own daemon** on their own
 machine, and **vela (cloud) is the shared collaboration backend**. Any
 cross-user change (user A comments on a shared project; user B should see it)
 travels two hops:

@@ -18,7 +18,7 @@ import {
 } from '../../collab/team-resource-state.js';
 import {
   enforceVerifiedWorkspaceResourceMutation,
-  resolveOptionalWorkspaceRequestAuthority,
+  resolveOptionalLocalWorkspaceRequestAuthority,
   type VerifyWorkspaceRequestAuthority,
 } from '../../collab/workspace-resource-mutation.js';
 import {
@@ -30,6 +30,7 @@ import type { WorkspaceDirectoryFetchResult } from '../../collab/vela-workspace-
 import type { PluginShareAction } from '../../services/plugin-share-tasks.js';
 import type { AuthorizeProjectRequest } from '../../collab/project-request-authority.js';
 import { workspaceTeamPluginBindingResourceId } from '../../plugins/registry.js';
+import { localPluginRegistryScope } from '../../plugins/local-source.js';
 import {
   classifyPluginInstallError,
   type PluginInstallErrorCode,
@@ -255,6 +256,11 @@ export interface RegisterPluginRoutesDeps {
       workspaceId: string | null,
       workspaceMemberId?: string | null,
     ) => InstalledPluginLike | null | Promise<InstalledPluginLike | null>;
+    getLocalPluginBySource?: (
+      db: SqliteDbLike,
+      id: string,
+      source: string,
+    ) => InstalledPluginLike | null | Promise<InstalledPluginLike | null>;
     installPlugin: (db: SqliteDbLike, args: unknown) => AsyncIterable<unknown>;
     isSafePluginId: (id: string) => boolean;
     uninstallPlugin: (db: SqliteDbLike, id: string, roots: string[]) => Promise<{ ok: boolean; removedFolder?: boolean; warning?: string }>;
@@ -275,12 +281,28 @@ export interface RegisterPluginRoutesDeps {
   helpers: PluginRouteHelpers;
 }
 
+function duplicatedProjectKind(plugin: InstalledPluginLike): ProjectMetadata['kind'] {
+  const od = plugin.manifest?.['od'];
+  const mode = od && typeof od === 'object'
+    ? (od as { mode?: unknown }).mode
+    : null;
+  switch (mode) {
+    case 'deck':
+    case 'image':
+    case 'video':
+    case 'audio':
+    case 'brand':
+    case 'template':
+    case 'prototype':
+      return mode;
+    default:
+      return 'prototype';
+  }
+}
+
 export function registerPluginEventRoutes(app: Express, deps: RegisterPluginEventRoutesDeps): void {
   const resolveEventScope = async (req: Request, res: Response) => {
-    const authority = await resolveOptionalWorkspaceRequestAuthority(
-      req,
-      deps.verifyWorkspaceRequestAuthority,
-    );
+    const authority = resolveOptionalLocalWorkspaceRequestAuthority(req);
     if (!authority.ok) {
       deps.http.sendApiError(
         res,
@@ -380,10 +402,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     verifyAuthority: VerifyWorkspaceRequestAuthority | undefined =
       deps.verifyWorkspaceRequestAuthority,
   ): Promise<WorkspaceCollabContext | null | undefined> => {
-    const authority = await resolveOptionalWorkspaceRequestAuthority(
-      req,
-      verifyAuthority,
-    );
+    const authority = resolveOptionalLocalWorkspaceRequestAuthority(req);
     if (!authority.ok) {
       helpers.sendApiError(
         res,
@@ -403,6 +422,34 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     return plugins.getWorkspacePlugin
       ? plugins.getWorkspacePlugin(db, id, workspaceId, authority?.workspaceMemberId ?? null)
       : plugins.getInstalledPlugin(db, id);
+  };
+  const applyResolvedPlugin = async (
+    req: Request,
+    res: Response,
+    plugin: InstalledPluginLike,
+    registry: unknown,
+  ) => {
+    const body = req.body && typeof req.body === 'object'
+      ? req.body as Record<string, unknown>
+      : {};
+    const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {};
+    const grantCaps = Array.isArray(body.grantCaps)
+      ? body.grantCaps.filter((capability: unknown): capability is string => typeof capability === 'string')
+      : [];
+    const locale = typeof body.locale === 'string' ? body.locale : undefined;
+    const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService);
+    const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe });
+    if (grantCaps.length > 0) {
+      const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]);
+      computed.result.capabilitiesGranted = Array.from(merged);
+      computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged);
+    }
+    return res.json({
+      ok: true,
+      ...computed.result,
+      warnings: computed.warnings,
+      manifestSourceDigest: computed.manifestSourceDigest,
+    });
   };
   const isTeamPlugin = (plugin: InstalledPluginLike | null | undefined): boolean =>
     typeof plugin?.source === 'string' && plugin.source.startsWith('team:plugin:');
@@ -548,7 +595,9 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
         db,
         req.params.id,
         'delete',
-        deps.verifyWorkspaceRequestAuthority,
+        authority
+          ? async () => ({ ok: true as const, context: authority })
+          : undefined,
       )) return;
       const result = await plugins.uninstallPlugin(db, req.params.id, paths.PLUGIN_REGISTRY_ROOTS); if (!result.ok && !result.removedFolder) return res.status(404).json({ error: 'plugin not found', warning: result.warning }); res.json(result);
     } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -575,9 +624,46 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       db,
       req.params.id,
       'writeFiles',
-      deps.verifyWorkspaceRequestAuthority,
+      authority
+        ? async () => ({ ok: true as const, context: authority })
+        : undefined,
     )) return;
     return helpers.installOrUpgradePlugin(req, res, 'upgrade', authority);
+  });
+  app.post('/api/plugins/:id/apply-local', async (req, res) => {
+    // This endpoint identifies bytes the local catalogue already returned. It
+    // deliberately performs no Workspace authority read; catalogue sync owns
+    // local availability and remote mutations retain their own fresh gates.
+    res.setHeader('x-od-plugin-apply-local', '1');
+    try {
+      const body = req.body && typeof req.body === 'object'
+        ? req.body as Record<string, unknown>
+        : {};
+      const source = typeof body.source === 'string' ? body.source.trim() : '';
+      if (!source || !plugins.getLocalPluginBySource) {
+        return res.status(404).json({ error: 'plugin not found' });
+      }
+      const plugin = await plugins.getLocalPluginBySource(db, req.params.id, source);
+      if (!plugin) return res.status(404).json({ error: 'plugin not found' });
+      const registry = await helpers.loadPluginRegistryView(
+        localPluginRegistryScope(plugin),
+      );
+      // Registry loading walks local Skill/Design System files asynchronously.
+      // Re-resolve immediately before apply so a local reconciliation tombstone
+      // that landed during that walk cannot activate stale plugin bytes.
+      const currentPlugin = await plugins.getLocalPluginBySource(
+        db,
+        req.params.id,
+        source,
+      );
+      if (!currentPlugin) return res.status(404).json({ error: 'plugin not found' });
+      return applyResolvedPlugin(req, res, currentPlugin, registry);
+    } catch (err: unknown) {
+      if (err instanceof plugins.MissingInputError) {
+        return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
+      }
+      return res.status(500).json({ error: String(err) });
+    }
   });
   app.post('/api/plugins/:id/apply', async (req, res) => {
     try {
@@ -585,14 +671,6 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       if (authority === undefined) return;
       const plugin = await resolveRequestPlugin(req.params.id, authority);
       if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-      const body = req.body && typeof req.body === 'object'
-        ? req.body as Record<string, unknown>
-        : {};
-      const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {};
-      const grantCaps = Array.isArray(body.grantCaps)
-        ? body.grantCaps.filter((c: unknown): c is string => typeof c === 'string')
-        : [];
-      const locale = typeof body.locale === 'string' ? body.locale : undefined;
       const registry = await helpers.loadPluginRegistryView({
         workspaceId: authority?.workspaceId ?? null,
         workspaceMemberId: authority?.workspaceMemberId ?? null,
@@ -613,19 +691,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       ) {
         return res.status(404).json({ error: 'plugin not found' });
       }
-      const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService);
-      const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe });
-      if (grantCaps.length > 0) {
-        const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]);
-        computed.result.capabilitiesGranted = Array.from(merged);
-        computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged);
-      }
-      res.json({
-        ok: true,
-        ...computed.result,
-        warnings: computed.warnings,
-        manifestSourceDigest: computed.manifestSourceDigest,
-      });
+      return applyResolvedPlugin(req, res, plugin, registry);
     } catch (err: unknown) {
       if (err instanceof plugins.MissingInputError) {
         return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
@@ -670,7 +736,11 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       const conversationId = ids.randomId();
       cleanupProjectId = projectId;
       const metadata: ProjectMetadata = {
-        kind: 'prototype',
+        // Preserve the plugin's artifact contract. Treating every duplicate as
+        // a prototype made deck behavior depend on the copied HTML happening
+        // to match the viewer's heuristic; fixed-canvas/vertical deck examples
+        // then opened without slide chrome or a thumbnail rail.
+        kind: duplicatedProjectKind(plugin),
         templateId: `plugin:${plugin.id}`,
         templateLabel: plugin.title || plugin.id,
         duplicatedFromPluginId: plugin.id,

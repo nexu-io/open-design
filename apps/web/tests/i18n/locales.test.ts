@@ -53,6 +53,37 @@ describe('i18n locales', () => {
     expect((LOCALE_LABEL as Record<string, string>).ja).toBe('日本語');
   });
 
+  it('localizes the Home prototype creation type in every supported locale', async () => {
+    const expected: Record<Locale, string> = {
+      ar: 'نموذج أولي',
+      de: 'Prototyp',
+      en: 'Prototype',
+      'es-ES': 'Prototipo',
+      fa: 'نمونه اولیه',
+      fr: 'Prototype',
+      hu: 'Prototípus',
+      id: 'Prototipe',
+      it: 'Prototipo',
+      ja: 'プロトタイプ',
+      ko: '프로토타입',
+      pl: 'Prototyp',
+      'pt-BR': 'Protótipo',
+      ru: 'Прототип',
+      th: 'ต้นแบบ',
+      tr: 'Prototip',
+      uk: 'Прототип',
+      'zh-CN': '原型',
+      'zh-TW': '原型',
+    };
+
+    for (const locale of LOCALES) {
+      const dict = await loadDict(locale);
+      expect(dict['homeHero.chip.prototype'], `${locale}.homeHero.chip.prototype`).toBe(
+        expected[locale],
+      );
+    }
+  });
+
   it('keeps locale dictionaries aligned with English keys and placeholders', async () => {
     const englishKeys = Object.keys(en).sort();
 

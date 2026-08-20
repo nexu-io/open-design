@@ -221,11 +221,20 @@ describe('server route inventory', () => {
       'POST /api/orbit/run',
       'POST /api/system/open-external',
       'POST /api/dialog/open-folder',
+      'POST /api/projects/:id/media/hyperframes/scaffold',
+      'POST /api/tools/media/hyperframes/scaffold',
       'POST /api/projects/:id/media/generate',
       'POST /api/tools/media/generate',
       'POST /api/research/search',
       'POST /api/media/tasks/:id/wait',
       'GET /api/projects/:id/media/tasks',
+    ];
+    // Website Clone agents use these project-scoped routes to ask the daemon
+    // to launch system Chrome outside their process sandbox. This is also the
+    // headless `od` CLI path, so it must remain registered without Electron.
+    const browserSessionRouteKeys = [
+      'POST /api/projects/:id/browser-sessions',
+      'DELETE /api/projects/:id/browser-sessions/:sessionId',
     ];
 
     expect(routeKeys).toEqual(expect.arrayContaining([
@@ -257,6 +266,7 @@ describe('server route inventory', () => {
     expect(routeKeys.filter((key) => designSystemRouteKeys.includes(key))).toEqual(designSystemRouteKeys);
     expect(routeKeys.filter((key) => staticCatalogRouteKeys.includes(key))).toEqual(staticCatalogRouteKeys);
     expect(routeKeys.filter((key) => mediaConfigRouteKeys.includes(key))).toEqual(mediaConfigRouteKeys);
+    expect(routeKeys.filter((key) => browserSessionRouteKeys.includes(key))).toEqual(browserSessionRouteKeys);
 
     expect(fallbackIndex).toBeGreaterThan(-1);
     expect(routeKeys.indexOf('GET /api/health')).toBeLessThan(fallbackIndex);

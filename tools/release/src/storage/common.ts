@@ -51,6 +51,10 @@ export function writeText(path: string, value: string): void {
 }
 
 export function contentType(name: string): string {
+  if (name.endsWith(".sh")) return "text/x-shellscript; charset=utf-8";
+  if (name.endsWith(".ps1") || name.endsWith(".cmd") || name.endsWith("SHA256SUMS")) {
+    return "text/plain; charset=utf-8";
+  }
   if (name.endsWith(".dmg")) return "application/x-apple-diskimage";
   if (name.endsWith(".zip")) return "application/zip";
   if (name.endsWith(".exe")) return "application/vnd.microsoft.portable-executable";

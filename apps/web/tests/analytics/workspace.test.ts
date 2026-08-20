@@ -62,4 +62,19 @@ describe('workspace analytics dimensions', () => {
 
     expect(workspaceAnalyticsDimensions(context).seat_state).toBe('unknown');
   });
+
+  it('treats the directory-only zero-seat sentinel as unknown', () => {
+    const context = workspaceContextFixture({
+      workspaceId: 'workspace-directory',
+      workspaceMemberId: 'member-directory',
+      seatSummary: {
+        seatLimit: 0,
+        usedSeats: 0,
+        availableSeats: 0,
+        isSeatFull: true,
+      },
+    });
+
+    expect(workspaceAnalyticsDimensions(context).seat_state).toBe('unknown');
+  });
 });

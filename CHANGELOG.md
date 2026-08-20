@@ -11,14 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.0] - 2026-05-29
 
-🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **Open Design AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀
+🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **OpenDesign AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀
 
 ### Highlights
 
-- 🤖 **Open Design AMR — official AI, one click from a fresh install.** The old first-run tax was brutal: install a CLI, find an API key, paste secrets, test auth, debug the shell, then maybe start designing. 0.9.0 cuts that down to the thing users actually wanted: open the app, sign in to AMR, pick a model, and go. Onboarding leads with AMR, the desktop keeps sign-in visible, live model discovery keeps choices fresh, wallet/account states are handled in the UI, image attachments work, and the `vela` runtime is bundled in the installer. (#2355, #2979, #2980, #3012, #3019, #3048, #3073, #3076, #3088, #3092, #3094, #3097, #3099, #3117, #3127, #3158, #3198, #3226) Thanks @lefarcen, @nettee, @mrcfps, @pftom, @jinmeihong0201-gif, @Caprika.
-- 🆕 **The agent bench gets much bigger.** Aider, Trae CLI, Antigravity, and DeepSeek Reasonix all join the picker, giving builders more real local-agent paths instead of a single blessed workflow. Aider gets first-class branding, Trae runs over ACP in yolo mode, and the new adapters make Open Design feel less like one agent integration and more like the place where agents come to work. (#1970, #2729, #2856, #3157, #2952) Thanks @mrbeandev, @JasonYang0104, @lefarcen, @Bernardxu123.
+- 🤖 **OpenDesign AMR — official AI, one click from a fresh install.** The old first-run tax was brutal: install a CLI, find an API key, paste secrets, test auth, debug the shell, then maybe start designing. 0.9.0 cuts that down to the thing users actually wanted: open the app, sign in to AMR, pick a model, and go. Onboarding leads with AMR, the desktop keeps sign-in visible, live model discovery keeps choices fresh, wallet/account states are handled in the UI, image attachments work, and the `vela` runtime is bundled in the installer. (#2355, #2979, #2980, #3012, #3019, #3048, #3073, #3076, #3088, #3092, #3094, #3097, #3099, #3117, #3127, #3158, #3198, #3226) Thanks @lefarcen, @nettee, @mrcfps, @pftom, @jinmeihong0201-gif, @Caprika.
+- 🆕 **The agent bench gets much bigger.** Aider, Trae CLI, Antigravity, and DeepSeek Reasonix all join the picker, giving builders more real local-agent paths instead of a single blessed workflow. Aider gets first-class branding, Trae runs over ACP in yolo mode, and the new adapters make OpenDesign feel less like one agent integration and more like the place where agents come to work. (#1970, #2729, #2856, #3157, #2952) Thanks @mrbeandev, @JasonYang0104, @lefarcen, @Bernardxu123.
 - 🔎 **Model picking stops feeling like scrolling a phone book.** Search now cuts through long model lists, and shared BYOK catalogs keep Settings and the inline switcher aligned so switching models feels fast instead of fiddly. (#3278) Thanks @AmyShang-alt.
-- 💬 **Keep talking while the model is still working.** Queue chat sends mid-stream, then let Open Design continue the conversation the moment the current turn finishes. Studio and Draw now follow the same flow, so capturing an idea does not depend on waiting for the previous response to end. (#2870, #3270, #1961) Thanks @zoeforfun, @lefarcen, @leno23.
+- 💬 **Keep talking while the model is still working.** Queue chat sends mid-stream, then let OpenDesign continue the conversation the moment the current turn finishes. Studio and Draw now follow the same flow, so capturing an idea does not depend on waiting for the previous response to end. (#2870, #3270, #1961) Thanks @zoeforfun, @lefarcen, @leno23.
 - 🧩 **Skills become a real plugin ecosystem.** Skill bundles now graduate into first-class Plugins: visible in the drawer, listable from the CLI, indexed on the site, and easier to explain to users. One extension model, one library, one mental model. (#3085) Thanks @Siri-Ray.
 - 🎨 **Bigger creative moves are one install away.** The official GSAP plugin brings serious web animation into the agent loop, while Research Decision Room turns research prompts into structured multi-role reviews instead of one long answer. (#3109, #3111, #2949) Thanks @Tuola-waj, @mturac.
 - 🌍 **The plugin library starts feeling global.** The on-site library now mirrors in-app categories and reads natively across supported locales, so visitors land on a catalog that feels built for them instead of partially translated around the edges. (#3010, #2926) Thanks @522700967-wq.
@@ -26,16 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🪪 **Design systems move from files to living assets.** Rename them, pin your own to the top, read real swatches from their color tables, and connect design-system projects to GitHub without the zip-file shuffle. (#2812, #2817, #2820) Thanks @portseif.
 - 📅 **Routines feel scheduled, not scripted.** A real picker, natural-language summaries, newest-first ordering, auto-focus after create, localization, and duplicate-slot cleanup make automations easier to trust. (#2593, #2389, #3035, #2598, #1971) Thanks @Hetsavani, @leno23, @sasha1107, @bulai0408.
 - 💬 **Review can keep moving while the artifact changes.** Comment mode now supports attachments, live preview updates, and clean deselection, so screenshots and notes stay attached to the work instead of freezing the review flow. (#2869, #2844, #3144) Thanks @zoeforfun, @leessju, @feliciaZH.
-- 📦 **Trying Open Design gets easier on Windows and Linux.** Windows gets a portable zip path; Linux gets Docker/Podman Compose one-click setup. Less install friction, faster first run. (#2937, #2414) Thanks @PerishCode, @epicsagas.
-- 🔌 **MCP clients can now do real workspace work.** Write files, delete files, delete projects, resolve the active project directory, run generation loops, and bootstrap Codex from one place. External clients can now participate in the Open Design workspace instead of only observing it. (#2416, #2802, #3141) Thanks @YOMXXX, @papperrollinggery, @lefarcen.
-- 🛂 **Network changes stop requiring a restart.** Switch the system proxy while Open Design is running; the next outbound request picks it up automatically. (#3093) Thanks @mrcfps.
+- 📦 **Trying OpenDesign gets easier on Windows and Linux.** Windows gets a portable zip path; Linux gets Docker/Podman Compose one-click setup. Less install friction, faster first run. (#2937, #2414) Thanks @PerishCode, @epicsagas.
+- 🔌 **MCP clients can now do real workspace work.** Write files, delete files, delete projects, resolve the active project directory, run generation loops, and bootstrap Codex from one place. External clients can now participate in the OpenDesign workspace instead of only observing it. (#2416, #2802, #3141) Thanks @YOMXXX, @papperrollinggery, @lefarcen.
+- 🛂 **Network changes stop requiring a restart.** Switch the system proxy while OpenDesign is running; the next outbound request picks it up automatically. (#3093) Thanks @mrcfps.
 - 🌐 **The public site gets a proper community front door.** Community, Discord/X, Ambassadors, a cleaner footer, localized template pages, and sharper brand details make the project easier to discover and share. (#3066, #3230, #3222, #3218, #3256) Thanks @leilei926524-tech, @522700967-wq.
 - ✏️ **Studio's mark tool gets cleaner and faster.** Draw and Screenshot merge into one Studio flow, with better preview interactions and clearer queue/screenshot modal behavior. (#3277, #3000, #3215) Thanks @lefarcen, @zoeforfun, @xxiaoxiong.
 
 ### ✨ Added
 
 #### 🤖 Agents & runtimes
-- **Open Design AMR (vela) as a first-class ACP stdio agent**, with onboarding, sign-in pill, and bundled `vela` CLI inside the installer. (#2355) Thanks @lefarcen.
+- **OpenDesign AMR (vela) as a first-class ACP stdio agent**, with onboarding, sign-in pill, and bundled `vela` CLI inside the installer. (#2355) Thanks @lefarcen.
 - **AMR login state read from `~/.amr`** so the desktop reflects vela's source of truth. (#3048, #3073) Thanks @Caprika.
 - **AMR sign-in pill hover-cancel.** (#3158) Thanks @Caprika.
 - **AMR account-failure and insufficient-balance UI**, including wallet URL handling and duplicate recharge-link dedupe. (#2980, #3099, #3117) Thanks @Caprika.
@@ -135,7 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.0] - 2026-05-20
 
-The rebuilt-core release: **everything is a plugin**, **headless by default**, **plugins create plugins**. Open Design's research-preview architecture has been replaced with a small, boring engine plus a plugin surface — design systems, slices, prototypes, exports, and Figma itself all live in plugins now. The desktop app is a thin wrapper around the OD CLI, so the same engine runs in Claude Code, OpenClaw, Hermes Agent, and chat bots in Lark / Discord / Slack. **Critique Theater** matures through **Phase 16** (rollout ratchet, conformance API, 9 Prometheus metrics, Grafana dashboard, M0 dark-launch by default). **149 design systems** now ship with structured `tokens.css` + components manifests across 60+ new brand fixtures. **Italian (it) locale** + **CJK font fallback**. New media providers: **Leonardo.ai**, **ElevenLabs**, **SenseAudio**. **Packaged auto-update** lands on both **macOS and Windows**, battle-hardened through the preview cycle. Plus a **top-to-bottom visual refresh**, **Quick-brief discovery overhaul**, **PostHog v2 analytics schema**, **manual edit UX overhaul** (focus mode, uploads, remove-element patch), **custom CLI agent profiles**, and **HTML Anything** landing page. 305 merged PRs by 75 contributors since 0.7.0.
+The rebuilt-core release: **everything is a plugin**, **headless by default**, **plugins create plugins**. OpenDesign's research-preview architecture has been replaced with a small, boring engine plus a plugin surface — design systems, slices, prototypes, exports, and Figma itself all live in plugins now. The desktop app is a thin wrapper around the OD CLI, so the same engine runs in Claude Code, OpenClaw, Hermes Agent, and chat bots in Lark / Discord / Slack. **Critique Theater** matures through **Phase 16** (rollout ratchet, conformance API, 9 Prometheus metrics, Grafana dashboard, M0 dark-launch by default). **149 design systems** now ship with structured `tokens.css` + components manifests across 60+ new brand fixtures. **Italian (it) locale** + **CJK font fallback**. New media providers: **Leonardo.ai**, **ElevenLabs**, **SenseAudio**. **Packaged auto-update** lands on both **macOS and Windows**, battle-hardened through the preview cycle. Plus a **top-to-bottom visual refresh**, **Quick-brief discovery overhaul**, **PostHog v2 analytics schema**, **manual edit UX overhaul** (focus mode, uploads, remove-element patch), **custom CLI agent profiles**, and **HTML Anything** landing page. 305 merged PRs by 75 contributors since 0.7.0.
 
 ### Added
 
@@ -200,7 +200,7 @@ The rebuilt-core release: **everything is a plugin**, **headless by default**, *
 - **Packaged update apply observations** captured for telemetry / debugging. ([#2429])
 - **Prerelease + preview package identity** so beta installs don't collide with stable. ([#2437])
 - **macOS Dock icon stays put** when desktop-pet window opens. ([#2413])
-- **Refresh Open Design app visuals** — new app icons, logo, brand glyphs. ([#2436])
+- **Refresh OpenDesign app visuals** — new app icons, logo, brand glyphs. ([#2436])
 - **Linux packaged client parity smoke coverage.**
 - **Ensure node binary dir is on PATH for agent sub-processes on Windows.** ([#1989])
 
@@ -551,12 +551,12 @@ A memory-plus-UI release: **auto-memory store** carries agent context across run
 - **`ib-pitch-book` skill** — investment-banking strategic-alternatives pitch book (Anthropic financial-services Pitch Agent workflow); ships `example.html` and IB layout references.
 ## [0.6.0] - 2026-05-09
 
-A connectivity-and-iteration release: Open Design becomes a fully bidirectional MCP citizen (external MCP client with 39 templates), ships **Cloudflare Pages deployment** for generated artifacts (with custom domains), advances Critique Theater to **Phase 6** (interrupt + project-keyed run registry), and lands a redesigned top bar, draggable file tabs, batch delete, **vector PDF export**, **agent-callable research/search**, and **Orbit activity summaries**. Hyperframes learns the HTML-in-Canvas API. New BYOK provider (Ollama Cloud), new agent capabilities (Gemini 3 preview + GPT-5.1 codex picker + DeepSeek v4), new design systems (BMW M, Slack, Cisco, Webex, Mission Control, Urdu Modern), eight new skill bundles, and Turkish + Thai locales. 136 merged PRs since 0.5.0.
+A connectivity-and-iteration release: OpenDesign becomes a fully bidirectional MCP citizen (external MCP client with 39 templates), ships **Cloudflare Pages deployment** for generated artifacts (with custom domains), advances Critique Theater to **Phase 6** (interrupt + project-keyed run registry), and lands a redesigned top bar, draggable file tabs, batch delete, **vector PDF export**, **agent-callable research/search**, and **Orbit activity summaries**. Hyperframes learns the HTML-in-Canvas API. New BYOK provider (Ollama Cloud), new agent capabilities (Gemini 3 preview + GPT-5.1 codex picker + DeepSeek v4), new design systems (BMW M, Slack, Cisco, Webex, Mission Control, Urdu Modern), eight new skill bundles, and Turkish + Thai locales. 136 merged PRs since 0.5.0.
 
 ### Added
 
 #### MCP, deployment & connectors
-- **External MCP client with daemon-managed OAuth and 39 design-focused templates.** Open Design can now consume MCP servers, not just expose itself as one. ([#898])
+- **External MCP client with daemon-managed OAuth and 39 design-focused templates.** OpenDesign can now consume MCP servers, not just expose itself as one. ([#898])
 - **Cloudflare Pages artifact deployment.** One-shot publish of generated artifacts to Pages from the desktop app. ([#729])
 - **Cloudflare Pages custom domains.** Bind your own domain to deployed artifacts. ([#851])
 - Preserve OAuth state and advertised tool counts when reconnecting MCP/connector providers. ([#1036])
@@ -732,7 +732,7 @@ A connectivity-and-iteration release: Open Design becomes a fully bidirectional 
 - Test: cover model option rendering. ([#948])
 - Test: de-flake chat-scroll-preservation across tab switches. ([#886])
 - Auto-generated metrics + contributors wall refreshes. ([#853], [#998], [#856], [#1004])
-- Release: Open Design 0.5.0 changelog landing. ([#820])
+- Release: OpenDesign 0.5.0 changelog landing. ([#820])
 
 ## [0.5.0] - 2026-05-07
 
@@ -880,12 +880,12 @@ A minor release focused on iteration: live-data dashboards graduate to a first-c
 
 ## [0.4.0] - 2026-05-05
 
-A multi-protocol leap: Open Design now ships as an MCP server, ships Critique Theater (Design Jury) Phase 4, gains live-reload + Tweaks mode + live artifacts in the preview pane, and adds five new agent / runtime adapters. 71 merged PRs from 40+ contributors over two days. Linux AppImage packaging landed in tooling, but the stable Linux artifact is deferred from 0.4.0 while containerized release packaging is hardened.
+A multi-protocol leap: OpenDesign now ships as an MCP server, ships Critique Theater (Design Jury) Phase 4, gains live-reload + Tweaks mode + live artifacts in the preview pane, and adds five new agent / runtime adapters. 71 merged PRs from 40+ contributors over two days. Linux AppImage packaging landed in tooling, but the stable Linux artifact is deferred from 0.4.0 while containerized release packaging is hardened.
 
 ### Added
 
 #### MCP & agent integration
-- **`od mcp` — expose Open Design as a stdio MCP server.** Coding agents in other repos (Claude Code, Codex, Cursor, VS Code, Antigravity, Zed, Windsurf) can read files from local Open Design projects directly, including the project the user has open in the Open Design app right now. ([#399])
+- **`od mcp` — expose OpenDesign as a stdio MCP server.** Coding agents in other repos (Claude Code, Codex, Cursor, VS Code, Antigravity, Zed, Windsurf) can read files from local OpenDesign projects directly, including the project the user has open in the OpenDesign app right now. ([#399])
 - **Link code folder support for agent context** — point agents at any local code folder alongside the design project. ([#455])
 - Kilo CLI (ACP) agent adapter. ([#480])
 - DeepSeek TUI agent adapter. ([#439])
@@ -1142,7 +1142,7 @@ A feature-heavy follow-up to 0.1.0 — dark mode, xAI Grok Imagine media generat
 
 ## [0.1.0] - 2026-05-01
 
-First public release of Open Design — a local-first, open-source alternative to Anthropic's Claude Design. It detects your installed code-agent CLI, runs design skills against curated design systems, and streams artifacts into a sandboxed in-app preview.
+First public release of OpenDesign — a local-first, open-source alternative to Anthropic's Claude Design. It detects your installed code-agent CLI, runs design skills against curated design systems, and streams artifacts into a sandboxed in-app preview.
 
 ### Added
 
@@ -1231,7 +1231,7 @@ First public release of Open Design — a local-first, open-source alternative t
 
 ### Internal
 
-- Initial project structure, project rename "Open Claude Design" → "Open Design", naming optimization. ([#1], [#2])
+- Initial project structure, project rename "Open Claude Design" → "OpenDesign", naming optimization. ([#1], [#2])
 - Initial AGENTS.md and OpenCode agent instructions. ([#114])
 - Beta release workflow placeholder. ([#36])
 - Git commit co-author policy. ([#131])

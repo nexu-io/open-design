@@ -15,6 +15,7 @@ import {
   PLANS_JSON_URL,
   CLOUD_CONSOLE_URL,
   cloudSubscribeUrl,
+  formatUsd,
   teamIntroTotalUsd,
   type PlanTierConfig,
   type TeamPlanTierConfig,
@@ -32,14 +33,14 @@ import {
 import { getTeamPricingContent } from '../../_lib/pricing-team-content';
 import EnterpriseLeadForm from '../../_components/enterprise-lead-form.astro';
 import {
-  getStory,
   getFaqs,
   getFaqTitle,
   getEnterprise,
 } from '../../_lib/pricing-extras-content';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { localeFromPath, localizedHref } from '../../i18n';
-import { DEEPSEEK_V4_FLASH_CAMPAIGN } from '../../_lib/deepseek-v4-flash-campaign';
+import { DEEPSEEK_V4_PRO_CAMPAIGN } from '../../_lib/deepseek-v4-pro-campaign';
+import { getPricingCampaignContent } from '../../_lib/pricing-campaign-content';
 
 const locale = localeFromPath(Astro.url.pathname);
 const href = (path: string) => localizedHref(path, locale);
@@ -58,19 +59,15 @@ const footnoteHtml = fillTemplate(L.footnote, {
   console: `<a class="inline-link" href="${CLOUD_CONSOLE_URL}">${L.consoleLabel}</a>`,
 });
 
-// Customer story + FAQ below the cards (mirrors vela's modal). "Read more"
-// points at the marketing site's own Ikigai One story page.
-const story = getStory(locale);
 const faqs = getFaqs(locale);
 const faqTitle = getFaqTitle(locale);
-const storyMoreHref = href('/stories/ikigai-one/');
 const enterprise = getEnterprise(locale);
 const LF = enterprise.leadForm;
 
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
 const title = teamContent.metaTitle;
 const description = teamContent.metaDescription;
-const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+const usd = formatUsd;
 
 const tiers: PlanTierConfig[] = PRICING_SNAPSHOT.tiers;
 const teamTiers: TeamPlanTierConfig[] = PRICING_SNAPSHOT.teamTiers;
@@ -93,11 +90,9 @@ function teamCreditOption(tier: TeamPlanTierConfig): string {
 function teamView(tier: TeamPlanTierConfig, interval: 'monthly' | 'yearly') {
   const selected = tier[interval];
   const months = interval === 'yearly' ? 12 : 1;
-  const introSeatMonth = Math.round(selected.introPriceUsd / months);
+  const introSeatMonth = selected.introPriceUsd / months;
   const regularSeatMonth =
-    interval === 'yearly'
-      ? Math.round(tier.monthly.priceUsd)
-      : Math.round(selected.priceUsd);
+    interval === 'yearly' ? tier.monthly.priceUsd : selected.priceUsd;
   const discountPct = Math.round(
     (1 - introSeatMonth / regularSeatMonth) * 100,
   );
@@ -118,29 +113,11 @@ const FREE_PREMIUM_MODELS = [...PREMIUM_MODELS].sort(
   (a, b) => Number(b.trial === true) - Number(a.trial === true),
 );
 const renderCatalogLabel = (label: string) => fillTemplate(label, catalogLabelVars);
-const deepSeekCampaign = locale.startsWith('zh')
-  ? {
-      badge: '无限使用',
-      headline: '这次，别省着用。DeepSeek V4 Flash 无限用。',
-      body: '8月6日—8月13日，一周免费用',
-      windowLabel: '活动倒计时',
-      windowValue: '7天 00:00:00',
-      modelBenefit: 'DeepSeek V4 Flash 无限使用',
-      paidBenefitNote: '8月6日—8月13日 · 一周免费用',
-      teamBenefitNote: '8月6日—8月13日 · 一周免费用',
-      disclaimer: '套餐内的无限制模型额度与免费生成次数，仅可通过Open Design使用；无法在MCP/CLI/API及其他场景使用。解释权归官方所有。',
-    }
-  : {
-      badge: 'Unlimited',
-      headline: 'Stop rationing. Use DeepSeek V4 Flash without limits.',
-      body: 'FREE all week, Aug 6—Aug 13',
-      windowLabel: 'Campaign countdown',
-      windowValue: '7d 00:00:00',
-      modelBenefit: 'Unlimited DeepSeek V4 Flash',
-      paidBenefitNote: 'Aug 6—Aug 13 · FREE all week',
-      teamBenefitNote: 'Aug 6—Aug 13 · FREE all week',
-      disclaimer: 'Unlimited model quota and free generations included in a plan are available only in open design, not through MCP, CLI, API, or other scenarios.',
-    };
+const deepSeekCampaign = getPricingCampaignContent(locale);
+const comingSoonLabel = L.comingSoon
+  .trim()
+  .replace(/^[（(]\s*/, '')
+  .replace(/\s*[）)]$/, '');
 
 // Vela's grant already includes the advertised Pro/Max uplift. The percentage
 // is a presentation badge only; applying it again would inflate $120/$300 to
@@ -183,26 +160,26 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: absUrl('/') },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: absUrl('/') },
       { '@type': 'ListItem', position: 2, name: teamContent.breadcrumbLabel, item: absUrl('/pricing/') },
     ],
   },
   {
     '@context': 'https://schema.org',
     '@type': 'Product',
-    name: 'Open Design Subscription',
+    name: 'OpenDesign Subscription',
     description,
     offers: [
       {
         '@type': 'Offer',
-        name: 'Open Design free',
+        name: 'OpenDesign free',
         price: '0',
         priceCurrency: 'USD',
         url: CLOUD_CONSOLE_URL,
       },
       ...tiers.map((t) => ({
         '@type': 'Offer',
-        name: `Open Design ${t.tier}`,
+        name: `OpenDesign ${t.tier}`,
         price: String(t.monthly.priceUsd),
         priceCurrency: 'USD',
         url: CLOUD_CONSOLE_URL,
@@ -210,7 +187,7 @@ const jsonLd = [
       ...teamTiers.flatMap((t) => [
         {
           '@type': 'Offer',
-          name: `Open Design ${teamTierLabel(t)} monthly`,
+          name: `OpenDesign ${teamTierLabel(t)} monthly`,
           price: String(t.monthly.priceUsd),
           priceCurrency: 'USD',
           url: CLOUD_CONSOLE_URL,
@@ -222,7 +199,7 @@ const jsonLd = [
         },
         {
           '@type': 'Offer',
-          name: `Open Design ${teamTierLabel(t)} yearly`,
+          name: `OpenDesign ${teamTierLabel(t)} yearly`,
           price: String(t.yearly.priceUsd),
           priceCurrency: 'USD',
           url: CLOUD_CONSOLE_URL,
@@ -240,13 +217,13 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="pricing" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <span aria-current="page">{teamContent.breadcrumbLabel}</span>
   </nav>
 
   <article class="info-page pr-page" data-pricing-root data-audience="creator" data-interval="yearly">
-    <aside class="pr-campaign" aria-label="DeepSeek V4 Flash campaign" data-pricing-campaign-surface data-campaign-locale={locale.startsWith('zh') ? 'zh' : 'en'} data-campaign-start-at={DEEPSEEK_V4_FLASH_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_FLASH_CAMPAIGN.endAtExclusive} hidden>
+    <aside class="pr-campaign" aria-label="DeepSeek V4 Pro and V4 Flash campaign" data-pricing-campaign-surface data-campaign-day-unit={deepSeekCampaign.dayUnit} data-campaign-start-at={DEEPSEEK_V4_PRO_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive} hidden>
       <span class="pr-campaign-badge">{deepSeekCampaign.badge}</span>
       <div class="pr-campaign-copy">
         <strong>{deepSeekCampaign.headline}</strong>
@@ -254,7 +231,7 @@ const jsonLd = [
       </div>
       <div class="pr-campaign-window" aria-label={deepSeekCampaign.windowLabel}>
         <span>{deepSeekCampaign.windowLabel}</span>
-        <strong data-pricing-campaign-countdown>{deepSeekCampaign.windowValue}</strong>
+        <strong data-pricing-campaign-countdown>14{deepSeekCampaign.dayUnit} 00:00:00</strong>
       </div>
     </aside>
     <header class="pr-hero">
@@ -419,10 +396,14 @@ const jsonLd = [
             {/* Fully-expanded benefits — credit + concurrency lead the list,
                 then every included benefit; no "includes all <tier>" heading. */}
             <ul class="pr-feats">
-              <li class="pr-feat pr-campaign-model-benefit" data-pricing-campaign-surface hidden>
-                <strong>{deepSeekCampaign.modelBenefit}</strong>
-                <small>{deepSeekCampaign.paidBenefitNote}</small>
-              </li>
+              {deepSeekCampaign.modelBenefits.map((benefit) => (
+                <li class="pr-feat pr-campaign-model-benefit" data-pricing-campaign-surface hidden>
+                  <div>
+                    <strong>{benefit}</strong>
+                    <small>{deepSeekCampaign.paidBenefitNote}</small>
+                  </div>
+                </li>
+              ))}
               <li class="pr-feat pr-feat-lead pr-feat-strong">
                 <span data-od-credit>{v.credits}</span>
                 {v.bonusPct != null && (
@@ -488,22 +469,31 @@ const jsonLd = [
 
     <section class="pr-multimodal" aria-labelledby="pr-multimodal-title">
       <div class="pr-multimodal-copy">
-        <span class="pr-multimodal-kicker">Open Design Cloud</span>
+        <span class="pr-multimodal-kicker">OpenDesign Cloud</span>
         <h2 id="pr-multimodal-title">{L.multimodalTitle}</h2>
         <p>{L.multimodalDescription}</p>
       </div>
       <div class="pr-multimodal-modes" aria-label={L.multimodalTitle}>
         <div class="pr-mode">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 9h9M5 13h14M5 17h9" /></svg>
-          <span>{L.designAgent}</span>
+          <span class="pr-mode-copy">
+            <small aria-hidden="true"></small>
+            <strong>{L.designAgent}</strong>
+          </span>
         </div>
         <div class="pr-mode">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><circle cx="9" cy="9" r="1.5" /><path d="m5.5 17 4-4 3 3 2-2 4 3" /></svg>
-          <span>{L.imageGeneration}</span>
+          <span class="pr-mode-copy">
+            <small aria-hidden="true"></small>
+            <strong>{L.imageGeneration}</strong>
+          </span>
         </div>
         <div class="pr-mode is-soon">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" /><path d="m10 9 5 3-5 3Z" /></svg>
-          <span>{L.videoGeneration}<span class="pr-soon-tag">{L.comingSoon}</span></span>
+          <span class="pr-mode-copy">
+            <small>{comingSoonLabel}</small>
+            <strong>{L.videoGeneration}</strong>
+          </span>
         </div>
       </div>
     </section>
@@ -606,10 +596,14 @@ const jsonLd = [
           </p>
 
           <ul class="pr-team-feature-list">
-            <li class="pr-campaign-model-benefit" data-pricing-campaign-surface hidden>
-              <strong>{deepSeekCampaign.modelBenefit}</strong>
-              <small>{deepSeekCampaign.teamBenefitNote}</small>
-            </li>
+            {deepSeekCampaign.modelBenefits.map((benefit) => (
+              <li class="pr-campaign-model-benefit" data-pricing-campaign-surface hidden>
+                <div>
+                  <strong>{benefit}</strong>
+                  <small>{deepSeekCampaign.teamBenefitNote}</small>
+                </div>
+              </li>
+            ))}
             {teamContent.teamFeatures.map((feature) => <li>{feature}</li>)}
           </ul>
 
@@ -642,52 +636,10 @@ const jsonLd = [
         </section>
       </div>
     </div>
+
     <p class="pr-foot" set:html={footnoteHtml} />
     <p class="pr-campaign-disclaimer" data-pricing-campaign-surface hidden>{deepSeekCampaign.disclaimer}</p>
   </article>
-
-  <section class="pr-story" aria-label={story.eyebrow}>
-    <div class="pr-story-head">
-      <p class="pr-story-eyebrow">{story.eyebrow}</p>
-      <a class="pr-story-more" href={storyMoreHref}>
-        {story.more}<span aria-hidden="true"> →</span>
-      </a>
-    </div>
-    <div class="pr-story-card">
-      <div class="pr-story-body">
-        <blockquote class="pr-story-quote">
-          <span class="pr-q" aria-hidden="true">“</span>{story.quote.lead}<span class="pr-hl">{story.quote.highlight}</span>{story.quote.tail}<span class="pr-q" aria-hidden="true">”</span>
-        </blockquote>
-        <div class="pr-story-person">
-          <span class="pr-story-avatar" aria-hidden="true">I</span>
-          <div>
-            <div class="pr-story-name">{story.name}</div>
-            <div class="pr-story-role">{story.role}</div>
-          </div>
-        </div>
-        <div class="pr-story-chips">
-          {story.chips.map((chip) => <span class="pr-chip">{chip}</span>)}
-        </div>
-        <div class="pr-story-stats">
-          {story.stats.map((stat) => (
-            <div class="pr-stat">
-              <div class="pr-stat-val">{stat.value}</div>
-              <div class="pr-stat-label">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <img
-        class="pr-story-cover"
-        src="/stories/ikigai-one-cover.webp"
-        alt={`${story.name} — ${story.role}`}
-        width={800}
-        height={450}
-        loading="lazy"
-        decoding="async"
-      />
-    </div>
-  </section>
 
   <section class="pr-faq" aria-label={faqTitle}>
     <h2 class="pr-faq-title">{faqTitle}</h2>
@@ -726,26 +678,28 @@ const jsonLd = [
       const campaign = root.querySelector('.pr-campaign');
       const campaignSurfaces = root.querySelectorAll('[data-pricing-campaign-surface]');
       const campaignCountdown = root.querySelector('[data-pricing-campaign-countdown]');
-      const campaignIsZh = campaign?.getAttribute('data-campaign-locale') === 'zh';
+      const campaignDayUnit = campaign?.getAttribute('data-campaign-day-unit') || 'd';
       const campaignStartAt = Date.parse(campaign?.getAttribute('data-campaign-start-at') || '');
       const campaignEndAt = Date.parse(campaign?.getAttribute('data-campaign-end-at') || '');
-      let campaignActive = false;
+      let campaignEligible = false;
+      let campaignVisible = false;
       const formatCampaignRemaining = (remainingMs) => {
         const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
         const days = Math.floor(totalSeconds / 86400);
         const hours = Math.floor((totalSeconds % 86400) / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
-        return `${days}${campaignIsZh ? '天' : 'd'} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        return `${days}${campaignDayUnit} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
       };
       const updateCampaignCountdown = () => {
         const now = Date.now();
-        campaignActive = now >= campaignStartAt && now < campaignEndAt;
-        campaignSurfaces.forEach((surface) => { surface.hidden = !campaignActive; });
-        if (!campaignActive || !campaignCountdown) return campaignActive;
+        campaignEligible = now >= campaignStartAt && now < campaignEndAt;
+        campaignVisible = campaignEligible;
+        campaignSurfaces.forEach((surface) => { surface.hidden = !campaignVisible; });
+        if (!campaignVisible || !campaignCountdown) return campaignVisible;
         const remainingMs = campaignEndAt - now;
         campaignCountdown.textContent = formatCampaignRemaining(remainingMs);
-        return campaignActive;
+        return campaignVisible;
       };
       updateCampaignCountdown();
       const campaignCountdownTimer = window.setInterval(updateCampaignCountdown, 1000);
@@ -776,7 +730,7 @@ const jsonLd = [
         const target = new URL(billingPlanUrl);
         if (inboundWorkspaceId) target.searchParams.set('workspaceId', inboundWorkspaceId);
         // od_campaign_id is intentionally NOT forwarded from the inbound URL:
-        // campaign membership is re-decided by campaignActive on this click and
+        // campaign membership is re-decided by campaignEligible on this click and
         // written only through __odAttributedUrl so a closed window cannot
         // inherit a desktop-badge campaign id into Cloud checkout.
         for (const key of [
@@ -792,7 +746,18 @@ const jsonLd = [
         }
         return target.toString();
       };
-      const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+      // Mirrors `formatUsd` in _lib/pricing.ts: cents only when the amount has
+      // them, so Team seat prices like $73.50 are not rounded into a wrong quote.
+      const usd = (n) => {
+        const cents = Math.round(n * 100);
+        return (
+          '$' +
+          (cents / 100).toLocaleString('en-US', {
+            minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+            maximumFractionDigits: 2,
+          })
+        );
+      };
       const fill = (tpl, vals) =>
         tpl.replace(/\{(\w+)\}/g, (_, k) => (k in vals ? vals[k] : '{' + k + '}'));
       const set = (scope, sel, text) => {
@@ -809,9 +774,16 @@ const jsonLd = [
       // ── Creator / Team audience toggle ─────────────────────────────────
       let lastCampaignBenefitAudience = null;
       const trackCampaignBenefit = (audience) => {
-        if (!campaignActive) return;
+        if (!campaignVisible) return;
         if (lastCampaignBenefitAudience === audience) return;
         lastCampaignBenefitAudience = audience;
+        track('surface_view', {
+          area: audience === 'team' ? 'pricing_team_plan' : 'pricing_personal_plan',
+          element: 'deepseek_v4_pro_benefit',
+          campaign_id: 'deepseek_v4_pro',
+          user_state: 'unknown',
+          audience,
+        });
         track('surface_view', {
           area: audience === 'team' ? 'pricing_team_plan' : 'pricing_personal_plan',
           element: 'deepseek_v4_flash_benefit',
@@ -865,17 +837,18 @@ const jsonLd = [
 
       // Campaign impressions must fire when the surfaces become visible, which
       // happens either on load (window already open) or mid-session when the
-      // countdown loop flips `campaignActive` at startAt. A one-time flag +
-      // the same 1s cadence as the reveal loop covers both paths; the benefit
-      // impression reuses trackCampaignBenefit's own audience dedupe.
+      // countdown loop flips `campaignVisible` at startAt.
+      // A one-time flag + the same 1s cadence as the reveal loop covers both
+      // paths; the benefit impression reuses trackCampaignBenefit's own audience
+      // dedupe.
       let campaignBannerImpressionTracked = false;
       const trackCampaignImpressionsOnce = () => {
-        if (!campaignActive || campaignBannerImpressionTracked) return;
+        if (!campaignVisible || campaignBannerImpressionTracked) return;
         campaignBannerImpressionTracked = true;
         track('surface_view', {
           area: 'campaign_banner',
-          element: 'deepseek_v4_flash',
-          campaign_id: 'deepseek_v4_flash',
+          element: 'deepseek_v4_pro',
+          campaign_id: 'deepseek_v4_pro',
           user_state: 'unknown',
         });
         trackCampaignBenefit(root.getAttribute('data-audience') === 'team' ? 'team' : 'creator');
@@ -981,13 +954,13 @@ const jsonLd = [
         const interval = root.getAttribute('data-interval') === 'monthly' ? 'monthly' : 'yearly';
         const selected = tier[interval];
         const months = interval === 'yearly' ? 12 : 1;
-        const introSeatMonth = Math.round(selected.introPriceUsd / months);
+        const introSeatMonth = selected.introPriceUsd / months;
         const listSeatMonth = tier.monthly.priceUsd;
         const discountPct = Math.round((1 - introSeatMonth / listSeatMonth) * 100);
         const intervalTotal = selected.introPriceUsd * teamSeats;
-        const amount = '$' + introSeatMonth.toLocaleString('en-US');
-        const strike = '$' + listSeatMonth.toLocaleString('en-US');
-        const total = '$' + intervalTotal.toLocaleString('en-US');
+        const amount = usd(introSeatMonth);
+        const strike = usd(listSeatMonth);
+        const total = usd(intervalTotal);
         const introTotalTemplate =
           interval === 'yearly' ? teamCopy.yearlyTotal : teamCopy.monthlyTotal;
 
@@ -1112,7 +1085,7 @@ const jsonLd = [
           // the window may not count toward it.
           const attribution = window.__odRecordCampaignEntry?.(
             audience === 'team' ? 'landing_pricing_team_plan' : 'landing_pricing_personal_plan',
-            campaignActive ? 'deepseek_v4_flash' : undefined,
+            campaignEligible ? 'deepseek_v4_pro' : undefined,
           );
           const props = {
             page_name: 'pricing',
@@ -1121,7 +1094,7 @@ const jsonLd = [
             tier: cta.getAttribute('data-tier') || 'unknown',
             interval: root.getAttribute('data-interval') || 'monthly',
             audience,
-            ...(campaignActive ? { campaign_id: 'deepseek_v4_flash' } : {}),
+            ...(campaignEligible ? { campaign_id: 'deepseek_v4_pro' } : {}),
             user_state: 'unknown',
             ...(attribution || {}),
           };
@@ -1277,6 +1250,11 @@ const jsonLd = [
     border-radius: 10px;
     color: inherit;
     background: color-mix(in srgb, #68f22e 7%, transparent);
+  }
+  .pr-campaign-model-benefit > div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
   }
   .pr-campaign-model-benefit strong { font-weight: 780; }
   .pr-campaign-model-benefit small { color: var(--muted); font-size: .72rem; font-weight: 500; }
@@ -1668,11 +1646,29 @@ const jsonLd = [
     line-height: 1.3;
     color: var(--ink);
   }
-  /* Modality that is presented but not yet purchasable. Reads as a
-     parenthetical on the label rather than a badge, so it never competes
-     with the campaign/bonus pills for attention. */
-  .pr-mode.is-soon svg { stroke: color-mix(in srgb, var(--ink, #262626) 48%, transparent); }
-  .pr-mode.is-soon > span { color: color-mix(in srgb, var(--ink, #262626) 48%, transparent); }
+  .pr-mode-copy {
+    display: grid;
+    grid-template-rows: 0.82rem auto;
+    gap: 4px;
+  }
+  .pr-mode-copy small {
+    grid-row: 1;
+    transform: translateY(-2px);
+    color: var(--ink-soft, #777);
+    font-size: 0.68rem;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+  .pr-mode-copy small:empty {
+    visibility: hidden;
+  }
+  .pr-mode-copy strong {
+    grid-row: 2;
+    color: var(--ink);
+    font-size: 0.78rem;
+    font-weight: 650;
+    line-height: 1.3;
+  }
   /* No margin: each locale's string carries its own separator (a leading
      space for Latin/Hangul, the full-width bracket's side bearing for CJK). */
   .pr-soon-tag {
@@ -1925,91 +1921,6 @@ const jsonLd = [
     .pr-team-controls { grid-template-columns: 1fr; }
     .pr-audience-btn { min-width: 0; flex: 1; }
   }
-
-  /* ---- Customer story ---- */
-  .pr-story { max-width: 1180px; margin: 72px auto 0; }
-  .pr-story-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 14px;
-  }
-  .pr-story-eyebrow {
-    margin: 0;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-soft, #999);
-  }
-  .pr-story-more {
-    flex-shrink: 0;
-    font-size: 0.84rem;
-    font-weight: 500;
-    color: var(--ink-soft, #666);
-    text-decoration: none;
-    transition: color 160ms;
-  }
-  .pr-story-more:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
-  .pr-story-card {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: center;
-    overflow: hidden;
-    border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
-    border-radius: 18px;
-    background: var(--surface, rgba(255, 255, 255, 0.55));
-  }
-  @media (max-width: 820px) {
-    .pr-story-card { grid-template-columns: 1fr; }
-  }
-  .pr-story-body { display: flex; flex-direction: column; gap: 22px; padding: 34px; }
-  .pr-story-quote {
-    margin: 0;
-    font-family: var(--serif, Georgia, serif);
-    font-weight: 600;
-    font-size: clamp(20px, 2.4vw, 28px);
-    line-height: 1.3;
-    color: var(--ink);
-  }
-  .pr-q { color: var(--ink-soft, #ccc); }
-  .pr-hl { color: var(--olive, #218c00); }
-  .pr-story-person { display: flex; align-items: center; gap: 12px; }
-  .pr-story-avatar {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    flex-shrink: 0;
-    border-radius: 999px;
-    background: var(--ink);
-    color: #fff;
-    font-weight: 700;
-    font-size: 0.9rem;
-  }
-  .pr-story-name { font-size: 0.9rem; font-weight: 650; color: var(--ink); }
-  .pr-story-role { font-size: 0.78rem; color: var(--ink-soft, #777); margin-top: 2px; }
-  .pr-story-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .pr-chip {
-    font-size: 0.74rem;
-    font-weight: 500;
-    color: var(--ink-soft, #666);
-    background: var(--line, rgba(0, 0, 0, 0.05));
-    padding: 0.18rem 0.5rem;
-    border-radius: 6px;
-  }
-  .pr-story-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px 24px;
-    padding-top: 20px;
-    border-top: 1px solid var(--line, rgba(0, 0, 0, 0.08));
-  }
-  .pr-stat-val { font-size: 1.5rem; font-weight: 750; color: var(--ink); letter-spacing: -0.01em; }
-  .pr-stat-label { margin-top: 3px; font-size: 0.76rem; line-height: 1.4; color: var(--ink-soft, #777); }
-  .pr-story-cover { width: 100%; height: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
 
   /* ---- FAQ ---- */
   .pr-faq { max-width: 760px; margin: 72px auto 0; }

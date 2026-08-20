@@ -19,6 +19,7 @@ export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 export type ToolPackAmrProfile = "prod" | "test" | "feature-test" | "local";
+export type ToolPackVelaWebUrls = Partial<Record<ToolPackAmrProfile, string>>;
 
 export type ToolPackCliOptions = {
   appVersion?: string;
@@ -113,6 +114,13 @@ export type ToolPackConfig = {
    * simply omit it, which leaves workspace-team dormant.
    */
   velaWebUrl?: string;
+  /**
+   * Optional per-profile origins used by the runtime profile switcher. Read
+   * from `OD_VELA_WEB_URL_PROD`, `_TEST`, `_FEATURE_TEST`, and `_LOCAL` so an
+   * official or local build can enable cross-profile links without checking
+   * deployment-specific hostnames into source.
+   */
+  velaWebUrls?: ToolPackVelaWebUrls;
   /**
    * Personal API key (`phx_...`) used by the @posthog/cli sourcemap helper to
    * upload browser sourcemaps to PostHog after `next build` and before the
@@ -243,6 +251,21 @@ function resolveToolPackVelaWebUrl(value: string | undefined): string | undefine
     throw new Error(`OD_VELA_WEB_URL must be http(s): ${value}`);
   }
   return normalized.replace(/\/+$/, "");
+}
+
+function resolveToolPackVelaWebUrls(env: NodeJS.ProcessEnv): ToolPackVelaWebUrls | undefined {
+  const candidates: ReadonlyArray<[ToolPackAmrProfile, string | undefined]> = [
+    ['prod', env.OD_VELA_WEB_URL_PROD],
+    ['test', env.OD_VELA_WEB_URL_TEST],
+    ['feature-test', env.OD_VELA_WEB_URL_FEATURE_TEST],
+    ['local', env.OD_VELA_WEB_URL_LOCAL],
+  ];
+  const result: ToolPackVelaWebUrls = {};
+  for (const [profile, value] of candidates) {
+    const origin = resolveToolPackVelaWebUrl(value);
+    if (origin) result[profile] = origin;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function resolveToolPackPosthogCliApiKey(value: string | undefined): string | undefined {
@@ -397,6 +420,7 @@ export function resolveToolPackConfig(
     posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
     posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),
     velaWebUrl: resolveToolPackVelaWebUrl(process.env.OD_VELA_WEB_URL),
+    velaWebUrls: resolveToolPackVelaWebUrls(process.env),
     posthogCliApiKey: resolveToolPackPosthogCliApiKey(
       process.env.POSTHOG_CLI_API_KEY ?? process.env.POSTHOG_PERSONAL_API_KEY,
     ),

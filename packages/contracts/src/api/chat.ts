@@ -120,7 +120,7 @@ export interface ChatRequest {
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
   /**
-   * Run-scoped media execution policy. Omitted means current Open Design
+   * Run-scoped media execution policy. Omitted means current OpenDesign
    * behavior: media generation is enabled and OD may execute its configured
    * local providers.
    */
@@ -455,6 +455,7 @@ export type NativeSessionHandleKind =
   | 'opaque-id'
   | 'cli-thread-id'
   | 'acp-session-handle'
+  | 'profile-session-id'
   | 'session-file-path'
   | 'unknown';
 
@@ -462,6 +463,7 @@ export type NativeSessionAcquisitionMode =
   | 'daemon-specified'
   | 'stream-captured'
   | 'acp-session-load'
+  | 'profile-session-frame'
   | 'session-file-discovered'
   | 'none'
   | 'unknown';
@@ -469,6 +471,7 @@ export type NativeSessionAcquisitionMode =
 export type NativeSessionContinuationMode =
   | 'native-resume-by-id'
   | 'acp-session-load'
+  | 'profile-stdio-resume'
   | 'session-file-resume'
   | 'none'
   | 'unknown';

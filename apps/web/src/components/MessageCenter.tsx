@@ -248,7 +248,7 @@ export function MessageCenter({
       <Icon name="bell" size={17} />{unreadCount > 0 ? <span className={styles.badge} aria-hidden>{unreadBadgeLabel(unreadCount)}</span> : null}
     </button>}
     {open ? createPortal(<div className={styles.backdrop} data-testid="message-center-backdrop"><aside ref={panelRef} className={styles.panel} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-testid="message-center-dialog">
-      <header className={styles.header}><div className={styles.headerCopy}><h2 id={titleId}>{t('messageCenter.title')}</h2><p>{t('messageCenter.subtitle')}</p></div></header>
+      <header className={styles.header}><div className={styles.headerCopy}><h2 id={titleId}>{t('messageCenter.title')}</h2><p>{t('messageCenter.subtitle')}</p></div><Button size="icon" className={styles.close} onClick={closePanel} aria-label={t('messageCenter.close')}><Icon name="close" size={18} strokeWidth={2}/></Button></header>
       <div className={styles.controls}><div className={styles.filters} role="group" aria-label={t('messageCenter.title')}>{FILTERS.map((item) => <button key={item.id} type="button" className={`${styles.filter}${filter === item.id ? ` ${styles.filterActive}` : ''}`} aria-pressed={filter === item.id} onClick={() => setFilter(item.id)}>{t(item.label)}{item.id === 'unread' && unreadCount > 0 ? <span className={styles.filterBadge} aria-hidden>{unreadBadgeLabel(unreadCount)}</span> : null}</button>)}</div><button type="button" className={styles.markAll} onClick={() => void markAllRead().catch(() => setSyncState('error'))} disabled={unreadCount === 0}>{t('messageCenter.markAllRead')}</button></div>
       <div className={styles.list} aria-live="polite">
         {syncState === 'error' && messages.length > 0 ? (
@@ -292,12 +292,10 @@ function MessageItem({
   onRead: (id: string) => Promise<void>;
   onError: () => void;
 }) {
-  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const formatted = formatPublishedDate(message.publishedAt, locale);
   const ctaUrl = safeExternalUrl(message.ctaUrl);
-  return <article className={`${styles.item}${message.readAt ? '' : ` ${styles.itemUnread}`}`}>
-    <span className={styles.itemViewHint} aria-hidden>{t('settings.memoryToastClickHint')}<Icon name="arrow-right" size={14} /></span>
+  return <article className={`${styles.item}${message.readAt ? '' : ` ${styles.itemUnread}`}${expanded ? ` ${styles.itemExpanded}` : ''}`}>
     <button type="button" className={styles.itemSummary} aria-expanded={expanded} onClick={() => { setExpanded((value) => !value); void onRead(message.id).catch(onError); }}><span className={styles.itemMeta}><span>{message.typeName}</span>{formatted ? <time dateTime={message.publishedAt}>{formatted}</time> : null}</span><strong>{message.title}</strong><span className={styles.bodyPreview}>{message.body}</span></button>
     {expanded && message.ctaLabel && ctaUrl ? <div className={styles.itemActions}><button type="button" className={styles.primaryAction} onClick={() => window.open(ctaUrl, '_blank', 'noopener,noreferrer')}>{message.ctaLabel}</button></div> : null}
   </article>;

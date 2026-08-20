@@ -1,7 +1,8 @@
 import type { Response } from 'express';
 import {
-  enforceVerifiedWorkspaceResourceMutation,
-  enforceVerifiedWorkspaceResourceRead,
+  requestWithWorkspaceNavigationScope,
+  workspaceResourceContextFromRequest,
+  type ResolveWorkspaceResourceReadAuthority,
   type VerifyWorkspaceRequestAuthority,
   type WorkspaceResourceAccessInput,
   type WorkspaceResourceMutationCapability,
@@ -38,13 +39,152 @@ export type AuthorizeProjectToolRequest = (
   options: AuthorizeProjectRequestOptions,
 ) => Promise<AuthorizedProjectToolRequest | null>;
 
+export async function enforceLocalProjectDataPlaneRequest(input: {
+  req: any;
+  projectId: string;
+  options: AuthorizeProjectRequestOptions;
+  db: unknown;
+  getWorkspaceProject: (
+    db: unknown,
+    workspaceId: string,
+    projectId: string,
+  ) => WorkspaceResourceAccessInput | null | undefined;
+  getWorkspaceProjectByProjectId: (
+    db: unknown,
+    projectId: string,
+  ) => WorkspaceResourceAccessInput | null | undefined;
+  onDenied?: (
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) => unknown;
+}): Promise<boolean> {
+  const {
+    req,
+    projectId,
+    options,
+    db,
+    getWorkspaceProject,
+    getWorkspaceProjectByProjectId,
+    onDenied,
+  } = input;
+  const deny = (
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ): false => {
+    onDenied?.(status, code, message, details);
+    return false;
+  };
+  const persisted = getWorkspaceProjectByProjectId(db, projectId);
+  if (!persisted?.workspaceId) return true;
+
+  const scopedRequest = options.mode === 'read' && options.allowNavigationQuery
+    ? requestWithWorkspaceNavigationScope(req)
+    : req;
+  if (scopedRequest === 'conflict') {
+    return deny(
+      400,
+      'WORKSPACE_CONTEXT_CONFLICT',
+      'workspace header and navigation scope must match',
+    );
+  }
+  const claimed = workspaceResourceContextFromRequest(scopedRequest);
+  if (claimed === 'missing') {
+    return deny(
+      400,
+      'WORKSPACE_CONTEXT_INCOMPLETE',
+      'both workspace and member identity are required',
+    );
+  }
+  if (claimed && claimed.workspaceId !== persisted.workspaceId) {
+    return deny(
+      403,
+      'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      `workspace project ${options.mode} is not allowed`,
+    );
+  }
+
+  const row = getWorkspaceProject(db, persisted.workspaceId, projectId);
+  if (!row || row.resourceState === 'deleted') {
+    return deny(
+      403,
+      'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      `workspace project ${options.mode} is not allowed`,
+    );
+  }
+  if (options.mode === 'read') {
+    if (
+      claimed
+      && row.visibility === 'personal'
+      && row.createdByWorkspaceMemberId
+      && row.createdByWorkspaceMemberId !== claimed.workspaceMemberId
+    ) {
+      return deny(
+        403,
+        'WORKSPACE_PROJECT_PERMISSION_DENIED',
+        'workspace project read is not allowed',
+      );
+    }
+    return true;
+  }
+  if (row.resourceState === 'frozen') {
+    return deny(
+      403,
+      'WORKSPACE_LOCKED',
+      'workspace project mutation is not allowed',
+    );
+  }
+  if (options.capability === 'comment' && row.visibility === 'team') return true;
+  if (!claimed && row.visibility === 'team') {
+    return deny(
+      400,
+      'WORKSPACE_CONTEXT_REQUIRED',
+      'workspace context is required',
+    );
+  }
+
+  // A Team project is single-writer. Pulled member mirrors deliberately persist
+  // a null creator, so null means "no local writer", not "unattributed local
+  // project". Keep those mirrors read-only from the durable row even when Vela
+  // is unavailable; only an exact persisted creator/member match may write.
+  if (
+    row.visibility === 'team'
+    && row.createdByWorkspaceMemberId !== claimed?.workspaceMemberId
+  ) {
+    return deny(
+      403,
+      'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      'workspace project mutation is not allowed',
+    );
+  }
+
+  // An explicit browser/tool identity must still match the persisted creator
+  // for attributed Personal projects. Headerless Personal projects retain CLI
+  // compatibility.
+  if (
+    claimed
+    && row.createdByWorkspaceMemberId
+    && row.createdByWorkspaceMemberId !== claimed.workspaceMemberId
+  ) {
+    return deny(
+      403,
+      'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      'workspace project mutation is not allowed',
+    );
+  }
+  return true;
+}
+
 /**
  * Build the one project data-plane authority gate used by route modules.
  *
- * Persisted project binding is the resource identity. Bound projects require a
- * fresh exact Workspace/member verification on every request; no active,
- * current, or last-known daemon Workspace participates. Unbound pre-Workspace
- * local projects retain their legacy behavior.
+ * Persisted project binding is the local namespace and creator witness. Local
+ * project data-plane requests never synchronously depend on Vela membership
+ * availability; cloud share/sync/billing boundaries perform their own fresh
+ * authorization. Unbound pre-Workspace local projects retain legacy behavior.
  */
 export function createAuthorizeProjectRequest(deps: {
   db: unknown;
@@ -57,13 +197,11 @@ export function createAuthorizeProjectRequest(deps: {
     db: unknown,
     projectId: string,
   ) => WorkspaceResourceAccessInput | null | undefined;
-  /**
-   * Bounded successful authority lease for idempotent project reads. When
-   * omitted, reads retain the mutation verifier for compatibility with narrow
-   * fixtures and callers that do not provide separate cache policy.
-   */
+  /** @deprecated Retained as an ignored compatibility seam for route fixtures. */
   verifyWorkspaceReadAuthority?: VerifyWorkspaceRequestAuthority;
-  /** Fresh fail-closed authority used for every project mutation. */
+  /** @deprecated Retained as an ignored compatibility seam for route fixtures. */
+  resolveWorkspaceReadAuthority?: ResolveWorkspaceResourceReadAuthority;
+  /** @deprecated Local project data-plane requests never call this verifier. */
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   /**
    * Durable local quarantine witness for a pulled mirror whose authoritative
@@ -71,6 +209,8 @@ export function createAuthorizeProjectRequest(deps: {
    * shape because it lives on project metadata for restart-safe recovery.
    */
   isProjectRevoked?: (db: unknown, projectId: string) => boolean;
+  /** A bound first-open placeholder may be read but is never content authority. */
+  isProjectUnmaterializedPlaceholder?: (db: unknown, projectId: string) => boolean;
   sendApiError: (
     res: Response,
     status: number,
@@ -83,9 +223,8 @@ export function createAuthorizeProjectRequest(deps: {
     db,
     getWorkspaceProject,
     getWorkspaceProjectByProjectId,
-    verifyWorkspaceReadAuthority,
-    verifyWorkspaceRequestAuthority,
     isProjectRevoked,
+    isProjectUnmaterializedPlaceholder,
     sendApiError,
   } = deps;
   return async (req, res, projectId, options) => {
@@ -102,31 +241,31 @@ export function createAuthorizeProjectRequest(deps: {
       );
       return false;
     }
-    if (options.mode === 'write') {
-      return await enforceVerifiedWorkspaceResourceMutation(
-        'project',
-        req,
-        res,
-        sendApiError,
-        getWorkspaceProject,
-        getWorkspaceProjectByProjectId,
-        db,
-        projectId,
-        options.capability,
-        verifyWorkspaceRequestAuthority,
-      );
-    }
-    return await enforceVerifiedWorkspaceResourceRead(
-      'project',
+    const allowed = await enforceLocalProjectDataPlaneRequest({
       req,
-      res,
-      sendApiError,
+      projectId,
+      options,
+      db,
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
-      db,
-      projectId,
-      verifyWorkspaceReadAuthority ?? verifyWorkspaceRequestAuthority,
-      options.allowNavigationQuery ? { allowNavigationQuery: true } : {},
-    );
+      onDenied: (status, code, message, details) => details === undefined
+        ? sendApiError(res, status, code, message)
+        : sendApiError(res, status, code, message, details),
+    });
+    if (!allowed) return false;
+    if (
+      options.mode !== 'read'
+      && options.capability !== 'comment'
+      && isProjectUnmaterializedPlaceholder?.(db, projectId)
+    ) {
+      sendApiError(
+        res,
+        409,
+        'PROJECT_MATERIALIZATION_PENDING',
+        'project content is still materializing',
+      );
+      return false;
+    }
+    return true;
   };
 }

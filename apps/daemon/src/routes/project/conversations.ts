@@ -10,6 +10,8 @@ import { TERMINAL_RUN_STATUSES } from '../../runtimes/runs.js';
 import { registerProjectCommentRoutes } from './comments.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 import {
+  compactAdjacentMessageAgentEvents,
+  countMessages,
   deleteConversationAndRepairTeamCommentAnchor,
   isProjectCommentAnchorConversationId,
 } from '../../db.js';
@@ -264,7 +266,11 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       return res.status(404).json({ error: 'conversation not found' });
     }
     const project = getProject(db, req.params.id);
-    if (project && listMessages(db, req.params.cid).length === 0) {
+    // COUNT(*) rather than listMessages(...).length: the backfill only needs to
+    // know whether the conversation is empty, and loading every message to
+    // answer that parses each one's JSON columns — including event logs that
+    // grow with tool output — before throwing the result away.
+    if (project && countMessages(db, req.params.cid) === 0) {
       const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(() => ({}));
       const agentId = typeof config.agentId === 'string' && config.agentId ? config.agentId : null;
       await backfillBrandExtractionTranscriptForProject({
@@ -548,8 +554,11 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     if (existing === null && getMessage(db, req.params.mid) !== null) {
       return res.status(404).json({ error: 'message not found' });
     }
+    const normalizedMessage = Array.isArray(m.events)
+      ? { ...m, events: compactAdjacentMessageAgentEvents(m.events) }
+      : m;
     const saved = upsertMessage(db, req.params.cid, {
-      ...mergeMessageWriteForDaemonBacked(existing, m),
+      ...mergeMessageWriteForDaemonBacked(existing, normalizedMessage),
       id: req.params.mid,
     });
     // Bump the parent project's updatedAt so the project list re-orders.

@@ -290,6 +290,17 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.NODE_USE_ENV_PROXY).toBeUndefined();
   });
 
+  it('forwards OD_ALLOWED_INTERNAL_HOSTS so the daemon can resolve trusted loopback hosts in packaged sidecars', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      OD_ALLOWED_INTERNAL_HOSTS: '127.0.0.1,localhost',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.OD_ALLOWED_INTERNAL_HOSTS).toBe('127.0.0.1,localhost');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
     const vpHome = mkdtempSync(join(tmpdir(), 'od-packaged-vp-home-'));
     const originalVpHome = process.env.VP_HOME;
@@ -581,6 +592,27 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       requireDesktopAuth: true,
     });
     expect(env.OPEN_DESIGN_AMR_PROFILE).toBe('test');
+  });
+
+  it('forwards the per-profile Vela console origins to the daemon', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      amrProfile: 'prod',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      velaWebUrl: 'https://prod.example.invalid',
+      velaWebUrls: {
+        prod: 'https://prod.example.invalid',
+        test: 'https://test.example.invalid',
+        'feature-test': 'https://feature.example.invalid',
+      },
+    });
+    expect(JSON.parse(env.OD_VELA_WEB_URLS ?? '{}')).toEqual({
+      prod: 'https://prod.example.invalid',
+      test: 'https://test.example.invalid',
+      'feature-test': 'https://feature.example.invalid',
+    });
   });
 
   it.each(['feature-test', 'test'] as const)(

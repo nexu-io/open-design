@@ -30,9 +30,12 @@ function buildDeps(input: {
   validateDesignSystem?: ReturnType<typeof vi.fn>;
   validateSkill?: ReturnType<typeof vi.fn>;
   getPlugin?: ReturnType<typeof vi.fn>;
+  getLocalPluginBySource?: ReturnType<typeof vi.fn>;
   loadRegistry?: ReturnType<typeof vi.fn>;
   insertProject?: ReturnType<typeof vi.fn>;
   insertConversation?: ReturnType<typeof vi.fn>;
+  fetchProjectCreationWorkspaceDirectory?: ReturnType<typeof vi.fn>;
+  authorizeProjectRequest?: ReturnType<typeof vi.fn>;
 } = {}) {
   const binding = {
     projectId: PROJECT_ID,
@@ -108,7 +111,7 @@ function buildDeps(input: {
         ?? vi.fn(async (id) => ({ ok: true, id })),
     },
     collabSync: functionProxy(),
-    authorizeProjectRequest: async () => true,
+    authorizeProjectRequest: input.authorizeProjectRequest ?? vi.fn(async () => true),
     verifyWorkspaceRequestAuthority: async () => ({
       ok: true,
       context: workspaceContextFromDirectoryItem({
@@ -121,18 +124,19 @@ function buildDeps(input: {
         lifecycleState: 'active',
       }),
     }),
-    fetchProjectCreationWorkspaceDirectory: async () => ({
-      ok: true,
-      items: [{
-        workspaceId: WORKSPACE_ID,
-        workspaceName: 'Project scope workspace',
-        workspaceType: 'personal',
-        workspaceMemberId: MEMBER_ID,
-        role: 'owner',
-        memberStatus: 'active',
-        lifecycleState: 'active',
-      }],
-    }),
+    fetchProjectCreationWorkspaceDirectory:
+      input.fetchProjectCreationWorkspaceDirectory ?? vi.fn(async () => ({
+        ok: true,
+        items: [{
+          workspaceId: WORKSPACE_ID,
+          workspaceName: 'Project scope workspace',
+          workspaceType: 'personal',
+          workspaceMemberId: MEMBER_ID,
+          role: 'owner',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }],
+      })),
     pluginScope: {
       loadRegistry: input.loadRegistry ?? vi.fn(async () => ({
         skills: [],
@@ -142,6 +146,9 @@ function buildDeps(input: {
         scenarios: [],
       })),
       getPlugin: input.getPlugin ?? vi.fn(async () => ({})),
+      ...(input.getLocalPluginBySource
+        ? { getLocalPluginBySource: input.getLocalPluginBySource }
+        : {}),
     },
   } as unknown as Parameters<typeof registerProjectRoutes>[1];
 }
@@ -167,6 +174,128 @@ function headers() {
 }
 
 describe('project resource selection uses the persisted exact member', () => {
+  it('routes project mutations through the central project authority gate', async () => {
+    const updateProject = vi.fn();
+    const authorizeProjectRequest = vi.fn(async (
+      _req: express.Request,
+      res: express.Response,
+      _projectId: string,
+      options: { mode: string; capability?: string },
+    ) => {
+      if (options.mode === 'write') {
+        res.status(409).json({
+          error: {
+            code: 'PROJECT_MATERIALIZATION_PENDING',
+            message: 'project content is still materializing',
+          },
+        });
+        return false;
+      }
+      return true;
+    });
+    const deps = buildDeps({ authorizeProjectRequest });
+    deps.projectStore.updateProject = updateProject;
+    const baseUrl = await start(deps);
+
+    const response = await fetch(`${baseUrl}/api/projects/${PROJECT_ID}`, {
+      method: 'PATCH',
+      headers: headers(),
+      body: JSON.stringify({ name: 'Must not land' }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'PROJECT_MATERIALIZATION_PENDING' },
+    });
+    expect(authorizeProjectRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      PROJECT_ID,
+      { mode: 'write', capability: 'rename' },
+    );
+    expect(updateProject).not.toHaveBeenCalled();
+  });
+
+  it('creates a local-only project without fetching Workspace authority', async () => {
+    const fetchProjectCreationWorkspaceDirectory = vi.fn(async () => ({
+      ok: false,
+      items: [],
+    }));
+    const insertProject = vi.fn((_: unknown, input: Record<string, unknown>) => input);
+    const baseUrl = await start(buildDeps({
+      fetchProjectCreationWorkspaceDirectory,
+      insertProject,
+    }));
+
+    const response = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        id: 'local-only-create',
+        name: 'Local-only create',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchProjectCreationWorkspaceDirectory).not.toHaveBeenCalled();
+    expect(insertProject).toHaveBeenCalledOnce();
+  });
+
+  it('uses selected local catalog provenance while project attribution is unavailable', async () => {
+    const validateDesignSystem = vi.fn(async (id) => ({ ok: true, id }));
+    const validateSkill = vi.fn(async (id) => ({ ok: true, id }));
+    const insertProject = vi.fn((_: unknown, input: Record<string, unknown>) => input);
+    const baseUrl = await start(buildDeps({
+      validateDesignSystem,
+      validateSkill,
+      insertProject,
+    }));
+
+    const response = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'cold-local-catalog-create',
+        name: 'Cold local catalog create',
+        designSystemId: 'user:workspace-brand',
+        designSystemCatalogScope: {
+          workspaceId: WORKSPACE_ID,
+          workspaceMemberId: MEMBER_ID,
+        },
+        skillId: 'workspace-skill',
+        skillCatalogScope: {
+          workspaceId: WORKSPACE_ID,
+          workspaceMemberId: MEMBER_ID,
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(validateDesignSystem).toHaveBeenCalledWith('user:workspace-brand', {
+      workspaceId: WORKSPACE_ID,
+      workspaceMemberId: MEMBER_ID,
+    });
+    expect(validateSkill).toHaveBeenCalledWith('workspace-skill', {
+      workspaceId: WORKSPACE_ID,
+      workspaceMemberId: MEMBER_ID,
+    });
+    expect(insertProject).toHaveBeenCalledOnce();
+    expect(insertProject).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      metadata: {
+        localCatalogScopes: {
+          skill: {
+            workspaceId: WORKSPACE_ID,
+            workspaceMemberId: MEMBER_ID,
+          },
+          designSystem: {
+            workspaceId: WORKSPACE_ID,
+            workspaceMemberId: MEMBER_ID,
+          },
+        },
+      },
+    }));
+  });
+
   it('passes exact member scope to both create validators', async () => {
     const validateDesignSystem = vi.fn(async (id) => ({ ok: true, id }));
     const validateSkill = vi.fn(async () => ({
@@ -260,5 +389,113 @@ describe('project resource selection uses the persisted exact member', () => {
     expect(insertProject).not.toHaveBeenCalled();
     expect(insertConversation).not.toHaveBeenCalled();
     expect(loadRegistry).not.toHaveBeenCalled();
+  });
+
+  it('does not reject an exact local Team plugin from a different historical Workspace', async () => {
+    const insertProject = vi.fn((_: unknown, input: Record<string, unknown>) => input);
+    const source = 'team:plugin:historical-workspace:shared-id';
+    const loadRegistry = vi.fn(async () => ({
+      skills: [],
+      designSystems: [],
+      craft: [],
+      atoms: [],
+      scenarios: [],
+    }));
+    const getLocalPluginBySource = vi.fn(async () => ({
+      id: 'shared-id',
+      source,
+    }));
+    const baseUrl = await start(buildDeps({
+      insertProject,
+      getLocalPluginBySource,
+      loadRegistry,
+    }));
+
+    const response = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        id: 'cross-workspace-local-plugin',
+        name: 'Cross-Workspace local plugin',
+        pluginId: 'shared-id',
+        pluginSource: source,
+      }),
+    });
+
+    // This narrow route fixture does not implement snapshot persistence, so the
+    // handler later returns BAD_REQUEST. The boundary under test is that exact
+    // source resolution and the local project write both occur instead of an
+    // early Workspace-mismatch 404.
+    expect(response.status).toBe(400);
+    expect(getLocalPluginBySource).toHaveBeenCalledWith('shared-id', source);
+    expect(loadRegistry).toHaveBeenCalledWith({
+      workspaceId: 'historical-workspace',
+      workspaceMemberId: null,
+    });
+    expect(insertProject).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a plugin source missing from the reconciled local catalog', async () => {
+    const insertProject = vi.fn();
+    const source = `team:plugin:${WORKSPACE_ID}:shared-id`;
+    const getLocalPluginBySource = vi.fn(async () => null);
+    const baseUrl = await start(buildDeps({ insertProject, getLocalPluginBySource }));
+
+    const response = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        id: 'locally-retired-plugin',
+        name: 'Locally retired plugin',
+        pluginId: 'shared-id',
+        pluginSource: source,
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'PLUGIN_NOT_FOUND' },
+    });
+    expect(getLocalPluginBySource).toHaveBeenCalledWith('shared-id', source);
+    expect(insertProject).not.toHaveBeenCalled();
+  });
+
+  it('does not create a project when an exact source retires during registry loading', async () => {
+    const insertProject = vi.fn();
+    const insertConversation = vi.fn();
+    const source = `team:plugin:${WORKSPACE_ID}:shared-id`;
+    let bindingLive = true;
+    const getLocalPluginBySource = vi.fn(async () =>
+      bindingLive ? { id: 'shared-id', source } : null,
+    );
+    const loadRegistry = vi.fn(async () => {
+      bindingLive = false;
+      return { skills: [], designSystems: [], craft: [], atoms: [], scenarios: [] };
+    });
+    const baseUrl = await start(buildDeps({
+      insertProject,
+      insertConversation,
+      getLocalPluginBySource,
+      loadRegistry,
+    }));
+
+    const response = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        id: 'retired-during-registry-load',
+        name: 'Retired during registry load',
+        pluginId: 'shared-id',
+        pluginSource: source,
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'PLUGIN_NOT_FOUND' },
+    });
+    expect(getLocalPluginBySource).toHaveBeenCalledTimes(2);
+    expect(insertProject).not.toHaveBeenCalled();
+    expect(insertConversation).not.toHaveBeenCalled();
   });
 });

@@ -286,7 +286,7 @@ function SkillPluginCandidateCard({
         { action },
       );
       setNotice({
-        message: `Open Design contribution task started for ${data?.path ?? "the draft"}.`,
+        message: `OpenDesign contribution task started for ${data?.path ?? "the draft"}.`,
       });
     } catch (err) {
       setNotice({ message: err instanceof Error ? err.message : String(err) });
@@ -370,7 +370,7 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // Click handler for the post-completion "Share to Open Design" submission
+  // Click handler for the post-completion "Share to OpenDesign" submission
   // action. ProjectView wires this to handleSend with the bundled
   // `od-share-to-community` trigger prompt.
   onShareToOpenDesign?: () => void;
@@ -633,13 +633,13 @@ function AssistantMessageImpl({
     () => turnFileOps.filter((entry) => entry.ops.includes('write') || entry.ops.includes('edit')),
     [turnFileOps],
   );
-  // Same artifacts-not-inputs rule, applied to the #5517 summary source. The
-  // summary row is fed by `fileOps` (produced files stay their own flat block
-  // below), so it needs its own read-only filter rather than reusing
-  // `turnArtifactOps`, which is derived from the produced-file merge.
+  // Same artifacts-not-inputs rule, applied to the #5517 summary source. Once
+  // the daemon has attached an authoritative produced-file list, the result
+  // card must describe that delivered set rather than every attempted tool
+  // path. Failed attempts remain visible in the execution disclosure.
   const summaryArtifactOps = useMemo(
-    () => fileOps.filter((entry) => entry.ops.includes('write') || entry.ops.includes('edit')),
-    [fileOps],
+    () => summaryArtifactOpsForProducedFiles(fileOps, produced),
+    [fileOps, produced],
   );
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
@@ -892,6 +892,7 @@ function AssistantMessageImpl({
             runStreaming={streaming}
             runSucceeded={runSucceeded}
             terminalRunSucceeded={message.runStatus === "succeeded"}
+            runCanceled={message.runStatus === "canceled"}
             runFailed={
               !streaming &&
               (message.runStatus === "failed" ||
@@ -1081,6 +1082,7 @@ function AssistantMessageImpl({
                   streaming,
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
+                  canceled: message.runStatus === "canceled",
                   preparing,
                   preparingStatus,
                   copyMarkdown,
@@ -1099,6 +1101,7 @@ function AssistantMessageImpl({
                 streaming={streaming}
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
+                canceled={message.runStatus === "canceled"}
                 preparing={preparing}
                 preparingStatus={preparingStatus}
                 copyMarkdown={copyMarkdown}
@@ -1255,6 +1258,60 @@ function mergeProducedFilesIntoFileOps(
     });
   }
   return merged;
+}
+
+function summaryArtifactOpsForProducedFiles(
+  fileOps: FileOpEntry[],
+  produced: ProjectFile[],
+): FileOpEntry[] {
+  const artifactOps = fileOps.filter(
+    (entry) => entry.ops.includes('write') || entry.ops.includes('edit'),
+  );
+  if (artifactOps.length === 0 || produced.length === 0) return artifactOps;
+
+  const unused = new Set(artifactOps);
+  return produced.map((file) => {
+    const candidates = [...unused]
+      .map((entry) => ({ entry, score: producedFileOpMatchScore(entry, file) }))
+      .filter(({ score }) => score > 0)
+      .sort((left, right) => {
+        const statusDelta =
+          Number(right.entry.status === 'done') - Number(left.entry.status === 'done');
+        return statusDelta || right.score - left.score;
+      });
+    const matched = candidates[0]?.entry;
+    if (matched) {
+      unused.delete(matched);
+      return {
+        ...matched,
+        path: file.name,
+        status: 'done' as const,
+      };
+    }
+
+    const fullPath = file.path || file.localPath || file.name;
+    return {
+      path: file.name,
+      fullPath,
+      ops: ['write'],
+      opCounts: { read: 0, write: 1, edit: 0, delete: 0 },
+      total: 1,
+      status: 'done',
+    };
+  });
+}
+
+function producedFileOpMatchScore(entry: FileOpEntry, file: ProjectFile): number {
+  const entryFullPath = normalizeTouchedPath(entry.fullPath);
+  const entryPath = normalizeTouchedPath(entry.path);
+  const filePaths = [file.path, file.localPath, file.name]
+    .filter((path): path is string => Boolean(path))
+    .map(normalizeTouchedPath);
+
+  if (filePaths.includes(entryFullPath)) return 3;
+  if (filePaths.some((path) => entryFullPath.endsWith(`/${path}`))) return 2;
+  if (filePaths.includes(entryPath)) return 1;
+  return 0;
 }
 
 function normalizeTouchedPath(path: string): string {
@@ -1539,6 +1596,7 @@ interface AssistantFooterProps {
   streaming: boolean;
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
+  canceled?: boolean;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
   // "Preparing…"; once content lands it flips to "Working".
   preparing?: boolean;
@@ -1560,6 +1618,7 @@ function AssistantFooter({
   streaming,
   hasUnfinishedTodos,
   hasEmptyResponse,
+  canceled = false,
   preparing = false,
   preparingStatus = "preparing",
   copyMarkdown,
@@ -1576,6 +1635,7 @@ function AssistantFooter({
     !streaming &&
     !hasUnfinishedTodos &&
     !hasEmptyResponse &&
+    !canceled &&
     !copyMarkdown &&
     !onFork
   )
@@ -1599,6 +1659,8 @@ function AssistantFooter({
                 : t("assistant.workingLabel")
               : hasEmptyResponse
               ? t("assistant.emptyResponseLabel")
+              : canceled
+              ? t("assistant.canceledLabel")
               : hasUnfinishedTodos
               ? t("assistant.unfinishedLabel")
               : t("assistant.doneLabel")}
@@ -2321,7 +2383,7 @@ function PluginActionPanel({
                   <span>
                     {actionBusy && busyKey === `contribute:${folder.path}`
                       ? "Sending..."
-                      : "Open Design PR"}
+                      : "OpenDesign PR"}
                   </span>
                 </button>
                 {onRequestOpenFile ? (
@@ -2417,7 +2479,7 @@ function pathMatchesFolderFileBasename(
 }
 
 function hasPluginFinalActionHint(content: string): boolean {
-  return /\b(Add to My plugins|Open Design PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
+  return /\b(Add to My plugins|OpenDesign PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
     content,
   );
 }
@@ -3635,6 +3697,7 @@ function TaskActivityCard({
   runStreaming,
   runSucceeded,
   terminalRunSucceeded,
+  runCanceled,
   runFailed,
   startedAt,
   endedAt,
@@ -3649,6 +3712,7 @@ function TaskActivityCard({
   runStreaming: boolean;
   runSucceeded: boolean;
   terminalRunSucceeded: boolean;
+  runCanceled: boolean;
   runFailed: boolean;
   startedAt: number | undefined;
   endedAt: number | undefined;
@@ -3683,10 +3747,18 @@ function TaskActivityCard({
         )));
   const stateLabel = running
     ? t("assistant.workingLabel")
-    : hasError
-      ? t("critiqueTheater.failedHeading")
-      : t("assistant.doneLabel");
-  const runState = running ? "running" : hasError ? "error" : "completed";
+    : runCanceled
+      ? t("assistant.canceledLabel")
+      : hasError
+        ? t("critiqueTheater.failedHeading")
+        : t("assistant.doneLabel");
+  const runState = running
+    ? "running"
+    : runCanceled
+      ? "canceled"
+      : hasError
+        ? "error"
+        : "completed";
   const elapsed = useLiveElapsed(runStreaming, startedAt, endedAt, durationMs);
 
   if (running && !hasConclusion && currentEntry) {
@@ -4069,6 +4141,13 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "streaming" ||
         ev.label === "starting" ||
         ev.label === "running" ||
+        // Bare runtime lifecycle markers are transport telemetry, not
+        // assistant content. Detail-bearing rows are product workflow badges
+        // and must remain visible (for example plugin share/contribute).
+        ((ev.label === "working" ||
+          ev.label === "done" ||
+          ev.label === "completed") &&
+          !ev.detail?.trim()) ||
         ev.label === "requesting" ||
         ev.label === "thinking" ||
         ev.label === "empty_response" ||

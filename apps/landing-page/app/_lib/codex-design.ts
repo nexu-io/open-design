@@ -2,10 +2,10 @@
  * Data model for the curated "Codex design" collection under
  * `/plugins/codex-design/`.
  *
- * Unlike the rest of `/plugins/*`, these are NOT Open Design bundled
+ * Unlike the rest of `/plugins/*`, these are NOT OpenDesign bundled
  * plugins — they are real, external, verified skills and resources for
  * doing design work with OpenAI Codex (openai/skills, MengTo/Skills,
- * etc.). The collection positions Open Design as the home for designing
+ * etc.). The collection positions OpenDesign as the home for designing
  * with Codex and drives to the client download + the curated
  * `codex-design` list.
  *
@@ -15,6 +15,13 @@
  * a real upstream source — do not add anything that can't be linked.
  */
 
+import type {
+  CuratedCollectionContent,
+  CuratedInstall,
+  CuratedLink,
+  CuratedSkill,
+} from './curated-collection';
+
 // Catalogue of 50 curated Codex design plugins.
 export const AWESOME_REPO_URL = 'https://github.com/nexu-io/codex-design';
 export const OD_DOWNLOAD_URL = '/download/';
@@ -22,96 +29,25 @@ export const OD_GUIDE_HREF = '/agents/codex-design/';
 
 export type CodexSkillCategory = 'Frontend & UI' | 'Design Systems';
 
-export interface CodexSkillLink {
-  readonly label: string;
-  readonly url: string;
-}
-
-/**
- * `installer`: run `command` inside Codex, then restart it.
- * `clone`: clone the repo, then point Codex at `skillPath`.
+/*
+ * The structural types are shared with every curated collection (see
+ * `curated-collection.ts`); the aliases below keep this catalogue's public
+ * names stable for the flat `/plugins/<slug>/` wrapper routes.
+ *
+ * Two install kinds exist because the upstream catalogues differ:
+ * openai/skills ships a `$skill-installer` you run inside Codex, while
+ * MengTo/Skills is a plain folder collection you clone and point Codex at.
+ * Commands are verbatim from each repo's README and are never translated.
  */
-export type CodexInstall =
-  | { readonly kind: 'installer'; readonly command: string }
-  | { readonly kind: 'clone'; readonly command: string; readonly skillPath: string };
-
-export interface CodexSkill {
-  /** Route slug under /plugins/codex-design/<slug>/ */
-  readonly slug: string;
-  readonly name: string;
-  readonly category: CodexSkillCategory;
-  /** Short attribution shown as a badge: "Official" for openai/skills, else author. */
-  readonly badge: string;
-  /** One-line promise. */
-  readonly tagline: string;
-  /** Illustration under /plugins/codex-design/skills/<file>. */
-  readonly image: string;
-  /** 1–2 sentence "what it is". */
-  readonly whatIsIt: string;
-  /** Why it matters for *design* specifically (bullets). */
-  readonly whyForDesign: readonly string[];
-  /** How you run it with Codex — plain steps. */
-  readonly howWithCodex: readonly string[];
-  /** Optional worked example / when-to-reach-for-it note. */
-  readonly example?: string;
-  /** Canonical upstream source (repo / folder). */
-  readonly source: CodexSkillLink;
-  /** `owner/name` of the source repo, used to look up snapshotted GitHub stats. */
-  readonly repo: string;
-  /**
-   * How this plugin is actually installed. The two upstream catalogues differ:
-   * openai/skills ships a `$skill-installer` you run inside Codex, while
-   * MengTo/Skills is a plain folder collection you clone and point Codex at.
-   * Commands are verbatim from each repo's README and are never translated.
-   */
-  readonly install: CodexInstall;
-  /**
-   * Licence the upstream skill ships under. Not uniform across the catalogue:
-   * MengTo/Skills is MIT, while the official Figma skills are governed by the
-   * Figma Developer Terms, so this is per-skill rather than per-repo.
-   */
-  readonly license: CodexSkillLink;
-  /** The `description` from the upstream SKILL.md frontmatter, verbatim. */
-  readonly upstreamDescription: string;
-  /**
-   * What the upstream SKILL.md actually covers, taken from its own section
-   * headings. Kept in English in every locale: these are the headings a reader
-   * will meet when they open the file.
-   */
-  readonly covers: readonly string[];
-  /** Optional extra reference (docs, author). */
-  readonly reference?: CodexSkillLink;
-  /**
-   * Filing tags shown in the detail sidebar. Technical terms kept in English
-   * across every locale: they are the vocabulary of the upstream catalogues
-   * these skills come from, and are how people search for them.
-   */
-  readonly tags: readonly string[];
-  /** Stargazers on the source repo, from a snapshot; shown as a popularity signal. */
-  readonly stars?: number;
-  /** How we know it works with Codex, quoting the repo's own README. */
-  readonly codexNote?: string;
-  /** Social/video traction with a number, for the popularity line. */
-  readonly social?: string;
-  /** When several upstream units are catalogued as one entry, what they are. */
-  readonly bundle?: string;
-}
-
-export interface CodexCollection {
-  readonly eyebrow: string;
-  readonly heading: string;
-  readonly lede: string;
-  readonly stats: readonly { readonly value: string; readonly label: string }[];
-  /** Intro paragraph above the skills grid. */
-  readonly intro: string;
-  /** "Why these" framing shown before the grid. */
-  readonly categories: readonly { readonly key: CodexSkillCategory; readonly blurb: string }[];
-}
+export type CodexSkillLink = CuratedLink;
+export type CodexInstall = CuratedInstall;
+export type CodexSkill = CuratedSkill<CodexSkillCategory>;
+export type CodexCollection = CuratedCollectionContent<CodexSkillCategory>;
 
 export const CODEX_COLLECTION: CodexCollection = {
   eyebrow: 'Codex design',
   heading: 'The design plugins that make Codex ship real UI',
-  lede: 'OpenAI Codex writes working code. Left alone it defaults to safe fonts, average spacing, and centered Helvetica. These are the plugins that give it taste: aesthetic skills and design-system rules. Install one, or run all of them inside Open Design.',
+  lede: 'OpenAI Codex writes working code. Left alone it defaults to safe fonts, average spacing, and centered Helvetica. These are the plugins that give it taste: aesthetic skills and design-system rules. Install one, or run all of them inside OpenDesign.',
   stats: [
     { value: '50', label: 'curated plugins' },
     { value: '13', label: 'source repos' },
@@ -147,7 +83,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Bento grids use grid-flow-dense, so no cell is left empty or broken.',
       'Cheap meta-labels are banned and button text contrast is verified before output.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask for a page; the skill emits a design_plan block before any UI code.',
       'Review its randomization picks: hero layout, font stack, components, GSAP paradigms.',
       'Check the pre-flight items: hero width math, grid density, label sweep, contrast.',
@@ -167,7 +103,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Typography',
       'Motion',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/gpt-tasteskill/SKILL.md' },
@@ -191,7 +127,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Centered heroes and three equal card rows are banned above set variance.',
       'Loading and empty states become skeletal and composed rather than generic spinners.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Describe the project vibe; the skill sets density, variance, and motion scores.',
       'It outputs a seven-section DESIGN.md with hex codes and functional color roles.',
       'Feed that file to Stitch directly, or through the Stitch MCP server.',
@@ -210,7 +146,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Design tokens',
       'Anti-patterns',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/stitch-skill/SKILL.md' },
@@ -234,7 +170,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Each section gets its own large image, keeping text and spacing analyzable.',
       'Heroes stay under three headline lines and free of nested container stacks.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'State the section count; in Codex the skill generates one image per section.',
       'Ask for a closer detail render when button or type detail stays unreadable.',
       'Have it run the clarity check before it writes any implementation files.',
@@ -253,7 +189,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Landing pages',
       'Design extraction',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/image-to-code-skill/SKILL.md' },
@@ -277,7 +213,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'A locked design bible keeps palette, type, and icons consistent across every screen.',
       'Multi-screen sets form a believable flow, not unrelated one-off mockups.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Name the app category and screen count; each screen becomes its own image.',
       'The skill picks a platform mode first: iOS, Android, or cross-platform neutral.',
       'Ask it to regenerate any screen where text is small or framing uneven.',
@@ -297,7 +233,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Image generation',
       'App flows',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/imagegen-frontend-mobile/SKILL.md' },
@@ -321,7 +257,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Hero composition varies past the overused left text, right image default.',
       'One palette, type scale, and CTA family holds across every generated frame.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Say how many sections you want; unstated landing pages default to six.',
       'The skill announces the count, then labels each output by section number.',
       'Give vibe words like editorial or cinematic to steer hero scale and background.',
@@ -340,7 +276,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Art direction',
       'Comps',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/imagegen-frontend-web/SKILL.md' },
@@ -364,7 +300,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Accents come only from four washed pastels reserved for tags and inline code.',
       'Sections gain depth from low-opacity imagery rather than flat empty backgrounds.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask for a page; the skill establishes macro-whitespace first, py-24 or py-32.',
       'It constrains type width to max-w-4xl and applies the monochrome variables immediately.',
       'Scroll-entry fades run through IntersectionObserver on transform and opacity only.',
@@ -383,7 +319,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Bento grid',
       'Design tokens',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/minimalist-skill/SKILL.md' },
@@ -407,7 +343,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'The pre-flight bans em-dashes, section-numbering eyebrows, scroll cues, and duplicate CTA intent.',
       'Layout repetition is capped, so eight sections use at least four different families.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'The agent states a one-line design read before writing any code.',
       'It sets three dials: design variance, motion intensity, and visual density.',
       'Every pre-flight checkbox must pass, or the page is not finished.',
@@ -427,7 +363,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Accessibility',
       'Anti-patterns',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/taste-skill/SKILL.md' },
@@ -451,7 +387,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'border-radius is rejected entirely, so every corner stays at ninety degrees.',
       'Halftone, scanline, and noise filters keep surfaces from reading as flat vector.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Choose one archetype: Swiss industrial print or tactical telemetry CRT terminal.',
       'Macro headings use clamp with negative tracking; metadata uses small uppercase monospace.',
       'Grid gaps of 1px with contrasting backgrounds produce the razor-thin dividing lines.',
@@ -471,7 +407,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'CSS Grid',
       'Dashboards',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/brutalist-skill/SKILL.md' },
@@ -495,7 +431,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Buttons in card groups align to a single bottom line across varied content.',
       'Missing hover, focus, loading, empty, and error states are filled in.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'It scans the codebase first to identify framework and styling method.',
       'It lists every generic pattern and weak point before changing anything.',
       'Fixes land in priority order: fonts, color, states, layout, components, typography polish.',
@@ -514,7 +450,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Tailwind',
       'CSS',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/redesign-skill/SKILL.md' },
@@ -538,7 +474,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Logo concepts follow a stated method such as monogram, metaphor fusion, or negative space.',
       'Boards carry rhythm: quiet, functional, emotional, and technical panels rather than uniform loudness.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Give the brand and category; the skill picks a visual mode first.',
       'It defaults to a 3x3 board, or a 2x3 reference-style mini deck.',
       'Keep text sparse: brand name, one tagline, one command, a few labels.',
@@ -557,7 +493,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Image generation',
       'Presentation boards',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/brandkit/SKILL.md' },
@@ -581,7 +517,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Cards get nested outer shell plus inner core, giving containers real machined depth.',
       'Section padding starts at py-24, so layouts breathe instead of crowding.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask Codex for a page; it silently rolls the variance engine first.',
       'It scaffolds background texture and type scale, then builds double-bezel containers.',
       'It injects custom cubic-bezier motion, then runs the pre-output checklist.',
@@ -600,7 +536,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Layout archetypes',
       'Anti-patterns',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'X @MengTo 1,716♥ · YT Chase AI 94,671',
     repo: 'Leonxlnx/taste-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/Leonxlnx/taste-skill', skillPath: 'skills/soft-skill/SKILL.md' },
@@ -624,7 +560,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Checks package.json first, so it reuses what the project already has.',
       'Catches hand-rolled dropdowns and toasts, replacing them with accessible primitives.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Invoke it explicitly; it never triggers on its own.',
       'State the task, not the library name, such as ‘I need toasts’.',
       'It names one library, explains its use, then wires it up.',
@@ -643,7 +579,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Motion',
       'State',
     ],
-    codexNote: 'No Codex mention; `npx skills add` is agent-agnostic',
+    agentNote: 'No Codex mention; `npx skills add` is agent-agnostic',
     social: 'X @emilkowalski 6,494♥',
     repo: 'emilkowalski/skills',
     install: { kind: 'clone', command: 'git clone https://github.com/emilkowalski/skills', skillPath: 'skills/pick-ui-library/SKILL.md' },
@@ -667,7 +603,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Animations start from the live on-screen value, removing visible jumps on interrupt.',
       'Flicks project a landing point, so throws land where the gesture aimed.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask Codex to build a sheet, drawer or drag interaction.',
       'It tracks 1:1 with pointer capture and records velocity history.',
       'On release it hands velocity to a spring using the shipped damping values.',
@@ -686,7 +622,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'backdrop-filter',
       'Reduced motion',
     ],
-    codexNote: 'No Codex mention; `npx skills add` is agent-agnostic',
+    agentNote: 'No Codex mention; `npx skills add` is agent-agnostic',
     social: 'X @emilkowalski 6,494♥',
     repo: 'emilkowalski/skills',
     install: { kind: 'clone', command: 'git clone https://github.com/emilkowalski/skills', skillPath: 'skills/apple-design/SKILL.md' },
@@ -710,7 +646,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Disambiguates close pairs such as clip-path versus mask, pop in versus bounce.',
       'Refuses to invent terms, so the naming stays trustworthy.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Describe what you saw, such as ‘the iOS rubber-band scroll’.',
       'It returns the bolded term plus a one-line glossary definition.',
       'Ask for alternates when two terms could plausibly fit.',
@@ -729,7 +665,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Easing',
       'Springs',
     ],
-    codexNote: 'No Codex mention; `npx skills add` is agent-agnostic',
+    agentNote: 'No Codex mention; `npx skills add` is agent-agnostic',
     social: 'X @emilkowalski 6,494♥',
     repo: 'emilkowalski/skills',
     install: { kind: 'clone', command: 'git clone https://github.com/emilkowalski/skills', skillPath: 'skills/animation-vocabulary/SKILL.md' },
@@ -753,7 +689,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Entrances start at scale(0.95), never scale(0), so nothing appears from nowhere.',
       'Popovers scale from their trigger instead of their centre, keeping the spatial link.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask Codex to review UI code; it returns a Before, After, Why table.',
       'For new motion it answers should this animate, why, which easing, how fast.',
       'It applies the checklist, flagging transition: all and durations over 300ms.',
@@ -772,7 +708,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'clip-path',
       'Perceived performance',
     ],
-    codexNote: 'No Codex mention; `npx skills add` is agent-agnostic',
+    agentNote: 'No Codex mention; `npx skills add` is agent-agnostic',
     social: 'X @emilkowalski 6,494♥',
     repo: 'emilkowalski/skills',
     install: { kind: 'clone', command: 'git clone https://github.com/emilkowalski/skills', skillPath: 'skills/emil-design-eng/SKILL.md' },
@@ -796,7 +732,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Icons generate as SVG text, so they stay editable, not raster.',
       'Banner rules enforce safe zones, two fonts maximum and one CTA.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Export GEMINI_API_KEY and install google-genai and pillow first.',
       'Run scripts/logo/search.py for a design brief, then generate.py for images.',
       'Feed the logo into scripts/cip/generate.py to produce deliverable mockups.',
@@ -815,7 +751,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'SVG icons',
       'Design tokens',
     ],
-    codexNote: '`uipro init --ai codex`',
+    agentNote: '`uipro init --ai codex`',
     social: 'YT Chase AI 94,671',
     repo: 'nextlevelbuilder/ui-ux-pro-max-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/nextlevelbuilder/ui-ux-pro-max-skill', skillPath: 'cli/assets/skills/design/SKILL.md' },
@@ -839,7 +775,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Generated visuals are rendered without text, so headlines stay crisp HTML.',
       'Three art directions per request, so comparison happens before commitment.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Answer the purpose, platform, content, brand, style and quantity questions.',
       'It builds one HTML banner per art direction with safe zones applied.',
       'It screenshots each at set width and height, compressing files over the limit.',
@@ -857,7 +793,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'HTML to PNG',
       'Art direction',
     ],
-    codexNote: '`uipro init --ai codex`',
+    agentNote: '`uipro init --ai codex`',
     social: 'YT Chase AI 94,671',
     repo: 'nextlevelbuilder/ui-ux-pro-max-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/nextlevelbuilder/ui-ux-pro-max-skill', skillPath: 'cli/assets/skills/banner-design/SKILL.md' },
@@ -881,7 +817,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Theme colours live in CSS variables, so dark mode stays consistent.',
       'Mobile-first breakpoints mean layouts start small and layer upward.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Run npx shadcn@latest init to configure the framework and theme.',
       'Add components with npx shadcn@latest add button card dialog form.',
       'Run scripts/tailwind_config_gen.py to generate a config with custom tokens.',
@@ -900,7 +836,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Dark mode',
       'Accessibility',
     ],
-    codexNote: '`uipro init --ai codex`',
+    agentNote: '`uipro init --ai codex`',
     social: 'YT Chase AI 94,671',
     repo: 'nextlevelbuilder/ui-ux-pro-max-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/nextlevelbuilder/ui-ux-pro-max-skill', skillPath: 'cli/assets/skills/ui-styling/SKILL.md' },
@@ -924,7 +860,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Extracted colours get compared against the palette, catching drift early.',
       'Assets are checked for naming, size and format before approval.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Edit docs/brand-guidelines.md, then run scripts/sync-brand-to-tokens.cjs.',
       'Verify with scripts/inject-brand-context.cjs --json.',
       'Check any new file with scripts/validate-asset.cjs before shipping it.',
@@ -943,7 +879,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Asset validation',
       'Color palette',
     ],
-    codexNote: '`uipro init --ai codex`',
+    agentNote: '`uipro init --ai codex`',
     social: 'YT Chase AI 94,671',
     repo: 'nextlevelbuilder/ui-ux-pro-max-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/nextlevelbuilder/ui-ux-pro-max-skill', skillPath: 'cli/assets/skills/brand/SKILL.md' },
@@ -967,7 +903,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Chart.js handles data slides, so numbers stay live rather than pasted images.',
       'Layout patterns are chosen from a set, keeping a deck visually consistent.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Invoke it with the create subcommand plus a topic and slide count.',
       'It loads references/create.md and follows that creation workflow.',
       'It pulls layout patterns and copywriting formulas from the reference files.',
@@ -984,7 +920,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Design tokens',
       'Layout patterns',
     ],
-    codexNote: '`uipro init --ai codex`',
+    agentNote: '`uipro init --ai codex`',
     social: 'YT Chase AI 94,671',
     repo: 'nextlevelbuilder/ui-ux-pro-max-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/nextlevelbuilder/ui-ux-pro-max-skill', skillPath: 'cli/assets/skills/slides/SKILL.md' },
@@ -1008,7 +944,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Component specs table default, hover, active, and disabled states so handoff leaves nothing ambiguous.',
       'A validator flags hardcoded hex values, keeping components and slides on the token system.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Run generate-tokens.cjs against a JSON token config to emit your CSS variable file.',
       'Ask Codex for component specs, then run validate-tokens.cjs over src/ to catch raw values.',
       'Use search-slides.py with position and context flags to pick layouts for a deck.',
@@ -1028,7 +964,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'component specs',
       'slides',
     ],
-    codexNote: '`uipro init --ai codex`',
+    agentNote: '`uipro init --ai codex`',
     social: 'YT Chase AI 94,671',
     repo: 'nextlevelbuilder/ui-ux-pro-max-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/nextlevelbuilder/ui-ux-pro-max-skill', skillPath: 'cli/assets/skills/design-system/SKILL.md' },
@@ -1052,7 +988,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'An 8pt baseline grid enforces vertical rhythm across headings, body copy, and spacing.',
       'Accessibility bar includes reduced-motion support, 44px touch targets, and high-contrast handling.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask Codex to restate the design intent, then define tokens before touching components.',
       'Request component rules covering anatomy, variants, states, and responsive behavior.',
       'Close with the QA checklist so a code reviewer can verify the output.',
@@ -1072,7 +1008,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'design tokens',
       'WCAG 2.2',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'YT AI LABS 109,460',
     repo: 'bergside/awesome-design-skills',
     install: { kind: 'clone', command: 'git clone https://github.com/bergside/awesome-design-skills', skillPath: 'skills/editorial/SKILL.md' },
@@ -1096,7 +1032,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Warm cream surfaces cut glare in long articles compared with pure white pages.',
       'Display serif headlines over ink-brown body text set a clear editorial rhythm.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Point Codex at the terracotta and cream tokens before it writes any component.',
       'Ask for anatomy, variants, and states per component, with spacing tokens named explicitly.',
       'Request anti-patterns and migration notes when retrofitting existing inconsistent UI.',
@@ -1116,7 +1052,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'blog',
       'design tokens',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'YT AI LABS 109,460',
     repo: 'bergside/awesome-design-skills',
     install: { kind: 'clone', command: 'git clone https://github.com/bergside/awesome-design-skills', skillPath: 'skills/terracotta/SKILL.md' },
@@ -1140,7 +1076,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'High-contrast rendering keeps text legible even when surfaces carry heavy pattern texture.',
       'Rules ban decorative motion, stopping the retro treatment from becoming visual noise.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Tell Codex the palette limit first, then let it derive pattern-based shading rules.',
       'Ask for empty, loading, and error states so patterned surfaces stay readable.',
       'Verify hit areas and focus states, which this skill calls out explicitly.',
@@ -1160,7 +1096,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'high contrast',
       'design tokens',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'YT AI LABS 109,460',
     repo: 'bergside/awesome-design-skills',
     install: { kind: 'clone', command: 'git clone https://github.com/bergside/awesome-design-skills', skillPath: 'skills/dithered/SKILL.md' },
@@ -1184,7 +1120,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Compact density spacing suits control-heavy panels such as dashboards and settings screens.',
       'Rules forbid mixing visual metaphors, so soft extrusion stays the only depth language.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Have Codex set surface and shadow tokens before styling any individual control.',
       'Ask for visible focus states, since soft shadows alone fail keyboard users.',
       'Require semantic HTML before ARIA, as this skill specifies.',
@@ -1204,7 +1140,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'dashboard',
       'WCAG 2.2',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'YT AI LABS 109,460',
     repo: 'bergside/awesome-design-skills',
     install: { kind: 'clone', command: 'git clone https://github.com/bergside/awesome-design-skills', skillPath: 'skills/neumorphism/SKILL.md' },
@@ -1228,7 +1164,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'A compact 12 to 32 type scale fits dense text inside small tiles.',
       'The cream #FFF5E6 surface keeps block edges readable without heavy borders.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask Codex to assign each block a size based on content priority.',
       'Define spacing tokens on the 4 to 32 scale before laying out tiles.',
       'Request overflow and long-label handling, which this skill lists as edge cases.',
@@ -1248,7 +1184,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'cards',
       'design tokens',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'YT AI LABS 109,460',
     repo: 'bergside/awesome-design-skills',
     install: { kind: 'clone', command: 'git clone https://github.com/bergside/awesome-design-skills', skillPath: 'skills/bento/SKILL.md' },
@@ -1272,7 +1208,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Deep blue text #1C398E on white holds contrast while the palette stays playful.',
       'Rules forbid mixing metaphors, so clay depth never combines with glass or flat.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask Codex for radius and shadow tokens first, since they define the clay look.',
       'Pair Poppins display with Montserrat body as specified, not two similar sans faces.',
       'Check that focus-visible and disabled states survive the soft shape treatment.',
@@ -1292,7 +1228,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Poppins',
       'design tokens',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'YT AI LABS 109,460',
     repo: 'bergside/awesome-design-skills',
     install: { kind: 'clone', command: 'git clone https://github.com/bergside/awesome-design-skills', skillPath: 'skills/claymorphism/SKILL.md' },
@@ -1316,7 +1252,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Two strong accents, red and ochre, replace gradients and shadows entirely.',
       'The accessibility floor still applies, so jarring layouts keep contrast and visible focus.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Tell Codex the tone is bold and unadorned before it picks components.',
       'Anchor every rule to a token or threshold, as the quality gates demand.',
       'Pair each do-rule with a concrete don’t-example when reviewing the output.',
@@ -1336,7 +1272,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'high contrast',
       'design tokens',
     ],
-    codexNote: 'Codex named 8× in the README',
+    agentNote: 'Codex named 8× in the README',
     social: 'YT AI LABS 109,460',
     repo: 'bergside/awesome-design-skills',
     install: { kind: 'clone', command: 'git clone https://github.com/bergside/awesome-design-skills', skillPath: 'skills/brutalism/SKILL.md' },
@@ -1360,7 +1296,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Locked tokens ban inline hex or font-family values that bypass the token block.',
       'Every emit is verified at 320, 375, 414, and 768 pixel widths.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Let the pre-flight scan read existing fonts, palette, and motion libraries first.',
       'Answer the audience, use case, and tone gate, or say go ahead.',
       'Run hallmark audit on a page for a ranked punch list without edits.',
@@ -1380,7 +1316,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'landing pages',
       'audit',
     ],
-    codexNote: 'Codex named in the repo description',
+    agentNote: 'Codex named in the repo description',
     social: 'X @nutlope 5,265♥ · YT 4,227',
     repo: 'Nutlope/hallmark',
     install: { kind: 'clone', command: 'git clone https://github.com/Nutlope/hallmark', skillPath: 'skills/hallmark/SKILL.md' },
@@ -1404,7 +1340,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Absolute bans reject gradient text, side-stripe borders, and eyebrow labels above every section.',
       'Contrast floors are explicit: 4.5:1 for body text, 3:1 for large text.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Run context.mjs once per session so the skill loads PRODUCT.md and DESIGN.md.',
       'Invoke a command such as critique, polish, or animate with a target file.',
       'Use live mode with a running dev server to generate in-browser variants.',
@@ -1424,7 +1360,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'motion',
       'OKLCH',
     ],
-    codexNote: 'Codex named 27× in the README',
+    agentNote: 'Codex named 27× in the README',
     social: 'YT Chase AI 94,671',
     repo: 'pbakaus/impeccable',
     install: { kind: 'clone', command: 'git clone https://github.com/pbakaus/impeccable', skillPath: 'plugin/skills/impeccable/SKILL.md' },
@@ -1448,7 +1384,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Records mood, composition, and brand voice, not just measurable tokens.',
       'Captures Canvas, WebGL, shader, and scroll effects that plain CSS cannot express.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask for the schema to see all three dimensions before analyzing anything.',
       'Hand Codex reference images or URLs and request a populated DNA JSON.',
       'Pass the JSON plus your content to generate a self-contained HTML page.',
@@ -1468,7 +1404,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'json',
       'generation',
     ],
-    codexNote: 'topic: codex-skills',
+    agentNote: 'topic: codex-skills',
     social: 'GitHub topic',
     repo: 'zanwei/design-dna',
     install: { kind: 'clone', command: 'git clone https://github.com/zanwei/design-dna', skillPath: 'SKILL.md' },
@@ -1492,7 +1428,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Tonal surfaces carry depth instead of shadows, matching current MD3 spec.',
       'A scored audit rates ten categories and lists fixes in priority order.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Name the platform so Codex picks Compose, Flutter, or CSS custom properties.',
       'Ask for a component and get the correct variant plus token wiring.',
       'Run the audit against a URL or source files for a compliance report.',
@@ -1512,7 +1448,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'theming',
       'audit',
     ],
-    codexNote: 'Codex is the README’s preferred path',
+    agentNote: 'Codex is the README’s preferred path',
     social: 'YT AI LABS 109,460',
     repo: 'hamen/material-3-skill',
     install: { kind: 'clone', command: 'git clone https://github.com/hamen/material-3-skill', skillPath: 'skills/material-3/SKILL.md' },
@@ -1536,7 +1472,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Fixes the nested radius mismatch that makes most components read as off.',
       'Catches layout shift from changing numbers before it reaches users.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Point Codex at a component and ask it to apply the principles.',
       'Request a review; findings come back as Before and After tables.',
       'Run the fourteen-item checklist before merging any frontend change.',
@@ -1556,7 +1492,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'typography',
       'code-review',
     ],
-    codexNote: 'Codex covered in the README install steps',
+    agentNote: 'Codex covered in the README install steps',
     social: 'YT Lukas Margerie 14,279',
     repo: 'jakubkrehel/make-interfaces-feel-better',
     install: { kind: 'clone', command: 'git clone https://github.com/jakubkrehel/make-interfaces-feel-better', skillPath: 'skills/make-interfaces-feel-better/SKILL.md' },
@@ -1580,7 +1516,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Reviewers comment on anchored elements instead of arguing in chat.',
       'Multi-step flows get an operable prototype beside the static mockups.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Install with the Agent-Native CLI, then run the /visual-plan command.',
       'Paste an existing Codex or Markdown plan to use as source.',
       'Read feedback, patch the plan, and verify the persisted result.',
@@ -1600,7 +1536,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'mdx',
       'mcp',
     ],
-    codexNote: 'README: runs from a Codex session',
+    agentNote: 'README: runs from a Codex session',
     social: 'X @Steve8708 1,783♥ · YT 48,275',
     repo: 'BuilderIO/skills',
     install: { kind: 'clone', command: 'git clone https://github.com/BuilderIO/skills', skillPath: 'skills/visual-plan/SKILL.md' },
@@ -1624,7 +1560,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'A density contract flags body pages that render under half full.',
       'Diagram primitives cover architecture, flowcharts, quadrants, timelines, and charts.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Say what you need; the decision tree picks the matching template.',
       'Let Codex distill your raw content into a validated content.json first.',
       'Run the build script to produce HTML, PDF, and verification reports.',
@@ -1644,7 +1580,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'templates',
       'diagrams',
     ],
-    codexNote: 'Agent-agnostic documentation design system',
+    agentNote: 'Agent-agnostic documentation design system',
     social: 'X @HiTw93 4,388♥',
     repo: 'tw93/Kami',
     install: { kind: 'clone', command: 'git clone https://github.com/tw93/Kami', skillPath: 'plugins/kami/skills/kami/SKILL.md' },
@@ -1668,7 +1604,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'The masked variant preserves an existing background instead of overwriting it.',
       'Defaults keep stops under 0.4 opacity, so borders frame rather than compete.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Point Codex at a card or pricing panel that needs a better edge.',
       'Pick the simple pattern for solid fills, masked for complex backgrounds.',
       'Check light and dark themes separately, since alpha rarely transfers.',
@@ -1688,7 +1624,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'tailwind',
       'dark-mode',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 13,807',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/css-border-gradient/SKILL.md' },
@@ -1712,7 +1648,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Screen readers still get the full text through an aria-label.',
       'Reduced-motion users see static text with no transform applied.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Mark a heading with data-masked-reveal and add the CSS mask rules.',
       'Call the split helper, which avoids the paid SplitText plugin.',
       'Wrap in a GSAP context in React so ScrollTrigger cleans up on route change.',
@@ -1732,7 +1668,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'accessibility',
       'react',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 12,504',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/masked-reveal/SKILL.md' },
@@ -1756,7 +1692,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Corner brackets need no extra markup, so structure stays in CSS.',
       'The layout still reads clearly if the texture layer is removed.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask for a technical or editorial page and get the parent grid first.',
       'Assign explicit span classes instead of ad hoc section widths.',
       'Verify frame edges align vertically and horizontally at both breakpoints.',
@@ -1776,7 +1712,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'design-tokens',
       'responsive',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 5,489',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/framed-grid-layout/SKILL.md' },
@@ -1800,7 +1736,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Guides share the container max-width and padding, so they never drift.',
       'Pointer events are disabled, so lines never block clicks or selection.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Add the container-lines class to the layout shell.',
       'Place corner squares only on real container or section corners.',
       'Check the lines stay subtle on both light and dark backgrounds.',
@@ -1820,7 +1756,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'pseudo-elements',
       'editorial',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 4,820',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/container-lines/SKILL.md' },
@@ -1844,7 +1780,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Depth stays directional, with light from top and shadow below.',
       'Warns against mixing glassmorphism, neumorphism, and skeuomorphism in one component.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Set the base tokens once, then tune them per brand and theme.',
       'Apply the raised surface to cards, buttons, tabs, and control housings.',
       'Add the pressed variant for active toggles and selected tabs only.',
@@ -1864,7 +1800,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'gradients',
       'buttons',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 1,550',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/skeuomorphic-ui/SKILL.md' },
@@ -1888,7 +1824,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Three fixed strengths map to controls, cards, and hero media respectively.',
       'Stacked low-opacity layers read as real depth rather than one blunt drop shadow.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Ask Codex to apply the md utility to cards, panels, and popovers.',
       'Reserve the lg utility for hero media and modal-like containers.',
       'Pair each shadow with a clean surface fill and consistent radius.',
@@ -1907,7 +1843,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'CSS',
       'components',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 1,447',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/beautiful-shadows/SKILL.md' },
@@ -1931,7 +1867,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Six-step monochrome palette holds foreground type readable without a heavy overlay.',
       'Vignette and off-axis mass give one bright focal area, not even brightness.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Drop the fixed canvas behind content and set pointer-events to none.',
       'Tune cellSize between 5px and 10px for matrix legibility.',
       'Adjust wave, cloud, ridge, and vignette values to shape the mass.',
@@ -1951,7 +1887,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'dark UI',
       'background',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 1,375',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/dither-background/SKILL.md' },
@@ -1975,7 +1911,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Separate core and glow widths keep the beam a blade, not a bar.',
       'Smoke concentrates near the beam and dissipates outward, protecting copy contrast.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Set a --brand-accent custom property, which the shader converts to RGB.',
       'Place the fixed canvas behind content with pointer-events none.',
       'Tune coreWidth, glowWidth, smokeDensity, and xOffset to position the beam.',
@@ -1995,7 +1931,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'background',
       'dark UI',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 862',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/webgl-laser/SKILL.md' },
@@ -2019,7 +1955,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Named tokens fix background, shell, line, copy, and accent values across the page.',
       'Rails, corner squares, and node pills give the minimal shell technical structure.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Paste the token block, then build the page foundation and hero shell.',
       'Add the mesh canvas inside the shell, behind shell content.',
       'Place a few nodes, rails, and markers, then keep drift loops slow.',
@@ -2039,7 +1975,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'canvas',
       'hero',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 839',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/mesh-gradient-dark-blue-clean/SKILL.md' },
@@ -2063,7 +1999,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Every effect has a reduced-motion branch that keeps layout and contrast intact.',
       'A build order stages static page first, then motion, avoiding tangled scroll scenes.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Install gsap and lenis, then wire Lenis into the GSAP ticker.',
       'Mark sections with the data attributes for reveals, stacks, and parallax.',
       'Add scrubbed pinned scenes last, then run the QA checklist.',
@@ -2083,7 +2019,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'parallax',
       'animation',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'X @MengTo 1,861♥',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/cinematic-scroll-storytelling/SKILL.md' },
@@ -2107,7 +2043,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Scale contrast between display headlines and tiny metadata carries the hierarchy.',
       'Negative space is preserved instead of filled, keeping the page editorial.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Set a wide max-width shell with visible column divisions first.',
       'Anchor a hero headline across most columns, support copy in a side column.',
       'Build service rows as multi-column listings with tiny metadata labels.',
@@ -2127,7 +2063,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'layout',
       'minimal',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 657',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/agency-grid-layout-minimal/SKILL.md' },
@@ -2151,7 +2087,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Beam lines and crosshairs align to the dial, reinforcing the calibration logic.',
       'Monochrome palette means brightness comes from glass highlights, not saturated accents.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Start with a near-black base plus faint grid and beam guides.',
       'Build nav, pills, and buttons as dark glass capsules with 1px highlight wrappers.',
       'Layer the dial: outer ring, ticks, rotating labels, center emblem.',
@@ -2171,7 +2107,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'monochrome',
       'hero',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 631',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/glass-dark-mode-clock/SKILL.md' },
@@ -2195,7 +2131,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Material presets cover premium metal, soft ceramic, and glow-tinted tech looks.',
       'Motion is limited to slow rotation and small bobbing, so copy stays primary.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Add the square canvas shell, then run the Three.js initializer on it.',
       'Set color, metalness, roughness, and emissive to match brand mood.',
       'Confirm resize handling and teardown of geometry, material, and renderer.',
@@ -2215,7 +2151,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'PBR',
       'lighting',
     ],
-    codexNote: 'Explicit Codex path: agent-skills/codex/',
+    agentNote: 'Explicit Codex path: agent-skills/codex/',
     social: 'Upstream usage 528',
     repo: 'MengTo/Skills',
     install: { kind: 'clone', command: 'git clone https://github.com/MengTo/Skills', skillPath: 'agent-skills/web-design/webgl-3d-object/SKILL.md' },
@@ -2239,7 +2175,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'ScrollTrigger and timelines get sequenced properly, not stacked ad hoc.',
       'Performance rules keep animation smooth instead of janky on scroll.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Install the GSAP skill set so Codex can load the relevant module.',
       'Ask for the motion you want; the right module handles the API.',
       'Reach for the React or frameworks module inside a component tree.',
@@ -2259,7 +2195,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Motion',
     ],
     bundle: 'Bundles 8 modules: core / timeline / scrolltrigger / plugins / react / frameworks / performance / utils',
-    codexNote: 'Codex named 5× in the README',
+    agentNote: 'Codex named 5× in the README',
     social: 'YT AI LABS 109,460',
     repo: 'greensock/gsap-skills',
     install: { kind: 'clone', command: 'git clone https://github.com/greensock/gsap-skills', skillPath: 'skills/gsap-core/SKILL.md' },
@@ -2283,7 +2219,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Turns vague ‘make it feel nicer’ into a prioritised motion audit.',
       'Holds animation to a named craft bar, not personal taste.',
     ],
-    howWithCodex: [
+    howWithAgent: [
       'Run the find pass to locate motion opportunities in your UI.',
       'Apply the improve pass to rework existing animation code.',
       'Run the review pass before shipping to catch low-craft motion.',
@@ -2301,7 +2237,7 @@ export const CODEX_SKILLS: readonly CodexSkill[] = [
       'Craft',
     ],
     bundle: 'Bundles 3 commands: find-animation-opportunities / improve-animations / review-animations',
-    codexNote: 'No Codex mention; agent-agnostic',
+    agentNote: 'No Codex mention; agent-agnostic',
     social: 'X @emilkowalski 6,494♥',
     repo: 'emilkowalski/skills',
     install: { kind: 'clone', command: 'git clone https://github.com/emilkowalski/skills', skillPath: 'skills/find-animation-opportunities/SKILL.md' },

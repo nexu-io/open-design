@@ -24,6 +24,8 @@ export interface AgentModelOption {
   additionalSpeedTiers?: string[];
   /** Service tiers supported by this model, keyed by Codex config id. */
   serviceTierOptions?: AgentModelOption[];
+  /** Reasoning efforts advertised for this exact model route. */
+  reasoningOptions?: AgentModelOption[];
 }
 
 /**
@@ -44,7 +46,7 @@ export type AgentFixIntent =
   /** Re-run agent detection (the Settings "Rescan" affordance). */
   | { kind: 'rescan' }
   /**
-   * Prompt the user to point Open Design at an explicit binary by writing
+   * Prompt the user to point OpenDesign at an explicit binary by writing
    * `envKey` (e.g. `CURSOR_AGENT_BIN`) into `agentCliEnv`. Used when the CLI
    * is installed somewhere PATH detection can't reach.
    */
@@ -73,6 +75,12 @@ export type AgentDiagnosticReason =
   | 'shim-broken'
   /** A user-set `*_BIN` override points at a missing/invalid file. */
   | 'configured-bin-invalid'
+  /** The binary ran, but its version could not be read under a strict policy. */
+  | 'version-probe-failed'
+  /** The installed CLI version is outside this OpenDesign build's tested set. */
+  | 'untested-version'
+  /** A required external runtime profile or companion failed its handshake. */
+  | 'runtime-profile-incompatible'
   /** Installed and invocable, but the CLI is not authenticated. */
   | 'auth-missing'
   /** Installed, but auth status could not be verified. */
@@ -114,7 +122,7 @@ export interface AgentInfo {
    */
   diagnostics?: AgentDiagnostic[];
   models?: AgentModelOption[];
-  /** Whether models came from the installed CLI or Open Design's static fallback. */
+  /** Whether models came from the installed CLI or OpenDesign's static fallback. */
   modelsSource?: 'live' | 'fallback';
   reasoningOptions?: AgentModelOption[];
   /** HTTPS URL to install or download the CLI (vendor docs, GitHub README, npm). */
@@ -132,7 +140,8 @@ export interface AgentInfo {
   externalMcpInjection?:
     | 'claude-mcp-json'
     | 'acp-merge'
-    | 'opencode-env-content';
+    | 'opencode-env-content'
+    | 'mimo-env-content';
   /**
    * When `false`, the Settings model picker hides the "Custom (fill below)"
    * option and the free-text input. Use this for agents whose CLI doesn't

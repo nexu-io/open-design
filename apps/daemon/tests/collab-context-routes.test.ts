@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -13,10 +16,13 @@ import {
 import {
   createDevWorkspaceContextProvider,
   parseWorkspaceCollabContext,
+  resolveWorkspaceSettingsUrl,
 } from '../src/collab/workspace-context.js';
 import { createWorkspaceBillingRuntimeCoordinator } from '../src/collab/workspace-billing-runtime.js';
+import { createActiveWorkspaceSelectionStore } from '../src/collab/active-workspace-selection.js';
 
 let server: http.Server | null = null;
+const roots: string[] = [];
 
 afterEach(async () => {
   if (server) {
@@ -24,6 +30,7 @@ afterEach(async () => {
     server = null;
     await new Promise<void>((resolve) => toClose.close(() => resolve()));
   }
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 /** The minimal payload a dev/demo run PUTs — only enum + identity fields. */
@@ -56,6 +63,8 @@ const TEAM_HEADERS = {
   'x-od-workspace-member-id': 'wm-1',
 };
 
+const TEAM_WORKSPACE_SETTINGS_URL = resolveWorkspaceSettingsUrl('wm-1', undefined);
+
 /** What `parseWorkspaceCollabContext` returns: the minimal input enriched with the
  *  fields it derives — workspaceId fallback, provider/billing defaults, and the
  *  permissions + seat summary derived through B's shared helpers. */
@@ -75,6 +84,9 @@ const TEAM_CONTEXT_PARSED: WorkspaceCollabContext = {
   // team scope) — collab gates on it, so the parser pins it when omitted.
   teamId: 'wm-1',
   displayName: 'Ma Shu',
+  ...(TEAM_WORKSPACE_SETTINGS_URL
+    ? { workspaceSettingsUrl: TEAM_WORKSPACE_SETTINGS_URL }
+    : {}),
 };
 
 async function startContextServer(
@@ -169,6 +181,47 @@ describe('collab context routes', () => {
     expect(fetchWorkspaceDirectory).not.toHaveBeenCalled();
   });
 
+  it('does not let exact-context enrichment downgrade directory-verified Team authority', async () => {
+    const verifiedTeamContext: WorkspaceCollabContext = {
+      ...TEAM_CONTEXT_PARSED,
+      role: 'admin',
+      permissions: buildWorkspacePermissions({ role: 'admin', lifecycleState: 'active' }),
+    };
+    const api = await startContextServer({
+      verifyWorkspaceReadAuthority: async () => ({
+        ok: true as const,
+        context: verifiedTeamContext,
+      }),
+    });
+    await api.req('/api/workspace/context', {
+      method: 'PUT',
+      body: {
+        workspaceId: verifiedTeamContext.workspaceId,
+        workspaceType: 'personal',
+        workspaceMemberId: verifiedTeamContext.workspaceMemberId,
+        role: 'member',
+        memberStatus: 'active',
+        lifecycleState: 'active',
+        planId: 'team_pro',
+      },
+    });
+
+    const response = await api.req('/api/workspace/context', {
+      headers: TEAM_HEADERS,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.context).toMatchObject({
+      workspaceId: verifiedTeamContext.workspaceId,
+      workspaceMemberId: verifiedTeamContext.workspaceMemberId,
+      workspaceType: 'team',
+      role: 'admin',
+      permissions: verifiedTeamContext.permissions,
+      planId: 'team_pro',
+      teamId: verifiedTeamContext.workspaceId,
+    });
+  });
+
   it('observes authoritative workspace size without sending names or member identity', async () => {
     const observeWorkspace = vi.fn();
     const api = await startContextServer({
@@ -206,6 +259,34 @@ describe('collab context routes', () => {
     );
     expect(observeWorkspace.mock.calls[0]?.[2]).not.toHaveProperty('displayName');
     expect(observeWorkspace.mock.calls[0]?.[2]).not.toHaveProperty('workspaceMemberId');
+  });
+
+  it('observes directory-only seat capacity as unknown without synthetic counts', async () => {
+    const observeWorkspace = vi.fn();
+    const api = await startContextServer({
+      observeWorkspace,
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [TEAM_DIRECTORY_ITEM],
+      }),
+    });
+
+    const response = await api.req('/api/workspace/context', {
+      headers: TEAM_HEADERS,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.context.seatSummary).toMatchObject({
+      seatLimit: 0,
+      usedSeats: 0,
+    });
+    expect(observeWorkspace).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ workspaceId: 'wm-1' }),
+      expect.objectContaining({ seat_state: 'unknown' }),
+    );
+    expect(observeWorkspace.mock.calls[0]?.[2]).not.toHaveProperty('seat_limit');
+    expect(observeWorkspace.mock.calls[0]?.[2]).not.toHaveProperty('member_count');
   });
 
   it('clears dev enrichment but retains directory-authorized exact context', async () => {
@@ -365,13 +446,14 @@ describe('collab context routes', () => {
     });
   });
 
-  it('keeps workspace selection request-local and does not mutate the daemon active pin', async () => {
+  it('persists the restart default after verifying the request-local selection', async () => {
     const setActive = vi.fn(async () => {});
     const api = await startContextServer({
       activeWorkspace: {
         get: () => 'ws-a',
         set: setActive,
         clear: async () => {},
+        clearIf: async () => true,
       },
       fetchWorkspaceDirectory: async () => ({
         ok: true,
@@ -396,7 +478,110 @@ describe('collab context routes', () => {
       workspaceId: 'ws-b',
       workspaceMemberId: 'wm-b',
     });
-    expect(setActive).not.toHaveBeenCalled();
+    expect(setActive).toHaveBeenCalledOnce();
+    expect(setActive).toHaveBeenCalledWith('ws-b');
+  });
+
+  it('keeps the previous directory default when selection persistence fails', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-workspace-selection-route-'));
+    roots.push(root);
+    const activeWorkspace = createActiveWorkspaceSelectionStore(root);
+    await activeWorkspace.set('ws-a');
+    await rm(root, { recursive: true });
+    await writeFile(root, 'not a directory', 'utf8');
+    const directoryItems = [
+      {
+        workspaceId: 'ws-a',
+        workspaceName: 'Workspace A',
+        workspaceType: 'team' as const,
+        workspaceMemberId: 'wm-a',
+        role: 'member' as const,
+        memberStatus: 'active' as const,
+        lifecycleState: 'active' as const,
+      },
+      {
+        workspaceId: 'ws-b',
+        workspaceName: 'Workspace B',
+        workspaceType: 'team' as const,
+        workspaceMemberId: 'wm-b',
+        role: 'owner' as const,
+        memberStatus: 'active' as const,
+        lifecycleState: 'active' as const,
+      },
+    ];
+    const api = await startContextServer({
+      activeWorkspace,
+      fetchWorkspaceDirectory: async () => ({ ok: true, items: directoryItems }),
+    });
+
+    const failedSwitch = await api.req('/api/workspace/active', {
+      method: 'PUT',
+      body: { workspaceId: 'ws-b', workspaceMemberId: 'wm-b' },
+    });
+    const directory = await api.req('/api/workspace/directory');
+
+    expect(failedSwitch.status).toBe(500);
+    expect(activeWorkspace.get()).toBe('ws-a');
+    expect(directory).toEqual({
+      status: 200,
+      body: { items: directoryItems, activeWorkspaceId: 'ws-a' },
+    });
+  });
+
+  it('does not let stale directory cleanup erase a concurrent workspace switch', async () => {
+    let pinned: string | null = 'ws-a';
+    let markClearStarted!: () => void;
+    let resumeClear!: () => void;
+    const clearStarted = new Promise<void>((resolve) => {
+      markClearStarted = resolve;
+    });
+    const clearMayFinish = new Promise<void>((resolve) => {
+      resumeClear = resolve;
+    });
+    const directoryItems = [{
+      workspaceId: 'ws-b',
+      workspaceName: 'Workspace B',
+      workspaceType: 'team' as const,
+      workspaceMemberId: 'wm-b',
+      role: 'owner' as const,
+      memberStatus: 'active' as const,
+      lifecycleState: 'active' as const,
+    }];
+    const api = await startContextServer({
+      activeWorkspace: {
+        get: () => pinned,
+        set: async (workspaceId) => {
+          pinned = workspaceId;
+        },
+        clear: async () => {
+          pinned = null;
+        },
+        clearIf: async (workspaceId) => {
+          markClearStarted();
+          await clearMayFinish;
+          if (pinned !== workspaceId) return false;
+          pinned = null;
+          return true;
+        },
+      },
+      fetchWorkspaceDirectory: async () => ({ ok: true, items: directoryItems }),
+    });
+
+    const staleDirectoryPromise = api.req('/api/workspace/directory');
+    await clearStarted;
+    const switched = await api.req('/api/workspace/active', {
+      method: 'PUT',
+      body: { workspaceId: 'ws-b', workspaceMemberId: 'wm-b' },
+    });
+    resumeClear();
+    const staleDirectory = await staleDirectoryPromise;
+
+    expect(switched.status).toBe(200);
+    expect(pinned).toBe('ws-b');
+    expect(staleDirectory).toEqual({
+      status: 200,
+      body: { items: directoryItems, activeWorkspaceId: 'ws-b' },
+    });
   });
 });
 

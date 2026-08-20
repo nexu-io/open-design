@@ -1,12 +1,12 @@
 # HyperFrames video templates — attribution & licensing
 
-These 23 templates were imported into Open Design from
+These 23 templates were imported into OpenDesign from
 [`nexu-io/html-video`](https://github.com/nexu-io/html-video) (Apache-2.0).
 Each plugin's `open-design.json` (`license`, `author`, `od.provenance`,
 `od.attribution`) and `template.json` (`source`) carry the canonical
 per-template record; this file is the directory-level summary required by the
 upstream licenses. Studio names recorded under `provenance.origin` are factual
-records of stylistic inspiration only — Open Design and html-video are **not
+records of stylistic inspiration only — OpenDesign and html-video are **not
 affiliated with, endorsed by, or sponsored by** any of them.
 
 ## Apache-2.0 — forked from `heygen-com/hyperframes`

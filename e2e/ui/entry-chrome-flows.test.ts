@@ -333,7 +333,7 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
     });
   });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 
   // Cloud-first onboarding no longer contains the legacy runtime/About-you/
   // Product-design survey. A signed-in user accepts the recommended Hosted
@@ -342,7 +342,7 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
   await expect(cloudPrimary).toBeEnabled();
   await cloudPrimary.click();
   await expect(page.getByRole('heading', { name: /Choose your model source|选择模型来源/i })).toBeVisible();
-  await page.getByRole('radio', { name: /Open Design Hosted/i }).click();
+  await page.getByRole('radio', { name: /OpenDesign Hosted/i }).click();
   await page.getByRole('button', { name: /^Continue$/i }).click();
 
   // Finishing model-source setup lands the user on Home with the composer
@@ -393,9 +393,8 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
 
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
-  // Nothing is applied on a fresh Home: no template pill reset, no plugin
-  // chip, no template-driven footer options or presets.
-  await expect(page.getByTestId('home-hero-template-reset')).toHaveCount(0);
+  // Nothing is applied on a fresh Home: no plugin chip, no template-driven
+  // footer options or presets.
   await expect(page.getByTestId('home-hero-active-plugin')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
@@ -417,7 +416,7 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   // `recent-projects-view-all` button — so `HomeView.onViewAllProjects` is
   // wired but unreachable. Drive the route directly until an entry returns.
   await page.goto('/projects', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page).toHaveURL(/\/projects$/);
   await expect(page.getByTestId('entry-view-projects')).toBeVisible();
 });
@@ -993,7 +992,7 @@ test('[P1] Use everywhere guide uses daemon MCP install info and copies an agent
   // With the topbar's "Use everywhere" button gone (#5517) the Integrations
   // route is the entry; its default tab is still the Use everywhere guide.
   await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
   // Landing on the route directly opens the view's own default tab, so select
   // the Use everywhere guide explicitly.
@@ -1084,7 +1083,7 @@ test('[P1] rail destinations navigate and Home keeps its composer execution pill
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer routes free-form prompts through the design router by default', async ({ page }) => {
+test('[P0] @critical home composer routes free-form prompts through the default prototype scenario', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
@@ -1103,13 +1102,15 @@ test('[P0] @critical home composer routes free-form prompts through the design r
     pendingPrompt?: string;
     conversationMode?: string;
     pluginId?: string | null;
+    pluginInputs?: Record<string, unknown>;
     metadata?: { kind?: string };
   };
-  expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
+  expect(body.name).toBe('Web Prototype');
   expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('design');
-  expect(body.pluginId).toBe('od-default');
-  expect(body.metadata?.kind).toBe('other');
+  expect(body.pluginId).toBe('example-web-prototype');
+  expect(body.pluginInputs).toMatchObject({ artifactKind: 'web prototype' });
+  expect(body.metadata?.kind).toBe('prototype');
 });
 
 test('[P0] @critical home working directory creates the project with linked dirs instead of importing files', async ({ page }) => {
@@ -1315,7 +1316,15 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  await expect(submit).toBeEnabled();
+  // Fresh Home locks submit until its default prototype route has resolved.
+  // Under the grouped CI pool that catalogue binding can outlive Playwright's
+  // default assertion timeout, so wait on the user-visible routed state before
+  // checking the attachment lifecycle rather than racing the seed effect.
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
+    /Prototype|原型/i,
+    { timeout: T.long },
+  );
+  await expect(submit).toBeEnabled({ timeout: T.long });
 
   await input.setInputFiles({
     name: 'brief.txt',
@@ -1585,8 +1594,8 @@ async function dispatchAmbientWorkspaceEvent(
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);

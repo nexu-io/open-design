@@ -1,6 +1,6 @@
 // Post-generation static QA pass for CTA (call-to-action) hierarchy.
 //
-// Background: Open Design's generated HTML/CSS prototypes are sometimes
+// Background: OpenDesign's generated HTML/CSS prototypes are sometimes
 // "functionally correct but feel unfinished" — a primary commerce action
 // renders as a neutral button, two equally-styled CTAs compete for the
 // same conversion slot, or a "Learn more" link is styled like the buy

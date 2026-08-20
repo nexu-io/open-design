@@ -1,14 +1,10 @@
 import type { ApiErrorResponse } from '@open-design/contracts';
 import type { Response } from 'express';
 import {
-  isWorkspaceResourceLocked,
   workspaceResourceContextFromRequest,
   type WorkspaceResourceContext,
 } from './workspace-resource-mutation.js';
-import {
-  workspaceContextFromDirectoryItem,
-  type WorkspaceDirectoryFetchResult,
-} from './vela-workspace-context.js';
+import type { WorkspaceDirectoryFetchResult } from './vela-workspace-context.js';
 import { sendApiError } from '../http/api-errors.js';
 
 export type CreatedProjectWorkspaceResolution =
@@ -44,125 +40,30 @@ export function sendCreatedProjectWorkspaceError(
 }
 
 /**
- * Resolve the workspace authority for a route that creates a project.
+ * Capture optional local attribution for an ordinary local project create.
  *
- * A completely headerless request is a legal legacy/anonymous caller and
- * intentionally leaves the new project unbound. Once either workspace
- * identity header is present, however, the request is a workspace-aware
- * caller: partial, removed, locked, or non-writing identities must fail
- * closed instead of silently creating an unbound orphan.
+ * PRODUCT INVARIANT: `POST /api/projects` creates local data first. Workspace
+ * identity on that request is metadata for `personal` + `local_only` routing;
+ * it is not permission to publish and must not trigger a directory/network
+ * lookup or block creation. A complete request snapshot is retained as local
+ * attribution even if its remote state may have changed; missing or partial
+ * identity produces an unbound local project. Later share/sync/move-to-Team
+ * operations perform fresh authority checks at their actual remote boundary.
  */
-export function resolveCreatedProjectWorkspace(
+export function localProjectWorkspaceAttribution(
   req: unknown,
-): CreatedProjectWorkspaceResolution {
+): WorkspaceResourceContext | null {
   const context = workspaceResourceContextFromRequest(req);
-  if (context === null) return { ok: true, context: null };
-  if (context === 'missing') {
-    return {
-      ok: false,
-      status: 400,
-      code: 'WORKSPACE_CONTEXT_INCOMPLETE',
-      message: 'workspace project creation requires both workspace and member identity',
-    };
-  }
-  if (
-    context.memberStatus !== 'active'
-    || !context.canWriteSyncedFiles
-    || isWorkspaceResourceLocked(context)
-  ) {
-    return {
-      ok: false,
-      status: 403,
-      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-      message: 'workspace project creation is not allowed',
-    };
-  }
-  return { ok: true, context };
+  return context === null || context === 'missing' ? null : context;
 }
 
-/**
- * Authorize an explicitly-scoped project create against the signed-in
- * membership directory. The caller-selected workspace/member pair is the
- * lookup key; the daemon's ambient active workspace is deliberately absent
- * from this contract.
- *
- * A missing fetcher is the local/dev compatibility path. Production Vela
- * mode injects one and therefore fails closed when AMR is unavailable.
- */
+/** Capture local attribution for project creation without a network gate. */
 export async function authorizeCreatedProjectWorkspace(
   req: unknown,
-  fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>,
+  _fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>,
+  _configuredEnv?: Record<string, string>,
 ): Promise<CreatedProjectWorkspaceResolution> {
-  const claimed = resolveCreatedProjectWorkspace(req);
-  if (!claimed.ok || claimed.context === null || !fetchWorkspaceDirectory) {
-    return claimed;
-  }
-  const claimedContext = claimed.context;
-
-  let directory: WorkspaceDirectoryFetchResult;
-  try {
-    directory = await fetchWorkspaceDirectory();
-  } catch {
-    directory = { ok: false, items: [] };
-  }
-  if (!directory.ok) {
-    if (directory.reason === 'unauthorized') {
-      return {
-        ok: false,
-        status: 401,
-        code: 'AMR_AUTH_REQUIRED',
-        message: 'AMR authorization expired. Sign in again to continue.',
-      };
-    }
-    return {
-      ok: false,
-      status: 503,
-      code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
-      message: 'workspace membership authority is temporarily unavailable',
-      retryable: true,
-    };
-  }
-
-  const item = directory.items.find(
-    (candidate) =>
-      candidate.workspaceId === claimedContext.workspaceId
-      && candidate.workspaceMemberId === claimedContext.workspaceMemberId,
-  );
-  if (!item) {
-    return {
-      ok: false,
-      status: 403,
-      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-      message: 'workspace project creation is not allowed',
-    };
-  }
-
-  const authoritative = workspaceContextFromDirectoryItem(item);
-  const context: WorkspaceResourceContext = {
-    workspaceId: authoritative.workspaceId,
-    workspaceType: authoritative.workspaceType,
-    workspaceTypeAsserted: authoritative.workspaceType,
-    appUserId: claimedContext.appUserId,
-    workspaceMemberId: authoritative.workspaceMemberId,
-    role: authoritative.role,
-    memberStatus: authoritative.memberStatus,
-    lifecycleState: authoritative.lifecycleState,
-    canShareProjects: authoritative.permissions.canShareProjects,
-    canWriteSyncedFiles: authoritative.permissions.canWriteSyncedFiles,
-  };
-  if (
-    context.memberStatus !== 'active'
-    || !context.canWriteSyncedFiles
-    || isWorkspaceResourceLocked(context)
-  ) {
-    return {
-      ok: false,
-      status: 403,
-      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-      message: 'workspace project creation is not allowed',
-    };
-  }
-  return { ok: true, context };
+  return { ok: true, context: localProjectWorkspaceAttribution(req) };
 }
 
 /**
@@ -184,17 +85,17 @@ export class CreatedProjectWorkspaceResolutionError extends Error {
   }
 }
 
-/**
- * Resolve an exact creation scope. Headerless legacy requests remain unbound.
- * Once either identity field is asserted, any incomplete, removed, denied, or
- * unavailable authority fails closed; it never degrades to ambient/current or
- * silently creates an unbound project.
- */
+/** Resolve the optional local creation scope. */
 export async function createdProjectWorkspaceHome(
   req: unknown,
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>,
+  configuredEnv?: Record<string, string>,
 ): Promise<WorkspaceResourceContext | null> {
-  const authorized = await authorizeCreatedProjectWorkspace(req, fetchWorkspaceDirectory);
+  const authorized = await authorizeCreatedProjectWorkspace(
+    req,
+    fetchWorkspaceDirectory,
+    configuredEnv,
+  );
   if (!authorized.ok) throw new CreatedProjectWorkspaceResolutionError(authorized);
   return authorized.context;
 }
@@ -209,11 +110,13 @@ export type CreatedProjectWorkspaceResolver = (
 
 export function createCreatedProjectWorkspaceResolver(deps: {
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  configuredEnv?: () => Record<string, string>;
 }): CreatedProjectWorkspaceResolver {
   return (req) =>
     createdProjectWorkspaceHome(
       req,
       deps.fetchWorkspaceDirectory,
+      deps.configuredEnv?.(),
     );
 }
 
@@ -224,13 +127,14 @@ export function createCreatedProjectWorkspaceResolver(deps: {
  * always gets a binding row. A project with no row is not a harmless default —
  * `GET /api/projects/:id/workspace-scope` answers `unbound` for it, which strips
  * the workspace off the run request (`ProjectView`'s `projectRunWorkspaceContext`
- * → an Open Design Cloud run nothing can bill) and blanks the balance/plan area
- * while that project is open (`AvatarMenu`). It is also denied a run outright by
- * `enforceWorkspaceResourceMutation` the moment the caller carries any workspace
- * header, because the two-key lookup comes back empty.
+ * → an OpenDesign Cloud run nothing can bill) and blanks the balance/plan area
+ * while that project is open (`AvatarMenu`). Headerless local AMR runs may use
+ * the signed-in account wallet, but any later request that asserts a Workspace
+ * still needs an exact persisted binding before workspace mutation gates allow it.
  *
- * `context` is the caller's exact verified Workspace when the request named
- * one. A headerless legacy request supplies null and remains unbound.
+ * `context` is the caller's complete local Workspace attribution when the
+ * request named one. A headerless legacy request supplies null and remains
+ * unbound; remote authority is checked only at a later cloud boundary.
  */
 export function bindCreatedProjectToWorkspace(
   ensureWorkspaceProject: (input: {
@@ -251,6 +155,12 @@ export function bindCreatedProjectToWorkspace(
   now: number,
 ): void {
   if (!context) return;
+  // This row is local attribution, not publication. It keeps billing and later
+  // run routing associated with the browser's captured Workspace/member while
+  // the project remains `personal` + `local_only`. Creating it must never be
+  // interpreted as sharing the project or as authorization to use any local
+  // plugin/Skill/Design System. The move/share/sync routes own those remote
+  // authorization boundaries.
   ensureWorkspaceProject({
     projectId,
     workspaceId: context.workspaceId,

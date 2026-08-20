@@ -1340,7 +1340,7 @@ describe('App project creation routing', () => {
     ['Local CLI', { ...baseConfig, mode: 'daemon' as const, agentId: 'codex' }],
     ['BYOK', { ...baseConfig, mode: 'api' as const, agentId: 'amr' }],
   ])(
-    'lets %s create an unscoped project while AMR workspace discovery is unavailable',
+    'lets %s create an unscoped project without waiting for AMR identity discovery',
     async (_label, executionConfig) => {
       mockedLoadConfig.mockReturnValue(executionConfig);
       mockedListProjects.mockResolvedValue([]);
@@ -1349,15 +1349,7 @@ describe('App project creation routing', () => {
         vi.fn(async (input: RequestInfo | URL) => {
           const pathname = new URL(String(input), 'http://d.local').pathname;
           if (pathname.endsWith('/integrations/vela/status')) {
-            return new Response(JSON.stringify({
-              loggedIn: false,
-              profile: 'default',
-              user: null,
-              configPath: '/test/vela.json',
-            }), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            });
+            return new Promise<Response>(() => {});
           }
           if (pathname.endsWith('/workspace/directory')) {
             return new Promise<Response>(() => {});
@@ -1370,7 +1362,7 @@ describe('App project creation routing', () => {
       );
 
       render(<App />);
-      await screen.findByText('false', { selector: '[data-testid="amr-login-status"]' });
+      await screen.findByText('null', { selector: '[data-testid="amr-login-status"]' });
       fireEvent.click(await screen.findByRole('button', { name: 'Create project' }));
 
       await waitFor(() => {
@@ -1382,11 +1374,62 @@ describe('App project creation routing', () => {
     },
   );
 
+  it('does not wait for directory identity while the richer Workspace context is still loading', async () => {
+    const context = workspaceContext('ws-cold-create', 'wm-cold-create');
+    const richContextRead = deferred<Response>();
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      mode: 'daemon',
+      agentId: 'amr',
+    });
+    mockedListProjects.mockResolvedValue([]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const pathname = new URL(String(input), 'http://d.local').pathname;
+        if (pathname.endsWith('/integrations/vela/status')) {
+          return new Response(JSON.stringify({
+            loggedIn: true,
+            profile: 'default',
+            user: { id: 'account-team-member' },
+            configPath: '/test/vela.json',
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (pathname.endsWith('/workspace/directory')) {
+          return new Response(
+            JSON.stringify(workspaceDirectoryFixture([context])),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        if (pathname.endsWith('/workspace/context')) return richContextRead.promise;
+        return new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+
+    render(<App />);
+    await screen.findByText('true', { selector: '[data-testid="amr-login-status"]' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Create project' }));
+
+    await waitFor(() => {
+      expect(mockedCreateProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceContext: null,
+        }),
+      );
+    });
+  });
+
   it.each([
     ['Local CLI', 'loading', { ...baseConfig, mode: 'daemon' as const, agentId: 'codex' }],
     ['BYOK', 'unavailable', { ...baseConfig, mode: 'api' as const, agentId: 'amr' }],
   ])(
-    'keeps %s project creation fail-closed for a signed-in account while Team workspace discovery is %s',
+    'lets %s create locally for a signed-in account while Team workspace discovery is %s',
     async (_label, discoveryState, executionConfig) => {
       mockedLoadConfig.mockReturnValue(executionConfig);
       mockedListProjects.mockResolvedValue([]);
@@ -1421,12 +1464,15 @@ describe('App project creation routing', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Create project' }));
 
       await waitFor(() => {
-        expect(mockedCreateProject).not.toHaveBeenCalled();
+        expect(mockedCreateProject).toHaveBeenCalledWith(
+          expect.objectContaining({ workspaceContext: null }),
+        );
       });
+      expect(screen.getByTestId('project-title').textContent).toBe('Fresh project');
     },
   );
 
-  it('keeps AMR Cloud project creation fail-closed while workspace discovery is loading even when signed out', async () => {
+  it('allows an unbound local AMR project while workspace discovery is loading', async () => {
     mockedLoadConfig.mockReturnValue({
       ...baseConfig,
       mode: 'daemon',
@@ -1463,7 +1509,9 @@ describe('App project creation routing', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Create project' }));
 
     await waitFor(() => {
-      expect(mockedCreateProject).not.toHaveBeenCalled();
+      expect(mockedCreateProject).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceContext: null }),
+      );
     });
   });
 
@@ -1730,7 +1778,7 @@ describe('App project creation routing', () => {
     expect(screen.queryByTestId('entry-project-project-existing')).toBeNull();
   });
 
-  it('does not re-add a locally deleted project when an older project list resolves stale', async () => {
+  it('removes a locally deleted project from workspace tabs and ignores a stale list', async () => {
     const initialProjects = deferred<Project[]>();
     const staleRefreshProjects = deferred<Project[]>();
     mockedListProjects
@@ -1754,6 +1802,8 @@ describe('App project creation routing', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-title').textContent).toBe('Fresh project');
     });
+    workspaceTabsHarness.projectIds.add('project-new');
+    expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh projects' }));
     expect(mockedListProjects).toHaveBeenCalledTimes(2);
@@ -1764,6 +1814,7 @@ describe('App project creation routing', () => {
     await waitFor(() => {
       expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', null);
       expect(screen.queryByTestId('entry-project-project-new')).toBeNull();
+      expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(false);
     });
 
     await act(async () => {

@@ -14,6 +14,7 @@ export type WorkspaceAuthorityMetricReason =
   | 'lease_hit'
   | 'lease_expired'
   | 'in_flight'
+  | 'failure_backoff'
   | 'fresh'
   | 'mutation'
   | 'event_dirty'
@@ -104,7 +105,7 @@ export function recordWorkspaceAuthorityDecision(input: {
 export function recordWorkspaceAuthoritySuppressedRequest(input: {
   mode: WorkspaceAuthorityCacheMode;
   source: WorkspaceAuthorityMetricSource;
-  reason: 'lease_hit' | 'in_flight' | 'safety_floor';
+  reason: 'lease_hit' | 'in_flight' | 'failure_backoff' | 'safety_floor';
 }): void {
   try {
     workspaceAuthoritySuppressedRequestsTotal.inc(input);

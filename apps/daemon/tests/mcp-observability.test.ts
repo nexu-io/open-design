@@ -31,7 +31,7 @@ describe('local MCP plugin observability contract', () => {
     globalThis.fetch = originalFetch;
   });
 
-  it('accepts the bounded Open Design context and rejects extra or secret fields', () => {
+  it('accepts the bounded OpenDesign context and rejects extra or secret fields', () => {
     expect(validateExternalPluginContext(pluginContext)).toEqual(pluginContext);
 
     expect(() => validateExternalPluginContext({
@@ -305,7 +305,7 @@ describe('local MCP plugin observability contract', () => {
   it('keeps MCP transport failures and delivery completeness as separate facts', () => {
     expect(mcpFailureFacts('start_run', {
       isError: true,
-      content: [{ type: 'text', text: 'cannot reach the Open Design daemon' }],
+      content: [{ type: 'text', text: 'cannot reach the OpenDesign daemon' }],
     })).toEqual({
       error_code: 'DAEMON_UNREACHABLE',
       failure_stage: 'run_accept',

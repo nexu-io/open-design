@@ -146,6 +146,14 @@ describe('conversation timestamps', () => {
     expect(isAssistantMessageStreaming(message, true, 'assistant-1')).toBe(false);
     expect(
       isAssistantMessageStreaming(
+        { ...message, runStatus: 'canceled' },
+        true,
+        'assistant-1',
+        new Set(['assistant-1']),
+      ),
+    ).toBe(false);
+    expect(
+      isAssistantMessageStreaming(
         { ...message, id: 'assistant-2', runStatus: 'running' },
         false,
         'assistant-1',

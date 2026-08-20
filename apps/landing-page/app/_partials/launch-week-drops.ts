@@ -13,7 +13,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>RELEASED</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN TEAM WORKSPACE</span>
+        <span class="drop-code">OpenDesign TEAM WORKSPACE</span>
         <h3>Collaborative Codex Is Live.</h3>
         <p class="proof">Your team and their Codex agents are now designing together on one live canvas.</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -73,7 +73,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>UP NEXT</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN COMMUNITY SHOWCASE</span>
+        <span class="drop-code">OpenDesign COMMUNITY SHOWCASE</span>
         <h3>The Community Showcase Is Live.</h3>
         <p class="proof">Everything the community built this week, in one place. Submissions close tonight.</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -89,7 +89,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>已发布</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN 团队协作空间</span>
+        <span class="drop-code">OpenDesign 团队协作空间</span>
         <h3>协作版 Codex 已上线。</h3>
         <p class="proof">你的团队和他们的 Codex 智能体，现在在同一块实时画布上一起做设计。</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -149,7 +149,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>即将到来</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN 社区作品展</span>
+        <span class="drop-code">OpenDesign 社区作品展</span>
         <h3>社区作品展已上线。</h3>
         <p class="proof">社区这一周做出来的全部作品，都在这里。今晚截止投稿。</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -165,7 +165,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>公開済み</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN チームワークスペース</span>
+        <span class="drop-code">OpenDesign チームワークスペース</span>
         <h3>コラボレーティブ Codex、公開。</h3>
         <p class="proof">チームと Codex エージェントが、ひとつのライブキャンバス上で一緒にデザインします。</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -225,7 +225,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>次回</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN コミュニティ・ショーケース</span>
+        <span class="drop-code">OpenDesign コミュニティ・ショーケース</span>
         <h3>コミュニティ・ショーケース、公開。</h3>
         <p class="proof">今週コミュニティが作ったものが、すべてここに。応募は今夜締め切りです。</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -241,7 +241,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>공개됨</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN 팀 워크스페이스</span>
+        <span class="drop-code">OpenDesign 팀 워크스페이스</span>
         <h3>협업 Codex가 공개되었습니다.</h3>
         <p class="proof">팀과 Codex 에이전트가 하나의 실시간 캔버스에서 함께 디자인합니다.</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -301,7 +301,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>다음 차례</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN 커뮤니티 쇼케이스</span>
+        <span class="drop-code">OpenDesign 커뮤니티 쇼케이스</span>
         <h3>커뮤니티 쇼케이스가 공개되었습니다.</h3>
         <p class="proof">이번 주 커뮤니티가 만든 모든 것이 한곳에. 제출은 오늘 밤 마감됩니다.</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -317,7 +317,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>VERÖFFENTLICHT</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN TEAM-WORKSPACE</span>
+        <span class="drop-code">OpenDesign TEAM-WORKSPACE</span>
         <h3>Collaborative Codex ist live.</h3>
         <p class="proof">Dein Team und seine Codex-Agenten gestalten jetzt gemeinsam auf einer Live-Canvas.</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -377,7 +377,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>ALS NÄCHSTES</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN COMMUNITY-SHOWCASE</span>
+        <span class="drop-code">OpenDesign COMMUNITY-SHOWCASE</span>
         <h3>Der Community-Showcase ist live.</h3>
         <p class="proof">Alles, was die Community diese Woche gebaut hat, an einem Ort. Einsendeschluss ist heute Abend.</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -393,7 +393,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>ВЫШЛО</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">КОМАНДНОЕ ПРОСТРАНСТВО OPEN DESIGN</span>
+        <span class="drop-code">КОМАНДНОЕ ПРОСТРАНСТВО OpenDesign</span>
         <h3>Совместный Codex запущен.</h3>
         <p class="proof">Ваша команда и её агенты Codex теперь работают над дизайном на одном живом холсте.</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -453,7 +453,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>ДАЛЕЕ</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">ВИТРИНА СООБЩЕСТВА OPEN DESIGN</span>
+        <span class="drop-code">ВИТРИНА СООБЩЕСТВА OpenDesign</span>
         <h3>Витрина сообщества открыта.</h3>
         <p class="proof">Всё, что сообщество создало за эту неделю, в одном месте. Приём работ закрывается сегодня вечером.</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -469,7 +469,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>PUBLIÉ</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">ESPACE D'ÉQUIPE OPEN DESIGN</span>
+        <span class="drop-code">ESPACE D'ÉQUIPE OpenDesign</span>
         <h3>Codex collaboratif est en ligne.</h3>
         <p class="proof">Votre équipe et ses agents Codex conçoivent désormais ensemble sur un même canevas en direct.</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -529,7 +529,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>À VENIR</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">VITRINE DE LA COMMUNAUTÉ OPEN DESIGN</span>
+        <span class="drop-code">VITRINE DE LA COMMUNAUTÉ OpenDesign</span>
         <h3>La vitrine de la communauté est en ligne.</h3>
         <p class="proof">Tout ce que la communauté a construit cette semaine, au même endroit. Les soumissions ferment ce soir.</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -545,7 +545,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>PUBLICADO</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">ESPACIO DE EQUIPO DE OPEN DESIGN</span>
+        <span class="drop-code">ESPACIO DE EQUIPO DE OpenDesign</span>
         <h3>Codex colaborativo ya está disponible.</h3>
         <p class="proof">Tu equipo y sus agentes de Codex ahora diseñan juntos en un mismo lienzo en vivo.</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -605,7 +605,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>PRÓXIMAMENTE</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">ESCAPARATE DE LA COMUNIDAD DE OPEN DESIGN</span>
+        <span class="drop-code">ESCAPARATE DE LA COMUNIDAD DE OpenDesign</span>
         <h3>El escaparate de la comunidad ya está disponible.</h3>
         <p class="proof">Todo lo que la comunidad construyó esta semana, en un solo lugar. Las propuestas cierran esta noche.</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -621,7 +621,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>PUBLICADO</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">ESPAÇO DE EQUIPE DO OPEN DESIGN</span>
+        <span class="drop-code">ESPAÇO DE EQUIPE DO OpenDesign</span>
         <h3>O Codex colaborativo está no ar.</h3>
         <p class="proof">Sua equipe e seus agentes Codex agora projetam juntos em uma mesma tela ao vivo.</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -681,7 +681,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>A SEGUIR</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">VITRINE DA COMUNIDADE OPEN DESIGN</span>
+        <span class="drop-code">VITRINE DA COMUNIDADE OpenDesign</span>
         <h3>A vitrine da comunidade está no ar.</h3>
         <p class="proof">Tudo o que a comunidade construiu nesta semana, em um só lugar. As inscrições encerram hoje à noite.</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -697,7 +697,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>PUBBLICATO</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">SPAZIO DI SQUADRA OPEN DESIGN</span>
+        <span class="drop-code">SPAZIO DI SQUADRA OpenDesign</span>
         <h3>Codex collaborativo è online.</h3>
         <p class="proof">Il tuo team e i suoi agenti Codex ora progettano insieme su un'unica canvas dal vivo.</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -757,7 +757,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>PROSSIMAMENTE</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">VETRINA DELLA COMMUNITY OPEN DESIGN</span>
+        <span class="drop-code">VETRINA DELLA COMMUNITY OpenDesign</span>
         <h3>La vetrina della community è online.</h3>
         <p class="proof">Tutto ciò che la community ha costruito questa settimana, in un unico posto. Le candidature chiudono stasera.</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>
@@ -773,7 +773,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>YAYINLANDI</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN EKİP ÇALIŞMA ALANI</span>
+        <span class="drop-code">OpenDesign EKİP ÇALIŞMA ALANI</span>
         <h3>İş birlikçi Codex yayında.</h3>
         <p class="proof">Ekibiniz ve Codex ajanları artık tek bir canlı tuval üzerinde birlikte tasarlıyor.</p>
         <div class="killstrip">CAN THEY KILL <span class="brand-target"><img src="/launch-week/figma-icon.svg" alt="Figma" loading="lazy" decoding="async" width="24" height="24"> FIGMA?</span></div>
@@ -833,7 +833,7 @@ export const LW_DROP_MARKUP: Record<string, string[]> = {
         <span data-status>SIRADAKİ</span>
       </div>
       <div class="drop-content">
-        <span class="drop-code">OPEN DESIGN TOPLULUK VİTRİNİ</span>
+        <span class="drop-code">OpenDesign TOPLULUK VİTRİNİ</span>
         <h3>Topluluk vitrini yayında.</h3>
         <p class="proof">Topluluğun bu hafta ürettiği her şey tek bir yerde. Başvurular bu gece kapanıyor.</p>
         <div class="killstrip">SO — DID WE KILL ANYTHING?</div>

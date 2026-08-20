@@ -155,6 +155,64 @@ describe('chat run service shutdown', () => {
     vi.useRealTimers();
   });
 
+  it('uses runtime usage attribution when the adapter has no message lifecycle', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      agentId: 'deepseek-harness',
+    }) as any;
+    run.model = 'default';
+    runs.emit(run, 'agent', {
+      type: 'usage',
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      usage: { input_tokens: 10, output_tokens: 2 },
+    });
+    runs.finish(run, 'succeeded', 0, null);
+
+    const diagnostics = runs.statusBody(run).executionDiagnostics;
+    expect(diagnostics?.environment).toMatchObject({
+      requestedModel: { state: 'available', value: 'default' },
+      provider: { state: 'available', value: 'deepseek-official' },
+      resolvedModel: { state: 'available', value: 'deepseek-v4-flash' },
+    });
+    expect(diagnostics?.assistantMessages.count).toMatchObject({
+      state: 'not_collected',
+      missingReason: 'assistant_message_lifecycle_not_exposed_by_runtime',
+    });
+  });
+
+  it('keeps lifecycle attribution ahead of the usage fallback', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      agentId: 'amr',
+    }) as any;
+    runs.emit(run, 'agent', {
+      type: 'usage',
+      provider: 'usage-provider',
+      model: 'usage-model',
+      usage: { input_tokens: 10, output_tokens: 2 },
+    });
+    runs.emit(run, 'agent', {
+      type: 'diagnostic',
+      name: 'assistant_message_lifecycle',
+      phase: 'end',
+      status: 'completed',
+      assistantMessageIndex: 1,
+      provider: 'lifecycle-provider',
+      model: 'lifecycle-model',
+    });
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run).executionDiagnostics?.environment).toMatchObject({
+      provider: { state: 'available', value: 'lifecycle-provider' },
+      resolvedModel: { state: 'available', value: 'lifecycle-model' },
+    });
+  });
+
   it('keeps model-step percentiles unavailable until the documented sample minimum', () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1', agentId: 'amr' }) as any;
@@ -531,19 +589,28 @@ describe('chat run service shutdown', () => {
         order.push(signal);
         return originalKill(signal);
       });
-      const abort = vi.fn(() => order.push('abort'));
       const run = runs.create();
       run.status = 'running';
+      run.stdinOpen = true;
       (run as any).child = child;
-      (run as any).acpSession = { abort };
+      (run as any).acpSession = {
+        abort: vi.fn(() => {
+          order.push('abort');
+          expect(child.stdin.end).not.toHaveBeenCalled();
+          expect(run.stdinOpen).toBe(true);
+        }),
+      };
 
       const cancelPromise = runs.cancel(run);
 
-      expect(abort).toHaveBeenCalledTimes(1);
+      expect((run as any).acpSession.abort).toHaveBeenCalledTimes(1);
       expect(order).toEqual(['abort']);
+      expect(child.stdin.end).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(30);
       expect(order).toEqual(['abort', 'SIGTERM']);
+      expect(child.stdin.end).toHaveBeenCalledTimes(1);
+      expect(run.stdinOpen).toBe(false);
 
       await vi.advanceTimersByTimeAsync(30);
       expect(order).toEqual(['abort', 'SIGTERM', 'SIGKILL']);
@@ -861,15 +928,21 @@ describe('chat run service shutdown', () => {
   it('uses adapter abort before process signals for ACP-style runs', async () => {
     const runs = createRuns();
     const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
-    const abort = vi.fn();
     const run = runs.create();
     run.status = 'running';
+    run.stdinOpen = true;
     (run as any).child = child;
-    (run as any).acpSession = { abort };
+    (run as any).acpSession = {
+      abort: vi.fn(() => {
+        expect(child.stdin.end).not.toHaveBeenCalled();
+        expect(run.stdinOpen).toBe(true);
+      }),
+    };
 
     await runs.shutdownActive({ graceMs: 10 });
 
-    expect(abort).toHaveBeenCalledTimes(1);
+    expect((run as any).acpSession.abort).toHaveBeenCalledTimes(1);
+    expect(child.lifecycle.slice(0, 2)).toEqual(['stdin.end', 'SIGTERM']);
     expect(child.signals).toEqual(['SIGTERM']);
     expect(run.status).toBe('canceled');
   });

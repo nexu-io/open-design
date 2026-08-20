@@ -49,6 +49,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: MacPa
     `${JSON.stringify(
       {
         auditReportPath: paths.webStandaloneHookAuditPath,
+        hyperframesRuntimeSourceRoot: paths.assembledAppRoot,
         pruneCopiedSharp: true,
         pruneRootNext: true,
         pruneRootSharp: true,

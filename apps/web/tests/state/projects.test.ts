@@ -20,6 +20,7 @@ import {
   installPluginSource,
   listPlugins,
   listPluginsFresh,
+  listMessages,
   invalidatePluginCatalogCache,
   listProjects,
   listWorkspaceProjectSummaries,
@@ -82,6 +83,106 @@ function teamWorkspaceContext(
     ...overrides,
   };
 }
+
+describe('listMessages', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('rejects a failed read instead of reporting an authoritative empty transcript', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      error: {
+        code: 'WORKSPACE_CONTEXT_REQUIRED',
+        message: 'workspace context is required',
+        retryable: true,
+      },
+    }, { status: 401 })));
+
+    await expect(listMessages('project-1', 'conversation-1')).rejects.toMatchObject({
+      name: 'ProjectMessageListError',
+      status: 401,
+      code: 'WORKSPACE_CONTEXT_REQUIRED',
+      retryable: true,
+      message: 'workspace context is required',
+    });
+  });
+});
+
+describe('createProject local plugin identity', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('preserves the selected local plugin source in the create payload', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
+      project: {
+        id: 'project-local-plugin',
+        name: 'Local plugin project',
+        skillId: null,
+        designSystemId: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      conversationId: 'conversation-1',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createProject({
+      name: 'Local plugin project',
+      skillId: null,
+      designSystemId: null,
+      pluginId: 'shared-plugin-id',
+      pluginSource: 'team:plugin:workspace-a:shared-plugin-id',
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      pluginId: 'shared-plugin-id',
+      pluginSource: 'team:plugin:workspace-a:shared-plugin-id',
+    });
+  });
+
+  it('preserves selected local resource catalogue scopes without adding Workspace headers', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
+      project: {
+        id: 'project-local-resources',
+        name: 'Local resource project',
+        skillId: 'workspace-skill',
+        designSystemId: 'user:workspace-brand',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      conversationId: 'conversation-1',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createProject({
+      name: 'Local resource project',
+      skillId: 'workspace-skill',
+      skillCatalogScope: {
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      },
+      designSystemId: 'user:workspace-brand',
+      designSystemCatalogScope: {
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      },
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(new Headers(init?.headers).has('x-od-workspace-id')).toBe(false);
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      skillCatalogScope: {
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      },
+      designSystemCatalogScope: {
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      },
+    });
+  });
+});
 
 describe('createConversation', () => {
   afterEach(() => {
@@ -293,6 +394,59 @@ describe('applyPlugin', () => {
       grantCaps: [],
       locale: 'zh-CN',
     });
+  });
+
+  it('uses the selected local source without Workspace headers', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ ok: true }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await applyPlugin('shared-plugin-id', {
+      pluginSource: 'team:plugin:workspace-a:shared-plugin-id',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('/api/plugins/shared-plugin-id/apply-local');
+    expect(new Headers(init?.headers).has('x-od-workspace-id')).toBe(false);
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      source: 'team:plugin:workspace-a:shared-plugin-id',
+      inputs: {},
+      grantCaps: [],
+    });
+  });
+
+  it('does not let an old daemon substitute an exact selected source', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith('/apply-local')) return new Response('not found', { status: 404 });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(applyPlugin('bundled-plugin', {
+      pluginSource: 'bundled:bundled-plugin',
+    })).resolves.toBeNull();
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/plugins/bundled-plugin/apply-local',
+    ]);
+  });
+
+  it('does not fall back when the new local resolver rejects a source', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: 'plugin not found' }),
+      { status: 404, headers: { 'x-od-plugin-apply-local': '1' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(applyPlugin('shared-plugin-id', {
+      pluginSource: 'team:plugin:workspace-a:shared-plugin-id',
+    })).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('scopes same-id plugin apply requests to the exact A/B workspace', async () => {

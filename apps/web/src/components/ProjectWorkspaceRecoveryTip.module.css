@@ -1,0 +1,15 @@
+.root {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 200;
+  width: min(260px, calc(100vw - 24px));
+  padding: 4px 0;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}

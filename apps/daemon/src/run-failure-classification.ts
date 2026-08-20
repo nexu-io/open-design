@@ -6,6 +6,7 @@ import type {
   TrackingRunFailureUserAction,
   TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
+import { isModelWindowLimitFailure } from '@open-design/contracts';
 
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
@@ -281,8 +282,11 @@ function promptTooLargeDetail(text: string): TrackingRunFailureDetail | null {
   }
   // `prefill context too large` is the local-runtime (MLX) shape of the same
   // "the prompt does not fit" failure that currently leaks into execution_failed.
+  // Claude Code's terminal result uses the distinct literal `Prompt is too
+  // long`; keep it here as a fallback for persisted or legacy failures that
+  // do not carry the structured AGENT_PROMPT_TOO_LARGE code.
   if (
-    /\b(context window|context size (?:has been )?exceeded|prompt too large|request_too_large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i.test(text)
+    /\b(context window|context size (?:has been )?exceeded|prompt too large|prompt is too long|request_too_large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i.test(text)
   ) {
     return 'prompt_too_large';
   }
@@ -842,6 +846,19 @@ function classifyRunFailureBase(
   }
 
   if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || isHardQuotaText(text) || isRateLimitText(text)) {
+    // Checked BEFORE the hard-quota reading: vela phrases its rolling per-model
+    // window as "…usage limit…", which `isHardQuotaText` matches, so without
+    // this branch a self-resetting window is reported as an exhausted quota —
+    // non-retryable, and counted against reliability as a real failure.
+    if (isModelWindowLimitFailure(text)) {
+      return classification(
+        'rate_limit',
+        'model_window_limit',
+        'session_init',
+        true,
+        'retry',
+      );
+    }
     const hardQuota = isHardQuotaText(text);
     const workspaceCredits = isWorkspaceCreditsText(text);
     const retryable = hardQuota ? false : (retryableHint ?? true);

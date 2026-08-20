@@ -504,6 +504,7 @@ export function scanRunEventsForUsageAnalytics(
           usage?: Record<string, unknown> | null;
           modelUsage?: Record<string, unknown> | null;
           label?: string;
+          provider?: unknown;
           model?: unknown;
           detail?: unknown;
         }
@@ -576,6 +577,20 @@ export function scanRunEventsForUsageAnalytics(
           cacheReadInputTokens !== undefined &&
           cacheCreationInputTokens !== undefined;
       }
+    }
+
+    if (
+      !agentReportedModel &&
+      ev?.event === 'agent' &&
+      data?.type === 'usage' &&
+      typeof data.model === 'string' &&
+      data.model.trim()
+    ) {
+      const model = data.model.trim();
+      const provider = typeof data.provider === 'string' ? data.provider.trim() : '';
+      agentReportedModel = provider && !model.includes('/')
+        ? `${provider}/${model}`
+        : model;
     }
 
     if (

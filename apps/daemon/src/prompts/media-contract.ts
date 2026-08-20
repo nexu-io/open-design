@@ -50,13 +50,24 @@ localized sentence and nothing else:
 
 - Success: say the localized equivalent of "Image generated". For Simplified
   Chinese, reply exactly \`图片已生成\`.
-- Failure, including a placeholder/stub outcome: say the localized equivalent
-  of "The image generation service is temporarily unavailable". For Simplified
-  Chinese, reply exactly \`图片生成服务暂时不可用\`.
+- Refused by a content safety policy — the structured result's error \`code\` is
+  \`safety_rejection\`: say the localized equivalent of "The image was not
+  generated because a content safety policy refused the request". For
+  Simplified Chinese, reply exactly \`图片未生成：内容安全策略拒绝了该请求\`.
+- A structured provider error — the result contains a non-empty error \`code\`
+  and \`message\`: include both safe fields so the user can understand the
+  actual failure. For Simplified Chinese, reply exactly
+  \`图片未生成：{message}（错误代码：{code}）\`, substituting the returned values.
+- Any other failure, including a placeholder/stub outcome: say the localized
+  equivalent of "The image generation service is temporarily unavailable". For
+  Simplified Chinese, reply exactly \`图片生成服务暂时不可用\`.
 
-Do not add a filename, model, provider, reason, remediation, retry offer, or
-follow-up question. Use the command's structured result only to choose success
-versus failure; retain its original diagnostics in the tool trace for debugging.`;
+A provider verdict is not automatically an outage. Use its structured code
+and message without reclassifying either one from wording or HTTP status.
+
+Do not add a filename, model, provider, remediation, retry offer, or follow-up
+question. For a structured provider error, expose only its safe \`message\` and
+\`code\`; retain all other diagnostics in the tool trace for debugging.`;
 
 export function renderMediaGenerationContract(
   mediaExecution?: MediaExecutionPolicy | undefined,
@@ -73,7 +84,7 @@ export function renderMediaGenerationContract(
 
 ## Media generation policy (load-bearing — overrides softer wording above)
 
-Open Design-owned media execution is **disabled for this run**. Do not call
+OpenDesign-owned media execution is **disabled for this run**. Do not call
 \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, OD media provider APIs, local
 renderers, or ad-hoc scripts that create media bytes on
 OD's behalf.
@@ -219,7 +230,7 @@ A size or tier the user names IS that ask, in any language — "2K", "1k",
 "high quality", "高质量". Map it onto \`--resolution\` / \`--quality\`;
 restating it inside the prompt text does not reach the provider.
 
-Open Design Cloud image and video models use the \`vela/*\` catalogue prefix.
+OpenDesign Cloud image and video models use the \`vela/*\` catalogue prefix.
 Always invoke those models through \`"$OD_NODE_BIN" "$OD_BIN" media generate\`.
 Never invoke the \`vela\` CLI directly and never call its remote media API.
 The daemon owns model routing, trusted Workspace attribution, task polling,
@@ -263,7 +274,7 @@ capture. The daemon process is unsandboxed and renders reliably AND
 streams per-line progress to your stderr (so the user sees frame
 counts in chat instead of a silent spinner).
 
-**Default recipe — use \`hyperframes init\`, don't write from scratch.**
+**Default recipe — use Open Design's scaffold, don't write from scratch.**
 For most OD requests ("test video", "5s product reveal", "demo clip"),
 authoring an HF composition from zero costs minutes of model output and
 silent chat-tool time. The init scaffold gives you a valid GSAP-ready
@@ -274,8 +285,8 @@ actually changes.
 COMP_REL=".hyperframes-cache/$(date +%s)-$(openssl rand -hex 2)"
 COMP="$OD_PROJECT_DIR/$COMP_REL"
 
-# Pure file copy, no Chrome — works in any agent shell.
-npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
+# Open Design writes the required files itself; HyperFrames init is never run.
+"$OD_NODE_BIN" "$OD_BIN" media scaffold --project "$OD_PROJECT_ID" --composition-dir "$COMP_REL"
 
 # Edit ONLY $COMP/index.html: tweak data-duration on the root, swap
 # the placeholder palette, add 1–3 clip <div>s, and append matching
@@ -302,10 +313,11 @@ The chat surfaces the mp4 as a download/open chip automatically. Keep
 Only write the composition HTML from scratch when the user explicitly
 needs something the blank template clearly can't host (multi-comp
 timelines, audio-reactive visuals, TTS-synced captions on an existing
-track). For typical test renders, the init+edit path is the default.
+track). For typical test renders, the scaffold+edit path is the default.
 
-You MAY still run lighter HF subcommands from your own shell:
-\`npx hyperframes lint "$COMP"\`, \`transcribe\`, \`tts\` — none of
+You MAY still run lighter HF subcommands from your own shell through
+\`"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN"\`: \`lint "$COMP"\`, \`transcribe\`,
+\`tts\` — none of
 these spawn Chrome so the agent-side sandbox doesn't trip them.
 Reserve the daemon dispatch for anything Chrome-bound (\`render\`,
 \`inspect\`, \`preview\`).
@@ -466,10 +478,10 @@ path is given.
 
    For \`hyperframes-html\`, the discovery turn is the last turn before
    you start authoring. Once the user answers, create the composition
-   with \`npx hyperframes init\` under \`.hyperframes-cache/\`, edit the
+   with \`"$OD_NODE_BIN" "$OD_BIN" media scaffold\` under \`.hyperframes-cache/\`, edit the
    generated \`index.html\`, and dispatch through
    \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>\`.
-   Do not run \`npx hyperframes render\` yourself; Chrome-bound rendering
+   Do not run HyperFrames \`render\` yourself; Chrome-bound rendering
    must happen in the daemon process. Do not add a second "plan" or
    "environment check" message first.
 3. **Generate by shell, then follow the user-facing completion contract.** When you invoke

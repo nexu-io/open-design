@@ -203,6 +203,8 @@ function summarizeAssistantMessageEvents(events) {
   let upstreamErrorCount = 0;
   let provider;
   let model;
+  let usageProvider;
+  let usageModel;
   let fallbackOrdinal = 0;
   const countErrorClass = (value) => {
     if (value === 'rate_limited') rateLimitedCount += 1;
@@ -212,6 +214,15 @@ function summarizeAssistantMessageEvents(events) {
   for (const record of events) {
     if (record?.event !== 'agent' || !record.data || typeof record.data !== 'object') continue;
     const data = record.data;
+    if (data.type === 'usage') {
+      if (typeof data.provider === 'string' && data.provider.trim()) {
+        usageProvider = data.provider.trim();
+      }
+      if (typeof data.model === 'string' && data.model.trim()) {
+        usageModel = data.model.trim();
+      }
+      continue;
+    }
     if (data.type !== 'diagnostic') continue;
     if (data.name === 'model_retry') {
       retryCount += 1;
@@ -282,8 +293,8 @@ function summarizeAssistantMessageEvents(events) {
     rateLimitedCount,
     timeoutCount,
     upstreamErrorCount,
-    provider,
-    model,
+    provider: provider ?? usageProvider,
+    model: model ?? usageModel,
   };
 }
 
@@ -1429,8 +1440,8 @@ export function createChatRunService({
     run.cancelOrigin = origin;
     run.updatedAt = Date.now();
     clearPendingRetryRestart(run);
-    closeRunStdin(run);
     if (!run.child) {
+      closeRunStdin(run);
       finish(run, 'canceled', null, 'SIGTERM');
       return statusBody(run);
     }
@@ -1448,6 +1459,7 @@ export function createChatRunService({
       if (await waitForCanceledChildExit(run, graceMs)) {
         return finishCanceledFromChildState(run, 'SIGTERM');
       }
+      closeRunStdin(run);
       killChild(run, 'SIGTERM');
       if (await waitForCanceledChildExit(run, graceMs)) {
         return finishCanceledFromChildState(run, 'SIGTERM');
@@ -1457,6 +1469,7 @@ export function createChatRunService({
       return finishCanceledFromChildState(run, 'SIGKILL');
     }
 
+    closeRunStdin(run);
     killChild(run, 'SIGTERM');
     if (await waitForCanceledChildExit(run, cancelGraceMs())) {
       return finishCanceledFromChildState(run, 'SIGTERM');
@@ -1473,7 +1486,6 @@ export function createChatRunService({
       run.cancelOrigin = 'daemon_shutdown';
       run.updatedAt = Date.now();
       clearPendingRetryRestart(run);
-      closeRunStdin(run);
       if (run.acpSession?.abort) {
         try {
           run.acpSession.abort();
@@ -1481,6 +1493,7 @@ export function createChatRunService({
           // Process signals below are the shutdown fallback.
         }
       }
+      closeRunStdin(run);
       killChild(run, 'SIGTERM');
       finish(run, 'canceled', null, 'SIGTERM');
       if (run.child && !(await waitForChildExit(run.child, graceMs))) {

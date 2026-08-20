@@ -14,7 +14,14 @@
  *   { type: 'od:slide-state', active: number, count: number }
  * after every navigation so the host can render its own counter / dots.
  */
-import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
+import {
+  DECK_EXPLICIT_SLIDE_SELECTOR,
+  DECK_LEGACY_SCREEN_LABEL_RE_SOURCE,
+  DECK_LEGACY_SCREEN_SLIDE_SELECTOR,
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+  injectDeckStageFallback,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
 import { buildPreviewObservabilityBridge } from '@open-design/contracts/runtime/preview-observability';
 
 import {
@@ -24,6 +31,7 @@ import {
   MANUAL_EDIT_DISCOVERY_SELECTOR,
   MANUAL_EDIT_SOURCE_PATH_ATTR,
 } from '../edit-mode/bridge';
+import { isApprovedFontStylesheetHref } from './deck-thumbnail-parser';
 
 export type SrcdocOptions = {
   deck?: boolean;
@@ -41,6 +49,9 @@ export type SrcdocOptions = {
   /** Install the live-preview error and white-screen reporting bridge. Keep
    * this disabled for exports, captures, thumbnails, and historical previews. */
   previewObservability?: boolean;
+  /** Let trusted font-CDN stylesheets load without blocking the live preview's
+   * first paint. Keep disabled for exports and other capture surfaces. */
+  deferFontStylesheets?: boolean;
   /**
    * Force every CSS animation/transition to complete instantly so the
    * document settles at its final visual state and stops repainting. Meant
@@ -388,7 +399,10 @@ export function buildSrcdoc(
   const withOdIds = annotateMissingOdIds(withSafeTitle);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
-  const withShim = injectSandboxShim(withBase);
+  const withDeferredFonts = options.deferFontStylesheets
+    ? deferTrustedFontStylesheets(withBase)
+    : withBase;
+  const withShim = injectSandboxShim(withDeferredFonts);
   const blockLoadTimeScriptRedirect = htmlHasLoadTimeLocationNavigation(withBase);
   // Always on: a redirect loop can freeze ANY previewed artifact, and the guard
   // is inert on documents that never self-redirect. Injected right after the
@@ -529,20 +543,57 @@ export function canActivateSrcDocTransport(state: SrcDocActivationInputs): boole
 
 function injectSrcdocTransportActivationBridge(doc: string, generation: string): string {
   const encodedGeneration = JSON.stringify(generation);
+  const markerGeneration = generation
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
   const script = `<script data-od-srcdoc-transport-activation>(function(){
   var generation = ${encodedGeneration};
-  function announceReady(){
+  var bodyComplete = false;
+  function containsCompletionMarker(node){
+    if (!node || node.nodeType !== 1) return false;
+    if (node.tagName === 'TEMPLATE' && node.getAttribute('data-od-srcdoc-transport-body-complete') === generation) return true;
+    var candidates = node.querySelectorAll ? node.querySelectorAll('template[data-od-srcdoc-transport-body-complete]') : [];
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (candidates[i].getAttribute('data-od-srcdoc-transport-body-complete') === generation) return true;
+    }
+    return false;
+  }
+  var completionObserver = typeof MutationObserver === 'function' ? new MutationObserver(function(records){
+    if (bodyComplete) return;
+    for (var i = 0; i < records.length; i += 1) {
+      var added = records[i].addedNodes || [];
+      for (var j = 0; j < added.length; j += 1) {
+        if (!containsCompletionMarker(added[j])) continue;
+        bodyComplete = true;
+        completionObserver.disconnect();
+        return;
+      }
+    }
+  }) : null;
+  if (completionObserver && document.documentElement) {
+    completionObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
+  function announceReady(probeId){
     if (!generation) return;
     try {
       if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'od:srcdoc-transport-activated', generation: generation }, '*');
+        var message = { type: 'od:srcdoc-transport-activated', generation: generation };
+        if (typeof probeId === 'string' && probeId) message.probeId = probeId;
+        message.bodyComplete = bodyComplete;
+        message.documentReadyState = document.readyState;
+        message.bodyPresent = !!document.body;
+        message.bodyChildCount = document.body ? document.body.children.length : 0;
+        message.documentElementChildCount = document.documentElement ? document.documentElement.children.length : 0;
+        window.parent.postMessage(message, '*');
       }
     } catch (_) { /* sandboxed parent */ }
   }
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (data && data.type === 'od:srcdoc-transport-ready-probe') {
-      if (data.generation === generation) announceReady();
+      if (data.generation === generation) announceReady(data.probeId);
       return;
     }
     if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;
@@ -558,7 +609,13 @@ function injectSrcdocTransportActivationBridge(doc: string, generation: string):
   // missing-ACK recovery indistinguishable from a genuinely aborted
   // `about:srcdoc` navigation. Placing the bridge first also runs it before an
   // authored meta CSP can disable later inline scripts.
-  return injectAfterHeadOpen(doc, script);
+  // The generation-specific inert tail marker distinguishes a fully parsed artifact from the
+  // half-document Chromium can leave behind after aborting about:srcdoc. The
+  // head bridge latches its insertion permanently, so later authored DOM
+  // replacement cannot erase the parser witness. A template is inert and
+  // remains compatible with authored CSPs.
+  const bodyCompleteMarker = `<template data-od-srcdoc-transport-body-complete="${markerGeneration}"></template>`;
+  return injectBeforeBodyEnd(injectAfterHeadOpen(doc, script), bodyCompleteMarker);
 }
 
 function injectSnapshotBridge(doc: string): string {
@@ -1206,7 +1263,7 @@ function serializeHtmlDocument(doc: Document): string {
  * Auto-annotate structural HTML elements that lack `data-od-id` or
  * `data-screen-label` so that the selection bridge (Picker / Pods /
  * Tweaks) can target them. This fixes imported designs whose HTML was
- * generated outside of Open Design and therefore carries no OD-specific
+ * generated outside of OpenDesign and therefore carries no OD-specific
  * annotations.
  */
 function annotateMissingOdIds(doc: string): string {
@@ -1249,6 +1306,62 @@ function injectManualEditBridge(doc: string): string {
   const withGuard = injectAfterHeadOpen(doc, buildManualEditKeyboardGuard());
   const withStyle = injectBeforeHeadEnd(withGuard, buildManualEditBridgeStyle());
   return injectBeforeBodyEnd(withStyle, buildManualEditBridge(false));
+}
+
+const DEFERRED_FONT_STYLESHEET_ATTR = 'data-od-deferred-font-stylesheet';
+
+function deferTrustedFontStylesheets(doc: string): string {
+  if (typeof DOMParser === 'undefined') return doc;
+  let parsed: Document;
+  try {
+    parsed = new DOMParser().parseFromString(doc, 'text/html');
+  } catch {
+    return doc;
+  }
+
+  let deferred = false;
+  parsed.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"][href]').forEach((link) => {
+    const href = link.getAttribute('href') ?? '';
+    if (!isApprovedFontStylesheetHref(href)) return;
+    const authoredMedia = link.getAttribute('media')?.trim() ?? '';
+    if (authoredMedia.toLowerCase() === 'print') return;
+    link.setAttribute(DEFERRED_FONT_STYLESHEET_ATTR, authoredMedia);
+    link.setAttribute('media', 'print');
+    deferred = true;
+  });
+  if (!deferred) return doc;
+
+  const script = `<script data-od-font-stylesheet-loader>(function(){
+  var attr = '${DEFERRED_FONT_STYLESHEET_ATTR}';
+  var selector = 'link[' + attr + ']';
+  function activate(link){
+    if (!link || !link.hasAttribute(attr)) return;
+    var media = link.getAttribute(attr) || 'all';
+    link.setAttribute('media', media);
+    link.removeAttribute(attr);
+  }
+  function watch(link){
+    if (!link || link.__odFontStylesheetWatched) return;
+    link.__odFontStylesheetWatched = true;
+    link.addEventListener('load', function(){ activate(link); }, { once: true });
+    try { if (link.sheet) activate(link); } catch (_) {}
+  }
+  function scan(root){
+    if (!root) return;
+    if (root.matches && root.matches(selector)) watch(root);
+    var links = root.querySelectorAll ? root.querySelectorAll(selector) : [];
+    for (var i = 0; i < links.length; i += 1) watch(links[i]);
+  }
+  var observer = typeof MutationObserver === 'function' ? new MutationObserver(function(records){
+    for (var i = 0; i < records.length; i += 1) {
+      var added = records[i].addedNodes || [];
+      for (var j = 0; j < added.length; j += 1) scan(added[j]);
+    }
+  }) : null;
+  if (observer && document.documentElement) observer.observe(document.documentElement, { childList: true, subtree: true });
+  scan(document);
+})();</script>`;
+  return injectAfterHeadOpen(serializeHtmlDocument(parsed), script);
 }
 
 function injectAfterHeadOpen(doc: string, payload: string): string {
@@ -2820,6 +2933,9 @@ function injectDeckBridge(
   const hasInlineSlideMessageListener =
     /addEventListener\s*\(\s*['"]message['"]/i.test(doc) && /\bod:slide\b/.test(doc);
   const hasInlineKeydownListener = !!options.artifactHasKeydownNavigation;
+  const hasInlineHashNavigation =
+    /(?:hashchange|onhashchange)/i.test(doc) && /location\.hash/i.test(doc);
+  const inlineHashIndexPrefix = /['"`]#\/['"`]/.test(doc) ? '#/' : '#';
   const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
   const clickNavigation = !!options.clickNavigation && !isFrameworkDeck;
   // Framework decks (`id="deck-stage"`) get the inverse fix. Their skeleton
@@ -2880,24 +2996,109 @@ function injectDeckBridge(
     }, true);
   }
   window.__odDeckBridgeOwnListenerInstall = false;
+  function deckStageSlides(stage){
+    if (!stage) return [];
+    var nested = stage.querySelectorAll(${JSON.stringify(DECK_SLIDE_SELECTOR)});
+    var direct = [];
+    for (var i = 0; i < nested.length; i++) {
+      if (nested[i].parentElement === stage) direct.push(nested[i]);
+    }
+    return direct.length ? direct : nested;
+  }
+  function legacyScreenSlides(){
+    var candidates = document.querySelectorAll(${JSON.stringify(DECK_LEGACY_SCREEN_SLIDE_SELECTOR)});
+    var labelRe = new RegExp(${JSON.stringify(DECK_LEGACY_SCREEN_LABEL_RE_SOURCE)}, 'i');
+    var groups = [];
+    for (var i = 0; i < candidates.length; i++) {
+      var match = labelRe.exec(candidates[i].getAttribute('data-screen-label') || '');
+      if (!match || !candidates[i].parentNode) continue;
+      var group = null;
+      for (var j = 0; j < groups.length; j++) {
+        if (groups[j].parent === candidates[i].parentNode) { group = groups[j]; break; }
+      }
+      if (!group) {
+        group = { parent: candidates[i].parentNode, slides: [], numbers: {} };
+        groups.push(group);
+      }
+      group.slides.push(candidates[i]);
+      group.numbers[String(Number(match[1]))] = true;
+    }
+    var best = [];
+    for (var k = 0; k < groups.length; k++) {
+      if (Object.keys(groups[k].numbers).length > 1 && groups[k].slides.length > best.length) {
+        best = groups[k].slides;
+      }
+    }
+    return best;
+  }
   function slides(){
-    // Structured selectors first so decorative .slide markup in non-deck
-    // pages (icons, badges, code samples) is not counted as deck slides;
-    // fall back to all .slide only when nothing structured matched, so
-    // freeform decks that nest slides under an extra wrapper still report
-    // the real count instead of leaving the host counter at 1 / 0.
-    var structured = document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
+    // An explicit deck-stage owns its descendants, so unrelated annotated
+    // screens elsewhere in the document cannot leak into its count. Otherwise
+    // prefer direct children of recognized legacy containers before falling
+    // back to every supported persisted slide marker.
+    var stageSlides = deckStageSlides(document.querySelector('deck-stage'));
+    if (stageSlides.length) return stageSlides;
+    var structured = document.querySelectorAll(${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)});
     if (structured.length) return structured;
-    return document.querySelectorAll('.slide');
+    var explicit = document.querySelectorAll(${JSON.stringify(DECK_EXPLICIT_SLIDE_SELECTOR)});
+    if (explicit.length) return explicit;
+    return legacyScreenSlides();
   }
-  function scrollOverflow(el){
+  function deckStageForSlides(list){
+    var stage = document.querySelector('deck-stage');
+    if (!stage) return null;
+    if (list && list.length && !stage.contains(list[0])) return null;
+    return stage;
+  }
+  function activeIndexFromDeckStage(list){
+    var stage = deckStageForSlides(list);
+    if (!stage) return -1;
+    var index = Number(stage.index);
+    if (!Number.isFinite(index)) return -1;
+    index = Math.floor(index);
+    return index >= 0 && index < list.length ? index : -1;
+  }
+  function navigateViaDeckStage(list, action, index){
+    if (!list.length) return false;
+    var stage = deckStageForSlides(list);
+    if (!stage) return false;
+    try {
+      if (action === 'go' && typeof index === 'number' && typeof stage.goTo === 'function') {
+        stage.goTo(index);
+      } else if (action === 'next' && typeof stage.next === 'function') {
+        stage.next();
+      } else if (action === 'prev' && typeof stage.prev === 'function') {
+        stage.prev();
+      } else if (action === 'first' && typeof stage.reset === 'function') {
+        stage.reset();
+      } else if (action === 'first' && typeof stage.goTo === 'function') {
+        stage.goTo(0);
+      } else if (action === 'last' && typeof stage.goTo === 'function') {
+        stage.goTo(list.length - 1);
+      } else {
+        return false;
+      }
+      // Public deck-stage methods are synchronous in the authored runtime.
+      // Report here for older implementations that do not emit slidechange;
+      // modern implementations also emit the event and are harmlessly
+      // coalesced by React state equality in the host.
+      report();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  function scrollOverflow(el, axis){
     if (!el) return 0;
-    return Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+    return axis === 'y'
+      ? Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0))
+      : Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
   }
-  function overflowMode(el){
+  function overflowMode(el, axis){
     if (!el || !window.getComputedStyle) return '';
     try {
-      return String(window.getComputedStyle(el).overflowX || '').toLowerCase();
+      var style = window.getComputedStyle(el);
+      return String(axis === 'y' ? style.overflowY : style.overflowX || '').toLowerCase();
     } catch (_) {
       return '';
     }
@@ -2915,14 +3116,14 @@ function injectDeckBridge(
       el === document.body
     );
   }
-  function rootScrollerClipped(){
-    return isClippedOverflowMode(overflowMode(document.documentElement)) ||
-      isClippedOverflowMode(overflowMode(document.body));
+  function rootScrollerClipped(axis){
+    return isClippedOverflowMode(overflowMode(document.documentElement, axis)) ||
+      isClippedOverflowMode(overflowMode(document.body, axis));
   }
-  function scrollLeftOf(el){
+  function scrollOffsetOf(el, axis){
     if (!el) return 0;
     try {
-      return Number(el.scrollLeft) || 0;
+      return Number(axis === 'y' ? el.scrollTop : el.scrollLeft) || 0;
     } catch (_) {
       return 0;
     }
@@ -2939,31 +3140,78 @@ function injectDeckBridge(
     add(document.body);
     return targets;
   }
-  function maxScrollLeft(){
+  function nestedScrollTargets(list){
+    var targets = [];
+    if (!list || !list.length) return targets;
+    var node = list[0] && list[0].parentElement;
+    while (node && !isRootScrollContainer(node)) {
+      var containsAll = true;
+      for (var i=1; i<list.length; i++) {
+        if (!node.contains(list[i])) { containsAll = false; break; }
+      }
+      if (containsAll) targets.push(node);
+      node = node.parentElement;
+    }
+    return targets;
+  }
+  function maxRootScrollOffset(axis){
     var targets = scrollTargets();
-    var value = 0;
+    var value = axis === 'y'
+      ? Number(window.scrollY || window.pageYOffset || 0)
+      : Number(window.scrollX || window.pageXOffset || 0);
     for (var i=0; i<targets.length; i++) {
-      value = Math.max(value, Number(targets[i].scrollLeft || 0));
+      value = Math.max(value, scrollOffsetOf(targets[i], axis));
     }
     return value;
   }
-  function hasHorizontalScroll(){
-    var targets = scrollTargets();
-    for (var i=0; i<targets.length; i++) {
-      if (targets[i].scrollWidth > targets[i].clientWidth + 1) return true;
+  function deckAxisOrder(list){
+    var minX = Infinity;
+    var maxX = -Infinity;
+    var minY = Infinity;
+    var maxY = -Infinity;
+    for (var i=0; list && i<list.length; i++) {
+      try {
+        var rect = list[i].getBoundingClientRect();
+        var x = Number(rect.left);
+        var y = Number(rect.top);
+        if (Number.isFinite(x)) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+        if (Number.isFinite(y)) { minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+      } catch (_) {}
     }
-    return false;
+    var xSpan = Number.isFinite(minX) && Number.isFinite(maxX) ? maxX - minX : 0;
+    var ySpan = Number.isFinite(minY) && Number.isFinite(maxY) ? maxY - minY : 0;
+    if (ySpan > 1 && ySpan > xSpan) return ['y', 'x'];
+    return ['x', 'y'];
   }
-  function isScrollDeck(){
-    var targets = scrollTargets();
-    for (var i=0; i<targets.length; i++) {
-      var candidate = targets[i];
-      if (scrollOverflow(candidate) <= 1) continue;
-      var mode = overflowMode(candidate);
-      if (isScrollableOverflowMode(mode)) return true;
-      if (isRootScrollContainer(candidate) && !isClippedOverflowMode(mode) && !rootScrollerClipped()) return true;
+  function scrollDeckTarget(list){
+    var axes = deckAxisOrder(list);
+    var nested = nestedScrollTargets(list);
+    for (var n=0; n<nested.length; n++) {
+      for (var a=0; a<axes.length; a++) {
+        var nestedAxis = axes[a];
+        if (scrollOverflow(nested[n], nestedAxis) <= 1) continue;
+        if (isScrollableOverflowMode(overflowMode(nested[n], nestedAxis))) {
+          return { axis: nestedAxis, element: nested[n], root: false };
+        }
+      }
     }
-    return false;
+    var targets = scrollTargets();
+    for (var a=0; a<axes.length; a++) {
+      var axis = axes[a];
+      for (var i=0; i<targets.length; i++) {
+        var candidate = targets[i];
+        if (scrollOverflow(candidate, axis) <= 1) continue;
+        var mode = overflowMode(candidate, axis);
+        if (isScrollableOverflowMode(mode)) return { axis: axis, element: candidate, root: true };
+        if (!isClippedOverflowMode(mode) && !rootScrollerClipped(axis)) {
+          return { axis: axis, element: candidate, root: true };
+        }
+      }
+    }
+    return null;
+  }
+  function isScrollDeck(list){
+    return !!scrollDeckTarget(list || slides());
   }
   function findActiveByClass(list){
     for (var i=0; i<list.length; i++) {
@@ -2981,12 +3229,52 @@ function injectDeckBridge(
     }
     return -1;
   }
+  function activeIndexFromScrollRects(list, scrollTarget){
+    var axis = scrollTarget.axis;
+    var origin = 0;
+    if (!scrollTarget.root) {
+      try {
+        var containerRect = scrollTarget.element.getBoundingClientRect();
+        origin = Number(axis === 'y' ? containerRect.top : containerRect.left) || 0;
+      } catch (_) {}
+    }
+    var best = -1;
+    var distance = Infinity;
+    var firstPosition = null;
+    var hasDistinctPosition = false;
+    for (var i=0; i<list.length; i++) {
+      try {
+        var rect = list[i].getBoundingClientRect();
+        var position = (Number(axis === 'y' ? rect.top : rect.left) || 0) - origin;
+        if (firstPosition === null) firstPosition = position;
+        else if (Math.abs(position - firstPosition) > 1) hasDistinctPosition = true;
+        var value = Math.abs(position);
+        if (value < distance) { distance = value; best = i; }
+      } catch (_) {}
+    }
+    return hasDistinctPosition ? best : -1;
+  }
+  var forcedScrollPageIndex = -1;
   function activeIndex(list){
     if (!list || !list.length) return 0;
-    if (isScrollDeck()) {
-      var w = Math.max(1, window.innerWidth);
-      return Math.max(0, Math.min(list.length - 1, Math.round(maxScrollLeft() / w)));
+    if (forcedScrollPageIndex >= 0) {
+      return Math.max(0, Math.min(list.length - 1, forcedScrollPageIndex));
     }
+    var scrollTarget = scrollDeckTarget(list);
+    if (scrollTarget) {
+      var byRect = activeIndexFromScrollRects(list, scrollTarget);
+      if (byRect >= 0) return byRect;
+      var axis = scrollTarget.axis;
+      var span = Math.max(1, scrollTarget.root
+        ? (axis === 'y' ? window.innerHeight : window.innerWidth)
+        : (axis === 'y' ? scrollTarget.element.clientHeight : scrollTarget.element.clientWidth));
+      var offset = scrollTarget.root
+        ? maxRootScrollOffset(axis)
+        : scrollOffsetOf(scrollTarget.element, axis);
+      return Math.max(0, Math.min(list.length - 1, Math.round(offset / span)));
+    }
+    var byDeckStage = activeIndexFromDeckStage(list);
+    if (byDeckStage >= 0) return byDeckStage;
     var byTransform = activeIndexFromTransform(list);
     if (byTransform >= 0) return byTransform;
     var byClass = findActiveByClass(list);
@@ -3100,10 +3388,22 @@ function injectDeckBridge(
   function updateDeckChrome(i, count){
     var cur = document.getElementById('deck-cur');
     var total = document.getElementById('deck-total');
+    var simpleCounter = document.getElementById('counter');
+    var simpleCounterParts = simpleCounter ? String(simpleCounter.textContent || '').split('/') : [];
     var prev = document.getElementById('deck-prev');
     var next = document.getElementById('deck-next');
     if (cur) cur.textContent = pad2(i + 1);
     if (total) total.textContent = pad2(count);
+    if (
+      simpleCounter &&
+      simpleCounterParts.length === 2 &&
+      simpleCounterParts[0].trim() !== '' &&
+      simpleCounterParts[1].trim() !== '' &&
+      Number.isFinite(Number(simpleCounterParts[0])) &&
+      Number.isFinite(Number(simpleCounterParts[1]))
+    ) {
+      simpleCounter.textContent = (i + 1) + ' / ' + count;
+    }
     if (prev) prev.toggleAttribute('disabled', i <= 0);
     if (next) next.toggleAttribute('disabled', i >= count - 1);
   }
@@ -3111,6 +3411,7 @@ function injectDeckBridge(
     var list = slides();
     if (!list.length) return false;
     var target = Math.max(0, Math.min(list.length - 1, i));
+    if (forcedScrollPageIndex >= 0) forcedScrollPageIndex = target;
     var activeClass = activeClassName(list);
     var usesInlineDisplay = false;
     var usesInlineVisibility = false;
@@ -3150,19 +3451,106 @@ function injectDeckBridge(
     report();
     return true;
   }
+  function forceScrollDeckPage(list, target, scrollTarget){
+    forcedScrollPageIndex = target;
+    var activeClass = activeClassName(list);
+    for (var i=0; i<list.length; i++) {
+      if (!list[i].hasAttribute('data-od-scroll-original-display')) {
+        list[i].setAttribute('data-od-scroll-original-display', list[i].style.display || '');
+      }
+      list[i].style.display = i === target
+        ? (list[i].getAttribute('data-od-scroll-original-display') || '')
+        : 'none';
+      if (list[i].classList) {
+        list[i].classList.remove('active', 'is-active', 'current');
+        if (i === target) list[i].classList.add(activeClass);
+      }
+    }
+    if (!scrollTarget || scrollTarget.root) {
+      try { window.scrollTo(0, 0); } catch (_) {}
+      var roots = scrollTargets();
+      for (var r=0; r<roots.length; r++) {
+        try { roots[r].scrollLeft = 0; roots[r].scrollTop = 0; } catch (_) {}
+      }
+    } else {
+      try { scrollTarget.element.scrollLeft = 0; scrollTarget.element.scrollTop = 0; } catch (_) {}
+    }
+    updateDeckChrome(target, list.length);
+    report(target);
+  }
   function scrollGo(i){
     var list = slides();
     var next = Math.max(0, Math.min(list.length - 1, i));
-    var left = next * window.innerWidth;
-    var targets = scrollTargets();
-    for (var t=0; t<targets.length; t++) {
+    var scrollTarget = scrollDeckTarget(list);
+    if (!scrollTarget) return;
+    var axis = scrollTarget.axis;
+    var span = Math.max(1, scrollTarget.root
+      ? (axis === 'y' ? window.innerHeight : window.innerWidth)
+      : (axis === 'y' ? scrollTarget.element.clientHeight : scrollTarget.element.clientWidth));
+    var offset = next * span;
+    try {
+      var firstRect = list[0].getBoundingClientRect();
+      var targetRect = list[next].getBoundingClientRect();
+      var firstPosition = Number(axis === 'y' ? firstRect.top : firstRect.left) || 0;
+      var targetPosition = Number(axis === 'y' ? targetRect.top : targetRect.left) || 0;
+      if (Math.abs(targetPosition - firstPosition) > 1) {
+        var current = scrollTarget.root
+          ? maxRootScrollOffset(axis)
+          : scrollOffsetOf(scrollTarget.element, axis);
+        var containerOrigin = 0;
+        if (!scrollTarget.root) {
+          var containerRect = scrollTarget.element.getBoundingClientRect();
+          containerOrigin = Number(axis === 'y' ? containerRect.top : containerRect.left) || 0;
+        }
+        offset = current + targetPosition - containerOrigin;
+      }
+    } catch (_) {}
+    var position = axis === 'y'
+      ? { top: offset, behavior: 'smooth' }
+      : { left: offset, behavior: 'smooth' };
+    if (scrollTarget.root) {
+      // Root scrolling is browser-special: setting scrollLeft/scrollTop on
+      // body or documentElement is not reliable when body owns overflow.
       try {
-        targets[t].scrollTo({ left: left, behavior: 'smooth' });
+        window.scrollTo(position);
       } catch (_) {
-        try { targets[t].scrollLeft = left; } catch (__) {}
+        try { window.scrollTo(axis === 'y' ? 0 : offset, axis === 'y' ? offset : 0); } catch (__) {}
+      }
+      var targets = scrollTargets();
+      for (var t=0; t<targets.length; t++) {
+        try {
+          targets[t].scrollTo(position);
+        } catch (_) {
+          try {
+            if (axis === 'y') targets[t].scrollTop = offset;
+            else targets[t].scrollLeft = offset;
+          } catch (__) {}
+        }
+      }
+    } else {
+      try {
+        scrollTarget.element.scrollTo(position);
+      } catch (_) {
+        try {
+          if (axis === 'y') scrollTarget.element.scrollTop = offset;
+          else scrollTarget.element.scrollLeft = offset;
+        } catch (__) {}
       }
     }
-    setTimeout(report, 380);
+    // A body-owned scroller can visually move while its offset remains absent
+    // from document.scrollingElement (notably in sandboxed iframes). Preserve
+    // the requested index for the host state instead of immediately snapping
+    // the rail back to page one; ordinary scroll events still call report()
+    // without an override and track subsequent manual movement.
+    report(next);
+    setTimeout(function(){
+      if (activeIndex(list) === next) { report(); return; }
+      // Some sandboxed Chromium documents expose a wide/tall root scrollWidth
+      // but ignore every root scrolling API. Fall back to a single-visible-page
+      // presentation so Remix never leaves the main canvas on page one while
+      // the host rail claims another page is active.
+      forceScrollDeckPage(list, next, scrollTarget);
+    }, 420);
   }
   function targetFor(action, list){
     var i = activeIndex(list);
@@ -3192,7 +3580,9 @@ function injectDeckBridge(
   // deferred artifact handler still runs afterwards, advancing a second time
   // and desyncing the artifact's internal index from the visible slide.
   var KEY_PROBE_WINDOW_MS = 48;
+  var DIRECT_INDEX_UNLOCK_TIMEOUT_MS = 1500;
   var preferredKeyTarget = null;
+  var odNavigationSequence = 0;
   // Seeded from a source scan (inline artifact scripts run before this
   // bridge); the addEventListener patches below catch later registrations.
   // Decks with no keyboard handling at all skip the probe entirely, so their
@@ -3242,7 +3632,8 @@ function injectDeckBridge(
       target.dispatchEvent(new KeyboardEvent('keyup', init));
     } catch (_) {}
   }
-  function goViaArtifactKeys(key, onDone){
+  function goViaArtifactKeys(key, onDone, isCurrent){
+    if (isCurrent && !isCurrent()) { onDone(false); return; }
     if (!key || !artifactHasKeydownNavigation()) { onDone(false); return; }
     var beforeIndex = activeIndex(slides());
     var beforeTrack = trackTransformSnapshot();
@@ -3250,6 +3641,7 @@ function injectDeckBridge(
     // window first on every keypress would tax document-listening decks one
     // probe window per navigation.
     if (preferredKeyTarget) {
+      if (isCurrent && !isCurrent()) { onDone(false); return; }
       dispatchKeysTo(preferredKeyTarget, key);
       waitForDeckMove(beforeIndex, beforeTrack, onDone);
       return;
@@ -3261,6 +3653,7 @@ function injectDeckBridge(
     dispatchKeysTo(window, key);
     waitForDeckMove(beforeIndex, beforeTrack, function(moved){
       if (moved) { preferredKeyTarget = window; onDone(true); return; }
+      if (isCurrent && !isCurrent()) { onDone(false); return; }
       dispatchKeysTo(document, key);
       waitForDeckMove(beforeIndex, beforeTrack, function(movedViaDocument){
         if (movedViaDocument) preferredKeyTarget = document;
@@ -3268,28 +3661,104 @@ function injectDeckBridge(
       });
     });
   }
-  function stepToIndexViaKeys(target, onDone){
+  function stepToIndexViaKeys(target, navigationSequence, onDone){
     var guard = slides().length + 4;
+    function isCurrent(){ return navigationSequence === odNavigationSequence; }
     function step(){
+      if (!isCurrent()) return;
       var current = activeIndex(slides());
       if (current === target) { onDone(true); return; }
       if (guard <= 0) { onDone(false); return; }
       guard -= 1;
       goViaArtifactKeys(target > current ? 'ArrowRight' : 'ArrowLeft', function(moved){
+        if (!isCurrent()) return;
         if (!moved) { onDone(false); return; }
         step();
-      });
+      }, isCurrent);
     }
     step();
   }
+  function artifactIndexInvoker(target, count){
+    var selectors = ['.nav-dot', '[data-slide-index]', '[data-page-index]'];
+    for (var s=0; s<selectors.length; s++) {
+      var controls = document.querySelectorAll(selectors[s]);
+      if (controls.length < count || !controls[target]) continue;
+      return function(){
+        try { controls[target].click(); } catch (_) {}
+      };
+    }
+    if (${JSON.stringify(hasInlineHashNavigation)}) {
+      return function(){
+        try {
+          // Preserve the artifact's own numeric hash route. Decks commonly
+          // use either #3 or #/3; changing the route shape makes their
+          // hashchange handler ignore the request, after which the bridge
+          // waits the full navigation-lock timeout and desynchronizes the
+          // artifact's private index with a DOM-only fallback.
+          var currentHashMatch = String(window.location.hash || '').match(/^(#.*?)(\d+)$/);
+          var hashPrefix = currentHashMatch
+            ? currentHashMatch[1]
+            : ${JSON.stringify(inlineHashIndexPrefix)};
+          var nextHash = hashPrefix + (target + 1);
+          if (window.location.hash === nextHash) return;
+          var oldUrl = String(window.location.href || '');
+          try {
+            // A fragment assignment on a Blob-backed Electron preview can be
+            // promoted to a slow navigation and briefly clear the compositor.
+            // Match artifact-owned routers: update the same-document route
+            // synchronously, then deliver the event they already listen for.
+            window.history.replaceState(null, '', nextHash);
+            var hashChangeEvent;
+            try {
+              hashChangeEvent = new HashChangeEvent('hashchange', {
+                oldURL: oldUrl,
+                newURL: String(window.location.href || ''),
+              });
+            } catch (_) {
+              hashChangeEvent = new Event('hashchange');
+            }
+            window.dispatchEvent(hashChangeEvent);
+          } catch (_) {
+            window.location.hash = nextHash;
+          }
+        } catch (_) {}
+      };
+    }
+    return null;
+  }
+  function goViaArtifactIndex(target, navigationSequence, onDone){
+    var list = slides();
+    var invoke = artifactIndexInvoker(target, list.length);
+    if (!invoke) { onDone(false); return; }
+    var deadline = Date.now() + DIRECT_INDEX_UNLOCK_TIMEOUT_MS;
+    function attempt(){
+      if (navigationSequence !== odNavigationSequence) return;
+      var beforeIndex = activeIndex(slides());
+      var beforeTrack = trackTransformSnapshot();
+      invoke();
+      waitForDeckMove(beforeIndex, beforeTrack, function(moved){
+        if (navigationSequence !== odNavigationSequence) return;
+        if (moved || activeIndex(slides()) === target) { onDone(true); return; }
+        // Some authored decks lock navigation during their entrance/slide
+        // transition. Keep the current page visible and retry the SAME target;
+        // never translate one thumbnail click into visible intermediate pages.
+        if (Date.now() < deadline) { setTimeout(attempt, 80); return; }
+        onDone(false);
+      });
+    }
+    attempt();
+  }
   function go(action){
+    var navigationSequence = ++odNavigationSequence;
     var list = slides();
     if (!list.length) return;
-    if (isScrollDeck()) {
+    if (navigateViaDeckStage(list, action)) return;
+    if (isScrollDeck(list)) {
       scrollGo(Math.max(0, Math.min(list.length - 1, targetFor(action, list))));
       return;
     }
     goViaArtifactKeys(keyForAction(action), function(moved){
+      if (navigationSequence !== odNavigationSequence) return;
       if (moved) { report(); return; }
       // Recompute the target at fallback time: rapid host requests can have
       // several probes in flight, and each fallback must step from the deck's
@@ -3299,26 +3768,27 @@ function injectDeckBridge(
       if (canSetActive(now) && setActive(target)) return;
       if (transformGo(target)) return;
       setTimeout(report, 280);
-    });
+    }, function(){ return navigationSequence === odNavigationSequence; });
   }
   function gotoIndex(i){
+    var navigationSequence = ++odNavigationSequence;
     var list = slides();
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
-    if (isScrollDeck()) { scrollGo(target); return; }
+    if (navigateViaDeckStage(list, 'go', target)) return;
+    if (isScrollDeck(list)) { scrollGo(target); return; }
     if (activeIndex(list) === target) { report(); return; }
-    stepToIndexViaKeys(target, function(stepped){
-      if (stepped) { report(); return; }
-      var now = slides();
-      if (canSetActive(now) && setActive(target)) return;
-      if (transformGo(target)) return;
-      var current = activeIndex(slides());
-      var diff = target - current;
-      if (!diff) { report(); return; }
-      var key = diff > 0 ? 'ArrowRight' : 'ArrowLeft';
-      var n = Math.abs(diff);
-      for (var k = 0; k < n; k++) dispatchKey(key);
-      setTimeout(report, 320);
+    goViaArtifactIndex(target, navigationSequence, function(moved){
+      if (navigationSequence !== odNavigationSequence) return;
+      if (moved) { report(); return; }
+      stepToIndexViaKeys(target, navigationSequence, function(stepped){
+        if (navigationSequence !== odNavigationSequence) return;
+        if (stepped) { report(); return; }
+        var now = slides();
+        if (canSetActive(now) && setActive(target)) return;
+        if (transformGo(target)) return;
+        setTimeout(report, 320);
+      });
     });
   }
   function isInteractiveClickTarget(target){
@@ -3358,10 +3828,13 @@ function injectDeckBridge(
     }, true);
   }
   var lastCommentTargetSlideIndex = -1;
-  function report(){
+  function report(forcedIndex){
     try {
       var list = slides();
-      var i = activeIndex(list);
+      var measured = activeIndex(list);
+      var i = Number.isFinite(forcedIndex)
+        ? Math.max(0, Math.min(list.length - 1, Math.floor(forcedIndex)))
+        : measured;
       var count = list.length;
       var progressWidth = count ? ((i + 1) / count * 100) + '%' : '0';
       updateDeckChrome(i, count);
@@ -3388,6 +3861,17 @@ function injectDeckBridge(
       }
     } catch (e) {}
   }
+  // Runtime-managed decks can also move themselves through their own tap
+  // zones, keyboard handler, or public API. Normalize both generations of
+  // deck-stage state notification back into the host-owned slide protocol.
+  document.addEventListener('slidechange', function(ev){
+    var stage = document.querySelector('deck-stage');
+    if (stage && ev.target === stage) report();
+  });
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (data && typeof data.slideIndexChanged === 'number') report();
+  });
   window.__odDeckSlideState = function(){
     var list = slides();
     return { active: activeIndex(list), count: list.length };
@@ -3456,6 +3940,12 @@ function injectDeckBridge(
   addOdSlideMessageListener(function(ev){
     var data = ev && ev.data;
     if (!data || data.type !== 'od:slide') return;
+    // Every newer host intent cancels an older multi-step jump, including a
+    // request for the slide that is CURRENTLY visible. The older jump may not
+    // have dispatched its first accepted key yet (the artifact can register on
+    // document after the window probe), so returning early without cancelling
+    // lets that stale request move the deck after the user's newer click.
+    odNavigationSequence += 1;
     var before = odSlideMessageBeforeIndex;
     odSlideMessageBeforeIndex = -1;
     function applyBridgeFallback() {

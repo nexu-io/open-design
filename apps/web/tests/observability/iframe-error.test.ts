@@ -12,6 +12,7 @@ vi.mock('../../src/analytics/error-tracking', () => ({ reportSafetyEvent }));
 import {
   installPreviewIframeMessageObserver,
   reportPreviewIframeMessage,
+  reportPreviewTransportRecovery,
   subscribePreviewIframeMessages,
 } from '../../src/observability/iframe-error';
 
@@ -71,6 +72,8 @@ describe('preview iframe observability', () => {
       visible_element_count: 0,
       viewport_width: 1440,
       viewport_height: 900,
+      blank_observation_count: 2,
+      sample_interval_ms: 1_500,
     }, { surface: 'artifact_preview', renderMode: 'srcdoc' });
 
     expect(reportSafetyEvent).toHaveBeenNthCalledWith(1, 'client_preview_resource_error', expect.objectContaining({
@@ -81,7 +84,99 @@ describe('preview iframe observability', () => {
       reason: 'no_visible_paint_after_timeout',
       visible_element_count: 0,
       viewport_width: 1440,
+      blank_observation_count: 2,
+      sample_interval_ms: 1_500,
     }));
+  });
+
+  it('reports host-observed incomplete srcDoc recovery without authored content', () => {
+    reportPreviewTransportRecovery({
+      surface: 'artifact_preview',
+      renderMode: 'srcdoc',
+      artifactId: 'anon-artifact',
+      artifactKind: 'slide_deck',
+      projectId: 'project-1',
+      signal: 'body_incomplete',
+      activationAcknowledged: true,
+      documentState: {
+        readyState: 'loading',
+        bodyPresent: true,
+        bodyChildCount: 2,
+        documentElementChildCount: 2,
+      },
+      viewportWidth: 1280,
+      viewportHeight: 720,
+    });
+
+    expect(reportSafetyEvent).toHaveBeenCalledWith(
+      'client_preview_white_screen',
+      {
+        surface: 'artifact_preview',
+        render_mode: 'srcdoc',
+        artifact_id: 'anon-artifact',
+        artifact_kind: 'slide_deck',
+        project_id: 'project-1',
+        reason: 'srcdoc_transport_unverified',
+        transport_signal: 'body_incomplete',
+        transport_stage: 'head_bridge_alive_body_tail_missing',
+        activation_acknowledged: true,
+        body_complete: false,
+        frame_ready_state: 'loading',
+        frame_body_present: true,
+        frame_body_child_count: 2,
+        frame_document_element_child_count: 2,
+        recovery_attempted: true,
+        recovery_path: 'lazy_shell_remount',
+        host_visibility_state: 'visible',
+        viewport_width: 1280,
+        viewport_height: 720,
+        timeout_ms: undefined,
+      },
+    );
+  });
+
+  it.each([
+    [true, 'head_bridge_lost_after_eager_ack'],
+    [false, 'no_head_bridge_ack'],
+  ])(
+    'classifies a probe timeout from activation state %s',
+    (activationAcknowledged, transportStage) => {
+      reportPreviewTransportRecovery({
+        surface: 'artifact_preview',
+        renderMode: 'srcdoc',
+        signal: 'probe_timeout',
+        activationAcknowledged,
+        timeoutMs: 1_500,
+      });
+
+      expect(reportSafetyEvent).toHaveBeenCalledWith(
+        'client_preview_white_screen',
+        expect.objectContaining({
+          transport_signal: 'probe_timeout',
+          transport_stage: transportStage,
+          activation_acknowledged: activationAcknowledged,
+          timeout_ms: 1_500,
+        }),
+      );
+    },
+  );
+
+  it('classifies a retained unverified frame recovered on reactivation', () => {
+    reportPreviewTransportRecovery({
+      surface: 'artifact_preview',
+      renderMode: 'srcdoc',
+      signal: 'reactivation_unverified',
+      activationAcknowledged: false,
+    });
+
+    expect(reportSafetyEvent).toHaveBeenCalledWith(
+      'client_preview_white_screen',
+      expect.objectContaining({
+        transport_signal: 'reactivation_unverified',
+        transport_stage: 'retained_frame_unverified_on_reactivation',
+        recovery_attempted: true,
+      }),
+    );
   });
 
   it('deduplicates repeated failures from one preview', () => {

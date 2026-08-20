@@ -19,8 +19,11 @@ import type { VelaLoginStatus } from '../../src/providers/daemon';
 
 const fetchVelaLoginStatusMock = vi.hoisted(() => vi.fn());
 
+const translate = (key: string) => key;
+
 vi.mock('../../src/i18n', () => ({
-  useT: () => (key: string) => key,
+  useI18n: () => ({ locale: 'en', setLocale: () => undefined, t: translate }),
+  useT: () => translate,
 }));
 
 vi.mock('../../src/components/AssistantMessage', () => ({

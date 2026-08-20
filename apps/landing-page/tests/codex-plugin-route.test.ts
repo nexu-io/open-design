@@ -47,7 +47,7 @@ describe('Codex plugin landing route', () => {
     );
     assert.match(
       page,
-      /\/goal Read https:\/\/open-design\.ai\/codex-plugin\/ to install Open Design for Codex and set up a new task for me\./,
+      /\/goal Read https:\/\/open-design\.ai\/codex-plugin\/ to install OpenDesign for Codex and set up a new task for me\./,
     );
     assert.match(page, /href=\{AGENT_INSTALL_GUIDE\}/);
   });

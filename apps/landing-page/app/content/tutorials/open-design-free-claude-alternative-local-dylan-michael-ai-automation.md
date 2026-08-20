@@ -1,7 +1,7 @@
 ---
-title: 'Open Design for Agencies — Commercially Safe, Cost-Managed, Client-Ready'
+title: 'OpenDesign for Agencies — Commercially Safe, Cost-Managed, Client-Ready'
 youtubeId: VleXU_AmRfg
-summary: An agency/freelancer playbook for Open Design — why the Apache-2.0 license makes it safe for client work, how to manage spend by switching models (build the structure on a strong model, iterate on cheap or free ones via OpenRouter), and how to ship client dashboards fast. Based on Dylan Michael's walkthrough.
+summary: An agency/freelancer playbook for OpenDesign — why the Apache-2.0 license makes it safe for client work, how to manage spend by switching models (build the structure on a strong model, iterate on cheap or free ones via OpenRouter), and how to ship client dashboards fast. Based on Dylan Michael's walkthrough.
 date: 2026-05-03
 category: Demo
 durationSeconds: 741
@@ -9,20 +9,20 @@ author: 'Dylan Michael | AI Automation'
 official: false
 ---
 
-If you build for clients, a closed design tool's weekly cap and single model make it hard to work at scale. This guide is an agency/freelancer playbook for Open Design: why it's **commercially safe**, how to **manage spend by switching models**, and how to ship client work fast. It follows the walkthrough **Dylan Michael** gives in [his video](https://www.youtube.com/watch?v=VleXU_AmRfg), rewritten and brought up to date with the current release. Watch the video above, or read on for the written version.
+If you build for clients, a closed design tool's weekly cap and single model make it hard to work at scale. This guide is an agency/freelancer playbook for OpenDesign: why it's **commercially safe**, how to **manage spend by switching models**, and how to ship client work fast. It follows the walkthrough **Dylan Michael** gives in [his video](https://www.youtube.com/watch?v=VleXU_AmRfg), rewritten and brought up to date with the current release. Watch the video above, or read on for the written version.
 
-![The Open Design workspace — describe what you want and pick a mode.](/tutorials/open-design-free-claude-alternative-local-dylan-michael-ai-automation/workspace-home.webp)
-*The Open Design workspace: describe what you want to build, pick a mode, and your agent does the rest.*
+![The OpenDesign workspace — describe what you want and pick a mode.](/tutorials/open-design-free-claude-alternative-local-dylan-michael-ai-automation/workspace-home.webp)
+*The OpenDesign workspace: describe what you want to build, pick a mode, and your agent does the rest.*
 
 ## Why it works for client work
 
-Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use** — and for agencies, three properties matter most:
+OpenDesign is an open-source, local-first design platform that runs **on top of the coding agent you already use** — and for agencies, three properties matter most:
 
 - **Apache-2.0 = commercially safe.** You can use it on client projects, sell what you build, and never ask permission or pay royalties — unlike some restrictively-licensed clones.
 - **Local-first = you own everything.** Projects live on your machine, so client work isn't sitting in someone else's cloud.
 - **Any model = managed spend.** Claude, ChatGPT, Gemini, DeepSeek, or free models — you're not forced to burn a premium model's credits on every task.
 
-Dylan's blunt framing: a closed tool can cost $20–$200/month and *still* rate-limit you to a couple of designs a week, which is unworkable when you're serving clients. Open Design removes the cap and the lock-in.
+Dylan's blunt framing: a closed tool can cost $20–$200/month and *still* rate-limit you to a couple of designs a week, which is unworkable when you're serving clients. OpenDesign removes the cap and the lock-in.
 
 ## Step 1 — Install and pick your engine
 
@@ -30,9 +30,9 @@ Ask your editor's agent to clone and set it up (paste the repo URL and let Claud
 
 ## Step 2 — Build the client deliverable
 
-Create a project (Dylan builds a premium sales-analytics dashboard), choose **high fidelity**, and prompt. Open Design asks **clarifying questions** (screens, surface, accent color, what the heatmap/leaderboard shows) and shows **the cost of each task** as it goes — useful when you're budgeting a client job. Pick a color scheme and it builds a polished one-shot result, then you refine in plain language ("add a premium refresh animation, switch to glassmorphism, tighten the spacing").
+Create a project (Dylan builds a premium sales-analytics dashboard), choose **high fidelity**, and prompt. OpenDesign asks **clarifying questions** (screens, surface, accent color, what the heatmap/leaderboard shows) and shows **the cost of each task** as it goes — useful when you're budgeting a client job. Pick a color scheme and it builds a polished one-shot result, then you refine in plain language ("add a premium refresh animation, switch to glassmorphism, tighten the spacing").
 
-![A real prototype generated in Open Design.](/tutorials/open-design-free-claude-alternative-local-dylan-michael-ai-automation/generated-prototype.webp)
+![A real prototype generated in OpenDesign.](/tutorials/open-design-free-claude-alternative-local-dylan-michael-ai-automation/generated-prototype.webp)
 *A real generated prototype rendered in the preview — a dark, cinematic agency landing page.*
 
 ## Step 3 — The cost move: switch models mid-project
@@ -41,7 +41,7 @@ This is the agency economics. Dylan's rule: **build the structure with a strong 
 
 You can also add a media provider key (e.g. OpenAI) and drop **generated images** right into the deliverable, then **deploy to Vercel** in one click for client review.
 
-![The HyperFrames motion and video gallery in Open Design.](/tutorials/open-design-free-claude-alternative-local-dylan-michael-ai-automation/motion-gallery.webp)
+![The HyperFrames motion and video gallery in OpenDesign.](/tutorials/open-design-free-claude-alternative-local-dylan-michael-ai-automation/motion-gallery.webp)
 *The HyperFrames gallery: code-driven motion and video pieces you can fork and remix.*
 
 ## Tips
@@ -54,7 +54,7 @@ You can also add a media provider key (e.g. OpenAI) and drop **generated images*
 
 ## FAQ
 
-**Can I use Open Design for paid client work?**
+**Can I use OpenDesign for paid client work?**
 Yes — it's Apache-2.0, so it's commercially safe to use, sell, and self-host with no royalties or permission.
 
 **How do I keep costs down across a project?**

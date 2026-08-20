@@ -301,7 +301,7 @@ describe('AssistantMessage tool status', () => {
     expect(container.querySelector('.op-status-done')).toBeNull();
   });
 
-  it('does not show Done when a canceled run is missing a tool result', () => {
+  it('shows Canceled when a canceled run is missing a tool result', () => {
     const { container } = render(
       <AssistantMessage
         projectKind="prototype"
@@ -322,9 +322,29 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(screen.getByTestId('task-activity-toggle').textContent).toContain('Run failed');
+    const activity = screen.getByTestId('task-activity-toggle');
+    expect(activity.textContent).toContain('Canceled');
+    expect(activity.getAttribute('data-run-state')).toBe('canceled');
     expect(container.querySelector('[data-tool-category="run"][data-tool-state="error"]')).not.toBeNull();
     expect(container.querySelector('.op-status-done')).toBeNull();
+  });
+
+  it('shows Canceled instead of Done when a canceled run has no activity card', () => {
+    const { container } = render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={{
+          ...messageWithEvents([{ kind: 'text', text: 'Partial response.' }]),
+          content: 'Partial response.',
+          runStatus: 'canceled',
+        }}
+        streaming={false}
+        projectId="project-1"
+      />,
+    );
+
+    expect(container.querySelector('.assistant-label')?.textContent).toBe('Canceled');
   });
 
   it.each(['no_result', 'delivery_failed'] as const)(
@@ -620,12 +640,37 @@ describe('AssistantMessage tool status', () => {
     expect(container.querySelector('.status-pill')).toBeNull();
   });
 
-  it('still renders status rows that carry a displayable detail', () => {
+  it('hides persisted lifecycle status rows after a run reaches a terminal state', () => {
+    const { container } = render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={{
+          ...messageWithEvents([
+            { kind: 'status', label: 'working' },
+            { kind: 'status', label: 'completed' },
+          ]),
+          runStatus: 'canceled',
+          endedAt: 2,
+        }}
+        streaming={false}
+        projectId="project-1"
+      />,
+    );
+
+    expect(container.querySelector('[data-status="working"]')).toBeNull();
+    expect(container.querySelector('[data-status="completed"]')).toBeNull();
+    expect(container.querySelector('.status-pill')).toBeNull();
+  });
+
+  it('still renders lifecycle and model status rows that carry a displayable detail', () => {
     const { container } = render(
       <AssistantMessage
         projectKind="prototype"
         conversationId="conv-1"
         message={messageWithEvents([
+          { kind: 'status', label: 'working', detail: 'Publishing plugin' },
+          { kind: 'status', label: 'done', detail: 'CLI command finished' },
           { kind: 'status', label: 'model', detail: 'claude-opus-4-7-high' },
         ])}
         streaming={false}
@@ -633,8 +678,13 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('[data-status="model"]')).not.toBeNull();
-    expect(container.querySelector('.status-detail')?.textContent).toContain('claude-opus-4-7-high');
+    expect(container.querySelector('[data-status="working"]')).not.toBeNull();
+    expect(container.querySelector('[data-status="done"]')).not.toBeNull();
+    expect(container.textContent).toContain('Publishing plugin');
+    expect(container.textContent).toContain('CLI command finished');
+    const modelStatus = container.querySelector('[data-status="model"]');
+    expect(modelStatus).not.toBeNull();
+    expect(modelStatus?.querySelector('.status-detail')?.textContent).toContain('claude-opus-4-7-high');
   });
 
   it('renders URLs in JSON-like status details without trailing structural characters', () => {

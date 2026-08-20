@@ -1,7 +1,11 @@
+import { performance } from 'node:perf_hooks';
 import type Database from 'better-sqlite3';
 import type { PersistedAgentEvent } from '@open-design/contracts';
+import type { RunFinishedProps } from '@open-design/contracts/analytics';
 import {
-  appendMessageAgentEvent,
+  appendMessageAgentEvents,
+  clearMessageAgentEventBatches,
+  finalizeMessageAgentEvents,
   upsertMessage,
 } from '../db.js';
 
@@ -22,6 +26,118 @@ type ChatRunMessageState = {
   failureDetail?: string | null;
 };
 
+type PendingMessageEvents = {
+  db: SqliteDb;
+  messageId: string;
+  events: PersistedAgentEvent[];
+  chars: number;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
+export type RunMessageEventPersistenceTelemetry = {
+  storageMode: 'append_only';
+  inputEventCount: number;
+  deltaEventCount: number;
+  inputCharCount: number;
+  flushCount: number;
+  batchEventCount: number;
+  persistedEventCount: number;
+  flushTotalMs: number;
+  flushMaxMs: number;
+  pendingCharPeak: number;
+  finalizeCount: number;
+  finalizeTotalMs: number;
+  finalizeMaxMs: number;
+  finalEventCount: number;
+  persistenceErrorCount: number;
+};
+
+type RunMessageEventPersistenceAnalytics = Pick<
+  RunFinishedProps,
+  | 'message_event_storage_mode'
+  | 'message_event_input_count'
+  | 'message_event_delta_count'
+  | 'message_event_input_char_count'
+  | 'message_event_flush_count'
+  | 'message_event_batch_event_count'
+  | 'message_event_persisted_count'
+  | 'message_event_flush_total_ms'
+  | 'message_event_flush_max_ms'
+  | 'message_event_pending_char_peak'
+  | 'message_event_finalize_count'
+  | 'message_event_finalize_total_ms'
+  | 'message_event_finalize_max_ms'
+  | 'message_event_final_event_count'
+  | 'message_event_persistence_error_count'
+>;
+
+export const RUN_MESSAGE_EVENT_FLUSH_INTERVAL_MS = 250;
+const RUN_MESSAGE_EVENT_FLUSH_CHARS = 64 * 1024;
+const pendingMessageEvents = new WeakMap<ChatRunMessageState, PendingMessageEvents>();
+const finalizedInputEventCounts = new WeakMap<ChatRunMessageState, number>();
+const messageEventPersistenceTelemetry = new WeakMap<
+  ChatRunMessageState,
+  RunMessageEventPersistenceTelemetry
+>();
+
+function ensureRunMessageEventPersistenceTelemetry(
+  run: ChatRunMessageState,
+): RunMessageEventPersistenceTelemetry {
+  let telemetry = messageEventPersistenceTelemetry.get(run);
+  if (!telemetry) {
+    telemetry = {
+      storageMode: 'append_only',
+      inputEventCount: 0,
+      deltaEventCount: 0,
+      inputCharCount: 0,
+      flushCount: 0,
+      batchEventCount: 0,
+      persistedEventCount: 0,
+      flushTotalMs: 0,
+      flushMaxMs: 0,
+      pendingCharPeak: 0,
+      finalizeCount: 0,
+      finalizeTotalMs: 0,
+      finalizeMaxMs: 0,
+      finalEventCount: 0,
+      persistenceErrorCount: 0,
+    };
+    messageEventPersistenceTelemetry.set(run, telemetry);
+  }
+  return telemetry;
+}
+
+export function readRunMessageEventPersistenceTelemetry(
+  run: ChatRunMessageState,
+): RunMessageEventPersistenceTelemetry | null {
+  const telemetry = messageEventPersistenceTelemetry.get(run);
+  return telemetry ? { ...telemetry } : null;
+}
+
+export function runMessageEventPersistenceAnalytics(
+  run: ChatRunMessageState,
+): RunMessageEventPersistenceAnalytics | Record<string, never> {
+  const telemetry = readRunMessageEventPersistenceTelemetry(run);
+  if (!telemetry) return {};
+  return {
+    message_event_storage_mode: telemetry.storageMode,
+    message_event_input_count: telemetry.inputEventCount,
+    message_event_delta_count: telemetry.deltaEventCount,
+    message_event_input_char_count: telemetry.inputCharCount,
+    message_event_flush_count: telemetry.flushCount,
+    message_event_batch_event_count: telemetry.batchEventCount,
+    message_event_persisted_count: telemetry.persistedEventCount,
+    message_event_flush_total_ms: Math.round(telemetry.flushTotalMs),
+    message_event_flush_max_ms: Math.round(telemetry.flushMaxMs),
+    message_event_pending_char_peak: telemetry.pendingCharPeak,
+    message_event_finalize_count: telemetry.finalizeCount,
+    message_event_finalize_total_ms: Math.round(telemetry.finalizeTotalMs),
+    message_event_finalize_max_ms: Math.round(telemetry.finalizeMaxMs),
+    message_event_final_event_count: telemetry.finalEventCount,
+    message_event_persistence_error_count: telemetry.persistenceErrorCount,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
@@ -34,11 +150,112 @@ export function persistRunEventToAssistantMessage(
 ): void {
   if (!run.assistantMessageId) return;
   const persisted = runSseEventToPersistedAgentEvent(event, data);
-  if (!persisted) return;
+  if (!persisted) {
+    if (event === 'end' || event === 'close') flushRunMessageEvents(run);
+    return;
+  }
+
+  let pending = pendingMessageEvents.get(run);
+  if (pending && (pending.db !== db || pending.messageId !== run.assistantMessageId)) {
+    flushRunMessageEvents(run);
+    pending = undefined;
+  }
+  if (!pending) {
+    pending = {
+      db,
+      messageId: run.assistantMessageId,
+      events: [],
+      chars: 0,
+      timer: null,
+    };
+    pendingMessageEvents.set(run, pending);
+  }
+  const telemetry = ensureRunMessageEventPersistenceTelemetry(run);
+  const isDelta = persisted.kind === 'text' || persisted.kind === 'thinking';
+  const eventChars = isDelta ? persisted.text.length : JSON.stringify(persisted).length;
+  telemetry.inputEventCount += 1;
+  telemetry.inputCharCount += eventChars;
+  if (isDelta) telemetry.deltaEventCount += 1;
+  appendPendingMessageEvent(pending, persisted);
+  telemetry.pendingCharPeak = Math.max(telemetry.pendingCharPeak, pending.chars);
+
+  if (!isDelta || pending.chars >= RUN_MESSAGE_EVENT_FLUSH_CHARS) {
+    flushRunMessageEvents(run);
+    return;
+  }
+  if (!pending.timer) {
+    pending.timer = setTimeout(() => {
+      flushRunMessageEvents(run);
+    }, RUN_MESSAGE_EVENT_FLUSH_INTERVAL_MS);
+    pending.timer.unref?.();
+  }
+}
+
+function appendPendingMessageEvent(
+  pending: PendingMessageEvents,
+  event: PersistedAgentEvent,
+): void {
+  const last = pending.events[pending.events.length - 1];
+  if (
+    (event.kind === 'text' || event.kind === 'thinking') &&
+    last?.kind === event.kind
+  ) {
+    last.text += event.text;
+  } else {
+    pending.events.push(event);
+  }
+  pending.chars += event.kind === 'text' || event.kind === 'thinking'
+    ? event.text.length
+    : JSON.stringify(event).length;
+}
+
+export function flushRunMessageEvents(run: ChatRunMessageState): void {
+  const pending = pendingMessageEvents.get(run);
+  if (!pending) return;
+  pendingMessageEvents.delete(run);
+  if (pending.timer) clearTimeout(pending.timer);
+  if (pending.events.length === 0) return;
+  const telemetry = ensureRunMessageEventPersistenceTelemetry(run);
+  telemetry.flushCount += 1;
+  telemetry.batchEventCount += pending.events.length;
+  const startedAt = performance.now();
   try {
-    appendMessageAgentEvent(db, run.assistantMessageId, persisted);
+    const events = appendMessageAgentEvents(pending.db, pending.messageId, pending.events);
+    if (events) telemetry.persistedEventCount += events.length;
   } catch (err) {
+    telemetry.persistenceErrorCount += 1;
     console.warn('[runs] message event persistence failed', err);
+  } finally {
+    const durationMs = Math.max(0, performance.now() - startedAt);
+    telemetry.flushTotalMs += durationMs;
+    telemetry.flushMaxMs = Math.max(telemetry.flushMaxMs, durationMs);
+  }
+}
+
+export function finalizeRunMessageEvents(
+  db: SqliteDb,
+  run: ChatRunMessageState,
+): void {
+  flushRunMessageEvents(run);
+  if (!run.assistantMessageId) return;
+  const telemetry = ensureRunMessageEventPersistenceTelemetry(run);
+  if (finalizedInputEventCounts.get(run) === telemetry.inputEventCount) return;
+  telemetry.finalizeCount += 1;
+  const startedAt = performance.now();
+  try {
+    const events = finalizeMessageAgentEvents(db, run.assistantMessageId);
+    if (events) {
+      telemetry.persistedEventCount = events.length;
+      telemetry.finalEventCount = events.length;
+    }
+    finalizedInputEventCounts.set(run, telemetry.inputEventCount);
+  } catch (err) {
+    telemetry.persistenceErrorCount += 1;
+    console.warn('[runs] message event finalization failed', err);
+  } finally {
+    const durationMs = Math.max(0, performance.now() - startedAt);
+    telemetry.finalizeTotalMs += durationMs;
+    telemetry.finalizeMaxMs = Math.max(telemetry.finalizeMaxMs, durationMs);
   }
 }
 
@@ -65,6 +282,7 @@ export function persistRunFailureClassification(
   const failureDetail = run.failureDetail ?? null;
   if (!failureCategory && !failureDetail) return;
   try {
+    finalizeRunMessageEvents(db, run);
     const row = db
       .prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
       .get(run.assistantMessageId) as { eventsJson?: string } | undefined;
@@ -105,6 +323,9 @@ export function persistRunFailureClassification(
       JSON.stringify(events),
       run.assistantMessageId,
     );
+    const telemetry = ensureRunMessageEventPersistenceTelemetry(run);
+    telemetry.persistedEventCount = events.length;
+    telemetry.finalEventCount = events.length;
   } catch (err) {
     console.warn('[runs] failure classification persistence failed', err);
   }
@@ -417,6 +638,7 @@ export function pinAssistantMessageOnRunCreate(
       allowStaleActiveRebind ? 1 : 0,
     );
     if (result.changes === 0) return { ok: false, reason: 'active' as const };
+    if (!isSameRun) clearMessageAgentEventBatches(db, run.assistantMessageId!);
     opts?.beforeClaimCommit?.();
     return { ok: true };
   });

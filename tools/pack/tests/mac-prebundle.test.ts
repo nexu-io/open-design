@@ -80,12 +80,14 @@ describe("mac standalone prebundle policy", () => {
       "better-sqlite3",
       "blake3-wasm",
       "fsevents",
+      "hyperframes",
       "node-pty",
     ]);
     expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual([
       "better-sqlite3",
       "blake3-wasm",
       "fsevents",
+      "hyperframes",
       "node-pty",
     ]);
     expect(MAC_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
@@ -96,7 +98,9 @@ describe("mac standalone prebundle policy", () => {
     expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
       "better-sqlite3": "12.10.0",
       "blake3-wasm": "2.1.5",
+      "hyperframes": "0.8.1",
       "node-pty": "1.1.0",
+      "sharp": "0.35.3",
     });
     expect(MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES).toEqual({ "fsevents": "2.3.3" });
     expect(MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-cli.mjs");

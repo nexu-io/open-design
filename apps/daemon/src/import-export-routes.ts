@@ -1,5 +1,9 @@
 import type { Express, Response } from 'express';
-import { PROJECT_EXPORT_MANIFEST_SCHEMA, isExportFormat } from '@open-design/contracts';
+import {
+  PROJECT_EXPORT_MANIFEST_SCHEMA,
+  isExportFormat,
+  type StandaloneHtmlExportRequest,
+} from '@open-design/contracts';
 import nodePath from 'node:path';
 import os from 'node:os';
 import { readFile, rm } from 'node:fs/promises';
@@ -19,6 +23,12 @@ import {
   inlineRelativeAssets,
   type InlineAssetReader,
 } from './inline-assets.js';
+import {
+  MAX_STANDALONE_ENTRY_BYTES,
+  StandaloneHtmlExportError,
+  bundleStandaloneHtml,
+  type StandaloneAssetReader,
+} from './artifacts/standalone-html.js';
 import {
   buildDeckRenderInput,
   buildScreenshotPdf,
@@ -592,7 +602,11 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   async function authorizeExportRead(
     req: any,
     res: any,
-    options: { allowNavigationQuery?: boolean; toolEndpoint?: string } = {},
+    options: {
+      allowNavigationQuery?: boolean;
+      deriveWorkspaceFromProject?: boolean;
+      toolEndpoint?: string;
+    } = {},
   ): Promise<AuthorizedExportRead | null> {
     const authorization = req.get('authorization');
     if (
@@ -613,6 +627,14 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       const authority = await ctx.authorizeProjectToolRequest(
         res,
         grant.projectId,
+        { mode: 'read' },
+      );
+      return authority ? { previewWorkspace: authority.workspace } : null;
+    }
+    if (options.deriveWorkspaceFromProject) {
+      const authority = await ctx.authorizeProjectToolRequest(
+        res,
+        req.params.id,
         { mode: 'read' },
       );
       return authority ? { previewWorkspace: authority.workspace } : null;
@@ -700,6 +722,155 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       };
     }
     return null;
+  }
+
+  async function handleStandaloneHtmlExport(
+    res: Response,
+    projectId: string,
+    body: StandaloneHtmlExportRequest | null | undefined,
+  ) {
+    try {
+      if (!isSafeId(projectId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+      const fileName = typeof body?.fileName === 'string' ? body.fileName.trim() : '';
+      if (!fileName) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      }
+      if (typeof body?.versionId === 'string' && body.versionId.trim()) {
+        return sendApiError(
+          res,
+          409,
+          'CONFLICT',
+          'standalone HTML cannot export a historical entry with current project dependencies',
+          { details: { kind: 'historical-dependency-snapshot-unavailable' } },
+        );
+      }
+
+      const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+
+      let ownerMeta;
+      try {
+        ownerMeta = await resolveProjectFilePath(
+          PROJECTS_DIR,
+          projectId,
+          fileName,
+          project.metadata,
+        );
+      } catch (error: any) {
+        const missing = error?.code === 'ENOENT';
+        return sendApiError(
+          res,
+          missing ? 404 : 400,
+          missing ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+          missing ? `HTML entry not found: ${fileName}` : String(error?.message || error),
+        );
+      }
+      if (ownerMeta.size > MAX_STANDALONE_ENTRY_BYTES) {
+        return sendApiError(
+          res,
+          413,
+          'PAYLOAD_TOO_LARGE',
+          `owner html ${ownerMeta.size} bytes exceeds ${MAX_STANDALONE_ENTRY_BYTES}`,
+          { details: { kind: 'limit-exceeded', limit: 'entryBytes' } },
+        );
+      }
+      if (!ownerMeta.mime.startsWith('text/html')) {
+        return sendApiError(
+          res,
+          415,
+          'UNSUPPORTED_MEDIA_TYPE',
+          'standalone export only supports HTML entry files',
+        );
+      }
+
+      const ownerFile = await readProjectFile(
+        PROJECTS_DIR,
+        projectId,
+        fileName,
+        project.metadata,
+      );
+      const exportSource = await resolveHtmlExportSource({
+        projectId,
+        projectsRoot: PROJECTS_DIR,
+        relPath: fileName,
+        html: ownerFile.buffer.toString('utf8'),
+        metadata: project.metadata,
+        readProjectFile,
+        resolveProjectFilePath,
+      });
+      const assetReader: StandaloneAssetReader = async (projectPath) => {
+        let meta;
+        try {
+          meta = await resolveProjectFilePath(
+            PROJECTS_DIR,
+            projectId,
+            projectPath,
+            project.metadata,
+          );
+        } catch (error: any) {
+          if (error?.code === 'ENOENT') return null;
+          throw error;
+        }
+        return {
+          mime: meta.mime,
+          size: meta.size,
+          read: async () => {
+            const file = await readProjectFile(
+              PROJECTS_DIR,
+              projectId,
+              projectPath,
+              project.metadata,
+            );
+            return file.buffer;
+          },
+        };
+      };
+      const bundled = await bundleStandaloneHtml({
+        entryPath: exportSource.relPath,
+        html: exportSource.html,
+        readAsset: assetReader,
+      });
+
+      const titleBase = typeof body?.title === 'string' && body.title.trim()
+        ? body.title.trim()
+        : path.basename(fileName, path.extname(fileName)) || 'artifact';
+      const filename = `${sanitizeArchiveFilename(titleBase) || 'artifact'}.html`;
+      const asciiFallback = filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_');
+      res.setHeader('Content-Security-Policy', 'sandbox allow-scripts');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+      res.setHeader(
+        'X-Open-Design-External-Dependencies',
+        String(bundled.externalDependencies.length),
+      );
+      return res.type('text/html').send(bundled.html);
+    } catch (error: any) {
+      if (error instanceof StandaloneHtmlExportError || error?.name === 'StandaloneHtmlExportError') {
+        const standaloneError = error as StandaloneHtmlExportError;
+        const details = {
+          kind: standaloneError.kind,
+          ...(standaloneError.dependency ? { dependency: standaloneError.dependency } : {}),
+          ...(standaloneError.chain.length > 0 ? { chain: standaloneError.chain } : {}),
+          ...(standaloneError.limit ? { limit: standaloneError.limit } : {}),
+        };
+        if (standaloneError.kind === 'limit-exceeded') {
+          return sendApiError(res, 413, 'PAYLOAD_TOO_LARGE', standaloneError.message, { details });
+        }
+        const status = standaloneError.kind === 'missing-local-dependency'
+          || standaloneError.kind === 'invalid-source'
+          ? 422
+          : 400;
+        const code = status === 422 ? 'VALIDATION_FAILED' : 'BAD_REQUEST';
+        return sendApiError(res, status, code, standaloneError.message, { details });
+      }
+      return sendApiError(res, 400, 'BAD_REQUEST', String(error?.message || error));
+    }
   }
 
   // Shared screenshot-export flow: render the deck to one PNG per slide via the
@@ -1233,7 +1404,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // PNG and assemble a one-image-per-slide .pptx. Replaces the old "send a prompt
   // to the agent and hope it runs python-pptx" path with a deterministic export.
   app.post('/api/projects/:id/export/pptx', async (req, res) => {
-    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
     if (!authority) return;
     await handleScreenshotExport(res, 'pptx', req.params.id, { authority, body: req.body });
   });
@@ -1242,7 +1416,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // The print-ready vector PDF stays on POST /export/pdf; this is the "exactly
   // what you see" counterpart that shares the slide renderer with PPTX.
   app.post('/api/projects/:id/export/pdf-image', async (req, res) => {
-    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
     if (!authority) return;
     await handleScreenshotExport(res, 'pdf', req.params.id, { authority, body: req.body });
   });
@@ -1252,20 +1429,31 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // the whole document at natural size. Viewport-independent — unlike the
   // host-compositor snapshot, the size never depends on the preview pane.
   app.post('/api/projects/:id/export/image', async (req, res) => {
-    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
     if (!authority) return;
     await handleScreenshotExport(res, 'image', req.params.id, { authority, body: req.body });
   });
 
-  // Generic programmatic export (PDF / image / PPTX) for the `od export` CLI and
-  // any caller using the shared `ExportRequest` contract. EVERY format rasterizes
-  // through the desktop screenshot renderer — `pdf` is the raster screenshot PDF
-  // (one page per deck slide / per viewport for a long page), exactly like the
-  // dedicated /export/{pptx,pdf-image,image} routes and what the web UI uses.
-  // There is deliberately NO vector printToPDF path here: it drops CJK glyphs in
-  // the packaged runtime, which is the fidelity bug this feature exists to avoid.
-  // handleScreenshotExport owns validation, the 404/400/422 error mapping, and
-  // scratch-dir cleanup.
+  // A true one-file HTML export: every required same-project dependency is
+  // embedded by the daemon. Remote HTTP(S) dependencies remain external and
+  // are listed in a machine-readable manifest inside the output.
+  app.post('/api/projects/:id/export/html', async (req, res) => {
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
+    if (!authority) return;
+    await handleStandaloneHtmlExport(res, req.params.id, req.body);
+  });
+
+  // Generic programmatic export (HTML / PDF / image / PPTX) for callers using
+  // the shared `ExportRequest` contract. HTML uses the headless standalone
+  // bundler above. Visual formats use the dedicated screenshot renderer paths;
+  // there is deliberately no vector printToPDF fallback because it drops CJK
+  // glyphs in the packaged runtime.
   app.post('/api/projects/:id/export', async (req, res) => {
     const { fileName, title, deck, format, imageFormat, width, height, versionId } = req.body || {};
     if (typeof fileName !== 'string' || fileName.length === 0) {
@@ -1274,8 +1462,18 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     if (!isExportFormat(format)) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'invalid export format');
     }
-    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
     if (!authority) return;
+    if (format === 'html') {
+      return handleStandaloneHtmlExport(res, req.params.id, {
+        fileName,
+        ...(typeof title === 'string' ? { title } : {}),
+        ...(typeof versionId === 'string' ? { versionId } : {}),
+      });
+    }
     await handleScreenshotExport(res, format, req.params.id, {
       authority,
       body: {
@@ -1538,8 +1736,9 @@ async function resolveHtmlExportSource({
       html: rewriteViteDistRootAssetUrls(distFile.buffer.toString('utf8')),
       relPath: distRelPath,
     };
-  } catch {
-    return { html, relPath };
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return { html, relPath };
+    throw error;
   }
 }
 

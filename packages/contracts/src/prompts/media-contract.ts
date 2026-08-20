@@ -13,13 +13,24 @@ localized sentence and nothing else:
 
 - Success: say the localized equivalent of "Image generated". For Simplified
   Chinese, reply exactly \`图片已生成\`.
-- Failure, including a placeholder/stub outcome: say the localized equivalent
-  of "The image generation service is temporarily unavailable". For Simplified
-  Chinese, reply exactly \`图片生成服务暂时不可用\`.
+- Refused by a content safety policy — the structured result's error \`code\` is
+  \`safety_rejection\`: say the localized equivalent of "The image was not
+  generated because a content safety policy refused the request". For
+  Simplified Chinese, reply exactly \`图片未生成：内容安全策略拒绝了该请求\`.
+- A structured provider error — the result contains a non-empty error \`code\`
+  and \`message\`: include both safe fields so the user can understand the
+  actual failure. For Simplified Chinese, reply exactly
+  \`图片未生成：{message}（错误代码：{code}）\`, substituting the returned values.
+- Any other failure, including a placeholder/stub outcome: say the localized
+  equivalent of "The image generation service is temporarily unavailable". For
+  Simplified Chinese, reply exactly \`图片生成服务暂时不可用\`.
 
-Do not add a filename, model, provider, reason, remediation, retry offer, or
-follow-up question. Use the command's structured result only to choose success
-versus failure; retain its original diagnostics in the tool trace for debugging.`;
+A provider verdict is not automatically an outage. Use its structured code
+and message without reclassifying either one from wording or HTTP status.
+
+Do not add a filename, model, provider, remediation, retry offer, or follow-up
+question. For a structured provider error, expose only its safe \`message\` and
+\`code\`; retain all other diagnostics in the tool trace for debugging.`;
 
 export const MEDIA_GENERATION_CONTRACT = `
 ---
@@ -72,7 +83,7 @@ lets the model's own default decide. A size or tier the user names IS that
 ask, in any language — "2K", "1k", "high quality", "高质量" — so map it onto
 the flag; restating it inside the prompt text does not reach the provider.
 
-Open Design Cloud image and video models use the \`vela/*\` catalogue prefix.
+OpenDesign Cloud image and video models use the \`vela/*\` catalogue prefix.
 Always invoke those models through \`"$OD_NODE_BIN" "$OD_BIN" media generate\`.
 Never invoke the \`vela\` CLI directly and never call its remote media API.
 The daemon owns model routing, trusted Workspace attribution, task polling,

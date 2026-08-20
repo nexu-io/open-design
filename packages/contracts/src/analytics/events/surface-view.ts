@@ -47,7 +47,7 @@ export interface DeepSeekCampaignModalSurfaceViewProps {
 export interface DeepSeekCampaignBadgeSurfaceViewProps {
   page_name: 'home';
   area: 'campaign_badge';
-  element: 'deepseek_v4_flash';
+  element: 'deepseek_v4_flash' | 'deepseek_v4_pro';
   campaign_id: TrackingCampaignId;
   user_state: TrackingCampaignUserState;
 }
@@ -55,7 +55,7 @@ export interface DeepSeekCampaignBadgeSurfaceViewProps {
 export interface DeepSeekCampaignModelBenefitSurfaceViewProps {
   page_name: 'home';
   area: 'execution_settings_popover';
-  element: 'deepseek_v4_flash_benefit';
+  element: 'deepseek_v4_flash_benefit' | 'deepseek_v4_pro_benefit';
   campaign_id: TrackingCampaignId;
   user_state: TrackingCampaignUserState;
   model_id: string;

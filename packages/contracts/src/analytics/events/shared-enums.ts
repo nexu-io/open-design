@@ -60,7 +60,7 @@ export type TrackingAmrEntrySource =
   | 'inline_model_switcher_amr_row'
   | 'settings_amr_agent_card'
   | 'settings_amr_authorize'
-  // The 'use Open Design Cloud' callout on the execution tab. Same device-auth
+  // The 'use OpenDesign Cloud' callout on the execution tab. Same device-auth
   // flow as settings_amr_authorize, kept distinct so the two entry points stay
   // separable in funnel analysis.
   | 'settings_cloud_callout'
@@ -91,7 +91,10 @@ export type TrackingAmrEntrySource =
   | 'artifact_success_upgrade'
   | 'home_artifact_upgrade';
 
-export type TrackingCampaignId = 'deepseek_v4_flash';
+// `deepseek_v4_flash` is the finished 8/6-8/13 free week; `deepseek_v4_pro`
+// is the 8/13-8/27 two-model window that follows it. Both stay declared so
+// the finished campaign's rows keep a valid id in the warehouse.
+export type TrackingCampaignId = 'deepseek_v4_flash' | 'deepseek_v4_pro';
 export type TrackingCampaignUserState = 'paid' | 'unpaid';
 export type TrackingCampaignConversionSource =
   | 'deepseek_unpaid_modal'
@@ -111,7 +114,7 @@ export interface AmrEntryAttribution {
   // Stripe payment result can be attributed without replacing first touch.
   campaignId?: TrackingCampaignId;
   conversionSource?: TrackingCampaignConversionSource;
-  // Open Design install/device id forwarded only on consent-gated AMR handoffs.
+  // OpenDesign install/device id forwarded only on consent-gated AMR handoffs.
   odDeviceId?: string;
   // Self-reported onboarding profile, forwarded to AMR (anchored to entryId) so
   // AMR can segment paid conversion by who the visitor is. Open strings, not a
@@ -251,6 +254,12 @@ export type TrackingRunFailureDetail =
   | 'missing_api_key'
   | 'invalid_api_key'
   | 'hard_quota'
+  // A rolling per-model usage window (vela's 5-hour `model_limit_exceeded`)
+  // that resets on its own at a known instant. Distinct from `hard_quota`:
+  // nothing was charged, nothing needs topping up, and the same request
+  // succeeds once the window rolls over — so it stays retryable and must not
+  // be counted as a quota exhaustion in reliability reporting.
+  | 'model_window_limit'
   | 'workspace_credits_exhausted'
   | 'rate_limit_429'
   | 'amr_insufficient_balance'

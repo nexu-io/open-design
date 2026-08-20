@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Express, Request, Response } from 'express';
+import type { LintArtifactRequest, LintArtifactResponse } from '@open-design/contracts';
 import {
   PREVIEW_OBSERVABILITY_BRIDGE_MARKER,
   buildPreviewObservabilityBridge,
@@ -9,6 +10,7 @@ import {
 import {
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
+  type LocalCatalogScope,
   type PluginManifest,
   type PreviewComment,
   type ProjectDesignTokenSuggestionProp,
@@ -52,6 +54,8 @@ import {
   getInstalledPlugin,
   listInstalledPlugins,
   resolvePluginSnapshot,
+  type ResolveSnapshotError,
+  type ResolveSnapshotOk,
 } from '../../plugins/index.js';
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
@@ -87,10 +91,8 @@ import {
   type WorkspaceTypeRegistry,
 } from '../../collab/team-share-scope.js';
 import {
-  enforceVerifiedWorkspaceResourceMutation,
   headerValue,
   isWorkspaceResourceLocked as isWorkspaceLocked,
-  requestCanMutateVerifiedWorkspaceResource,
   workspaceResourceAccess,
   workspaceResourceContext as workspaceProjectContext,
   workspaceResourceContextFromRequest as workspaceProjectContextFromRequest,
@@ -101,22 +103,45 @@ import {
   type WorkspaceResourceMutationCapability,
 } from '../../collab/workspace-resource-mutation.js';
 import {
-  resolveProjectWorkspaceScope,
-  resolveProjectWorkspaceScopeBootstrap,
+  resolveLocalProjectWorkspaceScope,
 } from '../../collab/project-workspace-scope.js';
 import {
   createAuthorizeProjectRequest,
+  enforceLocalProjectDataPlaneRequest,
   type AuthorizeProjectRequest,
 } from '../../collab/project-request-authority.js';
 import {
-  authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
   createCreatedProjectWorkspaceResolver,
   CreatedProjectWorkspaceResolutionError,
-  sendCreatedProjectWorkspaceError,
+  localProjectWorkspaceAttribution,
+  type CreatedProjectWorkspaceResolver,
 } from '../../collab/created-project-workspace.js';
+import { localPluginRegistryScope } from '../../plugins/local-source.js';
 import type { WorkspaceDirectoryFetchResult } from '../../collab/vela-workspace-context.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
+
+function parseLocalCatalogScope(value: unknown, field: string): LocalCatalogScope | null {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== 'object') {
+    throw new Error(`${field} must contain workspaceId and workspaceMemberId`);
+  }
+  const record = value as Record<string, unknown>;
+  const workspaceId = typeof record.workspaceId === 'string'
+    ? record.workspaceId.trim()
+    : '';
+  const workspaceMemberId = typeof record.workspaceMemberId === 'string'
+    ? record.workspaceMemberId.trim()
+    : '';
+  if (!workspaceId || !workspaceMemberId) {
+    throw new Error(`${field} must contain workspaceId and workspaceMemberId`);
+  }
+  return { workspaceId, workspaceMemberId };
+}
+
+function sameLocalCatalogScopes(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
   pluginScope?: {
@@ -128,6 +153,10 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
       id: string,
       options: { workspaceId: string | null; workspaceMemberId: string | null },
     ) => Promise<unknown | null>;
+    getLocalPluginBySource?: (
+      id: string,
+      source: string,
+    ) => Promise<Parameters<typeof resolvePluginSnapshot>[0]['plugin'] | null>;
   };
   teamProjectCatalog?: VelaTeamProjectCatalogClient;
   /** Bounded authoritative verifier for idempotent Workspace project reads. */
@@ -140,25 +169,21 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
    * through `verifyWorkspaceRequestAuthority`.
    */
   verifyPersonalProjectDeleteLeaseAuthority?: VerifyWorkspaceRequestAuthority;
-  /** Shared fresh exact authority gate for all project data-plane routes. */
+  /** Shared local binding gate for all project data-plane routes. */
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
   isProjectRevoked?: (projectId: string) => boolean;
-  /**
-   * Authoritative signed-in membership directory. Project detail uses it to
-   * resolve the project's persisted workspace independently from any
-   * daemon-global active/current state.
-   */
+  /** Durable first-open placeholder stamp lookup. */
+  isProjectUnmaterializedPlaceholder?: (projectId: string) => boolean;
+  /** Membership directory used by Workspace account and cloud boundaries. */
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
-  /**
-   * Production-only authority for project creation. Kept distinct from the
-   * read-side directory fetcher so local/dev and explicitly anonymous callers
-   * retain their existing behavior.
-   */
+  /** Current settings-backed AMR environment for synthesized project contexts. */
+  configuredEnv?: () => Record<string, string>;
+  /** @deprecated Creation is local; retained for compatible route composition. */
   fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   /**
    * Persist a design system and its Workspace ownership envelope from the
-   * exact directory-verified creation context. Production injects the shared
+   * request's complete local attribution. Production injects the shared
    * design-system creation service; the optional shape preserves isolated
    * route harnesses and headerless/local compatibility.
    */
@@ -215,7 +240,7 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
    * team share aimed at a personal workspace even when the caller's headers say
    * otherwise. See `collab/team-share-scope.ts`.
    */
-  workspaceTypes?: Pick<WorkspaceTypeRegistry, 'isKnownPersonal'>;
+  workspaceTypes?: Pick<WorkspaceTypeRegistry, 'isKnownPersonal' | 'learn' | 'typeOf'>;
 }
 
 // `WorkspaceProjectContext`/`WorkspaceProjectMutationCapability`/
@@ -303,21 +328,12 @@ function projectAccess(
 }
 
 /**
- * Build the project-flavored authoritative mutation gate. Every bound project
- * requires an exact Workspace/member pair; request role/permission claims and
- * daemon-global active/current/last-known state are never authority. Mutations
- * use fresh directory authority except the narrow personal local-only delete
- * lease below. The exported factory is shared with run/chat routes so all
- * project mutations fail closed identically.
- */
-/**
  * The non-rejecting counterpart of `createEnforceWorkspaceProjectMutation`,
- * for a read route that would otherwise write as a side effect. See
- * `requestCanMutateVerifiedWorkspaceResource` for why a READ must answer this question
- * without ever answering it with a 401/403.
+ * for a read route that would otherwise write as a local side effect.
  */
 export function createWorkspaceProjectWriteAuthorityCheck(
-  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
+  _verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
+  isProjectUnmaterializedPlaceholder?: (projectId: string) => boolean,
 ) {
   return async function requestCanWriteWorkspaceProject(
     req: any,
@@ -326,73 +342,63 @@ export function createWorkspaceProjectWriteAuthorityCheck(
     db: unknown,
     projectId: string,
   ): Promise<boolean> {
-    return requestCanMutateVerifiedWorkspaceResource(
+    const allowed = await enforceLocalProjectDataPlaneRequest({
       req,
+      projectId,
+      options: { mode: 'write', capability: 'writeFiles' },
+      db,
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
-      db,
-      projectId,
-      verifyWorkspaceRequestAuthority,
-    );
+    });
+    return allowed && !isProjectUnmaterializedPlaceholder?.(projectId);
   };
 }
 
 export function createEnforceWorkspaceProjectMutation(
-  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
-  verifyPersonalProjectDeleteLeaseAuthority?: VerifyWorkspaceRequestAuthority,
+  _verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
+  _verifyPersonalProjectDeleteLeaseAuthority?: VerifyWorkspaceRequestAuthority,
+  authorizeProjectRequest?: AuthorizeProjectRequest,
 ) {
   return async function enforceWorkspaceProjectMutation(
     req: any,
     res: Response,
-    sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
+    sendApiError: (
+      res: Response,
+      status: number,
+      code: string,
+      message: string,
+      details?: Record<string, unknown>,
+    ) => unknown,
     getWorkspaceProject: (db: unknown, workspaceId: string, projectId: string) => WorkspaceProjectAccessInput | null | undefined,
     getWorkspaceProjectByProjectId: (db: unknown, projectId: string) => WorkspaceProjectAccessInput | null | undefined,
     db: unknown,
     projectId: string,
     capability: WorkspaceProjectMutationCapability,
   ): Promise<boolean> {
-    return enforceVerifiedWorkspaceResourceMutation(
-      'project',
+    // Production routes must converge on the central project authority gate.
+    // In particular, that gate carries the durable placeholder-stamp check;
+    // relying only on the placeholder's creator-null binding would make one
+    // accidental reconciliation promotion sufficient to reopen content writes.
+    // Keep the local-data-plane fallback solely for focused legacy fixtures
+    // that do not provide the production authorizer.
+    if (authorizeProjectRequest) {
+      return authorizeProjectRequest(req, res, projectId, {
+        mode: 'write',
+        capability,
+      });
+    }
+    return enforceLocalProjectDataPlaneRequest({
       req,
-      res,
-      sendApiError,
+      projectId,
+      options: { mode: 'write', capability },
+      db,
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
-      db,
-      projectId,
-      capability,
-      verifyWorkspaceRequestAuthority,
-      capability === 'delete' && verifyPersonalProjectDeleteLeaseAuthority
-        ? {
-            authorityLease: {
-              verify: verifyPersonalProjectDeleteLeaseAuthority,
-              allow: personalLocalProjectDeleteLeaseAllowed,
-            },
-          }
-        : {},
-    );
+      onDenied: (status, code, message, details) => details === undefined
+        ? sendApiError(res, status, code, message)
+        : sendApiError(res, status, code, message, details),
+    });
   };
-}
-
-/**
- * A short-lived directory lease may authorize this one local-only cleanup.
- * Hub-backed or Team resources, stale ownership, locked membership and every
- * non-delete mutation still require a fresh control-plane read.
- */
-export function personalLocalProjectDeleteLeaseAllowed(
-  row: WorkspaceProjectAccessInput,
-  context: WorkspaceCollabContext,
-): boolean {
-  return context.workspaceType === 'personal'
-    && context.memberStatus === 'active'
-    && context.lifecycleState === 'active'
-    && context.permissions.canWriteSyncedFiles
-    && row.workspaceId === context.workspaceId
-    && row.visibility === 'personal'
-    && row.resourceState === 'active'
-    && row.createdByWorkspaceMemberId === context.workspaceMemberId
-    && row.syncState === 'local_only'
-    && !row.resourceHubResourceId;
 }
 
 function projectDetailResolvedDir(
@@ -628,6 +634,9 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var activeCommentElementId = null;
   var activeCommentSelector = null;
   var activeTargetPending = false;
+  function postReady(){
+    window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href }, '*');
+  }
   function esc(value){
     try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); }
     catch (_) { return String(value); }
@@ -973,7 +982,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     var data = ev && ev.data;
     if (!data || !data.type) return;
     if (data.type === 'od:url-selection-bridge-probe') {
-      window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+      postReady();
       return;
     }
     if (data.type === 'od:preview-runtime-state-capture' && data.id) {
@@ -1107,7 +1116,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true });
   ensureStyle();
-  window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+  postReady();
 })();
 </script>`;
 
@@ -1607,7 +1616,7 @@ function buildDesignSystemCopySourceContext(input: {
   return [
     '# Source Project Context',
     '',
-    'This design-system workspace was created from an existing Open Design project. Treat the copied project files as the primary source evidence for the generated design system.',
+    'This design-system workspace was created from an existing OpenDesign project. Treat the copied project files as the primary source evidence for the generated design system.',
     '',
     '## Source project',
     '',
@@ -1637,7 +1646,7 @@ function buildDesignSystemCopySourceContext(input: {
     '- Read this file before editing design-system outputs.',
     '- Read the copied files directly from the project workspace; they are source evidence, not generated design-system output.',
     '- Preserve high-signal assets, source examples, UI surfaces, copy, tokens, typography, and interaction patterns from the copied project.',
-    '- Generate a reusable Open Design design-system package in this same project: DESIGN.md, README.md, SKILL.md, colors_and_type.css, context/provenance, focused preview cards, preserved assets/build/fonts when available, and ui_kits/app/.',
+    '- Generate a reusable OpenDesign design-system package in this same project: DESIGN.md, README.md, SKILL.md, colors_and_type.css, context/provenance, focused preview cards, preserved assets/build/fonts when available, and ui_kits/app/.',
     '- Before final response, run `"$OD_NODE_BIN" "$OD_BIN" tools connectors design-system-package-audit --path . --fail-on-warnings` and fix every actionable issue.',
     '',
   ].join('\n');
@@ -1657,7 +1666,7 @@ function buildDesignSystemCopyPendingPrompt(input: {
     .slice(0, 140)
     .map((name) => `  - ${name}`);
   return [
-    'Create this project as a complete Open Design design system workspace.',
+    'Create this project as a complete OpenDesign design system workspace.',
     '',
     'Autonomy requirement:',
     '- Do not ask setup or clarification questions during design-system generation.',
@@ -1734,10 +1743,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { randomId } = ctx.ids;
   const { validateProjectDesignSystemId, validateProjectSkillId } = ctx.validation;
   const { collabSync, teamProjectCatalog, workspaceTypes } = ctx;
-  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
-    ctx.verifyWorkspaceRequestAuthority,
-    ctx.verifyPersonalProjectDeleteLeaseAuthority,
-  );
+  const learnAssertedWorkspaceType = (context: WorkspaceResourceContext | null) => {
+    if (!context?.workspaceTypeAsserted) return;
+    workspaceTypes?.learn({
+      workspaceId: context.workspaceId,
+      workspaceType: context.workspaceTypeAsserted,
+    });
+  };
   const verifyWorkspaceProjectReadAuthority =
     ctx.verifyWorkspaceReadAuthority ?? ctx.verifyWorkspaceRequestAuthority;
   const authorizeProjectRequest =
@@ -1748,11 +1760,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       getWorkspaceProjectByProjectId,
       isProjectRevoked: (_db, projectId) =>
         ctx.isProjectRevoked?.(projectId) ?? false,
+      isProjectUnmaterializedPlaceholder: (_db, projectId) =>
+        ctx.isProjectUnmaterializedPlaceholder?.(projectId) ?? false,
       ...(ctx.verifyWorkspaceRequestAuthority
         ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
         : {}),
       sendApiError,
     });
+  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
+    ctx.verifyWorkspaceRequestAuthority,
+    ctx.verifyPersonalProjectDeleteLeaseAuthority,
+    authorizeProjectRequest,
+  );
   async function verifiedWorkspaceProjectContext(
     req: any,
   ): Promise<WorkspaceProjectContext | null> {
@@ -1760,18 +1779,20 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     const verified = await ctx.verifyWorkspaceRequestAuthority(req);
     return verified.ok ? workspaceResourceContextFromVerified(verified.context) : null;
   }
-  /**
-   * Where a created project belongs when the request has no authorization gate
-   * of its own — the duplicate / design-system-copy pair and the
-   * project-location scan importer. An asserted pair is verified through the
-   * same directory lookup as `POST /api/projects`; a headerless legacy/local
-   * request remains unbound and a failed assertion writes nothing.
-   */
-  const resolveCreatedProjectHome = createCreatedProjectWorkspaceResolver({
+  // Duplicate/import paths use the same optional local attribution as ordinary
+  // project creation. Cloud authority is checked only when a later operation
+  // actually shares, syncs, or publishes the project.
+  const resolveCreatedProjectHomeWithLocalAttribution = createCreatedProjectWorkspaceResolver({
     ...(ctx.fetchProjectCreationWorkspaceDirectory
       ? { fetchWorkspaceDirectory: ctx.fetchProjectCreationWorkspaceDirectory }
       : {}),
+    ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv } : {}),
   });
+  const resolveCreatedProjectHome: CreatedProjectWorkspaceResolver = async (req) => {
+    const home = await resolveCreatedProjectHomeWithLocalAttribution(req);
+    learnAssertedWorkspaceType(home);
+    return home;
+  };
   function sendMissingWorkspaceContext(res: Response) {
     return sendApiError(res, 401, 'WORKSPACE_CONTEXT_REQUIRED', 'workspace context is required');
   }
@@ -2402,6 +2423,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     now: number,
   ) {
     if (ctx === null) return;
+    learnAssertedWorkspaceType(ctx);
     ensureWorkspaceProject(db, {
       projectId: targetProjectId,
       workspaceId: ctx.workspaceId,
@@ -2421,7 +2443,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * CURRENT mutating request's workspace, right before
    * `enforceWorkspaceProjectMutation` evaluates it.
    *
-   * the verified Workspace mutation gate denies any
+   * The Workspace mutation gate denies any
    * mutation the moment the two-key lookup comes back empty
    * (`workspaceResourceMutationAllowed`'s `if (!row) return false;`) — right
    * for a project genuinely bound to a DIFFERENT workspace than the one the
@@ -2450,37 +2472,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * explicit mutation request naming this exact project is the "yes, this is
    * mine" signal a read never had.
    *
-   * But that owner is NOT the request's own claim. `workspaceProjectContextFromRequest`
-   * only PARSES `x-od-workspace-*`, which is an unauthenticated hint any local
-   * caller can forge, and this row's `createdByWorkspaceMemberId` is what
-   * `workspaceResourceAccess` turns into `selfCreated` — the bit that grants a
-   * non-privileged member mutation rights over it. Writing the header value
-   * meant a plain curl could claim someone else's orphaned project into a
-   * workspace it has no membership in and install itself as the author.
-   *
-   * So the workspace and authorship both come from
-   * `resolveCreatedProjectHome`, the same exact verifier every created-project
-   * path uses:
-   *
-   *   - the asserted identity VERIFIES against the membership directory -> claim
-   *     it, attributed to the DIRECTORY's member id rather than the header's;
-   *   - it does NOT verify — foreign, inactive, removed, or authority unreadable
-   *     -> write NOTHING;
-   *   - no pair was asserted -> write nothing, and let the pre-existing gate
-   *     below answer. A caller that cannot prove membership over a project
-   *     nothing has ever claimed is exactly who that gate is for; inventing a
-   *     binding to keep it happy is what this fix removes.
-   *
-   * Failing closed is essential because this binding is sticky: assigning an
-   * orphan from a forged or unverifiable request could prevent its rightful
-   * Workspace from reconciling it later.
-   *
-   * The `null`/`'missing'` early return is unchanged and load-bearing, and is
-   * why this does not simply use `createdProjectWorkspaceHome`'s own third
-   * branch. The verified Workspace mutation gate runs immediately after this and
-   * its HEADERLESS branch answers 401 WORKSPACE_CONTEXT_REQUIRED as soon as ANY
-   * row exists for the resource. Claiming on a request that asserts nothing
-   * would therefore convert a working headerless mutation into a 401.
+   * A complete explicit pair may claim a true local orphan. Partial/headerless
+   * requests write nothing, and a project already bound anywhere is never
+   * re-homed. The daemon's loopback request boundary protects this local
+   * attribution; remote membership is enforced only at share/sync/publish.
    */
   function reconcileUnboundProjectBeforeMutation(
     req: any,
@@ -2491,7 +2486,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (asserted === null || asserted === 'missing') return;
     if (getWorkspaceProjectByProjectId(db, projectId)) return;
     if (!home) return;
-    // Verified assertions resolve to the exact pair used as the directory key.
+    // The resolver and parser must agree on the exact local attribution pair.
     if (
       home.workspaceId !== asserted.workspaceId
       || home.workspaceMemberId !== asserted.workspaceMemberId
@@ -2842,9 +2837,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             // A project this scan adopts off disk is as much a created project
             // as one typed into the composer, and needs the same home
             // workspace. Without this the imported project is an orphan the
-            // moment it appears: denied its first run by
-            // the verified Workspace mutation gate, and billing-less on any run
-            // that does get through.
+            // moment it appears: account-scoped local runs remain possible,
+            // but Workspace mutations and Workspace-pinned billing would have
+            // no durable home.
             bindCreatedProjectToWorkspace(
               (input) => ensureWorkspaceProject(db, input),
               createHome,
@@ -3395,13 +3390,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
-      const createWorkspace = await authorizeCreatedProjectWorkspace(
-        req,
-        ctx.fetchProjectCreationWorkspaceDirectory,
-      );
-      if (!createWorkspace.ok) {
-        return sendCreatedProjectWorkspaceError(res, createWorkspace);
-      }
+      // Ordinary project creation is local. Capture any complete identity that
+      // the Web already has for local attribution, but do not turn Workspace
+      // directory availability into a Send dependency. Remote share/sync/move
+      // routes retain their authoritative checks.
+      const createWorkspace = {
+        context: localProjectWorkspaceAttribution(req),
+      };
+      learnAssertedWorkspaceType(createWorkspace.context);
       const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
         req.body || {};
       if (typeof id !== 'string' || !isSafeId(id)) {
@@ -3465,9 +3461,27 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         workspaceId: createWorkspace.context?.workspaceId ?? null,
         workspaceMemberId: createWorkspace.context?.workspaceMemberId ?? null,
       };
+      let skillCatalogScope: LocalCatalogScope | null;
+      let designSystemCatalogScope: LocalCatalogScope | null;
+      try {
+        skillCatalogScope = parseLocalCatalogScope(
+          req.body?.skillCatalogScope,
+          'skillCatalogScope',
+        );
+        designSystemCatalogScope = parseLocalCatalogScope(
+          req.body?.designSystemCatalogScope,
+          'designSystemCatalogScope',
+        );
+      } catch (error) {
+        return sendApiError(res, 400, 'BAD_REQUEST', String(error));
+      }
+      // A staged local resource can outlive the shell's current identity
+      // snapshot while a Workspace switch is loading. Use the partition that
+      // produced that exact selection for local lookup only. It does not bind
+      // this local project to that Workspace or prove current membership.
       const designSystemValidation = await validateProjectDesignSystemId(
         designSystemId,
-        creationWorkspaceScope,
+        designSystemCatalogScope ?? creationWorkspaceScope,
       );
       if (!designSystemValidation.ok) {
         return sendApiError(
@@ -3480,7 +3494,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const normalizedDesignSystemId = designSystemValidation.id;
       const skillValidation = await validateProjectSkillId(
         skillId,
-        creationWorkspaceScope,
+        skillCatalogScope ?? creationWorkspaceScope,
       );
       if (!skillValidation.ok) {
         return sendApiError(res, 400, skillValidation.code, skillValidation.message);
@@ -3490,10 +3504,29 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
           ? req.body.pluginId.trim()
           : null;
+      const requestedPluginSource =
+        typeof req.body?.pluginSource === 'string' && req.body.pluginSource.trim().length > 0
+          ? req.body.pluginSource.trim()
+          : null;
+      // Local identity resolution only. Do not compare this historical source
+      // with the project's current Workspace or perform a membership request:
+      // Home already reconciles staged selections against its current local
+      // catalogue, and this project is local until a later share/sync/move.
+      const selectedLocalPlugin = requestedPluginId && requestedPluginSource
+        ? await ctx.pluginScope?.getLocalPluginBySource?.(
+            requestedPluginId,
+            requestedPluginSource,
+          ) ?? null
+        : null;
       if (requestedPluginId) {
-        const visiblePlugin = ctx.pluginScope
-          ? await ctx.pluginScope.getPlugin(requestedPluginId, creationWorkspaceScope)
-          : getInstalledPlugin(db, requestedPluginId);
+        // Once a source is supplied, never substitute a same-id Personal or
+        // other catalogue record. A missing local source is a missing plugin,
+        // not a Workspace authorization verdict.
+        const visiblePlugin = requestedPluginSource
+          ? selectedLocalPlugin
+          : ctx.pluginScope
+            ? await ctx.pluginScope.getPlugin(requestedPluginId, creationWorkspaceScope)
+            : getInstalledPlugin(db, requestedPluginId);
         if (!visiblePlugin) {
           return sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'plugin not found');
         }
@@ -3522,10 +3555,26 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         && (metadata as { intent?: unknown }).intent === 'web-clone'
         && typeof pendingPrompt === 'string'
         && /https?:\/\/\S+/i.test(pendingPrompt);
+      const localCatalogScopes = {
+        ...(normalizedSkillId && skillCatalogScope ? { skill: skillCatalogScope } : {}),
+        ...(normalizedDesignSystemId && designSystemCatalogScope
+          ? { designSystem: designSystemCatalogScope }
+          : {}),
+      };
+      const hasLocalCatalogScopes = Object.keys(localCatalogScopes).length > 0;
+      // This metadata is daemon-owned. A caller may supply provenance through
+      // the typed top-level fields, but cannot smuggle a different partition
+      // inside the otherwise extensible project metadata object.
+      const clientMetadata = metadata && typeof metadata === 'object'
+        ? Object.fromEntries(
+            Object.entries(metadata).filter(([key]) => key !== 'localCatalogScopes'),
+          )
+        : null;
       const projectMetadata =
-        metadata && typeof metadata === 'object'
+        clientMetadata
           ? {
-              ...metadata,
+              ...clientMetadata,
+              ...(hasLocalCatalogScopes ? { localCatalogScopes } : {}),
               ...(skipDiscoveryBrief === true || webCloneUrlSkipsDiscovery
                 ? { skipDiscoveryBrief: true }
                 : {}),
@@ -3536,9 +3585,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                     projectLocationId: selectedLocationId,
                   }
                 : {}),
-              ...(Array.isArray(metadata.linkedDirs)
+              ...(Array.isArray(clientMetadata.linkedDirs)
                 ? (() => {
-                    const v = validateLinkedDirs(metadata.linkedDirs);
+                    const v = validateLinkedDirs(clientMetadata.linkedDirs);
                     return v.error ? {} : { linkedDirs: v.dirs };
                   })()
                 : {}),
@@ -3546,6 +3595,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           : skipDiscoveryBrief === true
             ? {
                 skipDiscoveryBrief: true,
+                ...(hasLocalCatalogScopes ? { localCatalogScopes } : {}),
                 ...(externalProjectDir
                   ? {
                       baseDir: externalProjectDir,
@@ -3561,13 +3611,40 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                   importedFrom: 'project-location',
                   projectLocationId: selectedLocationId,
                 }
-              : null;
+              : hasLocalCatalogScopes
+                ? {
+                    localCatalogScopes,
+                  }
+                : null;
       const now = Date.now();
       const cid = randomId();
       const initialSessionMode = normalizeChatSessionMode(
         req.body?.conversationMode ?? req.body?.sessionMode,
       );
+      const explicitPlugin =
+        typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
+          ? true
+          : typeof req.body?.appliedPluginSnapshotId === 'string'
+            && req.body.appliedPluginSnapshotId.trim().length > 0;
+      let resolveBody =
+        explicitPlugin ? (req.body as Record<string, unknown>) : null;
+      if (!resolveBody && initialSessionMode === 'design') {
+        const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(
+          projectMetadata && typeof projectMetadata.kind === 'string'
+            ? projectMetadata as Parameters<
+                typeof defaultScenarioPluginIdForProjectMetadata
+              >[0]
+            : null,
+        );
+        if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
+          resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
+        }
+      }
       let project;
+      const pluginResolutionState: {
+        snapshot: ResolveSnapshotOk | null;
+        failure: ResolveSnapshotError | null;
+      } = { snapshot: null, failure: null };
       try {
         if (externalProjectDir) {
           await writeProjectManifest(externalProjectDir, {
@@ -3579,6 +3656,31 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             skillId: normalizedSkillId,
             designSystemId: normalizedDesignSystemId,
           });
+        }
+        const registry = resolveBody
+          ? await loadPluginRegistryView(
+              selectedLocalPlugin
+                ? localPluginRegistryScope(selectedLocalPlugin)
+                : creationWorkspaceScope,
+            )
+          : null;
+        let pluginForSnapshot = selectedLocalPlugin;
+        if (requestedPluginId && requestedPluginSource) {
+          // All preparation above is asynchronous. Re-resolve the exact local
+          // source immediately before the synchronous SQLite transaction so a
+          // reconciliation tombstone cannot leave a project/conversation or
+          // snapshot behind. This is local catalogue freshness only: do not
+          // turn it into a remote membership or current-Workspace gate.
+          pluginForSnapshot = await ctx.pluginScope?.getLocalPluginBySource?.(
+            requestedPluginId,
+            requestedPluginSource,
+          ) ?? null;
+          if (!pluginForSnapshot) {
+            if (externalProjectDir) {
+              await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+            }
+            return sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'plugin not found');
+          }
         }
         project = db.transaction(() => {
           const createdProject = insertProject(db, {
@@ -3611,6 +3713,33 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             id,
             now,
           );
+          if (resolveBody && registry) {
+            const resolved = resolvePluginSnapshot({
+              db,
+              body: resolveBody,
+              projectId: id,
+              conversationId: cid,
+              registry,
+              activeProjectDesignSystem:
+                typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
+                  ? { id: normalizedDesignSystemId }
+                  : undefined,
+              connectorProbe: buildConnectorProbe(connectorService),
+              ...(pluginForSnapshot ? { plugin: pluginForSnapshot } : {}),
+            });
+            if (resolved && !resolved.ok) {
+              if (!explicitPlugin) {
+                console.warn(
+                  `[plugins] default-scenario fallback skipped for project ${id}: ${resolved.body?.error?.code ?? 'unknown'}`,
+                );
+              } else {
+                pluginResolutionState.failure = resolved;
+                throw new Error('explicit plugin resolution failed');
+              }
+            } else {
+              pluginResolutionState.snapshot = resolved;
+            }
+          }
           return createdProject;
         })();
       } catch (err) {
@@ -3620,47 +3749,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         if (externalProjectDir) {
           await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
         }
+        if (pluginResolutionState.failure) {
+          return res
+            .status(pluginResolutionState.failure.status)
+            .json(pluginResolutionState.failure.body);
+        }
         throw err;
-      }
-      const explicitPlugin =
-        typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
-          ? true
-          : typeof req.body?.appliedPluginSnapshotId === 'string'
-            && req.body.appliedPluginSnapshotId.trim().length > 0;
-      let resolveBody =
-        explicitPlugin ? (req.body as Record<string, unknown>) : null;
-      if (!resolveBody && initialSessionMode === 'design') {
-        const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
-        if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
-          resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
-        }
-      }
-      let resolvedSnapshot = null;
-      if (resolveBody) {
-        const registry = await loadPluginRegistryView(creationWorkspaceScope);
-        const resolved = resolvePluginSnapshot({
-          db,
-          body: resolveBody,
-          projectId: id,
-          conversationId: cid,
-          registry,
-          activeProjectDesignSystem:
-            typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
-              ? { id: normalizedDesignSystemId }
-              : undefined,
-          connectorProbe: buildConnectorProbe(connectorService),
-        });
-        if (resolved && !resolved.ok) {
-          if (!explicitPlugin) {
-            console.warn(
-              `[plugins] default-scenario fallback skipped for project ${id}: ${resolved.body?.error?.code ?? 'unknown'}`,
-            );
-          } else {
-            return res.status(resolved.status).json(resolved.body);
-          }
-        } else {
-          resolvedSnapshot = resolved;
-        }
       }
       // For "from template" projects, seed the chosen template's snapshot
       // HTML into the new project folder so the agent can Read/edit files
@@ -3700,7 +3794,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
       }
       /** @type {import('@open-design/contracts').CreateProjectResponse} */
-      const createdProject = resolvedSnapshot?.ok ? getProject(db, id) ?? project : project;
+      const createdProject = pluginResolutionState.snapshot
+        ? getProject(db, id) ?? project
+        : project;
       const body = {
         // The binding above is part of the same transaction as the project and
         // seed conversation. Return that authority immediately so the Web can
@@ -3711,8 +3807,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           ? { ...createdProject, workspaceId: createWorkspace.context.workspaceId }
           : createdProject,
         conversationId: cid,
-        ...(resolvedSnapshot?.ok
-          ? { appliedPluginSnapshotId: resolvedSnapshot.snapshotId }
+        ...(pluginResolutionState.snapshot
+          ? { appliedPluginSnapshotId: pluginResolutionState.snapshot.snapshotId }
           : {}),
       };
       res.json(body);
@@ -3880,7 +3976,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const targetProjectId = randomId();
       const targetName = normalizeDesignSystemCopyName(req.body?.name, sourceProject);
       const requestedPendingPrompt = normalizePendingPrompt(req.body?.pendingPrompt);
-      const sourceNotes = `Created from Open Design project "${sourceProject.name}" (${sourceProject.id}).`;
+      const sourceNotes = `Created from OpenDesign project "${sourceProject.name}" (${sourceProject.id}).`;
       let createdDesignSystemId: string | null = null;
       let insertedProject = false;
       try {
@@ -4066,51 +4162,26 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     }
     const binding = getWorkspaceProjectByProjectId(db, project.id);
-    const hasWorkspaceClaim =
-      headerValue(req, 'x-od-workspace-id') !== null
-      || headerValue(req, 'x-od-workspace-member-id') !== null;
-    if (binding && !hasWorkspaceClaim) {
-      // This is the same session-generation keyed authority broker used by the
-      // shell directory and ordinary read gate. A cold shell + bootstrap joins
-      // one upstream read; its short successful lease is exact-account scoped,
-      // while failures are not cached. Never consult current/default Workspace.
-      const directory = ctx.fetchWorkspaceDirectory
-        ? await ctx.fetchWorkspaceDirectory().catch(
-            (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
-          )
-        : { ok: false, items: [] };
-      const bootstrap = resolveProjectWorkspaceScopeBootstrap({
-        projectId: project.id,
-        binding,
-        directory,
-      });
-      if (!bootstrap.ok) {
-        return sendApiError(
-          res,
-          bootstrap.status,
-          bootstrap.code,
-          bootstrap.message,
-          bootstrap.status === 503 ? { retryable: true } : {},
-        );
-      }
-      /** @type {import('@open-design/contracts').ProjectWorkspaceScopeResponse} */
-      const body = { scope: bootstrap.scope };
-      return res.json(body);
-    }
     if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
-    const directory = ctx.fetchWorkspaceDirectory
-      ? await ctx.fetchWorkspaceDirectory().catch(
-          (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
-        )
-      : { ok: false, items: [] };
-    // Persisted binding is the resource identity. The authorization gate above
-    // freshly verifies the exact caller pair for a bound project; a genuinely
-    // unbound legacy project remains unbound even when a caller supplies an
-    // unrelated Workspace identity.
-    const scope = resolveProjectWorkspaceScope({
+    const claimed = workspaceProjectContextFromRequest(req);
+    const assertedType = headerValue(req, 'x-od-workspace-type');
+    const requestWorkspaceType = assertedType === 'team' || assertedType === 'personal'
+      ? assertedType
+      : null;
+    if (binding?.workspaceId && requestWorkspaceType) {
+      workspaceTypes?.learn({
+        workspaceId: binding.workspaceId,
+        workspaceType: requestWorkspaceType,
+      });
+    }
+    const scope = resolveLocalProjectWorkspaceScope({
       projectId: project.id,
       binding,
-      directory,
+      requestWorkspaceMemberId:
+        claimed && claimed !== 'missing' ? claimed.workspaceMemberId : null,
+      requestWorkspaceType,
+      knownWorkspaceType: workspaceTypes?.typeOf(binding?.workspaceId) ?? null,
+      ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv() } : {}),
     });
     /** @type {import('@open-design/contracts').ProjectWorkspaceScopeResponse} */
     const body = { scope };
@@ -4209,6 +4280,20 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (patch.metadata && typeof patch.metadata === 'object') {
         const existing = getProject(db, req.params.id);
         const existingMeta = existing?.metadata;
+        if (
+          'localCatalogScopes' in patch.metadata
+          && !sameLocalCatalogScopes(
+            patch.metadata.localCatalogScopes,
+            existingMeta?.localCatalogScopes,
+          )
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'localCatalogScopes can only be set during project creation',
+          );
+        }
         if ('fromTrustedPicker' in patch.metadata
             && patch.metadata.fromTrustedPicker !== existingMeta?.fromTrustedPicker) {
           return sendApiError(
@@ -4252,6 +4337,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           }
           patch.metadata = {
             ...patch.metadata,
+            ...(existingMeta?.localCatalogScopes
+              ? { localCatalogScopes: existingMeta.localCatalogScopes }
+              : {}),
             baseDir: existingMeta.baseDir,
             ...(existingMeta.importedFrom === 'folder'
               ? { importedFrom: 'folder' }
@@ -4281,6 +4369,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             res, 400, 'BAD_REQUEST',
             'orchestratorWorkspace can only be set via POST /api/import/folder or POST /api/projects/:id/working-dir',
           );
+        } else if (existingMeta?.localCatalogScopes) {
+          patch.metadata = {
+            ...patch.metadata,
+            localCatalogScopes: existingMeta.localCatalogScopes,
+          };
         }
       }
       if (patch.metadata?.linkedDirs) {
@@ -4334,6 +4427,33 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           return sendApiError(res, 400, skillValidation.code, skillValidation.message);
         }
         patch.skillId = skillValidation.id;
+      }
+      if (
+        (Object.prototype.hasOwnProperty.call(patch, 'skillId')
+          && patch.skillId !== patchProject.skillId)
+        || (Object.prototype.hasOwnProperty.call(patch, 'designSystemId')
+          && patch.designSystemId !== patchProject.designSystemId)
+      ) {
+        const currentMetadata = patch.metadata && typeof patch.metadata === 'object'
+          ? patch.metadata
+          : patchProject.metadata;
+        const currentScopes = currentMetadata?.localCatalogScopes;
+        if (currentScopes) {
+          const nextScopes = { ...currentScopes };
+          if (
+            Object.prototype.hasOwnProperty.call(patch, 'skillId')
+            && patch.skillId !== patchProject.skillId
+          ) delete nextScopes.skill;
+          if (
+            Object.prototype.hasOwnProperty.call(patch, 'designSystemId')
+            && patch.designSystemId !== patchProject.designSystemId
+          ) delete nextScopes.designSystem;
+          const { localCatalogScopes: _localCatalogScopes, ...metadataWithoutScopes } =
+            currentMetadata;
+          patch.metadata = Object.keys(nextScopes).length > 0
+            ? { ...metadataWithoutScopes, localCatalogScopes: nextScopes }
+            : metadataWithoutScopes;
+        }
       }
       if (typeof patch.name === 'string' && patch.name.trim().length > 0) {
         // Design-system workspace projects mirror their design system's
@@ -4683,17 +4803,20 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
   // Standalone lint endpoint — POST raw HTML, get findings back.
   // The chat layer uses this to lint streamed-in artifacts without writing
   // them to disk first, so a P0 issue can be surfaced before save.
+  // Request/response are typed against the shared contract so a producer
+  // change that breaks the wire shape fails compilation here.
   app.post('/api/artifacts/lint', (req, res) => {
     try {
-      const { html } = req.body || {};
+      const { html } = (req.body ?? {}) as Partial<LintArtifactRequest>;
       if (typeof html !== 'string' || html.length === 0) {
         return res.status(400).json({ error: 'html required' });
       }
       const findings = lintArtifact(html);
-      res.json({
+      const payload: LintArtifactResponse = {
         findings,
         agentMessage: renderFindingsForAgent(findings),
-      });
+      };
+      res.json(payload);
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
     }
@@ -4706,6 +4829,8 @@ export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' |
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
   isProjectRevoked?: (projectId: string) => boolean;
+  /** Durable first-open placeholder stamp lookup. */
+  isProjectUnmaterializedPlaceholder?: (projectId: string) => boolean;
 }
 
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
@@ -4717,9 +4842,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { upload } = ctx.uploads;
   const { fs } = ctx.node;
   const { getProject, getWorkspaceProject, getWorkspaceProjectByProjectId } = ctx.projectStore;
-  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
-    ctx.verifyWorkspaceRequestAuthority,
-  );
   const authorizeProjectRequest =
     ctx.authorizeProjectRequest ??
     createAuthorizeProjectRequest({
@@ -4728,13 +4850,21 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       getWorkspaceProjectByProjectId,
       isProjectRevoked: (_db, projectId) =>
         ctx.isProjectRevoked?.(projectId) ?? false,
+      isProjectUnmaterializedPlaceholder: (_db, projectId) =>
+        ctx.isProjectUnmaterializedPlaceholder?.(projectId) ?? false,
       ...(ctx.verifyWorkspaceRequestAuthority
         ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
         : {}),
       sendApiError,
     });
+  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
+    ctx.verifyWorkspaceRequestAuthority,
+    undefined,
+    authorizeProjectRequest,
+  );
   const requestCanWriteWorkspaceProject = createWorkspaceProjectWriteAuthorityCheck(
     ctx.verifyWorkspaceRequestAuthority,
+    ctx.isProjectUnmaterializedPlaceholder,
   );
   const { listFiles, listProjectFolders, createProjectFolder, deleteProjectFolder, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, sanitizePath, ensureProject } = ctx.projectFiles;
   const { buildDocumentPreview } = ctx.documents;
@@ -6679,6 +6809,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
 export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'paths' | 'projectStore' | 'projectFiles'> {
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
+  authorizeProjectRequest?: AuthorizeProjectRequest;
+  /** Durable first-open placeholder stamp lookup. */
+  isProjectUnmaterializedPlaceholder?: (projectId: string) => boolean;
 }
 
 export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUploadRoutesDeps) {
@@ -6689,8 +6822,23 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
   const { getProject, getWorkspaceProject, getWorkspaceProjectByProjectId } = ctx.projectStore;
   const { readProjectFile } = ctx.projectFiles;
   const { fs } = ctx.node;
+  const authorizeProjectRequest =
+    ctx.authorizeProjectRequest ??
+    createAuthorizeProjectRequest({
+      db,
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      isProjectUnmaterializedPlaceholder: (_db, projectId) =>
+        ctx.isProjectUnmaterializedPlaceholder?.(projectId) ?? false,
+      ...(ctx.verifyWorkspaceRequestAuthority
+        ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
+        : {}),
+      sendApiError,
+    });
   const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
     ctx.verifyWorkspaceRequestAuthority,
+    undefined,
+    authorizeProjectRequest,
   );
 
   app.post(

@@ -486,7 +486,7 @@ describe('EntryShell team project content readiness', () => {
     ).toBe(false);
   });
 
-  it('falls back to POST pull when ready hydration does not succeed', async () => {
+  it('bootstraps a progressive open when ready hydration does not succeed', async () => {
     vi.stubGlobal('EventSource', MockWorkspaceEventSource as unknown as typeof EventSource);
     const workspace = teamContext();
     const materializedFile = {
@@ -498,7 +498,7 @@ describe('EntryShell team project content readiness', () => {
       kind: 'code' as const,
       mime: 'text/html',
     };
-    let pullSucceeded = false;
+    let bootstrapSucceeded = false;
     const requests: Array<{
       url: string;
       method: string;
@@ -531,12 +531,12 @@ describe('EntryShell team project content readiness', () => {
           }],
         });
       }
-      if (pathname.endsWith('/collab/pull') && init?.method === 'POST') {
-        pullSucceeded = true;
-        return jsonResponse({ ok: true });
+      if (pathname.endsWith('/collab/bootstrap') && init?.method === 'PUT') {
+        bootstrapSucceeded = true;
+        return jsonResponse({ ok: true, awaitingFirstMaterialization: true }, 202);
       }
       if (pathname.endsWith('/files')) {
-        return jsonResponse({ files: pullSucceeded ? [materializedFile] : [] });
+        return jsonResponse({ files: bootstrapSucceeded ? [materializedFile] : [] });
       }
       return jsonResponse({});
     }) as typeof fetch;
@@ -571,7 +571,7 @@ describe('EntryShell team project content readiness', () => {
     fireEvent.click(screen.getByTitle('Ready shared project'));
     expect(
       requests.some(({ url, method }) =>
-        method === 'POST' && url.includes('/api/projects/shared-ready/collab/pull')),
+        method === 'PUT' && url.includes('/api/projects/shared-ready/collab/bootstrap')),
     ).toBe(false);
     await act(async () => {
       finishHydration(false);
@@ -590,14 +590,14 @@ describe('EntryShell team project content readiness', () => {
     expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
     expect(
       requests.some(({ url, method }) =>
-        method === 'POST' && url.includes('/api/projects/shared-ready/collab/pull')),
+        method === 'PUT' && url.includes('/api/projects/shared-ready/collab/bootstrap')),
     ).toBe(true);
-    const pullRequest = requests.find(
+    const bootstrapRequest = requests.find(
       ({ url, method }) =>
-        method === 'POST'
-        && url.includes('/api/projects/shared-ready/collab/pull'),
+        method === 'PUT'
+        && url.includes('/api/projects/shared-ready/collab/bootstrap'),
     );
-    expect(pullRequest).toMatchObject({
+    expect(bootstrapRequest).toMatchObject({
       workspaceId: 'ws-1',
       workspaceMemberId: 'wm-1',
     });
@@ -673,7 +673,12 @@ describe('EntryShell team project content readiness', () => {
         }),
       });
     });
-    expect(await screen.findByText('Member B')).toBeTruthy();
+    // Barrier: the member switch must land in the shell before the click
+    // below, or it would capture wm-1. The account name is no longer rendered
+    // as visible text (320a36ac1 made the trigger avatar-only and moved the
+    // name into the hover menu) — it survives as the trigger's aria-label,
+    // which is the same value in the always-mounted chrome.
+    expect(await screen.findByLabelText('Member B')).toBeTruthy();
 
     fireEvent.click(screen.getByTitle('Ready shared project'));
     await waitFor(() => expect(onOpenProject).toHaveBeenCalledWith(
@@ -689,7 +694,7 @@ describe('EntryShell team project content readiness', () => {
     expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
     expect(
       requests.some(({ url, method }) =>
-        method === 'POST' && url.includes('/api/projects/shared-ready/collab/pull')),
+        method === 'PUT' && url.includes('/api/projects/shared-ready/collab/bootstrap')),
     ).toBe(true);
     expect(onTeamProjectContentReady).toHaveBeenCalledTimes(1);
   });
@@ -716,7 +721,10 @@ describe('EntryShell team project content readiness', () => {
     renderAt('/all-projects', { onTeamProjectContentReady });
 
     await waitFor(() => expect(MockWorkspaceEventSource.instances).toHaveLength(1));
-    await screen.findByText('Ma Shu');
+    // Barrier: wait for the workspace context to land before dispatching the
+    // readiness event. Read it off the account trigger's aria-label — the
+    // avatar-only trigger (320a36ac1) no longer prints the name as text.
+    await screen.findByLabelText('Ma Shu');
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
         type: 'team-project-content-ready',

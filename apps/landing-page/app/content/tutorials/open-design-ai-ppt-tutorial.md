@@ -1,9 +1,9 @@
 ---
-title: 'How to Create an AI-Powered PPT with Open Design: A Hands-on Workshop Tutorial'
-summary: A copy-ready written workshop guide for using Open Design to turn raw notes into an editable AI-powered PPT, from visual direction and deck mode through assets, charts, motion, and final QA.
+title: 'How to Create an AI-Powered PPT with OpenDesign: A Hands-on Workshop Tutorial'
+summary: A copy-ready written workshop guide for using OpenDesign to turn raw notes into an editable AI-powered PPT, from visual direction and deck mode through assets, charts, motion, and final QA.
 date: 2026-07-09
 category: Tutorial
-author: Open Design
+author: OpenDesign
 publicFormat: article
 thumbnail: /tutorials/open-design-ai-ppt-tutorial-cover.webp
 official: true
@@ -14,10 +14,10 @@ official: true
 # Before You Start
 You can use this workflow for a research report, product pitch, lecture, portfolio presentation, internal strategy memo, event recap, or any other material that needs to become a visual deck. The source material can be one document, several notes, a transcript, a research summary, or even a messy collection of bullet points.
 
-> **Recommended setup:** Open Design installed locally, one connected coding agent or AI agent, and a source document that contains the topic, audience, purpose, and raw content. If your agent can browse, download assets, generate images, and edit code, the workflow becomes much smoother.
+> **Recommended setup:** OpenDesign installed locally, one connected coding agent or AI agent, and a source document that contains the topic, audience, purpose, and raw content. If your agent can browse, download assets, generate images, and edit code, the workflow becomes much smoother.
 
 ## Define the Presentation Purpose First
-A presentation is not just a beautiful set of slides. It should help the audience understand something and make a decision, form a judgment, or take action. Before asking Open Design to design anything, write down what the audience should understand and what conclusion they should reach.
+A presentation is not just a beautiful set of slides. It should help the audience understand something and make a decision, form a judgment, or take action. Before asking OpenDesign to design anything, write down what the audience should understand and what conclusion they should reach.
 
 ### <span id="prompt-0"></span>Prompt 0: Clarify the deck purpose before design
 
@@ -47,14 +47,14 @@ Do not design the slides yet. Do not write HTML yet. Focus only on the story, st
 
 # Step 1: Use Image Mode to Generate One Reference Image with Multiple Styles
 <figure class="ppt-media">
-  <img src="/tutorials/open-design-ai-ppt-image-mode-entry.webp" alt="Open Design Image Mode entry in the prompt composer" width="1600" height="824" loading="lazy" />
+  <img src="/tutorials/open-design-ai-ppt-image-mode-entry.webp" alt="OpenDesign Image Mode entry in the prompt composer" width="1600" height="824" loading="lazy" />
   <figcaption>Start from Image Mode when you want one visual reference before building the full deck.</figcaption>
 </figure>
 
-The first Open Design step is not to generate the full PPT. Instead, use **Image Mode** to generate one reference image that contains several possible visual directions. This gives the user a choice before committing to a deck style.
+The first OpenDesign step is not to generate the full PPT. Instead, use **Image Mode** to generate one reference image that contains several possible visual directions. This gives the user a choice before committing to a deck style.
 This matters because people often do not know the exact name of the style they want. They may not know whether they prefer Swiss typography, brutalist layouts, cyberpunk dashboards, editorial magazine design, product launch visuals, or a clean investor-deck style. A multi-style reference image lets the user compare options visually and choose the style that best matches the message.
 
-> **Important:** in this step, generate only one image. The image should present multiple style options side by side. Do not ask Open Design to create the full deck yet.
+> **Important:** in this step, generate only one image. The image should present multiple style options side by side. Do not ask OpenDesign to create the full deck yet.
 
 ### <span id="prompt-1"></span>Prompt 1: Image Mode - generate one image with multiple PPT style options
 
@@ -84,12 +84,12 @@ Make the image useful for choosing the final PPT style.
 ```
 
 <figure class="ppt-media">
-  <img src="/tutorials/open-design-ai-ppt-style-light.webp" alt="A light Open Design slide image generated in Image Mode" width="1600" height="958" loading="lazy" />
+  <img src="/tutorials/open-design-ai-ppt-style-light.webp" alt="A light OpenDesign slide image generated in Image Mode" width="1600" height="958" loading="lazy" />
   <figcaption>One reference image can explore a clean, bright presentation style before the deck is built.</figcaption>
 </figure>
 
 <figure class="ppt-media">
-  <img src="/tutorials/open-design-ai-ppt-style-dark.webp" alt="A dark Open Design slide image generated in Image Mode" width="1600" height="958" loading="lazy" />
+  <img src="/tutorials/open-design-ai-ppt-style-dark.webp" alt="A dark OpenDesign slide image generated in Image Mode" width="1600" height="958" loading="lazy" />
   <figcaption>A contrasting dark direction helps compare visual language, hierarchy, and mood side by side.</figcaption>
 </figure>
 
@@ -132,7 +132,7 @@ Do not generate the deck yet. Help me choose one style direction and explain why
 
 # Step 2: Prepare the Slide Structure Before Designing
 Before going into Deck Mode, define the slide-by-slide content. This is where many AI presentation workflows fail: they try to design too early. If the text, slide order, and narrative logic are still unclear, every later design edit becomes more expensive.
-The goal here is to create a clean content skeleton: slide title, subtitle, key message, supporting points, and any visual requirement. You can use any AI chat tool for this step, or use Open Design chat if that is your preferred workspace.
+The goal here is to create a clean content skeleton: slide title, subtitle, key message, supporting points, and any visual requirement. You can use any AI chat tool for this step, or use OpenDesign chat if that is your preferred workspace.
 
 ### <span id="prompt-2"></span>Prompt 2: Create the slide-by-slide content plan
 
@@ -175,12 +175,12 @@ After the outline, create a simple HTML preview that places the text of each sli
 
 # Step 3: Use Deck Mode to Rebuild the Chosen Image Style as an Editable PPT
 <figure class="ppt-media">
-  <img src="/tutorials/open-design-ai-ppt-deck-mode-entry.png" alt="Open Design Deck Mode selected in the prompt composer" width="2754" height="1576" loading="lazy" />
+  <img src="/tutorials/open-design-ai-ppt-deck-mode-entry.png" alt="OpenDesign Deck Mode selected in the prompt composer" width="2754" height="1576" loading="lazy" />
   <figcaption>Switch to Deck Mode when the goal is an editable presentation, not a single reference image.</figcaption>
 </figure>
 
-Now switch to **Deck Mode**. Give Open Design the chosen reference image and the slide-by-slide content. Ask it to rebuild the deck in the visual style of the selected reference, but as editable HTML slides.
-This is the key difference between a static image workflow and an Open Design workflow. The output should not be a flat picture. It should be a deck you can inspect, edit, comment on, and continue improving.
+Now switch to **Deck Mode**. Give OpenDesign the chosen reference image and the slide-by-slide content. Ask it to rebuild the deck in the visual style of the selected reference, but as editable HTML slides.
+This is the key difference between a static image workflow and an OpenDesign workflow. The output should not be a flat picture. It should be a deck you can inspect, edit, comment on, and continue improving.
 
 ### <span id="prompt-3"></span>Prompt 3: Deck Mode - create the first editable deck
 
@@ -245,7 +245,7 @@ After making changes, summarize:
 ---
 
 # Step 5: Add Real Logos and Brand Assets
-AI-generated decks often use text placeholders where real logos, product icons, screenshots, or brand assets should appear. This weakens credibility. Ask Open Design to identify where real assets are needed, search for them, download appropriate versions, and place them into the deck.
+AI-generated decks often use text placeholders where real logos, product icons, screenshots, or brand assets should appear. This weakens credibility. Ask OpenDesign to identify where real assets are needed, search for them, download appropriate versions, and place them into the deck.
 For logos, be explicit: use official logos, preserve the original colors, and do not restyle them to match the deck. The deck can have a strong visual style, but brand assets should remain recognizable.
 
 <figure class="ppt-media">
@@ -376,7 +376,7 @@ After updating, summarize:
 ---
 
 # Step 8: Add Three.js Visual Effects Only Where It Helps
-Because Open Design decks are HTML-based, you can add web-native visual effects that traditional slide tools do not easily support. Three.js can create particles, 3D objects, subtle background depth, or spatial motion. Animation libraries can create entrance transitions, hover effects, section changes, or emphasis moments.
+Because OpenDesign decks are HTML-based, you can add web-native visual effects that traditional slide tools do not easily support. Three.js can create particles, 3D objects, subtle background depth, or spatial motion. Animation libraries can create entrance transitions, hover effects, section changes, or emphasis moments.
 Use this carefully. Motion should make the presentation more memorable or easier to understand. It should not make the slides harder to read.
 
 <figure class="ppt-media">
@@ -421,7 +421,7 @@ After updating, tell me:
 Use comments when the problem is attached to a specific slide element: a logo feels too large, a label needs different wording, a chart needs more breathing room, or a visual detail should be checked. This keeps feedback close to the exact object that needs work, so the next agent pass can act on the right part of the deck.
 
 <figure class="ppt-media">
-  <img src="/tutorials/open-design-ai-ppt-comment-tool.png" alt="Open Design comment box attached to a selected slide element" width="2154" height="1206" loading="lazy" />
+  <img src="/tutorials/open-design-ai-ppt-comment-tool.png" alt="OpenDesign comment box attached to a selected slide element" width="2154" height="1206" loading="lazy" />
   <figcaption>Element comments are useful for precise feedback on spacing, copy, assets, or visual hierarchy.</figcaption>
 </figure>
 
@@ -429,7 +429,7 @@ Use comments when the problem is attached to a specific slide element: a logo fe
 Use Mark when a visual area needs to be called out quickly. This is helpful for layout issues that are easier to show than describe, such as "this group feels too high", "this section should align with the title", or "the selected header needs more contrast".
 
 <figure class="ppt-media">
-  <img src="/tutorials/open-design-ai-ppt-mark-tool.png" alt="Open Design Mark tool highlighting a slide header area" width="2158" height="1210" loading="lazy" />
+  <img src="/tutorials/open-design-ai-ppt-mark-tool.png" alt="OpenDesign Mark tool highlighting a slide header area" width="2158" height="1210" loading="lazy" />
   <figcaption>Mark makes visual feedback concrete when a layout region needs adjustment.</figcaption>
 </figure>
 
@@ -437,7 +437,7 @@ Use Mark when a visual area needs to be called out quickly. This is helpful for 
 Use Edit when you already know the exact local change you want. Select the element, edit the text or style properties directly, and save the refinement without regenerating the whole deck. This is best for final wording, typography, and small layout fixes after the main design system is stable.
 
 <figure class="ppt-media">
-  <img src="/tutorials/open-design-ai-ppt-edit-tool.png" alt="Open Design Edit panel editing selected slide text" width="2156" height="1206" loading="lazy" />
+  <img src="/tutorials/open-design-ai-ppt-edit-tool.png" alt="OpenDesign Edit panel editing selected slide text" width="2156" height="1206" loading="lazy" />
   <figcaption>Edit is the fastest path for precise text, typography, and element-level refinements.</figcaption>
 </figure>
 
@@ -507,14 +507,14 @@ Because this workflow can include real assets, generated images, charts, 3D effe
     <tr><th background-color="light-gray">Format</th><th background-color="light-gray">Best For</th><th background-color="light-gray">Trade-off</th></tr>
   </thead>
   <tbody>
-    <tr><td>Present in Open Design</td><td>Keeping motion, HTML layout, charts, and interactive effects</td><td>Requires presenting from the Open Design environment</td></tr>
+    <tr><td>Present in OpenDesign</td><td>Keeping motion, HTML layout, charts, and interactive effects</td><td>Requires presenting from the OpenDesign environment</td></tr>
     <tr><td>PDF or images</td><td>Sharing a stable visual version</td><td>Motion and interaction are lost</td></tr>
     <tr><td>PPTX</td><td>Compatibility with traditional presentation tools</td><td>Complex HTML visuals may not convert perfectly</td></tr>
     <tr><td>HTML</td><td>Web-native sharing and archiving</td><td>External assets and generated effects need careful verification</td></tr>
   </tbody>
 </table>
 
-> **Recommended approach:** if the deck uses charts, 3D, and motion, present directly in Open Design when possible. If you need a shareable backup, export a PDF or image version after the final QA pass.
+> **Recommended approach:** if the deck uses charts, 3D, and motion, present directly in OpenDesign when possible. If you need a shareable backup, export a PDF or image version after the final QA pass.
 
 ---
 
@@ -527,15 +527,15 @@ Use this section as a compact copy-and-paste reference. Replace the bracketed va
   </thead>
   <tbody>
     <tr><td><a href="#prompt-0">Prompt 0</a></td><td>You need to clarify the story and decision logic.</td><td>Any AI chat</td></tr>
-    <tr><td><a href="#prompt-1">Prompt 1</a></td><td>You need one image with multiple visual style options.</td><td>Open Design Image Mode</td></tr>
-    <tr><td><a href="#prompt-1b">Prompt 1B</a></td><td>You want AI to help choose the best visual direction.</td><td>Open Design chat or any AI chat</td></tr>
+    <tr><td><a href="#prompt-1">Prompt 1</a></td><td>You need one image with multiple visual style options.</td><td>OpenDesign Image Mode</td></tr>
+    <tr><td><a href="#prompt-1b">Prompt 1B</a></td><td>You want AI to help choose the best visual direction.</td><td>OpenDesign chat or any AI chat</td></tr>
     <tr><td><a href="#prompt-2">Prompt 2</a></td><td>You need a slide-by-slide content plan.</td><td>Any AI chat</td></tr>
-    <tr><td><a href="#prompt-3">Prompt 3</a></td><td>You are ready to create the first editable deck.</td><td>Open Design Deck Mode</td></tr>
-    <tr><td><a href="#prompt-4">Prompt 4</a></td><td>The first deck needs to become closer to the reference image.</td><td>Open Design chat</td></tr>
-    <tr><td><a href="#prompt-5">Prompt 5</a></td><td>You need real logos and product assets.</td><td>Open Design chat</td></tr>
-    <tr><td><a href="#prompt-6">Prompt 6</a></td><td>You want AI-generated images only where useful.</td><td>Open Design chat</td></tr>
-    <tr><td><a href="#prompt-7">Prompt 7</a></td><td>You need charts for data-heavy slides.</td><td>Open Design chat</td></tr>
-    <tr><td><a href="#prompt-8a">Prompt 8A</a></td><td>You want restrained 3D visual effects.</td><td>Open Design chat</td></tr>
-    <tr><td><a href="#prompt-10a">Prompt 10A</a></td><td>You are ready to add final process animation and interaction to the whole PPT.</td><td>Open Design presentation / chat</td></tr>
+    <tr><td><a href="#prompt-3">Prompt 3</a></td><td>You are ready to create the first editable deck.</td><td>OpenDesign Deck Mode</td></tr>
+    <tr><td><a href="#prompt-4">Prompt 4</a></td><td>The first deck needs to become closer to the reference image.</td><td>OpenDesign chat</td></tr>
+    <tr><td><a href="#prompt-5">Prompt 5</a></td><td>You need real logos and product assets.</td><td>OpenDesign chat</td></tr>
+    <tr><td><a href="#prompt-6">Prompt 6</a></td><td>You want AI-generated images only where useful.</td><td>OpenDesign chat</td></tr>
+    <tr><td><a href="#prompt-7">Prompt 7</a></td><td>You need charts for data-heavy slides.</td><td>OpenDesign chat</td></tr>
+    <tr><td><a href="#prompt-8a">Prompt 8A</a></td><td>You want restrained 3D visual effects.</td><td>OpenDesign chat</td></tr>
+    <tr><td><a href="#prompt-10a">Prompt 10A</a></td><td>You are ready to add final process animation and interaction to the whole PPT.</td><td>OpenDesign presentation / chat</td></tr>
   </tbody>
 </table>

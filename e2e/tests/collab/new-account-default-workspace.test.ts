@@ -26,30 +26,12 @@ const DEFAULT_WORKSPACE_HEADERS = {
 
 let authority: Server;
 let authorityUrl: string;
-let currentWorkspaceSelected = false;
 
 beforeAll(async () => {
   authority = createServer((req, res) => {
     if (req.url === '/api/v1/workspaces' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ items: [DEFAULT_WORKSPACE] }));
-      return;
-    }
-    if (req.url === '/api/v1/workspaces/current' && req.method === 'GET') {
-      if (!req.headers['x-vela-workspace-id'] && !currentWorkspaceSelected) {
-        res.writeHead(403, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'missing_principal' }));
-        return;
-      }
-      currentWorkspaceSelected = true;
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({
-        ...DEFAULT_WORKSPACE,
-        billingState: 'free',
-        planId: null,
-        providerMode: 'platform_credits',
-        seatSummary: { seatLimit: 1, usedSeats: 1 },
-      }));
       return;
     }
     res.writeHead(404, { 'content-type': 'application/json' });
@@ -93,11 +75,10 @@ process.exit(1);
 
 describe('new account default workspace bootstrap', () => {
   test(
-    'uses nickname workspace as the default personal free workspace with zero Open Design Cloud balance',
+    'uses nickname workspace as the default personal free workspace with zero OpenDesign Cloud balance',
     { timeout: 240_000 },
     async () => {
       const suite = await createSmokeSuite('collab-new-account-default-workspace');
-      currentWorkspaceSelected = false;
 
       const velaBin = await writeFreeBillingVelaBin(
         join(suite.scratchDir, 'fake-vela-free-billing'),
@@ -129,8 +110,7 @@ describe('new account default workspace bootstrap', () => {
           expect(directory.activeWorkspaceId).toBeNull();
           expect(directory.items).toEqual([DEFAULT_WORKSPACE]);
 
-          // Once the local pin exists, the authoritative current context
-          // carries the positive free-state marker used by the web plan label.
+          // A second exact read remains on the same directory membership.
           const settledContext = await requestJson<{
             context: {
               workspaceId: string;
@@ -146,7 +126,7 @@ describe('new account default workspace bootstrap', () => {
             workspaceId: DEFAULT_WORKSPACE.workspaceId,
             workspaceName: 'Ada workspace',
             workspaceType: 'personal',
-            billingState: 'free',
+            billingState: 'active',
             planId: null,
           });
 

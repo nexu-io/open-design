@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -1744,7 +1744,7 @@ export function DesignFilesPanel({
                               void handlePluginFolderAgentAction(folder.path, 'contribute')
                             }
                           >
-                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'Open Design PR'}
+                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'OpenDesign PR'}
                           </button>
                         </div>
                       ) : null}
@@ -2069,17 +2069,19 @@ function HtmlCardThumbnail({
     url,
   ]);
 
-  // Track the host width so the fixed-layout iframe scales with the card.
-  // Environments without ResizeObserver (jsdom) fall back to an unscaled
-  // fill-the-box iframe.
-  useEffect(() => {
+  // Track the host width before paint so the iframe's first rendered viewport
+  // is the fixed desktop layout, then only its outer transform follows the
+  // card. This prevents responsive decks from fitting once to the card-sized
+  // iframe and then being scaled a second time after ResizeObserver runs.
+  useLayoutEffect(() => {
     const host = hostRef.current;
-    if (!host || typeof ResizeObserver === 'undefined') return;
+    if (!host) return;
     const update = () => {
       const width = host.clientWidth;
       if (width > 0) setScale(width / PAGE_THUMB_LAYOUT_WIDTH);
     };
     update();
+    if (typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(update);
     observer.observe(host);
     return () => observer.disconnect();
@@ -2095,16 +2097,16 @@ function HtmlCardThumbnail({
           srcDoc={srcDoc}
           sandbox="allow-scripts allow-downloads"
           loading="lazy"
-          style={
-            scale
+          style={{
+            width: PAGE_THUMB_LAYOUT_WIDTH,
+            height: PAGE_THUMB_LAYOUT_HEIGHT,
+            ...(scale
               ? {
-                  width: PAGE_THUMB_LAYOUT_WIDTH,
-                  height: PAGE_THUMB_LAYOUT_HEIGHT,
                   transform: `scale(${scale})`,
                   transformOrigin: '0 0',
                 }
-              : undefined
-          }
+              : {}),
+          }}
         />
       )}
     </div>

@@ -137,7 +137,7 @@ export const PREMIUM_MODELS: readonly PricingModel[] = [
 ] as const;
 
 /**
- * Hosted image roster, mirrored from the shipped Open Design Cloud catalogue
+ * Hosted image roster, mirrored from the shipped OpenDesign Cloud catalogue
  * in `apps/daemon/src/media/models.ts` (`provider: 'vela'`, `credentialsRequired:
  * false`): `vela/seedream-5.0`, `vela/seedream-5.0-pro`, `vela/nano-banana-2`
  * (+ `-lite`), and `vela/gpt-image-2`. Variant suffixes are grouped so one model
@@ -186,7 +186,7 @@ const EN: PricingContent = {
   labels: {
     heroTitle: 'Pay only for AI tasks that deliver results',
     footnote: 'Prices shown in USD. Checkout, billing, and auto top-up are handled in the {console}. Adjust or cancel your plan anytime.',
-    consoleLabel: 'Open Design Cloud console',
+    consoleLabel: 'OpenDesign Cloud console',
     monthly: 'Monthly',
     yearly: 'Yearly',
     yearlySave: 'Save up to 51%',
@@ -260,7 +260,7 @@ const ZH_CN: PricingContent = {
   labels: {
     heroTitle: '只为实际完成的 AI 任务付费',
     footnote: '价格以美元计。结账、账单与自动充值均在 {console} 完成。可随时调整或取消套餐。',
-    consoleLabel: 'Open Design Cloud 控制台',
+    consoleLabel: 'OpenDesign Cloud 控制台',
     monthly: '月付',
     yearly: '年付',
     yearlySave: '省最多 51%',
@@ -334,7 +334,7 @@ const ZH_TW: PricingContent = {
   labels: {
     heroTitle: '只為實際完成的 AI 任務付費',
     footnote: '價格以美元計。結帳、帳單與自動加值皆於 {console} 完成。可隨時調整或取消方案。',
-    consoleLabel: 'Open Design Cloud 主控台',
+    consoleLabel: 'OpenDesign Cloud 主控台',
     monthly: '月付',
     yearly: '年付',
     yearlySave: '最多省 51%',
@@ -408,7 +408,7 @@ const ES: PricingContent = {
   labels: {
     heroTitle: 'Paga solo por tareas de IA completadas',
     footnote: 'Precios en USD. El pago, la facturación y la recarga automática se gestionan en la {console}. Cambia o cancela tu plan cuando quieras.',
-    consoleLabel: 'consola de Open Design Cloud',
+    consoleLabel: 'consola de OpenDesign Cloud',
     monthly: 'Mensual',
     yearly: 'Anual',
     yearlySave: 'Ahorra hasta 51%',
@@ -482,7 +482,7 @@ const PT_BR: PricingContent = {
   labels: {
     heroTitle: 'Pague apenas por tarefas de IA concluídas',
     footnote: 'Preços em USD. Pagamento, faturamento e recarga automática são feitos no {console}. Ajuste ou cancele seu plano quando quiser.',
-    consoleLabel: 'console do Open Design Cloud',
+    consoleLabel: 'console do OpenDesign Cloud',
     monthly: 'Mensal',
     yearly: 'Anual',
     yearlySave: 'Economize até 51%',
@@ -556,7 +556,7 @@ const RU: PricingContent = {
   labels: {
     heroTitle: 'Платите только за выполненные задачи ИИ',
     footnote: 'Цены указаны в USD. Оплата, выставление счетов и автопополнение выполняются в {console}. Изменение или отмена тарифа в любое время.',
-    consoleLabel: 'консоли Open Design Cloud',
+    consoleLabel: 'консоли OpenDesign Cloud',
     monthly: 'Месяц',
     yearly: 'Год',
     yearlySave: 'Экономия до 51%',
@@ -630,7 +630,7 @@ const FR: PricingContent = {
   labels: {
     heroTitle: 'Payez uniquement pour les tâches IA terminées',
     footnote: 'Prix indiqués en USD. Le paiement, la facturation et la recharge automatique se gèrent dans la {console}. Ajustez ou résiliez votre forfait à tout moment.',
-    consoleLabel: 'console Open Design Cloud',
+    consoleLabel: 'console OpenDesign Cloud',
     monthly: 'Mensuel',
     yearly: 'Annuel',
     yearlySave: 'Économisez jusqu’à 51%',
@@ -704,7 +704,7 @@ const KO: PricingContent = {
   labels: {
     heroTitle: '완료된 AI 작업에만 비용을 지불하세요',
     footnote: '가격은 USD 기준입니다. 결제, 청구, 자동 충전은 {console}에서 처리됩니다. 플랜 변경 또는 취소는 언제든 가능합니다.',
-    consoleLabel: 'Open Design Cloud 콘솔',
+    consoleLabel: 'OpenDesign Cloud 콘솔',
     monthly: '월간',
     yearly: '연간',
     yearlySave: '최대 51% 절약',
@@ -778,7 +778,7 @@ const DE: PricingContent = {
   labels: {
     heroTitle: 'Zahle nur für abgeschlossene KI-Aufgaben',
     footnote: 'Preise in USD. Checkout, Abrechnung und automatisches Aufladen erfolgen in der {console}. Plan jederzeit anpassen oder kündigen.',
-    consoleLabel: 'Open Design Cloud Konsole',
+    consoleLabel: 'OpenDesign Cloud Konsole',
     monthly: 'Monatlich',
     yearly: 'Jährlich',
     yearlySave: 'Bis zu 51% sparen',
@@ -852,7 +852,7 @@ const JA: PricingContent = {
   labels: {
     heroTitle: '完了した AI タスクにだけ支払う',
     footnote: '価格は米ドル表示です。決済・請求・自動チャージは {console} で行います。プランの変更・解約はいつでも可能です。',
-    consoleLabel: 'Open Design Cloud コンソール',
+    consoleLabel: 'OpenDesign Cloud コンソール',
     monthly: '月額',
     yearly: '年額',
     yearlySave: '最大 51% オフ',

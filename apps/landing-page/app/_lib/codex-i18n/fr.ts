@@ -8,7 +8,7 @@ export const fr: CodexCopyOverride = {
   collectionEyebrow: 'Sélection éditoriale',
   collectionHeading: 'Les plugins design qui font livrer à Codex de vraies interfaces',
   collectionLede:
-    'OpenAI Codex écrit du code qui fonctionne. Livré à lui-même, il retombe sur des polices sans risque, des espacements moyens et du Helvetica centré. Voici les plugins qui lui donnent du goût : des skills esthétiques et des règles de design system. Installez-en un, ou faites-les tourner tous dans Open Design.',
+    'OpenAI Codex écrit du code qui fonctionne. Livré à lui-même, il retombe sur des polices sans risque, des espacements moyens et du Helvetica centré. Voici les plugins qui lui donnent du goût : des skills esthétiques et des règles de design system. Installez-en un, ou faites-les tourner tous dans OpenDesign.',
   collectionStats: [
     { value: '50', label: 'plugins sélectionnés' },
     { value: '13', label: 'dépôts sources' },
@@ -20,13 +20,13 @@ export const fr: CodexCopyOverride = {
     'Reprenez la main sur les choix esthétiques par défaut de Codex, avant la première ligne de code.',
     'Transformez vos tokens et vos composants en règles que Codex suit au lieu d’improviser.',
   ],
-  collectionCloserHeading: 'Passez la config. Designez avec Codex dans Open Design',
+  collectionCloserHeading: 'Passez la config. Designez avec Codex dans OpenDesign',
   filterAll: 'Tout',
   collectionCloserBody:
-    'Open Design est le workspace de design open source et agent-native qui tourne autour de Codex. Il garde vos systèmes, vos skills et vos templates cohérents pour que l’agent livre un travail qui vous appartient.',
+    'OpenDesign est le workspace de design open source et agent-native qui tourne autour de Codex. Il garde vos systèmes, vos skills et vos templates cohérents pour que l’agent livre un travail qui vous appartient.',
   categoryFrontend: 'Frontend & UI',
   categoryDesignSystems: 'Design systems',
-  ctaDownload: 'Télécharger Open Design',
+  ctaDownload: 'Télécharger OpenDesign',
   ctaStarList: 'Star la liste',
   ctaBrowseAll: 'Parcourir tous les plugins',
   ctaViewSource: 'Voir la source',
@@ -36,7 +36,7 @@ export const fr: CodexCopyOverride = {
   cardCta: 'Voir le plugin',
   detailWhatIsIt: 'De quoi il s’agit',
   detailWhyForDesign: 'Pourquoi ça compte pour le design',
-  detailHowWithCodex: 'Comment le faire tourner avec Codex',
+  detailHowWithAgent: 'Comment le faire tourner avec Codex',
   detailExampleTag: 'Quand y avoir recours',
   detailSource: 'Source',
   detailCategory: 'Catégorie',
@@ -45,12 +45,12 @@ export const fr: CodexCopyOverride = {
   detailLicense: 'Licence',
   detailCovers: 'Ce que ça couvre',
   detailUpstream: 'Depuis le SKILL.md en amont',
-  detailCodexNote: 'Compatible Codex',
+  detailAgentNote: 'Compatible Codex',
   detailTraction: 'Traction',
   detailRepo: 'Dépôt source',
   detailStars: 'Stars',
   installHeading: 'Comment l’installer',
-  installRunInCodex: 'Lancez ceci dans Codex.',
+  installRunInAgent: 'Lancez ceci dans Codex.',
   installRestart: 'Redémarrez Codex pour qu’il charge le nouveau skill.',
   installClone: 'Clonez le dépôt.',
   installPoint: 'Pointez Codex sur le fichier du skill.',
@@ -61,9 +61,9 @@ export const fr: CodexCopyOverride = {
   detailMoreOnList: 'En savoir plus sur la liste codex-design',
   detailRelated: 'Autres plugins design pour Codex',
   finalEyebrow: 'Prochaine étape',
-  detailCloserHeading: 'Designez avec Open Design, sans la config',
+  detailCloserHeading: 'Designez avec OpenDesign, sans la config',
   detailCloserBody:
-    'Installez ce plugin vous-même, ou faites tourner toute une couche design sélectionnée autour de Codex avec Open Design. Apportez votre clé, gardez la main sur ce que vous produisez.',
+    'Installez ce plugin vous-même, ou faites tourner toute une couche design sélectionnée autour de Codex avec OpenDesign. Apportez votre clé, gardez la main sur ce que vous produisez.',
   skills: {
     'gpt-taste': {
       tagline: 'Construit des pages primables avec du scroll GSAP et des grilles bento sans trous.',
@@ -74,7 +74,7 @@ export const fr: CodexCopyOverride = {
         'Les grilles bento utilisent grid-flow-dense, donc aucune cellule ne reste vide ou cassée.',
         'Les libellés méta bon marché sont bannis et le contraste du texte des boutons est vérifié avant livraison.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez une page ; le skill émet un bloc design_plan avant toute ligne de code UI.',
         'Vérifiez ses choix aléatoires : mise en page du hero, pile de polices, composants, paradigmes GSAP.',
         'Contrôlez les points de pre-flight : calcul de largeur du hero, densité de grille, chasse aux libellés, contraste.',
@@ -89,7 +89,7 @@ export const fr: CodexCopyOverride = {
         'Les heros centrés et les trois rangées de cartes égales sont interdits au-delà de la variance fixée.',
         'Les états de chargement et vides deviennent des squelettes composés, plus des spinners génériques.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Décrivez l’ambiance du projet ; le skill fixe les scores de densité, de variance et de mouvement.',
         'Il produit un DESIGN.md en sept sections, avec codes hex et rôles de couleur fonctionnels.',
         'Fournissez ce fichier directement à Stitch, ou via le serveur MCP de Stitch.',
@@ -104,7 +104,7 @@ export const fr: CodexCopyOverride = {
         'Chaque section reçoit sa propre grande image, ce qui garde le texte et l’espacement analysables.',
         'Les heros restent sous trois lignes de titre et sans empilement de conteneurs imbriqués.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Indiquez le nombre de sections ; dans Codex, le skill génère une image par section.',
         'Demandez un rendu de détail plus rapproché si un bouton ou une typo reste illisible.',
         'Faites-lui lancer la vérification de clarté avant d’écrire le moindre fichier d’implémentation.',
@@ -119,7 +119,7 @@ export const fr: CodexCopyOverride = {
         'Une bible de design verrouillée garde palette, typo et icônes cohérentes sur chaque écran.',
         'Les jeux multi-écrans forment un parcours crédible, pas des mockups isolés sans lien.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Indiquez la catégorie d’app et le nombre d’écrans ; chaque écran devient sa propre image.',
         'Le skill choisit d’abord un mode de plateforme : iOS, Android, ou cross-platform neutre.',
         'Demandez-lui de régénérer tout écran où le texte est petit ou le cadrage inégal.',
@@ -134,7 +134,7 @@ export const fr: CodexCopyOverride = {
         'La composition du hero varie au-delà du réflexe surexploité texte à gauche, image à droite.',
         'Une seule palette, une échelle typo et une famille de CTA tiennent sur toutes les images générées.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Précisez le nombre de sections voulu ; sans indication, les landing pages passent par défaut à six.',
         'Le skill annonce le compte, puis étiquette chaque image par numéro de section.',
         'Donnez des mots d’ambiance comme éditorial ou cinématographique pour orienter l’échelle du hero et le fond.',
@@ -149,7 +149,7 @@ export const fr: CodexCopyOverride = {
         'Les accents viennent uniquement de quatre pastels délavés, réservés aux tags et au code inline.',
         'Les sections gagnent en profondeur grâce à des images en faible opacité, plutôt qu’à des fonds vides et plats.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez une page ; le skill fixe d’abord le macro-espace blanc, py-24 ou py-32.',
         'Il limite la largeur du texte à max-w-4xl et applique aussitôt les variables monochromes.',
         'Les fondus d’entrée au scroll passent par IntersectionObserver, uniquement sur transform et opacity.',
@@ -164,7 +164,7 @@ export const fr: CodexCopyOverride = {
         'Le pre-flight bannit les tirets cadratins, les eyebrows de numérotation de section, les indices de scroll et les intentions de CTA en double.',
         'La répétition de mise en page est plafonnée : huit sections utilisent au moins quatre familles différentes.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'L’agent énonce une lecture du design en une ligne avant d’écrire le moindre code.',
         'Il règle trois curseurs : variance du design, intensité du mouvement et densité visuelle.',
         'Chaque case du pre-flight doit être cochée, sinon la page n’est pas terminée.',
@@ -179,7 +179,7 @@ export const fr: CodexCopyOverride = {
         'border-radius est totalement rejeté : chaque angle reste à quatre-vingt-dix degrés.',
         'Les filtres de trame, de scanlines et de bruit empêchent les surfaces de lire comme du vectoriel plat.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Choisissez un seul archétype : print industriel suisse ou terminal CRT de télémétrie tactique.',
         'Les titres macro utilisent clamp avec un tracking négatif ; les métadonnées, une petite monospace en majuscules.',
         'Des écarts de grille de 1px avec des fonds contrastés produisent les lignes de séparation ultra-fines.',
@@ -194,7 +194,7 @@ export const fr: CodexCopyOverride = {
         'Les boutons d’un groupe de cartes s’alignent sur une seule ligne basse, malgré des contenus variés.',
         'Les états manquants de survol, focus, chargement, vide et erreur sont complétés.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Il scanne d’abord la base de code pour identifier le framework et la méthode de style.',
         'Il liste chaque pattern générique et chaque point faible avant de toucher à quoi que ce soit.',
         'Les corrections arrivent par ordre de priorité : polices, couleur, états, mise en page, composants, finition typo.',
@@ -209,7 +209,7 @@ export const fr: CodexCopyOverride = {
         'Les concepts de logo suivent une méthode énoncée : monogramme, fusion de métaphores ou espace négatif.',
         'Les planches ont un rythme : panneaux sobres, fonctionnels, émotionnels et techniques, plutôt qu’une intensité uniforme.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Donnez la marque et la catégorie ; le skill choisit d’abord un mode visuel.',
         'Il opte par défaut pour une planche 3x3, ou un mini-deck de référence 2x3.',
         'Gardez le texte sobre : nom de marque, un tagline, une commande, quelques libellés.',
@@ -224,7 +224,7 @@ export const fr: CodexCopyOverride = {
         'Chaque effet a une branche reduced-motion qui garde mise en page et contraste intacts.',
         'Un ordre de construction pose d’abord la page statique, puis le mouvement, évitant les scènes de scroll emmêlées.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Installez gsap et lenis, puis branchez Lenis dans le ticker de GSAP.',
         'Marquez les sections avec les attributs data pour les révélations, les piles et la parallaxe.',
         'Ajoutez les scènes épinglées calées sur le scroll en dernier, puis déroulez la checklist QA.',
@@ -239,7 +239,7 @@ export const fr: CodexCopyOverride = {
         'Des presets de matériau couvrent le métal premium, la céramique douce et les looks tech teintés de lueur.',
         'Le mouvement se limite à une rotation lente et un léger balancement : le texte reste prioritaire.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Ajoutez la coque de canvas carrée, puis lancez l’initialiseur Three.js dessus.',
         'Réglez color, metalness, roughness et emissive pour coller à l’ambiance de la marque.',
         'Confirmez la gestion du redimensionnement et la libération de la géométrie, du matériau et du renderer.',
@@ -254,7 +254,7 @@ export const fr: CodexCopyOverride = {
         'La variante masquée préserve un fond existant au lieu de l’écraser.',
         'Les valeurs par défaut gardent les arrêts sous 0.4 d’opacité : les bordures cadrent au lieu de rivaliser.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Orientez Codex vers une carte ou un panneau tarifaire qui a besoin d’un meilleur bord.',
         'Choisissez le pattern simple pour les fonds pleins, masqué pour les fonds complexes.',
         'Vérifiez les thèmes clair et sombre séparément, car l’alpha se transpose rarement.',
@@ -269,7 +269,7 @@ export const fr: CodexCopyOverride = {
         'Les cartes reçoivent une coque externe et un cœur interne imbriqués, donnant aux conteneurs une vraie profondeur usinée.',
         'Le padding des sections démarre à py-24 : les mises en page respirent au lieu de s’entasser.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez une page à Codex ; il lance d’abord son moteur de variance en silence.',
         'Il pose la texture de fond et l’échelle typo, puis construit des conteneurs à double biseau.',
         'Il injecte un mouvement cubic-bezier sur mesure, puis déroule sa checklist avant sortie.',
@@ -284,7 +284,7 @@ export const fr: CodexCopyOverride = {
         'Il regarde d’abord package.json, pour réutiliser ce que le projet possède déjà.',
         'Il repère les dropdowns et toasts faits main et les remplace par des primitives accessibles.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Invoquez-le explicitement ; il ne se déclenche jamais seul.',
         'Décrivez la tâche, pas le nom de la bibliothèque, par exemple « il me faut des toasts ».',
         'Il nomme une bibliothèque, en explique l’usage, puis l’intègre.',
@@ -299,7 +299,7 @@ export const fr: CodexCopyOverride = {
         'Les animations partent de la valeur affichée en temps réel, sans saut visible en cas d’interruption.',
         'Les gestes vifs projettent un point d’arrivée : le lancer atterrit là où le geste visait.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez à Codex de construire une sheet, un drawer ou une interaction de glissement.',
         'Il suit le pointeur au 1:1 avec pointer capture et enregistre l’historique de vélocité.',
         'Au relâchement, il transmet la vélocité à un ressort avec les valeurs d’amortissement fournies.',
@@ -314,7 +314,7 @@ export const fr: CodexCopyOverride = {
         'Désambiguïse les paires proches comme clip-path et mask, pop in et bounce.',
         'Refuse d’inventer des termes : la nomenclature reste fiable.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Décrivez ce que vous avez vu, par exemple « le scroll élastique d’iOS ».',
         'Il renvoie le terme en gras plus une définition de glossaire en une ligne.',
         'Demandez des variantes quand deux termes pourraient convenir.',
@@ -329,7 +329,7 @@ export const fr: CodexCopyOverride = {
         'Les entrées démarrent à scale(0.95), jamais scale(0) : rien ne surgit de nulle part.',
         'Les popovers s’agrandissent depuis leur déclencheur plutôt que leur centre, préservant le lien spatial.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez à Codex de relire du code UI ; il renvoie un tableau Avant, Après, Pourquoi.',
         'Pour tout nouveau mouvement, il répond : faut-il animer, pourquoi, quel easing, à quelle vitesse.',
         'Il applique la checklist et signale transition: all ainsi que les durées au-delà de 300 ms.',
@@ -344,7 +344,7 @@ export const fr: CodexCopyOverride = {
         'Les icônes sont générées en texte SVG : elles restent éditables, pas matricielles.',
         'Les règles de bannière imposent des zones sûres, deux polices maximum et un seul CTA.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Exportez d’abord GEMINI_API_KEY et installez google-genai et pillow.',
         'Lancez scripts/logo/search.py pour un brief de design, puis generate.py pour les images.',
         'Passez le logo à scripts/cip/generate.py pour produire des mockups livrables.',
@@ -359,7 +359,7 @@ export const fr: CodexCopyOverride = {
         'Les visuels générés sont rendus sans texte : les titres restent en HTML net.',
         'Trois directions artistiques par demande : on compare avant de s’engager.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Répondez aux questions d’objectif, de plateforme, de contenu, de marque, de style et de quantité.',
         'Il construit une bannière HTML par direction artistique, zones sûres appliquées.',
         'Il capture chacune à la largeur et à la hauteur fixées, en compressant les fichiers trop lourds.',
@@ -374,7 +374,7 @@ export const fr: CodexCopyOverride = {
         'Les couleurs de thème vivent dans des variables CSS : le dark mode reste cohérent.',
         'Des breakpoints mobile-first : les mises en page partent du petit écran et montent en complexité.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Lancez npx shadcn@latest init pour configurer le framework et le thème.',
         'Ajoutez des composants avec npx shadcn@latest add button card dialog form.',
         'Lancez scripts/tailwind_config_gen.py pour générer une config avec des tokens personnalisés.',
@@ -389,7 +389,7 @@ export const fr: CodexCopyOverride = {
         'Les couleurs extraites sont comparées à la palette, ce qui repère la dérive tôt.',
         'Les assets sont vérifiés en nommage, taille et format avant validation.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Éditez docs/brand-guidelines.md, puis lancez scripts/sync-brand-to-tokens.cjs.',
         'Vérifiez avec scripts/inject-brand-context.cjs --json.',
         'Contrôlez tout nouveau fichier avec scripts/validate-asset.cjs avant de le livrer.',
@@ -404,7 +404,7 @@ export const fr: CodexCopyOverride = {
         'Chart.js gère les slides de données : les chiffres restent vivants au lieu d’images collées.',
         'Les patterns de mise en page sont pris dans un jeu défini, gardant le deck cohérent.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Invoquez-le avec la sous-commande create, plus un sujet et un nombre de slides.',
         'Il charge references/create.md et suit ce workflow de création.',
         'Il puise patterns de mise en page et formules de copywriting dans les fichiers de référence.',
@@ -419,7 +419,7 @@ export const fr: CodexCopyOverride = {
         'Les specs de composant tabulent les états par défaut, survol, actif et désactivé : la passation ne laisse aucune ambiguïté.',
         'Un validateur signale les valeurs hex en dur, gardant composants et slides sur le système de tokens.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Lancez generate-tokens.cjs sur une config de tokens JSON pour produire votre fichier de variables CSS.',
         'Demandez les specs de composant à Codex, puis lancez validate-tokens.cjs sur src/ pour repérer les valeurs brutes.',
         'Utilisez search-slides.py avec les flags de position et de contexte pour choisir les mises en page d’un deck.',
@@ -434,7 +434,7 @@ export const fr: CodexCopyOverride = {
         'Une grille de base de 8pt impose un rythme vertical entre titres, corps de texte et espacements.',
         'Le seuil d’accessibilité inclut la prise en charge du reduced-motion, des cibles tactiles de 44px et la gestion du contraste élevé.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez à Codex de reformuler l’intention de design, puis de définir les tokens avant de toucher aux composants.',
         'Réclamez des règles de composant couvrant anatomie, variantes, états et comportement responsive.',
         'Terminez par la checklist QA pour qu’un relecteur de code puisse vérifier le rendu.',
@@ -449,7 +449,7 @@ export const fr: CodexCopyOverride = {
         'Les surfaces crème chaudes réduisent l’éblouissement des longs articles face aux pages blanc pur.',
         'Des titres en serif de titrage sur un corps brun encre posent un rythme éditorial net.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Orientez Codex vers les tokens terracotta et crème avant qu’il n’écrive le moindre composant.',
         'Demandez anatomie, variantes et états par composant, avec des tokens d’espacement nommés explicitement.',
         'Réclamez anti-patterns et notes de migration quand vous reprenez une UI existante incohérente.',
@@ -464,7 +464,7 @@ export const fr: CodexCopyOverride = {
         'Un rendu très contrasté garde le texte lisible même quand les surfaces portent une texture de motif dense.',
         'Les règles bannissent le mouvement décoratif, empêchant le traitement rétro de virer au bruit visuel.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Indiquez d’abord à Codex la limite de palette, puis laissez-le en déduire les règles d’ombrage par motif.',
         'Demandez les états vide, chargement et erreur pour que les surfaces à motif restent lisibles.',
         'Vérifiez les zones cliquables et les états de focus, que ce skill signale explicitement.',
@@ -479,7 +479,7 @@ export const fr: CodexCopyOverride = {
         'L’espacement compact convient aux panneaux riches en contrôles comme les dashboards et les écrans de réglages.',
         'Les règles interdisent de mêler les métaphores visuelles : l’extrusion douce reste le seul langage de profondeur.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Faites poser à Codex les tokens de surface et d’ombre avant de styler le moindre contrôle.',
         'Demandez des états de focus visibles, car les ombres douces seules laissent tomber les utilisateurs au clavier.',
         'Exigez du HTML sémantique avant l’ARIA, comme le précise ce skill.',
@@ -494,7 +494,7 @@ export const fr: CodexCopyOverride = {
         'Une échelle typo compacte de 12 à 32 loge du texte dense dans de petites tuiles.',
         'La surface crème #FFF5E6 garde les bords de bloc lisibles sans bordures lourdes.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez à Codex d’attribuer à chaque bloc une taille selon la priorité du contenu.',
         'Définissez les tokens d’espacement sur l’échelle de 4 à 32 avant de disposer les tuiles.',
         'Réclamez la gestion du débordement et des libellés longs, que ce skill liste comme cas limites.',
@@ -509,7 +509,7 @@ export const fr: CodexCopyOverride = {
         'Un texte bleu profond #1C398E sur blanc tient le contraste pendant que la palette reste ludique.',
         'Les règles interdisent de mêler les métaphores : la profondeur argile ne se combine jamais au verre ni au plat.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez d’abord à Codex les tokens de rayon et d’ombre, car ils définissent le look argile.',
         'Associez le titrage Poppins au corps Montserrat comme spécifié, pas deux sans-serif similaires.',
         'Vérifiez que les états focus-visible et désactivé survivent au traitement de formes douces.',
@@ -524,7 +524,7 @@ export const fr: CodexCopyOverride = {
         'Deux accents forts, rouge et ocre, remplacent entièrement dégradés et ombres.',
         'Le plancher d’accessibilité s’applique quand même : les mises en page heurtées gardent contraste et focus visible.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Dites à Codex que le ton est franc et dépouillé avant qu’il ne choisisse les composants.',
         'Ancrez chaque règle à un token ou un seuil, comme l’exigent les portes qualité.',
         'Associez chaque règle « à faire » à un exemple concret « à ne pas faire » lors de la relecture.',
@@ -539,7 +539,7 @@ export const fr: CodexCopyOverride = {
         'Des tokens verrouillés bannissent les valeurs hex ou font-family en ligne qui contournent le bloc de tokens.',
         'Chaque sortie est vérifiée aux largeurs de 320, 375, 414 et 768 pixels.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Laissez le scan de pre-flight lire d’abord les polices, la palette et les bibliothèques de mouvement en place.',
         'Répondez à la porte audience, cas d’usage et ton, ou dites d’y aller.',
         'Lancez hallmark audit sur une page pour une liste de corrections priorisée, sans modification.',
@@ -554,7 +554,7 @@ export const fr: CodexCopyOverride = {
         'Des interdits absolus rejettent le texte en dégradé, les bordures à liseré latéral et les eyebrows au-dessus de chaque section.',
         'Les planchers de contraste sont explicites : 4.5:1 pour le corps de texte, 3:1 pour le grand texte.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Lancez context.mjs une fois par session pour que le skill charge PRODUCT.md et DESIGN.md.',
         'Invoquez une commande comme critique, polish ou animate avec un fichier cible.',
         'Utilisez le mode live avec un dev server actif pour générer des variantes dans le navigateur.',
@@ -569,7 +569,7 @@ export const fr: CodexCopyOverride = {
         'Consigne l’ambiance, la composition et la voix de marque, pas seulement des tokens mesurables.',
         'Capture les effets Canvas, WebGL, shader et scroll que le CSS seul ne sait pas exprimer.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez le schéma pour voir les trois dimensions avant toute analyse.',
         'Confiez à Codex des images de référence ou des URL et réclamez un JSON DNA rempli.',
         'Passez le JSON avec votre contenu pour générer une page HTML autonome.',
@@ -584,7 +584,7 @@ export const fr: CodexCopyOverride = {
         'Des surfaces tonales portent la profondeur à la place des ombres, conformément à la spec MD3 actuelle.',
         'Un audit noté évalue dix catégories et liste les corrections par ordre de priorité.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Nommez la plateforme pour que Codex choisisse Compose, Flutter ou les propriétés CSS personnalisées.',
         'Demandez un composant et obtenez la bonne variante avec le câblage des tokens.',
         'Lancez l’audit sur une URL ou des fichiers source pour un rapport de conformité.',
@@ -599,7 +599,7 @@ export const fr: CodexCopyOverride = {
         'Corrige le décalage de rayons imbriqués qui fait paraître la plupart des composants bancals.',
         'Attrape le décalage de mise en page dû aux chiffres qui changent avant qu’il n’atteigne les utilisateurs.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Orientez Codex vers un composant et demandez-lui d’appliquer les principes.',
         'Demandez une revue ; les constats reviennent en tableaux Avant et Après.',
         'Déroulez la checklist de quatorze points avant de merger tout changement frontend.',
@@ -614,7 +614,7 @@ export const fr: CodexCopyOverride = {
         'Les relecteurs commentent des éléments ancrés au lieu de débattre dans le chat.',
         'Les parcours multi-étapes reçoivent un prototype manipulable à côté des maquettes statiques.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Installez-le via la CLI Agent-Native, puis lancez la commande /visual-plan.',
         'Collez un plan Codex ou Markdown existant pour servir de source.',
         'Lisez les retours, corrigez le plan et vérifiez le résultat enregistré.',
@@ -629,7 +629,7 @@ export const fr: CodexCopyOverride = {
         'Un contrat de densité signale les pages de contenu remplies à moins de la moitié.',
         'Les primitives de diagramme couvrent architecture, organigrammes, quadrants, chronologies et graphiques.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Dites ce qu’il vous faut ; l’arbre de décision choisit le template correspondant.',
         'Laissez d’abord Codex distiller votre contenu brut en un content.json validé.',
         'Lancez le script de build pour produire HTML, PDF et rapports de vérification.',
@@ -644,7 +644,7 @@ export const fr: CodexCopyOverride = {
         'Les lecteurs d’écran reçoivent tout de même le texte complet via un aria-label.',
         'Les utilisateurs en reduced-motion voient un texte statique, sans aucune transform.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Marquez un titre avec data-masked-reveal et ajoutez les règles de mask CSS.',
         'Appelez le helper de découpe, qui évite le plugin payant SplitText.',
         'Enveloppez dans un contexte GSAP en React pour que ScrollTrigger se nettoie au changement de route.',
@@ -659,7 +659,7 @@ export const fr: CodexCopyOverride = {
         'Les équerres d’angle ne demandent aucun markup supplémentaire : la structure reste en CSS.',
         'La mise en page reste claire même si l’on retire la couche de texture.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez une page technique ou éditoriale et obtenez d’abord la grille parente.',
         'Attribuez des classes de span explicites plutôt que des largeurs de section improvisées.',
         'Vérifiez que les bords des cadres s’alignent verticalement et horizontalement aux deux breakpoints.',
@@ -674,7 +674,7 @@ export const fr: CodexCopyOverride = {
         'Les repères partagent la max-width et le padding du conteneur : ils ne dérivent jamais.',
         'Les événements de pointeur sont désactivés : les lignes ne bloquent jamais clics ni sélection.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Ajoutez la classe container-lines à la coque de mise en page.',
         'Placez les carrés d’angle uniquement sur de vrais coins de conteneur ou de section.',
         'Vérifiez que les lignes restent discrètes sur fond clair comme sombre.',
@@ -689,7 +689,7 @@ export const fr: CodexCopyOverride = {
         'La profondeur reste directionnelle, lumière en haut et ombre en bas.',
         'Met en garde contre le mélange de glassmorphism, neumorphism et skeuomorphism dans un même composant.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Posez les tokens de base une fois, puis ajustez-les par marque et par thème.',
         'Appliquez la surface relevée aux cartes, boutons, onglets et boîtiers de contrôle.',
         'Ajoutez la variante enfoncée uniquement aux toggles actifs et aux onglets sélectionnés.',
@@ -704,7 +704,7 @@ export const fr: CodexCopyOverride = {
         'Trois intensités fixes correspondent respectivement aux contrôles, aux cartes et aux médias hero.',
         'Des couches empilées en faible opacité se lisent comme une vraie profondeur, pas comme une ombre portée brute.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Demandez à Codex d’appliquer l’utilitaire md aux cartes, panneaux et popovers.',
         'Réservez l’utilitaire lg aux médias hero et aux conteneurs de type modale.',
         'Associez chaque ombre à un remplissage de surface net et à un rayon cohérent.',
@@ -719,7 +719,7 @@ export const fr: CodexCopyOverride = {
         'Une palette monochrome à six paliers garde le texte de premier plan lisible sans surcouche lourde.',
         'Vignette et masse décentrée donnent une seule zone focale lumineuse, pas une luminosité uniforme.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Placez le canvas fixe derrière le contenu et mettez pointer-events à none.',
         'Réglez cellSize entre 5px et 10px pour la lisibilité de la matrice.',
         'Ajustez les valeurs de wave, cloud, ridge et vignette pour sculpter la masse.',
@@ -734,7 +734,7 @@ export const fr: CodexCopyOverride = {
         'Des largeurs de cœur et de lueur distinctes gardent le faisceau en lame, pas en barre.',
         'La fumée se concentre près du faisceau et se dissipe vers l’extérieur, préservant le contraste du texte.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Définissez une propriété personnalisée --brand-accent, que le shader convertit en RGB.',
         'Placez le canvas fixe derrière le contenu avec pointer-events none.',
         'Réglez coreWidth, glowWidth, smokeDensity et xOffset pour positionner le faisceau.',
@@ -749,7 +749,7 @@ export const fr: CodexCopyOverride = {
         'Des tokens nommés fixent les valeurs de fond, de coque, de ligne, de texte et d’accent sur toute la page.',
         'Rails, carrés d’angle et pilules de nœud donnent à la coque minimale une structure technique.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Collez le bloc de tokens, puis construisez la fondation de page et la coque hero.',
         'Ajoutez le canvas mesh dans la coque, derrière son contenu.',
         'Placez quelques nœuds, rails et marqueurs, puis gardez les boucles de dérive lentes.',
@@ -764,7 +764,7 @@ export const fr: CodexCopyOverride = {
         'Le contraste d’échelle entre titres de titrage et minuscules métadonnées porte la hiérarchie.',
         'L’espace négatif est préservé plutôt que rempli, gardant la page éditoriale.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Posez d’abord une coque en max-width large, avec des divisions de colonnes visibles.',
         'Ancrez un titre hero sur la plupart des colonnes, le texte d’appui dans une colonne latérale.',
         'Construisez les rangées de services en listings multi-colonnes avec de minuscules libellés de métadonnées.',
@@ -779,7 +779,7 @@ export const fr: CodexCopyOverride = {
         'Lignes de faisceau et réticules s’alignent sur le cadran, renforçant la logique de calibration.',
         'Une palette monochrome : la clarté vient des reflets du verre, pas d’accents saturés.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Partez d’une base quasi noire avec de faibles repères de grille et de faisceaux.',
         'Construisez nav, pilules et boutons en capsules de verre sombre avec des contours de reflet de 1px.',
         'Superposez le cadran : anneau externe, graduations, libellés rotatifs, emblème central.',
@@ -794,7 +794,7 @@ export const fr: CodexCopyOverride = {
         'ScrollTrigger et timelines sont séquencés correctement, pas empilés au petit bonheur.',
         'Des règles de performance gardent l’animation fluide au lieu de saccader au scroll.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Installez le jeu de skills GSAP pour que Codex puisse charger le module pertinent.',
         'Demandez le mouvement voulu ; le bon module gère l’API.',
         'Piochez le module React ou frameworks à l’intérieur d’un arbre de composants.',
@@ -809,7 +809,7 @@ export const fr: CodexCopyOverride = {
         'Transforme le vague « rends ça plus agréable » en un audit de mouvement priorisé.',
         'Tient l’animation à un niveau d’exigence nommé, pas au goût personnel.',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Lancez la passe de repérage pour localiser les occasions de mouvement dans votre UI.',
         'Appliquez la passe d’amélioration pour retravailler le code d’animation existant.',
         'Lancez la passe de revue avant de livrer pour attraper le mouvement bâclé.',

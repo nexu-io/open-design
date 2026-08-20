@@ -136,4 +136,67 @@ describe('workspace exact context cache', () => {
     expect(calls).toBe(3);
     expect(cache.cached('w1')).toBeNull();
   });
+
+  it('refetches account A after an A to B to A identity reset with no intervening read', async () => {
+    let identity = 'account-a';
+    let calls = 0;
+    const cache = createWorkspaceExactContextCache({
+      identity: () => identity,
+      provider: {
+        current: async () => null,
+        resolveExact: async ({ workspaceId }) => {
+          calls += 1;
+          return context(workspaceId);
+        },
+      },
+    });
+    await cache.refresh({ workspaceId: 'w1' });
+    cache.setRealtimeHealthy('w1', true);
+    expect(cache.cached('w1')).not.toBeNull();
+
+    identity = 'account-b';
+    cache.resetIdentity();
+    identity = 'account-a';
+    cache.resetIdentity();
+
+    cache.setRealtimeHealthy('w1', true);
+    await expect(cache.provider.resolveExact?.({ workspaceId: 'w1' }))
+      .resolves.toMatchObject({ workspaceId: 'w1' });
+    expect(calls).toBe(2);
+  });
+
+  it('fences an account A response that settles after an A to B to A identity reset', async () => {
+    let identity = 'account-a';
+    let release!: (value: WorkspaceCollabContext) => void;
+    const blocked = new Promise<WorkspaceCollabContext>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const cache = createWorkspaceExactContextCache({
+      identity: () => identity,
+      provider: {
+        current: async () => null,
+        resolveExact: async ({ workspaceId }) => {
+          calls += 1;
+          return calls === 1 ? blocked : context(workspaceId);
+        },
+      },
+    });
+
+    const staleAccountARead = cache.refresh({ workspaceId: 'w1' });
+    cache.setRealtimeHealthy('w1', true);
+    identity = 'account-b';
+    cache.resetIdentity();
+    identity = 'account-a';
+    cache.resetIdentity();
+
+    release(context('w1'));
+    await staleAccountARead;
+    cache.setRealtimeHealthy('w1', true);
+    expect(cache.cached('w1')).toBeNull();
+
+    await cache.provider.resolveExact?.({ workspaceId: 'w1' });
+    expect(calls).toBe(2);
+    expect(cache.cached('w1')).not.toBeNull();
+  });
 });

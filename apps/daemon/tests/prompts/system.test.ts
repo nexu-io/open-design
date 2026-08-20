@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { INTEGRATIONS_MCP_PATH } from '@open-design/contracts';
 
 import {
   composeSystemPrompt,
@@ -231,7 +232,7 @@ describe('composeSystemPrompt', () => {
         skillMode: surface,
         metadata: { kind: surface } as any,
       });
-      expect(prompt).not.toContain('# Open Design Charter');
+      expect(prompt).not.toContain('# OpenDesign Charter');
       expect(prompt).not.toContain('## Requirements Clarification Phase');
       expect(prompt).not.toContain('## Delivery');
       // Nor the Ask-mode charter (fourth-round finding): CHAT_MODE_OVERRIDE
@@ -241,7 +242,7 @@ describe('composeSystemPrompt', () => {
     }
     // Non-media slim runs keep the charter head.
     const design = composeSystemPrompt({ promptCoreVariant: 'slim' });
-    expect(design).toContain('# Open Design Charter');
+    expect(design).toContain('# OpenDesign Charter');
     expect(design).toContain('## Requirements Clarification Phase');
   });
 
@@ -269,8 +270,10 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('## Active skill — hyperframes');
     expect(prompt).toContain('**Pre-flight (do this before any other tool):**');
     expect(prompt).toContain('`references/html-in-canvas.md`');
+    expect(prompt).toContain('`"$OD_NODE_BIN" "$OD_BIN" media scaffold`');
     expect(prompt).toContain('media generate --surface video --model hyperframes-html --composition-dir <rel>');
-    expect(prompt).toContain('Do not run `npx hyperframes render` yourself');
+    expect(prompt).toContain('Do not run HyperFrames `render` yourself');
+    expect(prompt).not.toContain('npx hyperframes');
     expect(prompt).not.toContain('intentionally rejected for this model');
     expect(prompt).not.toContain('AGENT_RENDERED');
     expect(prompt).not.toContain('rendered by you directly via npx');
@@ -278,8 +281,10 @@ describe('composeSystemPrompt', () => {
 
   it('keeps both hyperframes skill copies aligned with the daemon render handoff', () => {
     for (const markdown of [hyperframesSkillMarkdown, officialHyperframesSkillMarkdown]) {
+      expect(markdown).toContain('"$OD_NODE_BIN" "$OD_BIN" media scaffold');
       expect(markdown).toContain('media generate --surface video --model hyperframes-html --composition-dir <rel>');
-      expect(markdown).toContain('Do not run `npx hyperframes render`');
+      expect(markdown).toContain('Do not run HyperFrames `render`');
+      expect(markdown).not.toContain('npx hyperframes');
       expect(markdown).not.toContain('AGENT_RENDERED');
       expect(markdown).not.toContain('rendered by you directly via npx');
       expect(markdown).not.toContain('dispatcher path returns a 400');
@@ -381,7 +386,7 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('filesystem execution profile');
       expect(prompt).toContain("runtime's native tool-call interface");
       expect(prompt).toContain('Never type a tool invocation into assistant text');
-      expect(prompt).toContain('This tool-call rule does not apply to Open Design UI markup');
+      expect(prompt).toContain('This tool-call rule does not apply to OpenDesign UI markup');
       expect(prompt).toContain('emit the complete `<question-form>...</question-form>` block directly');
       expect(prompt).toContain('Do not output generated source code in a `<artifact type="text/html">...</artifact>` block.');
     });
@@ -395,7 +400,7 @@ describe('composeSystemPrompt', () => {
       expect(amrPrompt).toContain(
         'Video model: `vela/doubao-seedance-2-0-260128`',
       );
-      expect(amrPrompt).toContain('### Open Design Cloud media defaults');
+      expect(amrPrompt).toContain('### OpenDesign Cloud media defaults');
       expect(amrPrompt).not.toContain('### Run-scoped BYOK media defaults');
       expect(amrPrompt).toContain('Never invoke the `vela` CLI directly');
       expect(amrPrompt).toContain('trusted Workspace attribution');
@@ -431,10 +436,30 @@ describe('composeSystemPrompt', () => {
       );
     });
 
+    // The provider-error branch has to reach the prompt the DAEMON composes,
+    // not just the copy in packages/contracts. Reclassifying a provider verdict
+    // as an outage hides the actionable code and message from the user.
+    it('preserves structured provider errors in both prompts', () => {
+      for (const metadata of [
+        { kind: 'image', imageModel: 'vela/gpt-image-2' },
+        { kind: 'prototype' },
+      ]) {
+        const prompt = composeSystemPrompt({
+          agentId: 'amr',
+          locale: 'zh-CN',
+          metadata: metadata as any,
+        });
+        expect(prompt).toContain('错误代码：{code}');
+        expect(prompt).toContain(
+          'without reclassifying either one from wording or HTTP status',
+        );
+      }
+    });
+
     it('prioritizes question forms over native tool calls when clarifying', () => {
       const prompt = composeSystemPrompt({ agentId: 'amr' });
       expect(prompt).toContain('## Structured clarification on any turn');
-      expect(prompt).toContain('`<question-form>` is assistant text for the Open Design UI, not a native tool call');
+      expect(prompt).toContain('`<question-form>` is assistant text for the OpenDesign UI, not a native tool call');
       expect(prompt).toContain(
         'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',
       );
@@ -529,7 +554,7 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'image' },
         mediaExecution: { mode: 'disabled' },
       });
-      expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
+      expect(prompt).toContain('OpenDesign-owned media execution is **disabled for this run**');
       expect(prompt).not.toContain('## Media generation contract');
       expect(prompt).not.toContain('External MCP servers — already authenticated');
     });
@@ -554,7 +579,12 @@ describe('composeSystemPrompt', () => {
         '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication`',
       );
       expect(directive).toContain('localhost:<random>/callback');
-      expect(directive).toContain('Settings → External MCP');
+      // Reconnect lives in the top-level Integrations view, NOT in Settings:
+      // `mcpClient` kept its Settings render block but lost its sidebar nav
+      // item, so "Settings → External MCP" named a place users cannot navigate
+      // to. Asserted through the contract so this cannot drift again.
+      expect(directive).toContain(INTEGRATIONS_MCP_PATH);
+      expect(directive).not.toContain('Settings → External MCP');
     });
 
     it('skips entries with blank ids and emits nothing when none remain', () => {

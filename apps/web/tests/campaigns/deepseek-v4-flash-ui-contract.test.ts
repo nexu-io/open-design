@@ -31,11 +31,20 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     expect(entryShellSource).toContain('deepSeekV4FlashCampaignAudience !== \'unknown\'');
   });
 
-  it('opens the official Pricing page in a separate browser context', () => {
-    expect(entryShellSource).toContain('https://open-design.ai/zh/pricing/?source=desktop_campaign_badge');
+  // The badge lands where the modal's CTA lands: the console's plan surface,
+  // scoped to the caller's workspace. Both are in-product entry points for a
+  // signed-in user, so sending one to the console (where they can actually
+  // subscribe) and the other to the marketing site splits the same funnel
+  // across two destinations — and the marketing URL was additionally pinned to
+  // `/zh/`, so every non-Chinese user landed on a Chinese page.
+  it('opens the console plan surface, matching the modal CTA', () => {
+    expect(entryShellSource).toContain('amrPlansUrlForWorkspace');
     expect(entryShellSource).toContain("'deepseek_workbench_badge'");
-    expect(entryShellSource).toContain('attributedAmrUrl(DEEPSEEK_CAMPAIGN_PRICING_URL, attribution, deviceId)');
     expect(entryShellSource).toContain("'noopener,noreferrer'");
+    // No hardcoded marketing URL, and no locale pinned into a link shown to
+    // all 19 locales.
+    expect(entryShellSource).not.toContain('open-design.ai/zh/pricing');
+    expect(entryShellSource).not.toContain('DEEPSEEK_CAMPAIGN_PRICING_URL');
   });
 
   it('uses a restrained green campaign treatment from shared brand tokens', () => {

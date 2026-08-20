@@ -378,7 +378,7 @@ pnpm exec playwright test -c playwright.config.ts ui/design-systems-manager.test
 
 1. `uses the same Settings-configured AMR env for login and subsequent status reads`
    - 覆盖 `/api/integrations/vela/login` 与 `/api/integrations/vela/status` 都必须使用同一份 `agentCliEnv.amr`
-   - 避免终端里的 `vela` 已登录，但 Open Design 因配置源不一致读成未登录
+   - 避免终端里的 `vela` 已登录，但 OpenDesign 因配置源不一致读成未登录
 
 ### 8. queued run 取消的终态语义
 

@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 
 export const API_TOKEN_BASIC_USERNAME = 'open-design';
-export const API_TOKEN_BASIC_CHALLENGE = 'Basic realm="Open Design", charset="UTF-8"';
+export const API_TOKEN_BASIC_CHALLENGE = 'Basic realm="OpenDesign", charset="UTF-8"';
 
 export function isTruthyEnvFlag(value: unknown): boolean {
   const normalized = String(value || '').trim().toLowerCase();

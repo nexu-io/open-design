@@ -1,5 +1,5 @@
 /*
- * Open Design plugin page — complete locale registry.
+ * OpenDesign plugin page — complete locale registry.
  *
  * Unlike older DeepPartial page models, every locale here must satisfy the
  * full English copy shape. That makes omissions, missing FAQ entries and

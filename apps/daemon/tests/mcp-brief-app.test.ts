@@ -245,7 +245,7 @@ function createBriefAppHarness(options: {
   };
 }
 
-describe('local Open Design MCP brief app', () => {
+describe('local OpenDesign MCP brief app', () => {
   it('exposes collect_brief through the canonical MCP Apps resource', () => {
     const collectBrief = localMcpToolDefinitions().find(
       (tool) => tool.name === 'collect_brief',
@@ -844,7 +844,7 @@ describe('local Open Design MCP brief app', () => {
     });
   });
 
-  it('keeps user-facing MCP copy on public Open Design product terms', () => {
+  it('keeps user-facing MCP copy on public OpenDesign product terms', () => {
     const visibleToolCopy = localMcpToolDefinitions()
       .flatMap((tool) => [
         tool.description,
@@ -868,7 +868,7 @@ describe('local Open Design MCP brief app', () => {
       MCP_SERVER_INSTRUCTIONS,
     ].join('\n');
 
-    expect(userFacingCopy).toContain('Open Design Cloud');
+    expect(userFacingCopy).toContain('OpenDesign Cloud');
     expect(userFacingCopy).toContain('Local Codex');
     expect(userFacingCopy).not.toContain('Secure BYOK');
     expect(userFacingCopy).not.toMatch(/\b(?:Vela|AMR)\b/u);

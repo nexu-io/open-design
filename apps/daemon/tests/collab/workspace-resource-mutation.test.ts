@@ -3,6 +3,7 @@ import {
   enforceVerifiedWorkspaceResourceMutation,
   enforceVerifiedWorkspaceResourceRead,
   enforceWorkspaceResourceMutation,
+  resolveOptionalLocalWorkspaceRequestAuthority,
   type WorkspaceResourceAccessInput,
 } from '../../src/collab/workspace-resource-mutation.js';
 import { workspaceContextFromDirectoryItem } from '../../src/collab/vela-workspace-context.js';
@@ -72,6 +73,40 @@ function makeLookups(rowsByResourceId: Record<string, WorkspaceResourceAccessInp
   const getWorkspaceResourceByResourceId = (_db: unknown, resourceId: string) => rowsByResourceId[resourceId];
   return { getWorkspaceResource, getWorkspaceResourceByResourceId };
 }
+
+describe('resolveOptionalLocalWorkspaceRequestAuthority', () => {
+  it('uses only the complete local namespace pair and ignores stale cloud policy fields', () => {
+    const resolved = resolveOptionalLocalWorkspaceRequestAuthority(fakeReq(workspaceHeaders({
+      workspaceId: 'workspace-a',
+      memberId: 'member-a',
+      role: 'owner',
+      lifecycleState: 'locked',
+      canWriteSyncedFiles: 'false',
+    })));
+
+    expect(resolved).toMatchObject({
+      ok: true,
+      context: {
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+        role: 'member',
+        lifecycleState: 'active',
+        memberStatus: 'active',
+        permissions: { canWriteSyncedFiles: true },
+      },
+    });
+  });
+
+  it('rejects a partial local namespace pair without any remote fallback', () => {
+    expect(resolveOptionalLocalWorkspaceRequestAuthority(fakeReq(workspaceHeaders({
+      workspaceId: 'workspace-a',
+    })))).toMatchObject({
+      ok: false,
+      status: 400,
+      code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+    });
+  });
+});
 
 describe('enforceWorkspaceResourceMutation', () => {
   it('allows a headerless caller against a resource with no team binding', () => {

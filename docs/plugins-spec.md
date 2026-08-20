@@ -1,10 +1,10 @@
-# Open Design Plugin & Marketplace Spec (v1)
+# OpenDesign Plugin & Marketplace Spec (v1)
 
-> **In one sentence:** Open Design plugins turn portable `SKILL.md` capabilities into marketplace-ready, one-click design workflows while preserving compatibility with existing agent skill catalogs, headless CLI use, and self-hosted deployment.
+> **In one sentence:** OpenDesign plugins turn portable `SKILL.md` capabilities into marketplace-ready, one-click design workflows while preserving compatibility with existing agent skill catalogs, headless CLI use, and self-hosted deployment.
 
 **Parent:** [`spec.md`](spec.md) · **Siblings:** [`skills-protocol.md`](skills-protocol.md) · [`architecture.md`](architecture.md) · [`agent-adapters.md`](agent-adapters.md) · [`modes.md`](modes.md)
 
-A **Plugin** is the unit of distribution for Open Design. Where a [Skill](skills-protocol.md) describes a single capability that an agent can run, a Plugin is the shippable bundle around it: one or more skills, an optional design system reference, optional craft rules, optional Claude-plugin assets, a preview, a use-case query, an asset folder, and a small machine-readable sidecar that powers OD's marketplace surface. A plugin is always anchored to a portable `SKILL.md` so it is publishable to every existing skill catalog without modification.
+A **Plugin** is the unit of distribution for OpenDesign. Where a [Skill](skills-protocol.md) describes a single capability that an agent can run, a Plugin is the shippable bundle around it: one or more skills, an optional design system reference, optional craft rules, optional Claude-plugin assets, a preview, a use-case query, an asset folder, and a small machine-readable sidecar that powers OD's marketplace surface. A plugin is always anchored to a portable `SKILL.md` so it is publishable to every existing skill catalog without modification.
 
 > **Compatibility promise (extends [`skills-protocol.md`](skills-protocol.md)):** Any plugin folder that ships a `SKILL.md` works as a plain agent skill in Claude Code, Cursor, Codex, Gemini CLI, OpenClaw, Hermes, etc. Adding `open-design.json` is purely additive — it unlocks OD's marketplace card, preview, one-click "use" flow, and typed context-chip strip, but it never changes how the underlying skill runs. **One repo, two consumption modes.**
 
@@ -22,7 +22,7 @@ The shortest mental model:
 
 ### Figma-era vs agent-era boundary
 
-| Question | Figma-era plugin assumption | Open Design v1 answer |
+| Question | Figma-era plugin assumption | OpenDesign v1 answer |
 | --- | --- | --- |
 | Who consumes the plugin? | The host UI runtime. | A code agent through OD's project/run pipeline. |
 | Does the plugin need a live UI lifecycle? | Usually yes: mount panel, listen to messages, mutate document. | No. The plugin is static files plus manifest; the agent run is the active process. |
@@ -80,7 +80,7 @@ Concretely, this spec promotes the existing "first-party atoms" from a flat capa
 
 In one sentence: **a plugin describes "what this long-running task's pipeline looks like and which GenUI surfaces it needs to collaborate with the user", the daemon supplies atoms and the surface bus, the agent runs a devloop on the pipeline, and artifacts carry provenance (§11.5) recording every plugin that touched the task.**
 
-**Current implementation clarification:** `discovery -> plan -> generate -> critique` is a reference pipeline shape, not a fixed hard-coded wizard. A plugin snapshot can carry `od.pipeline.stages[].atoms[]`; the daemon resolves that snapshot, injects the active plugin block plus active stage atom blocks into the system prompt, emits stage events, and lets the agent work through the pipeline. When the user has not explicitly selected a plugin, OD still does **not** launch a generic naked agent: the base Open Design designer prompt and discovery rules are always present. Product entry points bind sensible defaults on top of that base: Home free-form input routes through the bundled, hidden `od-default` scenario, while typed New Project flows choose the default bundled scenario for the project kind. `od-default` is a router and task-shaper; it should guide the run into the normal design pipeline, not be treated as a standalone "make it beautiful" aesthetic engine.
+**Current implementation clarification:** `discovery -> plan -> generate -> critique` is a reference pipeline shape, not a fixed hard-coded wizard. A plugin snapshot can carry `od.pipeline.stages[].atoms[]`; the daemon resolves that snapshot, injects the active plugin block plus active stage atom blocks into the system prompt, emits stage events, and lets the agent work through the pipeline. When the user has not explicitly selected a plugin, OD still does **not** launch a generic naked agent: the base OpenDesign designer prompt and discovery rules are always present. Product entry points bind sensible defaults on top of that base: Home free-form input routes through the bundled, hidden `od-default` scenario, while typed New Project flows choose the default bundled scenario for the project kind. `od-default` is a router and task-shaper; it should guide the run into the normal design pipeline, not be treated as a standalone "make it beautiful" aesthetic engine.
 
 ### Four product scenarios
 
@@ -116,7 +116,7 @@ All four scenarios share the same `ApplyResult`, the same run pipeline, and the 
 16. [Phased implementation plan](#16-phased-implementation-plan)
 17. [Examples](#17-examples)
 18. [Risks and open questions](#18-risks-and-open-questions)
-19. [Why this is a meaningful step for Open Design](#19-why-this-is-a-meaningful-step-for-open-design)
+19. [Why this is a meaningful step for OpenDesign](#19-why-this-is-a-meaningful-step-for-opendesign)
 20. [Post-v1 extensibility — artifact taxonomy, evaluators, and production handoff](#20-post-v1-extensibility--artifact-taxonomy-evaluators-and-production-handoff)
 21. [Scenario coverage matrix and delivery roadmap](#21-scenario-coverage-matrix-and-delivery-roadmap)
 22. [Authoring extension points: building uncovered scenarios on top of v1 substrate](#22-authoring-extension-points-building-uncovered-scenarios-on-top-of-v1-substrate)
@@ -133,7 +133,7 @@ All four scenarios share the same `ApplyResult`, the same run pipeline, and the 
 
 ## 1. Vision
 
-Open Design becomes a **server + CLI + atomic core engine + plugin/marketplace system**. The product surface inverts: instead of "click a button, fill a form", users open a marketplace, click a plugin, and the input box hydrates with a query plus a typed strip of context chips above it. The same plugin folder is also a valid agent skill for Claude Code, Cursor, Codex, Gemini CLI, OpenClaw, Hermes, and is publishable as a standalone GitHub repo to:
+OpenDesign becomes a **server + CLI + atomic core engine + plugin/marketplace system**. The product surface inverts: instead of "click a button, fill a form", users open a marketplace, click a plugin, and the input box hydrates with a query plus a typed strip of context chips above it. The same plugin folder is also a valid agent skill for Claude Code, Cursor, Codex, Gemini CLI, OpenClaw, Hermes, and is publishable as a standalone GitHub repo to:
 
 - [`anthropics/skills`](https://github.com/anthropics/skills)
 - [`anthropics/claude-code/plugins`](https://github.com/anthropics/claude-code/tree/main/plugins)
@@ -143,7 +143,7 @@ Open Design becomes a **server + CLI + atomic core engine + plugin/marketplace s
 
 Each catalog needs a different listing format, but all of them index `SKILL.md`-shaped folders. By keeping `SKILL.md` canonical and `open-design.json` strictly sidecar, a single repo lands in every catalog without per-target rewrites.
 
-A second axis of the same vision: **the CLI is the canonical agent-facing API for Open Design.** Code agents (Claude Code, Cursor, Codex, OpenClaw, Hermes, in-house orchestrators) drive OD by shelling out `od …`, not by hitting `/api/*` directly. The CLI wraps every server capability — project creation, conversation/run lifecycle, plugin apply, file system operations on a project, design library introspection, daemon control — behind a stable subcommand contract. The HTTP server is an implementation detail that backs the desktop UI and the CLI itself; agents that talk HTTP are bypassing the contract.
+A second axis of the same vision: **the CLI is the canonical agent-facing API for OpenDesign.** Code agents (Claude Code, Cursor, Codex, OpenClaw, Hermes, in-house orchestrators) drive OD by shelling out `od …`, not by hitting `/api/*` directly. The CLI wraps every server capability — project creation, conversation/run lifecycle, plugin apply, file system operations on a project, design library introspection, daemon control — behind a stable subcommand contract. The HTTP server is an implementation detail that backs the desktop UI and the CLI itself; agents that talk HTTP are bypassing the contract.
 
 A third axis, derived from the second: **OD runs fully headless; the UI is a productivity layer, not a runtime dependency.** A user with nothing but Claude Code (or Cursor, Codex, Gemini CLI) and `od` installed can browse the marketplace, install a plugin, create a project, run a task, and consume the produced artifacts end-to-end without ever launching the desktop app. The desktop UI is exactly the same value-add Cursor's IDE adds on top of `cursor-agent` CLI: faster discovery, live artifact preview, chat/canvas side-by-side, marketplace browsing, direction-picker GUI, critique-theater panel — all sugar on the same primitives. Every UI feature is implementable as a CLI subcommand or a streaming event first; the UI consumes those primitives and adds presentation. The decoupling is enforced architecturally (§11.7).
 
@@ -160,7 +160,7 @@ A fifth axis is the product-shape co-evolution with the agent: **UI is requested
 3. Three install sources: local folder, GitHub repo (with optional ref/subpath), arbitrary HTTPS archive, plus federated `open-design-marketplace.json` indexes.
 4. One-click "use" auto-fills the brief input and a strip of `ContextItem` chips above it (skills, design-system, craft, assets, MCP, claude-plugin, atom).
 5. Tiered trust by default; capability scoping is declarative and optional.
-6. The OD core engine, atomic capabilities, and plugin runtime are all reachable from CLI so any code agent can drive Open Design headlessly.
+6. The OD core engine, atomic capabilities, and plugin runtime are all reachable from CLI so any code agent can drive OpenDesign headlessly.
 7. **A plugin is a long-task wrapper.** Each plugin targets exactly one of the four product scenarios (new-generation / code-migration / figma-migration / tune-collab) and uses `od.pipeline` to assemble OD's first-party atoms into ordered stages plus an optional devloop (§10).
 8. **Reproducible + auditable.** Every apply persists an immutable `AppliedPluginSnapshot` (§8.2.1); runs and artifacts back-reference the snapshot id. A plugin upgrade never breaks an old run's prompt reconstruction.
 9. **Same artifact, many surfaces.** The artifact manifest (§11.5.1) records plugin provenance plus the export and deploy history across downstream surfaces (cli / other code agents / cloud / desktop) so subsequent tuning, migration, and collaboration always pick up the same artifact.
@@ -232,7 +232,7 @@ Rules of authorship:
     "en": "Generate a 12-slide investor deck from a one-line brief.",
     "zh-CN": "根据一句 brief 生成 12 页投资人 deck。"
   },
-  "author":   { "name": "Open Design", "url": "https://open-design.ai" },
+  "author":   { "name": "OpenDesign", "url": "https://open-design.ai" },
   "license":  "MIT",
   "homepage": "https://github.com/open-design/plugins/make-a-deck",
   "icon":     "./icon.svg",
@@ -353,7 +353,7 @@ Rules of authorship:
 ### 5.1 Field reference
 
 - `compat.*` — relative paths to inherited files. The loader concatenates their content into the OD prompt stack assembled by [`composeSystemPrompt()`](../apps/daemon/src/prompts/system.ts).
-- `specVersion` — the Open Design plugin spec version used to interpret the manifest. This is distinct from plugin `version` and is frozen into apply snapshots for replay.
+- `specVersion` — the OpenDesign plugin spec version used to interpret the manifest. This is distinct from plugin `version` and is frozen into apply snapshots for replay.
 - `version` — the plugin package version. Bump it whenever behavior, metadata, pipeline, inputs, or bundled assets change in a way users may need to audit.
 - `publishedAt` — optional ISO 8601 timestamp of when the plugin was first published to its catalog. The Community gallery's "Newest" sort ranks bundled catalog records by it, so recency survives fresh installs (local install timestamps tie across a whole first-boot seed); user-installed plugins keep ranking by local install/update recency regardless of this field. Required for bundled first-party plugins (enforced by `e2e/tests/plugin-published-at.test.ts`); stamp the authoring time and do not move it on later edits.
 - `title_i18n` / `description_i18n` — optional localized display metadata. Keep `title` and `description` as English fallbacks; UI surfaces resolve requested locale, base language, English, then the first available value.
@@ -437,7 +437,7 @@ Mirrors [`anthropics/skills/.claude-plugin/marketplace.json`](https://raw.github
   "specVersion": "1.0.0",
   "name": "open-design-official",
   "version": "1.0.0",
-  "owner":    { "name": "Open Design", "url": "https://open-design.ai" },
+  "owner":    { "name": "OpenDesign", "url": "https://open-design.ai" },
   "metadata": { "description": "First-party plugins", "version": "1.0.0" },
   "plugins": [
     { "name": "make-a-deck", "version": "1.0.0", "source": "github:open-design/plugins/make-a-deck", "tags": ["deck"] },
@@ -817,7 +817,7 @@ Two hard constraints on devloop:
 
 Each devloop iteration writes the round's artifact diff, critique output, and consumed tokens into `runs.devloop_iterations` (§11.4 SQLite extension), which feeds audit and a future per-iteration pricing model.
 
-`GET /api/atoms` returns atoms plus the known reference pipelines. The current implementation has already started the self-hosting path: first-party atom plugins live under `plugins/_official/atoms/**`, bundled scenario plugins live under `plugins/_official/scenarios/**`, and `renderActiveStageBlock(stageId, bodies)` injects the active stage's atom bodies into the prompt. The system prompt is therefore pipeline-aware today, but not yet fully data-driven: the base Open Design designer prompt, discovery philosophy, and some entry-point defaults still live in daemon/product code. That is enough to ground the "plugins assemble the core pipeline" claim without pretending every byte of behavior has moved into plugins.
+`GET /api/atoms` returns atoms plus the known reference pipelines. The current implementation has already started the self-hosting path: first-party atom plugins live under `plugins/_official/atoms/**`, bundled scenario plugins live under `plugins/_official/scenarios/**`, and `renderActiveStageBlock(stageId, bodies)` injects the active stage's atom bodies into the prompt. The system prompt is therefore pipeline-aware today, but not yet fully data-driven: the base OpenDesign designer prompt, discovery philosophy, and some entry-point defaults still live in daemon/product code. That is enough to ground the "plugins assemble the core pipeline" claim without pretending every byte of behavior has moved into plugins.
 
 ### 10.3 Generative UI: AG-UI–inspired surfaces
 
@@ -1269,7 +1269,7 @@ This also answers the "no plugin selected" path: a run without an applied plugin
 
 ## 12. CLI surface
 
-The CLI (`od …`) is **the canonical agent-facing API** for Open Design. Plugin verbs are one slice of it; the rest of the CLI wraps the daemon's core capabilities — projects, conversations, runs, file operations, design library introspection, daemon control — so that any code agent can drive OD end-to-end through shell calls. This is the "natural-language project + task creation through CLI" path: a code agent reads a user's request, then issues a sequence of `od …` calls instead of speaking HTTP.
+The CLI (`od …`) is **the canonical agent-facing API** for OpenDesign. Plugin verbs are one slice of it; the rest of the CLI wraps the daemon's core capabilities — projects, conversations, runs, file operations, design library introspection, daemon control — so that any code agent can drive OD end-to-end through shell calls. This is the "natural-language project + task creation through CLI" path: a code agent reads a user's request, then issues a sequence of `od …` calls instead of speaking HTTP.
 
 ### 12.1 Three transports of one logical API
 
@@ -1462,7 +1462,7 @@ When `--json` is set, structured error output is `{ "error": { "code": "<short-c
 
 ### 12.5 Authoring patterns for code agents
 
-A code agent driving Open Design through the CLI typically does:
+A code agent driving OpenDesign through the CLI typically does:
 
 ```bash
 # 1. (Optional) Inspect what's available.
@@ -1518,7 +1518,7 @@ Deep-link contract (Phase 4 deliverable, scoped here so the schema supports it):
 - `od://plugins/<id>?apply=1[&input.k=v...]` — install if missing, then apply with the supplied inputs.
 - `od://marketplace/add?url=<urlencoded>` — register a new federated catalog.
 
-The desktop app registers the `od://` URL scheme; clicking a button on `open-design.ai/marketplace` either launches the desktop or, if it is not installed, falls back to a "How to install Open Design" flow.
+The desktop app registers the `od://` URL scheme; clicking a button on `open-design.ai/marketplace` either launches the desktop or, if it is not installed, falls back to a "How to install OpenDesign" flow.
 
 **Status: out of scope for the v1 implementation,** but the JSON shapes and the URL scheme are locked here so the in-app marketplace and the public site can be developed independently without divergence.
 
@@ -1602,7 +1602,7 @@ What this proves:
 
 The mental model:
 
-| Layer                 | Cursor                                       | Open Design                                          |
+| Layer                 | Cursor                                       | OpenDesign                                          |
 | --------------------- | -------------------------------------------- | ---------------------------------------------------- |
 | Headless agent CLI    | `cursor-agent` (drives the agent loop)       | `od run start --agent claude --follow` + `od plugin run` |
 | Local services / db   | Cursor's background indexing / state         | OD daemon-managed state. Storage paths are governed only by root `AGENTS.md` → **Daemon data directory contract**. |
@@ -1967,7 +1967,7 @@ Open questions worth confirming before code lands:
 - **Coupling between GenUI persisted state and `AppliedPluginSnapshot`** — when a plugin upgrades and `surface.schema` changes, old rows auto-`invalidate`; should we additionally **force a re-apply** (generating a new `AppliedPluginSnapshot`) or allow the surface to invalidate while leaving the snapshot untouched? (Default: surface only; `od plugin doctor` flags schema drift; replay still uses the old snapshot.)
 - ~~**Timing of AG-UI protocol adoption**~~ — **resolved.** `@open-design/agui-adapter` and `GET /api/runs/:runId/agui` have shipped as optional interoperability. OD-native GenUI remains the internal renderer and CopilotKit is not a required product dependency.
 
-## 19. Why this is a meaningful step for Open Design
+## 19. Why this is a meaningful step for OpenDesign
 
 - **Inherited supply.** Every public agent skill on `anthropics/skills`, `awesome-agent-skills`, `clawhub`, and `skills.sh` is one optional `open-design.json` away from being an OD plugin — and reciprocally, every OD plugin is publishable to all four catalogs without modification.
 - **Boundary-clean.** New code lives in two pure-TS packages (`packages/plugin-runtime`, `packages/contracts/src/plugins/*`) and one daemon module group (`apps/daemon/src/plugins/`); no cross-app coupling, no contracts package leaks, no SKILL.md fork. Honors every constraint in the root [`AGENTS.md`](../AGENTS.md).

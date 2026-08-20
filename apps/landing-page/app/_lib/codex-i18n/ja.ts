@@ -8,7 +8,7 @@ export const ja: CodexCopyOverride = {
   collectionEyebrow: 'キュレーションコレクション',
   collectionHeading: 'Codex に「本物の UI」を作らせるデザインプラグイン',
   collectionLede:
-    'OpenAI Codex は動くコードを書く。ただ放っておけば、無難なフォント、平凡な余白、中央寄せの Helvetica に落ち着く。ここに集めたのは Codex にセンスを与えるプラグイン、つまり美意識のスキルとデザインシステムのルール。ひとつだけ入れてもいいし、Open Design の中でまとめて動かしてもいい。',
+    'OpenAI Codex は動くコードを書く。ただ放っておけば、無難なフォント、平凡な余白、中央寄せの Helvetica に落ち着く。ここに集めたのは Codex にセンスを与えるプラグイン、つまり美意識のスキルとデザインシステムのルール。ひとつだけ入れてもいいし、OpenDesign の中でまとめて動かしてもいい。',
   collectionStats: [
     { value: '50', label: '厳選プラグイン' },
     { value: '13', label: '提供元リポジトリ' },
@@ -20,13 +20,13 @@ export const ja: CodexCopyOverride = {
     '1 行もコードを書かないうちに、Codex のデフォルトの美的判断を上書きする。',
     'トークンとコンポーネントを、Codex が勝手に発明せず従うルールに変える。',
   ],
-  collectionCloserHeading: 'セットアップは飛ばして、Open Design の中で Codex とデザインする',
+  collectionCloserHeading: 'セットアップは飛ばして、OpenDesign の中で Codex とデザインする',
   filterAll: 'すべて',
   collectionCloserBody:
-    'Open Design は、Codex を包み込むように動くオープンソースのエージェントネイティブなデザインワークスペースです。デザインシステム、スキル、テンプレートの一貫性を保つので、エージェントが仕上げた成果物はあなたのものになります。',
+    'OpenDesign は、Codex を包み込むように動くオープンソースのエージェントネイティブなデザインワークスペースです。デザインシステム、スキル、テンプレートの一貫性を保つので、エージェントが仕上げた成果物はあなたのものになります。',
   categoryFrontend: 'フロントエンド & UI',
   categoryDesignSystems: 'デザインシステム',
-  ctaDownload: 'Open Design をダウンロード',
+  ctaDownload: 'OpenDesign をダウンロード',
   ctaStarList: 'リストに Star を付ける',
   ctaBrowseAll: 'すべてのプラグインを見る',
   ctaViewSource: 'ソースを見る',
@@ -36,7 +36,7 @@ export const ja: CodexCopyOverride = {
   cardCta: 'プラグインを見る',
   detailWhatIsIt: '概要',
   detailWhyForDesign: 'デザインにとっての意味',
-  detailHowWithCodex: 'Codex での使い方',
+  detailHowWithAgent: 'Codex での使い方',
   detailExampleTag: '使いどころ',
   detailSource: '出典',
   detailCategory: 'カテゴリ',
@@ -45,12 +45,12 @@ export const ja: CodexCopyOverride = {
   detailLicense: 'ライセンス',
   detailCovers: 'カバーする内容',
   detailUpstream: '上流の SKILL.md より',
-  detailCodexNote: 'Codex で使える',
+  detailAgentNote: 'Codex で使える',
   detailTraction: '注目度',
   detailRepo: 'ソースリポジトリ',
   detailStars: 'スター',
   installHeading: 'インストール方法',
-  installRunInCodex: 'Codex の中でこれを実行する。',
+  installRunInAgent: 'Codex の中でこれを実行する。',
   installRestart: 'Codex を再起動して、新しいスキルを読み込ませる。',
   installClone: 'リポジトリをクローンする。',
   installPoint: 'スキルファイルの場所を Codex に指定する。',
@@ -61,9 +61,9 @@ export const ja: CodexCopyOverride = {
   detailMoreOnList: 'codex-design リストをもっと見る',
   detailRelated: 'ほかの Codex デザインプラグイン',
   finalEyebrow: '次のステップ',
-  detailCloserHeading: 'セットアップなしで、Open Design とデザインする',
+  detailCloserHeading: 'セットアップなしで、OpenDesign とデザインする',
   detailCloserBody:
-    'このプラグインを自分で入れてもいいし、Open Design でキュレーション済みのデザインレイヤーごと Codex の周りで動かしてもいい。自分の API キーを使い、成果物も自分のものに。',
+    'このプラグインを自分で入れてもいいし、OpenDesign でキュレーション済みのデザインレイヤーごと Codex の周りで動かしてもいい。自分の API キーを使い、成果物も自分のものに。',
   skills: {
     'gpt-taste': {
       tagline:
@@ -75,7 +75,7 @@ export const ja: CodexCopyOverride = {
         'ベントーグリッドは grid-flow-dense を使うので、空セルや欠けが残らない。',
         '安っぽいメタラベルは禁止、ボタン文字のコントラストも出力前に検証する。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'ページを頼むと、UI コードの前にスキルが design_plan ブロックを出す。',
         'ヒーローのレイアウト、フォントスタック、コンポーネント、GSAP のパラダイムというランダム選択の結果を確認する。',
         'ヒーロー幅の計算、グリッド密度、ラベル点検、コントラストというプリフライト項目を確認する。',
@@ -90,7 +90,7 @@ export const ja: CodexCopyOverride = {
         '中央寄せのヒーローや均等な 3 列カードは、設定したばらつきを超えると禁止される。',
         'ローディングと空状態は、ありきたりなスピナーではなくスケルトンで組み立てたものになる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'プロジェクトの雰囲気を伝えると、スキルが密度・ばらつき・モーションのスコアを決める。',
         'hex コードと機能別のカラーロールを備えた、7 セクション構成の DESIGN.md を出力する。',
         'そのファイルを Stitch に直接、または Stitch の MCP サーバー経由で渡す。',
@@ -105,7 +105,7 @@ export const ja: CodexCopyOverride = {
         '各セクションが専用の大きな画像を持つので、テキストと余白を分析しやすい状態が保たれる。',
         'ヒーローの見出しは 3 行以内に収まり、入れ子コンテナの積み重ねも生じない。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'セクション数を伝えると、Codex 上でスキルがセクションごとに 1 枚ずつ画像を生成する。',
         'ボタンや文字の細部が読めないときは、より寄ったディテールレンダーを頼む。',
         '実装ファイルを書く前に、明瞭さのチェックを実行させる。',
@@ -120,7 +120,7 @@ export const ja: CodexCopyOverride = {
         '固定したデザインバイブルが、パレット、書体、アイコンを全画面で一貫させる。',
         '複数画面のセットは、無関係な単発モックアップではなく、説得力のあるフローを形づくる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'アプリのカテゴリと画面数を伝えると、各画面がそれぞれ 1 枚の画像になる。',
         'スキルはまず iOS、Android、クロスプラットフォーム中立のいずれかのモードを選ぶ。',
         '文字が小さい、あるいはフレーミングが不均一な画面は、再生成を頼む。',
@@ -135,7 +135,7 @@ export const ja: CodexCopyOverride = {
         'ヒーローの構図は、左にテキスト・右に画像という多用されがちな定番を超えて変化する。',
         '1 つのパレット、タイプスケール、CTA のファミリーが、生成されるすべてのフレームで保たれる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '欲しいセクション数を伝える。指定がなければランディングページは既定で 6 セクションになる。',
         'スキルはまずセクション数を宣言し、各出力にセクション番号のラベルを付ける。',
         'エディトリアルやシネマティックといった雰囲気の言葉を与えて、ヒーローのスケールと背景を導く。',
@@ -150,7 +150,7 @@ export const ja: CodexCopyOverride = {
         'アクセントは、タグとインラインコード専用に用意した色あせた 4 色のパステルからのみ来る。',
         'セクションは、のっぺりした空白の背景ではなく、低い不透明度の画像で奥行きを得る。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'ページを頼むと、スキルはまず py-24 や py-32 といった大きな余白を確立する。',
         '文字幅を max-w-4xl に制限し、モノクロームの変数をすぐに適用する。',
         'スクロールで現れるフェードは、transform と opacity だけを対象に IntersectionObserver で動く。',
@@ -165,7 +165,7 @@ export const ja: CodexCopyOverride = {
         'プリフライトは、ダッシュ記号、セクション番号のアイブロウ、スクロール誘導、重複する CTA の意図を禁止する。',
         'レイアウトの繰り返しには上限があり、8 セクションなら少なくとも 4 種類の異なるファミリーを使う。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'エージェントはコードを書く前に、1 行でデザインの読み解きを言語化する。',
         'デザインのばらつき、モーションの強さ、視覚的な密度という 3 つのダイヤルを設定する。',
         'プリフライトの項目はすべて通らなければならず、そうでなければページは未完成扱いになる。',
@@ -180,7 +180,7 @@ export const ja: CodexCopyOverride = {
         'border-radius は完全に排除され、すべての角が 90 度のまま保たれる。',
         'ハーフトーン、スキャンライン、ノイズのフィルターが、面が平板なベクターに見えるのを防ぐ。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'スイスの工業印刷、あるいは戦術テレメトリの CRT 端末という、いずれか 1 つの原型を選ぶ。',
         '大見出しは負のトラッキングを持つ clamp を使い、メタデータは小さな大文字のモノスペースを使う。',
         'コントラストのある背景と組み合わせた 1px のグリッドの隙間が、剃刀のように細い区切り線を生む。',
@@ -195,7 +195,7 @@ export const ja: CodexCopyOverride = {
         'カードグループ内のボタンは、内容の長さが違っても 1 本の下端ラインに揃う。',
         '欠けていたホバー、フォーカス、ローディング、空、エラーの各状態が埋められる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'まずコードベースをスキャンし、フレームワークとスタイリングの手法を特定する。',
         '何かを変更する前に、ありきたりなパターンと弱点をすべて洗い出す。',
         '修正は、フォント、色、状態、レイアウト、コンポーネント、タイポグラフィの仕上げという優先順で入る。',
@@ -210,7 +210,7 @@ export const ja: CodexCopyOverride = {
         'ロゴのコンセプトは、モノグラム、メタファーの融合、ネガティブスペースといった明示された手法に従う。',
         'ボードにはリズムがあり、一様に賑やかなのではなく、静かなパネル、機能的なパネル、情緒的なパネル、技術的なパネルが混ざる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'ブランドとカテゴリを伝えると、スキルはまずビジュアルのモードを選ぶ。',
         '既定では 3x3 のボード、あるいは 2x3 の参考資料風ミニデックになる。',
         'テキストは最小限に。ブランド名、タグライン 1 本、コマンド 1 つ、いくつかのラベルだけにする。',
@@ -225,7 +225,7 @@ export const ja: CodexCopyOverride = {
         'カードは外殻と内芯の入れ子になり、コンテナに削り出したような本物の奥行きが出る。',
         'セクションの余白は py-24 から始まるので、レイアウトが窮屈にならず呼吸する。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex にページを頼むと、まず内部でばらつきエンジンを回す。',
         '背景の質感とタイプスケールを組み、次に二重ベゼルのコンテナを作る。',
         '独自の cubic-bezier モーションを差し込み、出力前のチェックリストを実行する。',
@@ -240,7 +240,7 @@ export const ja: CodexCopyOverride = {
         'まず package.json を確認するので、プロジェクトが既に持つものを再利用する。',
         '手作りのドロップダウンやトーストを見つけ、アクセシブルなプリミティブに置き換える。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '明示的に呼び出す。自動では起動しない。',
         'ライブラリ名ではなくタスクを伝える。たとえば「トーストが欲しい」のように。',
         'ライブラリを 1 つ挙げ、使い方を説明し、そのまま組み込む。',
@@ -255,7 +255,7 @@ export const ja: CodexCopyOverride = {
         'アニメーションは画面上の現在値から始まるので、割り込み時に見えるジャンプが消える。',
         'フリックは着地点を予測するので、放り投げた先はジェスチャーが狙った場所に落ち着く。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex にシート、ドロワー、ドラッグ操作のいずれかを作らせる。',
         'pointer capture で 1:1 に追従し、速度の履歴を記録する。',
         '指を離すと、付属の減衰値を使ってスプリングに速度を渡す。',
@@ -270,7 +270,7 @@ export const ja: CodexCopyOverride = {
         'clip-path と mask、pop in と bounce のような紛らわしい組を区別する。',
         '用語を勝手に作らないので、名づけの信頼性が保たれる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '見たものを説明する。たとえば「iOS のラバーバンドスクロール」のように。',
         '太字の用語と、1 行の用語定義を返す。',
         '2 つの用語が両方あり得るときは、代替案を求める。',
@@ -285,7 +285,7 @@ export const ja: CodexCopyOverride = {
         '登場は scale(0) ではなく scale(0.95) から始まるので、何もないところから現れることがない。',
         'ポップオーバーは中心ではなくトリガーから拡大し、空間的なつながりを保つ。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex に UI コードのレビューを頼むと、Before・After・Why の表を返す。',
         '新しいモーションでは、動かすべきか、なぜか、どのイージングか、どれくらいの速さかに答える。',
         'チェックリストを適用し、transition: all や 300ms を超える継続時間を指摘する。',
@@ -300,7 +300,7 @@ export const ja: CodexCopyOverride = {
         'アイコンは SVG テキストとして生成されるので、ラスターではなく編集可能なまま残る。',
         'バナーのルールが、セーフゾーン、フォント最大 2 種、CTA 1 つを徹底させる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'まず GEMINI_API_KEY を書き出し、google-genai と pillow をインストールする。',
         'デザインブリーフには scripts/logo/search.py を、画像には generate.py を実行する。',
         'ロゴを scripts/cip/generate.py に渡して、納品可能なモックアップを作る。',
@@ -315,7 +315,7 @@ export const ja: CodexCopyOverride = {
         '生成したビジュアルはテキストなしで描かれるので、見出しはくっきりした HTML のまま残る。',
         '1 回のリクエストにつきアートディレクションは 3 案なので、決める前に比較できる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '目的、プラットフォーム、内容、ブランド、スタイル、数量の質問に答える。',
         'アートディレクションごとに、セーフゾーンを適用した HTML バナーを 1 つずつ作る。',
         '指定した幅と高さで各バナーをスクリーンショットし、上限を超えるファイルは圧縮する。',
@@ -330,7 +330,7 @@ export const ja: CodexCopyOverride = {
         'テーマの色は CSS 変数に置かれるので、ダークモードの一貫性が保たれる。',
         'モバイルファーストのブレークポイントにより、レイアウトは小さく始まって上へ積み上がる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'npx shadcn@latest init を実行して、フレームワークとテーマを設定する。',
         'npx shadcn@latest add button card dialog form でコンポーネントを追加する。',
         'scripts/tailwind_config_gen.py を実行して、カスタムトークン付きの設定を生成する。',
@@ -345,7 +345,7 @@ export const ja: CodexCopyOverride = {
         '抽出した色をパレットと照合し、ずれを早期に捉える。',
         'アセットは承認前に、命名、サイズ、形式が点検される。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'docs/brand-guidelines.md を編集し、scripts/sync-brand-to-tokens.cjs を実行する。',
         'scripts/inject-brand-context.cjs --json で検証する。',
         '新しいファイルは出す前に、scripts/validate-asset.cjs で点検する。',
@@ -360,7 +360,7 @@ export const ja: CodexCopyOverride = {
         'データスライドは Chart.js が扱うので、数値は貼り付けた画像ではなく生きたままになる。',
         'レイアウトパターンはセットから選ばれ、デックの見た目の一貫性を保つ。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'create サブコマンドに、トピックとスライド枚数を添えて呼び出す。',
         'references/create.md を読み込み、その制作ワークフローに従う。',
         '参照ファイルから、レイアウトパターンとコピーライティングの型を引き出す。',
@@ -375,7 +375,7 @@ export const ja: CodexCopyOverride = {
         'コンポーネント仕様が default、hover、active、disabled の各状態を表にするので、ハンドオフに曖昧さが残らない。',
         'バリデーターがハードコードされた hex 値を指摘し、コンポーネントとスライドをトークンシステムに乗せ続ける。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'JSON のトークン設定に対して generate-tokens.cjs を実行し、CSS 変数ファイルを出力する。',
         'Codex にコンポーネント仕様を頼み、src/ に対して validate-tokens.cjs を実行して生の値を捕まえる。',
         'search-slides.py を position と context のフラグ付きで使い、デックのレイアウトを選ぶ。',
@@ -390,7 +390,7 @@ export const ja: CodexCopyOverride = {
         '8pt のベースライングリッドが、見出し、本文、余白にわたる垂直方向のリズムを徹底させる。',
         'アクセシビリティの基準には、reduced-motion 対応、44px のタッチターゲット、高コントラスト対応が含まれる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex にデザインの意図を言い直させ、コンポーネントに触れる前にトークンを定義する。',
         'アナトミー、バリアント、状態、レスポンシブ挙動をカバーするコンポーネントのルールを求める。',
         'QA チェックリストで締めくくり、コードレビュアーが出力を検証できるようにする。',
@@ -405,7 +405,7 @@ export const ja: CodexCopyOverride = {
         '暖かいクリームの面は、真っ白なページに比べて長い記事でのぎらつきを抑える。',
         'インクブラウンの本文に載るディスプレイセリフの見出しが、明快なエディトリアルのリズムを作る。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'コンポーネントを書かせる前に、Codex をテラコッタとクリームのトークンに向ける。',
         'コンポーネントごとにアナトミー、バリアント、状態を求め、余白トークンは明示的に名指しする。',
         '既存の不揃いな UI を作り直すときは、アンチパターンと移行メモを求める。',
@@ -420,7 +420,7 @@ export const ja: CodexCopyOverride = {
         '高コントラストな描画により、面に濃いパターンの質感があってもテキストが読みやすい。',
         '装飾的なモーションを禁止するルールが、レトロな表現が視覚的ノイズになるのを防ぐ。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'まず Codex にパレットの上限を伝え、パターンに基づく陰影のルールを導かせる。',
         '空、ローディング、エラーの状態を求め、パターンの載った面が読みやすいまま保たれるようにする。',
         'このスキルが明示的に挙げる、ヒットエリアとフォーカス状態を検証する。',
@@ -435,7 +435,7 @@ export const ja: CodexCopyOverride = {
         'コンパクトな密度の余白は、ダッシュボードや設定画面のようなコントロールの多いパネルに合う。',
         '視覚的メタファーの混在を禁じるルールにより、やわらかな押し出しが唯一の奥行き表現であり続ける。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '個々のコントロールをスタイリングする前に、Codex に面と影のトークンを設定させる。',
         'やわらかな影だけではキーボード利用者に不十分なので、見えるフォーカス状態を求める。',
         'このスキルの指定どおり、ARIA より先にセマンティックな HTML を必須とする。',
@@ -450,7 +450,7 @@ export const ja: CodexCopyOverride = {
         'コンパクトな 12〜32 のタイプスケールが、小さなタイルに濃い密度のテキストを収める。',
         'クリーム #FFF5E6 の面が、重い枠線なしでもブロックの縁を読み取りやすく保つ。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'コンテンツの優先度に基づいて、各ブロックにサイズを割り当てさせる。',
         'タイルを配置する前に、4〜32 のスケールで余白トークンを定義する。',
         'このスキルがエッジケースとして挙げる、オーバーフローと長いラベルの処理を求める。',
@@ -465,7 +465,7 @@ export const ja: CodexCopyOverride = {
         '白地の濃い青のテキスト #1C398E が、遊び心のあるパレットのままコントラストを保つ。',
         'メタファーの混在を禁じるルールにより、クレイの奥行きがガラスやフラットと混ざることはない。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'クレイの見た目を決めるのは角丸と影なので、まず Codex にそのトークンを求める。',
         '似たサンセリフ 2 種ではなく、指定どおり見出しの Poppins と本文の Montserrat を組み合わせる。',
         'やわらかな形状の処理でも、focus-visible と disabled の状態が残っているか確認する。',
@@ -480,7 +480,7 @@ export const ja: CodexCopyOverride = {
         '赤とオーカーという強い 2 色のアクセントが、グラデーションと影を完全に置き換える。',
         'アクセシビリティの下限は依然として適用されるので、不調和なレイアウトでもコントラストと見えるフォーカスは保たれる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'コンポーネントを選ばせる前に、トーンは太く装飾なしだと Codex に伝える。',
         '品質ゲートが求めるとおり、すべてのルールをトークンか閾値に紐づける。',
         '出力をレビューするときは、各「すべき」ルールに具体的な「してはいけない」例を対にする。',
@@ -495,7 +495,7 @@ export const ja: CodexCopyOverride = {
         '固定されたトークンが、トークンブロックを迂回するインラインの hex や font-family 値を禁止する。',
         'すべての出力が、320、375、414、768 ピクセル幅で検証される。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'まずプリフライトのスキャンに、既存のフォント、パレット、モーションライブラリを読ませる。',
         'オーディエンス、ユースケース、トーンのゲートに答えるか、そのまま進めるよう伝える。',
         'ページに対して hallmark audit を実行し、編集なしで優先順位づけした指摘リストを得る。',
@@ -510,7 +510,7 @@ export const ja: CodexCopyOverride = {
         '絶対禁止事項が、グラデーション文字、横帯のボーダー、全セクション上のアイブロウラベルを退ける。',
         'コントラストの下限は明示的で、本文は 4.5:1、大きな文字は 3:1。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'セッションごとに context.mjs を 1 回実行し、スキルに PRODUCT.md と DESIGN.md を読み込ませる。',
         '対象ファイルを添えて、critique、polish、animate といったコマンドを呼び出す。',
         '起動中の dev サーバーで live モードを使い、ブラウザ内でバリアントを生成する。',
@@ -525,7 +525,7 @@ export const ja: CodexCopyOverride = {
         '計測可能なトークンだけでなく、ムード、構図、ブランドボイスも記録する。',
         '素の CSS では表現できない Canvas、WebGL、シェーダー、スクロール効果も捉える。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '何かを分析する前にスキーマを求め、3 つの次元をすべて確認する。',
         'Codex に参照画像や URL を渡し、中身の入った DNA の JSON を求める。',
         'その JSON と自分のコンテンツを渡して、自己完結した HTML ページを生成する。',
@@ -540,7 +540,7 @@ export const ja: CodexCopyOverride = {
         'トーナルな面が影の代わりに奥行きを担い、現行の MD3 仕様に沿う。',
         '採点式の監査が 10 のカテゴリを評価し、修正を優先順で列挙する。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'プラットフォームを指定して、Codex に Compose、Flutter、CSS カスタムプロパティのいずれかを選ばせる。',
         'コンポーネントを求めると、正しいバリアントとトークンの結線が得られる。',
         'URL やソースファイルに対して監査を実行し、準拠レポートを得る。',
@@ -555,7 +555,7 @@ export const ja: CodexCopyOverride = {
         '多くのコンポーネントが違和感を持つ原因となる、入れ子の角丸の不一致を直す。',
         '変化する数字によるレイアウトのずれを、ユーザーに届く前に捕まえる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Codex をコンポーネントに向けて、原則を適用させる。',
         'レビューを求めると、指摘が Before と After の表で返ってくる。',
         'フロントエンドの変更をマージする前に、14 項目のチェックリストを実行する。',
@@ -570,7 +570,7 @@ export const ja: CodexCopyOverride = {
         'レビュアーはチャットで議論する代わりに、固定された要素にコメントする。',
         '複数ステップのフローには、静的なモックアップの横に操作可能なプロトタイプが付く。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'Agent-Native CLI でインストールし、/visual-plan コマンドを実行する。',
         '既存の Codex または Markdown の計画を貼り付けて、元ネタにする。',
         'フィードバックを読み、計画を修正し、保存された結果を検証する。',
@@ -585,7 +585,7 @@ export const ja: CodexCopyOverride = {
         '密度の取り決めが、半分も埋まらない本文ページを指摘する。',
         '図版プリミティブが、アーキテクチャ、フローチャート、四象限、タイムライン、チャートをカバーする。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '必要なものを伝えると、決定木が合致するテンプレートを選ぶ。',
         'まず Codex に、素のコンテンツを検証済みの content.json に整えさせる。',
         'ビルドスクリプトを実行して、HTML、PDF、検証レポートを生成する。',
@@ -600,7 +600,7 @@ export const ja: CodexCopyOverride = {
         'マスクしたバリアントは、既存の背景を上書きせずそのまま残す。',
         '既定ではストップの不透明度を 0.4 未満に抑えるので、ボーダーは主張せず枠として収まる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'より良い縁が必要なカードや料金パネルに、Codex を向ける。',
         'ベタ塗りにはシンプルなパターン、複雑な背景にはマスク版を選ぶ。',
         'アルファはそのまま移りにくいので、ライトとダークのテーマを別々に確認する。',
@@ -615,7 +615,7 @@ export const ja: CodexCopyOverride = {
         'スクリーンリーダーは、aria-label 越しに全文を受け取れる。',
         'reduced-motion のユーザーには、transform を当てない静止したテキストが表示される。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '見出しに data-masked-reveal を付け、CSS のマスクルールを加える。',
         '有料の SplitText プラグインを避ける、分割ヘルパーを呼び出す。',
         'React では GSAP の context で包み、ルート変更時に ScrollTrigger が後片付けされるようにする。',
@@ -630,7 +630,7 @@ export const ja: CodexCopyOverride = {
         '角ブラケットは余計なマークアップを要さないので、構造は CSS に留まる。',
         'テクスチャレイヤーを外しても、レイアウトは明快に読める。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '技術系またはエディトリアルのページを頼み、まず親グリッドを得る。',
         '場当たり的なセクション幅ではなく、明示的な span クラスを割り当てる。',
         '両方のブレークポイントで、枠の縁が縦にも横にも揃っているか検証する。',
@@ -645,7 +645,7 @@ export const ja: CodexCopyOverride = {
         'ガイドはコンテナの max-width と padding を共有するので、ずれることがない。',
         'ポインターイベントは無効なので、線がクリックや選択を妨げることはない。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'レイアウトのシェルに container-lines クラスを追加する。',
         '角の四角は、実際のコンテナやセクションの角だけに置く。',
         'ライトとダークの両方の背景で、線が控えめなまま保たれるか確認する。',
@@ -660,7 +660,7 @@ export const ja: CodexCopyOverride = {
         '奥行きには方向があり、光は上から、影は下に来る。',
         'グラスモーフィズム、ニューモーフィズム、スキューモーフィズムを 1 つのコンポーネントで混ぜないよう警告する。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '基準トークンを一度設定し、あとはブランドとテーマごとに調整する。',
         '浮き上がった面を、カード、ボタン、タブ、コントロールの筐体に適用する。',
         '押下バリアントは、アクティブなトグルと選択中のタブだけに加える。',
@@ -675,7 +675,7 @@ export const ja: CodexCopyOverride = {
         '固定した 3 段階の強さが、それぞれコントロール、カード、ヒーローメディアに対応する。',
         '重ねた低不透明度の層が、鈍い 1 枚のドロップシャドウではなく本物の奥行きに見える。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'カード、パネル、ポップオーバーに md ユーティリティを適用させる。',
         'lg ユーティリティは、ヒーローメディアとモーダル的なコンテナのために取っておく。',
         '各シャドウを、すっきりした面の塗りと一貫した角丸と組み合わせる。',
@@ -690,7 +690,7 @@ export const ja: CodexCopyOverride = {
         '6 段階のモノクロームパレットが、重いオーバーレイなしでも前景の文字を読みやすく保つ。',
         'ビネットと軸をずらした塊が、一様な明るさではなく 1 つの明るい焦点をつくる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '固定した canvas をコンテンツの背後に置き、pointer-events を none にする。',
         '行列の読みやすさのために、cellSize を 5px から 10px の間で調整する。',
         'wave、cloud、ridge、vignette の値を調整して、塊の形を整える。',
@@ -705,7 +705,7 @@ export const ja: CodexCopyOverride = {
         'コアとグローの幅を分けることで、ビームが帯ではなく刃のまま保たれる。',
         '煙はビームの近くに集まって外へ散るので、コピーのコントラストが守られる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '--brand-accent のカスタムプロパティを設定すると、シェーダーがそれを RGB に変換する。',
         '固定した canvas を、pointer-events none でコンテンツの背後に置く。',
         'coreWidth、glowWidth、smokeDensity、xOffset を調整して、ビームの位置を決める。',
@@ -720,7 +720,7 @@ export const ja: CodexCopyOverride = {
         '名前の付いたトークンが、背景、シェル、線、コピー、アクセントの値をページ全体で固定する。',
         'レール、角の四角、ノードのピルが、ミニマルなシェルに技術的な構造を与える。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'トークンブロックを貼り付け、ページの土台とヒーローシェルを作る。',
         'メッシュの canvas を、シェルの中でシェルのコンテンツの背後に加える。',
         'ノード、レール、マーカーをいくつか置き、ドリフトのループはゆっくりに保つ。',
@@ -735,7 +735,7 @@ export const ja: CodexCopyOverride = {
         'どの効果にも reduced-motion の分岐があり、レイアウトとコントラストを損なわない。',
         'ビルドの順序が、まず静的なページ、次にモーションと段階を踏み、絡まったスクロールシーンを避ける。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'gsap と lenis をインストールし、Lenis を GSAP のティッカーに結線する。',
         '出現、スタック、パララックスのための data 属性を、セクションに付ける。',
         'スクラブ連動のピン留めシーンは最後に加え、QA チェックリストを実行する。',
@@ -750,7 +750,7 @@ export const ja: CodexCopyOverride = {
         'ディスプレイ見出しと極小メタデータのスケール差が、階層を担う。',
         'ネガティブスペースは埋めずに残され、ページをエディトリアルに保つ。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'まず、カラムの仕切りが見える広い max-width のシェルを設定する。',
         'ヒーローの見出しをほとんどのカラムにまたがらせ、補足コピーは脇のカラムに置く。',
         'サービスの行を、極小のメタデータラベルを添えた多段カラムのリストとして作る。',
@@ -765,7 +765,7 @@ export const ja: CodexCopyOverride = {
         'ビーム線と十字線がダイヤルに揃い、校正のロジックを補強する。',
         'モノクロームのパレットにより、明るさは彩度の高いアクセントではなくガラスのハイライトから来る。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'ニアブラックの下地に、かすかなグリッドとビームのガイドを加えて始める。',
         'ナビ、ピル、ボタンを、1px のハイライトで縁取ったダークガラスのカプセルとして作る。',
         'ダイヤルを層で組む。外周のリング、目盛り、回転するラベル、中心のエンブレム。',
@@ -780,7 +780,7 @@ export const ja: CodexCopyOverride = {
         'マテリアルのプリセットが、上質な金属、やわらかなセラミック、発光がかったテック調をカバーする。',
         '動きはゆっくりの回転と小さな上下だけに抑えられ、コピーが主役のまま保たれる。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         '正方形の canvas シェルを加え、その上で Three.js の初期化処理を実行する。',
         'color、metalness、roughness、emissive をブランドのムードに合わせて設定する。',
         'リサイズ処理と、ジオメトリ、マテリアル、レンダラーの後片付けを確認する。',
@@ -795,7 +795,7 @@ export const ja: CodexCopyOverride = {
         'ScrollTrigger とタイムラインが、場当たり的に積まれるのではなく正しく並べられる。',
         'パフォーマンスのルールが、スクロール時にカクつかせずアニメーションを滑らかに保つ。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'GSAP のスキルセットをインストールし、Codex が該当モジュールを読み込めるようにする。',
         '欲しいモーションを頼めば、適切なモジュールが API を扱う。',
         'コンポーネントツリーの中では、React またはフレームワークのモジュールを使う。',
@@ -810,7 +810,7 @@ export const ja: CodexCopyOverride = {
         '曖昧な「もっと良くして」を、優先順位づけしたモーションの監査に変える。',
         'アニメーションを、個人の好みではなく明示された水準に保つ。',
       ],
-      howWithCodex: [
+      howWithAgent: [
         'find パスを実行して、UI の中のモーションの機会を突き止める。',
         'improve パスを適用して、既存のアニメーションコードを作り直す。',
         '出荷前に review パスを実行し、詰めの甘いモーションを捕まえる。',

@@ -52,6 +52,8 @@ describe('preview observability contract', () => {
       stack: 'line one\nline two',
       line: 12.6,
       viewport_width: 20_000_000,
+      blank_observation_count: 2,
+      sample_interval_ms: 1_500,
       ignored: 'not part of the protocol',
     });
 
@@ -61,6 +63,8 @@ describe('preview observability contract', () => {
       stack: 'line one line two',
       line: 13,
       viewport_width: 10_000_000,
+      blank_observation_count: 2,
+      sample_interval_ms: 1_500,
     });
     expect(parsed).not.toHaveProperty('ignored');
   });

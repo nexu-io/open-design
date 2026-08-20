@@ -549,7 +549,7 @@ describe('resolveChatFileLink (issue: chatpane file links opening a home-page wi
 
     it('never derives a managed root from an imported baseDir', () => {
       // resolvedDir does not end with `/<projectId>`, so a sibling under the
-      // same parent is NOT provably another Open Design project.
+      // same parent is NOT provably another OpenDesign project.
       expect(
         resolveChatFileLink(
           '/Users/mac/workspace/projects/other-folder/index.html',

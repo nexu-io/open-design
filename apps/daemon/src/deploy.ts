@@ -142,8 +142,8 @@ export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
     projectName: '',
   };
   if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
-  if (!next.token) throw new DeployError('Cloudflare API token is required.', 400);
-  if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
+  if (!next.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
+  if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
   await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
   return publicCloudflarePagesConfig(next);
 }
@@ -241,7 +241,7 @@ function normalizeCloudflarePagesConfigHints(input: unknown, fallback: Cloudflar
 export async function buildDeployFilePlan(projectsRoot: string, projectId: string, entryName: string, options: DeployOptions = {}): Promise<DeployFilePlan> {
   const entryPath = validateProjectPath(entryName);
   if (!/\.html?$/i.test(entryPath)) {
-    throw new DeployError('Only HTML files can be deployed.', 400);
+    throw new DeployError('Only HTML files can be deployed.', 400, undefined, 'NOT_HTML');
   }
 
   const entry = await readProjectFile(projectsRoot, projectId, entryPath, options.metadata);
@@ -349,7 +349,7 @@ export async function buildDeployFileSet(projectsRoot: string, projectId: string
     throw new DeployError(`Could not deploy referenced files (${parts.join('; ')}).`, 400, {
       missing: plan.missing,
       invalid: plan.invalid,
-    });
+    }, 'MISSING_REFERENCES');
   }
   return plan.files;
 }
@@ -387,7 +387,7 @@ function isLinkedFolderProject(metadata: unknown) {
 
 export async function deployToVercel({ config, files, projectId }: { config: DeployConfig; files: DeployFile[]; projectId: string }) {
   if (!config?.token) {
-    throw new DeployError('Vercel token is required.', 400);
+    throw new DeployError('Vercel token is required.', 400, undefined, 'VERCEL_TOKEN_REQUIRED');
   }
 
   const createResp = await fetch(`${VERCEL_API}/v13/deployments${vercelTeamQuery(config)}`, {
@@ -416,7 +416,7 @@ export async function deployToVercel({ config, files, projectId }: { config: Dep
     ? await pollVercelDeployment(config, deploymentId)
     : created;
   if (ready?.readyState === 'ERROR') {
-    throw new DeployError(ready?.error?.message || 'Vercel deployment failed.', 502, ready);
+    throw new DeployError(ready?.error?.message || 'Vercel deployment failed.', 502, ready, 'VERCEL_DEPLOY_FAILED');
   }
 
   const candidates = deploymentUrlCandidates(ready, created);
@@ -437,8 +437,8 @@ export async function deployToVercel({ config, files, projectId }: { config: Dep
 }
 
 export async function listCloudflarePagesZones(config: DeployConfig) {
-  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
-  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
+  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
+  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
   const accountId = config.accountId;
   const zones = await fetchCloudflarePaginatedResult(
     config,
@@ -476,9 +476,9 @@ export async function deployToCloudflarePages(input: { config: DeployConfig; fil
     priorMetadata = undefined,
     target = 'production',
   } = input || {};
-  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
-  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
-  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
+  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
+  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
+  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400, undefined, 'CF_PROJECT_NAME_UNRESOLVED');
 
   const customDomainSelection = await validateCloudflarePagesDeploySelection(
     config,
@@ -571,12 +571,12 @@ function normalizeCloudflarePagesDeploySelection(input: unknown): CloudflarePage
   if (!rawZoneId && !rawZoneName && !rawPrefix) return null;
   const zoneName = normalizeCloudflareZoneName(rawZoneName);
   const domainPrefix = normalizeCloudflareDomainPrefix(rawPrefix);
-  if (!rawZoneId) throw new DeployError('Cloudflare zone is required for a custom domain.', 400);
+  if (!rawZoneId) throw new DeployError('Cloudflare zone is required for a custom domain.', 400, undefined, 'CF_ZONE_REQUIRED');
   if (!zoneName || !isValidCloudflareZoneName(zoneName)) {
-    throw new DeployError('Select a valid Cloudflare domain for the custom domain.', 400);
+    throw new DeployError('Select a valid Cloudflare domain for the custom domain.', 400, undefined, 'CF_ZONE_INVALID');
   }
   if (!domainPrefix) {
-    throw new DeployError('Enter a valid subdomain prefix, for example "demo".', 400);
+    throw new DeployError('Enter a valid subdomain prefix, for example "demo".', 400, undefined, 'CF_SUBDOMAIN_INVALID');
   }
   return {
     zoneId: rawZoneId,
@@ -600,23 +600,23 @@ async function validateCloudflarePagesDeploySelection(config: DeployConfig, sele
   if (!zoneName || zoneName !== selection.zoneName) {
     throw new DeployError('Cloudflare zone selection no longer matches the selected domain.', 400, {
       errorCode: 'cloudflare_zone_mismatch',
-    });
+    }, 'CF_ZONE_MISMATCH');
   }
   if (zone?.status && zone.status !== 'active') {
     throw new DeployError('Cloudflare custom domains require an active zone.', 400, {
       errorCode: 'cloudflare_zone_inactive',
-    });
+    }, 'CF_ZONE_INACTIVE');
   }
   if (zone?.type && zone.type !== 'full') {
     throw new DeployError('Cloudflare custom domains require a full DNS zone.', 400, {
       errorCode: 'cloudflare_zone_not_full',
-    });
+    }, 'CF_ZONE_PARTIAL');
   }
   return { ...selection, zoneName };
 }
 
 async function setupCloudflarePagesCustomDomain({ config, projectId, selection, pagesDevUrl, priorMetadata }: { config: DeployConfig; projectId: string; selection: CloudflarePagesDeploySelection; pagesDevUrl: string; priorMetadata?: JsonObject | undefined }) {
-  if (!config.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
+  if (!config.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400, undefined, 'CF_PROJECT_NAME_UNRESOLVED');
   const pagesTarget = normalizeHostname(hostnameFromUrl(pagesDevUrl) || `${config.projectName}.pages.dev`);
   const marker = cloudflarePagesDnsMarker(projectId, config.projectName, pagesTarget);
   const base = {
@@ -710,7 +710,7 @@ async function ensureCloudflarePagesCnameRecord({ config, selection, target, mar
   if (conflicting) {
     if (canPatchCloudflarePagesCname(conflicting, selection, marker, priorMetadata)) {
       const conflictingId = conflicting.id;
-      if (!conflictingId) throw new DeployError('Cloudflare DNS record id is missing.', 502);
+      if (!conflictingId) throw new DeployError('Cloudflare DNS record id is missing.', 502, undefined, 'CF_DNS_RECORD_MISSING');
       const patched = await patchCloudflareDnsRecord(config, selection.zoneId, conflictingId, {
         type: 'CNAME',
         name: selection.hostname,
@@ -813,6 +813,7 @@ function cloudflarePagesDnsConflictError(selection: CloudflarePagesDeploySelecti
       dnsRecordId: conflicting.id,
       dnsOwnership: 'external',
     },
+    'CF_DNS_RECORD_CONFLICT',
   );
 }
 
@@ -902,6 +903,7 @@ async function ensureCloudflarePagesDomain(config: DeployConfig, hostname: strin
           errorCode: 'cloudflare_domain_already_bound',
           domainStatus: 'conflict',
         },
+        'CF_DOMAIN_ALREADY_BOUND',
       );
     }
     throw cloudflareError(json, resp.status, 'Cloudflare Pages custom domain setup failed.');
@@ -925,9 +927,9 @@ async function findCloudflarePagesDomain(config: DeployConfig, hostname: string)
 }
 
 export async function readCloudflarePagesDomain(config: DeployConfig, hostname: string) {
-  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
-  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
-  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
+  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
+  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
+  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400, undefined, 'CF_PROJECT_NAME_UNRESOLVED');
   return findCloudflarePagesDomain(config, hostname);
 }
 
@@ -1054,6 +1056,8 @@ async function uploadCloudflarePagesAssets(uploadToken: string, files: DeployFil
       throw new DeployError(
         `Cloudflare Pages assets must be ${formatMib(CLOUDFLARE_PAGES_ASSET_MAX_BYTES)} or smaller: ${file.file} is ${formatMib(data.length)}.`,
         400,
+        undefined,
+        'CF_ASSET_TOO_LARGE',
       );
     }
     const hash = cloudflarePagesAssetHash({ ...file, data });
@@ -1070,7 +1074,7 @@ async function uploadCloudflarePagesAssets(uploadToken: string, files: DeployFil
   if (missing.length > 0) {
     const missingFiles = missing.map((hash) => {
       const file = uniqueFiles.get(hash);
-      if (!file) throw new DeployError(`Cloudflare reported an unknown asset hash: ${hash}`, 502);
+      if (!file) throw new DeployError(`Cloudflare reported an unknown asset hash: ${hash}`, 502, undefined, 'CF_UNKNOWN_ASSET_HASH');
       return {
         ...file,
         hash,
@@ -1813,12 +1817,12 @@ function vercelTeamQuery(config: DeployConfig) {
 }
 
 function cloudflareAccountPagesProjectsUrl(config: DeployConfig) {
-  if (!config.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
+  if (!config.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
   return `${CLOUDFLARE_API}/accounts/${encodeURIComponent(config.accountId)}/pages/projects`;
 }
 
 function cloudflarePagesProjectUrl(config: DeployConfig, suffix = '') {
-  if (!config.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
+  if (!config.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400, undefined, 'CF_PROJECT_NAME_UNRESOLVED');
   const base = `${cloudflareAccountPagesProjectsUrl(config)}/${encodeURIComponent(config.projectName)}`;
   return suffix ? `${base}/${suffix}` : base;
 }
@@ -1861,7 +1865,7 @@ async function readCloudflareJson(resp: Response): Promise<JsonObject> {
   try {
     return await resp.json() as JsonObject;
   } catch {
-    throw new DeployError('Cloudflare returned a non-JSON response.', resp.status || 502);
+    throw new DeployError('Cloudflare returned a non-JSON response.', resp.status || 502, undefined, 'CF_BAD_RESPONSE');
   }
 }
 
@@ -1904,7 +1908,7 @@ async function readVercelJson(resp: Response): Promise<JsonObject> {
   try {
     return await resp.json() as JsonObject;
   } catch {
-    throw new DeployError('Vercel returned a non-JSON response.', resp.status || 502);
+    throw new DeployError('Vercel returned a non-JSON response.', resp.status || 502, undefined, 'VERCEL_BAD_RESPONSE');
   }
 }
 
@@ -1915,6 +1919,13 @@ function cloudflareError(json: JsonObject, status: number, fallback: string) {
     json?.message ||
     fallback ||
     `Cloudflare request failed (${status}).`;
+  // Deliberately NO structured code: this is the catch-all for any Cloudflare
+  // API rejection, where the provider's HTTP status IS the signal. The client
+  // (apps/web/src/providers/registry.ts) only falls back to `HTTP_${status}`
+  // when the envelope code is generic, so stamping one code here would fold
+  // auth (403), quota (429) and upstream faults (5xx) into a single bucket —
+  // the opposite of what this file's specific codes are for. Add a code here
+  // only for a failure whose CAUSE is known, not merely its status.
   return new DeployError(message, status, json);
 }
 
@@ -1938,8 +1949,10 @@ function vercelError(json: JsonObject, status: number) {
   const code = json?.error?.code;
   const message = json?.error?.message || json?.message || `Vercel request failed (${status}).`;
   if (code === 'forbidden' || /permission/i.test(message)) {
-    return new DeployError("You don't have permission to create a project.", status, json);
+    return new DeployError("You don't have permission to create a project.", status, json, 'PROVIDER_FORBIDDEN');
   }
+  // Catch-all — no structured code, so the client keeps bucketing by the real
+  // provider status. See cloudflareError above.
   return new DeployError(message, status, json);
 }
 

@@ -3,9 +3,9 @@ name: html-ppt-zhangzara-signal
 en_name: "Write a Strategy Decision Memo like a Corp-Dev Lead"
 zh_name: "像战略发展负责人一样写战略决策备忘"
 description: |
-  Open Design's strategy memo: should it monetize the plugin registry now or hold — options, risks, and the recommendation. Built as a decision-grade corporate strategy deck for CEO, strategy team.
+  OpenDesign's strategy memo: should it monetize the plugin registry now or hold — options, risks, and the recommendation. Built as a decision-grade corporate strategy deck for CEO, strategy team.
 en_description: |
-  Open Design's strategy memo: should it monetize the plugin registry now or hold — options, risks, and the recommendation. Built as a decision-grade corporate strategy deck for CEO, strategy team.
+  OpenDesign's strategy memo: should it monetize the plugin registry now or hold — options, risks, and the recommendation. Built as a decision-grade corporate strategy deck for CEO, strategy team.
 zh_description: |
   像战略发展负责人一样写战略决策备忘——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -40,7 +40,7 @@ od:
   animations: false
   category: "corporate-strategy"
   scenario: "strategy"
-  example_prompt: "Create \"Write a Strategy Decision Memo like a Corp-Dev Lead\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's strategy memo: should it monetize the plugin registry now or hold — options, risks, and the recommendation. Audience: CEO, strategy team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
+  example_prompt: "Create \"Write a Strategy Decision Memo like a Corp-Dev Lead\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: OpenDesign's strategy memo: should it monetize the plugin registry now or hold — options, risks, and the recommendation. Audience: CEO, strategy team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
 ---
 
 # Signal

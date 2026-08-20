@@ -277,7 +277,7 @@ describe('AssistantMessage feedback gate', () => {
     expect(onForkFromMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('reaches Contribute (share to Open Design) through the More -> Share cascade', () => {
+  it('reaches Contribute (share to OpenDesign) through the More -> Share cascade', () => {
     const onShare = vi.fn();
 
     render(
@@ -1333,8 +1333,9 @@ describe('AssistantMessage recovered produced files', () => {
     expect(produced?.textContent).toContain('browser-war-deck-outline.md');
     const download = produced?.querySelector('a[download]');
     expect(download).toBeTruthy();
-    expect(download?.getAttribute('href')).toContain('workspaceId=workspace-a');
-    expect(download?.getAttribute('href')).toContain('workspaceMemberId=member-a');
+    expect(download?.getAttribute('href')).toBe(
+      '/api/projects/proj-1/raw/browser-war-deck-outline.md',
+    );
     expect(screen.queryByTestId('file-ops-summary')).toBeNull();
   });
 
@@ -1380,6 +1381,53 @@ describe('AssistantMessage recovered produced files', () => {
     const hasProducedFiles = !!document.querySelector('.produced-files');
     expect(hasFileOpsSummary).toBe(true);
     expect(hasProducedFiles).toBe(false);
+  });
+
+  it('lists only the authoritative artifact when an earlier edit targeted a wrong project path', () => {
+    const fileName = 'opendesign-b2b-sales-deck.html';
+    const failedPath = `/workspace/projects/wrong-project/${fileName}`;
+    const deliveredPath = `/workspace/projects/project-1/${fileName}`;
+    const file = producedFile(fileName);
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'failed-edit',
+              name: 'Edit',
+              input: { file_path: failedPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'failed-edit',
+              content: `File ${failedPath} not found`,
+              isError: true,
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_use',
+              id: 'successful-edit',
+              name: 'Edit',
+              input: { file_path: deliveredPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'successful-edit',
+              content: 'Updated successfully.',
+              isError: false,
+            } as ChatMessage['events'][number],
+          ],
+          producedFiles: [file],
+        })}
+        streaming={false}
+        projectId="project-1"
+        projectFiles={[file]}
+      />,
+    );
+
+    expect(screen.getAllByTestId(`file-ops-row-${fileName}`)).toHaveLength(1);
+    expect(screen.queryByTestId('file-ops-toggle')).toBeNull();
   });
 
   it('shows project files mentioned as plain filenames in the assistant summary', () => {
