@@ -165,7 +165,7 @@ export interface LexicalComposerInputProps {
   ): boolean;
   // Optional combobox a11y. When set, the ContentEditable announces the active
   // mention row (id lives in the portaled listbox) without moving DOM focus.
-  comboboxAria?: { activeId: string | null; expanded: boolean };
+  comboboxAria?: { activeId: string | null; controlsId?: string; expanded: boolean };
   // Read-only mode (team-shared project viewer). Makes the Lexical editor
   // non-editable so the caret/typing is blocked, applies a muted read-only
   // visual state, and hard-stops Enter from firing a send (belt-and-suspenders
@@ -819,7 +819,7 @@ export const LexicalComposerInput = forwardRef<
               title={title ?? placeholder}
               role="combobox"
               aria-expanded={comboboxAria?.expanded ? 'true' : 'false'}
-              aria-controls="mention-listbox"
+              aria-controls={comboboxAria?.controlsId ?? 'mention-listbox'}
               {...(comboboxAria?.activeId
                 ? { 'aria-activedescendant': comboboxAria.activeId }
                 : {})}

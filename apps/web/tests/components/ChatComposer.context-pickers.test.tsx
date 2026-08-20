@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  KEY_ARROW_DOWN_COMMAND,
+  KEY_ARROW_UP_COMMAND,
+  KEY_TAB_COMMAND,
+} from 'lexical';
 import { createRef, useState, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,8 +22,18 @@ vi.mock('../../src/analytics/events', async (importOriginal) => {
 import { ChatComposer, type ChatComposerHandle } from '../../src/components/ChatComposer';
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
-import type { AppliedPluginSnapshot, ProjectMetadata } from '@open-design/contracts';
-import { composerText, pressEnter, typeAndSettle, typeInComposer } from '../helpers/lexical-composer';
+import type {
+  AppliedPluginSnapshot,
+  McpServerConfig,
+  ProjectMetadata,
+} from '@open-design/contracts';
+import {
+  composerText,
+  getComposerEditor,
+  pressEnter,
+  typeAndSettle,
+  typeInComposer,
+} from '../helpers/lexical-composer';
 
 const COMMUNITY_PLUGIN = {
   id: 'community-deck',
@@ -127,7 +142,7 @@ const APPLY_RESULT = {
 let fetchMock: ReturnType<typeof vi.fn>;
 let plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
 let skills = [SKILL];
-let servers = [MCP_SERVER];
+let servers: McpServerConfig[] = [MCP_SERVER];
 let openFolderPaths: string[];
 let deferNextProjectPatch = false;
 let rejectNextProjectPatch = false;
@@ -142,6 +157,7 @@ let referenceProjects: Array<{
   metadata: { kind: 'prototype' };
 }>;
 let referenceProjectDetails: Record<string, { project: (typeof referenceProjects)[number]; resolvedDir: string | null }>;
+const originalScrollIntoView = Element.prototype.scrollIntoView;
 
 function composerElement(
   overrides: Partial<ComponentProps<typeof ChatComposer>> = {},
@@ -197,6 +213,7 @@ function projectPatchBodies(): Array<{ metadata?: { linkedDirs?: string[] } }> {
 // every editor-text assertion (it walks the tree and emits real `\n`s).
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   trackChatPanelClickMock.mockClear();
   plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
   skills = [SKILL];
@@ -313,6 +330,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (originalScrollIntoView) {
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  } else {
+    delete (Element.prototype as { scrollIntoView?: Element['scrollIntoView'] }).scrollIntoView;
+  }
   vi.unstubAllGlobals();
   cleanup();
 });
@@ -428,6 +450,118 @@ describe('ChatComposer context pickers', () => {
     expect(settingsRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
     expect(mcpRow?.textContent).toContain('Open MCP server settings or insert a server tool hint.');
     expect(mcpRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
+  });
+
+  it('filters slash commands by command and MCP metadata in the active locale', async () => {
+    servers = [{
+      id: 'palette-bridge',
+      label: 'Presentation Bridge',
+      transport: 'http',
+      enabled: true,
+      url: 'https://mcp.example.test',
+    }];
+    renderComposer({}, { locale: 'zh-CN' });
+    await flushMounts();
+
+    const matchingQueries = [
+      ['http', '/mcp palette-bridge'],
+      ['presentation', '/mcp palette-bridge'],
+      ['palette-bridge', '/mcp palette-bridge'],
+      ['server-id', '/mcp'],
+      ['插入', '/mcp'],
+      ['mcp', '/mcp'],
+    ] as const;
+
+    for (const [query, commandLabel] of matchingQueries) {
+      await typeAndSettle(`/${query}`);
+      const listbox = await screen.findByRole('listbox', { name: '斜杠命令' });
+      expect(within(listbox).getByText(commandLabel)).toBeTruthy();
+    }
+  });
+
+  it('keeps zero-result slash state open and exposes the active slash option to the combobox', async () => {
+    renderComposer({}, { locale: 'zh-CN' });
+    await flushMounts();
+
+    await typeAndSettle('/');
+
+    const input = screen.getByTestId('chat-composer-input');
+    const listbox = await screen.findByRole('listbox', { name: '斜杠命令' });
+    expect(listbox.id).toBe('slash-listbox');
+    expect(input.getAttribute('aria-expanded')).toBe('true');
+    expect(input.getAttribute('aria-controls')).toBe('slash-listbox');
+    expect(input.getAttribute('aria-activedescendant')).toBe(
+      within(listbox).getByRole('option', { selected: true }).id,
+    );
+
+    await typeAndSettle('/missing');
+
+    expect(await screen.findByText('没有找到“missing”的结果。')).toBeTruthy();
+    expect(screen.getByRole('listbox', { name: '斜杠命令' }).id).toBe('slash-listbox');
+    expect(input.getAttribute('aria-expanded')).toBe('true');
+    expect(input.getAttribute('aria-controls')).toBe('slash-listbox');
+    expect(input.hasAttribute('aria-activedescendant')).toBe(false);
+  });
+
+  it('scrolls the keyboard-selected slash option into view with nearest alignment', async () => {
+    servers = Array.from({ length: 8 }, (_, index) => ({
+      id: `server-${index + 1}`,
+      label: `Server ${index + 1}`,
+      transport: 'stdio' as const,
+      enabled: true,
+      command: `server-${index + 1}`,
+    }));
+    renderComposer();
+    await flushMounts();
+    await typeAndSettle('/');
+
+    const listbox = await screen.findByRole('listbox', { name: 'Slash commands' });
+    const initialOption = within(listbox).getByRole('option', { selected: true });
+    const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView);
+    scrollIntoView.mockClear();
+
+    act(() => {
+      getComposerEditor().dispatchCommand(
+        KEY_ARROW_DOWN_COMMAND,
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
+    });
+
+    const nextOption = within(listbox).getByRole('option', { selected: true });
+    expect(nextOption.id).not.toBe(initialOption.id);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest' });
+
+    act(() => {
+      getComposerEditor().dispatchCommand(
+        KEY_ARROW_UP_COMMAND,
+        new KeyboardEvent('keydown', { key: 'ArrowUp' }),
+      );
+    });
+
+    expect(within(listbox).getByRole('option', { selected: true }).id).toBe(initialOption.id);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest' });
+  });
+
+  it('submits an unmatched slash literal with Enter but never with Tab', async () => {
+    const onSend = vi.fn();
+    renderComposer({ onSend });
+    await flushMounts();
+    await typeAndSettle('/unmatched-literal');
+
+    act(() => {
+      getComposerEditor().dispatchCommand(
+        KEY_TAB_COMMAND,
+        new KeyboardEvent('keydown', { key: 'Tab' }),
+      );
+    });
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(composerText()).toBe('/unmatched-literal');
+
+    pressEnter();
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend.mock.calls[0]?.[0]).toBe('/unmatched-literal');
   });
 
   it('lists Design Files first in All and picks the first file with Enter', async () => {

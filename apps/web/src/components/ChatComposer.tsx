@@ -185,6 +185,7 @@ interface SlashCommand {
   descKey: keyof Dict;
   // Optional argument hint shown after the description.
   argHint?: string;
+  searchTerms?: readonly string[];
   // Icon glyph from the project Icon set.
   icon: 'sparkles' | 'eye' | 'sliders';
 }
@@ -1011,6 +1012,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           descKey: 'pet.slashMcp',
           icon: 'sparkles',
           argHint: s.label || s.transport,
+          searchTerms: [s.id, s.label ?? '', s.transport],
         });
       }
       if (researchAvailable) {
@@ -1030,8 +1032,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (!slash) return [] as SlashCommand[];
       const q = slash.q.toLowerCase();
       if (!q) return slashCommands;
-      return slashCommands.filter((c) => c.label.toLowerCase().includes(q));
-    }, [slash, slashCommands]);
+      return slashCommands.filter((command) => [
+        command.label,
+        command.id,
+        command.argHint ?? '',
+        t(command.descKey),
+        ...(command.searchTerms ?? []),
+      ].some((value) => value.toLowerCase().includes(q)));
+    }, [slash, slashCommands, t]);
 
     function pickSlash(cmd: SlashCommand) {
       if (!slash) return;
@@ -2447,22 +2455,29 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function handlePopoverKey(
       key: 'ArrowDown' | 'ArrowUp' | 'Tab' | 'Enter' | 'Escape',
     ): boolean {
-      if (slash && filteredSlash.length > 0) {
-        if (key === 'ArrowDown') {
-          setSlashIndex((i) => (i + 1) % filteredSlash.length);
+      if (slash) {
+        if (filteredSlash.length > 0) {
+          if (key === 'ArrowDown') {
+            setSlashIndex((i) => (i + 1) % filteredSlash.length);
+            return true;
+          }
+          if (key === 'ArrowUp') {
+            setSlashIndex(
+              (i) => (i - 1 + filteredSlash.length) % filteredSlash.length,
+            );
+            return true;
+          }
+          if (key === 'Tab' || key === 'Enter') {
+            const safe = Math.min(slashIndex, filteredSlash.length - 1);
+            pickSlash(filteredSlash[safe]!);
+            return true;
+          }
+        }
+        if (key === 'Enter') {
+          void submit();
           return true;
         }
-        if (key === 'ArrowUp') {
-          setSlashIndex(
-            (i) => (i - 1 + filteredSlash.length) % filteredSlash.length,
-          );
-          return true;
-        }
-        if (key === 'Tab' || key === 'Enter') {
-          const safe = Math.min(slashIndex, filteredSlash.length - 1);
-          pickSlash(filteredSlash[safe]!);
-          return true;
-        }
+        if (key === 'ArrowDown' || key === 'ArrowUp' || key === 'Tab') return true;
         if (key === 'Escape') {
           setSlash(null);
           return true;
@@ -3087,11 +3102,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onTrigger={handleEditorTrigger}
               onEnterSend={() => void submit()}
               onPasteFiles={handlePasteFiles}
-              popoverOpen={Boolean(mention) || Boolean(slash && filteredSlash.length > 0)}
+              popoverOpen={Boolean(mention) || Boolean(slash)}
               onPopoverKey={handlePopoverKey}
               comboboxAria={{
-                expanded: Boolean(mention),
-                activeId: mention ? `mention-opt-${mentionIndex}` : null,
+                expanded: Boolean(mention) || Boolean(slash),
+                controlsId: slash ? 'slash-listbox' : 'mention-listbox',
+                activeId: slash
+                  ? filteredSlash.length > 0
+                    ? `slash-opt-${Math.min(slashIndex, filteredSlash.length - 1)}`
+                    : null
+                  : mention
+                    ? `mention-opt-${mentionIndex}`
+                    : null,
               }}
             />
             {placeholderScenarios.length > 0 ? (
@@ -3133,11 +3155,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           </CaretFloatingLayer>
           <CaretFloatingLayer
             caret={caretRect}
-            open={Boolean(slash && filteredSlash.length > 0)}
+            open={Boolean(slash)}
             boundaryRef={composerRootRef}
           >
             <SlashPopover
               commands={filteredSlash}
+              query={slash?.q ?? ''}
               activeIndex={Math.min(slashIndex, filteredSlash.length - 1)}
               onPick={pickSlash}
               onHover={(i) => setSlashIndex(i)}
@@ -5607,62 +5630,83 @@ function ImportItem({
 
 function SlashPopover({
   commands,
+  query,
   activeIndex,
   onPick,
   onHover,
   t,
 }: {
   commands: SlashCommand[];
+  query: string;
   activeIndex: number;
   onPick: (cmd: SlashCommand) => void;
   onHover: (index: number) => void;
   t: TranslateFn;
 }) {
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (activeIndex < 0) return;
+    resultsRef.current
+      ?.querySelector(`#slash-opt-${activeIndex}`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, commands]);
+
   return (
     <div
       className="slash-popover"
       data-testid="slash-popover"
-      role="listbox"
-      aria-label={t('pet.slashPopoverAria')}
     >
       <div className="slash-popover-head">
         <span>{t('pet.slashPopoverTitle')}</span>
         <span className="slash-popover-hint">{t('pet.slashPopoverHint')}</span>
       </div>
-      {commands.map((cmd, idx) => {
-        const active = idx === activeIndex;
-        return (
-          <button
-            key={cmd.id}
-            id={`slash-opt-${idx}`}
-            type="button"
-            role="option"
-            aria-selected={active}
-            className={`slash-item${active ? ' active' : ''}`}
-            onMouseDown={(e) => {
-              // Prevent the textarea from losing focus before the click
-              // handler fires — otherwise selectionStart resets and the
-              // pick replacement targets the wrong substring.
-              e.preventDefault();
-            }}
-            onMouseEnter={() => onHover(idx)}
-            onClick={() => onPick(cmd)}
-          >
-            <span className="slash-item-icon" aria-hidden>
-              <Icon name={cmd.icon} size={13} />
-            </span>
-            <span className="slash-item-body">
-              <span className="slash-item-row">
-                <code className="slash-item-label">{cmd.label}</code>
-                {cmd.argHint ? (
-                  <span className="slash-item-arg">{cmd.argHint}</span>
-                ) : null}
+      <div
+        ref={resultsRef}
+        id="slash-listbox"
+        className="slash-popover-results"
+        role="listbox"
+        aria-label={t('pet.slashPopoverAria')}
+      >
+        {commands.length === 0 ? (
+          <div className="mention-empty">
+            {t('chat.mentionNoResults', { query })}
+          </div>
+        ) : commands.map((cmd, idx) => {
+          const active = idx === activeIndex;
+          return (
+            <button
+              key={cmd.id}
+              id={`slash-opt-${idx}`}
+              type="button"
+              role="option"
+              aria-selected={active}
+              className={`slash-item${active ? ' active' : ''}`}
+              onMouseDown={(e) => {
+                // Prevent the textarea from losing focus before the click
+                // handler fires — otherwise selectionStart resets and the
+                // pick replacement targets the wrong substring.
+                e.preventDefault();
+              }}
+              onMouseEnter={() => onHover(idx)}
+              onClick={() => onPick(cmd)}
+            >
+              <span className="slash-item-icon" aria-hidden>
+                <Icon name={cmd.icon} size={13} />
               </span>
-              <span className="slash-item-desc">{t(cmd.descKey)}</span>
-            </span>
-          </button>
-        );
-      })}
+              <span className="slash-item-body">
+                <span className="slash-item-row">
+                  <code className="slash-item-label">{cmd.label}</code>
+                  {cmd.argHint ? (
+                    <span className="slash-item-arg">{cmd.argHint}</span>
+                  ) : null}
+                </span>
+                <span className="slash-item-desc">{t(cmd.descKey)}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

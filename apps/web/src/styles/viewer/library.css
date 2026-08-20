@@ -370,6 +370,7 @@
   /* removed: position, bottom, left, right, margin-bottom, fixed max-height, z-index */
 }
 .slash-popover-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -389,6 +390,12 @@
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-muted);
+}
+.slash-popover-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scroll-padding-block: 5px;
 }
 .slash-item {
   display: flex;
