@@ -5103,13 +5103,21 @@ function AppInner() {
           : undefined,
     });
     if (pendingCreation && activeProject) {
+      // Same `div.app` element as the ProjectView branch below, deliberately.
+      // React reconciles one element across the pending -> real hand-off, so
+      // the `.app` entrance animation plays once for the whole transition
+      // instead of restarting when ProjectView takes over (the pending surface
+      // lives ~150ms, shorter than the 180ms animation, so a second mount read
+      // as the project frame flashing twice).
       appMain = (
-        <ProjectCreationPendingView
-          project={activeProject}
-          prompt={pendingCreation.prompt}
-          agentId={config.agentId}
-          onBack={handleBack}
-        />
+        <div className="app">
+          <ProjectCreationPendingView
+            project={activeProject}
+            prompt={pendingCreation.prompt}
+            agentId={config.agentId}
+            onBack={handleBack}
+          />
+        </div>
       );
     } else if (
       routeSurfaceState === 'loading-projects'
@@ -5176,6 +5184,7 @@ function AppInner() {
       );
     } else if (activeProject) {
       appMain = (
+        <div className="app">
         <ProjectView
           key={projectViewAuthorizationLifetimeKey(
             activeProject.id,
@@ -5252,6 +5261,7 @@ function AppInner() {
           onDuplicateProject={handleDuplicateProject}
           onRunActivityChange={handleProjectRunActivityChange}
         />
+        </div>
       );
     }
   } else {

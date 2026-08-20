@@ -11017,9 +11017,14 @@ export function ProjectView({
     </>
   );
 
+  // The `.app` shell belongs to the caller, not to this component. App.tsx
+  // renders the same `div.app` around both this view and
+  // ProjectCreationPendingView so React reconciles one element across the
+  // hand-off. Owning the shell here would make each view mount its own
+  // element and replay the `.app` entrance animation, which reads as the
+  // project frame flashing twice on the way in from Home.
   return (
     <CollabProvider value={collabValue}>
-    <div className="app">
       <CritiqueTheaterMount
         projectId={project.id}
         enabled={critiqueTheaterEnabled}
@@ -11548,7 +11553,6 @@ export function ProjectView({
           />
         ) : null}
       </AnimatePresence>
-    </div>
     </CollabProvider>
   );
 }
