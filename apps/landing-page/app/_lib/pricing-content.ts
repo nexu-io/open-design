@@ -16,6 +16,23 @@
  */
 import type { LandingLocaleCode } from '../i18n';
 
+const CURRENT_PLAN_LABELS: Partial<Record<LandingLocaleCode, string>> = {
+  en: 'Current plan',
+  zh: '当前套餐',
+  'zh-tw': '目前方案',
+  ja: '現在のプラン',
+  ko: '현재 요금제',
+  de: 'Aktueller Tarif',
+  fr: 'Offre actuelle',
+  ru: 'Текущий тариф',
+  es: 'Plan actual',
+  'pt-br': 'Plano atual',
+};
+
+export function getCurrentPlanLabel(locale: LandingLocaleCode): string {
+  return CURRENT_PLAN_LABELS[locale] ?? CURRENT_PLAN_LABELS.en!;
+}
+
 export type PlanTierId = 'plus' | 'pro' | 'max';
 
 export interface PlanCopy {

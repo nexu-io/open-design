@@ -20,8 +20,13 @@ import {
 } from "../app/_lib/pricing-team-content.ts";
 import {
   PREMIUM_MODELS,
+  getCurrentPlanLabel,
   getPricingContent,
 } from "../app/_lib/pricing-content.ts";
+import {
+  isPersonalPlanAtOrBelow,
+  loadCurrentPersonalPlanTier,
+} from "../app/_lib/pricing-current-plan.ts";
 import { LANDING_LOCALES } from "../app/i18n.ts";
 import { DEEPSEEK_V4_PRO_CAMPAIGN } from "../app/_lib/deepseek-v4-pro-campaign.ts";
 
@@ -658,6 +663,92 @@ describe("pricing contract", () => {
       "https://open-design.ai/cloud/dashboard?billing=plan&workspaceId=workspace-a",
     );
     assert.equal(scopedBillingPlanUrl("  "), CLOUD_CONSOLE_URL);
+  });
+
+  it("recognizes only the signed-in account's current personal plan for CTA copy", async () => {
+    const requests: string[] = [];
+    const requestOptions: Array<RequestInit | undefined> = [];
+    const fetcher = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      requests.push(url);
+      requestOptions.push(init);
+      if (url.endsWith("/api/auth/get-session")) {
+        return Response.json({ user: { id: "user-1" } });
+      }
+      return Response.json({ membershipTier: "Pro" });
+    };
+
+    assert.equal(
+      await loadCurrentPersonalPlanTier("https://amr-api.open-design.ai/", fetcher),
+      "pro",
+    );
+    assert.deepEqual(requests, [
+      "https://amr-api.open-design.ai/api/auth/get-session",
+      "https://amr-api.open-design.ai/api/v1/billing/summary",
+    ]);
+    assert.deepEqual(
+      requestOptions.map((options) => options?.credentials),
+      ["include", "include"],
+    );
+    assert.equal(getCurrentPlanLabel("en"), "Current plan");
+    assert.equal(getCurrentPlanLabel("zh"), "当前套餐");
+  });
+
+  it("disables the current personal plan and every downgrade target", () => {
+    assert.deepEqual(
+      ["go", "plus", "pro", "max"].filter((tier) =>
+        isPersonalPlanAtOrBelow(tier, "pro"),
+      ),
+      ["go", "plus", "pro"],
+    );
+    assert.equal(isPersonalPlanAtOrBelow("team", "pro"), false);
+    assert.equal(isPersonalPlanAtOrBelow("max", "pro"), false);
+  });
+
+  it("keeps CTA copy unchanged when subscription identity is unavailable or non-personal", async () => {
+    const signedOut = async () => Response.json(null);
+    const teamPlan = async (input: string | URL | Request) =>
+      Response.json(
+        String(input).endsWith("/api/auth/get-session")
+          ? { user: { id: "user-1" } }
+          : { membershipTier: "team_pro" },
+      );
+    const failed = async () => new Response(null, { status: 503 });
+
+    assert.equal(
+      await loadCurrentPersonalPlanTier("https://amr-api.open-design.ai", signedOut),
+      null,
+    );
+    assert.equal(
+      await loadCurrentPersonalPlanTier("https://amr-api.open-design.ai", teamPlan),
+      null,
+    );
+    assert.equal(
+      await loadCurrentPersonalPlanTier("https://amr-api.open-design.ai", failed),
+      null,
+    );
+  });
+
+  it("labels the current CTA and disables current or lower personal tiers", async () => {
+    const [page, individualPlans] = await Promise.all([
+      readFile(PRICING_PAGE_PATH, "utf8"),
+      readFile(PRICING_INDIVIDUAL_PATH, "utf8"),
+    ]);
+
+    assert.match(page, /data-billing-api-origin=\{apiOrigin\}/);
+    assert.match(page, /data-current-plan-label=\{currentPlanLabel\}/);
+    assert.match(page, /loadCurrentPersonalPlanTier\(apiOrigin\)/);
+    assert.match(page, /\[data-pricing-cta\]\[data-tier="\$\{currentTier\}"\] > span/);
+    assert.match(page, /isPersonalPlanAtOrBelow\(tier, currentTier\)/);
+    assert.match(page, /cta\.setAttribute\('aria-disabled', 'true'\)/);
+    assert.match(page, /cta\.setAttribute\('tabindex', '-1'\)/);
+    assert.match(page, /cta\.removeAttribute\('href'\)/);
+    assert.match(page, /cta\.hasAttribute\('data-subscription-disabled'\)/);
+    assert.match(
+      individualPlans,
+      /\.pricing-card-cta\[aria-disabled='true'\][\s\S]*?cursor:\s*not-allowed;/,
+    );
+    assert.match(individualPlans, /data-pricing-cta data-tier=\{tier\}/);
   });
 
   it("preserves only an explicit inbound workspace without inferring local state", async () => {

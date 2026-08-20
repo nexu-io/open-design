@@ -134,7 +134,11 @@ import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { Button } from '@open-design/components';
-import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
+import {
+  defaultAgentModelId,
+  effectiveAgentModelChoice,
+  effectiveAgentModelId,
+} from './agentModelSelection';
 import { AgentIcon } from './AgentIcon';
 import { CommunityView } from './CommunityView';
 import { TeamSlotPlaceholder } from './TeamSlotPlaceholder';
@@ -1348,6 +1352,10 @@ export function EntryShell({
     let amrGatePrecheckWitness: AmrBalanceGateScope | undefined;
     let amrGatePrecheckPassed = false;
     if (config.mode === 'daemon' && config.agentId === 'amr') {
+      const amrModelId = effectiveAgentModelId(
+        agents.find((agent) => agent.id === 'amr'),
+        config.agentModels?.amr,
+      );
       // PRODUCT INVARIANT: Send never starts Workspace identity discovery.
       // Billing consumes the shell's current in-memory snapshot; if it has not
       // arrived yet, the existing account-scoped gate is used. The daemon's
@@ -1364,7 +1372,7 @@ export function EntryShell({
         const gateWorkspaceIdentity = workspaceIdentityCacheKey(gateWorkspaceContext);
         const gateScope = amrBalanceGateScopeForWorkspaceContext(gateWorkspaceContext);
         let gate = await retryUnavailableAmrBalanceGate(
-          () => checkAmrBalanceGate(gateScope),
+          () => checkAmrBalanceGate(gateScope, amrModelId),
         );
         // Hard blocks hold THIS submit open: the dialog resolves 'retry' when
         // its blocking condition clears (sign-in completed, recharge landed)
@@ -1383,7 +1391,7 @@ export function EntryShell({
           setAmrBalanceGateBlock(null);
           if (decision === 'dismiss') return 'blocked' as const;
           gate = await retryUnavailableAmrBalanceGate(
-            () => checkAmrBalanceGate(gateScope),
+            () => checkAmrBalanceGate(gateScope, amrModelId),
           );
         }
         if (gate.kind === 'unavailable') return false;

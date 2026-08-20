@@ -860,6 +860,16 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     background: #8cf76c;
   }
 
+  .pricing-card .pricing-card-cta[aria-disabled='true'],
+  .pricing-card .pricing-card-cta[aria-disabled='true']:hover,
+  .pricing-card .pricing-card-cta[aria-disabled='true']:focus-visible {
+    color: #595d54;
+    background: #d8dad4;
+    border-color: #c5c8c0;
+    cursor: not-allowed;
+    transform: none;
+  }
+
   .plan-feature-details {
     margin-top: 14px;
     padding-top: 0;

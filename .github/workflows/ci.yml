@@ -59,49 +59,60 @@ jobs:
               || vars.OD_CI_RUNNER_MODE }}
         run: python3 .github/scripts/runners.py
 
-  scopes:
-    name: Detect validation scopes
+  plan:
+    name: Plan validation workloads
     needs: [runners]
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     outputs:
-      ci_mode: ${{ steps.detect.outputs.ci_mode }}
-      daemon_tests_required: ${{ steps.detect.outputs.daemon_tests_required }}
-      web_tests_required: ${{ steps.detect.outputs.web_tests_required }}
-      tools_dev_tests_required: ${{ steps.detect.outputs.tools_dev_tests_required }}
-      tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
-      ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}
-      visual_validation_required: ${{ steps.detect.outputs.visual_validation_required }}
-      workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
-      run_e2e_vitest: ${{ steps.detect.outputs.run_e2e_vitest }}
-      run_playwright_critical: ${{ steps.detect.outputs.run_playwright_critical }}
-      run_playwright_visual: ${{ steps.detect.outputs.run_playwright_visual }}
-      run_preflight: ${{ steps.detect.outputs.run_preflight }}
-      run_preflight_typecheck: ${{ steps.detect.outputs.run_preflight_typecheck }}
-      run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}
-      run_web_workspace_tests: ${{ steps.detect.outputs.run_web_workspace_tests }}
-      run_windows_tools_pack_payload_tests: ${{ steps.detect.outputs.run_windows_tools_pack_payload_tests }}
-      run_workspace_unit_tests: ${{ steps.detect.outputs.run_workspace_unit_tests }}
-      ui_p0_matrix: ${{ steps.detect.outputs.ui_p0_matrix }}
-      visual_matrix: ${{ steps.detect.outputs.visual_matrix }}
+      run: ${{ steps.hash.outputs.run }}
+      equal: ${{ steps.hash.outputs.equal }}
+      scopes: ${{ steps.scopes.outputs.scopes }}
+      ui_p0_matrix: ${{ steps.scopes.outputs.ui_p0_matrix }}
+      visual_matrix: ${{ steps.scopes.outputs.visual_matrix }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: package.json
-
-      - name: Detect workspace and app test scopes
-        id: detect
+      - name: Resolve validation scopes
+        id: scopes
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node --experimental-strip-types scripts/scopes.ts github-output
+        run: python3 .github/scripts/scopes.py github-output --output "$RUNNER_TEMP/scope-plan.json"
+
+      - name: Restore previous hash map
+        id: hash_cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/hash-state.json
+          key: ci-hash-${{ runner.os }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ci-hash-${{ runner.os }}-${{ github.ref }}-
+
+      - name: Compare and replace hash map
+        id: hash
+        run: >-
+          python3 .github/scripts/hash.py github-output
+          --workflow ci
+          --scope-plan "$RUNNER_TEMP/scope-plan.json"
+          --state "$RUNNER_TEMP/hash-state.json"
+
+      # Carry the freshly computed comparison register to the gate without
+      # publishing it as reusable cache state. A failed gate must leave the
+      # previously successful map in place so an identical retry runs again.
+      - name: Upload pending hash map
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-hash-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/hash-state.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Create visual report handoff
         id: visual_report_handoff
-        if: ${{ github.event_name == 'pull_request' && steps.detect.outputs.run_playwright_visual == 'true' }}
+        if: ${{ github.event_name == 'pull_request' && fromJSON(steps.hash.outputs.run).playwright_visual }}
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -145,7 +156,8 @@ jobs:
 
   static_gate:
     name: Static gate
-    needs: [runners]
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).static_gate }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 10
     env:
@@ -236,8 +248,8 @@ jobs:
 
   preflight:
     name: Preflight
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_preflight == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).preflight }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 45
 
@@ -269,14 +281,14 @@ jobs:
       # If postinstall grows a targeted app type-generation phase covering these
       # three exports without broad app builds, this CI prebuild can be removed.
       - name: Prebuild workspace type declarations
-        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
+        if: ${{ fromJSON(needs.plan.outputs.scopes).run_preflight_typecheck }}
         run: |
           pnpm --filter @open-design/daemon build
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Typecheck workspaces
-        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
+        if: ${{ fromJSON(needs.plan.outputs.scopes).run_preflight_typecheck }}
         run: |
           pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
@@ -289,8 +301,8 @@ jobs:
 
   workspace_unit_tests:
     name: Workspace unit tests
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_workspace_unit_tests == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).workspace_unit_tests }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
     timeout-minutes: 20
 
@@ -313,15 +325,15 @@ jobs:
           pnpm --filter @open-design/platform test
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
-          if [ "${{ needs.scopes.outputs.tools_dev_tests_required }}" = "true" ]; then
+          if [ "${{ fromJSON(needs.plan.outputs.scopes).tools_dev_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-dev test
           fi
-          if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+          if [ "${{ fromJSON(needs.plan.outputs.scopes).tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/desktop build
             pnpm --filter @open-design/desktop test
             pnpm --filter @open-design/packaged test
             pnpm --filter @open-design/tools-pack test
-            if [ "${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
+            if [ "${{ fromJSON(needs.plan.outputs.run).e2e_vitest }}" != "true" ]; then
               pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
             fi
           fi
@@ -329,8 +341,8 @@ jobs:
 
   daemon_unit_tests:
     name: Daemon tests (${{ matrix.shard }}/4)
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).daemon_unit_tests }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
     timeout-minutes: 15
     strategy:
@@ -357,8 +369,8 @@ jobs:
 
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).windows_tools_pack_payload_tests }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).windows_tools }}
     timeout-minutes: 20
 
@@ -376,8 +388,8 @@ jobs:
 
   web_workspace_tests:
     name: Web workspace tests (${{ matrix.shard }}/2)
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).web_workspace_tests }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
     strategy:
@@ -405,8 +417,8 @@ jobs:
 
   e2e_vitest:
     name: E2E Vitest
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_e2e_vitest == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).e2e_vitest }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
 
@@ -440,8 +452,8 @@ jobs:
 
   playwright_critical:
     name: Playwright critical (${{ matrix.group }})
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_playwright_critical == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).playwright_critical }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 30
     strategy:
@@ -488,14 +500,14 @@ jobs:
 
   ui_p0:
     name: UI P0 (${{ matrix.name }})
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).ui_p0 }}
     runs-on: ${{ matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0 }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}
+        include: ${{ fromJSON(needs.plan.outputs.ui_p0_matrix) }}
 
     steps:
       - name: Checkout
@@ -560,14 +572,14 @@ jobs:
 
   playwright_visual:
     name: Playwright visual (${{ matrix.name }})
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_playwright_visual == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).playwright_visual }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).visual_hot }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.scopes.outputs.visual_matrix) }}
+        include: ${{ fromJSON(needs.plan.outputs.visual_matrix) }}
 
     steps:
       - name: Checkout
@@ -652,7 +664,7 @@ jobs:
   validate:
     name: Validate workspace
     needs:
-      - scopes
+      - plan
       - runners
       - static_gate
       - preflight
@@ -698,19 +710,10 @@ jobs:
 
           required_misses="$(echo "$NEEDS_JSON" | jq -r '
             . as $needs |
-            ($needs.scopes.outputs // {}) as $out |
-            def when($condition; $jobs): if $condition then $jobs else [] end;
+            (($needs.plan.outputs.run // "{}") | fromjson) as $run |
             (
-              ["scopes", "static_gate"]
-              + when($out.run_preflight == "true"; ["preflight"])
-              + when($out.run_workspace_unit_tests == "true"; ["workspace_unit_tests"])
-              + when($out.daemon_tests_required == "true"; ["daemon_unit_tests"])
-              + when($out.run_windows_tools_pack_payload_tests == "true"; ["windows_tools_pack_payload_tests"])
-              + when($out.run_web_workspace_tests == "true"; ["web_workspace_tests"])
-              + when($out.run_e2e_vitest == "true"; ["e2e_vitest"])
-              + when($out.run_playwright_critical == "true"; ["playwright_critical"])
-              + when($out.run_ui_p0 == "true"; ["ui_p0"])
-              + when($out.run_playwright_visual == "true"; ["playwright_visual"])
+              ["plan"]
+              + [$run | to_entries[] | select(.value) | .key]
             )[]
             | select(($needs[.].result // "missing") != "success")
             | "\(.)=\($needs[.].result // "missing")"
@@ -891,6 +894,23 @@ jobs:
         with:
           name: ${{ steps.merge_blocking_label_gate.outputs.comment_name }}
           path: ${{ steps.merge_blocking_label_gate.outputs.comment_path }}
+
+      - name: Download pending hash map
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: ci-hash-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}
+
+      # Publish only after every merge-gating step has passed. The cache still
+      # contains only the identity-to-hash comparison register; successful gate
+      # completion controls publication rather than becoming cache payload.
+      - name: Save successful hash map
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/hash-state.json
+          key: ci-hash-${{ runner.os }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   runtime_summary:
     name: Runtime summary

@@ -18,6 +18,8 @@ import type {
   WorkspaceBillingResponse,
 } from '@open-design/contracts';
 import { fetchAmrWalletSnapshot } from '../providers/daemon';
+import { resolveAmrPlan } from './amr-low-balance-plan';
+import { isUnlimitedAmrModelForPlan } from './amr-unlimited-models';
 
 /**
  * Hard-block line (USD): at or below this the wallet cannot fund any part of
@@ -229,6 +231,7 @@ async function fetchWorkspaceWalletSnapshot(
 
 async function checkWorkspaceBalanceGate(
   scope: AmrBalanceGateScope,
+  modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
   // The URL carries the selected workspace identity. The daemon authorizes
   // that exact directory membership and returns a v2 identity-stamped wallet.
@@ -259,6 +262,10 @@ async function checkWorkspaceBalanceGate(
   }
   const balance = amrWalletBalanceUsd(workspaceSnapshot);
   if (balance == null) return { kind: 'unavailable' };
+  if (balance <= AMR_LOW_BALANCE_WARN_USD && scope.workspaceType === 'personal') {
+    const plan = await resolveAmrPlan(workspaceSnapshot!);
+    if (isUnlimitedAmrModelForPlan(plan, modelId)) return { kind: 'allow' };
+  }
   if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {
     return {
       kind: 'hard',
@@ -274,10 +281,11 @@ async function checkWorkspaceBalanceGate(
 
 export async function checkAmrBalanceGate(
   scope?: AmrBalanceGateScope,
+  modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
   try {
     if (scope) {
-      return await checkWorkspaceBalanceGate(scope);
+      return await checkWorkspaceBalanceGate(scope, modelId);
     }
     const cached = await fetchAmrWalletSnapshot().catch(() => null);
     const cachedBalance = amrWalletBalanceUsd(cached);
@@ -290,6 +298,8 @@ export async function checkAmrBalanceGate(
         return { kind: 'allow' };
       }
       // cached is non-null here: a definitive balance implies a snapshot.
+      const plan = await resolveAmrPlan(cached!);
+      if (isUnlimitedAmrModelForPlan(plan, modelId)) return { kind: 'allow' };
       return { kind: 'soft', snapshot: cached! };
     }
     // Hard-block candidate (signed out or empty): confirm against the live
@@ -309,6 +319,10 @@ export async function checkAmrBalanceGate(
     if (fresh.stale || fresh.error != null) return { kind: 'allow' };
     const freshBalance = amrWalletBalanceUsd(fresh);
     if (freshBalance == null) return { kind: 'allow' };
+    if (freshBalance <= AMR_LOW_BALANCE_WARN_USD) {
+      const plan = await resolveAmrPlan(fresh);
+      if (isUnlimitedAmrModelForPlan(plan, modelId)) return { kind: 'allow' };
+    }
     if (freshBalance <= AMR_HARD_BLOCK_BALANCE_USD) {
       return { kind: 'hard', reason: 'insufficient', snapshot: fresh };
     }

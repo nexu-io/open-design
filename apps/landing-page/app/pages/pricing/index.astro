@@ -21,6 +21,7 @@ import {
   type TeamPlanTierConfig,
 } from '../../_lib/pricing';
 import {
+  getCurrentPlanLabel,
   getPricingContent,
   fillTemplate,
 } from '../../_lib/pricing-content';
@@ -39,8 +40,14 @@ const locale = localeFromPath(Astro.url.pathname);
 const isZh = locale === 'zh' || locale === 'zh-tw';
 const href = (path: string) => localizedHref(path, locale);
 const content = getPricingContent(locale);
+const currentPlanLabel = getCurrentPlanLabel(locale);
 const teamContent = getTeamPricingContent(locale);
 const L = content.labels;
+const env = import.meta.env as Record<string, string | undefined>;
+const apiOrigin =
+  env.PUBLIC_CLOUD_API_BASE ??
+  env.PUBLIC_AMR_API_BASE ??
+  'https://amr-api.open-design.ai';
 
 // Footer line with the cloud-console link injected into the localized
 // template. Brand/URL only — safe to render as HTML.
@@ -176,6 +183,8 @@ const jsonLd = [
     data-pricing-root
     data-audience="creator"
     data-interval="yearly"
+    data-billing-api-origin={apiOrigin}
+    data-current-plan-label={currentPlanLabel}
     data-campaign-start-at={DEEPSEEK_V4_PRO_CAMPAIGN.startAt}
     data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive}
   >
@@ -560,6 +569,10 @@ const jsonLd = [
       const syncCtas = () => {
         const interval = root.getAttribute('data-interval') === 'monthly' ? 'monthly' : 'yearly';
         for (const cta of root.querySelectorAll('[data-pricing-cta]')) {
+          if (cta.hasAttribute('data-subscription-disabled')) {
+            cta.removeAttribute('href');
+            continue;
+          }
           const tier = cta.getAttribute('data-tier') || '';
           if (tier === 'free') {
             cta.setAttribute('href', new URL('/cloud/dashboard', billingPlanUrl).toString());
@@ -880,6 +893,10 @@ const jsonLd = [
       root.addEventListener('click', (event) => {
         const cta = event.target && event.target.closest && event.target.closest('[data-pricing-cta]');
         if (!cta) return;
+        if (cta.hasAttribute('data-subscription-disabled')) {
+          event.preventDefault();
+          return;
+        }
         try {
           const audience = root.getAttribute('data-audience') || 'creator';
           // Outside the activity window the CTA still records od_entry_*
@@ -991,6 +1008,33 @@ const jsonLd = [
         });
       }
     })();
+  </script>
+  <script>
+    import {
+      isPersonalPlanAtOrBelow,
+      loadCurrentPersonalPlanTier,
+    } from '../../_lib/pricing-current-plan';
+
+    const pricingRoot = document.querySelector('[data-pricing-root]');
+    if (pricingRoot) {
+      const apiOrigin = pricingRoot.getAttribute('data-billing-api-origin') || '';
+      const currentPlanLabel = pricingRoot.getAttribute('data-current-plan-label') || '';
+      void loadCurrentPersonalPlanTier(apiOrigin).then((currentTier) => {
+        if (!currentTier || !currentPlanLabel) return;
+        for (const cta of pricingRoot.querySelectorAll('[data-pricing-cta]')) {
+          const tier = cta.getAttribute('data-tier') || '';
+          if (!isPersonalPlanAtOrBelow(tier, currentTier)) continue;
+          cta.setAttribute('data-subscription-disabled', '');
+          cta.setAttribute('aria-disabled', 'true');
+          cta.setAttribute('tabindex', '-1');
+          cta.removeAttribute('href');
+        }
+        const label = pricingRoot.querySelector(
+          `[data-pricing-cta][data-tier="${currentTier}"] > span`,
+        );
+        if (label) label.textContent = currentPlanLabel;
+      });
+    }
   </script>
 </Layout>
 
