@@ -21,12 +21,12 @@
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
+  <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
   <a href="https://discord.gg/mHAjSMV6gz"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
-  <a href="QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
+  <a href="../../QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
-<p align="center"><a href="../../README.md"><b>English</b></a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a> · <a href="README.th.md">ภาษาไทย</a> · <b>فارسی</b></p>
+<p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a> · <a href="README.th.md">ภาษาไทย</a> · <b>فارسی</b></p>
 
 ---
 
@@ -50,7 +50,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 <table>
 <tr>
 <td valign="top">
-<img src="docs/screenshots/product-tour/home.png" alt="صفحه خانه OpenDesign با انواع artifact، نویسنده خلاصه، انتخابگر مدل و مثال‌ها" /><br/>
+<img src="../../docs/screenshots/product-tour/home.png" alt="صفحه خانه OpenDesign با انواع artifact، نویسنده خلاصه، انتخابگر مدل و مثال‌ها" /><br/>
 <sub><b>صفحه اصلی</b> — یک نوع artifact را انتخاب کنید، یک خلاصه وارد کنید، و سیستم طراحی، دایرکتوری کاری و مدل را قبل از شروع تنظیم کنید.</sub>
 </td>
 </tr>
@@ -59,11 +59,11 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/plugins.png" alt="صفحه افزونه‌های OpenDesign که کاتالوگ مهارت‌های رسمی را نشان می‌دهد" /><br/>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="صفحه افزونه‌های OpenDesign که کاتالوگ مهارت‌های رسمی را نشان می‌دهد" /><br/>
 <sub><b>افزونه‌ها</b> — مهارت‌های رسمی را بر اساس دسته‌بندی مرور کنید، کاتالوگ را جستجو کنید، و با <code>امتحان کنید</code> یک گردش کار را راه‌اندازی کنید.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/design-system.png" alt="پیش‌نمایش سیستم طراحی Shopify درون استودیو OpenDesign" /><br/>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="پیش‌نمایش سیستم طراحی Shopify درون استودیو OpenDesign" /><br/>
 <sub><b>سیستم طراحی</b> — زبان بصری یک برند را استخراج و اصلاح کنید، نتیجه را پیش‌نمایش کنید و با آن در همان فضای کاری ایجاد کنید.</sub>
 </td>
 </tr>
@@ -76,31 +76,31 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-prototype.png" alt="پیش‌نمایش پروتوتایپ وب در استودیو OpenDesign" /><br/>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="پیش‌نمایش پروتوتایپ وب در استودیو OpenDesign" /><br/>
 <sub><b>پروتوتایپ</b> — تجربیات وب را تولید یا بازسازی کنید، صفحه رندر شده را بازرسی کنید و با agent در محل تکرار کنید.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-deck.png" alt="پیش‌نمایش دک چند اسلایدی در استودیو OpenDesign" /><br/>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="پیش‌نمایش دک چند اسلایدی در استودیو OpenDesign" /><br/>
 <sub><b>دک</b> — ارائه‌های چند اسلایدی ایجاد کنید، تامبنیل‌ها و یادداشت‌های سخنران را بررسی کنید و در صورت آمادگی خروجی بگیرید.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-mobile-app.png" alt="پیش‌نمایش artifact برنامه موبایل در استودیو OpenDesign" /><br/>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="پیش‌نمایش artifact برنامه موبایل در استودیو OpenDesign" /><br/>
 <sub><b>برنامه موبایل</b> — رابط‌های موبایل را در یک پیش‌نمایش دستگاه تولید و صیقل دهید، با مکالمه، فایل‌های خروجی و اقدامات گام بعدی در کنار آن.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-image.png" alt="پیش‌نمایش تصویر تولید شده در استودیو OpenDesign" /><br/>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="پیش‌نمایش تصویر تولید شده در استودیو OpenDesign" /><br/>
 <sub><b>تصویر</b> — دارایی‌های بصری را از مکالمه پروژه تولید کنید، نتیجه را در اندازه کامل پیش‌نمایش کنید، سپس دانلود یا باز کنید.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-document.png" alt="پیش‌نمایش سند چند صفحه‌ای در استودیو OpenDesign" /><br/>
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="پیش‌نمایش سند چند صفحه‌ای در استودیو OpenDesign" /><br/>
 <sub><b>سند</b> — راهنماها و اسناد ویرایشی چند صفحه‌ای صیقلی ایجاد کنید، چینش رندر شده را بازرسی کنید و در صورت آمادگی خروجی بگیرید یا به اشتراک بگذارید.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/product-tour/studio-hyperframe.png" alt="پیش‌نمایش گرافیک موشن HyperFrame در استودیو OpenDesign" /><br/>
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="پیش‌نمایش گرافیک موشن HyperFrame در استودیو OpenDesign" /><br/>
 <sub><b>HyperFrame</b> — گرافیک‌های موشن مبتنی بر کد بسازید، انیمیشن را درون استودیو پیش‌نمایش کنید و ویدیوی نهایی را خروجی بگیرید.</sub>
 </td>
 </tr>
@@ -110,7 +110,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 
 ## سازگاری پلتفرم
 
-> > OpenDesign به دو روش به agentهای کدنویسی جریان اصلی متصل می‌شود: **مهارت‌ها، CLI و MCP** برای agentهایی که OD را مصرف می‌کنند، به‌علاوه **آداپترهای runtime بومی** برای agentهایی که OD مستقیماً راه‌اندازی می‌کند. DeepSeek Harness یک runtime بومی درجه یک از طریق CLI رسمی `dsh` است، با streaming ساختاریافته، کشف مدل، لغو و ادامه جلسه.
+> OpenDesign به دو روش به agentهای کدنویسی جریان اصلی متصل می‌شود: **مهارت‌ها، CLI و MCP** برای agentهایی که OD را مصرف می‌کنند، به‌علاوه **آداپترهای runtime بومی** برای agentهایی که OD مستقیماً راه‌اندازی می‌کند. DeepSeek Harness یک runtime بومی درجه یک از طریق CLI رسمی `dsh` است، با streaming ساختاریافته، کشف مدل، لغو و ادامه جلسه.
 
 | agent / پلتفرم کدنویسی &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | وضعیت &nbsp;&nbsp; | تنظیم سریع &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -144,7 +144,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 
 **CLI نصب نشده؟** پروکسی BYOK در `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` همان حلقه را به شما می‌دهد (بدون spawn فرآیند) — `baseUrl` + `apiKey` + `model` را وارد کنید، با پیش‌تنظیمات برای OpenAI، Atlas Cloud، Anthropic، Azure OpenAI، Google Gemini، Ollama، LM Studio، vLLM یا هر endpoint سازگار با OpenAI. Atlas Cloud از `https://api.atlascloud.ai/v1` با کلید خودتان و شناسه‌های مدل سازگار با OpenAI مانند `qwen/qwen3.5-flash` استفاده می‌کند. محافظت SSRF در هر هدف IP های داخلی / link-local / CGNAT را در لبه daemon مسدود می‌کند.
 
-تعاریف Runtime در [`apps/daemon/src/runtimes/defs/`](apps/daemon/src/runtimes/defs/) قرار دارند، با ثبت و مدیریت stream مشترک در [`apps/daemon/src/runtimes/`](apps/daemon/src/runtimes/). برای قرارداد آداپتر [`docs/agent-adapters.md`](docs/agent-adapters.md) را ببینید.
+تعاریف Runtime در [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) قرار دارند، با ثبت و مدیریت stream مشترک در [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/). برای قرارداد آداپتر [`docs/agent-adapters.md`](../../docs/agent-adapters.md) را ببینید.
 
 ---
 
@@ -159,11 +159,11 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/dating-web.png" alt="پروتوتایپ وب dating-web" /><br/>
+<img src="../../docs/screenshots/skills/dating-web.png" alt="پروتوتایپ وب dating-web" /><br/>
 <sub><b>پروتوتایپ وب</b> — یک داشبورد ویرایشی با نوارهای پیمایش، KPI ها و نمودارها. رندر شده مستقیماً از <code>design-templates/dating-web/</code>.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/gamified-app.png" alt="برنامه گیمیفای شده" /><br/>
+<img src="../../docs/screenshots/skills/gamified-app.png" alt="برنامه گیمیفای شده" /><br/>
 <sub><b>پروتوتایپ برنامه موبایل</b> — یک جریان گیمیفای شده سه صفحه‌ای با روبان‌های XP و جزئیات ماموریت. مستقیماً به Cursor / Codex / Claude Code تحویل دهید تا به React/Next/Vue تبدیل شود.</sub>
 </td>
 </tr>
@@ -176,21 +176,21 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/live-dashboard.png" alt="داشبورد زنده" /><br/>
+<img src="../../docs/screenshots/skills/live-dashboard.png" alt="داشبورد زنده" /><br/>
 <sub><b>داشبورد زنده</b> — یک دیوار KPI قابل ویرایش که پنل تنظیمات آن پارامترهای ارزشمند را به سطح می‌آورد. agent یک manifest منتشر می‌کند و iframe بدون بارگذاری مجدد رندر می‌شود.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/research-decision-room.png" alt="اتاق تصمیم" /><br/>
+<img src="../../docs/screenshots/skills/research-decision-room.png" alt="اتاق تصمیم" /><br/>
 <sub><b>اتاق تصمیم</b> — یک artifact بریفینگ چند منبعی برای جلسات محصول / تحقیق / عملیات.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/github-dashboard.png" alt="داشبورد GitHub" /><br/>
+<img src="../../docs/screenshots/skills/github-dashboard.png" alt="داشبورد GitHub" /><br/>
 <sub><b>داشبورد به سبک GitHub</b> — معیارهای مخزن به‌عنوان یک artifact زنده ارائه شده‌اند.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/flowai-live-dashboard-template.png" alt="داشبورد زنده Flow" /><br/>
+<img src="../../docs/screenshots/skills/flowai-live-dashboard-template.png" alt="داشبورد زنده Flow" /><br/>
 <sub><b>الگوی داشبورد زنده Flow</b> — یک الگوی KPI خاص دامنه، برندسازی شده از طریق <code>DESIGN.md</code> فعال.</sub>
 </td>
 </tr>
@@ -201,11 +201,11 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/07-magazine-deck.png" alt="دک مجله‌ای (guizang-ppt)" /><br/>
+<img src="../../docs/screenshots/07-magazine-deck.png" alt="دک مجله‌ای (guizang-ppt)" /><br/>
 <sub><b>حالت دک (guizang-ppt)</b> — چینش‌های مجله‌ای، hero WebGL، چک‌لیست‌های P0/P1/P2. بسته‌بندی شده دقیقاً از <a href="https://github.com/op7418/guizang-ppt-skill"><code>op7418/guizang-ppt-skill</code></a> با حفظ مجوز اصلی آن.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/deck-swiss-international.png" alt="دک Swiss" /><br/>
+<img src="../../docs/screenshots/skills/deck-swiss-international.png" alt="دک Swiss" /><br/>
 <sub><b>دک به سبک Swiss International</b> — لنگرگاه شبکه‌ای، تأکیدات تک‌رنگ. یکی از <b>15 الگوی دک</b> و <b>36 تم</b> در <code>design-templates/html-ppt-*/</code>.</sub>
 </td>
 </tr>
@@ -225,7 +225,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 </tr>
 </table>
 
-**93 پرامپت آماده تکرار** در [`prompt-templates/`](prompt-templates/) قرار دارند — تامبنیل‌های پیش‌نمایش، متن کامل پرامپت، مدل هدف، نسبت تصویر و انتساب منبع. یک کلیک یک خلاصه را در نویسنده رها می‌کند.
+**93 پرامپت آماده تکرار** در [`prompt-templates/`](../../prompt-templates/) قرار دارند — تامبنیل‌های پیش‌نمایش، متن کامل پرامپت، مدل هدف، نسبت تصویر و انتساب منبع. یک کلیک یک خلاصه را در نویسنده رها می‌کند.
 
 ### 5 · ویدیو و HyperFrames — گرافیک‌های موشن بومی agent
 
@@ -233,20 +233,20 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 
 <table>
 <tr>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="تبلیغ SaaS" /></a><br/><sub><b>تبلیغ محصول SaaS 30 ثانیه‌ای</b> · 16:9 · نمایش‌های سه‌بعدی UI</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="کارائوکه TikTok" /></a><br/><sub><b>سر صحبت‌کننده کارائوکه TikTok</b> · 9:16 · TTS + زیرنویس‌های همگام با کلمات</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="رول جذاب برند" /></a><br/><sub><b>رول جذاب برند 30 ثانیه‌ای</b> · 16:9 · تایپ جنبشی واکنش‌پذیر به صدا</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="مسابقه نمودار میله‌ای" /></a><br/><sub><b>مسابقه نمودار میله‌ای</b> · 16:9 · اینفوگرافیک داده به سبک NYT</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="تبلیغ SaaS" /></a><br/><sub><b>تبلیغ محصول SaaS 30 ثانیه‌ای</b> · 16:9 · نمایش‌های سه‌بعدی UI</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="کارائوکه TikTok" /></a><br/><sub><b>سر صحبت‌کننده کارائوکه TikTok</b> · 9:16 · TTS + زیرنویس‌های همگام با کلمات</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="رول جذاب برند" /></a><br/><sub><b>رول جذاب برند 30 ثانیه‌ای</b> · 16:9 · تایپ جنبشی واکنش‌پذیر به صدا</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="مسابقه نمودار میله‌ای" /></a><br/><sub><b>مسابقه نمودار میله‌ای</b> · 16:9 · اینفوگرافیک داده به سبک NYT</sub></td>
 </tr>
 <tr>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="نقشه پرواز" /></a><br/><sub><b>نقشه پرواز</b> · 16:9 · نمایش مسیر به سبک Apple</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="پایان‌بندی لوگو" /></a><br/><sub><b>پایان‌بندی سینمایی لوگو 4 ثانیه‌ای</b> · 16:9 · مونتاژ قطعه به قطعه + درخشش</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="شمارنده پول" /></a><br/><sub><b>شمارنده پول $0 → $10K</b> · 9:16 · هیجان به سبک Apple</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="وب‌سایت به ویدیو" /></a><br/><sub><b>وب‌سایت به ویدیو</b> · 16:9 · سایت را در 3 viewport ضبط می‌کند</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="نقشه پرواز" /></a><br/><sub><b>نقشه پرواز</b> · 16:9 · نمایش مسیر به سبک Apple</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="پایان‌بندی لوگو" /></a><br/><sub><b>پایان‌بندی سینمایی لوگو 4 ثانیه‌ای</b> · 16:9 · مونتاژ قطعه به قطعه + درخشش</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="شمارنده پول" /></a><br/><sub><b>شمارنده پول $0 → $10K</b> · 9:16 · هیجان به سبک Apple</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="وب‌سایت به ویدیو" /></a><br/><sub><b>وب‌سایت به ویدیو</b> · 16:9 · سایت را در 3 viewport ضبط می‌کند</sub></td>
 </tr>
 </table>
 
-11 الگوی HyperFrames + 39 پرامپت Seedance با مخزن ارسال می‌شوند. تامبنیل‌های کاتالوگ © HeyGen؛ فریم‌ورک Apache-2.0 است. گردش کار رندر خاص OD (کش ترکیب، راه‌حل sandbox-exec، MP4-as-chip) در [`design-templates/hyperframes/`](design-templates/hyperframes/) توضیح داده شده است.
+11 الگوی HyperFrames + 39 پرامپت Seedance با مخزن ارسال می‌شوند. تامبنیل‌های کاتالوگ © HeyGen؛ فریم‌ورک Apache-2.0 است. گردش کار رندر خاص OD (کش ترکیب، راه‌حل sandbox-exec، MP4-as-chip) در [`design-templates/hyperframes/`](../../design-templates/hyperframes/) توضیح داده شده است.
 
 [hyperframes]: https://github.com/heygen-com/hyperframes
 
@@ -320,7 +320,7 @@ URL میزبانی شده shell را برگرداند به جای فالبک HTM
 > **کاربران macOS / WSL2:** `/usr/bin/od` یک دستور octal-dump سیستمی است و می‌تواند
 > دستور `od` OpenDesign را سایه‌اندازی کند. کاربران برنامه دسکتاپ باید قطعه
 > **تنظیمات → سرور MCP** را ترجیح دهند؛ کاربران WSL2 باید ابتدا
-> راهنمای [`راه‌اندازی WSL2`](docs/wsl-setup.md) را دنبال کنند.
+> راهنمای [`راه‌اندازی WSL2`](../../docs/wsl-setup.md) را دنبال کنند.
 
 سپس، درون agent:
 
@@ -350,7 +350,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-الگوی App Store Sealos تصویر Docker منتشر شده OpenDesign را با ذخیره‌سازی فضای کاری پایدار و Basic Auth روی پروکسی عمومی اجرا می‌کند. برای استقرارهای سفارشی عمومی یا مشترک Docker، راهنمای reverse-proxy و `OPEN_DESIGN_ALLOWED_ORIGINS` را در [`deploy/README.md`](deploy/README.md#local-compose) دنبال کنید.
+الگوی App Store Sealos تصویر Docker منتشر شده OpenDesign را با ذخیره‌سازی فضای کاری پایدار و Basic Auth روی پروکسی عمومی اجرا می‌کند. برای استقرارهای سفارشی عمومی یا مشترک Docker، راهنمای reverse-proxy و `OPEN_DESIGN_ALLOWED_ORIGINS` را در [`deploy/README.md`](../../deploy/README.md#local-compose) دنبال کنید.
 
 ### 🧑‍💻 اجرا از منبع
 
@@ -363,7 +363,7 @@ pnpm tools-dev run web
 
 URL چاپ شده توسط `tools-dev` را باز کنید؛ پورت‌های توسعه به صورت پویا اختصاص داده می‌شوند مگر اینکه پرچم‌های پورت صریح را پاس دهید.
 
-Node `~24`، pnpm `10.33.x`. کاربران WSL2، [`docs/wsl-setup.md`](docs/wsl-setup.md) را ببینید؛ کاربران Windows بومی، [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) را ببینید. شروع سریع کامل، متغیرهای env، Nix flake و جریان ساخت بسته‌بندی شده → [`QUICKSTART.md`](QUICKSTART.md).
+Node `~24`، pnpm `10.33.x`. کاربران WSL2، [`docs/wsl-setup.md`](../../docs/wsl-setup.md) را ببینید؛ کاربران Windows بومی، [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md) را ببینید. شروع سریع کامل، متغیرهای env، Nix flake و جریان ساخت بسته‌بندی شده → [`QUICKSTART.md`](../../QUICKSTART.md).
 
 ### یک گردش کار کامل — از خلاصه تا artifact
 
@@ -395,7 +395,7 @@ od skills list --json
 
 **چرا MCP؟** خروجی گرفتن و پیوست مجدد یک zip در هر تکرار جریان را می‌شکند. MCP منبع طراحی را مستقیماً در معرض دید قرار می‌دهد — agent همیشه فایل زنده را می‌بیند.
 
-**برای یک agent که از صفر شروع می‌کند،** نصب‌کننده `~/.config/<agent>/open-design.json` (یا معادل پلتفرم) به‌علاوه یک قطعه MCP کپی-پیست قرار می‌دهد. Cursor یک deeplink یک‌کلیکی دریافت می‌کند؛ Claude Code یک one-liner `claude mcp add-json` دریافت می‌کند؛ هر agent دیگری JSON را در اسکیمایی که config آن انتظار دارد دریافت می‌کند. در نصب‌های دسکتاپ macOS، آن قطعه تنظیمات را به‌جای تایپ `od mcp install <agent>` خالی در Terminal ترجیح دهید، زیرا `/usr/bin/od` ممکن است در PATH برنده شود. جریان کامل هر agent → **تنظیمات → سرور MCP** در برنامه دسکتاپ، یا [`docs/agent-adapters.md`](docs/agent-adapters.md).
+**برای یک agent که از صفر شروع می‌کند،** نصب‌کننده `~/.config/<agent>/open-design.json` (یا معادل پلتفرم) به‌علاوه یک قطعه MCP کپی-پیست قرار می‌دهد. Cursor یک deeplink یک‌کلیکی دریافت می‌کند؛ Claude Code یک one-liner `claude mcp add-json` دریافت می‌کند؛ هر agent دیگری JSON را در اسکیمایی که config آن انتظار دارد دریافت می‌کند. در نصب‌های دسکتاپ macOS، آن قطعه تنظیمات را به‌جای تایپ `od mcp install <agent>` خالی در Terminal ترجیح دهید، زیرا `/usr/bin/od` ممکن است در PATH برنده شود. جریان کامل هر agent → **تنظیمات → سرور MCP** در برنامه دسکتاپ، یا [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
 
 **مدل امنیتی.** به‌طور پیش‌فرض فقط خواندنی، daemon به `127.0.0.1` متصل می‌شود و SSRF در لبه پروکسی مسدود می‌شود. قرارگیری در معرض LAN نیاز به یک `OD_BIND_HOST` صریح به‌علاوه `OD_ALLOWED_ORIGINS` دارد. اعتبارنامه‌های کانکتور و مسیرهای پیش‌نمایش artifact زنده بدون توجه به آن فقط loopback باقی می‌مانند.
 
@@ -405,40 +405,40 @@ od skills list --json
 
 ## مهارت‌ها و الگوهای طراحی
 
-**بیش از 100 مهارت کاربردی در [`skills/`](skills/) ارسال می‌شوند**. هر یک از قرارداد [`SKILL.md`][skill] Agent Skills پیروی می‌کند و رفتار، مراجع یا ابزارهای قابل استفاده مجدد agent را ارائه می‌دهد. starterهای قابل رندر به‌صورت جداگانه در [`design-templates/`](design-templates/) قرار دارند؛ آنها نیز ممکن است از `SKILL.md` استفاده کنند، اما کاتالوگ الگوی طراحی را به‌جای رجیستری مهارت کاربردی پر می‌کنند.
+**بیش از 100 مهارت کاربردی در [`skills/`](../../skills/) ارسال می‌شوند**. هر یک از قرارداد [`SKILL.md`][skill] Agent Skills پیروی می‌کند و رفتار، مراجع یا ابزارهای قابل استفاده مجدد agent را ارائه می‌دهد. starterهای قابل رندر به‌صورت جداگانه در [`design-templates/`](../../design-templates/) قرار دارند؛ آنها نیز ممکن است از `SKILL.md` استفاده کنند، اما کاتالوگ الگوی طراحی را به‌جای رجیستری مهارت کاربردی پر می‌کنند.
 
 دو **حالت** کاتالوگ الگوی طراحی را لنگر می‌زنند: `prototype` (artifactهای تک‌صفحه‌ای وب/موبایل/دسکتاپ) و `deck` (ارائه‌های swipe افقی). الگوهای دیگر سطوح `image`، `video`، `audio` و utility را پوشش می‌دهند. فیلد **`scenario`** الگوها را بر اساس مخاطب گروه‌بندی می‌کند: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
 | الگوی طراحی | حالت | سناریو | چه چیزی تولید می‌کند |
 |---|---|---|---|
-| [`web-prototype`](design-templates/web-prototype/) | prototype | design | صفحه فرود / hero پیش‌فرض |
-| [`saas-landing`](design-templates/saas-landing/) | prototype | marketing | Hero / ویژگی‌ها / قیمت‌گذاری / CTA |
-| [`dashboard`](design-templates/dashboard/) | prototype | operation | مدیریت / تحلیل (با sidebar) |
-| [`mobile-app`](design-templates/mobile-app/) | prototype | design | برنامه فریم شده iPhone 15 Pro / Pixel |
-| [`mobile-onboarding`](design-templates/mobile-onboarding/) | prototype | design | جریان Splash · value-prop · sign-in |
-| [`social-carousel`](design-templates/social-carousel/) | prototype | marketing | کاروسل 3 کارتی 1080×1080 |
-| [`email-marketing`](design-templates/email-marketing/) | prototype | marketing | ایمیل برند با فالبک جدول ایمن |
-| [`magazine-poster`](design-templates/magazine-poster/) | prototype | marketing | چینش مجله تک‌صفحه‌ای |
-| [`motion-frames`](design-templates/motion-frames/) | prototype | marketing | hero موشن CSS حلقه‌ای |
-| [`sprite-animation`](design-templates/sprite-animation/) | prototype | marketing | توضیح‌دهنده انیمیشن پیکسلی 8 بیتی |
-| [`pm-spec`](design-templates/pm-spec/) | prototype | product | سند مشخصات PM (با TOC + log تصمیم) |
-| [`team-okrs`](design-templates/team-okrs/) | prototype | product | کارت امتیازی OKR |
-| [`eng-runbook`](design-templates/eng-runbook/) | prototype | engineering | runbook حادثه |
-| [`finance-report`](design-templates/finance-report/) | prototype | finance | خلاصه مالی اجرایی |
-| [`hr-onboarding`](design-templates/hr-onboarding/) | prototype | hr | برنامه ورود به نقش |
-| [`guizang-ppt`](design-templates/guizang-ppt/) | deck | marketing | PPT وب به سبک مجله (پیش‌فرض دک) |
-| [`html-ppt-*`](design-templates/) | deck | marketing | 15 الگوی دک × 36 تم (الگوی اصلی در [`design-templates/html-ppt/`](design-templates/html-ppt/)) |
-| [`hyperframes`](design-templates/hyperframes/) | video | marketing | گرافیک‌موشن HTML → MP4 (فریم‌ورک OSS HeyGen) |
-| [`critique`](design-templates/critique/) | utility | design | برگه امتیاز خودنقدی پنج بعدی |
-| [`tweaks`](design-templates/tweaks/) | utility | design | manifest پنل تنظیمات منتشر شده توسط AI |
+| [`web-prototype`](../../design-templates/web-prototype/) | prototype | design | صفحه فرود / hero پیش‌فرض |
+| [`saas-landing`](../../design-templates/saas-landing/) | prototype | marketing | Hero / ویژگی‌ها / قیمت‌گذاری / CTA |
+| [`dashboard`](../../design-templates/dashboard/) | prototype | operation | مدیریت / تحلیل (با sidebar) |
+| [`mobile-app`](../../design-templates/mobile-app/) | prototype | design | برنامه فریم شده iPhone 15 Pro / Pixel |
+| [`mobile-onboarding`](../../design-templates/mobile-onboarding/) | prototype | design | جریان Splash · value-prop · sign-in |
+| [`social-carousel`](../../design-templates/social-carousel/) | prototype | marketing | کاروسل 3 کارتی 1080×1080 |
+| [`email-marketing`](../../design-templates/email-marketing/) | prototype | marketing | ایمیل برند با فالبک جدول ایمن |
+| [`magazine-poster`](../../design-templates/magazine-poster/) | prototype | marketing | چینش مجله تک‌صفحه‌ای |
+| [`motion-frames`](../../design-templates/motion-frames/) | prototype | marketing | hero موشن CSS حلقه‌ای |
+| [`sprite-animation`](../../design-templates/sprite-animation/) | prototype | marketing | توضیح‌دهنده انیمیشن پیکسلی 8 بیتی |
+| [`pm-spec`](../../design-templates/pm-spec/) | prototype | product | سند مشخصات PM (با TOC + log تصمیم) |
+| [`team-okrs`](../../design-templates/team-okrs/) | prototype | product | کارت امتیازی OKR |
+| [`eng-runbook`](../../design-templates/eng-runbook/) | prototype | engineering | runbook حادثه |
+| [`finance-report`](../../design-templates/finance-report/) | prototype | finance | خلاصه مالی اجرایی |
+| [`hr-onboarding`](../../design-templates/hr-onboarding/) | prototype | hr | برنامه ورود به نقش |
+| [`guizang-ppt`](../../design-templates/guizang-ppt/) | deck | marketing | PPT وب به سبک مجله (پیش‌فرض دک) |
+| [`html-ppt-*`](../../design-templates/) | deck | marketing | 15 الگوی دک × 36 تم (الگوی اصلی در [`design-templates/html-ppt/`](../../design-templates/html-ppt/)) |
+| [`hyperframes`](../../design-templates/hyperframes/) | video | marketing | گرافیک‌موشن HTML → MP4 (فریم‌ورک OSS HeyGen) |
+| [`critique`](../../design-templates/critique/) | utility | design | برگه امتیاز خودنقدی پنج بعدی |
+| [`tweaks`](../../design-templates/tweaks/) | utility | design | manifest پنل تنظیمات منتشر شده توسط AI |
 
-پروتکل کامل و تقسیم دایرکتوری → [`docs/skills-protocol.md`](docs/skills-protocol.md). endpointهای رجیستری: `GET /api/skills` برای مهارت‌های کاربردی و `GET /api/design-templates` برای الگوهای رندرینگ.
+پروتکل کامل و تقسیم دایرکتوری → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). endpointهای رجیستری: `GET /api/skills` برای مهارت‌های کاربردی و `GET /api/design-templates` برای الگوهای رندرینگ.
 
 ---
 
 ## سیستم‌های طراحی
 
-**151 بسته سیستم طراحی در سطح برند متمرکز بر `DESIGN.md`** با مخزن ارسال می‌شوند. بسته‌های قدیمی ممکن است فقط حاوی آن قرارداد Markdown باشند؛ بسته‌های جدیدتر همچنین می‌توانند `manifest.json`، `tokens.css` کامپایل شده، fixtureهای کامپوننت، داراییها و شواهد منشأ را حمل کنند. کاتالوگ سیستم‌های مشتق شده upstream را با افزودنی‌های متعلق به پروژه مخلوط می‌کند؛ [`design-systems/README.md`](design-systems/README.md) شکل بسته و منشأ را ثبت می‌کند. تعویض یک سیستم → رندر بعدی از توکن‌های جدید استفاده می‌کند.
+**151 بسته سیستم طراحی در سطح برند متمرکز بر `DESIGN.md`** با مخزن ارسال می‌شوند. بسته‌های قدیمی ممکن است فقط حاوی آن قرارداد Markdown باشند؛ بسته‌های جدیدتر همچنین می‌توانند `manifest.json`، `tokens.css` کامپایل شده، fixtureهای کامپوننت، داراییها و شواهد منشأ را حمل کنند. کاتالوگ سیستم‌های مشتق شده upstream را با افزودنی‌های متعلق به پروژه مخلوط می‌کند؛ [`design-systems/README.md`](../../design-systems/README.md) شکل بسته و منشأ را ثبت می‌کند. تعویض یک سیستم → رندر بعدی از توکن‌های جدید استفاده می‌کند.
 
 <details>
 <summary><b>کاتالوگ کامل (کلیک کنید تا باز شود)</b></summary>
@@ -463,7 +463,7 @@ od skills list --json
 
 </details>
 
-وارد کردن مجدد کتابخانه از طریق [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). اضافه کردن برند خودتان → یک `DESIGN.md` در `design-systems/<brand>/` بیاندازید. راهنمای کامل → [`design-systems/README.md`](design-systems/README.md).
+وارد کردن مجدد کتابخانه از طریق [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts). اضافه کردن برند خودتان → یک `DESIGN.md` در `design-systems/<brand>/` بیاندازید. راهنمای کامل → [`design-systems/README.md`](../../design-systems/README.md).
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
 
@@ -471,24 +471,24 @@ od skills list --json
 
 ## افزونه‌ها
 
-**277 افزونه رسمی به‌علاوه 183 مثال مرجع قابل ترکیب مجدد** در [`plugins/_official/`](plugins/_official/) قرار دارند. هر ورودی یک دایرکتوری افزونه قابل حمل است که توسط `open-design.json` به‌علاوه payload مورد نیاز نوع آن لنگر شده است: به‌عنوان مثال `SKILL.md` برای گردش‌های کاری agent، `template.json` برای الگوهای رسانه‌ای، یا `DESIGN.md` برای ورودی‌های سیستم طراحی. مستقیماً به یک دسته بپرید:
+**277 افزونه رسمی به‌علاوه 183 مثال مرجع قابل ترکیب مجدد** در [`plugins/_official/`](../../plugins/_official/) قرار دارند. هر ورودی یک دایرکتوری افزونه قابل حمل است که توسط `open-design.json` به‌علاوه payload مورد نیاز نوع آن لنگر شده است: به‌عنوان مثال `SKILL.md` برای گردش‌های کاری agent، `template.json` برای الگوهای رسانه‌ای، یا `DESIGN.md` برای ورودی‌های سیستم طراحی. مستقیماً به یک دسته بپرید:
 
 | دسته | تعداد | محتویات |
 |---|---|---|
-| [`scenarios/`](plugins/_official/scenarios/) | 13 | سناریوهای طراحی کامل — [`od-default`](plugins/_official/scenarios/od-default/), [`od-design-refine`](plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](plugins/_official/scenarios/od-code-migration/), [`od-react-export`](plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](plugins/_official/scenarios/od-web-effect-extractor/) |
-| [`image-templates/`](plugins/_official/image-templates/) | 45 | پرامپت‌های تصویری یک‌ضربی — ویرایشی، سینمایی، محصول، پرتره |
-| [`video-templates/`](plugins/_official/video-templates/) | 63 | الگوهای موشن HyperFrames / Seedance / Veo |
-| [`design-systems/`](plugins/_official/design-systems/) | 143 | `DESIGN.md` برند بسته‌بندی شده به‌عنوان افزونه |
-| [`atoms/`](plugins/_official/atoms/) | 13 | قطعات UI قابل استفاده مجدد (دکمه‌ها، hero ها، کارت‌های KPI) |
-| [`examples/`](plugins/_official/examples/) | 183 | خروجی‌های مرجع قابل ترکیب مجدد |
+| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | سناریوهای طراحی کامل — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
+| [`image-templates/`](../../plugins/_official/image-templates/) | 45 | پرامپت‌های تصویری یک‌ضربی — ویرایشی، سینمایی، محصول، پرتره |
+| [`video-templates/`](../../plugins/_official/video-templates/) | 63 | الگوهای موشن HyperFrames / Seedance / Veo |
+| [`design-systems/`](../../plugins/_official/design-systems/) | 143 | `DESIGN.md` برند بسته‌بندی شده به‌عنوان افزونه |
+| [`atoms/`](../../plugins/_official/atoms/) | 13 | قطعات UI قابل استفاده مجدد (دکمه‌ها، hero ها، کارت‌های KPI) |
+| [`examples/`](../../plugins/_official/examples/) | 183 | خروجی‌های مرجع قابل ترکیب مجدد |
 
-همچنین [`plugins/community/`](plugins/community/) برای افزونه‌های جامعه و [`plugins/registry/`](plugins/registry/) برای جریان انتشار.
+همچنین [`plugins/community/`](../../plugins/community/) برای افزونه‌های جامعه و [`plugins/registry/`](../../plugins/registry/) برای جریان انتشار.
 
 ### افزونه‌ها چه کاری می‌توانند انجام دهند
 
-- 🤖 **در هر agent کدنویسی اجرا شوند** — [Claude Code](docs/agent-adapters.md)، Codex، Cursor، Copilot، [OpenClaw](https://github.com/openclaw/openclaw)، [Antigravity](https://antigravity.google)، Hermes، Kimi… از طریق همان پروتکل مهارتی که agent قبلاً می‌شناسد.
-- 🔁 **انتقال گردش‌های کاری Figma / Pencil** → منبع React، Next.js یا Vue. [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/) را ببینید.
-- 🛠️ **تازه‌سازی یک کدبیس موجود به مشخصات برند** — یک افزونه را به یک مخزن `git` + `DESIGN.md` اشاره دهید، یک PR دریافت کنید. [`od-code-migration`](plugins/_official/scenarios/od-code-migration/) را ببینید.
+- 🤖 **در هر agent کدنویسی اجرا شوند** — [Claude Code](../../docs/agent-adapters.md)، Codex، Cursor، Copilot، [OpenClaw](https://github.com/openclaw/openclaw)، [Antigravity](https://antigravity.google)، Hermes، Kimi… از طریق همان پروتکل مهارتی که agent قبلاً می‌شناسد.
+- 🔁 **انتقال گردش‌های کاری Figma / Pencil** → منبع React، Next.js یا Vue. [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/) را ببینید.
+- 🛠️ **تازه‌سازی یک کدبیس موجود به مشخصات برند** — یک افزونه را به یک مخزن `git` + `DESIGN.md` اشاره دهید، یک PR دریافت کنید. [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/) را ببینید.
 - 💾 **پایدارسازی گردش‌های کاری سفارشی** — الگوهای قابل استفاده مجدد تیم شما در کنار آنهایی که ارسال شده‌اند قرار می‌گیرند.
 
 ### استفاده از افزونه‌ها
@@ -534,16 +534,16 @@ od plugin validate ./my-plugin                          # بررسی manifest / 
 pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 ```
 
-مجموعه فیلد کامل و قرارداد runtime → [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md)؛ توسعه یک افزونه با یک agent کدنویسی → [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md)؛ الگوهای حداقلی کپی-پیست → [`plugins/spec/examples/`](plugins/spec/examples/).
+مجموعه فیلد کامل و قرارداد runtime → [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md)؛ توسعه یک افزونه با یک agent کدنویسی → [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md)؛ الگوهای حداقلی کپی-پیست → [`plugins/spec/examples/`](../../plugins/spec/examples/).
 
 ### مشارکت یک افزونه
 
-1. پوشه افزونه را در [`plugins/community/`](plugins/community/) بیاندازید (افزونه‌های شخص ثالث)، یا — برای ارسال آن بسته‌بندی شده با OpenDesign — در سطح تطبیقی [`plugins/_official/`](plugins/_official/).
+1. پوشه افزونه را در [`plugins/community/`](../../plugins/community/) بیاندازید (افزونه‌های شخص ثالث)، یا — برای ارسال آن بسته‌بندی شده با OpenDesign — در سطح تطبیقی [`plugins/_official/`](../../plugins/_official/).
 2. اعتبارسنجی را پاس کنید: `od plugin validate`، `pnpm guard`، `pnpm --filter @open-design/plugin-runtime typecheck`.
-3. PR را با استفاده از الگو در [`plugins/spec/CONTRIBUTING.md`](plugins/spec/CONTRIBUTING.md) پر کنید (شناسه، نسخه، مسیر، حالت، قابلیت‌ها، مثال‌های محرک؛ یک اسکرین‌شات / پیش‌نمایش برای افزونه‌های بصری پیوست کنید).
-4. برای انتشار در یک رجیستری خارجی (skills.sh / ClawHub / GitHub مستقل) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](plugins/spec/PUBLISHING-REGISTRIES.md).
+3. PR را با استفاده از الگو در [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) پر کنید (شناسه، نسخه، مسیر، حالت، قابلیت‌ها، مثال‌های محرک؛ یک اسکرین‌شات / پیش‌نمایش برای افزونه‌های بصری پیوست کنید).
+4. برای انتشار در یک رجیستری خارجی (skills.sh / ClawHub / GitHub مستقل) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md).
 
-endpoint رجیستری افزونه: `GET /api/plugins`. نمای کلی دایرکتوری → [`plugins/README.md`](plugins/README.md) ([简体中文](plugins/README.zh-CN.md)).
+endpoint رجیستری افزونه: `GET /api/plugins`. نمای کلی دایرکتوری → [`plugins/README.md`](../../plugins/README.md) ([简体中文](../../plugins/README.zh-CN.md)).
 
 ---
 
@@ -587,7 +587,7 @@ endpoint رجیستری افزونه: `GET /api/plugins`. نمای کلی دای
 | دسکتاپ | پوسته Electron + رندرر ایمن + IPC sidecar (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |
 | چرخه حیات | یک نقطه ورود: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) |
 
-معماری کامل → [`docs/architecture.md`](docs/architecture.md). پروتکل مهارت → [`docs/skills-protocol.md`](docs/skills-protocol.md). قرارداد آداپتر agent → [`docs/agent-adapters.md`](docs/agent-adapters.md).
+معماری کامل → [`docs/architecture.md`](../../docs/architecture.md). پروتکل مهارت → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). قرارداد آداپتر agent → [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
 
 ---
 
@@ -615,7 +615,7 @@ endpoint رجیستری افزونه: `GET /api/plugins`. نمای کلی دای
 - [ ] افزونه‌های انتقال Figma / Pencil → React / Next / Vue (آلفا)
 - [ ] افزونه تازه‌سازی-کدبیس-موجود (به یک مخزن git + `DESIGN.md` اشاره کنید)
 
-تحویل مرحله‌ای → [`docs/roadmap.md`](docs/roadmap.md).
+تحویل مرحله‌ای → [`docs/roadmap.md`](../../docs/roadmap.md).
 
 ---
 
@@ -640,13 +640,13 @@ OpenDesign به حرکت ادامه می‌دهد زیرا مشارکت‌کنن
 
 | می‌خواهید ارسال کنید… | چگونه | کجا |
 |---|---|---|
-| یک **مهارت** کاربردی جدید | یک پوشه با `SKILL.md` + `assets/` اختیاری + `references/` بیاندازید | [`skills/`](skills/) · مشخصات در [`docs/skills-protocol.md`](docs/skills-protocol.md) |
-| یک **الگوی طراحی** رندرینگ جدید | یک بسته `SKILL.md` قابل رندر اضافه کنید | [`design-templates/`](design-templates/) |
-| یک **سیستم طراحی** جدید | یک بسته متمرکز بر `DESIGN.md` بیاندازید؛ `manifest.json`، `tokens.css`، کامپوننت‌ها، دارایی‌ها یا منشأ را در صورت نیاز اضافه کنید | [`design-systems/<brand>/`](design-systems/) |
-| یک **افزونه** جدید | `open-design.json` + payload خاص نوع را زیر یک پوشه دسته بیاندازید | [`plugins/community/`](plugins/community/) · مشخصات در [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md) · راهنمای توسعه agent در [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md) |
-| پشتیبانی از یک **CLI agent کدنویسی** جدید | یک تعریف runtime + ورودی رجیستری؛ یک parser فقط برای یک فرمت سیم جدید اضافه کنید | [`apps/daemon/src/runtimes/defs/`](apps/daemon/src/runtimes/defs/) |
+| یک **مهارت** کاربردی جدید | یک پوشه با `SKILL.md` + `assets/` اختیاری + `references/` بیاندازید | [`skills/`](../../skills/) · مشخصات در [`docs/skills-protocol.md`](../../docs/skills-protocol.md) |
+| یک **الگوی طراحی** رندرینگ جدید | یک بسته `SKILL.md` قابل رندر اضافه کنید | [`design-templates/`](../../design-templates/) |
+| یک **سیستم طراحی** جدید | یک بسته متمرکز بر `DESIGN.md` بیاندازید؛ `manifest.json`، `tokens.css`، کامپوننت‌ها، دارایی‌ها یا منشأ را در صورت نیاز اضافه کنید | [`design-systems/<brand>/`](../../design-systems/) |
+| یک **افزونه** جدید | `open-design.json` + payload خاص نوع را زیر یک پوشه دسته بیاندازید | [`plugins/community/`](../../plugins/community/) · مشخصات در [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md) · راهنمای توسعه agent در [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md) |
+| پشتیبانی از یک **CLI agent کدنویسی** جدید | یک تعریف runtime + ورودی رجیستری؛ یک parser فقط برای یک فرمت سیم جدید اضافه کنید | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) |
 | رفع باگ یا صیقل دادن UI | برچسب [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) را مرور کنید | [Issues →](https://github.com/nexu-io/open-design/issues) |
-| ترجمه اسناد | فایل‌های `README.<lang>.md` را به‌روزرسانی کنید | [`TRANSLATIONS.md`](TRANSLATIONS.md) |
+| ترجمه اسناد | فایل‌های `README.<lang>.md` را به‌روزرسانی کنید | [`TRANSLATIONS.md`](../../TRANSLATIONS.md) |
 
 ### 🤖 مشارکت به‌عنوان یک agent
 
@@ -670,11 +670,11 @@ pnpm --filter @open-design/<package> test
 gh pr create --fill
 ```
 
-جریان مشارکت دوستانه برای agent، سبک کد و میله PR → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](docs/i18n/CONTRIBUTING.de.md) · [Français](docs/i18n/CONTRIBUTING.fr.md) · [简体中文](docs/i18n/CONTRIBUTING.zh-CN.md) · [日本語](docs/i18n/CONTRIBUTING.ja-JP.md) · [한국어](docs/i18n/CONTRIBUTING.ko.md) · [Português](docs/i18n/CONTRIBUTING.pt-BR.md) · [ภาษาไทย](docs/i18n/CONTRIBUTING.th.md)).
+جریان مشارکت دوستانه برای agent، سبک کد و میله PR → [`CONTRIBUTING.md`](../../CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [한국어](CONTRIBUTING.ko.md) · [Português](CONTRIBUTING.pt-BR.md) · [ภาษาไทย](CONTRIBUTING.th.md)).
 
 ### 🏅 برنامه OpenDesign Fellow
 
-ما در حال استخدام **OpenDesign Fellow** در سراسر جهان هستیم — Fellow ها محصول را در کنار تیم اصلی شکل می‌دهند، OpenDesign را به صورت رسمی در منطقه خود نمایندگی می‌کنند و جامعه را به صورت محلی رشد می‌دهند، با پشتیبانی مالی ($1,000 / MR)، اعتبار رایگان LLM و یک مسیر بررسی مستقیم. جزئیات → [`MAINTAINERS.md`](MAINTAINERS.md) و اعلامیه در [Discord](https://discord.gg/mHAjSMV6gz).
+ما در حال استخدام **OpenDesign Fellow** در سراسر جهان هستیم — Fellow ها محصول را در کنار تیم اصلی شکل می‌دهند، OpenDesign را به صورت رسمی در منطقه خود نمایندگی می‌کنند و جامعه را به صورت محلی رشد می‌دهند، با پشتیبانی مالی ($1,000 / MR)، اعتبار رایگان LLM و یک مسیر بررسی مستقیم. جزئیات → [`MAINTAINERS.md`](../../MAINTAINERS.md) و اعلامیه در [Discord](https://discord.gg/mHAjSMV6gz).
 
 ---
 
@@ -708,7 +708,7 @@ gh pr create --fill
   </tr>
 </table>
 
-قوانین نگهدارنده، معیارهای ترفیع و پروتکل خروج → [`MAINTAINERS.md`](MAINTAINERS.md) (همچنین [Deutsch](docs/i18n/MAINTAINERS.de.md) · [Français](docs/i18n/MAINTAINERS.fr.md) · [简体中文](docs/i18n/MAINTAINERS.zh-CN.md) · [日本語](docs/i18n/MAINTAINERS.ja-JP.md) · [한국어](docs/i18n/MAINTAINERS.ko.md) · [Português](docs/i18n/MAINTAINERS.pt-BR.md) · [ภาษาไทย](docs/i18n/MAINTAINERS.th.md)).
+قوانین نگهدارنده، معیارهای ترفیع و پروتکل خروج → [`MAINTAINERS.md`](../../MAINTAINERS.md) (همچنین [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [한국어](MAINTAINERS.ko.md) · [Português](MAINTAINERS.pt-BR.md) · [ภาษาไทย](MAINTAINERS.th.md)).
 
 ## مشارکت‌کنندگان
 
@@ -726,7 +726,7 @@ gh pr create --fill
   <img alt="OpenDesign — معیارهای مخزن" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
-SVG بالا هر روز توسط [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) با استفاده از [`lowlighter/metrics`](https://github.com/lowlighter/metrics) دوباره تولید می‌شود.
+SVG بالا هر روز توسط [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) با استفاده از [`lowlighter/metrics`](https://github.com/lowlighter/metrics) دوباره تولید می‌شود.
 
 ---
 
@@ -754,7 +754,7 @@ SVG بالا هر روز توسط [`.github/workflows/metrics.yml`](.github/work
 |---|---|
 | Claude Design | محصول متن‌بسته‌ای که این مخزن جایگزین متن‌باز آن است. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | قطب‌نمای فلسفه طراحی — گردش کار طراح جونیور، پروتکل دارایی برند، چک‌لیست ضد-AI-slop، نقد پنج بعدی. |
-| [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | مهارت PPT وب به سبک مجله، بسته‌بندی شده دقیقاً در [`design-templates/guizang-ppt/`](design-templates/guizang-ppt/). پیش‌فرض برای حالت دک. |
+| [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | مهارت PPT وب به سبک مجله، بسته‌بندی شده دقیقاً در [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/). پیش‌فرض برای حالت دک. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | خانواده HTML PPT Studio — 15 الگوی دک، 36 تم، 31 چینش صفحه، runtime انیمیشن، حالت ارائه‌دهنده کارت مغناطیسی. |
 | [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | اولین جایگزین متن‌باز Claude Design؛ الگوهای UX که قرض می‌گیریم (حلقه streaming-artifact، iframe ایمن، پنل agent زنده). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | معماری daemon + آداپتر — شناسایی agent اسکن PATH، daemon محلی به‌عنوان تنها فرآیند ممتاز. |
@@ -763,7 +763,7 @@ SVG بالا هر روز توسط [`.github/workflows/metrics.yml`](.github/work
 | [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | فریم‌ورک گرافیک‌موشن HTML→MP4، به‌عنوان `hyperframes-html` درجه یک در OpenDesign ادغام شده است. |
 | [Claude Code skills][skill] | قرارداد `SKILL.md` که دقیقاً اتخاذ می‌کنیم. |
 
-منشأ دقیق → [`docs/references.md`](docs/references.md).
+منشأ دقیق → [`docs/references.md`](../../docs/references.md).
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 
