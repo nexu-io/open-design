@@ -110,7 +110,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 
 ## سازگاری پلتفرم
 
-> OpenDesign به دو روش به agentهای کدنویسی جریان اصلی متصل می‌شود: **مهارت‌ها، CLI و MCP** برای agentهایی که OD را مصرف می‌کنند، به‌علاوه **آداپترهای runtime بومی** برای agentهایی که OD مستقیماً راه‌اندازی می‌کند. DeepSeek Harness یک runtime بومی درجه یک از طریق CLI رسمی `dsh` است، با streaming ساختاریافته، کشف مدل، لغو و ادامه جلسه.
+> > OpenDesign به دو روش به agentهای کدنویسی جریان اصلی متصل می‌شود: **مهارت‌ها، CLI و MCP** برای agentهایی که OD را مصرف می‌کنند، به‌علاوه **آداپترهای runtime بومی** برای agentهایی که OD مستقیماً راه‌اندازی می‌کند. DeepSeek Harness یک runtime بومی درجه یک از طریق CLI رسمی `dsh` است، با streaming ساختاریافته، کشف مدل، لغو و ادامه جلسه.
 
 | agent / پلتفرم کدنویسی &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | وضعیت &nbsp;&nbsp; | تنظیم سریع &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -187,7 +187,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 <tr>
 <td width="50%" valign="top">
 <img src="docs/screenshots/skills/github-dashboard.png" alt="داشبورد GitHub" /><br/>
-<sub><b>داشبورد به سبک GitHub</b> — معیارهای مخزن به عنوان یک artifact زنده ارائه شده‌اند.</sub>
+<sub><b>داشبورد به سبک GitHub</b> — معیارهای مخزن به‌عنوان یک artifact زنده ارائه شده‌اند.</sub>
 </td>
 <td width="50%" valign="top">
 <img src="docs/screenshots/skills/flowai-live-dashboard-template.png" alt="داشبورد زنده Flow" /><br/>
@@ -229,7 +229,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 
 ### 5 · ویدیو و HyperFrames — گرافیک‌های موشن بومی agent
 
-**[HyperFrames][hyperframes]** فریم‌ورک ویدیوی متن‌باز و بومی agent HeyGen است که به عنوان یک شهروند درجه یک در OpenDesign ادغام شده است. agent HTML + CSS + GSAP می‌نویسد، و HyperFrames آن را به یک MP4 قطعی از طریق headless Chrome + FFmpeg رندر می‌کند. آن را با **Seedance 2.0** برای t2v / i2v سینمایی، **Veo 3 / Sora 2 / Kling 2** برای انواع مدل مسیریابی شده و **Suno v5 / Lyria 2** برای لایه صوتی جفت کنید.
+**[HyperFrames][hyperframes]** فریم‌ورک ویدیوی متن‌باز و بومی agent HeyGen است که به‌عنوان یک شهروند درجه یک در OpenDesign ادغام شده است. agent HTML + CSS + GSAP می‌نویسد، و HyperFrames آن را به یک MP4 قطعی از طریق headless Chrome + FFmpeg رندر می‌کند. آن را با **Seedance 2.0** برای t2v / i2v سینمایی، **Veo 3 / Sora 2 / Kling 2** برای انواع مدل مسیریابی شده و **Suno v5 / Lyria 2** برای لایه صوتی جفت کنید.
 
 <table>
 <tr>
@@ -294,7 +294,7 @@ OpenDesign (OD) جایگزین متن‌باز است. همان حلقه، هم�
 
 ### 🤖 نصب در agent کدنویسی شما (بدون UI)
 
-می‌توانید از OpenDesign بدون باز کردن GUI استفاده کنید — آن را به عنوان یک مهارت، افزونه یا سرور MCP درون Claude Code، Codex، Cursor، Copilot، OpenClaw، Antigravity، Hermes، Kimi و موارد دیگر فراخوانی کنید.
+می‌توانید از OpenDesign بدون باز کردن GUI استفاده کنید — آن را به‌عنوان یک مهارت، افزونه یا سرور MCP درون Claude Code، Codex، Cursor، Copilot، OpenClaw، Antigravity، Hermes، Kimi و موارد دیگر فراخوانی کنید.
 
 اگر برنامه دسکتاپ macOS را از طریق DMG یا Homebrew cask نصب کرده‌اید، shell شما
 ممکن است هنوز `od` را به ابزار octal-dump داخلی Apple در `/usr/bin/od` حل کند. در
@@ -341,8 +341,8 @@ docker compose up -d
 # باز کنید http://127.0.0.1:7456
 ```
 
-اگر مرورگر درخواست اعتبارنامه کرد، از `open-design` به عنوان نام کاربری و
-مقدار `OD_API_TOKEN` از `deploy/.env` به عنوان رمز عبور استفاده کنید. این ترافیک bridge Docker را
+اگر مرورگر درخواست اعتبارنامه کرد، از `open-design` به‌عنوان نام کاربری و
+مقدار `OD_API_TOKEN` از `deploy/.env` به‌عنوان رمز عبور استفاده کنید. این ترافیک bridge Docker را
 احراز هویت شده نگه می‌دارد بدون نیاز به شبکه host. کلاینت‌های API می‌توانند همچنان
 از `Authorization: Bearer <OD_API_TOKEN>` استفاده کنند.
 
@@ -379,7 +379,7 @@ Node `~24`، pnpm `10.33.x`. کاربران WSL2، [`docs/wsl-setup.md`](docs/ws
 
 ## استفاده از OpenDesign از agent کدنویسی شما
 
-OpenDesign یک **سرور MCP stdio** و **اسکریپت‌های نصب برای هر agent** را ارسال می‌کند. هر agent سازگار با MCP در مخزن دیگری می‌تواند مستقیماً فایل‌ها را از پروژه‌های محلی OpenDesign شما بخواند — CSS توکن‌ها، کامپوننت‌های JSX، HTML ورودی — به عنوان یک API ساختاریافته قابل پرس‌وجو با نام. agent همیشه فایل زنده را می‌بیند، نه یک خروجی قدیمی.
+OpenDesign یک **سرور MCP stdio** و **اسکریپت‌های نصب برای هر agent** را ارسال می‌کند. هر agent سازگار با MCP در مخزن دیگری می‌تواند مستقیماً فایل‌ها را از پروژه‌های محلی OpenDesign شما بخواند — CSS توکن‌ها، کامپوننت‌های JSX، HTML ورودی — به‌عنوان یک API ساختاریافته قابل پرس‌وجو با نام. agent همیشه فایل زنده را می‌بیند، نه یک خروجی قدیمی.
 
 ```bash
 # نصب یک‌خطی (بیش از 16 CLI پشتیبانی می‌شود):
@@ -395,7 +395,7 @@ od skills list --json
 
 **چرا MCP؟** خروجی گرفتن و پیوست مجدد یک zip در هر تکرار جریان را می‌شکند. MCP منبع طراحی را مستقیماً در معرض دید قرار می‌دهد — agent همیشه فایل زنده را می‌بیند.
 
-**برای یک agent که از صفر شروع می‌کند،** نصب‌کننده `~/.config/<agent>/open-design.json` (یا معادل پلتفرم) به‌علاوه یک قطعه MCP کپی-پیست قرار می‌دهد. Cursor یک deeplink یک‌کلیکی دریافت می‌کند؛ Claude Code یک one-liner `claude mcp add-json` دریافت می‌کند؛ هر agent دیگری JSON را در اسکیمایی که config آن انتظار دارد دریافت می‌کند. در نصب‌های دسکتاپ macOS، آن قطعه تنظیمات را به جای تایپ `od mcp install <agent>` خالی در Terminal ترجیح دهید، زیرا `/usr/bin/od` ممکن است در PATH برنده شود. جریان کامل هر agent → **تنظیمات → سرور MCP** در برنامه دسکتاپ، یا [`docs/agent-adapters.md`](docs/agent-adapters.md).
+**برای یک agent که از صفر شروع می‌کند،** نصب‌کننده `~/.config/<agent>/open-design.json` (یا معادل پلتفرم) به‌علاوه یک قطعه MCP کپی-پیست قرار می‌دهد. Cursor یک deeplink یک‌کلیکی دریافت می‌کند؛ Claude Code یک one-liner `claude mcp add-json` دریافت می‌کند؛ هر agent دیگری JSON را در اسکیمایی که config آن انتظار دارد دریافت می‌کند. در نصب‌های دسکتاپ macOS، آن قطعه تنظیمات را به‌جای تایپ `od mcp install <agent>` خالی در Terminal ترجیح دهید، زیرا `/usr/bin/od` ممکن است در PATH برنده شود. جریان کامل هر agent → **تنظیمات → سرور MCP** در برنامه دسکتاپ، یا [`docs/agent-adapters.md`](docs/agent-adapters.md).
 
 **مدل امنیتی.** به‌طور پیش‌فرض فقط خواندنی، daemon به `127.0.0.1` متصل می‌شود و SSRF در لبه پروکسی مسدود می‌شود. قرارگیری در معرض LAN نیاز به یک `OD_BIND_HOST` صریح به‌علاوه `OD_ALLOWED_ORIGINS` دارد. اعتبارنامه‌های کانکتور و مسیرهای پیش‌نمایش artifact زنده بدون توجه به آن فقط loopback باقی می‌مانند.
 
@@ -416,7 +416,7 @@ od skills list --json
 | [`dashboard`](design-templates/dashboard/) | prototype | operation | مدیریت / تحلیل (با sidebar) |
 | [`mobile-app`](design-templates/mobile-app/) | prototype | design | برنامه فریم شده iPhone 15 Pro / Pixel |
 | [`mobile-onboarding`](design-templates/mobile-onboarding/) | prototype | design | جریان Splash · value-prop · sign-in |
-| [`social-carousel`](design-templates/social-carousel/) | prototype | marketing | چرخ فلک 3 کارتی 1080×1080 |
+| [`social-carousel`](design-templates/social-carousel/) | prototype | marketing | کاروسل 3 کارتی 1080×1080 |
 | [`email-marketing`](design-templates/email-marketing/) | prototype | marketing | ایمیل برند با فالبک جدول ایمن |
 | [`magazine-poster`](design-templates/magazine-poster/) | prototype | marketing | چینش مجله تک‌صفحه‌ای |
 | [`motion-frames`](design-templates/motion-frames/) | prototype | marketing | hero موشن CSS حلقه‌ای |
@@ -471,14 +471,14 @@ od skills list --json
 
 ## افزونه‌ها
 
-**277 افزونه رسمی به‌علاوه 183 مثال مرجع قابل ترکیب مجدد** در [`plugins/_official/`](plugins/_official/) قرار دارند. هر ورودی یک دایرکتوری افزونه قابل حمل است که توسط `open-design.json` به‌علاوه payload مورد نیاز نوع آن لنگر شده است: به عنوان مثال `SKILL.md` برای گردش‌های کاری agent، `template.json` برای الگوهای رسانه‌ای، یا `DESIGN.md` برای ورودی‌های سیستم طراحی. مستقیماً به یک دسته بپرید:
+**277 افزونه رسمی به‌علاوه 183 مثال مرجع قابل ترکیب مجدد** در [`plugins/_official/`](plugins/_official/) قرار دارند. هر ورودی یک دایرکتوری افزونه قابل حمل است که توسط `open-design.json` به‌علاوه payload مورد نیاز نوع آن لنگر شده است: به‌عنوان مثال `SKILL.md` برای گردش‌های کاری agent، `template.json` برای الگوهای رسانه‌ای، یا `DESIGN.md` برای ورودی‌های سیستم طراحی. مستقیماً به یک دسته بپرید:
 
 | دسته | تعداد | محتویات |
 |---|---|---|
 | [`scenarios/`](plugins/_official/scenarios/) | 13 | سناریوهای طراحی کامل — [`od-default`](plugins/_official/scenarios/od-default/), [`od-design-refine`](plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](plugins/_official/scenarios/od-code-migration/), [`od-react-export`](plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](plugins/_official/scenarios/od-web-effect-extractor/) |
 | [`image-templates/`](plugins/_official/image-templates/) | 45 | پرامپت‌های تصویری یک‌ضربی — ویرایشی، سینمایی، محصول، پرتره |
 | [`video-templates/`](plugins/_official/video-templates/) | 63 | الگوهای موشن HyperFrames / Seedance / Veo |
-| [`design-systems/`](plugins/_official/design-systems/) | 143 | `DESIGN.md` برند بسته‌بندی شده به عنوان افزونه |
+| [`design-systems/`](plugins/_official/design-systems/) | 143 | `DESIGN.md` برند بسته‌بندی شده به‌عنوان افزونه |
 | [`atoms/`](plugins/_official/atoms/) | 13 | قطعات UI قابل استفاده مجدد (دکمه‌ها، hero ها، کارت‌های KPI) |
 | [`examples/`](plugins/_official/examples/) | 183 | خروجی‌های مرجع قابل ترکیب مجدد |
 
@@ -495,7 +495,7 @@ od skills list --json
 
 افزونه‌ها در تساوی کامل در **UI وب** و **`od` CLI** هستند — همان endpoint های `/api/plugins`، هر کدام که مناسب است را انتخاب کنید.
 
-**در برنامه دسکتاپ / وب:** صفحه **افزونه** را برای مرور بازار باز کنید و روی **نصب** کلیک کنید؛ درون استودیوی یک پروژه، افزونه‌ها به عنوان چیپ‌های نویسنده ظاهر می‌شوند که برای اعمال (با ورودی‌هایی که اعلام می‌کنند) روی آنها کلیک می‌کنید.
+**در برنامه دسکتاپ / وب:** صفحه **افزونه** را برای مرور بازار باز کنید و روی **نصب** کلیک کنید؛ درون استودیوی یک پروژه، افزونه‌ها به‌عنوان چیپ‌های نویسنده ظاهر می‌شوند که برای اعمال (با ورودی‌هایی که اعلام می‌کنند) روی آنها کلیک می‌کنید.
 
 **در خط فرمان** (بدون UI اجرا می‌شود — این مسیری است که agent های خارجی استفاده می‌کنند):
 
@@ -513,7 +513,7 @@ od plugin uninstall od-default       # حذف نصب
 
 ### ساخت یک افزونه
 
-یک افزونه OpenDesign نیاز به `open-design.json` به علاوه payload مورد نیاز نوع آن دارد. یک مهارت گردش کاری یا سناریو همچنین شامل `SKILL.md` است؛ ورودی‌های الگوی فقط-manifest و سیستم طراحی به جای آن از payload های خودشان استفاده می‌کنند:
+یک افزونه OpenDesign نیاز به `open-design.json` به‌علاوه payload مورد نیاز نوع آن دارد. یک مهارت گردش کاری یا سناریو همچنین شامل `SKILL.md` است؛ ورودی‌های الگوی فقط-manifest و سیستم طراحی به جای آن از payload های خودشان استفاده می‌کنند:
 
 ```
 my-plugin/
@@ -648,7 +648,7 @@ OpenDesign به حرکت ادامه می‌دهد زیرا مشارکت‌کنن
 | رفع باگ یا صیقل دادن UI | برچسب [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) را مرور کنید | [Issues →](https://github.com/nexu-io/open-design/issues) |
 | ترجمه اسناد | فایل‌های `README.<lang>.md` را به‌روزرسانی کنید | [`TRANSLATIONS.md`](TRANSLATIONS.md) |
 
-### 🤖 مشارکت به عنوان یک agent
+### 🤖 مشارکت به‌عنوان یک agent
 
 اگر *شما agent ای هستید که این را می‌خوانید*، سریع‌ترین مسیر این است:
 
@@ -757,10 +757,10 @@ SVG بالا هر روز توسط [`.github/workflows/metrics.yml`](.github/work
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | مهارت PPT وب به سبک مجله، بسته‌بندی شده دقیقاً در [`design-templates/guizang-ppt/`](design-templates/guizang-ppt/). پیش‌فرض برای حالت دک. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | خانواده HTML PPT Studio — 15 الگوی دک، 36 تم، 31 چینش صفحه، runtime انیمیشن، حالت ارائه‌دهنده کارت مغناطیسی. |
 | [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | اولین جایگزین متن‌باز Claude Design؛ الگوهای UX که قرض می‌گیریم (حلقه streaming-artifact، iframe ایمن، پنل agent زنده). |
-| [`multica-ai/multica`](https://github.com/multica-ai/multica) | معماری daemon + آداپتر — شناسایی agent اسکن PATH، daemon محلی به عنوان تنها فرآیند ممتاز. |
+| [`multica-ai/multica`](https://github.com/multica-ai/multica) | معماری daemon + آداپتر — شناسایی agent اسکن PATH، daemon محلی به‌عنوان تنها فرآیند ممتاز. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | منبع تاریخی اسکیمای 9 بخشی اصلی `DESIGN.md` و 70 سیستم مشتق شده upstream؛ بسته‌های فعلی ممکن است آن baseline را گسترش دهند. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | منبع 57 مهارت طراحی اضافه شده در `design-systems/`. |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | فریم‌ورک گرافیک‌موشن HTML→MP4، به عنوان `hyperframes-html` درجه یک در OpenDesign ادغام شده است. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | فریم‌ورک گرافیک‌موشن HTML→MP4، به‌عنوان `hyperframes-html` درجه یک در OpenDesign ادغام شده است. |
 | [Claude Code skills][skill] | قرارداد `SKILL.md` که دقیقاً اتخاذ می‌کنیم. |
 
 منشأ دقیق → [`docs/references.md`](docs/references.md).
