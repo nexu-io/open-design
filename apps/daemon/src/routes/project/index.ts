@@ -5443,10 +5443,41 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         .join(',');
       return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
     });
-    return next.replace(cssUrl, (match, quote: string, value: string) => {
-      const rewritten = rewrite(value);
-      return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
-    });
+
+    const rewriteCssUrls = (chunk: string): string =>
+      chunk.replace(cssUrl, (match, quote: string, value: string) => {
+        const rewritten = rewrite(value);
+        return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
+      });
+
+    // The attribute passes above run over the whole document, so a relative
+    // <script src> is still workspace-scoped. The cssUrl pass must not touch
+    // executable JavaScript, though: inline code legitimately contains
+    // `url(...)` substrings (for example `URL.revokeObjectURL(url)`), and
+    // rewriting them produces a syntax error that kills the script. Executable
+    // JS lives in three places: <script> bodies, `on*` event-handler attribute
+    // values, and `javascript:` URI attribute values. Preserve all three
+    // verbatim, covering the browser's valid syntax for each — including
+    // unquoted handler values and whitespace inside the script end tag; CSS
+    // `url(...)` references only appear in <style>, style=, and stylesheet
+    // markup, so skipping executable regions loses nothing.
+    const executableRegion = new RegExp(
+      [
+        '<script\\b[^>]*>[\\s\\S]*?</script\\s*>',
+        '\\son[a-z0-9_-]*\\s*=\\s*(?:"[^"]*"|\'[^\']*\'|[^\\s"\'`=<>]+)',
+        '(?:"javascript:[^"]*"|\'javascript:[^\']*\')',
+        'javascript:[^\\s"\'<>]*',
+      ].join('|'),
+      'gi',
+    );
+    let cssRewritten = '';
+    let cursor = 0;
+    let regionMatch: RegExpExecArray | null;
+    while ((regionMatch = executableRegion.exec(next)) !== null) {
+      cssRewritten += rewriteCssUrls(next.slice(cursor, regionMatch.index)) + regionMatch[0];
+      cursor = regionMatch.index + regionMatch[0].length;
+    }
+    return cssRewritten + rewriteCssUrls(next.slice(cursor));
   }
 
   async function maybeResolveVitePreviewHtml({

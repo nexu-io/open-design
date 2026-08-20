@@ -281,6 +281,89 @@ describe('project preview containment routes', () => {
     expect(borrowedTokenResponse.status).toBe(404);
   });
 
+  it('does not rewrite url(...) patterns inside <script> blocks', async () => {
+    const workspaceId = `workspace-${randomUUID()}`;
+    const workspaceMemberId = `member-${randomUUID()}`;
+    const projectId = await createProject({ entryFile: 'script.html' });
+    await writeProjectFile(
+      projectId,
+      'script.html',
+      [
+        '<!doctype html><html><head><title>Script</title>',
+        '<style>.hero { background-image: url("assets/hero.png") }</style>',
+        '</head><body>',
+        '<script src="scripts/app.js"></script>',
+        '<script>var u = URL.createObjectURL(new Blob(["x"])); URL.revokeObjectURL(u);</script>',
+        '<script>URL.revokeObjectURL(u2)</script >',
+        '</body></html>',
+      ].join(''),
+    );
+    await writeProjectFile(projectId, 'assets/hero.png', 'hero-png-bytes');
+    bindPersonalProject(projectId, workspaceId, workspaceMemberId);
+
+    const scopeQuery = new URLSearchParams({ workspaceId, workspaceMemberId });
+    const rawResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/script.html?${scopeQuery}`,
+    );
+    expect(rawResponse.status).toBe(200);
+    const html = await rawResponse.text();
+
+    // CSS url(...) references outside <script> are still workspace-scoped.
+    expect(html).toContain(`/api/projects/${projectId}/raw/assets/hero.png`);
+
+    // Relative external script sources are still workspace-scoped.
+    expect(html).toContain(`/api/projects/${projectId}/raw/scripts/app.js`);
+
+    // Executable JS that happens to contain url(...) is left untouched,
+    // including a script whose end tag carries whitespace before `>`.
+    expect(html).toContain('URL.revokeObjectURL(u)');
+    expect(html).toContain('URL.revokeObjectURL(u2)');
+    expect(html).not.toContain('revokeObjecturl(');
+  });
+
+  it('does not rewrite url(...) patterns in executable attribute values', async () => {
+    const workspaceId = `workspace-${randomUUID()}`;
+    const workspaceMemberId = `member-${randomUUID()}`;
+    const projectId = await createProject({ entryFile: 'attrs.html' });
+    await writeProjectFile(
+      projectId,
+      'attrs.html',
+      [
+        '<!doctype html><html><head><title>Attrs</title>',
+        '<style>.hero { background-image: url("assets/hero.png") }</style>',
+        '</head><body>',
+        '<button onclick="URL.revokeObjectURL(u)">revoke</button>',
+        '<button onclick=URL.revokeObjectURL(u2)>revoke-unquoted</button>',
+        '<a href="javascript:URL.revokeObjectURL(u)">jump</a>',
+        '<a href=javascript:URL.revokeObjectURL(u3)>jump-unquoted</a>',
+        '<script src="scripts/app.js"></script>',
+        '</body></html>',
+      ].join(''),
+    );
+    await writeProjectFile(projectId, 'assets/hero.png', 'hero-png-bytes');
+    bindPersonalProject(projectId, workspaceId, workspaceMemberId);
+
+    const scopeQuery = new URLSearchParams({ workspaceId, workspaceMemberId });
+    const rawResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/attrs.html?${scopeQuery}`,
+    );
+    expect(rawResponse.status).toBe(200);
+    const html = await rawResponse.text();
+
+    // CSS url(...) references and relative script sources are still
+    // workspace-scoped alongside the protected executable attributes.
+    expect(html).toContain(`/api/projects/${projectId}/raw/assets/hero.png`);
+    expect(html).toContain(`/api/projects/${projectId}/raw/scripts/app.js`);
+
+    // Event handlers and javascript: URIs stay byte-for-byte unchanged,
+    // whether quoted or unquoted.
+    expect(html).toContain('onclick="URL.revokeObjectURL(u)"');
+    expect(html).toContain('onclick=URL.revokeObjectURL(u2)');
+    expect(html).toContain('href="javascript:URL.revokeObjectURL(u)"');
+    expect(html).toContain('href=javascript:URL.revokeObjectURL(u3)');
+    expect(html).not.toContain('revokeObjecturl(');
+  });
+
   it('serves minted preview HTML and assets without bearer headers when API token auth is enabled', async () => {
     const previousToken = process.env.OD_API_TOKEN;
     const token = `preview-token-${randomUUID()}`;
