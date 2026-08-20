@@ -8,7 +8,10 @@ import {
   buildVersionDiagnostic,
 } from '../../src/runtimes/diagnostics.js';
 import type { RuntimeAgentDef } from '../../src/runtimes/types.js';
-import { parseDeepSeekHarnessVersion } from '../../src/runtimes/defs/deepseek-harness.js';
+import {
+  deepseekHarnessAgentDef,
+  parseDeepSeekHarnessVersion,
+} from '../../src/runtimes/defs/deepseek-harness.js';
 
 const versionedDef: RuntimeAgentDef = {
   id: 'deepseek-harness',
@@ -65,6 +68,10 @@ function writeProfileBin(dir: string, compatible: boolean): string {
 }
 
 describe('runtime version policy', () => {
+  it('accepts the published DeepSeek Harness rc.7 release', () => {
+    expect(deepseekHarnessAgentDef.versionPolicy?.supportedVersions).toContain('0.1.0-rc.7');
+  });
+
   it.each([
     ['0.1.0-rc.6', true, undefined],
     ['0.1.0-rc.7', true, 'untested-version'],
