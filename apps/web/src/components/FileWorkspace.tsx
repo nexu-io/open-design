@@ -49,6 +49,7 @@ import {
 } from '../providers/registry';
 import type { Dict } from '../i18n/types';
 import { STAGE_ATTACHMENT_EVENT, type StageAttachmentEventDetail } from './ChatComposer';
+import { TabLabel } from './workspaceTabLabel';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import { navigate, registerNavigationGuard } from '../router';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
@@ -4027,7 +4028,10 @@ export function FileWorkspace({
               );
               label = conv?.title?.trim() || t('workspace.sideChatDefaultTitle');
             } else {
-              label = `${liveArtifact?.title ?? name}${dirtyMark}`;
+              // Bare label; dirtyMark rides its own prop so `foo.sketch.json`
+              // still splits into stem + `.json` even when the tab is dirty
+              // (`${label} •` would defeat the extension regex).
+              label = liveArtifact?.title ?? name;
             }
             const iconNameOverride: IconName | undefined = isTerminal
               ? 'terminal'
@@ -4047,6 +4051,8 @@ export function FileWorkspace({
               <Tab
                 key={name}
                 label={label}
+                dirtyMark={dirtyMark || undefined}
+                plainLabel={isTerminal || isSideChat}
                 iconNameOverride={iconNameOverride}
                 syncBadge={tabSyncBadge}
                 active={activeTab === name}
@@ -8341,6 +8347,8 @@ interface WorkspaceTabItemHandlers {
 // individual tab only changes when its own label/active/drag props do.
 const Tab = memo(function Tab({
   label,
+  dirtyMark,
+  plainLabel = false,
   meta,
   title,
   active,
@@ -8361,6 +8369,18 @@ const Tab = memo(function Tab({
   onDragEnd,
 }: {
   label: string;
+  /** Trailing dirty-state modifier (e.g. ` •`) rendered as its own pinned
+   *  span after the extension so extension detection works on the bare
+   *  filename. */
+  dirtyMark?: string;
+  /** Force the plain-text label branch (no stem/ext/dirty split). Set
+   *  for tabs whose label is user-arbitrary text rather than a real
+   *  filename: terminal tabs, side-chat conversation titles, and any
+   *  other non-file surface. Prevents `Review.Notes` from splitting into
+   *  `Review` + pinned `.Notes` and prevents the raised 240px cap from
+   *  applying to those tabs. Browser tabs are also plain but they route
+   *  through the `kind === 'browser'` branch below. */
+  plainLabel?: boolean;
   meta?: string;
   title?: string;
   active: boolean;
@@ -8391,7 +8411,8 @@ const Tab = memo(function Tab({
       : t('workspace.fileSyncUploading')
     : null;
   const tabTitle = title ?? (meta ? `${label} ${meta}` : label);
-  const tabTooltip = syncBadgeLabel ? `${tabTitle} · ${syncBadgeLabel}` : tabTitle;
+  const tooltipBase = dirtyMark ? `${tabTitle}${dirtyMark}` : tabTitle;
+  const tabTooltip = syncBadgeLabel ? `${tooltipBase} · ${syncBadgeLabel}` : tooltipBase;
   return (
     <div
       className={[
@@ -8435,7 +8456,17 @@ const Tab = memo(function Tab({
         </span>
       ) : null}
       <span className="ws-tab-text">
-        <span className="ws-tab-label">{label}</span>
+        {/* Browser tabs carry URLs (`example.com`) whose trailing token
+            reads as a file extension by pure shape. Non-file tabs
+            (terminal, side-chat) carry user-arbitrary text that may
+            happen to contain a dot. Both bypass the split so only real
+            file / live-artifact labels get the extension pinning and
+            the raised 240px cap. */}
+        {kind === 'browser' || plainLabel ? (
+          <span className="ws-tab-label">{label}</span>
+        ) : (
+          <TabLabel title={label} dirtyMark={dirtyMark} />
+        )}
         {meta ? <span className="ws-tab-meta">{meta}</span> : null}
       </span>
       {liveArtifact ? (

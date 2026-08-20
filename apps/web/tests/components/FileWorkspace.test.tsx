@@ -2571,6 +2571,60 @@ describe('FileWorkspace launcher tab creation', () => {
     ]);
   });
 
+  it('renders side-chat and terminal tabs with a plain label (no file-extension split)', () => {
+    // Terminal and side-chat tabs carry user-arbitrary text, not real
+    // filenames, so they must bypass the stem/ext split. A side-chat
+    // title such as `Review.Notes` would otherwise render `.Notes` as a
+    // pinned extension and pick up the 240px file-tab cap; regressing
+    // both the pill's visual width and the semantics of the label.
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['index.html', 'terminal:term-1', 'chat:conversation-1'],
+          active: 'index.html',
+        }}
+        conversations={[
+          {
+            id: 'conversation-1',
+            projectId: 'project-1',
+            title: 'Review.Notes',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ]}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const tabs = Array.from(document.querySelectorAll<HTMLElement>('.ws-tabs-bar .ws-tab'));
+    const bar = tabs.find((tab) => (tab.textContent ?? '').includes('Review.Notes'));
+    const term = tabs.find((tab) => (tab.textContent ?? '').includes('New Terminal'));
+    const file = tabs.find((tab) => (tab.textContent ?? '').includes('index.html'));
+    expect(bar, 'side-chat tab missing').toBeTruthy();
+    expect(term, 'terminal tab missing').toBeTruthy();
+    expect(file, 'file tab missing').toBeTruthy();
+
+    // Side-chat: title is `Review.Notes`; must NOT split into stem/ext,
+    // must render as a single plain `.ws-tab-label` text node.
+    expect(bar!.querySelector('.ws-tab-label-stem'), 'side-chat label split into stem span').toBeNull();
+    expect(bar!.querySelector('.ws-tab-label-ext'), 'side-chat picked up extension span').toBeNull();
+    expect(bar!.querySelector('.ws-tab-label')?.textContent).toBe('Review.Notes');
+
+    // Terminal: label is friendly text; same plain-shape invariant.
+    expect(term!.querySelector('.ws-tab-label-stem'), 'terminal label split into stem span').toBeNull();
+    expect(term!.querySelector('.ws-tab-label-ext'), 'terminal picked up extension span').toBeNull();
+
+    // Sanity: the file tab DOES split (this is the fix's intended path).
+    expect(file!.querySelector('.ws-tab-label-stem'), 'file tab lost its stem span').toBeTruthy();
+    expect(file!.querySelector('.ws-tab-label-ext')?.textContent).toBe('.html');
+  });
+
   it('shows project sync progress on the Design Files root tab without hiding materialized files', () => {
     render(
       <FileWorkspace
