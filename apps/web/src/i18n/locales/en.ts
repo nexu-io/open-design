@@ -2083,7 +2083,6 @@ export const en: Dict = {
   'inlineSwitcher.openFullSettings': 'Open execution settings',
   'inlineSwitcher.customSuffix': '(custom)',
   'inlineSwitcher.unlimitedBadge': 'Unlimited',
-  'inlineSwitcher.unlimitedTooltip': 'Your plan includes unlimited use of this model — these calls do not spend wallet credits.',
   'project.backToProjects': 'Back to projects',
   'project.brandReadyTitle': '{name} design system is ready',
   'project.brandReadyTitleGeneric': 'Your design system is ready',

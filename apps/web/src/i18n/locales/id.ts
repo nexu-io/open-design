@@ -2083,7 +2083,6 @@ export const id: Dict = {
   'inlineSwitcher.openFullSettings': 'Buka pengaturan eksekusi',
   'inlineSwitcher.customSuffix': '(kustom)',
   'inlineSwitcher.unlimitedBadge': 'Tanpa batas',
-  'inlineSwitcher.unlimitedTooltip': 'Paket Anda mencakup penggunaan model ini tanpa batas — panggilan ini tidak mengurangi saldo.',
   'project.backToProjects': 'Kembali ke proyek',
   'project.brandReadyTitle': 'Sistem desain {name} sudah siap',
   'project.brandReadyTitleGeneric': 'Sistem desain Anda sudah siap',

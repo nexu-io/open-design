@@ -2083,7 +2083,6 @@ export const ar: Dict = {
   'inlineSwitcher.openFullSettings': 'فتح إعدادات التنفيذ',
   'inlineSwitcher.customSuffix': '(مخصص)',
   'inlineSwitcher.unlimitedBadge': 'غير محدود',
-  'inlineSwitcher.unlimitedTooltip': 'تتضمن خطتك استخدامًا غير محدود لهذا النموذج — هذه الطلبات لا تستهلك رصيدك.',
   'project.backToProjects': 'العودة للمشاريع',
   'project.brandReadyTitle': 'نظام تصميم {name} جاهز',
   'project.brandReadyTitleGeneric': 'نظام التصميم جاهز',

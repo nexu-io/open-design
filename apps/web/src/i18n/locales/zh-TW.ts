@@ -2187,7 +2187,6 @@ export const zhTW: Dict = {
   "inlineSwitcher.openFullSettings": "開啟執行設定",
   "inlineSwitcher.customSuffix": "（自訂）",
   "inlineSwitcher.unlimitedBadge": "無限使用",
-  "inlineSwitcher.unlimitedTooltip": "目前方案包含此模型的無限使用，呼叫不會消耗餘額。",
   "project.backToProjects": "返回專案列表",
   "project.brandReadyTitle": "{name} 設計體系已就緒",
   "project.brandReadyTitleGeneric": "你的設計體系已就緒",

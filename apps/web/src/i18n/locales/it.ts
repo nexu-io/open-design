@@ -2083,7 +2083,6 @@ export const it: Dict = {
   'inlineSwitcher.openFullSettings': 'Apri impostazioni di esecuzione',
   'inlineSwitcher.customSuffix': '(personalizzato)',
   'inlineSwitcher.unlimitedBadge': 'Illimitato',
-  'inlineSwitcher.unlimitedTooltip': 'Il tuo piano include l’uso illimitato di questo modello: queste chiamate non consumano il saldo.',
   'project.backToProjects': 'Torna ai progetti',
   'project.brandReadyTitle': 'Il design system {name} è pronto',
   'project.brandReadyTitleGeneric': 'Il tuo design system è pronto',

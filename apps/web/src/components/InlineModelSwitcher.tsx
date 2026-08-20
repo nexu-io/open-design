@@ -762,7 +762,7 @@ export function InlineModelSwitcher({
   const unlimitedBadgeForModel = useCallback(
     (
       modelId: string | null | undefined,
-    ): { label: string; tooltip: string; stateClass: string } | null => {
+    ): { label: string; tooltip: string | null; stateClass: string } | null => {
       // Same guard the campaign uses: in BYOK mode the visible model is billed
       // by the user's own provider, and the dormant AMR selection must not
       // leak an entitlement claim onto it.
@@ -778,9 +778,12 @@ export function InlineModelSwitcher({
         };
       }
       if (!isUnlimitedModelForPlanTier(modelId, planTier)) return null;
+      // Badge text only — the campaign's rule-summary tooltip is campaign copy
+      // and there is no product-written line for the plan case, so this branch
+      // carries no tooltip rather than an invented one.
       return {
         label: t('inlineSwitcher.unlimitedBadge'),
-        tooltip: t('inlineSwitcher.unlimitedTooltip'),
+        tooltip: null,
         stateClass: '',
       };
     },
@@ -1239,10 +1242,14 @@ export function InlineModelSwitcher({
             <span className="inline-switcher__chip-model-name">{chipModel}</span>
             {chipUnlimitedBadge ? (
               <span
-                className={`inline-switcher__campaign-badge od-tooltip${chipUnlimitedBadge.stateClass}`}
-                data-tooltip={chipUnlimitedBadge.tooltip}
-                data-tooltip-placement="top"
-                aria-label={chipUnlimitedBadge.tooltip}
+                className={
+                  'inline-switcher__campaign-badge'
+                  + (chipUnlimitedBadge.tooltip ? ' od-tooltip' : '')
+                  + chipUnlimitedBadge.stateClass
+                }
+                data-tooltip={chipUnlimitedBadge.tooltip ?? undefined}
+                data-tooltip-placement={chipUnlimitedBadge.tooltip ? 'top' : undefined}
+                aria-label={chipUnlimitedBadge.tooltip ?? undefined}
                 data-testid="inline-model-switcher-chip-unlimited-badge"
               >
                 {chipUnlimitedBadge.label}
@@ -1528,10 +1535,14 @@ export function InlineModelSwitcher({
                           </span>
                           {unlimitedBadge ? (
                             <span
-                              className={`inline-switcher__campaign-badge od-tooltip${unlimitedBadge.stateClass}`}
-                              data-tooltip={unlimitedBadge.tooltip}
-                              data-tooltip-placement="top"
-                              aria-label={unlimitedBadge.tooltip}
+                              className={
+                                'inline-switcher__campaign-badge'
+                                + (unlimitedBadge.tooltip ? ' od-tooltip' : '')
+                                + unlimitedBadge.stateClass
+                              }
+                              data-tooltip={unlimitedBadge.tooltip ?? undefined}
+                              data-tooltip-placement={unlimitedBadge.tooltip ? 'top' : undefined}
+                              aria-label={unlimitedBadge.tooltip ?? undefined}
                               data-testid={`inline-model-switcher-unlimited-badge-${m.id}`}
                             >
                               {unlimitedBadge.label}

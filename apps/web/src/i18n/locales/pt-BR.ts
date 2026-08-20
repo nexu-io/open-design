@@ -2083,7 +2083,6 @@ export const ptBR: Dict = {
   'inlineSwitcher.openFullSettings': 'Abrir configurações de execução',
   'inlineSwitcher.customSuffix': '(personalizado)',
   'inlineSwitcher.unlimitedBadge': 'Ilimitado',
-  'inlineSwitcher.unlimitedTooltip': 'Seu plano inclui o uso ilimitado deste modelo — essas chamadas não consomem saldo.',
   'project.backToProjects': 'Voltar aos projetos',
   'project.brandReadyTitle': 'O design system {name} está pronto',
   'project.brandReadyTitleGeneric': 'Seu design system está pronto',
