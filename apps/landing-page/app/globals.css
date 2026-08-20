@@ -5728,6 +5728,9 @@ footer .container {
 }
 .foot-social a:hover { color: var(--ink, #262626); }
 .foot-locale {
+  /* Right-aligned next to the social icons (pushes off the legal text). */
+  margin-left: auto;
+  margin-right: 12px;
   font-family: var(--sans);
   font-size: 13px;
   color: var(--ink-soft, #595959);
@@ -5751,8 +5754,8 @@ footer .container {
 .foot-locale .locale-menu {
   top: auto;
   bottom: calc(100% + 10px);
-  right: auto;
-  left: 0;
+  right: 0;
+  left: auto;
   animation: none;
 }
 .foot-locale .locale-menu::before {
