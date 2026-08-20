@@ -617,7 +617,7 @@ body::before {
      edge stays pinned while the right pulls in — reads as a left-to-right
      collapse. */
   margin-inline: auto;
-  padding: 14px 0;
+  padding: 22px 0;
   background: transparent;
   border-bottom: 1px solid transparent;
   transition:
@@ -648,33 +648,34 @@ body::before {
  * vertical padding for the condensed feel.
  */
 .site-chrome.is-condensed .nav {
-  /* Full-bleed, flush to the top, transparent ground: a soft backdrop blur
-     keeps the links legible over content, with a hairline bottom rule
-     instead of a floating capsule. */
-  margin: 0 auto;
-  width: 100%;
-  padding: 10px 0;
-  border-radius: 0;
-  border: 0;
-  border-bottom: 1px solid rgba(21, 20, 15, 0.08);
-  background: hsl(0 0% 100% / 0.55);
-  -webkit-backdrop-filter: blur(14px) saturate(1.3);
-  backdrop-filter: blur(14px) saturate(1.3);
-  box-shadow: none;
+  /* Detaches from the edges into a centered floating capsule: a gap from
+     the top, side margins, and fully rounded ends. 1280px (not 1080px) so
+     the longest translated nav rows (ja/ru/uk) still hold a single line —
+     the row must never wrap into a second line over the hero. */
+  margin: 14px auto 0;
+  width: min(1280px, calc(100% - 32px));
+  padding: 9px 0;
+  border-radius: 999px;
+  border: 1px solid rgba(21, 20, 15, 0.08);
+  background: hsl(0 0% 100% / 0.42);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: url(#nav-liquid-glass) blur(7px) saturate(1.4);
+  box-shadow:
+    inset 0 0 2px 1px rgba(255, 255, 255, 0.55),
+    inset 0 0 10px 4px rgba(255, 255, 255, 0.22),
+    0 6px 24px rgba(17, 17, 26, 0.06),
+    0 12px 40px rgba(17, 17, 26, 0.05);
 }
 /* The inner gutter eases in lockstep with the capsule width. */
 .nav > .container {
-  /* Edge-to-edge bar: brand flush left, actions flush right, with a fixed
-     side gutter instead of the centred 1280px content column. */
-  max-width: none;
-  padding: 0 32px;
   transition: padding 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 /* Tighten the inner container padding inside the capsule (the full 64px
    container gutter would over-inset the brand / links / actions). */
 .site-chrome.is-condensed .nav > .container {
   max-width: none;
-  padding: 0 32px;
+  padding: 0 28px;
 }
 .nav-inner {
   display: flex;
@@ -1940,15 +1941,15 @@ a.nav-mega-col-head.is-active {
 .hero-community-cta {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  height: 64px;
-  padding: 0 26px;
+  gap: 9px;
+  height: 52px;
+  padding: 0 20px;
   border: 1px solid rgba(26, 26, 26, 0.18);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.86);
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 650;
   text-decoration: none;
   white-space: nowrap;
@@ -1972,14 +1973,14 @@ a.nav-mega-col-head.is-active {
   stroke-linejoin: round;
 }
 .hero-community-icon path:last-child { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-.hero-community-icon-feishu { width: 24px; height: auto; flex-basis: 24px; }
+.hero-community-icon-feishu { width: 22px; height: auto; flex-basis: 22px; }
 .hero-community-perk {
   margin-left: 2px;
-  padding: 3px 9px;
+  padding: 3px 8px;
   border-radius: 999px;
   background: var(--coral);
   color: #0d2601;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: 0.01em;
@@ -2058,7 +2059,7 @@ a.nav-mega-col-head.is-active {
 .hero-community-qr-img { display: block; width: 168px; height: 168px; border-radius: 8px; }
 @media (max-width: 640px) {
   .hero-actions { flex-wrap: wrap; }
-  .hero-community-cta { height: 52px; padding: 0 20px; font-size: 14px; }
+  .hero-community-cta { height: 46px; padding: 0 16px; font-size: 14px; }
 }
 .hero-download-attention {
   position: relative;
@@ -7128,16 +7129,6 @@ footer .container {
 }
 .hm-dl:hover .hm-di { transform: translateY(2px); }
 .hm-dl:active { transform: translateY(-1px) scale(0.99); }
-.hm-dl::after {
-  content: '';
-  position: absolute;
-  right: 10px;
-  top: 10px;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #ff3b30;
-}
 .hm-dl .hm-sheen { display: none; }
 .hm-dl-hero { animation: hm-dl-breathe 2.8s ease-in-out infinite; }
 .hm-dl-hero:hover { animation-play-state: paused; }

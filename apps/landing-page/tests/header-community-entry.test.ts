@@ -46,10 +46,10 @@ test('Discord / Feishu no longer duplicate inside the Community dropdown', () =>
   assert.doesNotMatch(en, /<span class="dropdown-name">Feishu<\/span>/);
 });
 
-test('condensed header is a full-bleed flush-top bar, not a floating capsule', () => {
+test('condensed header keeps the floating capsule treatment', () => {
   assert.match(
     stylesSource,
-    /\.site-chrome\.is-condensed \.nav\s*\{[^}]*margin:\s*0 auto;[^}]*width:\s*100%;[^}]*border-radius:\s*0;/s,
+    /\.site-chrome\.is-condensed \.nav\s*\{[^}]*margin:\s*14px auto 0;[^}]*border-radius:\s*999px;/s,
   );
 });
 
