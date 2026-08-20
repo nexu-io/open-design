@@ -14,6 +14,7 @@ import {
   type UserDesignSystemInput,
   updateUserDesignSystemRevisionStatus,
 } from '../../src/design-systems/index.js';
+import { teamResourceWorkspaceRoot } from '../../src/collab/team-resource-materialization.js';
 
 describe('design system generation jobs', () => {
   let root: string;
@@ -189,6 +190,36 @@ describe('design system generation jobs', () => {
     expect(acceptedBody).toContain('## Revision Request: Visual Foundations');
   });
 
+  it('runs a Team revision against the exact materialized root without touching same-id Personal', async () => {
+    const teamRoot = teamResourceWorkspaceRoot(root, 'team-a');
+    const personal = await createUserDesignSystem(root, {
+      title: 'Same ID',
+      summary: 'Personal canonical.',
+      status: 'draft',
+    });
+    const team = await createUserDesignSystem(teamRoot, {
+      title: 'Same ID',
+      summary: 'Team materialization.',
+      status: 'published',
+    });
+    expect(team.id).toBe(personal.id);
+    const store = createDesignSystemGenerationJobStore({
+      root,
+      delayMs: 0,
+      idFactory: () => 'team-revision',
+    });
+
+    store.revise({
+      root: teamRoot,
+      designSystemId: team.id,
+      feedback: 'Team-only revision.',
+    });
+    expect((await waitForJob(store, 'team-revision')).status).toBe('succeeded');
+
+    expect(await listUserDesignSystemRevisions(teamRoot, team.id)).toHaveLength(1);
+    expect(await listUserDesignSystemRevisions(root, personal.id)).toHaveLength(0);
+  });
+
   it('creates a review-gated token contract rebuild revision with file changes', async () => {
     const store = createDesignSystemGenerationJobStore({
       root,
@@ -259,6 +290,46 @@ describe('design system generation jobs', () => {
     expect(accepted?.status).toBe('accepted');
     await expect(readFile(path.join(root, 'token-product', 'source', 'token-contract.rebuild-request.md'), 'utf8'))
       .resolves.toContain('Token Contract Rebuild Request');
+  });
+
+  it('stores a Team token rebuild only under the exact materialized root', async () => {
+    const teamRoot = teamResourceWorkspaceRoot(root, 'team-a');
+    const personal = await createUserDesignSystem(root, {
+      title: 'Same ID',
+      summary: 'Personal canonical.',
+      status: 'draft',
+    });
+    const team = await createUserDesignSystem(teamRoot, {
+      title: 'Same ID',
+      summary: 'Team materialization.',
+      status: 'published',
+    });
+    const store = createDesignSystemGenerationJobStore({
+      root,
+      delayMs: 0,
+      idFactory: () => 'team-token-rebuild',
+    });
+
+    store.rebuildTokenContract({
+      root: teamRoot,
+      designSystemId: team.id,
+      decision: {
+        designSystemId: team.id,
+        available: true,
+        recommended: true,
+        forced: false,
+        reason: 'Token contract rebuild recommended.',
+        triggers: ['quality report recommends rebuild'],
+      },
+      feedback: 'Team-only token rebuild.',
+      sectionTitle: 'Token Contract',
+      baseBody: team.body,
+      proposedBody: `${team.body}\n\n## Team token review\n`,
+    });
+    expect((await waitForJob(store, 'team-token-rebuild')).status).toBe('succeeded');
+
+    expect(await listUserDesignSystemRevisions(teamRoot, team.id)).toHaveLength(1);
+    expect(await listUserDesignSystemRevisions(root, personal.id)).toHaveLength(0);
   });
 });
 

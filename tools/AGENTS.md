@@ -14,7 +14,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 ## Retired tools
 
-- `tools/pr` / `@open-design/tools-pr` / `pnpm tools-pr` has been retired from this repository. Maintainer PR-duty workflows now live outside the product workspace in `PerishCode/duty`; do not restore an Open Design-local PR-duty tool without a new explicit maintainer decision.
+- `tools/pr` / `@open-design/tools-pr` / `pnpm tools-pr` has been retired from this repository. Maintainer PR-duty workflows now live outside the product workspace in `PerishCode/duty`; do not restore an OpenDesign-local PR-duty tool without a new explicit maintainer decision.
 
 ## Packaging scope
 

@@ -11,7 +11,11 @@
 // first-class. Existing v2 events remain queryable; v3 producers add only the
 // bounded source fields below and never treat self-reported plugin metadata as
 // an authorization or billing signal.
-export const EVENT_SCHEMA_VERSION = 3;
+// v4 (2026-08-04): run_created/run_finished add stable task lineage and
+// domain-grouped payloads while dual-writing the selected v2/v3 flat aliases.
+// Older app versions keep sending their original schema version; historical
+// events are not rewritten.
+export const EVENT_SCHEMA_VERSION = 4;
 
 export type AnalyticsClientType = 'web' | 'desktop' | 'external_mcp';
 export type AnalyticsEntrySurface =

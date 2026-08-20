@@ -2,9 +2,35 @@
    Home view — vertical stack inside the entry main scroll
    ============================================================ */
 .home-view {
+  position: relative;
+  /* Contain the kinetic-grid canvas (z-index -1): a local stacking context
+     keeps it above the wash but under every home surface. */
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 12px;
+  /* Size container so the preset strip inside the 960px hero column can
+     measure the full home column (100cqw) and match the recent-projects
+     width exactly — see .home-hero__plugin-presets-wrap. */
+  container-type: inline-size;
+}
+/* Empty workspace: no recent projects rendered below, so the hero column
+   centers vertically in the scroll viewport instead of hugging the top. */
+.home-view--centered {
+  min-height: 100%;
+  justify-content: center;
+}
+/* `.home-hero`'s own fixed top padding (below) is tuned for the OTHER
+   variant — hugging the top of the scroll column so a specific reference
+   window's fold lines up with the recent-projects grid. `.home-view--centered`
+   has no recent-projects grid to align to; it vertically centers the whole
+   column instead via the `justify-content: center` above. Stacking that fixed
+   padding on top of the centering pushed the logo/title well below the
+   viewport's true center, reading as an oversized blank band above it. Drop
+   it back to match the bottom padding so the hero's own box is symmetric and
+   the flex centering does all of the vertical balancing. */
+.home-view--centered .home-hero {
+  padding-top: var(--spacing-4);
 }
 /* The hero block self-constrains to a readable column even though
    its parent now stretches to ~1440px so the plugin gallery can
@@ -14,6 +40,11 @@
   width: 100%;
   max-width: 960px;
 }
+/* Give "最近项目" a clearer break from the composer above — the 12px flex
+   gap alone read as too tight against the hero. */
+.home-view > .recent-projects {
+  margin-top: var(--spacing-52);
+}
 
 /* Hero — large centered prompt input */
 .home-hero {
@@ -21,8 +52,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  padding: 32px 0 8px;
+  gap: var(--spacing-6);
+  /* Trim the large blank band while keeping the hero clear of the tab strip.
+     96px lands the composer card ~300px below the scroll column's top (the
+     logo + type carousel above it add ~204px) — per product: 输入框整块上移，
+     顶距从 446 收到 300。 */
+  padding: 96px 0 var(--spacing-4);
 }
 .home-hero__brand {
   position: relative;
@@ -48,11 +83,47 @@
   font-size: 16px;
   color: var(--text-strong);
 }
+.home-hero__logo-wrap {
+  position: relative;
+  display: block;
+  /* Sized against the pixel-scan wordmark (was 201.6px for the static-image
+     build — read as undersized once the full mark+wordmark artwork landed). */
+  width: min(260px, 65vw);
+  /* Logo → composer gap = 24px total: this 18px + the hero's 6px flex gap. */
+  margin-bottom: var(--spacing-18);
+}
+.home-hero__logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* Tile-field wordmark: a sized, relative host the canvas engine measures and
+   overlays. Keeps the original logo's footprint (same 1705:291 aspect as
+   logo-03.svg) so the composer below doesn't shift. */
+.home-hero__logo--tiles {
+  position: relative;
+  aspect-ratio: 1705 / 291;
+}
+.home-hero__logo--tiles > canvas {
+  position: absolute;
+  inset: 0;
+  /* Canvas is a replaced element: inset alone does NOT stretch it (it keeps
+     its intrinsic drawing-buffer size), so pin the CSS box explicitly. */
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
 .home-hero__title {
-  margin: 0;
+  /* Extra bottom margin widens just the title → input-card gap (adds to the
+     6px flex gap → ~26px total) without touching the logo → title spacing. */
+  margin: 0 0 var(--spacing-20);
   font-family: var(--serif);
   font-weight: 600;
-  font-size: 40px;
+  font-size: 28.8px;
+  line-height: 1.24;
   letter-spacing: -0.02em;
   color: var(--text-strong);
   text-align: center;
@@ -60,14 +131,14 @@
 .home-hero__subtitle {
   margin: 0;
   color: var(--text-muted);
-  font-size: 13.5px;
+  font-size: 13px;
   text-align: center;
   max-width: 540px;
   line-height: 1.55;
 }
 .home-hero__subtitle kbd {
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   padding: 1px 5px;
   border: 1px solid var(--border);
   border-radius: 3px;
@@ -104,8 +175,8 @@
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
   color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 580;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.3;
   letter-spacing: 0;
   box-shadow: var(--shadow-xs);
@@ -280,7 +351,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 540;
+  font-weight: 500;
   line-height: 1.3;
   cursor: pointer;
   transition:
@@ -359,7 +430,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
   text-align: left;
@@ -400,22 +471,68 @@
   white-space: nowrap;
 }
 
+/* Base card grouping the composer input + the design-system / working-dir row.
+   Use the same subtle selected surface as the left rail so the grouping reads
+   without becoming a separate heavy panel. */
+.home-hero__composer-card {
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 820px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+  padding: var(--spacing-4) var(--spacing-4) var(--spacing-8);
+  /* White grouping tray at 60% opacity (was the solid --bg-subtle gray) so the
+     footer reads as a soft translucent surface over the page wash. */
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  transition: background-color var(--duration-faster, 100ms) var(--curve-easy-ease, ease);
+  /* Borderless: the tinted surface alone provides the grouping; the inner
+     input card keeps the only stroke. */
+  border: none;
+  /* Rounder, and concentric with the inner input card: outer radius = inner
+     radius (16px) + the 4px gap (this card's side padding), so the two corners
+     run parallel and read as consistent. */
+  border-radius: 20px;
+}
+/* While the composer is engaged (input focused) the grouping surface steps
+   one level heavier on the neutral ladder so the active state reads. */
+.home-hero__composer-card:focus-within {
+  /* Engaged state: same white tray, a touch more opaque so the active step
+     still reads without reverting to gray. */
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+.home-hero__composer-card .home-hero__input-card,
+.home-hero__composer-card .home-hero__workdir-row {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
 .home-hero__input-card {
   position: relative;
   --home-hero-prompt-max-height: 180px;
   z-index: 2;
   width: 100%;
   max-width: 720px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  /* Inner prompt surface stays white; the outer composer card provides the
+     subtle selected-gray grouping. */
+  background: var(--bg-app);
+  /* Stroke only appears once the user engages the field (focus-within
+     below); idle state stays borderless. */
+  border: var(--stroke-thin) solid transparent;
+  /* Concentric with the outer composer card (20px) minus its 4px inset. */
+  border-radius: 16px;
   box-shadow: none;
-  padding: 14px 14px 10px;
+  padding: var(--spacing-8);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--spacing-8);
   margin-top: 0;
-  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+  transition:
+    border-color var(--duration-faster) var(--curve-easy-ease),
+    box-shadow var(--duration-faster) var(--curve-easy-ease);
 }
 /* While one of the composer's popovers is open, the whole card (a stacking
    context) is lifted so the popover escapes above the static home content
@@ -428,18 +545,26 @@
    920). Popover z-indexes inside the card (1503/1701/…) are local to the
    card's stacking context and only order its own children. */
 .home-hero__input-card:has(.inline-switcher__popover),
-.home-hero__input-card:has(.session-mode-toggle__popover),
-.home-hero__input-card:has(.home-hero__plugin-picker),
-.home-hero__input-card:has(.home-hero__template-menu) {
+.home-hero__input-card:has(.home-hero__plugin-picker) {
   z-index: 9;
   overflow: visible;
 }
+/* The input-card's z:1700 only wins INSIDE the composer-card's stacking
+   context (composer-card is z:2). The example-prompts rail is a later sibling
+   whose scroll-edge fades are also z:2, so by DOM order they paint over the
+   whole composer-card subtree — including an open popover. Lift the
+   composer-card itself while a composer popover is open so its trapped popover
+   clears the rail fades instead of the white gradient floating over it. */
+.home-hero__composer-card:has(.inline-switcher__popover),
+.home-hero__composer-card:has(.home-hero__plugin-picker) {
+  z-index: 40;
+}
 .home-hero__input-card--compact-authoring {
   max-width: 640px;
-  padding-block: 12px 10px;
+  padding: var(--spacing-8);
 }
 .home-hero__input-card:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-color: var(--border-strong);
   box-shadow: none;
 }
 .home-hero__input-card.is-drag-active {
@@ -449,26 +574,26 @@
 .home-hero__active {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: var(--spacing-8);
   align-items: center;
   max-height: min(82px, 18vh);
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 2px;
-  font-size: 11.5px;
+  padding: 0;
+  font-size: 12px;
 }
 .home-hero__active-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--spacing-8);
   min-width: 0;
   max-width: min(240px, 100%);
-  min-height: 24px;
-  padding: 2px 5px 2px 3px;
+  min-height: var(--spacing-36);
+  padding: 0 var(--spacing-12);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-panel) 86%, var(--accent-tint));
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border-soft));
-  color: color-mix(in srgb, var(--accent) 78%, var(--text));
+  background: transparent;
+  border: var(--stroke-thin) solid var(--border);
+  color: var(--text);
   line-height: 1;
   box-shadow: none;
 }
@@ -476,13 +601,26 @@
   background: color-mix(in srgb, var(--bg-subtle) 88%, var(--accent-tint));
   color: var(--text-strong);
 }
+.home-hero__active-chip--command {
+  background: color-mix(in srgb, var(--green, #16a34a) 10%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--green, #16a34a) 22%, var(--border-soft));
+  color: color-mix(in srgb, var(--green, #16a34a) 78%, var(--text-strong));
+}
 .home-hero__active-chip--context {
-  background: color-mix(in srgb, var(--bg-panel) 90%, var(--bg-subtle));
+  background: transparent;
   color: var(--text);
-  border-color: var(--border-soft);
+  border-color: var(--border);
 }
 .home-hero__active-chip--file {
-  background: color-mix(in srgb, var(--bg-panel) 92%, var(--accent-tint));
+  background: transparent;
+}
+.home-hero__active-chip--image-file {
+  gap: var(--spacing-6);
+  min-height: 44px;
+  padding: var(--spacing-4) var(--spacing-6) var(--spacing-4) var(--spacing-4);
+  border-radius: var(--radius-large);
+  background: var(--bg-panel);
+  color: var(--text);
 }
 .home-hero__active-file-group {
   display: contents;
@@ -497,8 +635,8 @@
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--text) 7%, var(--bg-subtle));
   color: var(--text-muted);
-  font-size: 9px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
 }
 .home-hero__active-label {
@@ -511,7 +649,7 @@
 .home-hero__active-meta {
   flex: 0 0 auto;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 18px;
 }
 .home-hero__active-chip-body {
@@ -531,7 +669,11 @@
   cursor: default;
 }
 .home-hero__active-chip-body:hover {
-  color: var(--accent);
+  background: transparent;
+  color: var(--text);
+}
+.home-hero__active-chip--image-file .home-hero__active-chip-body:hover {
+  color: inherit;
 }
 .home-hero__active-chip-body:disabled:hover {
   color: inherit;
@@ -539,16 +681,16 @@
 .home-hero__active-file-body {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--spacing-8);
   min-width: 0;
   color: inherit;
   font: inherit;
   line-height: 1;
 }
 .home-hero__active-icon {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
+  width: var(--spacing-24);
+  height: var(--spacing-24);
+  flex: 0 0 var(--spacing-24);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -558,18 +700,18 @@
 }
 .home-hero__active-thumb {
   display: block;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
-  border-radius: var(--radius-sm);
+  width: var(--spacing-36);
+  height: var(--spacing-36);
+  flex: 0 0 var(--spacing-36);
+  border-radius: var(--radius-medium);
   object-fit: cover;
   background: var(--bg-subtle);
 }
 .home-hero__active-clear {
   appearance: none;
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
+  width: var(--spacing-20);
+  height: var(--spacing-20);
+  flex: 0 0 var(--spacing-20);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -587,8 +729,8 @@
 }
 .home-hero__active-clear:hover {
   opacity: 1;
-  background: var(--red-bg);
-  color: var(--red);
+  background: transparent;
+  color: var(--text);
 }
 .home-hero__prompt-surface {
   display: flex;
@@ -614,16 +756,20 @@
   min-width: 0;
 }
 .home-hero__lexical .composer-input-editor {
-  min-height: 64px;
+  /* Taller resting field (~3 lines) so the prompt area reads as a canvas,
+     not a single-line search box. */
+  min-height: 66px;
   max-height: var(--home-hero-prompt-max-height, 180px);
 }
 .home-hero__lexical .composer-editable {
-  min-height: 64px;
-  padding: 8px 4px;
+  min-height: 66px;
+  padding: 0;
+  font-size: var(--font-size-14);
+  font-weight: 500;
 }
 .home-hero__lexical .composer-input-placeholder {
-  top: 8px;
-  left: 4px;
+  top: 0;
+  left: 0;
   color: var(--text-soft);
 }
 /* Typewriter placeholder carousel — a pointer-events-none overlay aligned to
@@ -632,14 +778,14 @@
    blanked behind it. See home-hero/PlaceholderCarousel.tsx. */
 .home-hero__lexical .home-hero__carousel {
   position: absolute;
-  top: 8px;
-  left: 4px;
+  top: 0;
+  left: 0;
   right: 8px;
   display: flex;
   align-items: center;
   pointer-events: none;
   user-select: none;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--text-soft);
   overflow: hidden;
@@ -705,8 +851,8 @@
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
   color: var(--accent);
-  font-size: 11.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
 }
 .home-hero__input-card .plugin-inputs-form__required {
   color: var(--accent);
@@ -823,14 +969,14 @@
 .home-hero__plugin-hover-card p {
   margin: 3px 0 0;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.4;
 }
 .home-hero__plugin-hover-kicker {
   display: block;
   margin-bottom: 2px;
-  color: var(--text-muted);
-  font-size: 10px;
+  color: var(--text-faint);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -840,8 +986,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 8px;
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--text-faint);
+  font-size: 12px;
 }
 .home-hero__plugin-hover-meta span {
   min-width: 0;
@@ -857,7 +1003,7 @@
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   cursor: pointer;
 }
 .home-hero__plugin-hover-card button:hover {
@@ -895,7 +1041,7 @@
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -906,8 +1052,8 @@
   box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.05));
 }
 .home-hero__mention-tab span:last-child {
-  color: var(--text-muted);
-  font-size: 10.5px;
+  color: var(--text-faint);
+  font-size: 12px;
 }
 .home-hero__plugin-picker-empty {
   padding: 10px;
@@ -921,8 +1067,8 @@
 }
 .home-hero__mention-section-label {
   padding: 5px 4px 2px;
-  color: var(--text-muted);
-  font-size: 10px;
+  color: var(--text-faint);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -970,21 +1116,21 @@
   overflow: hidden;
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .home-hero__plugin-option-main span:last-child {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .home-hero__plugin-option-meta {
   flex: 0 0 auto;
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--text-faint);
+  font-size: 12px;
 }
 .home-hero__input-foot {
   position: relative;
@@ -1011,29 +1157,6 @@
   gap: 8px;
   flex: 0 0 auto;
 }
-.home-hero__mode-switcher {
-  display: inline-flex;
-  min-width: 0;
-  flex: 0 0 auto;
-}
-.home-hero__mode-switcher .session-mode-toggle,
-.home-hero__mode-switcher .session-mode-toggle__trigger {
-  height: 32px;
-  min-height: 32px;
-  box-sizing: border-box;
-}
-.home-hero__mode-switcher .session-mode-toggle__trigger {
-  max-width: 118px;
-  border-radius: var(--radius-sm);
-  box-shadow: none;
-}
-.home-hero__mode-switcher .session-mode-toggle__popover {
-  right: 0;
-  left: auto;
-  z-index: 1701;
-  flex-direction: row-reverse;
-  align-items: flex-end;
-}
 .home-hero__execution-switcher {
   display: inline-flex;
   min-width: 0;
@@ -1041,32 +1164,102 @@
 }
 .home-hero__execution-switcher .inline-switcher {
   min-width: 0;
-  width: 58px;
-  max-width: 58px;
+  /* Sizes to the chip below, which now carries a status dot + the model name.
+     Left at the old 36px icon square, this wrapper capped the chip before its
+     own max-width applied and squeezed the model name to zero width. The
+     ≤900px block collapses both back to an icon. */
+  width: auto;
+  max-width: 220px;
 }
 .home-hero__execution-switcher .inline-switcher__chip {
-  width: 58px;
-  height: 32px;
-  max-width: 58px;
-  justify-content: space-between;
-  padding: 0 8px 0 9px;
-  gap: 4px;
-  border-radius: var(--radius-sm);
+  /* Now shows a connection-status dot + the selected model name, so it sizes
+     to its content instead of a fixed icon square. */
+  width: auto;
+  max-width: 220px;
+  height: 36px;
+  justify-content: center;
+  padding: 0 14px;
+  gap: 7px;
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+}
+.home-hero__execution-switcher .inline-switcher__chip:hover,
+.home-hero__execution-switcher .inline-switcher__chip[aria-expanded='true'] {
+  border-color: transparent;
+  box-shadow: none;
+  background: var(--bg-subtle);
 }
 .home-hero__execution-switcher .inline-switcher__chip-icon {
   width: 20px;
   height: 20px;
 }
+/* Connection-status dot: green = agent reachable, gray = unreachable/failed.
+   A same-color halo pulses outward for the "breathing" live indicator. */
+.inline-switcher__chip-conn {
+  position: relative;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--text-soft);
+}
+.inline-switcher__chip-conn[data-connected='true'] {
+  background: var(--green, #00aa54);
+}
+.inline-switcher__chip-conn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: inline-switcher-chip-breathe 2s var(--ease-out, ease-out) infinite;
+}
+@keyframes inline-switcher-chip-breathe {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inline-switcher__chip-conn::after {
+    animation: none;
+  }
+}
+.inline-switcher__chip-model-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-12, 12px);
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text);
+}
 .home-hero__execution-switcher .inline-switcher__chip-chevron {
   flex: 0 0 auto;
 }
 .home-hero__execution-switcher .inline-switcher__popover {
-  right: 0;
-  left: auto;
+  /* Align the popover's left edge to the trigger (crab chip) left edge. */
+  left: 0;
+  right: auto;
   z-index: 1503;
+  /* Compact home-hero variant: narrower + tighter than the shared 320px popover
+     since it only lists agents (no mode segment / model row). */
+  width: 260px;
+  padding: var(--spacing-10);
+  gap: var(--spacing-8);
 }
 .home-hero__execution-switcher .inline-switcher__agent-grid {
   grid-template-columns: 1fr;
+  /* Tight rows for the borderless compact model list (no card gaps). */
+  gap: 2px;
 }
 .home-hero__tool {
   appearance: none;
@@ -1103,7 +1296,7 @@
   height: 18px;
   border-radius: var(--radius-sm);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1;
 }
 /* "+" menu: collapses attach + connectors/plugins/mcp into one trigger with an
@@ -1270,6 +1463,40 @@
   background: var(--border);
   opacity: 0.7;
 }
+.home-hero__working-dir-picker [data-testid='working-dir-trigger'] {
+  min-height: 26px;
+  padding: 4px 5px;
+  border-radius: 999px;
+  color: var(--text-muted);
+}
+.home-hero__working-dir-picker [data-testid='working-dir-trigger']:hover,
+.home-hero__working-dir-picker [data-testid='working-dir-trigger']:focus-visible {
+  /* Solid fill (matches the design-system picker beside it) — the previous
+     translucent mix read as a see-through smudge over the frosted footer. */
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+/* The working-directory dropdown must float below its trigger and never
+   participate in the row's flow. If it were laid out in-flow, opening it would
+   grow the picker's box and — because this row is center-aligned — lift the
+   trigger above the design-system picker beside it. Keep the trigger and the
+   design-system picker on one line whether the dropdown is open or closed. */
+.home-hero__working-dir-picker {
+  position: relative;
+  align-self: center;
+}
+.home-hero__working-dir-picker [data-testid='working-dir-panel'] {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 90;
+}
+/* The working-dir menu is an absolute overlay — float it over the content
+   below (lift the card's stacking context) instead of reserving space with a
+   margin, which shoved 最近项目 down and back up (a jitter) on open/close. */
+.home-hero__composer-card:has(.home-hero__working-dir-picker [data-testid='working-dir-panel']) {
+  z-index: 40;
+}
 /* Persistent design-system picker — borderless trigger mirroring the
    working-directory picker so the two read as one row of leading accessories
    below the composer. The shared popover (search + preview) is unchanged. */
@@ -1285,7 +1512,7 @@
   gap: 6px;
   padding: 4px 6px;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 999px;
   background: transparent;
   color: var(--text-muted, var(--text));
   font: inherit;
@@ -1319,80 +1546,6 @@
   flex: 0 0 auto;
   opacity: 0.55;
 }
-.home-hero__active-type-chip {
-  appearance: none;
-  height: 32px;
-  max-width: 220px;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.2;
-  box-shadow: var(--shadow-xs);
-  transition:
-    background-color 120ms var(--ease-out),
-    border-color 120ms var(--ease-out),
-    color 120ms var(--ease-out),
-    box-shadow 120ms var(--ease-out);
-}
-.home-hero__active-type-chip.is-active {
-  border-color: color-mix(in srgb, var(--selected) 42%, var(--border));
-  background: color-mix(in srgb, var(--selected) 10%, var(--bg-panel));
-  color: var(--selected);
-  font-weight: 650;
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--selected-soft) 66%, transparent),
-    var(--shadow-xs);
-}
-.home-hero__active-type-chip-icon {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-pill);
-}
-.home-hero__active-type-chip.is-active .home-hero__active-type-chip-icon {
-  background: color-mix(in srgb, var(--selected) 12%, transparent);
-  color: var(--selected);
-}
-.home-hero__active-type-chip-close {
-  /* Always visible so the chip reads as removable at a glance — it brightens
-     to full opacity on hover/focus rather than appearing from nothing. */
-  flex: 0 0 auto;
-  width: 12px;
-  opacity: 0.55;
-  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
-}
-.home-hero__active-type-chip span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-hero__active-type-chip:hover,
-.home-hero__active-type-chip:focus-visible {
-  outline: none;
-  border-color: color-mix(in srgb, var(--selected) 54%, var(--border-strong));
-  background: color-mix(in srgb, var(--selected) 14%, var(--bg-panel));
-  color: var(--selected);
-  box-shadow:
-    0 0 0 3px var(--selected-soft),
-    var(--shadow-xs);
-}
-.home-hero__active-type-chip:hover .home-hero__active-type-chip-close,
-.home-hero__active-type-chip:focus-visible .home-hero__active-type-chip-close {
-  opacity: 1;
-}
 .home-hero__footer-options {
   display: contents;
 }
@@ -1411,7 +1564,7 @@
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 500;
   box-shadow: var(--shadow-xs);
   transition:
     background-color 120ms var(--ease-out),
@@ -1442,7 +1595,7 @@
   color: var(--text);
   font: inherit;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0;
   outline: none;
 }
@@ -1469,7 +1622,7 @@
   color: currentColor;
   font: inherit;
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0;
   outline: none;
   cursor: pointer;
@@ -1517,7 +1670,7 @@
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0;
   box-shadow: var(--shadow-xs);
   transition:
@@ -1638,7 +1791,6 @@
 }
 .home-hero__footer-select-search input:focus {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
   background: var(--bg-panel);
 }
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-search input:focus {
@@ -1651,12 +1803,12 @@
   padding: 12px 4px 4px;
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
 }
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-count {
   padding: 7px 3px 0;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 .home-hero__footer-select-group + .home-hero__footer-select-group {
@@ -1671,16 +1823,16 @@
 .home-hero__footer-select-group-label {
   padding: 7px 4px 6px;
   color: var(--text-faint);
-  font-size: 10.5px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-group-label {
   padding: 3px 3px 5px;
   color: color-mix(in srgb, var(--text-muted) 82%, transparent);
-  font-size: 9.5px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.12em;
 }
 .home-hero__footer-select-item {
@@ -1699,7 +1851,7 @@
   padding: 7px 9px;
   font: inherit;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0;
   text-align: left;
   transition:
@@ -1718,8 +1870,8 @@
 .home-hero__footer-select-description {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1728,12 +1880,12 @@
   gap: 2px;
 }
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-copy > .home-hero__footer-select-label {
-  font-size: 12.5px;
-  font-weight: 760;
+  font-size: 13px;
+  font-weight: 700;
   color: currentColor;
 }
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-description {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.15;
 }
@@ -1750,8 +1902,8 @@
   padding: 5px 8px;
   border-radius: var(--radius);
   color: var(--text);
-  font-size: 12.5px;
-  font-weight: 720;
+  font-size: 13px;
+  font-weight: 700;
 }
 .home-hero__footer-select-meta {
   max-width: 92px;
@@ -1759,7 +1911,7 @@
   color: var(--text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   text-overflow: ellipsis;
   text-transform: lowercase;
   white-space: nowrap;
@@ -1767,8 +1919,8 @@
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-meta {
   max-width: 66px;
   color: var(--text-muted);
-  font-size: 10.5px;
-  font-weight: 720;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 .home-hero__ds-option-preview {
@@ -1820,12 +1972,12 @@
 .home-hero__ds-option-preview b {
   align-self: center;
   color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1;
 }
 .home-hero__ds-option-preview--compact b {
-  font-size: 7px;
+  font-size: 12px;
 }
 .home-hero__footer-option-icon {
   width: 26px;
@@ -1861,8 +2013,8 @@
   border-radius: var(--radius);
   background: color-mix(in srgb, currentColor 10%, var(--bg-panel));
   color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0;
   line-height: 1;
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 44%, transparent);
@@ -1881,7 +2033,7 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  font-size: 8px;
+  font-size: 12px;
 }
 .home-hero__model-option-icon--compact img {
   width: 12px;
@@ -1897,7 +2049,7 @@
   color: #3c8cff;
 }
 .home-hero__model-option-icon--sense {
-  color: #2563eb;
+  color: #1A74FF;
 }
 .home-hero__model-option-icon--grok {
   color: #111827;
@@ -1906,7 +2058,7 @@
   color: #4285f4;
 }
 .home-hero__model-option-icon--router {
-  color: #7c3aed;
+  color: #353535;
 }
 .home-hero__model-option-icon--flux {
   color: #0f766e;
@@ -1980,13 +2132,13 @@
   color: #d06943;
 }
 .home-hero__ratio-option-icon--tall {
-  color: #2563eb;
+  color: #1A74FF;
 }
 .home-hero__ratio-option-icon--standard {
   color: #0f766e;
 }
 .home-hero__ratio-option-icon--portrait {
-  color: #7c3aed;
+  color: #353535;
 }
 .home-hero__ratio-option-icon--custom {
   color: var(--text-muted);
@@ -2003,6 +2155,14 @@
 .home-hero__footer-select-item.is-selected {
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-subtle));
   color: var(--accent);
+}
+.home-hero__footer-option--select[data-field-name='template'] .home-hero__footer-select-item.is-selected {
+  background: color-mix(in srgb, var(--brand-soft) 56%, var(--bg-panel));
+  color: var(--text);
+}
+.home-hero__footer-option--select[data-field-name='template'] .home-hero__footer-select-item.is-selected .home-hero__footer-select-label {
+  color: var(--brand-text);
+  font-weight: 600;
 }
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-item.is-selected {
   background: color-mix(in srgb, var(--accent) 10%, #e7e1e3);
@@ -2083,45 +2243,72 @@
   }
 }
 .home-hero__submit {
+  /* Black send pill with brand-green arrow + label. One tier deeper than
+     --accent (#353535) per design: ink-black ground so the green pops. In
+     dark the blocks below pin the surface to the lifted dark tint instead —
+     brand green stays legible on both. */
+  --home-hero-submit-bg: var(--text-strong);
+  --home-hero-submit-fg: #87ea5c;
+
   appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-width: 64px;
-  height: 32px;
-  padding: 0 16px;
+  /* Icon-only round send (label removed): equal sides make a circle. */
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: white;
-  box-shadow: var(--shadow-xs);
+  border: var(--stroke-thin) solid transparent;
+  background: var(--home-hero-submit-bg);
+  color: var(--home-hero-submit-fg);
+  box-shadow: none;
   cursor: pointer;
   font: inherit;
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: var(--font-size-14);
+  font-weight: 500;
   line-height: 1;
-  transition:
-    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  filter: none;
+  backdrop-filter: none;
+  transition: none;
 }
-.home-hero__submit:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  box-shadow: var(--shadow-sm);
+[data-theme="dark"] .home-hero__submit {
+  --home-hero-submit-bg: var(--accent-tint);
 }
-.home-hero__submit:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--shadow-xs); }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .home-hero__submit {
+    --home-hero-submit-bg: var(--accent-tint);
+  }
+}
+
+.home-hero__submit:hover:not(:disabled),
+.home-hero__submit:active:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--home-hero-submit-bg) 86%, #fff);
+  color: var(--home-hero-submit-fg);
+  box-shadow: none;
+  transform: none;
+}
+
+.home-hero__submit.home-hero__attention-sheen::after {
+  animation: none;
+  content: none;
+}
+
 .home-hero__submit:disabled {
-  opacity: 0.5;
+  /* Idle (nothing typed) reads identical to the active state — always the
+     black ground + brand-green arrow, so the button never shifts color when
+     the user starts typing. */
+  opacity: 1;
   cursor: default;
+  background: var(--home-hero-submit-bg);
+  color: var(--home-hero-submit-fg);
   box-shadow: none;
 }
 .home-hero__error {
   color: var(--red);
-  font-size: 12.5px;
+  font-size: 13px;
   background: var(--red-bg);
   border: 1px solid var(--red-border);
   padding: 8px 12px;
@@ -2139,7 +2326,8 @@
   justify-content: center;
   padding: 24px;
   background: rgba(16, 12, 10, 0.34);
-  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 .home-hero-confirm {
   width: min(420px, 100%);
@@ -2173,7 +2361,7 @@
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
 }
 .home-hero-confirm__secondary {
@@ -2226,7 +2414,7 @@
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.35;
   text-align: left;
   cursor: pointer;
@@ -2303,23 +2491,84 @@
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
+/* Break out of the hero's 960px column to the full home column, so the strip
+   is exactly as wide as the 最近项目 grid below. 100cqw reads the .home-view
+   size container; the symmetric margins re-center the wider box inside the
+   centered hero (they collapse to 0 when the viewport is narrower than the
+   hero cap and the two widths coincide). */
 .home-hero__plugin-presets-wrap {
-  max-width: min(880px, 100%);
+  /* One geometry contract for both the loading shell and settled cards.
+     The fixed card height is the natural rendered height of the preview,
+     gap, caption line, padding, and border rounded to a whole pixel. */
+  --home-plugin-preset-width: 248px;
+  --home-plugin-preset-preview-h: 150px;
+  --home-plugin-preset-card-h: 194px;
+  width: 100cqw;
+  max-width: 100cqw;
+  margin-inline: calc((100% - 100cqw) / 2);
 }
 
 /* Positioning context so the edge auto-scroll zones anchor to just the
    scrolling presets row (not the title above it). */
 .home-hero__rail-scroller {
   position: relative;
+  /* Both preset rows use 1px top + 8px bottom padding. Reserving that
+     together with the shared card height prevents the centered Home layout
+     from moving when loading content is replaced. */
+  min-height: calc(var(--home-plugin-preset-card-h) + 9px);
 }
 
 .home-hero__plugin-presets {
   display: flex;
+  align-items: stretch;
   gap: 10px;
   overflow-x: auto;
+  overflow-y: visible;
   overscroll-behavior-x: contain;
-  padding: 1px 2px 14px;
-  scrollbar-width: thin;
+  padding: 1px 2px 8px;
+  /* No visible scrollbar: trackpad/wheel scrolling and the edge auto-scroll
+     zones (useEdgeAutoScroll) already cover navigation. */
+  scrollbar-width: none;
+}
+.home-hero__plugin-presets::-webkit-scrollbar { display: none; }
+
+/* Keep the Examples rail's final geometry reserved while the Workspace-scoped
+   plugin catalogue resolves. These placeholders are deliberately static: the
+   real cards already own their entrance animation, and animating the loading
+   shell would recreate the startup twitch this state is meant to prevent. */
+.home-hero__plugin-presets-loading {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  overflow: hidden;
+  padding: 1px 2px 8px;
+}
+.home-hero__plugin-preset-loading {
+  flex: 0 0 var(--home-plugin-preset-width);
+  min-width: 0;
+  height: var(--home-plugin-preset-card-h);
+  min-height: var(--home-plugin-preset-card-h);
+  display: grid;
+  grid-template-rows: var(--home-plugin-preset-preview-h) minmax(0, auto);
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.home-hero__plugin-preset-loading-preview {
+  display: block;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+.home-hero__plugin-preset-loading-title {
+  display: block;
+  width: 46%;
+  height: 10px;
+  margin: 1px 10px 0;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-faint) 18%, var(--bg-subtle));
 }
 
 /* Each preset is wrapped in a positioning cell so the "Open as project"
@@ -2327,18 +2576,23 @@
    card button. The flex sizing lives on the cell; the card button fills it. */
 .home-hero__plugin-preset-cell {
   position: relative;
-  flex: 0 0 248px;
+  flex: 0 0 var(--home-plugin-preset-width);
   min-width: 0;
   display: flex;
+  /* One source for the preview row's height: the preview box below pins
+     itself to it. */
+  --preset-preview-h: var(--home-plugin-preset-preview-h);
 }
 
 .home-hero__plugin-preset {
   appearance: none;
   position: relative;
   width: 100%;
+  height: var(--home-plugin-preset-card-h);
+  min-height: var(--home-plugin-preset-card-h);
   min-width: 0;
   display: grid;
-  grid-template-rows: 150px minmax(0, auto);
+  grid-template-rows: var(--home-plugin-preset-preview-h) minmax(0, auto);
   gap: 8px;
   padding: 0;
   border: 1px solid var(--border);
@@ -2367,11 +2621,16 @@
 .home-hero__plugin-preset:not(:disabled):focus-visible,
 .home-hero__plugin-preset.is-active {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  /* Light hover border: only a hint of accent over the neutral border. */
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
   background: color-mix(in srgb, var(--accent-tint) 32%, var(--bg-panel));
   color: var(--text-strong);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
+}
+/* Selected keeps the firmer accent ring so it still reads above plain hover. */
+.home-hero__plugin-preset.is-active {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
 }
 
 .home-hero__plugin-preset.is-pending {
@@ -2381,89 +2640,15 @@
 .home-hero__plugin-preset-preview {
   position: relative;
   min-width: 0;
-  min-height: 0;
+  /* Pinned to the tile's preview row: whatever the inner surface renders
+     (oversized media, iframes) clips here instead of spilling over the title
+     below. The height comes from the cell so the hover actions track it. */
+  height: var(--preset-preview-h);
+  min-height: var(--preset-preview-h);
+  max-height: var(--preset-preview-h);
   overflow: hidden;
   background: var(--bg-subtle);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-}
-
-.home-hero__plugin-preset-actions {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  top: 108px;
-  z-index: 5;
-  display: flex;
-  gap: 6px;
-  opacity: 0;
-  transform: translateY(6px);
-  pointer-events: none;
-  transition:
-    opacity 180ms var(--ease-out),
-    transform 180ms var(--ease-out);
-}
-
-.home-hero__plugin-preset-cell:hover .home-hero__plugin-preset-actions,
-.home-hero__plugin-preset-cell:focus-within .home-hero__plugin-preset-actions {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-.home-hero__plugin-preset-action {
-  appearance: none;
-  min-width: 0;
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid rgba(17, 17, 17, 0.12);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.92);
-  color: #111;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
-  cursor: pointer;
-  transition:
-    background-color 120ms var(--ease-out),
-    border-color 120ms var(--ease-out),
-    color 120ms var(--ease-out);
-}
-
-.home-hero__plugin-preset-action--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg-panel);
-}
-
-.home-hero__plugin-preset-action:hover:not(:disabled),
-.home-hero__plugin-preset-action:focus-visible {
-  outline: none;
-  background: white;
-  border-color: rgba(17, 17, 17, 0.18);
-}
-
-.home-hero__plugin-preset-action--primary:hover:not(:disabled),
-.home-hero__plugin-preset-action--primary:focus-visible {
-  background: color-mix(in srgb, var(--accent) 88%, #fff);
-  border-color: color-mix(in srgb, var(--accent) 88%, #fff);
-}
-
-.home-hero__plugin-preset-action:disabled {
-  opacity: 0.58;
-  cursor: progress;
-}
-
-.home-hero__plugin-preset-action span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .home-hero__plugin-preset-check {
@@ -2516,6 +2701,7 @@
    height + title-row height to prototype/HyperFrames/image tiles. */
 .home-hero__plugin-preset[data-od-mode="deck"] .home-hero__plugin-preset-preview {
   aspect-ratio: auto;
+  background: var(--bg-panel);
   --deck-preview-scale: 0.166;
 }
 .home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__html-frame {
@@ -2540,19 +2726,17 @@
   transform: translate(-50%, -50%) scale(var(--deck-preview-scale));
 }
 
-/* The baked deck preview (od.bakedPreview) is captured at the 1.31 tile aspect,
-   so the deck's fixed 16:9 stage self-letterboxes with a dark --stage-bg band
-   baked into the poster/clip. The iframe rule above only fixes the LIVE surface;
-   these preset tiles render the BAKED media (preferBaked), so mirror the same
-   treatment for it: render the clip in a native 16:9 box centered in the
-   standard cell and center-crop it, so object-fit:cover strips exactly the baked
-   letterbox and the slide reads edge-to-edge with no dark band. (Non-deck tiles
-   keep the top-anchored 1.31 clip below so web-page hero headlines stay in
-   frame.) */
+/* Baked deck posters/clips use the gallery's 1.31:1 capture frame, with the
+   actual 16:9 slide centered inside it. Put that media in its native 16:9 box
+   before object-fit crops it, otherwise the capture's dark stage background
+   survives as a black strip above the slide. Keep the deck out of the generic
+   poster zoom below as well: once the 16:9 crop removes the baked letterbox,
+   another scale would cut real slide content off all four edges. */
 .home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__preview--media {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--bg-panel);
 }
 .home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__media {
   position: relative;
@@ -2564,6 +2748,23 @@
 .home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__media-img,
 .home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__media-video {
   object-position: center;
+  transform: none;
+}
+
+/* Baseline zoom — a FRAMING transform, not a hover effect (the hover cover
+   zoom was removed family-wide; see recent-projects.css). The baked hover-pan
+   poster is framed 1.31:1 (see below) while this row's cell is a wider
+   ~1.65:1 box, so a bare object-fit:cover only has room to crop vertically —
+   it fills the box edge-to-edge on the WIDTH axis, which leaves the poster's
+   own outer canvas/whitespace margin (visible on every side of the source
+   frame, e.g. the wireframe examples' graph-paper/dot-grid gutter) sitting
+   fully intact inside the thumbnail. That reads as "small image, big padding"
+   even though no literal padding declaration exists. Scaling the
+   already-cover-fitted image up around its own center crops that margin off
+   every edge instead, so the actual content fills more of the tile. */
+.home-hero__plugin-preset-preview .plugins-home__media-img,
+.home-hero__plugin-preset-preview .plugins-home__media-video {
+  transform: scale(1.15);
 }
 
 /* Baked clips are framed 1.31:1 for the Community grid; the wider preset tiles
@@ -2581,7 +2782,11 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  padding: 2px 12px 12px;
+  /* Caption sits flush with the card/preview left edge (no horizontal
+     inset — dogfood 2026-07-28) and 12px under the preview's bottom line:
+     the 8px grid row gap + this 4px. Overflowing titles ellipsize at the
+     card edge (nowrap + ellipsis on the title below). */
+  padding: 4px 0 8px;
 }
 .home-hero__plugin-preset-category {
   align-self: flex-start;
@@ -2603,8 +2808,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
-  font-weight: 650;
+  /* No horizontal padding of its own: the title nests inside
+     `__plugin-preset-meta`, whose 8px inset IS the text-to-card-edge
+     distance — a second inset here silently doubles it. */
+  padding: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -2658,7 +2867,7 @@
   border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1;
   letter-spacing: -0.005em;
@@ -2719,17 +2928,16 @@
 }
 
 @media (max-width: 900px) {
+  .home-hero__plugin-presets-wrap {
+    --home-plugin-preset-width: 224px;
+    --home-plugin-preset-preview-h: 136px;
+    --home-plugin-preset-card-h: 180px;
+  }
   .home-hero__title {
-    font-size: 30px;
+    font-size: 38.4px;
   }
   .home-hero__prompt-examples-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .home-hero__plugin-preset-cell {
-    flex-basis: 224px;
-  }
-  .home-hero__plugin-preset {
-    grid-template-rows: 136px minmax(0, auto);
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
     transform: scale(0.146);
@@ -2760,24 +2968,23 @@
   }
   .home-hero__execution-switcher .inline-switcher,
   .home-hero__execution-switcher .inline-switcher__chip {
-    width: 58px;
-    max-width: 58px;
+    width: 36px;
+    max-width: 36px;
   }
 }
 
 @media (max-width: 560px) {
+  .home-hero__plugin-presets-wrap {
+    --home-plugin-preset-width: 208px;
+    --home-plugin-preset-preview-h: 126px;
+    --home-plugin-preset-card-h: 170px;
+  }
   .home-hero__type-tabs {
     justify-content: flex-start;
     padding: 0;
   }
   .home-hero__prompt-examples-grid {
     grid-template-columns: 1fr;
-  }
-  .home-hero__plugin-preset-cell {
-    flex-basis: 208px;
-  }
-  .home-hero__plugin-preset {
-    grid-template-rows: 126px minmax(0, auto);
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
     transform: scale(0.134);
@@ -2793,59 +3000,10 @@
 /* Positioning context for the rail so the edge auto-scroll zones can anchor to
    the visible rail box (not the full page width). Carries the centering and
    max-width the scroll container used to own. */
-/* Template starter block: a "Start with a template…" caption above the
-   scenario-card rail, and a "…or start a blank project" escape hatch below it.
-   The section is one flex child of the centered hero column. */
-.home-hero__template-section {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-.home-hero__template-heading {
-  padding: 0 2px;
-  color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.3;
-  text-align: center;
-}
-.home-hero__blank-project {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 560;
-  line-height: 1.2;
-  cursor: pointer;
-  transition:
-    color 120ms var(--ease-out),
-    background-color 120ms var(--ease-out);
-}
-.home-hero__blank-project:hover,
-.home-hero__blank-project:focus-visible {
-  outline: none;
-  color: var(--text-strong);
-  background: var(--bg-subtle);
-}
-.home-hero__blank-project svg {
-  opacity: 0.7;
-  transition: transform 120ms var(--ease-out);
-}
-.home-hero__blank-project:hover svg {
-  transform: translateX(2px);
-}
 .home-hero__scenario-cards-wrap {
   position: relative;
   max-width: min(900px, 100%);
+  min-height: 138px;
   margin: 2px auto 0;
 }
 .home-hero__type-tabs.home-hero__scenario-cards {
@@ -2854,8 +3012,10 @@
   justify-content: safe center;
   align-items: stretch;
   gap: 10px;
-  padding: 2px 12px 10px;
+  min-height: 138px;
+  padding: 2px 12px 12px;
   overflow-x: auto;
+  overflow-y: visible;
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
 }
@@ -2890,27 +3050,20 @@
     transform 160ms var(--ease-out),
     color 160ms var(--ease-out);
 }
+/* No gradient wash on the edge zones (dogfood 2026-07-28): the fade veiled
+   the last partially-visible card. The zones stay as invisible hover strips;
+   only the arrow icon shows. */
 .home-hero__rail-edge--left {
   left: 0;
   justify-content: flex-start;
   padding-left: 8px;
   cursor: w-resize;
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--bg-app) 92%, transparent),
-    transparent
-  );
 }
 .home-hero__rail-edge--right {
   right: 0;
   justify-content: flex-end;
   padding-right: 8px;
   cursor: e-resize;
-  background: linear-gradient(
-    to left,
-    color-mix(in srgb, var(--bg-app) 92%, transparent),
-    transparent
-  );
 }
 @media (prefers-reduced-motion: reduce) {
   .home-hero__rail-edge,
@@ -2925,7 +3078,7 @@
   align-items: stretch;
   justify-content: flex-start;
   gap: 0;
-  min-height: 0;
+  min-height: 126px;
   padding: 0;
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
@@ -2972,7 +3125,7 @@
 .home-hero__scenario-card-title {
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.25;
 }
 .home-hero__scenario-card.is-active .home-hero__scenario-card-title {
@@ -2980,7 +3133,7 @@
 }
 .home-hero__scenario-card-desc {
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
   white-space: normal;
@@ -2999,263 +3152,92 @@
    ============================================================ */
 .home-hero__footer-option--select[data-field-name='template'] {
   max-width: 220px;
+  background-color: transparent;
+  background-image: none;
 }
+/* Selected template: same selected pair as the nav rail's active item
+   (极浅品牌背景 #f9fff4 under deep brand green #2f781d). */
 .home-hero__footer-option--select[data-field-name='template'].has-selection {
   max-width: 250px;
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  background: color-mix(in srgb, var(--accent-tint) 58%, var(--bg-panel));
-  color: var(--accent);
-  box-shadow:
-    var(--shadow-xs),
-    0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: transparent;
+  background-color: #f9fff4;
+  background-image: none;
+  color: #2f781d;
+  /* Same selected stroke as the composer-mode (设计) pill: an inset 1px ring
+     at 22% of the deep brand green. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2f781d 22%, transparent);
+}
+.home-hero__footer-option--select[data-field-name='template']:hover,
+.home-hero__footer-option--select[data-field-name='template'].is-open,
+.home-hero__footer-option--select[data-field-name='template']:focus-within {
+  border-color: var(--border);
+  background-color: transparent;
+  background-image: none;
+  color: var(--text-muted);
+  box-shadow: var(--shadow-xs);
+}
+.home-hero__footer-option--select[data-field-name='template'].has-selection:hover,
+.home-hero__footer-option--select[data-field-name='template'].has-selection.is-open,
+.home-hero__footer-option--select[data-field-name='template'].has-selection:focus-within {
+  border-color: transparent;
+  background-color: #f9fff4;
+  color: #2f781d;
+  /* Keep the selected ring through hover/open/focus — the generic template
+     hover rule above would otherwise swap it back to shadow-xs. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2f781d 22%, transparent);
+}
+.home-hero__footer-option.home-hero__template-option:hover,
+.home-hero__footer-option.home-hero__template-option.is-open,
+.home-hero__footer-option.home-hero__template-option:focus-within {
+  background-color: transparent;
+  background-image: none;
+}
+.home-hero__template-option {
+  /* Same overall height as the neighboring composer "+" trigger (36px, see
+     .home-hero__input-card .plus-menu__trigger) so the foot row reads as one
+     line of equal-height controls. */
+  height: 36px;
 }
 .home-hero__template-trigger {
   flex: 1 1 auto;
   max-width: 188px;
+  background-color: transparent;
+  background-image: none;
+}
+.home-hero__template-option .home-hero__template-trigger,
+.home-hero__template-option .home-hero__template-trigger:hover:not(:disabled),
+.home-hero__template-option .home-hero__template-trigger:focus-visible,
+.home-hero__template-option .home-hero__template-trigger:disabled {
+  background: transparent;
+  background-color: transparent;
+  background-image: none;
+  border-color: transparent;
+  box-shadow: none;
 }
 /* Small "Template" caption inside the trigger so the field is self-labeling
    (the field's sr-only <span> pattern is not used here). */
 .home-hero__template-kicker {
   flex: 0 0 auto;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
 }
-/* Mini ScenarioArt thumbnail in the trigger so the pill's leading glyph matches
-   the dropdown's illustrative cards (instead of a flat line icon). */
-.home-hero__template-trigger-thumb {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 18px;
-  overflow: hidden;
-  border-radius: var(--radius-xs, 4px);
-  color: var(--accent);
-}
-.home-hero__template-trigger-thumb .home-hero__scenario-art-svg {
-  width: 24px;
-  height: auto;
-}
 .home-hero__template-option.has-selection .home-hero__template-kicker {
-  color: color-mix(in srgb, var(--accent) 52%, var(--text-faint));
+  color: var(--text-faint);
+}
+/* Icon + label in the nav rail's deep brand green on the pale wash. */
+.home-hero__template-option.has-selection .home-hero__footer-option-icon {
+  color: #2f781d;
 }
 .home-hero__template-option.has-selection .home-hero__footer-select-label {
-  color: var(--text-strong);
-  font-weight: 650;
-}
-.home-hero__template-reset {
-  appearance: none;
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: -5px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  opacity: 0.72;
-  transition:
-    opacity 120ms var(--ease-out),
-    color 120ms var(--ease-out);
-}
-.home-hero__template-reset svg {
-  display: block;
-  flex: 0 0 auto;
-  pointer-events: none;
-}
-.home-hero__template-reset:hover,
-.home-hero__template-reset:focus-visible {
-  outline: none;
-  background: transparent;
-  color: var(--text-muted);
-  opacity: 1;
-}
-.home-hero__template-reset:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  outline-offset: 2px;
-}
-.home-hero__template-menu {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 7px);
-  z-index: 140;
-  width: min(380px, calc(100vw - 32px));
-  max-height: min(440px, calc(100vh - 200px));
-  overflow-y: auto;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--bg-panel) 98%, white);
-  box-shadow:
-    0 16px 38px rgba(15, 23, 42, 0.14),
-    0 2px 6px rgba(15, 23, 42, 0.08);
-  isolation: isolate;
-}
-.home-hero__template-menu-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.home-hero__template-search {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  transition:
-    border-color 120ms var(--ease-out),
-    box-shadow 120ms var(--ease-out);
-}
-.home-hero__template-search:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
-}
-.home-hero__template-search input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  outline: none;
-  font: inherit;
-  font-size: 12.5px;
-  color: var(--text);
-}
-.home-hero__template-search input:focus,
-.home-hero__template-search input:focus-visible {
-  outline: none;
-  border-color: transparent;
-  box-shadow: none;
-}
-.home-hero__template-clear {
-  appearance: none;
-  flex: 0 0 auto;
-  height: 34px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 12.5px;
+  color: #2f781d;
   font-weight: 600;
-  cursor: pointer;
-  transition:
-    color 120ms var(--ease-out),
-    background-color 120ms var(--ease-out);
 }
-.home-hero__template-clear:hover,
-.home-hero__template-clear:focus-visible {
-  outline: none;
-  color: var(--text-strong);
-  background: var(--bg-subtle);
-}
-.home-hero__template-group-label {
-  padding: 2px 2px 8px;
-  color: var(--text-faint);
-  font-size: 10.5px;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.home-hero__template-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.home-hero__template-empty {
-  padding: 12px 4px;
-  color: var(--text-muted);
-  font-size: 12.5px;
-}
-.home-hero__template-card {
-  appearance: none;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 120ms var(--ease-out),
-    background-color 120ms var(--ease-out),
-    transform 120ms var(--ease-out);
-}
-.home-hero__template-card:hover:not(:disabled),
-.home-hero__template-card:focus-visible {
-  outline: none;
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
-  transform: translateY(-1px);
-}
-.home-hero__template-card:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-.home-hero__template-card.is-active {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: var(--accent-tint);
-}
-.home-hero__template-card-art {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 54px;
-  border-radius: var(--radius);
-  /* Same illustrative gradient as the rail's scenario-card art, so the
-     dropdown thumbnails read as the same template set. */
-  background: radial-gradient(
-    120% 120% at 30% 20%,
-    color-mix(in srgb, var(--accent-tint) 78%, var(--bg-panel)),
-    var(--bg-subtle)
-  );
-  color: var(--accent);
-}
-.home-hero__template-card .home-hero__scenario-art-svg {
-  transition: transform 160ms var(--ease-out);
-}
-.home-hero__template-card:hover:not(:disabled) .home-hero__scenario-art-svg {
-  transform: scale(1.05);
-}
-.home-hero__template-card-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  text-align: center;
-}
-.home-hero__template-card-label {
-  color: var(--text-strong);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1.2;
-}
-.home-hero__template-card.is-active .home-hero__template-card-label {
-  color: var(--accent);
-}
-.home-hero__template-card-desc {
-  color: var(--text-muted);
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 1.25;
+/* The template pill breathes wider than its 8px siblings: 16px on both
+   edges, in rest and selected states alike. */
+.home-hero__template-option {
+  padding: 0 16px;
 }
 /* Hover-preview value in the trigger reads as transient (lighter) until
    committed by a click. */
@@ -3263,15 +3245,195 @@
   color: var(--text-muted);
   font-style: italic;
 }
-@media (hover: none) {
-  .home-hero__plugin-preset-actions {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
-  }
+/* Preview text needs the light ramp (not grey) when it sits on the ink fill. */
+.home-hero__template-option.has-selection .home-hero__footer-select-label.is-preview {
+  color: color-mix(in srgb, #fafafa 72%, transparent);
 }
-@media (prefers-reduced-motion: reduce) {
-  .home-hero__template-card .home-hero__scenario-art-svg {
-    transition: none;
-  }
+/* ---- Template picker list menu ----------------------------------------- */
+/* List replacement for the former radial (pie) menu: compact icon + name
+   rows (no descriptions, at most 12 kinds — per product), selected row
+   carries a soft fill and a trailing check. Portaled to <body>, fixed at
+   the trigger's captured anchor, normally below and flipped above when the
+   remaining lower viewport cannot fit one complete row. */
+.home-hero__template-list {
+  position: fixed;
+  z-index: 1900;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 340px;
+  /* Exactly 6 rows visible (per product), the rest scroll: 6 × 44px row +
+     5 × 2px flex gap + 12px padding. */
+  max-height: min(286px, calc(100vh - 96px));
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 4%, transparent),
+    0 12px 32px -12px color-mix(in srgb, #000 22%, transparent);
+  transform-origin: top left;
+  animation: pop-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-hero__template-list-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-md, 10px);
+  text-align: left;
+  cursor: pointer;
+}
+.home-hero__template-list-item:hover,
+.home-hero__template-list-item.is-active {
+  background: var(--bg-subtle);
+}
+.home-hero__template-list-item[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.55;
+}
+.home-hero__template-list-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.home-hero__template-list-icon {
+  display: inline-flex;
+  color: var(--text);
+  flex: 0 0 auto;
+}
+.home-hero__template-list-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.home-hero__template-list-check {
+  display: inline-flex;
+  color: var(--text);
+  flex: 0 0 auto;
+}
+/* ---- Capsule type row (replaces the fanned carousel) ------------------- */
+/* ONE line exactly as wide as the composer card below (820px — keep in sync
+   with .home-hero__composer-card), EVERY gap the same 8px (keep in sync
+   with the component's PILL_GAP): fitting pills inline, then the pinned
+   视频 pill + 全部 button; the remainder lives in the 全部 popover. */
+.home-hero__type-pills-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 820px;
+  /* 8px to the composer card below (per product): .home-hero's own 6px flex
+     gap contributes, so only 2px lives here. */
+  margin: 10px auto 2px;
+  padding: 2px 0;
+}
+.home-hero__type-pill {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+/* Pinned pills + the 全部 trigger, measured as one unit by the fit
+   computation. Same 8px rhythm inside as the row around it. */
+.home-hero__type-pills-tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.home-hero__type-pills-more {
+  position: relative;
+  flex: 0 0 auto;
+}
+/* Invisible measuring copy of the full pill set: out of flow, unpainted,
+   non-interactive — exists only so the component can read natural widths. */
+.home-hero__type-pills-probe {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+}
+.home-hero__type-pills-more-btn.is-open {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
+}
+.home-hero__type-pills-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 4%, transparent),
+    0 12px 32px -12px color-mix(in srgb, #000 22%, transparent);
+  animation: pop-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  transform-origin: top right;
+}
+.home-hero__type-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+  transition:
+    color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+.home-hero__type-pill:hover:not(:disabled) {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
+  transform: translateY(-0.5px);
+}
+/* Selected pill mirrors the composer's selected template chip exactly (the
+   `.has-selection` pair above: 极浅品牌背景 #f9fff4, deep brand green
+   #2f781d, inset 1px ring at 22%), so the picked type reads as the same
+   object in both places. */
+.home-hero__type-pill.is-active {
+  background: #f9fff4;
+  border-color: transparent;
+  color: #2f781d;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2f781d 22%, transparent);
+}
+.home-hero__type-pill.is-active:hover:not(:disabled) {
+  background: #f9fff4;
+  border-color: transparent;
+  color: #2f781d;
+  transform: none;
+}
+.home-hero__type-pill:disabled {
+  cursor: default;
+  opacity: 0.6;
 }

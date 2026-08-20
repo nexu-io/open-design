@@ -12,7 +12,7 @@
  *                                         device-authorization flow's
  *                                         on-disk side-effect without the
  *                                         interactive browser approval —
- *                                         tests for Open Design's daemon
+ *                                         tests for OpenDesign's daemon
  *                                         login route only care that the
  *                                         config file appears.
  *
@@ -21,7 +21,7 @@
  *
  *   `vela agent run --runtime opencode` → ACP stdio runtime. Speaks just
  *                                         enough of the protocol to drive
- *                                         Open Design's `detectAcpModels`
+ *                                         OpenDesign's `detectAcpModels`
  *                                         and `attachAcpSession` through a
  *                                         complete turn:
  *
@@ -42,6 +42,11 @@
  *   FAKE_VELA_SESSION_NEW_ERROR  – when set, session/new returns a JSON-RPC error
  *   FAKE_VELA_SET_MODEL_ERROR    – when set, session/set_model returns a JSON-RPC error
  *   FAKE_VELA_PROMPT_ERROR       – when set, session/prompt returns a JSON-RPC error
+ *   FAKE_VELA_PROMPT_ERROR_ON_LOAD – when set, session/prompt errors only after session/load
+ *   FAKE_VELA_STALL_AFTER_PROMPT – when set to '1', session/prompt never completes
+ *                                   and emits non-substantive heartbeat updates
+ *   FAKE_VELA_PROMPT_RESULT_DELAY_MS – delay the terminal session/prompt result
+ *                                      after streaming substantive output
  *   FAKE_VELA_MODELS             – newline-separated `vela models` stdout
  *   FAKE_VELA_MODEL_PRESET_JSON  – JSON stdout for `model preset --format json`
  *   FAKE_VELA_MODEL_LIST_JSON    – JSON stdout for `model list --all --format json`
@@ -72,6 +77,12 @@ const THOUGHT_TEXT = env.FAKE_VELA_THOUGHT || '';
 const SESSION_NEW_ERROR = env.FAKE_VELA_SESSION_NEW_ERROR || '';
 const SET_MODEL_ERROR = env.FAKE_VELA_SET_MODEL_ERROR || '';
 const PROMPT_ERROR = env.FAKE_VELA_PROMPT_ERROR || '';
+const PROMPT_ERROR_ON_LOAD = env.FAKE_VELA_PROMPT_ERROR_ON_LOAD || '';
+const STALL_AFTER_PROMPT = env.FAKE_VELA_STALL_AFTER_PROMPT === '1';
+const TEXT_BEFORE_STALL = env.FAKE_VELA_TEXT_BEFORE_STALL === '1';
+const PROMPT_RESULT_DELAY_MS = Number(env.FAKE_VELA_PROMPT_RESULT_DELAY_MS) || 0;
+const OMIT_PROMPT_USAGE = env.FAKE_VELA_OMIT_PROMPT_USAGE === '1';
+const STAY_ALIVE_AFTER_PROMPT_MS = Number(env.FAKE_VELA_STAY_ALIVE_AFTER_PROMPT_MS) || 0;
 const AVAILABLE_MODELS = [
   { modelId: 'openai/gpt-5.4-mini', name: 'gpt-5.4-mini' },
   { modelId: 'anthropic/claude-3.7-sonnet', name: 'claude-3.7-sonnet' },
@@ -282,8 +293,9 @@ function handleMessage(msg) {
         });
         return;
       }
-      if (PROMPT_ERROR) {
-        writeError(id, PROMPT_ERROR, -32602);
+      const promptError = PROMPT_ERROR || (didLoad ? PROMPT_ERROR_ON_LOAD : '');
+      if (promptError) {
+        writeError(id, promptError, -32602);
         return;
       }
       const sessionId = typeof params?.sessionId === 'string' ? params.sessionId : SESSION_ID;
@@ -291,11 +303,35 @@ function handleMessage(msg) {
         writeError(id, 'session/set_model must be called before session/prompt', -32602);
         return;
       }
+      if (STALL_AFTER_PROMPT) {
+        if (TEXT_BEFORE_STALL) emitSessionUpdates(sessionId);
+        // Keep both the ACP stage watchdog and the outer chat inactivity
+        // watchdog fed without producing text, thinking, tools, artifacts, or
+        // a terminal prompt result. This models a provider bridge that stays
+        // transport-alive forever while never returning a first model output.
+        setInterval(() => {
+          writeNotification('session/update', {
+            sessionId,
+            update: { sessionUpdate: 'heartbeat' },
+          });
+        }, 20);
+        return;
+      }
       emitSessionUpdates(sessionId);
-      writeResult(id, {
-        stopReason: 'end_turn',
-        usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 },
-      });
+      const finishPrompt = () => {
+        writeResult(id, {
+          stopReason: 'end_turn',
+          ...(OMIT_PROMPT_USAGE
+            ? {}
+            : { usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 } }),
+        });
+        if (STAY_ALIVE_AFTER_PROMPT_MS > 0) setTimeout(() => {}, STAY_ALIVE_AFTER_PROMPT_MS);
+      };
+      if (PROMPT_RESULT_DELAY_MS > 0) {
+        setTimeout(finishPrompt, PROMPT_RESULT_DELAY_MS);
+      } else {
+        finishPrompt();
+      }
       return;
     }
     case 'session/cancel':
@@ -344,7 +380,7 @@ stdin.on('end', () => {
 // `vela login`: the daemon's /api/integrations/vela/login route spawns this
 // without expecting any ACP traffic. Real vela goes through a device-auth
 // loop and writes ~/.amr/config.json on success; the stub skips the loop
-// and just writes the file so Open Design's status reader and AmrLoginPill
+// and just writes the file so OpenDesign's status reader and AmrLoginPill
 // poller see the same on-disk projection production produces. The stdin EOF
 // handler above ignores login mode so delayed login tests can keep this
 // process alive without opening the ACP stdio bridge.
@@ -448,11 +484,12 @@ function loginAndExit() {
     writeFileSync(env.FAKE_VELA_ENV_DUMP_PATH, JSON.stringify(env, null, 2), 'utf8');
   }
   const profile = (env.VELA_PROFILE || 'prod').trim() || 'prod';
-  const allowed = new Set(['prod', 'test', 'local']);
+  const allowed = new Set(['prod', 'test', 'feature-test', 'local']);
   if (!allowed.has(profile)) {
-    stderr.write(`[fake-vela] unknown profile ${profile}; defaulting to prod\n`);
+    stderr.write(`[fake-vela] unknown profile ${profile}; expected prod, test, feature-test, or local\n`);
+    exit(1);
   }
-  const profileName = allowed.has(profile) ? profile : 'prod';
+  const profileName = profile;
   const delayMs = Number(env.FAKE_VELA_LOGIN_DELAY_MS) || 0;
   const userEmail = env.FAKE_VELA_LOGIN_USER_EMAIL || 'fake-user@example.com';
   const userPlan = env.FAKE_VELA_LOGIN_USER_PLAN || 'free';

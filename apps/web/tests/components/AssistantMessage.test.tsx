@@ -10,8 +10,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
+import { CollabProvider } from '../../src/collab/collab-context';
 import * as registry from '../../src/providers/registry';
 import type { ChatMessage, ProjectFile } from '../../src/types';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 
 beforeAll(() => {
   const store = new Map<string, string>();
@@ -62,7 +64,67 @@ function producedFile(name: string): ProjectFile {
   } as ProjectFile;
 }
 
+const PROJECT_A_CONTEXT = workspaceContextFixture({
+  workspaceId: 'workspace-a',
+  workspaceMemberId: 'member-a',
+});
+
+function projectCollabValue(workspaceContext = PROJECT_A_CONTEXT) {
+  return {
+    workspaceContext,
+    workspaceContextLoading: false,
+    enabled: false,
+    member: null,
+    present: [],
+    publishedVersion: null,
+    syncState: null,
+    viewerOnly: false,
+    isOwner: false,
+    ownerDisplayName: null,
+    ownerRole: null,
+    downloadPending: false,
+    reportChange: vi.fn(),
+    requestPublish: vi.fn(),
+    refreshPresence: vi.fn(),
+    checkStatusNow: vi.fn(),
+  };
+}
+
 describe('AssistantMessage feedback gate', () => {
+  it('opens a produced file when the user clicks the filename row', () => {
+    const onRequestOpenFile = vi.fn();
+    render(
+      <AssistantMessage
+        message={baseMessage({ producedFiles: [producedFile('poster.png')] })}
+        streaming={false}
+        projectId="proj-1"
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('poster.png'));
+    expect(onRequestOpenFile).toHaveBeenCalledWith('poster.png');
+  });
+
+  it.each(['Enter', ' '])(
+    'opens a produced file when the user presses %s on its row',
+    (key) => {
+      const onRequestOpenFile = vi.fn();
+      render(
+        <AssistantMessage
+          message={baseMessage({ producedFiles: [producedFile('poster.png')] })}
+          streaming={false}
+          projectId="proj-1"
+          onRequestOpenFile={onRequestOpenFile}
+        />,
+      );
+
+      const row = screen.getByRole('button', { name: 'Open: poster.png' });
+      fireEvent.keyDown(row, { key });
+      expect(onRequestOpenFile).toHaveBeenCalledWith('poster.png');
+    },
+  );
+
   it('renders plugin suggestions as compact user decisions with secondary actions in details', () => {
     const message = baseMessage({
       content: '',
@@ -155,6 +217,50 @@ describe('AssistantMessage feedback gate', () => {
     }
   });
 
+  it('recvqacy887jsF — shows the copy button mid-stream once there is partial text', () => {
+    // The copy affordance is gated on "is there any non-whitespace text yet"
+    // (copyMarkdown in AssistantMessage.tsx), not on the turn having ended —
+    // so a user can copy what has streamed in so far instead of waiting for
+    // the whole reply. The footer's own CSS backs this: `.assistant-footer`
+    // is opacity:0/hover-revealed at rest, but `[data-streaming="true"]`
+    // forces it to full opacity so a mid-stream reader doesn't ALSO need to
+    // hover to see it.
+    const message = baseMessage({
+      content: 'Partial answer so far',
+      runStatus: undefined,
+      endedAt: undefined,
+      events: [{ kind: 'text', text: 'Partial answer so far' } as ChatMessage['events'][number]],
+    });
+    render(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Copy response markdown' })).toBeTruthy();
+  });
+
+  it('recvqacy887jsF — hides the copy button while streaming has not produced any text yet', () => {
+    // The inverse of the above: before the first token lands there is
+    // nothing to copy, so the button correctly stays absent (not merely
+    // faded out) rather than rendering with an empty payload.
+    const message = baseMessage({
+      content: '',
+      runStatus: undefined,
+      endedAt: undefined,
+      events: [{ kind: 'status', label: 'thinking' } as ChatMessage['events'][number]],
+    });
+    render(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Copy response markdown' })).toBeNull();
+  });
+
   it('calls the fork handler from completed assistant turns', () => {
     const onForkFromMessage = vi.fn();
     render(
@@ -171,7 +277,7 @@ describe('AssistantMessage feedback gate', () => {
     expect(onForkFromMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('reaches Contribute (share to Open Design) through the More -> Share cascade', () => {
+  it('reaches Contribute (share to OpenDesign) through the More -> Share cascade', () => {
     const onShare = vi.fn();
 
     render(
@@ -355,7 +461,7 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
               kind: 'status',
               label: 'error',
               detail:
-                'AMR Cloud reported insufficient balance. Recharge at https://open-design.ai/amr/wallet, then retry.',
+                'AMR Cloud reported insufficient balance. Top up at https://open-design.ai/amr/dashboard, then retry.',
             } as ChatMessage['events'][number],
           ],
         })}
@@ -365,9 +471,30 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
       />,
     );
 
-    const link = screen.getByRole('link', { name: 'https://open-design.ai/amr/wallet' });
-    expect(link.getAttribute('href')).toBe('https://open-design.ai/amr/wallet');
+    const link = screen.getByRole('link', { name: 'https://open-design.ai/amr/dashboard' });
+    expect(link.getAttribute('href')).toBe('https://open-design.ai/amr/dashboard');
     expect(link.classList.contains('md-link')).toBe(true);
+  });
+
+  it('renders context compaction status with a readable label and detail', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'status',
+              label: 'context_compaction',
+              detail: 'Compacting conversation history after a context-length error',
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('compacting context')).toBeTruthy();
+    expect(screen.getByText('Compacting conversation history after a context-length error')).toBeTruthy();
   });
 });
 
@@ -711,7 +838,11 @@ describe('AssistantMessage question forms', () => {
 
     await waitFor(() => {
       expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);
-      expect(deleteProjectFileMock).toHaveBeenCalledWith('proj-1', 'uploads/mood.png');
+      expect(deleteProjectFileMock).toHaveBeenCalledWith(
+        'proj-1',
+        'uploads/mood.png',
+        null,
+      );
     });
     expect(send.disabled).toBe(false);
 
@@ -775,17 +906,19 @@ describe('AssistantMessage question forms', () => {
     ].join('\n');
     const onSubmitQuestionForm = vi.fn();
     const { container } = render(
-      <AssistantMessage
-        message={baseMessage({
-          content: form,
-          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
-        })}
-        streaming={false}
-        projectId="proj-1"
-        conversationId="conv-1"
-        isLast
-        onSubmitQuestionForm={onSubmitQuestionForm}
-      />,
+      <CollabProvider value={projectCollabValue()}>
+        <AssistantMessage
+          message={baseMessage({
+            content: form,
+            events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+          })}
+          streaming={false}
+          projectId="proj-1"
+          conversationId="conv-1"
+          isLast
+          onSubmitQuestionForm={onSubmitQuestionForm}
+        />
+      </CollabProvider>,
     );
     const input = container.querySelector('input[type="file"]');
     if (!(input instanceof HTMLInputElement)) throw new Error('expected file input');
@@ -797,7 +930,18 @@ describe('AssistantMessage question forms', () => {
     fireEvent.click(send);
 
     await waitFor(() => {
-      expect(deleteProjectFileMock).toHaveBeenCalledWith('proj-1', 'uploads/mood.png');
+      expect(uploadProjectFilesMock).toHaveBeenNthCalledWith(
+        1,
+        'proj-1',
+        [mood, brief],
+        undefined,
+        PROJECT_A_CONTEXT,
+      );
+      expect(deleteProjectFileMock).toHaveBeenCalledWith(
+        'proj-1',
+        'uploads/mood.png',
+        PROJECT_A_CONTEXT,
+      );
     });
     expect(onSubmitQuestionForm).not.toHaveBeenCalled();
 
@@ -1158,30 +1302,132 @@ describe('AssistantMessage recovered produced files', () => {
   it('shows linked project files from the assistant summary as files this turn', () => {
     const content = '已创建计划文档：[browser-war-deck-outline.md](browser-war-deck-outline.md)。';
     render(
+      <CollabProvider value={projectCollabValue()}>
+        <AssistantMessage
+          message={baseMessage({
+            content,
+            events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+            producedFiles: [],
+          })}
+          streaming={false}
+          projectId="proj-1"
+          projectFiles={[
+            {
+              name: 'browser-war-deck-outline.md',
+              path: 'browser-war-deck-outline.md',
+              size: 4096,
+              mtime: 1700000005,
+              kind: 'text',
+              mime: 'text/markdown',
+            } as ProjectFile,
+          ]}
+        />
+      </CollabProvider>,
+    );
+
+    // #5517 shape: recovered files land in the flat produced-files block (name
+    // / size / Open / Download), not folded into the collapsible tool-op
+    // summary — that summary lists only ops the turn actually emitted.
+    const produced = document.querySelector('.produced-files');
+    expect(produced).toBeTruthy();
+    expect(produced?.textContent).toContain('browser-war-deck-outline.md');
+    const download = produced?.querySelector('a[download]');
+    expect(download).toBeTruthy();
+    expect(download?.getAttribute('href')).toBe(
+      '/api/projects/proj-1/raw/browser-war-deck-outline.md',
+    );
+    expect(screen.queryByTestId('file-ops-summary')).toBeNull();
+  });
+
+  it('never shows the tool-op summary and the produced-files block at once (P0 recvqaerXd82bE)', () => {
+    // A turn that both writes a file via a tracked tool call AND mentions an
+    // older, already-existing file in its prose recovers that older file into
+    // `displayedProduced` too. Before the fix this rendered two stacked panels
+    // that both read "Files from this turn" — one scoped to the tool call,
+    // one to the wider recovered set — which reads to users as a duplicate,
+    // untrustworthy render rather than two different pieces of information.
+    const content = '已创建 index.html，基于更早的 [logo.svg](logo.svg)。';
+    render(
       <AssistantMessage
         message={baseMessage({
           content,
-          events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+          events: [
+            { kind: 'text', text: content } as ChatMessage['events'][number],
+            {
+              kind: 'tool_use',
+              id: 'tool-1',
+              name: 'Write',
+              input: { file_path: 'index.html' },
+            } as ChatMessage['events'][number],
+          ],
           producedFiles: [],
         })}
         streaming={false}
         projectId="proj-1"
         projectFiles={[
           {
-            name: 'browser-war-deck-outline.md',
-            path: 'browser-war-deck-outline.md',
-            size: 4096,
+            name: 'logo.svg',
+            path: 'logo.svg',
+            size: 2048,
             mtime: 1700000005,
-            kind: 'text',
-            mime: 'text/markdown',
+            kind: 'image',
+            mime: 'image/svg+xml',
           } as ProjectFile,
         ]}
       />,
     );
 
-    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
-    expect(screen.getByTestId('file-ops-row-browser-war-deck-outline.md')).toBeTruthy();
-    expect(screen.getByTitle('Write')).toBeTruthy();
+    const hasFileOpsSummary = !!screen.queryByTestId('file-ops-summary');
+    const hasProducedFiles = !!document.querySelector('.produced-files');
+    expect(hasFileOpsSummary).toBe(true);
+    expect(hasProducedFiles).toBe(false);
+  });
+
+  it('lists only the authoritative artifact when an earlier edit targeted a wrong project path', () => {
+    const fileName = 'opendesign-b2b-sales-deck.html';
+    const failedPath = `/workspace/projects/wrong-project/${fileName}`;
+    const deliveredPath = `/workspace/projects/project-1/${fileName}`;
+    const file = producedFile(fileName);
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'failed-edit',
+              name: 'Edit',
+              input: { file_path: failedPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'failed-edit',
+              content: `File ${failedPath} not found`,
+              isError: true,
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_use',
+              id: 'successful-edit',
+              name: 'Edit',
+              input: { file_path: deliveredPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'successful-edit',
+              content: 'Updated successfully.',
+              isError: false,
+            } as ChatMessage['events'][number],
+          ],
+          producedFiles: [file],
+        })}
+        streaming={false}
+        projectId="project-1"
+        projectFiles={[file]}
+      />,
+    );
+
+    expect(screen.getAllByTestId(`file-ops-row-${fileName}`)).toHaveLength(1);
+    expect(screen.queryByTestId('file-ops-toggle')).toBeNull();
   });
 
   it('shows project files mentioned as plain filenames in the assistant summary', () => {
@@ -1208,8 +1454,9 @@ describe('AssistantMessage recovered produced files', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
-    expect(screen.getByTestId('file-ops-row-browser-war-deck-outline.md')).toBeTruthy();
+    const produced = document.querySelector('.produced-files');
+    expect(produced).toBeTruthy();
+    expect(produced?.textContent).toContain('browser-war-deck-outline.md');
   });
 
   it('does not recover old reference files as produced files', () => {

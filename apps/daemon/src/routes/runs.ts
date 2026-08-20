@@ -8,35 +8,45 @@ import {
   RUN_RESULT_PACKAGE_SCHEMA,
   type AppliedPluginSnapshot,
   type ArtifactManifest,
+  type ByokChatProviderConfig,
   type ChatRunStatus,
   type ChatRunStatusResponse,
   type ProjectMetadata as ContractProjectMetadata,
   type RunResultPackageResponse,
 } from '@open-design/contracts';
 import {
+  buildRunCreatedV4Aliases,
+  buildRunFinishedV4Aliases,
   deriveConfigureGlobals,
   modelIdForTracking,
   sessionModeToTracking,
   type TrackingDesignSystemSource,
   type TrackingDesignSystemKind,
   type TrackingDesignSystemEditSurface,
+  type RunTaskLineageProps,
+  type TrackingRunRecoveryActionType,
 } from '@open-design/contracts/analytics';
 import type { OdNativeEvent } from '@open-design/agui-adapter';
 import { newInsertId, readAnalyticsContext } from '../analytics.js';
 import type { AnalyticsContext } from '../analytics.js';
 import { spawnEnvForAgent } from '../agents.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
+import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
+import {
+  workspaceResourceContextFromRequest,
+  type BoundWorkspaceResourceMutationGate,
+  type WorkspaceResourceAccessInput,
+} from '../collab/workspace-resource-mutation.js';
 import {
   codexSessionIdFromRunEvents,
   readCodexRolloutFirstCall,
 } from '../codex-rollout-usage.js';
-import type { ByokCredentialService } from '../byok/credential-service.js';
 import type { ConnectorService } from '../connectors/service.js';
 import {
   conversationTurnIndexForRun,
+  getFirstProjectConversation,
   getConversation,
   getProject,
-  listConversations,
   normalizeConversationSessionMode,
   updateProject,
   upsertMessage,
@@ -80,7 +90,10 @@ import {
 } from '../run-analytics-observability.js';
 import {
   diffRunArtifacts,
+  primaryArtifactChangeForRun,
   snapshotProjectArtifacts,
+  supportingAssetFilesChangedForRun,
+  type RunArtifactDiff,
   type RunArtifactBaseline,
 } from '../run-artifact-fs.js';
 import {
@@ -99,17 +112,26 @@ import {
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
 import {
+  buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_AGENT_ID,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from '../runtimes/byok-opencode.js';
 import { resolveChatRunInactivityTimeoutMs } from '../runtimes/chat-run-lifecycle.js';
+import { runMessageEventPersistenceAnalytics } from '../runtimes/chat-run-messages.js';
+import { TERMINAL_RUN_STATUSES } from '../runtimes/runs.js';
 import {
   deriveActivationMilestones,
   runAskedUserQuestion,
 } from '../runtimes/run-artifacts.js';
 import {
+  accountScopedRunWorkspaceScopeForProject,
+  pinRunWorkspaceScopeForProject,
+  type RunWorkspaceScope,
+} from '../runtimes/project-amr-trace-env.js';
+import {
   runArtifactCountForRun,
   runDesignSystemCreatedForRun,
+  runFilesWrittenForRun,
   runPreviewModuleCountForRun,
 } from '../runtimes/run-lifecycle-analytics.js';
 import { normalizeCommentAttachments } from '../runtimes/chat-prompt-inputs.js';
@@ -240,14 +262,11 @@ function seededUserMessageTurnMetadataFields(
 interface ProjectRecord {
   id: string;
   name: string;
+  createdAt?: number;
+  updatedAt?: number;
   designSystemId?: string | null;
   metadata?: ProjectMetadata;
   appliedPluginSnapshotId?: string | null;
-}
-
-interface ConversationRecord {
-  id: string;
-  createdAt?: number;
 }
 
 interface RunEventRecord
@@ -274,11 +293,14 @@ interface ChatRun {
   clientRequestId?: string | null;
   requestFingerprint?: string | null;
   agentId: string | null;
+  workspaceScope?: RunWorkspaceScope | null;
   model?: string | null;
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
   cancelRequested?: boolean;
+  cancelOrigin?: ChatRunStatusResponse['cancelOrigin'];
+  terminalTrigger?: ChatRunStatusResponse['terminalTrigger'];
   exitCode?: number | null;
   signal?: string | null;
   error?: string | null;
@@ -332,7 +354,10 @@ interface ChatRun {
     artifactsModified?: number;
     designSystemCreated: boolean;
     previewModuleCount: number;
+    filesWritten?: number;
+    diff?: RunArtifactDiff;
   };
+  artifactPaths?: string[];
   designSystemId?: string | null;
   designSystemRequestedId?: string | null;
   designSystemSelectionSource?: string | null;
@@ -348,6 +373,7 @@ interface ChatRun {
 interface RunCreateMeta extends JsonRecord {
   projectId?: string;
   conversationId?: string;
+  userMessageId?: string;
   assistantMessageId?: string;
   clientRequestId?: string;
   requestFingerprint?: string;
@@ -357,6 +383,7 @@ interface RunCreateMeta extends JsonRecord {
   message?: string;
   currentPrompt?: string;
   projectMetadata?: ProjectMetadata;
+  workspaceScope?: RunWorkspaceScope | null;
 }
 
 interface RunListFilters {
@@ -379,7 +406,12 @@ interface ChatRunService {
   stream(run: ChatRun, req: Request, res: Response): void;
   start(run: ChatRun, starter: () => Promise<unknown>): ChatRun;
   wait(run: ChatRun): Promise<ChatRunStatusResponse>;
-  cancel(run: ChatRun): Promise<ChatRunStatusResponse>;
+  cancel(
+    run: ChatRun,
+    origin?: NonNullable<ChatRunStatusResponse['cancelOrigin']>,
+  ): Promise<ChatRunStatusResponse>;
+  /** Undo an optimistically-created run (e.g. a failed ownership claim). */
+  drop(run: ChatRun): void;
   isTerminal(status: ChatRunStatus): boolean;
   emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
   setAnalyticsRecovery?(run: ChatRun, recovery: {
@@ -452,6 +484,7 @@ export interface RegisterRunRoutesDeps {
       status: number,
       code: string,
       message: string,
+      details?: Record<string, unknown>,
     ) => Response<unknown> | void;
   };
   paths: {
@@ -465,7 +498,6 @@ export interface RegisterRunRoutesDeps {
   chat: {
     startChatRun: (meta: RunCreateMeta, run: ChatRun) => Promise<unknown>;
   };
-  byokCredentials: Pick<ByokCredentialService, 'has'>;
   lifecycle: {
     isDaemonShuttingDown: () => boolean;
   };
@@ -484,8 +516,22 @@ export interface RegisterRunRoutesDeps {
       runs: ChatRunService;
       db: SqliteDb;
     }) => void;
-    loadPluginRegistryView: () => Promise<Parameters<typeof resolvePluginSnapshot>[0]['registry']>;
+    loadPluginRegistryView: (options?: {
+      workspaceId?: string | null;
+      workspaceMemberId?: string | null;
+    }) => Promise<Parameters<typeof resolvePluginSnapshot>[0]['registry']>;
     renderPluginBriefTemplate: (template: string, inputs?: Record<string, unknown>) => string;
+    /**
+     * Fail-closed request-scoped plugin lookup. The catalog API and the run
+     * API must use the same Workspace/member visibility rules; otherwise a
+     * caller can bypass a hidden Personal plugin by posting its id directly
+     * to /api/runs.
+     */
+    authorizePluginRequest?: (
+      req: ApiRequest,
+      res: ApiResponse,
+      pluginId: string,
+    ) => Promise<boolean>;
   };
   telemetry: {
     reportRunCompletionTelemetryFallback: (input: RunCreatedFallbackInput) => void;
@@ -494,12 +540,75 @@ export interface RegisterRunRoutesDeps {
     runRetryEventsForAnalytics: (events: RunEventRecord[]) => RunRetryAnalyticsEvent[];
   };
   messages: {
-    pinAssistantMessageOnRunCreate: (db: SqliteDb, run: ChatRun) => void;
+    pinAssistantMessageOnRunCreate: (
+      db: SqliteDb,
+      run: ChatRun,
+      opts?: {
+        status?: string;
+        beforeFreshInsert?: () => void;
+        beforeClaimCommit?: () => void;
+        isRunActive?: (runId: string) => boolean;
+      },
+    ) => { ok: boolean; reason?: 'active' | 'scope' };
     reconcileAssistantMessageOnRunEnd: (
       db: SqliteDb,
       runs: ChatRunService,
       run: ChatRun,
     ) => void;
+  };
+  /**
+   * Workspace-identity gate for POST /api/runs and POST /api/chat — this
+   * file's two "create a run" entry points. Until this fix both had ZERO
+   * `enforceWorkspace*` coverage: unlike rename/delete/duplicate/writeFiles
+   * and comments (all gated per spec 04 §10/§11), any caller who knew a
+   * projectId could spawn an agent run against it — including a project
+   * bound to a TEAM workspace — with no workspace identity headers at all.
+   *
+   * Borrows the SAME `enforceWorkspaceProjectMutation` instance
+   * `routes/project/index.ts` builds via `createEnforceWorkspaceProjectMutation`
+   * (cross-checked against the daemon's own last-known membership) rather
+   * than re-deriving a second, possibly-drifting copy here — see
+   * `routes/project/comments.ts` for the established borrow-the-project's-
+   * gate pattern this mirrors.
+   *
+   * Optional, and a no-op when omitted, so fixtures that only exercise run
+   * creation (most of this file's existing tests, which use plain
+   * non-workspace-bound projects) keep compiling and behaving exactly as
+   * before — an unbound project's runs were never gated either way, since
+   * `enforceWorkspaceResourceMutation` itself passes a `row === null` lookup
+   * straight through regardless of ctx.
+   */
+  enforceWorkspaceProjectMutation?: BoundWorkspaceResourceMutationGate;
+  /** Fresh exact authority for run reads/cancel after resolving run.projectId. */
+  authorizeProjectRequest?: AuthorizeProjectRequest;
+  /**
+   * Paired with `enforceWorkspaceProjectMutation` above: the SAME
+   * `workspace_projects` binding lookups project's own mutation routes
+   * already use, so a run's gate reads the identical row rename/delete/
+   * duplicate/comments already check instead of a second query shape.
+   */
+  projectStore?: {
+    // `db` is typed `any` here (matching `BoundWorkspaceResourceMutationGate`'s
+    // own `db: unknown` seam) purely to sidestep strict-function-type
+    // contravariance: the concrete `db.ts` implementations take `SqliteDb`,
+    // and this field's value is threaded straight into
+    // `enforceWorkspaceProjectMutation`'s matching `db: unknown` parameters.
+    getWorkspaceProject: (
+      db: any,
+      workspaceId: string,
+      projectId: string,
+    ) => WorkspaceResourceAccessInput | null | undefined;
+    getWorkspaceProjectByProjectId: (
+      db: any,
+      projectId: string,
+    ) => (WorkspaceResourceAccessInput & { workspaceId?: string | null }) | null | undefined;
+    ensureWorkspaceProject?: (
+      db: any,
+      input: Record<string, unknown>,
+    ) => (WorkspaceResourceAccessInput & { workspaceId?: string | null }) | null | undefined;
+  };
+  amrWorkspaceScope?: {
+    isSignedIn: () => boolean | Promise<boolean>;
   };
 }
 
@@ -580,14 +689,6 @@ function isProjectEnrichableDesignSystem(project: ProjectRecord): boolean {
   }
   const metadata = project.metadata;
   return metadata?.importedFrom === 'brand-extraction' || metadata?.importedFrom === 'design-system';
-}
-
-function toConversationRecords(value: unknown): ConversationRecord[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is ConversationRecord =>
-        Boolean(item && typeof item === 'object' && typeof (item as JsonRecord).id === 'string'),
-      )
-    : [];
 }
 
 function toProjectFiles(value: unknown): ProjectFileEntry[] {
@@ -690,8 +791,11 @@ function routeParamId(req: ApiRequest): string | null {
 function withoutSensitiveRunInput(body: JsonRecord): JsonRecord {
   const sanitized = { ...body };
   delete sanitized.byokProvider;
+  delete sanitized.byokProfileId;
   delete sanitized.apiKey;
   delete sanitized.rechargeResumeCapability;
+  // Workspace scope is a server-issued authorization fact, not a request option.
+  delete sanitized.workspaceScope;
   return sanitized;
 }
 
@@ -736,6 +840,7 @@ function runRequestFingerprint(
   delete logicalRequest.requestFingerprint;
   delete logicalRequest.resume;
   delete logicalRequest.analyticsHints;
+  delete logicalRequest.userMessageId;
   delete logicalRequest.assistantMessageId;
   delete logicalRequest.projectMetadata;
   delete logicalRequest.appliedPluginSnapshotId;
@@ -777,49 +882,12 @@ function externalPluginAttributionMismatch(
   );
 }
 
-const CREDENTIAL_FIELD_PATTERN =
-  /^(?:api[_-]?key|authorization|access[_-]?token|refresh[_-]?token|secret|password)$/iu;
-
-function containsCredentialShapedField(value: unknown, depth = 0): boolean {
-  // Over-complex structured input is rejected rather than allowed to outrun
-  // the secret scan. This keeps the credential boundary fail-closed.
-  if (depth > 20) return true;
-  if (value === null || typeof value !== 'object') return false;
-  if (Array.isArray(value)) {
-    return value.some((item) => containsCredentialShapedField(item, depth + 1));
-  }
-  return Object.entries(value as JsonRecord).some(([key, nested]) =>
-    CREDENTIAL_FIELD_PATTERN.test(key)
-    || containsCredentialShapedField(nested, depth + 1),
-  );
-}
-
-async function byokRunInputError(
-  meta: JsonRecord,
-  credentials: Pick<ByokCredentialService, 'has'>,
-): Promise<string | null> {
-  const isByokRequest =
-    meta.agentId === BYOK_OPENCODE_AGENT_ID
-    || typeof meta.byokProfileId === 'string';
-  if (
-    Object.prototype.hasOwnProperty.call(meta, 'byokProvider')
-    || Object.prototype.hasOwnProperty.call(meta, 'apiKey')
-    || (isByokRequest && containsCredentialShapedField(meta))
-  ) {
-    return 'Raw BYOK credentials are not accepted by run APIs; save a secure credential profile and pass byokProfileId.';
-  }
-  if (meta.agentId !== BYOK_OPENCODE_AGENT_ID) return null;
-  const profileId = typeof meta.byokProfileId === 'string'
-    ? meta.byokProfileId.trim()
-    : '';
-  if (!profileId) return BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE;
-  try {
-    return await credentials.has(profileId)
-      ? null
-      : BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE;
-  } catch {
-    return BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE;
-  }
+function hasCompleteByokOpenCodeConfig(meta: JsonRecord): boolean {
+  if (meta.agentId !== BYOK_OPENCODE_AGENT_ID) return true;
+  return buildOpenCodeByokProviderConfig(
+    meta.byokProvider as ByokChatProviderConfig | null | undefined,
+    typeof meta.model === 'string' ? meta.model : null,
+  ) !== null;
 }
 
 function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
@@ -850,6 +918,273 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     pinAssistantMessageOnRunCreate,
     reconcileAssistantMessageOnRunEnd,
   } = ctx.messages;
+
+  /** Authorize every bound run mutation before plugin or snapshot resolution. */
+  async function authorizeRunProjectBeforePluginResolution(
+    req: ApiRequest,
+    res: ApiResponse,
+    projectId: string,
+  ): Promise<{ ok: true; authorizedBoundMutation: boolean } | { ok: false }> {
+    if (!ctx.projectStore || !ctx.authorizeProjectRequest) {
+      return { ok: true, authorizedBoundMutation: false };
+    }
+    const binding = ctx.projectStore.getWorkspaceProjectByProjectId(db, projectId);
+    if (!binding) return { ok: true, authorizedBoundMutation: false };
+
+    const requestContext = workspaceResourceContextFromRequest(req);
+    const mustAuthorize = binding.visibility === 'team' || requestContext !== null;
+    if (!mustAuthorize) {
+      // Headerless local CLI/BYOK calls keep the legacy Personal-project path.
+      return { ok: true, authorizedBoundMutation: false };
+    }
+    if (!await ctx.authorizeProjectRequest(
+      req,
+      res,
+      projectId,
+      { mode: 'write', capability: 'writeFiles' },
+    )) {
+      return { ok: false };
+    }
+    return { ok: true, authorizedBoundMutation: true };
+  }
+
+  function requestedSnapshotBelongsToProject(
+    res: ApiResponse,
+    projectId: string,
+    snapshotId: unknown,
+  ): boolean {
+    if (typeof snapshotId !== 'string' || snapshotId.trim().length === 0) {
+      return true;
+    }
+    const normalizedSnapshotId = snapshotId.trim();
+    const row = db
+      .prepare('SELECT project_id AS projectId FROM applied_plugin_snapshots WHERE id = ?')
+      .get(normalizedSnapshotId) as { projectId?: unknown } | undefined;
+    if (row?.projectId === projectId) return true;
+    sendApiError(
+      res,
+      404,
+      'snapshot-not-found',
+      `Applied plugin snapshot ${normalizedSnapshotId} not found`,
+    );
+    return false;
+  }
+
+  /**
+   * Pin a run to its persisted project binding. The sole adoption branch is a
+   * signed-in AMR request for a truly unbound historical project: an explicitly
+   * Personal local attribution becomes the persisted creator witness. Vela
+   * remains the final membership and billing authority when the run reaches
+   * the cloud; local run creation never probes the Workspace directory.
+   */
+  async function prepareRunWorkspaceScope(
+    req: ApiRequest,
+    res: ApiResponse,
+    projectId: string,
+    agentId: unknown,
+    authorizedBoundMutation = false,
+  ): Promise<
+    | { ok: true; workspaceScope: RunWorkspaceScope | null }
+    | { ok: false }
+  > {
+    if (!ctx.projectStore) return { ok: true, workspaceScope: null };
+    const binding = ctx.projectStore.getWorkspaceProjectByProjectId(db, projectId);
+    const requestContext = workspaceResourceContextFromRequest(req);
+    if (binding) {
+      // A shared Team project is a single-writer resource. Billing still uses
+      // the persisted Workspace binding below, but starting an agent can write
+      // project files and conversation state, so the caller must separately
+      // prove project-owner mutation standing. Explicitly scoped Personal
+      // requests use the same exact creator gate before plugin/snapshot
+      // resolution; only headerless local Personal callers keep legacy access.
+      if (
+        binding.visibility === 'team'
+        && !authorizedBoundMutation
+        && ctx.authorizeProjectRequest
+        && !await ctx.authorizeProjectRequest(
+          req,
+          res,
+          projectId,
+          { mode: 'write', capability: 'writeFiles' },
+        )
+      ) {
+        return { ok: false };
+      }
+      // Run billing scope is the persisted project binding. On the Personal
+      // lane a headerless local caller remains valid; Vela/AMR receives the
+      // signed-in account plus this exact binding and makes the membership/
+      // balance decision.
+      const workspaceScope = pinRunWorkspaceScopeForProject(db, projectId);
+      if (!workspaceScope || workspaceScope.workspaceId !== binding.workspaceId) {
+        sendApiError(
+          res,
+          409,
+          'AMR_WORKSPACE_SCOPE_CONFLICT',
+          'the project Workspace binding changed before the run could be pinned',
+        );
+        return { ok: false };
+      }
+      if (requestContext === null) return { ok: true, workspaceScope };
+      if (requestContext === 'missing') {
+        sendApiError(
+          res,
+          400,
+          'WORKSPACE_CONTEXT_INCOMPLETE',
+          'both workspace and member identity are required',
+        );
+        return { ok: false };
+      }
+      if (requestContext.workspaceId !== binding.workspaceId) {
+        sendApiError(
+          res,
+          403,
+          'WORKSPACE_PROJECT_PERMISSION_DENIED',
+          'run workspace does not match the persisted project workspace',
+        );
+        return { ok: false };
+      }
+      return { ok: true, workspaceScope };
+    }
+
+    // This migration guard is deliberately AMR-only. Local CLIs, BYOK
+    // providers, and every other runtime retain the legacy unbound path and do
+    // not even probe AMR login or Workspace authority.
+    if (agentId !== 'amr' || !ctx.amrWorkspaceScope) {
+      return { ok: true, workspaceScope: null };
+    }
+    if (!await ctx.amrWorkspaceScope.isSignedIn()) {
+      return { ok: true, workspaceScope: null };
+    }
+
+    if (requestContext === null) {
+      // A headerless, genuinely unbound project is the local/account-scoped
+      // compatibility lane. Home may create it before Workspace discovery
+      // settles, after already running the account balance gate; requiring a
+      // later identity here would turn that accepted first prompt into a 409.
+      // Explicitly bound projects still pin their persisted Workspace above.
+      return {
+        ok: true,
+        workspaceScope: accountScopedRunWorkspaceScopeForProject(projectId),
+      };
+    }
+    if (requestContext === 'missing') {
+      sendApiError(
+        res,
+        400,
+        'WORKSPACE_CONTEXT_INCOMPLETE',
+        'both workspace and member identity are required',
+      );
+      return { ok: false };
+    }
+
+    if (requestContext.workspaceTypeAsserted === 'team') {
+      sendApiError(
+        res,
+        409,
+        'AMR_PERSONAL_WORKSPACE_REQUIRED',
+        'historical projects can only be adopted into a Personal Workspace',
+      );
+      return { ok: false };
+    }
+    if (requestContext.workspaceTypeAsserted !== 'personal') {
+      return {
+        ok: true,
+        workspaceScope: accountScopedRunWorkspaceScopeForProject(projectId),
+      };
+    }
+    const ensureWorkspaceProject = ctx.projectStore.ensureWorkspaceProject;
+    if (!ensureWorkspaceProject) {
+      sendApiError(
+        res,
+        409,
+        'AMR_WORKSPACE_SCOPE_REQUIRED',
+        'the project must be migrated into a Personal Workspace before running AMR Cloud',
+      );
+      return { ok: false };
+    }
+
+    const project = toProjectRecord(getProject(db, projectId));
+    if (!project) {
+      sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      return { ok: false };
+    }
+    const { getWorkspaceProjectByProjectId } = ctx.projectStore;
+    const bindPersonal = db.transaction(() => {
+      const existing = getWorkspaceProjectByProjectId(db, projectId);
+      if (existing) return existing;
+      ensureWorkspaceProject(db, {
+        projectId,
+        workspaceId: requestContext.workspaceId,
+        visibility: 'personal',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: requestContext.workspaceMemberId,
+        updatedByWorkspaceMemberId: requestContext.workspaceMemberId,
+        syncState: 'local_only',
+        resourceHubResourceId: null,
+        cloudTombstonedAt: null,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      });
+      return getWorkspaceProjectByProjectId(db, projectId);
+    });
+    const adopted = bindPersonal();
+    if (adopted?.workspaceId !== requestContext.workspaceId) {
+      sendApiError(
+        res,
+        409,
+        'AMR_WORKSPACE_SCOPE_CONFLICT',
+        'the project was bound to another Workspace before AMR could start',
+      );
+      return { ok: false };
+    }
+    const workspaceScope = pinRunWorkspaceScopeForProject(db, projectId);
+    if (!workspaceScope || workspaceScope.workspaceId !== requestContext.workspaceId) {
+      sendApiError(
+        res,
+        409,
+        'AMR_WORKSPACE_SCOPE_CONFLICT',
+        'the project Workspace binding changed before the run could be pinned',
+      );
+      return { ok: false };
+    }
+    return { ok: true, workspaceScope };
+  }
+
+  async function authorizeRunProject(
+    req: ApiRequest,
+    res: ApiResponse,
+    run: ChatRun,
+    options: { mode: 'read'; allowNavigationQuery?: boolean } | {
+      mode: 'write';
+      capability: 'writeFiles';
+    },
+  ): Promise<boolean> {
+    if (!run.projectId || !ctx.authorizeProjectRequest) return true;
+
+    // Once a run exists, status/stream/cancel are local lifecycle operations.
+    // Headerless CLI/MCP/browser callers must not lose access merely because
+    // the Workspace directory is stale or offline, regardless of which agent
+    // created the run. Explicitly asserted identity still goes through the
+    // local project gate so conflicting or partial scope cannot be ignored.
+    const requestContext = workspaceResourceContextFromRequest(req);
+    const carriesNavigationScope =
+      options.mode === 'read'
+      && options.allowNavigationQuery
+      && (
+        (typeof req.query?.workspaceId === 'string'
+          && req.query.workspaceId.trim().length > 0)
+        || (typeof req.query?.workspaceMemberId === 'string'
+          && req.query.workspaceMemberId.trim().length > 0)
+      );
+    if (
+      requestContext === null
+      && !carriesNavigationScope
+    ) {
+      return true;
+    }
+
+    return ctx.authorizeProjectRequest(req, res, run.projectId, options);
+  }
 
   function runToolBundleDeliveryTargetForProject(
     projectId: unknown,
@@ -882,16 +1217,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
     }
-    const initialByokInputError = await byokRunInputError(
-      requestBody,
-      ctx.byokCredentials,
-    );
-    if (initialByokInputError) {
+    if (!hasCompleteByokOpenCodeConfig(requestBody)) {
       return sendApiError(
         res,
         400,
         'VALIDATION_FAILED',
-        initialByokInputError,
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
     // Reject a client-supplied conversationId that is missing a projectId or
@@ -910,14 +1241,53 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
     }
+    let authorizedBoundMutation = false;
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+      const authorization = await authorizeRunProjectBeforePluginResolution(
+        req,
+        res,
+        requestBody.projectId,
+      );
+      if (!authorization.ok) return;
+      authorizedBoundMutation = authorization.authorizedBoundMutation;
+    }
+    let effectiveAgentId =
+      typeof requestBody.agentId === 'string' && requestBody.agentId
+        ? requestBody.agentId
+        : null;
+    if (!effectiveAgentId) {
+      try {
+        const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
+          ? appCfg.agentId
+          : null;
+        const agents = await detectAgents(
+          toJsonRecord(appCfg.agentCliEnv),
+        ).catch((): DetectedAgent[] => []);
+        const cfgAgentAvailable = cfgAgent
+          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
+          : false;
+        effectiveAgentId = cfgAgent && cfgAgentAvailable
+          ? cfgAgent
+          : agents.find((agent) => agent.available)?.id ?? null;
+      } catch (err) {
+        console.warn('[runs] agent id fallback failed', err);
+      }
+    }
+    let preparedWorkspaceScope: RunWorkspaceScope | null = null;
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+      const prepared = await prepareRunWorkspaceScope(
+        req,
+        res,
+        requestBody.projectId,
+        effectiveAgentId,
+        authorizedBoundMutation,
+      );
+      if (!prepared.ok) return;
+      preparedWorkspaceScope = prepared.workspaceScope;
+    }
     let resolvedSnapshot = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      let registryView: Parameters<typeof resolvePluginSnapshot>[0]['registry'];
-      try {
-        registryView = await loadPluginRegistryView();
-      } catch (err) {
-        return res.status(500).json({ error: String(err) });
-      }
       const explicitPlugin =
         requestBody.pluginId || requestBody.appliedPluginSnapshotId;
       let runResolveBody: JsonRecord = requestBody;
@@ -935,6 +1305,39 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           }
         }
       }
+      // Authorize the final plugin id, not only the literal request field.
+      // Project-kind fallback may synthesize a pluginId, and it must not gain
+      // a bypass around the same scoped catalog resolver.
+      if (
+        typeof runResolveBody.pluginId === 'string'
+        && runResolveBody.pluginId.length > 0
+        && ctx.plugins.authorizePluginRequest
+        && !await ctx.plugins.authorizePluginRequest(
+          req,
+          res,
+          runResolveBody.pluginId,
+        )
+      ) return;
+      let registryView: Parameters<typeof resolvePluginSnapshot>[0]['registry'];
+      try {
+        const projectBinding = ctx.projectStore?.getWorkspaceProjectByProjectId(
+          db,
+          requestBody.projectId,
+        );
+        registryView = await loadPluginRegistryView(
+          projectBinding?.workspaceId
+            ? {
+                workspaceId: String(projectBinding.workspaceId),
+                workspaceMemberId:
+                  typeof projectBinding.createdByWorkspaceMemberId === 'string'
+                    ? projectBinding.createdByWorkspaceMemberId
+                    : null,
+              }
+            : undefined,
+        );
+      } catch (err) {
+        return res.status(500).json({ error: String(err) });
+      }
       const resolved = resolvePluginSnapshot({
         db,
         body: runResolveBody,
@@ -944,6 +1347,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           : null,
         registry: registryView,
         connectorProbe: buildConnectorProbe(connectorService),
+        requireSnapshotProjectMatch: true,
       });
       if (resolved && !resolved.ok) {
         if (!explicitPlugin) {
@@ -961,6 +1365,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       ...withoutSensitiveRunInput(requestBody),
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
+      ...(effectiveAgentId ? { agentId: effectiveAgentId } : {}),
+      // Always replace any untrusted request field, including with null for an
+      // unbound project.
+      workspaceScope: preparedWorkspaceScope,
     };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
@@ -1007,16 +1415,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[runs] agent id fallback failed', err);
       }
     }
-    const resolvedByokInputError = await byokRunInputError(
-      meta,
-      ctx.byokCredentials,
-    );
-    if (resolvedByokInputError) {
+    if (!hasCompleteByokOpenCodeConfig({
+      ...meta,
+      ...(requestBody.byokProvider !== undefined
+        ? { byokProvider: requestBody.byokProvider }
+        : {}),
+    })) {
       return sendApiError(
         res,
         400,
         'VALIDATION_FAILED',
-        resolvedByokInputError,
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
     const toolBundleSupport = validateRunToolBundleForAgent(
@@ -1104,17 +1513,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       (typeof meta.conversationId !== 'string' || !meta.conversationId)
     ) {
       try {
-        const convs = toConversationRecords(listConversations(db, meta.projectId));
-        const defaultConv = convs.length > 0
-          ? [...convs].sort((a, b) => {
-              const aCreated = Number(a?.createdAt);
-              const bCreated = Number(b?.createdAt);
-              if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
-                return aCreated - bCreated;
-              }
-              return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
-            })[0]
-          : null;
+        const defaultConv = getFirstProjectConversation(db, meta.projectId);
         if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
           meta.conversationId = defaultConv.id;
           conversationFallbackBound = true;
@@ -1154,17 +1553,121 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // omit it. Without a server-side pin, pinAssistantMessageOnRunCreate no-ops,
     // lastMessageId stays null, and multi-turn native session resume is skipped
     // (missing_cursor / resume_skipped). Ownership is validated above first.
-    // Also seed the user turn when the server bound conversationId via the
-    // headless fallback even if the client already supplied a pin — the pre-
-    // refactor path always seeded in that case, and MCP allows pin + omitted
-    // conversationId independently.
+    // A web client also supplies userMessageId so this route can pin the user
+    // row before the assistant row. Its separate best-effort PUT may arrive
+    // later; upserting the same id then preserves the position established
+    // here. Headless fallback keeps its existing generated-id behavior.
     //
     // Prepare seed payload before createOrReuse, but only persist when the run
     // is newly created so lost-response retries with clientRequestId do not
     // duplicate user turns.
     const missingClientPin =
       typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId;
-    let omitPinUserSeed: {
+    const clientUserMessageId =
+      typeof meta.userMessageId === 'string' && meta.userMessageId
+        ? meta.userMessageId
+        : null;
+    if (clientUserMessageId && !isSafeId(clientUserMessageId)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'userMessageId is invalid');
+    }
+    if (clientUserMessageId && typeof meta.conversationId === 'string') {
+      const existingUserPin = db
+        .prepare(`SELECT role, conversation_id AS conversationId FROM messages WHERE id = ?`)
+        .get(clientUserMessageId) as
+        | { role?: unknown; conversationId?: unknown }
+        | undefined;
+      if (existingUserPin && existingUserPin.role !== 'user') {
+        return sendApiError(
+          res,
+          409,
+          'INVALID_USER_MESSAGE',
+          'userMessageId must reference a user message',
+        );
+      }
+      if (
+        existingUserPin
+        && existingUserPin.conversationId !== meta.conversationId
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'IDEMPOTENCY_CONFLICT',
+          'userMessageId belongs to a different conversation',
+        );
+      }
+    }
+    // The run's assistantMessageId must reference an assistant message in THIS
+    // conversation, or the run would pin/append/finalize a row it does not own
+    // (a user row in the same conversation, or an assistant row in another
+    // conversation). Without this check, `pinAssistantMessageOnRunCreate` only
+    // skips the pin and the run still mutates the foreign row via the id-only
+    // writers (#6418 review).
+    const clientAssistantMessageId =
+      typeof meta.assistantMessageId === 'string' && meta.assistantMessageId
+        ? meta.assistantMessageId
+        : null;
+    if (clientAssistantMessageId && !isSafeId(clientAssistantMessageId)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId is invalid');
+    }
+    if (
+      clientUserMessageId
+      && clientAssistantMessageId
+      && clientUserMessageId === clientAssistantMessageId
+    ) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'userMessageId and assistantMessageId must be distinct',
+      );
+    }
+    if (clientAssistantMessageId) {
+      // Without a resolvable conversation there is nothing to validate the
+      // assistantMessageId against — the run would mutate a row it does not
+      // own via the id-only writers. Reject rather than guess (nettee).
+      if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
+      }
+      const chatConversation = getConversation(db, meta.conversationId);
+      if (
+        !chatConversation
+        || (
+          typeof meta.projectId === 'string'
+          && meta.projectId
+          && chatConversation.projectId !== meta.projectId
+        )
+      ) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
+      const existingAssistantPin = db
+        .prepare(
+          `SELECT role, conversation_id AS conversationId, run_id AS runId, run_status AS runStatus FROM messages WHERE id = ?`,
+        )
+        .get(clientAssistantMessageId) as
+        | { role?: unknown; conversationId?: unknown; runId?: unknown; runStatus?: unknown }
+        | undefined;
+      if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
+        return sendApiError(
+          res,
+          409,
+          'INVALID_ASSISTANT_MESSAGE',
+          'assistantMessageId must reference an assistant message',
+        );
+      }
+      if (
+        existingAssistantPin
+        && existingAssistantPin.conversationId !== meta.conversationId
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'IDEMPOTENCY_CONFLICT',
+          'assistantMessageId belongs to a different conversation',
+        );
+      }
+    }
+    let runUserSeed: {
+      id: string;
       conversationId: string;
       content: string;
       attachments: ReturnType<typeof seededUserMessageAttachmentFields>;
@@ -1173,7 +1676,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
-      (missingClientPin || conversationFallbackBound)
+      (clientUserMessageId || missingClientPin || conversationFallbackBound)
     ) {
       if (missingClientPin) {
         meta.assistantMessageId = randomUUID();
@@ -1202,7 +1705,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             ? originalMessage
             : null;
       if (promptForUserMessage !== null) {
-        omitPinUserSeed = {
+        runUserSeed = {
+          id: clientUserMessageId ?? randomUUID(),
           conversationId: meta.conversationId,
           content: promptForUserMessage,
           attachments: seededAttachments,
@@ -1213,6 +1717,34 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         };
       }
     }
+    const seedRunUserMessage = () => {
+      if (!runUserSeed) return;
+      const now = Date.now();
+      upsertMessage(db, runUserSeed.conversationId, {
+        id: runUserSeed.id,
+        role: 'user',
+        content: runUserSeed.content,
+        startedAt: now,
+        endedAt: now,
+        // Same turn metadata the web client writes via PUT /messages so
+        // reload/retry keep sessionMode, runContext, and applied plugin.
+        ...runUserSeed.turnMetadata,
+        // Preserve request attachments/commentAttachments on the seeded user
+        // turn so reload/listMessages still show chips and annotation context
+        // for omit-pin / headless clients (same columns as PUT /messages).
+        ...runUserSeed.attachments,
+      });
+      // Bump parent project updatedAt so listProjects reorders (same as
+      // PUT /messages). Headless/API turns that never hit that route would
+      // otherwise leave the project buried under more recent activity.
+      if (typeof meta.projectId === 'string' && meta.projectId) {
+        updateProject(db, meta.projectId, {});
+      }
+    };
+    const isRunActiveForAssistantClaim = (runId: string): boolean => {
+      const existingRun = design.runs.get(runId);
+      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
+    };
     meta.requestFingerprint = runRequestFingerprint(
       meta,
       resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
@@ -1260,47 +1792,70 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ...(run.pluginId ? { pluginId: run.pluginId } : {}),
         });
       }
-      if (!rechargeFailure || !design.runs.prepareRestart(run)) {
+      if (!rechargeFailure) {
         return sendApiError(
           res,
           409,
           'RUN_NOT_RECHARGE_RESUMABLE',
-          'Only a failed Open Design Cloud run waiting for recharge can be resumed with the same request',
+          'Only a failed OpenDesign Cloud run waiting for recharge can be resumed with the same request',
+        );
+      }
+      // Claim BEFORE arming the restart. On a conflict the reused run stays
+      // terminal + resumable (never dropped) and the request is rejected —
+      // the claim writes the post-restart `queued` intent so the message row
+      // does not stay terminal while the run is being resumed (#6418).
+      const resumeClaim = pinAssistantMessageOnRunCreate(db, run, {
+        status: 'queued',
+        isRunActive: isRunActiveForAssistantClaim,
+      });
+      if (!resumeClaim.ok) {
+        return sendApiError(
+          res,
+          409,
+          'RUN_IN_PROGRESS',
+          'assistantMessageId is already bound to an active run',
+        );
+      }
+      if (!design.runs.prepareRestart(run)) {
+        return sendApiError(
+          res,
+          409,
+          'RUN_NOT_RECHARGE_RESUMABLE',
+          'Only a failed OpenDesign Cloud run waiting for recharge can be resumed with the same request',
         );
       }
       resumed = true;
     }
-    if (creation.kind === 'created' && omitPinUserSeed) {
+    // Atomic ownership claim runs BEFORE any message seeding: a rejected run
+    // never leaves an orphan user turn (nettee on #6418). Only a freshly
+    // created run is dropped on failure — a resumed loser is the client's own
+    // idempotent run and must survive.
+    if (creation.kind === 'created') {
+      let claimed: { ok: boolean; reason?: 'active' | 'scope' };
       try {
-        const now = Date.now();
-        upsertMessage(db, omitPinUserSeed.conversationId, {
-          id: randomUUID(),
-          role: 'user',
-          content: omitPinUserSeed.content,
-          startedAt: now,
-          endedAt: now,
-          // Same turn metadata the web client writes via PUT /messages so
-          // reload/retry keep sessionMode, runContext, and applied plugin.
-          ...omitPinUserSeed.turnMetadata,
-          // Preserve request attachments/commentAttachments on the seeded user
-          // turn so reload/listMessages still show chips and annotation context
-          // for omit-pin / headless clients (same columns as PUT /messages).
-          ...omitPinUserSeed.attachments,
-        });
-        // Bump parent project updatedAt so listProjects reorders (same as
-        // PUT /messages). Headless/API turns that never hit that route would
-        // otherwise leave the project buried under more recent activity.
-        if (typeof meta.projectId === 'string' && meta.projectId) {
-          updateProject(db, meta.projectId, {});
-        }
+        const claimOptions = runUserSeed
+          ? {
+              beforeClaimCommit: () => {
+                seedRunUserMessage();
+              },
+              isRunActive: isRunActiveForAssistantClaim,
+            }
+          : { isRunActive: isRunActiveForAssistantClaim };
+        claimed = pinAssistantMessageOnRunCreate(db, run, claimOptions);
       } catch (err) {
-        console.warn('[runs] api client user message pin failed', err);
+        // Never let an unclaimed run start.
+        design.runs.drop(run);
+        throw err;
       }
-    }
-    try {
-      pinAssistantMessageOnRunCreate(db, run);
-    } catch (err) {
-      console.warn('[runs] message create pin failed', err);
+      if (!claimed.ok) {
+        design.runs.drop(run);
+        return sendApiError(
+          res,
+          409,
+          'RUN_IN_PROGRESS',
+          'assistantMessageId is already bound to an active run',
+        );
+      }
     }
     const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
     if (requestAnalyticsContext?.clientType === 'external_mcp') {
@@ -1355,7 +1910,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[plugins] skill candidate hook setup failed', err);
       }
     }
-    design.runs.start(run, () => startChatRun(meta, run));
+    const executionMeta: RunCreateMeta = {
+      ...meta,
+      ...(requestBody.byokProvider !== undefined
+        ? { byokProvider: requestBody.byokProvider }
+        : {}),
+    };
+    design.runs.start(run, () => startChatRun(executionMeta, run));
 
     const reqBody = requestBody;
     const analyticsHints =
@@ -1463,6 +2024,46 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const hintProjectTurnIndex = typeof analyticsHints.projectTurnIndex === 'number'
         ? analyticsHints.projectTurnIndex
         : undefined;
+      const taskExecutionId = typeof analyticsHints.taskExecutionId === 'string'
+        && analyticsHints.taskExecutionId.length > 0
+        ? analyticsHints.taskExecutionId
+        : run.clientRequestId ?? run.id;
+      const initialRunId = typeof analyticsHints.initialRunId === 'string'
+        && analyticsHints.initialRunId.length > 0
+        ? analyticsHints.initialRunId
+        : run.id;
+      const taskRunIndex = typeof analyticsHints.taskRunIndex === 'number'
+        && Number.isInteger(analyticsHints.taskRunIndex)
+        && analyticsHints.taskRunIndex >= 0
+        ? analyticsHints.taskRunIndex
+        : 0;
+      const recoveryActionTypes: ReadonlySet<TrackingRunRecoveryActionType> = new Set([
+        'manual_retry',
+        'resume_run',
+        'authorize_and_retry',
+        'switch_model_retry',
+        'switch_runtime_retry',
+        'question_answer',
+      ]);
+      const recoveryActionType = typeof analyticsHints.recoveryActionType === 'string'
+        && recoveryActionTypes.has(
+          analyticsHints.recoveryActionType as TrackingRunRecoveryActionType,
+        )
+        ? analyticsHints.recoveryActionType as TrackingRunRecoveryActionType
+        : undefined;
+      const taskLineage: RunTaskLineageProps = {
+        task_execution_id: taskExecutionId,
+        initial_run_id: initialRunId,
+        task_run_index: taskRunIndex,
+        ...(typeof analyticsHints.sourceRunId === 'string' && analyticsHints.sourceRunId.length > 0
+          ? { source_run_id: analyticsHints.sourceRunId }
+          : {}),
+        ...(recoveryActionType ? { recovery_action_type: recoveryActionType } : {}),
+        ...(typeof analyticsHints.recoveryActionInstanceId === 'string'
+          && analyticsHints.recoveryActionInstanceId.length > 0
+          ? { recovery_action_instance_id: analyticsHints.recoveryActionInstanceId }
+          : {}),
+      };
       const conversationTurnIndex = run.conversationId
         ? conversationTurnIndexForRun(db, run.conversationId, run.id)
         : null;
@@ -1676,6 +2277,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             }
           : {}),
       };
+      Object.assign(baseProps, buildRunCreatedV4Aliases(baseProps, taskLineage));
       design.runs.setAnalyticsRecovery?.(run, {
         context: analyticsContext,
         properties: baseProps,
@@ -1723,6 +2325,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           status,
           ...(errorCode ? { errorCode } : {}),
           agentId: run.agentId,
+          cancelOrigin: run.cancelOrigin ?? null,
+          terminalTrigger: run.terminalTrigger ?? null,
           events: run.events,
         });
         const usageAnalytics = scanRunEventsForUsageAnalytics(
@@ -1758,7 +2362,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         // in the rollout `last_token_usage`, read here best-effort.
         const firstCallUsage = await (async (): Promise<{
           first_call_input_tokens?: number;
+          first_call_input_tokens_effective?: number;
           first_call_cache_read_input_tokens?: number;
+          first_call_cache_creation_input_tokens?: number;
           first_call_cache_hit_ratio?: number;
         } | null> => {
           if (run.agentId === 'codex') {
@@ -1775,7 +2381,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                   'codex',
                 ),
               ).CODEX_HOME;
-              return await readCodexRolloutFirstCall({ codexHome, sessionId });
+              const codexUsage = await readCodexRolloutFirstCall({ codexHome, sessionId });
+              return codexUsage
+                ? {
+                    ...codexUsage,
+                    first_call_input_tokens_effective:
+                      codexUsage.first_call_input_tokens,
+                  }
+                : null;
             } catch {
               return null;
             }
@@ -1783,10 +2396,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           if (usageAnalytics.first_call_input_tokens === undefined) return null;
           return {
             first_call_input_tokens: usageAnalytics.first_call_input_tokens,
+            ...(usageAnalytics.first_call_input_tokens_effective !== undefined
+              ? {
+                  first_call_input_tokens_effective:
+                    usageAnalytics.first_call_input_tokens_effective,
+                }
+              : {}),
             ...(usageAnalytics.first_call_cache_read_input_tokens !== undefined
               ? {
                   first_call_cache_read_input_tokens:
                     usageAnalytics.first_call_cache_read_input_tokens,
+                }
+              : {}),
+            ...(usageAnalytics.first_call_cache_creation_input_tokens !== undefined
+              ? {
+                  first_call_cache_creation_input_tokens:
+                    usageAnalytics.first_call_cache_creation_input_tokens,
                 }
               : {}),
             ...(usageAnalytics.first_call_cache_hit_ratio !== undefined
@@ -1808,11 +2433,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           runDesignSystemCreatedForRun(run);
         const toolStreamPreviewModuleCount = (): number =>
           runPreviewModuleCountForRun(run);
+        const toolStreamFilesWritten = (): number => runFilesWrittenForRun(run);
         let artifactCount: number;
         let artifactsCreated: number | undefined;
         let artifactsModified: number | undefined;
         let designSystemCreated: boolean;
         let previewModuleCount: number;
+        let filesWritten: number | undefined;
+        let artifactDiff: RunArtifactDiff | undefined;
         const artifactOutcome = run.artifactOutcome;
         if (artifactOutcome) {
           artifactCount = artifactOutcome.artifactCount;
@@ -1820,6 +2448,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           artifactsModified = artifactOutcome.artifactsModified;
           designSystemCreated = artifactOutcome.designSystemCreated;
           previewModuleCount = artifactOutcome.previewModuleCount;
+          filesWritten = artifactOutcome.filesWritten;
+          artifactDiff = artifactOutcome.diff;
         } else {
           const artifactBaseline = runArtifactBaselines.take(run.id);
           if (artifactBaseline && !artifactBaseline.contended) {
@@ -1833,20 +2463,24 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               diff = null;
             }
             if (diff) {
+              artifactDiff = diff;
               artifactCount = diff.touched;
               artifactsCreated = diff.created;
               artifactsModified = diff.modified;
               designSystemCreated = diff.designSystemCreated;
               previewModuleCount = diff.previewModuleCount;
+              filesWritten = diff.filesWritten;
             } else {
               artifactCount = toolStreamArtifactCount();
               designSystemCreated = toolStreamDesignSystemCreated();
               previewModuleCount = toolStreamPreviewModuleCount();
+              filesWritten = toolStreamFilesWritten();
             }
           } else {
             artifactCount = toolStreamArtifactCount();
             designSystemCreated = toolStreamDesignSystemCreated();
             previewModuleCount = toolStreamPreviewModuleCount();
+            filesWritten = toolStreamFilesWritten();
           }
         }
         const touchedArtifactPaths = runTouchedArtifactPaths(run);
@@ -1897,7 +2531,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             insertId: `${runInsertId}-${retryEvent.event}-${index}`,
           });
         }
-        const finishedProperties = {
+        const clarificationRequested = runAskedUserQuestion(run.events);
+        const interactionMode = typeof reqBody.sessionMode === 'string'
+          ? sessionModeToTracking(reqBody.sessionMode)
+          : undefined;
+        const primaryArtifactChange = artifactDiff
+          ? primaryArtifactChangeForRun({
+              diff: artifactDiff,
+              projectKind: runProjectKind,
+              hadExistingArtifacts: hintHasExistingArtifact === true,
+              ...(interactionMode ? { interactionMode } : {}),
+              clarificationRequested,
+            })
+          : undefined;
+        const supportingAssetFilesChanged = artifactDiff
+          ? supportingAssetFilesChangedForRun(artifactDiff, runProjectKind)
+          : undefined;
+        const finishedProperties: Record<string, unknown> = {
             ...baseProps,
             design_system_id: run.designSystemId ?? undefined,
             design_system_digest: run.designSystemDigest ?? undefined,
@@ -1933,7 +2583,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               : {}),
             ...(artifactsCreated !== undefined ? { artifacts_created: artifactsCreated } : {}),
             ...(artifactsModified !== undefined ? { artifacts_modified: artifactsModified } : {}),
-            asked_user_question: runAskedUserQuestion(run.events),
+            ...(filesWritten !== undefined ? { files_written_count: filesWritten } : {}),
+            asked_user_question: clarificationRequested,
             retry_attempt_count: run.retryAttemptCount ?? 0,
             retry_final_result: run.retryFinalResult ?? 'not_attempted',
             ...(agentCliVersion
@@ -2031,7 +2682,57 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             tool_error_count: toolAnalytics.tool_error_count,
             tool_name_count: toolAnalytics.tool_name_count,
             tool_names: toolAnalytics.tool_names_csv,
+            ...runMessageEventPersistenceAnalytics(run),
           };
+        Object.assign(
+          finishedProperties,
+          buildRunFinishedV4Aliases(finishedProperties, taskLineage, {
+            inputAccountingMode: usageAnalytics.input_accounting_mode,
+            ...(firstCallUsage
+              ? {
+                  firstModelCall: {
+                    ...(firstCallUsage.first_call_input_tokens !== undefined
+                      ? { provider_input_tokens: firstCallUsage.first_call_input_tokens }
+                      : {}),
+                    ...(firstCallUsage.first_call_input_tokens_effective !== undefined
+                      ? { effective_input_tokens: firstCallUsage.first_call_input_tokens_effective }
+                      : {}),
+                    ...(firstCallUsage.first_call_cache_read_input_tokens !== undefined
+                      ? { cache_read_tokens: firstCallUsage.first_call_cache_read_input_tokens }
+                      : {}),
+                    ...(firstCallUsage.first_call_cache_creation_input_tokens !== undefined
+                      ? { cache_write_tokens: firstCallUsage.first_call_cache_creation_input_tokens }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(primaryArtifactChange
+              ? { primaryArtifactChange }
+              : {}),
+            ...(artifactDiff
+              ? {
+                  artifactFiles: {
+                    changed_file_count: artifactDiff.contentTouched,
+                    created_file_count: artifactDiff.contentCreated,
+                    modified_file_count: artifactDiff.contentModified,
+                    ...(supportingAssetFilesChanged !== undefined
+                      ? {
+                          supporting_asset_files_changed_count:
+                            supportingAssetFilesChanged,
+                        }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(isDesignSystemRun
+              ? {
+                  designSystemChangeType: designSystemCreated
+                    ? hintHasExistingArtifact === true ? 'modified' : 'created'
+                    : 'none',
+                }
+              : {}),
+          }),
+        );
         // Refresh local recovery snapshot so crash recovery matches PostHog
         // `run_finished` (usage/timing/tools), not only run_created baseProps.
         // Keep the base insertId here: reconcileDurableRunTerminals appends
@@ -2054,10 +2755,55 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
   });
 
-  app.get('/api/runs', (req: ApiRequest, res: ApiResponse) => {
+  app.get('/api/runs', async (req: ApiRequest, res: ApiResponse) => {
     const { projectId, conversationId, status } = req.query;
     const runs = design.runs.list({ projectId, conversationId, status });
-    const body = { runs: runs.map(design.runs.statusBody) };
+    let visibleRuns = runs;
+    if (typeof projectId === 'string' && projectId) {
+      const binding =
+        ctx.projectStore?.getWorkspaceProjectByProjectId(db, projectId);
+      if (binding) {
+        const requestContext = workspaceResourceContextFromRequest(req);
+        if (requestContext === null) {
+          // Headerless local CLI/MCP callers may list only the runs whose
+          // persisted runtime is known not to use AMR's Workspace billing
+          // plane. Filtering the whole set avoids both insertion-order bugs:
+          // an AMR first row cannot block local runs, and a non-AMR first row
+          // cannot accidentally reveal AMR or unknown-runtime runs.
+          visibleRuns = runs.filter(
+            (run) =>
+              typeof run.agentId === 'string'
+              && run.agentId.length > 0
+              && run.agentId !== 'amr',
+          );
+        } else if (
+          ctx.authorizeProjectRequest
+          && !await ctx.authorizeProjectRequest(
+            req,
+            res,
+            projectId,
+            { mode: 'read' },
+          )
+        ) {
+          return;
+        }
+      }
+    } else if (
+      ctx.projectStore
+      && runs.some(
+        (run) =>
+          run.projectId
+          && ctx.projectStore?.getWorkspaceProjectByProjectId(db, run.projectId),
+      )
+    ) {
+      return sendApiError(
+        res,
+        400,
+        'PROJECT_SCOPE_REQUIRED',
+        'projectId is required when listing Workspace-bound runs',
+      );
+    }
+    const body = { runs: visibleRuns.map(design.runs.statusBody) };
     res.json(body);
   });
 
@@ -2108,6 +2854,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    if (!await authorizeRunProject(req, res, run, { mode: 'read' })) return;
     const status = design.runs.statusBody(run);
     const project = run.projectId ? toProjectRecord(getProject(db, run.projectId)) : null;
     let files: ProjectFileEntry[] = [];
@@ -2194,6 +2941,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    if (!await authorizeRunProject(req, res, run, { mode: 'read' })) return;
     const status = design.runs.statusBody(run);
     if (!design.runs.isTerminal(run.status)) {
       res.json(status);
@@ -2232,11 +2980,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     });
   });
 
-  app.get('/api/runs/:id/events', (req: ApiRequest, res: ApiResponse) => {
+  app.get('/api/runs/:id/events', async (req: ApiRequest, res: ApiResponse) => {
     const runId = routeParamId(req);
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    if (!await authorizeRunProject(
+      req,
+      res,
+      run,
+      { mode: 'read', allowNavigationQuery: true },
+    )) return;
     design.runs.stream(run, req, res);
   });
 
@@ -2245,6 +2999,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    if (!await authorizeRunProject(
+      req,
+      res,
+      run,
+      { mode: 'read', allowNavigationQuery: true },
+    )) return;
     const { encodeOdEventForAgui } = await import('@open-design/agui-adapter');
     const sse = createSseResponse(res);
     const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
@@ -2294,7 +3054,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const status = await design.runs.cancel(run);
+    if (!await authorizeRunProject(
+      req,
+      res,
+      run,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
+    const status = await design.runs.cancel(run, 'user_stop');
     const body = { ok: true, run: status };
     res.json(body);
   });
@@ -2349,16 +3115,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
     }
-    const byokInputError = await byokRunInputError(
-      requestBody,
-      ctx.byokCredentials,
-    );
-    if (byokInputError) {
+    let authorizedBoundMutation = false;
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+      const authorization = await authorizeRunProjectBeforePluginResolution(
+        req,
+        res,
+        requestBody.projectId,
+      );
+      if (!authorization.ok) return;
+      authorizedBoundMutation = authorization.authorizedBoundMutation;
+    }
+    if (!hasCompleteByokOpenCodeConfig(requestBody)) {
       return sendApiError(
         res,
         400,
         'VALIDATION_FAILED',
-        byokInputError,
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
     const meta: RunCreateMeta = {
@@ -2366,7 +3138,91 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
       ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
+      workspaceScope: null,
     };
+    // Mirror the POST /api/runs ownership check: the assistantMessageId must
+    // reference an assistant message in THIS conversation, or the run mutates a
+    // row it does not own via the id-only writers (#6418 review).
+    const chatAssistantMessageId =
+      typeof meta.assistantMessageId === 'string' && meta.assistantMessageId
+        ? meta.assistantMessageId
+        : null;
+    if (chatAssistantMessageId) {
+      // Without a resolvable conversation there is nothing to validate the
+      // assistantMessageId against — the run would mutate a row it does not
+      // own via the id-only writers (nettee on #6418).
+      if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
+      }
+      const chatConversation = getConversation(db, meta.conversationId);
+      if (
+        !chatConversation
+        || (
+          typeof meta.projectId === 'string'
+          && meta.projectId
+          && chatConversation.projectId !== meta.projectId
+        )
+      ) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
+      const existingAssistantPin = db
+        .prepare(
+          `SELECT role, conversation_id AS conversationId, run_id AS runId, run_status AS runStatus FROM messages WHERE id = ?`,
+        )
+        .get(chatAssistantMessageId) as
+        | { role?: unknown; conversationId?: unknown; runId?: unknown; runStatus?: unknown }
+        | undefined;
+      if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
+        return sendApiError(
+          res,
+          409,
+          'INVALID_ASSISTANT_MESSAGE',
+          'assistantMessageId must reference an assistant message',
+        );
+      }
+      if (
+        existingAssistantPin
+        && existingAssistantPin.conversationId !== meta.conversationId
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'IDEMPOTENCY_CONFLICT',
+          'assistantMessageId belongs to a different conversation',
+        );
+      }
+    }
+    if (typeof meta.projectId === 'string' && meta.projectId) {
+      const preparedWorkspaceScope =
+        await prepareRunWorkspaceScope(
+          req,
+          res,
+          meta.projectId,
+          meta.agentId,
+          authorizedBoundMutation,
+        );
+      if (!preparedWorkspaceScope.ok) return;
+      meta.workspaceScope = preparedWorkspaceScope.workspaceScope;
+    }
+    if (
+      typeof requestBody.pluginId === 'string'
+      && requestBody.pluginId.length > 0
+      && ctx.plugins.authorizePluginRequest
+      && !await ctx.plugins.authorizePluginRequest(
+        req,
+        res,
+        requestBody.pluginId,
+      )
+    ) return;
+    if (
+      typeof meta.projectId === 'string'
+      && meta.projectId
+      && !requestedSnapshotBelongsToProject(
+        res,
+        meta.projectId,
+        meta.appliedPluginSnapshotId,
+      )
+    ) return;
     meta.requestFingerprint = runRequestFingerprint(meta);
     const creation = design.runs.createOrReuse(meta);
     if (creation.kind === 'conflict') {
@@ -2382,16 +3238,41 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       design.runs.stream(run, req, res);
       return;
     }
+    const isRunActiveForAssistantClaim = (runId: string): boolean => {
+      const existingRun = design.runs.get(runId);
+      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
+    };
+    // Atomic ownership claim (#6418): a created run must acquire the assistant
+    // message before streaming — otherwise drop the run and reject.
+    let claimed: { ok: boolean; reason?: 'active' | 'scope' };
     try {
-      pinAssistantMessageOnRunCreate(db, run);
+      claimed = pinAssistantMessageOnRunCreate(db, run, {
+        isRunActive: isRunActiveForAssistantClaim,
+      });
     } catch (err) {
-      console.warn('[chat] message create pin failed', err);
+      design.runs.drop(run);
+      throw err;
+    }
+    if (!claimed.ok) {
+      design.runs.drop(run);
+      return sendApiError(
+        res,
+        409,
+        'RUN_IN_PROGRESS',
+        'assistantMessageId is already bound to an active run',
+      );
     }
     design.runs.stream(run, req, res);
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
-    design.runs.start(run, () => startChatRun(meta, run));
+    const executionMeta: RunCreateMeta = {
+      ...meta,
+      ...(requestBody.byokProvider !== undefined
+        ? { byokProvider: requestBody.byokProvider }
+        : {}),
+    };
+    design.runs.start(run, () => startChatRun(executionMeta, run));
   });
 }
 
-export const __forTestByokRunInputError = byokRunInputError;
+export const __forTestHasCompleteByokOpenCodeConfig = hasCompleteByokOpenCodeConfig;
 export const __forTestWithoutSensitiveRunInput = withoutSensitiveRunInput;

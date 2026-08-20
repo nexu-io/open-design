@@ -234,6 +234,12 @@ export interface AnalyticsService {
     properties?: Record<string, unknown>;
     insertId?: string;
   }): Promise<void>;
+  identifyGroup(args: {
+    context: AnalyticsContext;
+    groupType: 'workspace';
+    groupKey: string;
+    properties: Record<string, unknown>;
+  }): Promise<void>;
   shutdown(): Promise<void>;
 }
 
@@ -241,6 +247,7 @@ const NOOP_SERVICE: AnalyticsService = {
   capture: async () => undefined,
   captureSafety: async () => undefined,
   mergeAnonymousPerson: async () => undefined,
+  identifyGroup: async () => undefined,
   shutdown: async () => undefined,
 };
 
@@ -269,7 +276,7 @@ export function createAnalyticsService(args: {
   // assumes a server deployment where the ingestion request originates from a
   // datacenter IP, so GeoIP would mis-attribute every user to the server's
   // location — hence it stamps `$geoip_disable: true` and PostHog skips
-  // country enrichment. Open Design's daemon runs on the USER'S OWN machine,
+  // country enrichment. OpenDesign's daemon runs on the USER'S OWN machine,
   // so the request's source IP is the user's real public IP, identical to what
   // posthog-js already sends. Leaving the default on stripped country from
   // every daemon-emitted event (run_created, run_finished, *_result, …) —
@@ -412,6 +419,22 @@ export function createAnalyticsService(args: {
         });
       } catch {
         // Attribution merge failures must not block app startup or consent.
+      }
+    },
+    identifyGroup: async ({ context, groupType, groupKey, properties }) => {
+      try {
+        const appCfg = await readAppConfig(args.dataDir);
+        if (appCfg.telemetry?.metrics !== true) return;
+        const cleanProperties = cleanPosthogPersonProperties(properties);
+        if (!groupKey || Object.keys(cleanProperties).length === 0) return;
+        client.groupIdentify({
+          groupType,
+          groupKey,
+          distinctId: context.deviceId,
+          properties: cleanProperties,
+        });
+      } catch {
+        // Group updates are best-effort and must never affect product reads.
       }
     },
     shutdown: async () => {

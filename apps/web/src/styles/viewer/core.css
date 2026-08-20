@@ -5,7 +5,7 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: var(--bg);
+  background: var(--veil-canvas);
   overflow: hidden;
 }
 .workspace:has(.share-menu-popover, .present-menu),
@@ -21,49 +21,42 @@
   justify-content: space-between;
   align-items: center;
   padding: 8px 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-  font-size: 12.5px;
+  border-bottom: 0;
+  /* Solid white bar, no hairline: nothing scrolls under this bar (the body
+     scrolls inside itself), so a glass film served no function. Dark theme
+     swaps to the panel surface below. */
+  background: #ffffff;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  font-size: 13px;
   color: var(--text-muted);
   gap: 8px;
   min-height: 44px;
-  min-width: 0;
   flex-shrink: 0;
+  /* Establishes the containment context the @container queries below key off
+     (narrow-pane icon-only mode tabs, the ⋮ overflow menu, and the controls it
+     is a fallback for). Dropped by a merge (rec:recvq5vpmWCBM1) and only
+     partially restored since — without this, every one of those @container
+     rules has no ancestor to match against and is permanently inert. */
   container-type: inline-size;
 }
-.viewer-toolbar-left,
-.viewer-toolbar-actions,
-.viewer-toolbar-inline-actions,
-.viewer-preview-toolbar-inline {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
+[data-theme='dark'] .viewer-toolbar {
+  background: var(--bg-panel);
 }
-.viewer-toolbar-left { gap: 8px; flex: 1 1 auto; }
-.viewer-toolbar-actions { gap: 2px; flex: 0 0 auto; }
-.viewer-toolbar-inline-actions { gap: 2px; }
-.viewer-preview-toolbar-inline { gap: 8px; }
-.file-version-trigger {
-  width: 30px;
-  min-width: 30px;
-  min-height: 28px;
-  gap: 6px;
-  justify-content: center;
-  padding: 0;
-  font-size: 12.5px;
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .viewer-toolbar {
+    background: var(--bg-panel);
+  }
 }
-.file-version-trigger span {
-  display: none;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.viewer-toolbar-left { display: inline-flex; align-items: center; gap: 8px; }
+.viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; }
+/* Wraps the icon-action group (screenshot/comment/mark/edit/comment-count/
+   zoom) as a single unit `.viewer-toolbar-actions` can hide via the 600px
+   @container breakpoint above once the ⋮ overflow menu is the fallback home
+   for them — see the container-type note on .viewer-toolbar. */
+.viewer-toolbar-inline-actions { display: inline-flex; gap: 2px; align-items: center; min-width: 0; }
 .viewer-toolbar-tool-divider {
-  width: 1px;
-  height: 18px;
-  margin: 0 5px;
-  background: var(--border);
+  display: none;
 }
 .viewer-toolbar .icon-only,
 .viewer-toolbar-actions .icon-only {
@@ -82,6 +75,7 @@
 .viewer-toolbar .icon-only:hover:not(:disabled),
 .viewer-toolbar-actions .icon-only:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
 .viewer-tab-icon {
+  /* Icon rides along only in the narrow layout, where the label is dropped. */
   display: none;
   flex: 0 0 auto;
 }
@@ -91,30 +85,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.html-viewer .viewer-mode-tabs .viewer-tab {
-  width: 32px;
-  min-width: 32px;
-  padding-inline: 0;
-}
-.html-viewer .viewer-mode-tabs .viewer-tab-icon {
-  display: inline-flex;
-}
-.html-viewer .viewer-mode-tabs .viewer-tab-label {
-  display: none;
-}
-.viewer-viewport-switcher {
-  width: 30px;
-}
-.viewer-viewport-trigger {
-  justify-content: center;
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  padding: 0;
-}
-.viewer-viewport-trigger > span {
-  display: none;
-}
+
 .viewer-toolbar-more {
   position: relative;
   display: none;
@@ -184,6 +155,9 @@
   }
 }
 
+/* Narrow pane: the mode switch drops to icon-only, the inline deck counter
+   steps aside, and the ⋮ overflow menu (hidden on wide panes) comes in as the
+   fallback home for anything the narrower breakpoints below take off the bar. */
 @container (max-width: 720px) {
   .viewer-mode-tabs .viewer-tab {
     width: 30px;
@@ -223,9 +197,6 @@
     flex: 1 1 0;
     gap: 4px;
   }
-  .viewer-mode-tabs {
-    display: none;
-  }
 }
 
 /* Shown when a .jsx/.tsx module (loaded by a sibling HTML entry) is opened on
@@ -244,7 +215,7 @@
 }
 .viewer-module-pointer__title {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text);
 }
@@ -301,17 +272,31 @@
   border: none;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .viewer-action:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.viewer-action:disabled,
+.viewer-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
 .viewer-action.active {
+  /* Selected reads from the tinted fill alone — no ring. The active tool
+     button carries a transparent 1px border by default; the global
+     button:hover rule (primitives.css) would otherwise flip that border to
+     --border-strong while the button is hovered, drawing a gray ring on the
+     selected tool. Pin it transparent (and kill any shadow) across states. */
   background: var(--accent-tint);
   color: var(--accent-strong);
+  border-color: transparent;
+  box-shadow: none;
 }
 .viewer-action.active:hover:not(:disabled) {
   background: var(--accent-tint);
   color: var(--accent-strong);
+  border-color: transparent;
+  box-shadow: none;
 }
 .viewer-action.primary {
   background: var(--accent);
@@ -347,7 +332,7 @@
 .viewer-comment-count {
   min-width: 12px;
   color: currentColor;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -365,7 +350,7 @@
   border-radius: var(--radius-sm);
   background: var(--text);
   color: var(--bg-panel);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
   opacity: 0;
   pointer-events: none;
@@ -397,8 +382,10 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius-md, 10px);
   box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
 }
@@ -412,7 +399,7 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.2;
   white-space: nowrap;
   text-align: left;
@@ -455,7 +442,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-muted);
   padding: 4px 10px;
   border-radius: var(--radius-sm);
@@ -485,7 +472,17 @@
 .viewer-toggle.active .switch { background: var(--text); border-color: var(--text); }
 .viewer-toggle.on .switch::after,
 .viewer-toggle.active .switch::after { transform: translateX(12px); }
-.viewer-tabs { min-width: 0; display: inline-flex; gap: 2px; }
+/* Switch-style segmented control (opendesign spec): a recessed neutral
+   track holding pill segments; the active segment reads as a raised light
+   thumb — 极浅背景 fill + thin default border on the 次级浅背景 track. */
+.viewer-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+}
 .viewer-mode-menu {
   position: relative;
   display: inline-flex;
@@ -501,7 +498,7 @@
   border-color: var(--border);
   background-color: var(--bg-panel);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.2;
   box-shadow: var(--shadow-xs);
 }
@@ -537,7 +534,7 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
 }
 .viewer-mode-menu-item:hover,
@@ -550,23 +547,33 @@
   color: var(--accent-strong);
 }
 .viewer-tab {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   background: transparent;
-  border: none;
-  padding: 4px 10px;
+  border: var(--stroke-thin, 1px) solid transparent;
+  /* Reset the global `button` rule (primitives.css: height: 36px). A 36px
+     segment plus the track's 2px padding made the switch 40px tall, so it stood
+     4px proud of every sibling control on the toolbar (`.viewer-action` /
+     `.viewer-viewport-trigger` are 36px). Sizing the segment at 32px lands the
+     track on exactly 36px and the row reads as one height. */
+  height: 32px;
+  padding: 3px 12px;
   font-size: 12px;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
+  /* Segment stays a capsule inside the switch track. */
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
   white-space: nowrap;
+  transition:
+    background-color var(--duration-faster) var(--curve-easy-ease),
+    color var(--duration-faster) var(--curve-easy-ease),
+    border-color var(--duration-faster) var(--curve-easy-ease);
 }
-.viewer-tab:hover { background: var(--bg-subtle); color: var(--text); }
+/* Inactive segment hover: text deepens only — a fill would fight the track. */
+.viewer-tab:hover:not(:disabled):not(.active) { background: transparent; color: var(--text); }
+/* Active segment = the switch thumb: light fill + thin border lifts it off
+   the recessed track (border kept alive in theater.css). */
 .viewer-tab.active {
-  background: var(--bg-subtle);
-  color: var(--text);
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text-strong);
   font-weight: 500;
 }
 .viewer-meta { font-size: 12px; color: var(--text-muted); }
@@ -582,6 +589,18 @@
   gap: 4px;
 }
 .ghost-link:hover { background: var(--bg-subtle); color: var(--text); }
+/* Viewer toolbar actions: pure outlined pills — stroke only, no fill. */
+.viewer-toolbar-actions .ghost-link {
+  padding: 5px 14px;
+  border-color: var(--border);
+  border-radius: var(--radius-pill, 999px);
+  background: transparent;
+}
+.viewer-toolbar-actions .ghost-link:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong, var(--border));
+  color: var(--text);
+}
 .viewer-body {
   flex: 1;
   min-height: 0;
@@ -601,7 +620,11 @@
   background:
     radial-gradient(circle at 34% 36%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 34%),
     linear-gradient(180deg, color-mix(in srgb, var(--bg) 88%, var(--bg-panel)), var(--bg));
-  animation: od-fade-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  /* Anti-flash: hold the skeleton invisible for ~180ms so fast (local) file
+     loads never flash it — only genuinely slow fetches (shared-project pulls,
+     big files) fade it in. The sentinel that shows it per file switch is
+     deliberate (#4650); this only stops the sub-200ms blink. */
+  animation: od-fade-in 220ms cubic-bezier(0.23, 1, 0.32, 1) 180ms both;
 }
 .viewer-loading-stage {
   position: relative;
@@ -787,7 +810,7 @@
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .live-artifact-refresh-notice-copy {
   display: inline-flex;
@@ -904,7 +927,7 @@
 .live-artifact-refresh-hero-desc {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 .live-artifact-refresh-hero-meta {
@@ -922,7 +945,7 @@
   text-align: right;
 }
 .live-artifact-refresh-label {
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -939,7 +962,7 @@
   font-weight: 500;
 }
 .live-artifact-refresh-sub {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -947,7 +970,7 @@
 /* Refresh status badges reuse the .live-artifact-badge pill shape with tone mixins */
 .live-artifact-badge.refresh-status {
   text-transform: uppercase;
-  letter-spacing: 0;
+  letter-spacing: 0.04em;
 }
 .live-artifact-badge.refresh-status.tone-neutral {
   color: var(--text-muted);
@@ -1008,14 +1031,14 @@
 }
 .live-artifact-refresh-section-header h4 {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 .live-artifact-refresh-hint {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .live-artifact-refresh-empty {
@@ -1024,7 +1047,7 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 .live-artifact-refresh-empty em {
@@ -1092,12 +1115,12 @@
   flex-wrap: wrap;
 }
 .live-artifact-refresh-event-time {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 .live-artifact-refresh-event-detail {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text);
   line-height: 1.5;
   word-break: break-word;
@@ -1141,7 +1164,7 @@
   white-space: nowrap;
 }
 .live-artifact-refresh-tile-meta code {
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--mono);
   color: var(--text-muted);
   background: var(--bg-subtle);
@@ -1154,7 +1177,7 @@
 }
 .live-artifact-refresh-tile-error {
   grid-column: 1 / -1;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--red);
   background: var(--red-bg);
   border: 1px solid var(--red-border);
@@ -1186,7 +1209,7 @@
   min-width: 0;
 }
 .live-artifact-refresh-kv dt {
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1241,7 +1264,7 @@
   margin: 0;
   padding: 0 14px 10px;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .live-artifact-refresh-raw pre.viewer-source {
@@ -1284,6 +1307,18 @@
   visibility: hidden;
   pointer-events: none;
 }
+/* First-ever URL-load of an artifact: the iframe's own navigation can queue
+   behind heavy same-origin traffic (e.g. drafts-grid cover iframes), which
+   otherwise reads as a dead white pane. Sits above both transport iframes
+   until the active frame's first load event lands. */
+.artifact-preview-first-load {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  background: var(--bg-panel);
+}
 .preview-asset-warning {
   position: absolute;
   left: 12px;
@@ -1316,44 +1351,43 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: 30px;
+  /* Auto width — hug the trigger's content instead of a fixed box. */
+  width: auto;
 }
 .viewer-viewport-trigger {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  min-height: 30px;
-  justify-content: center;
-  gap: 0;
-  padding: 0;
-  border-color: var(--border);
-  background-color: var(--bg-panel);
-  color: var(--text-muted);
-  font-size: 12.5px;
+  /* Auto width so the button hugs icon + label + chevron. A fixed square hid
+     the label and left nothing but an empty chip when the glyph was missing. */
+  width: auto;
+  min-height: 26px;
+  justify-content: flex-start;
+  /* Icon ↔ label gap = 4px (the label flexes, so this gap is the visible
+     device-icon-to-text spacing; the chevron stays pushed to the right). */
+  gap: 4px;
+  padding: 4px 8px 4px 10px;
+  /* Capsule button. */
+  border-radius: var(--radius-pill);
+  border-color: transparent;
+  background-color: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.2;
   box-shadow: none;
 }
 .viewer-viewport-trigger > svg {
   flex: 0 0 auto;
 }
-.viewer-viewport-trigger > .viewer-viewport-icon {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-}
 .viewer-viewport-trigger > span {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Size to the label text, don't stretch to fill the button. */
+  flex: 0 0 auto;
   white-space: nowrap;
 }
-.viewer-viewport-trigger:hover:not(:disabled),
+.viewer-viewport-trigger:hover:not(:disabled) {
+  border-color: transparent;
+  background-color: transparent;
+}
 .viewer-viewport-trigger[aria-expanded='true'] {
-  border-color: var(--border-strong);
+  border-color: transparent;
   background-color: var(--bg-subtle);
   color: var(--text);
 }
@@ -1364,6 +1398,9 @@
   z-index: 80;
   width: max-content;
   min-width: 144px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2, 2px);
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1393,8 +1430,8 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1;
   text-align: left;
 }
@@ -1403,7 +1440,10 @@
   color: var(--text);
 }
 .viewer-viewport-menu-item.active {
-  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  /* No stroke on the selected row — the fill, darker text and checkmark
+     already mark it. The border stays transparent (keeps the reserved 1px
+     from the base rule so text doesn't shift). */
+  border-color: transparent;
   background: color-mix(in srgb, var(--accent-tint) 82%, var(--bg-panel));
   color: var(--accent-strong);
 }
@@ -1531,6 +1571,14 @@
   background: var(--bg);
   isolation: isolate;
 }
+/* While the draw toolbar is open in a tablet/mobile device frame, reserve room at the
+   bottom of the preview's scroll area so the device frame (and the page's scrollbar)
+   can clear the pinned toolbar — which is portaled to the non-scrolling .viewer-body —
+   instead of being hidden behind it. Padding keeps the checkered backdrop full-bleed,
+   so the toolbar reads as a floating pill rather than a docked footer bar (#3455). */
+.preview-viewport:not(.preview-viewport-desktop).preview-draw-active {
+  padding-bottom: 84px;
+}
 .comment-overlay-layer {
   position: absolute;
   inset: 0;
@@ -1603,7 +1651,7 @@
   background: #d96a46;
   color: white;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 36px;
   text-align: center;
   box-shadow: 0 10px 22px rgba(33, 24, 18, 0.22);
@@ -1627,10 +1675,35 @@
   max-height: calc(100% - 28px);
   overflow: auto;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   box-shadow: var(--shadow-lg);
+}
+/* Composer variant (BoardComposerPopover). The card's height is clamped to the
+   space left in the preview stage, so when the anchored element sits low the
+   card is shorter than its content. With the whole card as the scroller the
+   action row simply fell below the fold and the user could not reach cancel /
+   send at all. Invariant: the card is a fixed frame — only the body scrolls,
+   and the action row is always inside the visible box.
+   The read-only `.annotation-hover-popover` keeps the plain scrolling card;
+   it has no `.comment-popover-body` and no actions to protect. */
+.comment-popover-composer {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.comment-popover-body {
+  flex: 1 1 auto;
+  /* Without this a flex item refuses to shrink below its content height, which
+     would push the action row back out of the frame. */
+  min-height: 0;
+  overflow: auto;
+}
+.comment-popover-composer .comment-popover-actions {
+  flex: 0 0 auto;
 }
 .comment-popover-titlebar {
   display: flex;
@@ -1649,6 +1722,23 @@
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.comment-popover-view-all {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.comment-popover-view-all:hover {
+  color: var(--text);
 }
 .comment-popover-drag-handle {
   flex: 0 0 auto;
@@ -1785,7 +1875,7 @@
   border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .board-pod-chip-remove {
   display: inline-flex;
@@ -2037,6 +2127,16 @@
   gap: 6px;
   flex: 0 0 auto;
 }
+/* Select-all sits on its own row UNDER the header divider (per product), so
+   the header keeps just the title and the close control. */
+.comment-side-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  /* No bottom inset: the 16px gap down to the first comment is owned by the
+     list's own top padding, so the two never stack into a 22px+ gutter. */
+  padding: 6px 8px 0;
+}
 .comment-side-select-all {
   border: 0;
   border-radius: var(--radius-sm);
@@ -2044,7 +2144,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
 }
 .comment-side-select-all:hover:not(:disabled) {
@@ -2098,7 +2198,7 @@
 .comment-side-rail span {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -2112,7 +2212,7 @@
   border-radius: var(--radius-pill);
   background: #ff5a3c;
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
 }
@@ -2128,7 +2228,7 @@
   padding: 24px 8px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .comment-side-item {
   position: relative;
@@ -2209,6 +2309,12 @@
   flex: 1;
   min-width: 0;
 }
+.comment-side-author-copy {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
 .comment-side-author strong {
   font-size: 13px;
   color: var(--text);
@@ -2216,13 +2322,22 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.comment-side-author small {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
 .comment-side-avatar {
   width: 20px;
   height: 20px;
   border-radius: 50%;
   background: #0a0a0a;
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2230,7 +2345,7 @@
   flex-shrink: 0;
 }
 .comment-side-time {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -2391,8 +2506,8 @@
   background: #0d3858;
   color: #fff;
   box-shadow: 0 12px 32px rgba(6, 22, 36, 0.28);
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 16px;
+  font-weight: 600;
   white-space: nowrap;
 }
 .screenshot-toast > i {
@@ -2470,7 +2585,7 @@
 }
 .inspect-panel-title code {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2484,7 +2599,7 @@
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 .inspect-ancestor-notice-icon {
@@ -2496,7 +2611,7 @@
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   border-radius: var(--radius-pill);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
 }
@@ -2511,7 +2626,7 @@
   border-radius: 3px;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* MCP Copy button floats above a syntax-highlighted <pre>; .ghost's
@@ -2535,7 +2650,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 }
 .inspect-section-label {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2548,7 +2663,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 }
 .inspect-row > label {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .inspect-row input[type='color'] {
   width: 28px;
@@ -2565,7 +2680,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
   background-color: var(--bg);
-  font-size: 11px;
+  font-size: 12px;
   font-family: inherit;
 }
 .inspect-row input[type='text'] {
@@ -2577,7 +2692,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .inspect-row-value {
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   min-width: 42px;
   text-align: right;
 }
@@ -2593,7 +2708,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-radius: var(--radius-xs);
   background: var(--red-bg);
   color: var(--red);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .inspect-empty-hint-container {
@@ -2623,7 +2738,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   padding: 1px 5px;
   border-radius: 3px;
   background: var(--bg);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .comments-panel {
@@ -2641,7 +2756,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .comments-section h3 {
   margin: 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2692,7 +2807,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .comment-card p {
   margin: 0;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -2703,7 +2818,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-radius: var(--radius-pill);
   background: var(--bg);
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .comment-card-action:hover {
   border-color: var(--accent-soft);
@@ -2721,7 +2836,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   flex-wrap: wrap;
   gap: 4px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 .comment-card-meta span {
   max-width: 140px;
@@ -2750,55 +2865,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   max-height: none;
   overflow: visible;
   align-items: flex-start;
-}
-
-.file-version-backdrop.modal-backdrop {
-  z-index: 1700;
-  box-sizing: border-box;
-  padding: clamp(18px, 4vh, 48px) 20px;
-}
-.file-version-modal {
-  width: min(94vw, 1680px);
-  height: min(90vh, 980px);
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: var(--bg-panel);
-  color: var(--text);
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
-}
-.file-version-sidebar {
-  min-width: 0;
-  /* As a grid item, min-height defaults to `auto` (content) which lets a long
-     list push past the modal and clip instead of scrolling. `min-height: 0`
-     lets the column shrink to its track so the inner list can own the scroll. */
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--border);
-  background: var(--bg);
-}
-.file-version-sidebar-head,
-.file-version-head,
-.file-version-prompt-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.file-version-sidebar-head {
-  min-height: 58px;
-  padding: 0 16px 0 18px;
-  border-bottom: 1px solid var(--border);
-}
-.file-version-count {
-  color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
 }
 .file-version-search {
   display: flex;
@@ -2860,12 +2926,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   background: var(--bg-subtle);
   color: var(--text);
 }
-.file-version-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  padding: 10px;
-}
 .file-version-empty {
   padding: 18px 10px;
   color: var(--text-muted);
@@ -2924,76 +2984,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
     background-position: -200% 0, 0 0;
   }
 }
-.file-version-item {
-  position: relative;
-  width: 100%;
-  min-height: 90px;
-  display: block;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  background: var(--bg-panel);
-  color: var(--text);
-  box-shadow: var(--shadow-xs);
-  transition:
-    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
-    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.file-version-item-select {
-  width: 100%;
-  min-width: 0;
-  min-height: 88px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 13px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-.file-version-item + .file-version-item {
-  margin-top: 8px;
-}
-.file-version-item:hover:not(.active) {
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
-  background: color-mix(in srgb, var(--accent-tint) 42%, var(--bg-panel));
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-.file-version-item:focus-within {
-  outline: none;
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.file-version-item-select:focus-visible,
-.file-version-head-download-wrap .viewer-action:focus-visible {
-  outline: none;
-}
-.file-version-item.active {
-  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
-  background: color-mix(in srgb, var(--accent-tint) 70%, var(--bg-panel));
-  box-shadow: var(--shadow-sm);
-}
-.file-version-item.active::before {
-  content: '';
-  position: absolute;
-  top: 13px;
-  bottom: 13px;
-  left: 0;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--accent);
-}
-.file-version-download-wrap {
-  position: relative;
-  display: inline-flex;
-  z-index: 22;
-}
 .file-version-download-menu.share-menu-popover {
   top: calc(100% + 8px);
   right: 0;
@@ -3002,31 +2992,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   max-width: calc(100vw - 64px);
   z-index: 23;
   pointer-events: auto;
-}
-.file-version-item-top {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: flex-start;
-}
-.file-version-item-top > * {
-  min-width: 0;
-  flex: 0 0 auto;
-}
-.file-version-current-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 8px;
-  border-radius: 6px;
-  background: var(--text);
-  color: var(--bg-panel);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  white-space: nowrap;
 }
 .file-version-source-badge {
   display: inline-flex;
@@ -3060,114 +3025,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   background: color-mix(in srgb, #64748b 10%, var(--bg-panel));
   color: var(--text);
 }
-.file-version-time {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin-left: auto;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 11.5px;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.file-version-item-title {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-.file-version-item-meta {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.2;
-}
-.file-version-item-restored {
-  color: var(--text-muted);
-}
-.file-version-item-restored::before {
-  content: '·';
-  margin: 0 6px;
-  color: var(--border-strong, var(--border));
-}
-.file-version-main {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-panel);
-}
-.file-version-head {
-  min-height: 58px;
-  padding: 10px 16px 10px 18px;
-  border-bottom: 1px solid var(--border);
-  position: relative;
-  z-index: 20;
-}
-.file-version-meta {
-  min-width: 0;
-}
-.file-version-meta-row {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.file-version-prompt-popover h3 {
-  margin: 0;
-  color: var(--text);
-}
-.file-version-selected-date {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.file-version-restored-from {
-  flex: 0 0 auto;
-  color: var(--text-muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-.file-version-prompt-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.file-version-prompt-toggle:hover:not(:disabled),
-.file-version-prompt-toggle.active {
-  border-color: var(--border);
-  background: var(--bg-subtle);
-  color: var(--text);
-}
-.file-version-prompt-toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.file-version-prompt-popover-wrap {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-}
 @keyframes file-version-pop-in {
   from {
     opacity: 0;
@@ -3177,63 +3034,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-}
-.file-version-prompt-popover {
-  position: absolute;
-  z-index: 8;
-  top: calc(100% + 10px);
-  left: 0;
-  width: min(520px, calc(100vw - 72px));
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--bg-panel);
-  color: var(--text);
-  box-shadow: var(--shadow-md), 0 18px 48px rgba(15, 23, 42, 0.16);
-  transform-origin: top left;
-  animation: file-version-pop-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.file-version-prompt-popover p {
-  max-height: min(28vh, 220px);
-  margin: 12px 0 0;
-  overflow: auto;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-}
-.file-version-prompt-popover .file-version-prompt-head h3 {
-  font-size: 14px;
-  font-weight: 700;
-}
-.file-version-copy-prompt {
-  padding-inline: 7px;
-}
-.file-version-actions {
-  position: relative;
-  z-index: 21;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  min-height: 32px;
-}
-.file-version-restore-wrap {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-}
-.file-version-restore-action {
-  box-sizing: border-box;
-  min-height: 32px;
-  max-width: 280px;
-  padding: 0 12px;
-}
-.file-version-restore-action span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .file-version-restore-confirm {
   position: absolute;
@@ -3265,55 +3065,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 14px;
-}
-.file-version-viewport-toggle {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  height: 32px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--bg-subtle);
-}
-.file-version-viewport-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 26px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.file-version-viewport-button:hover:not(.active) {
-  color: var(--text);
-  background: color-mix(in srgb, var(--bg-panel) 60%, transparent);
-}
-.file-version-viewport-button.active {
-  background: var(--bg-panel);
-  color: var(--text);
-  box-shadow: var(--shadow-xs);
-}
-.file-version-preview {
-  position: relative;
-  z-index: 0;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  /* Desktop preview is full-bleed like a real browser viewport; the device
-     modes draw their own inset "stage" (see the :not(.preview-viewport-desktop)
-     rule below), so no outer padding is needed here. */
-  padding: 0;
-  background: var(--bg-panel);
 }
 .file-version-preview-overlay {
   position: absolute;
@@ -3347,74 +3098,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
     transform: rotate(360deg);
   }
 }
-.file-version-preview .preview-viewport {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-.file-version-preview .preview-viewport:not(.preview-viewport-desktop) {
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  /* Small even inset so the device frame fills nearly the full stage height.
-     Paired with the modal's { canvasPadding: 24 } so the fit-scale leaves the
-     same 12px gutter it reserves here (24 total = 12 top + 12 bottom). */
-  padding: 12px;
-}
-/* Desktop frame-clip is flat/full-bleed (a browser viewport). The device modes
-   keep their rounded bezel + shadow via the more specific global
-   `.preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip` rule,
-   so stripping chrome here only affects desktop. */
-.file-version-preview .preview-frame-clip {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-  background: #fff;
-  overflow: hidden;
-  box-shadow: none;
-}
-/* Tighten the device bezel shadow inside the modal so the frame can fill the
-   stage without the soft halo getting clipped by the stage's `overflow: hidden`.
-   4 classes → wins over the global 3-class device frame-clip rule. */
-.file-version-preview .preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip {
-  box-shadow: 0 10px 34px rgba(15, 23, 42, 0.16);
-}
-/* Decks are 16:9. In desktop mode a full-bleed iframe lets the slide bottom-
-   anchor in a taller pane with a black letterbox on top. Instead, center the
-   deck in a 16:9 stage box: `100cqh * 16/9` gives the width that fits the pane
-   height, capped at 100% for narrow panes — so the slide fills the box with no
-   distortion and no letterbox, centered both axes. */
-.file-version-preview .preview-viewport-desktop.preview-viewport-deck {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  container-type: size;
-  padding: 20px;
-  background: var(--bg-subtle);
-}
-.file-version-preview .preview-viewport-desktop.preview-viewport-deck .preview-frame-clip {
-  flex: 0 0 auto;
-  width: min(100%, calc(100cqh * 16 / 9));
-  height: auto;
-  max-height: 100%;
-  aspect-ratio: 16 / 9;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
-}
-.file-version-preview .preview-frame-clip > div,
-.file-version-preview iframe {
-  width: 100%;
-  height: 100%;
-}
-.file-version-preview iframe {
-  display: block;
-  border: 0;
-  background: #fff;
-}
 .viewer-modal-backdrop.file-version-export-backdrop.modal-backdrop {
   z-index: 1800;
 }
@@ -3423,15 +3106,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .file-version-item,
-  .file-version-prompt-toggle,
-  .file-version-viewport-button {
-    transition: none;
-  }
-  .file-version-item:hover:not(.active) {
-    transform: none;
-  }
-  .file-version-prompt-popover,
   .file-version-restore-confirm,
   .file-version-preview-overlay {
     animation: none;
@@ -3444,54 +3118,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   }
 }
 
-@media (max-width: 860px) {
-  .file-version-backdrop.modal-backdrop {
-    padding: 12px;
-  }
-  .file-version-modal {
-    width: min(100vw - 24px, 720px);
-    height: min(94vh, 900px);
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(154px, 28vh) minmax(0, 1fr);
-  }
-  .file-version-sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .file-version-list {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-  }
-  .file-version-item {
-    min-width: 220px;
-    margin-top: 0;
-  }
-  .file-version-item + .file-version-item {
-    margin-top: 0;
-  }
-  .file-version-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .file-version-meta-row {
-    flex-wrap: wrap;
-  }
-  .file-version-actions {
-    width: 100%;
-    flex-wrap: wrap;
-    margin-left: 0;
-  }
-  .file-version-restore-action {
-    max-width: none;
-  }
-  .file-version-preview {
-    padding: 14px;
-  }
-  .file-version-preview .preview-viewport {
-    min-height: 300px;
-  }
-}
 .viewer-source {
   margin: 0;
   padding: 16px;

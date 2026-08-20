@@ -2,10 +2,11 @@ import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { Locator } from '@playwright/test';
 import { expect, test } from '@/playwright/suite';
 
 import { writeFakeVelaBin } from '@/amr';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import {
   createProjectViaApi,
@@ -14,10 +15,13 @@ import {
   openSettingsDialog,
   putAppConfig,
   seedBrowserConfig,
-  sendPrompt,
 } from '@/playwright/amr';
 
 test.describe.configure({ timeout: T.xlong });
+
+test.beforeEach(async ({ page }) => {
+  await suppressWhatsNew(page);
+});
 
 async function stubCatalogsEmpty(page: import('@playwright/test').Page) {
   await page.route('**/api/skills', async (route) => {
@@ -32,7 +36,7 @@ async function stubCatalogsEmpty(page: import('@playwright/test').Page) {
   await routeAgents(page, [
     {
       id: 'amr',
-      name: 'Open Design AMR',
+      name: 'OpenDesign AMR',
       bin: 'vela',
       available: true,
       version: 'test',
@@ -41,7 +45,12 @@ async function stubCatalogsEmpty(page: import('@playwright/test').Page) {
   ]);
 }
 
-test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AMR selected', async ({ page }) => {
+/** The AMR agent card's own select button, which carries `aria-pressed`. */
+function amrAgentToggle(settings: Locator): Locator {
+  return settings.getByTestId('settings-agent-card-amr').getByRole('button').first();
+}
+
+test('[P0] after local Sign out, the app returns to Cloud sign-in without clearing setup', async ({ page }) => {
   await stubCatalogsEmpty(page);
   const root = join(tmpdir(), `open-design-amr-logout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const reloginVelaBin = await writeFakeVelaBin(join(root, 'bin-relogin'), {
@@ -108,7 +117,11 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await gotoProject(page, projectId);
 
   const settings = await openSettingsDialog(page);
-  await expect(settings.getByRole('button', { name: /Open Design/i }).first()).toHaveAttribute('aria-pressed', 'true');
+  // Scope to the AMR agent card: the settings sidebar also carries an
+  // "OpenDesign MCP" nav item, so a surface-wide /OpenDesign/i now resolves
+  // to that `settings-nav-item` (which has no aria-pressed) instead of the
+  // agent card's select button.
+  await expect(amrAgentToggle(settings)).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByRole('button', { name: /^Sign out$/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(settings).toHaveCount(0);
@@ -116,30 +129,22 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
     const response = await fetch('/api/integrations/vela/logout', { method: 'POST' });
     if (!response.ok) throw new Error(`logout failed: ${response.status}`);
   });
-  const reopenedSettings = await openSettingsDialog(page);
-  await expect(reopenedSettings.getByRole('button', { name: /Open Design/i }).first()).toHaveAttribute('aria-pressed', 'true');
-  await expect(reopenedSettings.getByRole('button', { name: /^Authorize$|^Sign in$/i })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(reopenedSettings).toHaveCount(0);
-  const reloginConfig = {
-    ...config,
-    agentCliEnv: {
-      amr: { VELA_BIN: reloginVelaBin },
-    },
-  };
-  await putAppConfig(page, reloginConfig);
-  await page.evaluate((next) => {
-    window.localStorage.setItem('open-design:config', JSON.stringify(next));
-  }, reloginConfig);
-  await gotoProject(page, projectId);
-  await sendPrompt(page, 'AMR logout should require relogin');
-
-  const balanceGate = page.getByTestId('amr-balance-dialog');
-  await expect(balanceGate).toBeVisible({ timeout: 15_000 });
-  await expect(balanceGate).toContainText(/Sign in to start creating/i);
-  await expect(balanceGate).toContainText(/sign in and this task can start right away/i);
-  await expect(balanceGate.getByRole('button', { name: /^Sign in$/i })).toBeVisible();
-
+  // A definitive signed-out Cloud status now gates the entry on sign-in.
+  // This is passive session loss (the logout endpoint was called directly),
+  // so the saved AMR setup must survive for reauthentication.
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(
+    page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
+  ).toBeVisible({ timeout: T.long });
+  await expect(page.getByRole('button', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => {
+    const raw = window.localStorage.getItem('open-design:config');
+    return raw ? JSON.parse(raw) : null;
+  })).toMatchObject({
+    agentId: 'amr',
+    onboardingCompleted: true,
+  });
   const configResponse = await page.request.get('/api/app-config');
   expect(configResponse.ok(), await configResponse.text()).toBeTruthy();
   const body = (await configResponse.json()) as { config?: { agentId?: string } };

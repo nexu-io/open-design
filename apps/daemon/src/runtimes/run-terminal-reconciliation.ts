@@ -3,6 +3,12 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import type Database from 'better-sqlite3';
+import {
+  buildRunFinishedV4Aliases,
+  type TrackingRunCancelOrigin,
+  type TrackingRunTerminalTrigger,
+  type RunTaskLineageProps,
+} from '@open-design/contracts/analytics';
 
 import { appendMessageStatusEvent } from '../db.js';
 import { classifyRunFailure } from '../run-failure-classification.js';
@@ -32,6 +38,8 @@ interface DurableRunState extends RestartRecoverableDurableRunState {
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
+  cancelOrigin?: TrackingRunCancelOrigin | null;
+  terminalTrigger?: TrackingRunTerminalTrigger | null;
   createdAt: number;
   artifactCount?: number;
   endedWithUnfinishedWork?: boolean;
@@ -259,34 +267,66 @@ export async function reconcileDurableRunTerminals(
               failure_stage: 'finalize' as const,
               retryable: true,
               user_action: 'retry' as const,
+              terminal_trigger: 'daemon_restart' as const,
             }
           : classifyRunFailure({
               result: runResult,
               status: state,
               ...(errorCode ? { errorCode } : {}),
               agentId: state.agentId,
+              cancelOrigin: state.cancelOrigin ?? null,
+              terminalTrigger: state.terminalTrigger ?? null,
               events,
             })
         : undefined;
+      const properties: Record<string, unknown> = {
+        ...state.analyticsRecovery.properties,
+        area: state.analyticsRecovery.properties.area === 'design_system_generation'
+          ? 'design_system_generation'
+          : 'chat_panel',
+        result: runResult,
+        artifact_count: state.artifactCount ?? 0,
+        asked_user_question: runAskedUserQuestion(events),
+        total_duration_ms: Math.max(0, state.updatedAt - state.createdAt),
+        langfuse_trace_id: state.id,
+        terminal_reconciled: true,
+        terminal_recovery_reason: recoveryReason,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        ...(failure ?? {}),
+      };
+      const taskLineage: RunTaskLineageProps = {
+        task_execution_id:
+          typeof properties.task_execution_id === 'string'
+            ? properties.task_execution_id
+            : state.id,
+        initial_run_id:
+          typeof properties.initial_run_id === 'string'
+            ? properties.initial_run_id
+            : state.id,
+        task_run_index:
+          typeof properties.task_run_index === 'number'
+            ? properties.task_run_index
+            : 0,
+        ...(typeof properties.source_run_id === 'string'
+          ? { source_run_id: properties.source_run_id }
+          : {}),
+        ...(typeof properties.recovery_action_type === 'string'
+          ? {
+              recovery_action_type: properties.recovery_action_type as NonNullable<
+                RunTaskLineageProps['recovery_action_type']
+              >,
+            }
+          : {}),
+        ...(typeof properties.recovery_action_instance_id === 'string'
+          ? { recovery_action_instance_id: properties.recovery_action_instance_id }
+          : {}),
+      };
+      Object.assign(properties, buildRunFinishedV4Aliases(properties, taskLineage));
       await Promise.resolve(options.analytics.capture({
         eventName: 'run_finished',
         context: state.analyticsRecovery.context,
         appVersion: options.appVersion,
-        properties: {
-          ...state.analyticsRecovery.properties,
-          area: state.analyticsRecovery.properties.area === 'design_system_generation'
-            ? 'design_system_generation'
-            : 'chat_panel',
-          result: runResult,
-          artifact_count: state.artifactCount ?? 0,
-          asked_user_question: runAskedUserQuestion(events),
-          total_duration_ms: Math.max(0, state.updatedAt - state.createdAt),
-          langfuse_trace_id: state.id,
-          terminal_reconciled: true,
-          terminal_recovery_reason: recoveryReason,
-          ...(errorCode ? { error_code: errorCode } : {}),
-          ...(failure ?? {}),
-        },
+        properties,
         insertId: `${state.analyticsRecovery.insertId}-finish`,
       }));
       state.analyticsRecovery.completedAt = Date.now();

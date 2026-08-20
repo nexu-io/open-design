@@ -16,7 +16,7 @@
  * @see https://github.com/nexu-io/open-design/issues/710
  */
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -27,6 +27,9 @@ import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-pro
 import {
   buildPackagedDaemonSpawnEnv,
   createPackagedSidecarSpawnOptions,
+  createRestartPolicy,
+  createWebSidecarSupervisor,
+  openLog,
   registerPackagedWebUrl,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
@@ -42,7 +45,16 @@ function slashPath(value: string): string {
 
 describe('resolveDaemonStatusTimeoutMs', () => {
   it('uses the 35-second baseline budget on platforms without a known slow-cold-start class', () => {
-    expect(resolveDaemonStatusTimeoutMs({}, 'darwin')).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({}, 'freebsd')).toBe(35_000);
+  });
+
+  it('widens the baseline to 90 seconds on darwin for packaged 0.18.1+ Apple Silicon cold starts', () => {
+    // Packaged 0.18.1 macOS launches can exceed the 35s baseline on slower
+    // Apple Silicon cold boots, after which the parent tears the sidecars down
+    // and the desktop falls back to a stale web URL. The wider budget matches
+    // the win32/linux "slow, not dead" safety net.
+    // https://github.com/nexu-io/open-design/issues/6637
+    expect(resolveDaemonStatusTimeoutMs({}, 'darwin')).toBe(90_000);
   });
 
   it('widens the baseline to 90 seconds on linux for AppImage FUSE cold starts', () => {
@@ -64,7 +76,7 @@ describe('resolveDaemonStatusTimeoutMs', () => {
   });
 
   it('treats an empty OD_LEGACY_DATA_DIR as unset', () => {
-    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'darwin')).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'freebsd')).toBe(35_000);
   });
 
   it('extends the budget to 30 minutes when OD_LEGACY_DATA_DIR is set', () => {
@@ -87,7 +99,7 @@ describe('resolveDaemonStatusTimeoutMs', () => {
     try {
       delete process.env.OD_LEGACY_DATA_DIR;
       expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(90_000);
-      expect(resolveDaemonStatusTimeoutMs(undefined, 'darwin')).toBe(35_000);
+      expect(resolveDaemonStatusTimeoutMs(undefined, 'darwin')).toBe(90_000);
       process.env.OD_LEGACY_DATA_DIR = '/some/legacy/path';
       expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(30 * 60 * 1000);
     } finally {
@@ -276,6 +288,17 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.HTTP_PROXY).toBeUndefined();
     expect(env.HTTPS_PROXY).toBeUndefined();
     expect(env.NODE_USE_ENV_PROXY).toBeUndefined();
+  });
+
+  it('forwards OD_ALLOWED_INTERNAL_HOSTS so the daemon can resolve trusted loopback hosts in packaged sidecars', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      OD_ALLOWED_INTERNAL_HOSTS: '127.0.0.1,localhost',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.OD_ALLOWED_INTERNAL_HOSTS).toBe('127.0.0.1,localhost');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
@@ -571,6 +594,145 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect(env.OPEN_DESIGN_AMR_PROFILE).toBe('test');
   });
 
+  it('forwards the per-profile Vela console origins to the daemon', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      amrProfile: 'prod',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      velaWebUrl: 'https://prod.example.invalid',
+      velaWebUrls: {
+        prod: 'https://prod.example.invalid',
+        test: 'https://test.example.invalid',
+        'feature-test': 'https://feature.example.invalid',
+      },
+    });
+    expect(JSON.parse(env.OD_VELA_WEB_URLS ?? '{}')).toEqual({
+      prod: 'https://prod.example.invalid',
+      test: 'https://test.example.invalid',
+      'feature-test': 'https://feature.example.invalid',
+    });
+  });
+
+  it.each(['feature-test', 'test'] as const)(
+    'enables the vela-cli workspace-team transport for a %s build with an injected vela web origin',
+    (amrProfile) => {
+      const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+        appVersion: null,
+        amrProfile,
+        daemonCliEntry: null,
+        legacyDataDir: null,
+        requireDesktopAuth: true,
+        velaWebUrl: 'https://vela.example.invalid',
+      });
+      expect(env.OPEN_DESIGN_AMR_PROFILE).toBe(amrProfile);
+      expect(env.OD_WORKSPACE_CONTEXT_SOURCE).toBe('vela');
+      expect(env.OD_TEAM_PROJECTS_TRANSPORT).toBe('vela-cli');
+      expect(env.OD_COLLAB_TRANSPORT).toBe('vela-cli');
+      expect(env.OD_RESOURCE_TRANSPORT).toBe('vela-cli');
+      expect(env.OD_VELA_WEB_URL).toBe('https://vela.example.invalid');
+    },
+  );
+
+  // The gate is profile AND origin. A build whose CI secret was never
+  // configured must degrade to "workspace-team dormant" rather than turn the
+  // transports on against an unknown backend.
+  it.each(['feature-test', 'test'] as const)(
+    'leaves the workspace-team transport off for a %s build with no injected vela web origin',
+    (amrProfile) => {
+      for (const velaWebUrl of [undefined, null, '', '   ']) {
+        const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+          appVersion: null,
+          amrProfile,
+          daemonCliEntry: null,
+          legacyDataDir: null,
+          requireDesktopAuth: true,
+          velaWebUrl,
+        });
+        expect('OD_WORKSPACE_CONTEXT_SOURCE' in env).toBe(false);
+        expect('OD_TEAM_PROJECTS_TRANSPORT' in env).toBe(false);
+        expect('OD_COLLAB_TRANSPORT' in env).toBe(false);
+        expect('OD_RESOURCE_TRANSPORT' in env).toBe(false);
+        expect('OD_VELA_WEB_URL' in env).toBe(false);
+      }
+    },
+  );
+
+  it('leaves the workspace-team transport off for builds without a workspace-team backend', () => {
+    for (const amrProfile of ['prod', 'local', null] as const) {
+      const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+        appVersion: null,
+        amrProfile,
+        daemonCliEntry: null,
+        legacyDataDir: null,
+        requireDesktopAuth: true,
+      });
+      expect('OD_WORKSPACE_CONTEXT_SOURCE' in env).toBe(false);
+      expect('OD_TEAM_PROJECTS_TRANSPORT' in env).toBe(false);
+      expect('OD_COLLAB_TRANSPORT' in env).toBe(false);
+      expect('OD_RESOURCE_TRANSPORT' in env).toBe(false);
+      expect('OD_VELA_WEB_URL' in env).toBe(false);
+    }
+  });
+
+  // Workspace Team is released, so a prod bundle handed an origin now turns the
+  // transports on — that is the shipping path for stable users.
+  it('enables the workspace-team transport for a prod build with an injected vela web origin', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      amrProfile: 'prod',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      velaWebUrl: 'https://open-design.ai/cloud',
+    });
+    expect(env.OD_WORKSPACE_CONTEXT_SOURCE).toBe('vela');
+    expect(env.OD_TEAM_PROJECTS_TRANSPORT).toBe('vela-cli');
+    expect(env.OD_COLLAB_TRANSPORT).toBe('vela-cli');
+    expect(env.OD_RESOURCE_TRANSPORT).toBe('vela-cli');
+    expect(env.OD_VELA_WEB_URL).toBe('https://open-design.ai/cloud');
+  });
+
+  // The profile allowlist remains the load-bearing half of the gate for every
+  // profile that is NOT a released Vela backend: a `local` or profile-less
+  // bundle handed an origin must still stay dormant rather than point the
+  // transports at a backend that does not serve them.
+  it('never enables the workspace-team transport for a local or profile-less build', () => {
+    for (const amrProfile of ['local', null] as const) {
+      const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+        appVersion: null,
+        amrProfile,
+        daemonCliEntry: null,
+        legacyDataDir: null,
+        requireDesktopAuth: true,
+        velaWebUrl: 'https://vela.example.invalid',
+      });
+      expect('OD_WORKSPACE_CONTEXT_SOURCE' in env).toBe(false);
+      expect('OD_TEAM_PROJECTS_TRANSPORT' in env).toBe(false);
+      expect('OD_COLLAB_TRANSPORT' in env).toBe(false);
+      expect('OD_RESOURCE_TRANSPORT' in env).toBe(false);
+      expect('OD_VELA_WEB_URL' in env).toBe(false);
+    }
+  });
+
+  // The origin half of the gate is what protects a misconfigured prod build:
+  // no injected origin means dormant, never a guessed backend.
+  it('keeps a prod build dormant when no vela web origin was injected', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      amrProfile: 'prod',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+    });
+    expect('OD_WORKSPACE_CONTEXT_SOURCE' in env).toBe(false);
+    expect('OD_TEAM_PROJECTS_TRANSPORT' in env).toBe(false);
+    expect('OD_COLLAB_TRANSPORT' in env).toBe(false);
+    expect('OD_RESOURCE_TRANSPORT' in env).toBe(false);
+    expect('OD_VELA_WEB_URL' in env).toBe(false);
+  });
+
   it('forwards POSTHOG_KEY/POSTHOG_HOST to the daemon spawn env when baked into the bundle', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,
@@ -709,6 +871,288 @@ describe('waitForStatus child-exit fast-fail', () => {
       expect((captured as Error).message).toContain('sidecar status pid 1234 did not match spawned pid 5678');
     } finally {
       await server.close();
+    }
+  });
+});
+
+/**
+ * The web sidecar used to be spawned once and never watched. When it
+ * died mid-session — observed 2026-07-25 after a 0.15.1 -> 0.16.1
+ * launcher handoff reaped it — nothing respawned it, and the od://
+ * proxy kept forwarding to the dead port until the app was relaunched.
+ *
+ * The supervisor respawns it, but a sidecar that crashes during boot
+ * must not respawn forever: each attempt spends a full Next.js boot.
+ */
+describe('createRestartPolicy', () => {
+  it('allows up to maxRestarts inside the window and refuses the next one', () => {
+    const policy = createRestartPolicy({ maxRestarts: 3, windowMs: 60_000 });
+    expect(policy.allow(1_000)).toBe(true);
+    expect(policy.allow(2_000)).toBe(true);
+    expect(policy.allow(3_000)).toBe(true);
+    expect(policy.allow(4_000)).toBe(false);
+  });
+
+  it('forgets attempts that fell out of the window', () => {
+    const policy = createRestartPolicy({ maxRestarts: 2, windowMs: 10_000 });
+    expect(policy.allow(1_000)).toBe(true);
+    expect(policy.allow(2_000)).toBe(true);
+    expect(policy.allow(3_000)).toBe(false);
+    // 12_001 is more than windowMs after both recorded attempts, so the
+    // window is empty again and a fresh burst is allowed.
+    expect(policy.allow(12_001)).toBe(true);
+  });
+
+  it('defaults to 5 restarts per 60s window', () => {
+    const policy = createRestartPolicy();
+    for (let i = 0; i < 5; i += 1) {
+      expect(policy.allow(1_000 + i)).toBe(true);
+    }
+    expect(policy.allow(1_006)).toBe(false);
+  });
+});
+
+describe('createWebSidecarSupervisor', () => {
+  type SupervisorChild = {
+    exit(): void;
+    exited: boolean;
+    exitListeners: Array<() => void>;
+    name: string;
+  };
+
+  const child = (name: string): SupervisorChild => {
+    const value: SupervisorChild = {
+      exit() {
+        value.exited = true;
+        for (const listener of value.exitListeners.splice(0)) listener();
+      },
+      exited: false,
+      exitListeners: [],
+      name,
+    };
+    return value;
+  };
+
+  it('keeps retrying when a replacement exits before readiness', async () => {
+    const initial = child('initial');
+    const failedReplacement = child('failed-replacement');
+    const recovered = child('recovered');
+    const spawnQueue = [initial, failedReplacement, recovered];
+    const closed: string[] = [];
+    const registered: string[] = [];
+
+    const supervisor = createWebSidecarSupervisor<SupervisorChild, { url: string | null }>({
+      closeChild: async (value) => {
+        closed.push(value.name);
+      },
+      hasExited: (value) => value.exited,
+      onExit: (value, listener) => value.exitListeners.push(listener),
+      policy: createRestartPolicy({ maxRestarts: 5, windowMs: 60_000 }),
+      registerUrl: async (url) => {
+        registered.push(url);
+      },
+      spawn: async () => {
+        const value = spawnQueue.shift();
+        if (value == null) throw new Error('unexpected extra spawn');
+        return value;
+      },
+      waitUntilReady: async (value) => {
+        if (value === failedReplacement) {
+          value.exit();
+          throw new Error('replacement exited during boot');
+        }
+        return {
+          url: value === initial
+            ? 'http://127.0.0.1:61001'
+            : 'http://127.0.0.1:61003',
+        };
+      },
+    });
+
+    await expect(supervisor.start()).resolves.toEqual({ url: 'http://127.0.0.1:61001' });
+    initial.exit();
+
+    await vi.waitFor(() => {
+      expect(supervisor.currentUrl()).toBe('http://127.0.0.1:61003');
+    });
+    expect(registered).toEqual([
+      'http://127.0.0.1:61001',
+      'http://127.0.0.1:61003',
+    ]);
+    expect(closed).toEqual(['initial', 'failed-replacement']);
+    expect(spawnQueue).toHaveLength(0);
+
+    await supervisor.close();
+    expect(closed).toEqual(['initial', 'failed-replacement', 'recovered']);
+  });
+
+  it('stops retrying when boot failures exhaust the restart budget', async () => {
+    const initial = child('initial');
+    const failedOne = child('failed-one');
+    const failedTwo = child('failed-two');
+    const spawnQueue = [initial, failedOne, failedTwo];
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const supervisor = createWebSidecarSupervisor<SupervisorChild, { url: string | null }>({
+      closeChild: async () => undefined,
+      hasExited: (value) => value.exited,
+      onExit: (value, listener) => value.exitListeners.push(listener),
+      policy: createRestartPolicy({ maxRestarts: 2, windowMs: 60_000 }),
+      registerUrl: async () => undefined,
+      spawn: async () => {
+        const value = spawnQueue.shift();
+        if (value == null) throw new Error('unexpected extra spawn');
+        return value;
+      },
+      waitUntilReady: async (value) => {
+        if (value !== initial) {
+          value.exit();
+          throw new Error('replacement exited during boot');
+        }
+        return { url: 'http://127.0.0.1:61501' };
+      },
+    });
+
+    try {
+      await supervisor.start();
+      initial.exit();
+
+      await vi.waitFor(() => {
+        expect(errorLog).toHaveBeenCalledWith(
+          'packaged web sidecar restart budget exhausted; not respawning',
+        );
+      });
+      expect(spawnQueue).toHaveLength(0);
+      expect(supervisor.currentUrl()).toBe('http://127.0.0.1:61501');
+    } finally {
+      await supervisor.close();
+      errorLog.mockRestore();
+    }
+  });
+
+  it('closes a replacement whose deferred spawn resolves after shutdown starts', async () => {
+    const initial = child('initial');
+    const lateReplacement = child('late-replacement');
+    let resolveLateSpawn!: (value: SupervisorChild) => void;
+    const lateSpawn = new Promise<SupervisorChild>((resolve) => {
+      resolveLateSpawn = resolve;
+    });
+    const closed: string[] = [];
+    const registered: string[] = [];
+    let spawnCount = 0;
+
+    const supervisor = createWebSidecarSupervisor<SupervisorChild, { url: string | null }>({
+      closeChild: async (value) => {
+        closed.push(value.name);
+      },
+      hasExited: (value) => value.exited,
+      onExit: (value, listener) => value.exitListeners.push(listener),
+      registerUrl: async (url) => {
+        registered.push(url);
+      },
+      spawn: async () => {
+        spawnCount += 1;
+        return spawnCount === 1 ? initial : await lateSpawn;
+      },
+      waitUntilReady: async (value) => ({
+        url: value === initial
+          ? 'http://127.0.0.1:62001'
+          : 'http://127.0.0.1:62002',
+      }),
+    });
+
+    await supervisor.start();
+    initial.exit();
+    await vi.waitFor(() => expect(spawnCount).toBe(2));
+
+    const closePromise = supervisor.close();
+    resolveLateSpawn(lateReplacement);
+    await closePromise;
+
+    expect(registered).toEqual(['http://127.0.0.1:62001']);
+    expect(closed).toEqual(['initial', 'late-replacement']);
+    expect(lateReplacement.exitListeners).toHaveLength(1);
+    expect(supervisor.currentUrl()).toBe('http://127.0.0.1:62001');
+  });
+});
+
+/**
+ * Every packaged launch opens each sidecar's latest.log with mode "w",
+ * which used to DESTROY the prior session's log. That is exactly the log
+ * that matters after an incident-triggered relaunch: the support bundle
+ * contained only the ~70 lines written since the restart while the
+ * incident-time daemon log was gone. openLog must rotate the prior file
+ * aside as previous.log (exactly one prior session, no unbounded growth)
+ * before truncating.
+ */
+describe('packaged sidecar log rotation', () => {
+  it('rotates the prior latest.log aside as previous.log before truncating', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-log-rotate-'));
+    const logDir = join(root, 'logs', 'daemon');
+    const logPath = join(logDir, 'latest.log');
+    const previousPath = join(logDir, 'previous.log');
+    try {
+      // Session 1: nothing to rotate, log dir gets created.
+      const first = await openLog(logPath);
+      await first.write('session-1 incident line\n');
+      await first.close();
+
+      // Session 2 (the relaunch after the incident): session 1's content must
+      // survive as previous.log while latest.log starts fresh.
+      const second = await openLog(logPath);
+      expect(readFileSync(previousPath, 'utf8')).toContain('session-1 incident line');
+      expect(readFileSync(logPath, 'utf8')).toBe('');
+      await second.write('session-2 line\n');
+      await second.close();
+
+      // Session 3: previous.log holds exactly the MOST RECENT prior session,
+      // not an accumulation of every session ever.
+      const third = await openLog(logPath);
+      await third.close();
+      const previousContent = readFileSync(previousPath, 'utf8');
+      expect(previousContent).toContain('session-2 line');
+      expect(previousContent).not.toContain('session-1 incident line');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Rotation is best-effort, but "best-effort" must never degrade INTO the data
+   * loss it exists to prevent. If the rename fails for anything other than the
+   * first-launch ENOENT — a Windows share-lock on previous.log, a read-only or
+   * exotic filesystem — truncating latest.log destroys the only copy of the
+   * incident-time log while previous.log stays unavailable to diagnostics.
+   *
+   * The rejection is injected with a real filesystem condition rather than a
+   * module mock: renaming a file onto an existing DIRECTORY fails (EISDIR on
+   * POSIX, EPERM/EACCES on Windows), which is a non-ENOENT failure on every
+   * platform this ships to.
+   */
+  it('keeps the prior log instead of truncating it when rotation fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-log-rotate-fail-'));
+    const logDir = join(root, 'logs', 'daemon');
+    const logPath = join(logDir, 'latest.log');
+    try {
+      mkdirSync(logDir, { recursive: true });
+      writeFileSync(logPath, 'incident line that must survive\n');
+      // previous.log is a directory, so rename(latest.log -> previous.log) fails
+      // with a non-ENOENT error.
+      mkdirSync(join(logDir, 'previous.log'), { recursive: true });
+
+      const handle = await openLog(logPath);
+      // The prior session survives in place; rotation failing is not a licence
+      // to erase it.
+      expect(readFileSync(logPath, 'utf8')).toContain('incident line that must survive');
+      // ...and the returned handle still works, appending after the kept bytes.
+      await handle.write('post-rotation-failure line\n');
+      await handle.close();
+
+      const merged = readFileSync(logPath, 'utf8');
+      expect(merged).toContain('incident line that must survive');
+      expect(merged).toContain('post-rotation-failure line');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

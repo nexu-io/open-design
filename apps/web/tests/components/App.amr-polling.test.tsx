@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
+import { navigate, type Route } from '../../src/router';
 import type { AppConfig } from '../../src/types';
 import { loadConfig, mergeDaemonConfig, fetchDaemonConfig } from '../../src/state/config';
 import {
@@ -17,10 +19,32 @@ import {
 import { fetchAmrModels, fetchVelaLoginStatus } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
-vi.mock('../../src/router', () => ({
-  navigate: vi.fn(),
-  useRoute: () => ({ kind: 'home' as const, view: 'home' as const }),
-}));
+// Settings is now a full-page route (`/settings`): App.openSettings navigates
+// instead of toggling a modal flag, so the router mock must feed navigate()
+// calls back into useRoute() (like the production useSyncExternalStore router)
+// for the settings surface to render at all.
+const homeRouteMock = { kind: 'home' as const, view: 'home' as const };
+const routeListeners = new Set<() => void>();
+const useRouteMock = vi.fn<() => Route>(() => homeRouteMock);
+
+vi.mock('../../src/router', async () => {
+  const actual = await vi.importActual<typeof import('../../src/router')>('../../src/router');
+  return {
+    ...actual,
+    navigate: vi.fn((route: unknown) => {
+      useRouteMock.mockReturnValue(route as never);
+      routeListeners.forEach((notify) => notify());
+    }),
+    useRoute: () =>
+      useSyncExternalStore(
+        (onChange) => {
+          routeListeners.add(onChange);
+          return () => routeListeners.delete(onChange);
+        },
+        useRouteMock,
+      ),
+  };
+});
 
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
@@ -66,6 +90,7 @@ vi.mock('../../src/components/SettingsDialog', () => ({
   SettingsDialog: ({
     onRefreshAgents,
     onAmrLoginStatusChange,
+    onClose,
   }: {
     onRefreshAgents: (options?: { agentCliEnv?: AppConfig['agentCliEnv'] }) => void | Promise<void>;
     onAmrLoginStatusChange?: (status: {
@@ -75,6 +100,7 @@ vi.mock('../../src/components/SettingsDialog', () => ({
       user: null;
       configPath: string;
     } | null) => void;
+    onClose: () => void;
   }) => (
     <>
       <button
@@ -100,6 +126,7 @@ vi.mock('../../src/components/SettingsDialog', () => ({
       >
         mark amr signed in
       </button>
+      <button onClick={onClose}>close settings</button>
     </>
   ),
 }));
@@ -175,6 +202,7 @@ const mockedListTemplates = vi.mocked(listTemplates);
 const mockedLoadConfig = vi.mocked(loadConfig);
 const mockedMergeDaemonConfig = vi.mocked(mergeDaemonConfig);
 const mockedFetchDaemonConfig = vi.mocked(fetchDaemonConfig);
+const mockedNavigate = vi.mocked(navigate);
 
 const baseConfig: AppConfig = {
   mode: 'api',
@@ -213,6 +241,8 @@ async function advanceTestClock(ms: number): Promise<void> {
 
 describe('App AMR polling', () => {
   beforeEach(() => {
+    window.localStorage.clear();
+    useRouteMock.mockReturnValue(homeRouteMock);
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([
       {
@@ -319,6 +349,38 @@ describe('App AMR polling', () => {
       expect(screen.getByTestId('amr-model').textContent).toBe('unlocked-model');
     });
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns every authenticated surface to onboarding when Cloud auth definitively expires', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      mode: 'daemon',
+      agentId: 'amr',
+    });
+    useRouteMock.mockReturnValue({
+      kind: 'project',
+      projectId: 'project-with-expired-auth',
+      conversationId: null,
+      fileName: null,
+    });
+    mockedFetchVelaLoginStatus.mockResolvedValue({
+      loggedIn: true,
+      loginInFlight: false,
+      profile: 'local',
+      user: { id: 'expired-user', email: 'expired@example.com' },
+      configPath: '/tmp/amr-config.json',
+      sessionState: 'reauth_required',
+      credentialRevision: 'expired-revision',
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith(
+        { kind: 'home', view: 'onboarding' },
+        { replace: true },
+      );
+    });
   });
 
   it('starts AMR preset polling before the agent probe resolves', { timeout: 10_000 }, async () => {
@@ -464,6 +526,11 @@ describe('App AMR polling', () => {
     fireEvent.click(screen.getByText('mark amr signed in'));
     await advanceTestClock(0);
 
+    // Settings is a full-page route now; return home so the EntryView
+    // mock (which renders the amr-model probe) is mounted again.
+    fireEvent.click(screen.getByText('close settings'));
+    await advanceTestClock(0);
+
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
     expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
   });
@@ -563,6 +630,10 @@ describe('App AMR polling', () => {
     });
     fireEvent.click(screen.getByText('rescan agents'));
 
+    // Settings is a full-page route now; return home so the EntryView
+    // mock (which renders the amr-model probe) is mounted again.
+    fireEvent.click(screen.getByText('close settings'));
+
     await waitFor(() => {
       expect(screen.getByTestId('amr-model').textContent).toBe('new-probe');
     });
@@ -634,6 +705,10 @@ describe('App AMR polling', () => {
       expect(screen.getByTestId('amr-profile').textContent).toBe('prod');
     });
 
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const workspaceDirectoryReadsBefore = fetchMock.mock.calls.filter(([input]) =>
+      input.toString().includes('/api/workspace/directory')).length;
+
     fireEvent(window, new CustomEvent('open-design:app-config-changed'));
 
     await waitFor(() => {
@@ -647,6 +722,11 @@ describe('App AMR polling', () => {
     });
     await waitFor(() => {
       expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([input]) =>
+        input.toString().includes('/api/workspace/directory')).length,
+      ).toBeGreaterThan(workspaceDirectoryReadsBefore);
     });
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
   });

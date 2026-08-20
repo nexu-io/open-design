@@ -28,7 +28,7 @@ import {
 import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
 import { brandFromMaterial } from '../src/brands/provisional.js';
-import { listDesignSystems } from '../src/design-systems/index.js';
+import { deleteUserDesignSystem, listDesignSystems } from '../src/design-systems/index.js';
 import {
   buildBrandSystem,
   defaultSeed,
@@ -211,7 +211,7 @@ describe('agent-driven brand extraction engine', () => {
   it('adopts the brand canvas for the default theme when the brand is explicitly dark-first', () => {
     const darkCanvasBrand: Brand = {
       ...VALID_BRAND,
-      name: 'Open Design',
+      name: 'OpenDesign',
       colors: [
         { role: 'background', hex: '#050505', oklch: 'oklch(14% 0 0)', name: 'Black', usage: 'source hero background' },
         { role: 'surface', hex: '#0a0a0a', oklch: 'oklch(17% 0 0)', name: 'Panel', usage: 'source cards' },
@@ -242,7 +242,7 @@ describe('agent-driven brand extraction engine', () => {
   it('still falls back to the light default theme when brand neutrals are ambiguous', () => {
     const midGrayBrand: Brand = {
       ...VALID_BRAND,
-      name: 'Open Design',
+      name: 'OpenDesign',
       colors: [
         { role: 'background', hex: '#808080', oklch: 'oklch(60% 0 0)', name: 'Gray', usage: 'source background' },
         { role: 'foreground', hex: '#f4f4f4', oklch: 'oklch(96% 0 0)', name: 'White', usage: 'source text' },
@@ -348,9 +348,9 @@ describe('agent-driven brand extraction engine', () => {
     const brand = brandFromMaterial({
       url: 'https://open-design.ai/',
       finalUrl: 'https://open-design.ai/',
-      siteName: 'Open Design',
-      title: 'Open Design',
-      description: 'Open Design design system.',
+      siteName: 'OpenDesign',
+      title: 'OpenDesign',
+      description: 'OpenDesign design system.',
       colors: [
         { hex: '#262626', count: 19, sources: ['css-var:--ink'] },
         { hex: '#15140f', count: 15, sources: ['css-var:--shadow-ink'] },
@@ -366,8 +366,8 @@ describe('agent-driven brand extraction engine', () => {
       googleFontsUrls: [],
       fontFiles: [],
       logos: [],
-      headings: ['Open Design The Open-source Claude Design alternative'],
-      paragraphs: ['Open Design is a local-first design platform.'],
+      headings: ['OpenDesign The Open-source Claude Design alternative'],
+      paragraphs: ['OpenDesign is a local-first design platform.'],
       navLabels: [],
       extraPages: [],
       screenshot: null,
@@ -526,6 +526,42 @@ describe('agent-driven brand extraction engine', () => {
       defaultStatus: 'draft',
     });
     expect(systems).toHaveLength(0);
+  });
+
+  it('rolls back the scoped draft when the project Workspace binding fails', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const deleteDraftDesignSystem = vi.fn(deleteUserDesignSystem);
+    const bindCreatedProject = vi.fn(() => {
+      throw new Error('workspace project binding failed');
+    });
+    const options = {
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      deleteUserDesignSystem: deleteDraftDesignSystem,
+      bindCreatedProject,
+    } as Parameters<typeof startBrandExtraction>[0] & {
+      bindCreatedProject: (projectId: string) => void;
+    };
+
+    await expect(startOfflineBrandExtraction(options))
+      .rejects.toThrow('workspace project binding failed');
+
+    expect(bindCreatedProject).toHaveBeenCalledTimes(1);
+    expect(deleteDraftDesignSystem).toHaveBeenCalledTimes(1);
+    expect(listProjects(db)).toHaveLength(0);
+    expect(readdirSync(projectsRoot)).toEqual([]);
+    expect(readdirSync(brandsRoot)).toEqual([]);
+    await expect(listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    })).resolves.toHaveLength(0);
   });
 
   it('rolls back brand startup state when design-md staging fails before draft reservation', async () => {

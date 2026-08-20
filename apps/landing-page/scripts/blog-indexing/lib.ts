@@ -467,6 +467,30 @@ export function fileToSlug(file: string): string {
   return path.basename(file).replace(/\.md$/, '');
 }
 
+/**
+ * Derives the post slug from a canonical blog URL, or undefined for any
+ * other URL shape. Inverse of `blogSlugToUrl`.
+ */
+export function urlToBlogSlug(url: string): string | undefined {
+  const m = url.match(new RegExp(`^${SITE}/blog/([^/]+)/$`));
+  return m?.[1];
+}
+
+/**
+ * True when the post's source frontmatter opts the whole cluster out of the
+ * search index with a top-level `noindex: true` (see the `noindex` docblock
+ * in `apps/landing-page/app/content.config.ts`). Such posts are deliberately
+ * noindexed and dropped from the sitemap, so the indexing pipeline must skip
+ * them instead of treating them as readiness failures. Same regex style as
+ * the sitemap filter in `astro.config.ts`; the anchored `noindex:` does not
+ * match the indented i18n keys or `noindexLocaleVariants:`.
+ */
+export function isNoindexPost(slug: string): boolean {
+  const file = path.join(BLOG_DIR, `${slug}.md`);
+  if (!existsSync(file)) return false;
+  return /^noindex:\s*true\b/m.test(readFileSync(file, 'utf8'));
+}
+
 /* -------------------------- IO utils ------------------------- */
 
 export function readJsonFile<T>(file: string): T {

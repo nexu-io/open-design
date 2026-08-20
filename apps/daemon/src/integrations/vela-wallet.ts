@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 
 import {
+  markVelaAuthorizationExpired,
   readVelaControlApiContext,
   readVelaLoginStatus,
   type VelaUser,
@@ -35,6 +36,10 @@ interface CachedSnapshot {
 interface VelaWalletBalanceResponse {
   balanceUsd?: unknown;
   updatedAt?: unknown;
+}
+
+function isValidUsdBalance(value: unknown): value is string {
+  return typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value);
 }
 
 function publicUser(user: VelaUser | null): AmrWalletSnapshot['user'] {
@@ -121,6 +126,8 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       profile: string;
       timeoutMs: number;
       user: AmrWalletSnapshot['user'];
+      env: NodeJS.ProcessEnv;
+      configuredEnv: Record<string, string>;
     },
   ): Promise<AmrWalletSnapshot> {
     const fetchedAt = now().toISOString();
@@ -136,6 +143,7 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       });
       if (response.status === 401 || response.status === 403) {
         cache.delete(key);
+        markVelaAuthorizationExpired(input.env, input.configuredEnv);
         return unavailableSnapshot({
           code: 'unauthorized',
           fetchedAt,
@@ -164,16 +172,26 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
         });
       }
       const body = (await response.json()) as VelaWalletBalanceResponse;
-      const balanceUsd = typeof body.balanceUsd === 'string' ? body.balanceUsd : null;
-      if (balanceUsd === null) {
+      if (!isValidUsdBalance(body.balanceUsd)) {
+        const cached = cache.get(key);
+        if (cached) {
+          return {
+            ...withCacheSource(cached.snapshot, true),
+            error: {
+              code: 'upstream',
+              message: 'AMR wallet balance response contained an invalid balanceUsd.',
+            },
+          };
+        }
         return unavailableSnapshot({
           code: 'upstream',
           fetchedAt,
-          message: 'AMR wallet balance response was missing balanceUsd.',
+          message: 'AMR wallet balance response contained an invalid balanceUsd.',
           profile: input.profile,
           user: input.user,
         });
       }
+      const balanceUsd = body.balanceUsd;
       const snapshot: AmrWalletSnapshot = {
         status: 'available',
         profile: input.profile,
@@ -260,6 +278,8 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       profile: context.profile,
       timeoutMs,
       user,
+      env,
+      configuredEnv,
     }).finally(() => {
       inflight.delete(key);
     });

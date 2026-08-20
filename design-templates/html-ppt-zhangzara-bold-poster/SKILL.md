@@ -3,9 +3,9 @@ name: html-ppt-zhangzara-bold-poster
 en_name: "Write a Series A Growth Story like a Tier-1 VC Partner"
 zh_name: "像一线 VC 合伙人一样写 A 轮增长叙事"
 description: |
-  Open Design's Series A growth story: the traction curve, the expansion motion, and why it's venture-scale. Built as a decision-grade fundraising pitch deck for Series A partners.
+  OpenDesign's Series A growth story: the traction curve, the expansion motion, and why it's venture-scale. Built as a decision-grade fundraising pitch deck for Series A partners.
 en_description: |
-  Open Design's Series A growth story: the traction curve, the expansion motion, and why it's venture-scale. Built as a decision-grade fundraising pitch deck for Series A partners.
+  OpenDesign's Series A growth story: the traction curve, the expansion motion, and why it's venture-scale. Built as a decision-grade fundraising pitch deck for Series A partners.
 zh_description: |
   像一线 VC 合伙人一样写 A 轮增长叙事——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -41,7 +41,7 @@ od:
   animations: false
   category: "fundraising-pitch"
   scenario: "finance"
-  example_prompt: "Create \"Write a Series A Growth Story like a Tier-1 VC Partner\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's Series A growth story: the traction curve, the expansion motion, and why it's venture-scale. Audience: Series A partners. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
+  example_prompt: "Create \"Write a Series A Growth Story like a Tier-1 VC Partner\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: OpenDesign's Series A growth story: the traction curve, the expansion motion, and why it's venture-scale. Audience: Series A partners. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
 ---
 
 # Bold Poster

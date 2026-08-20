@@ -29,6 +29,121 @@ async function writeFakeOpenCodeCompanion(
   return companion;
 }
 
+async function pinnedVelaCliVersion(): Promise<string> {
+  const manifest = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ) as {
+    optionalDependencies?: Record<string, string>;
+  };
+  const version = manifest.optionalDependencies?.["@powerformer/vela-cli"];
+  if (!version) throw new Error("missing @powerformer/vela-cli pin");
+  return version;
+}
+
+/**
+ * Help output as current Vela prints it: `--authorize-only` made `stageDir`
+ * optional, so the usage line reads `[stageDir]`. Every flag the daemon drives
+ * is still there — the capability is unchanged, only the usage shape moved.
+ */
+async function velaCliCommandWithOptionalStageDir(
+  _source: string,
+  args: readonly string[],
+): Promise<{ stderr: string; stdout: string }> {
+  if (args[0] === "--version") {
+    return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
+  }
+  if (args[0] === "billing") {
+    return {
+      stderr: "",
+      stdout: [
+        "Usage:",
+        "  vela billing workspace-snapshot [flags]",
+        "      --workspace-id string",
+        "      --format string",
+      ].join("\n"),
+    };
+  }
+  return {
+    stderr: "",
+    stdout: [
+      "Usage:",
+      "  vela team-projects pull <projectId> [stageDir] [flags]",
+      "      --authorize-only",
+      "      --expected-version int",
+      "      --live-dir string",
+      "      --ref string",
+      "      --json",
+    ].join("\n"),
+  };
+}
+
+/**
+ * A CLI whose pull usage dropped the staging-directory positional entirely.
+ * The daemon always passes it, so packaging must refuse this binary rather
+ * than ship one that rejects the invocation at runtime.
+ */
+async function velaCliCommandWithoutStageDir(
+  _source: string,
+  args: readonly string[],
+): Promise<{ stderr: string; stdout: string }> {
+  if (args[0] === "--version") {
+    return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
+  }
+  if (args[0] === "billing") {
+    return {
+      stderr: "",
+      stdout: [
+        "Usage:",
+        "  vela billing workspace-snapshot [flags]",
+        "      --workspace-id string",
+        "      --format string",
+      ].join("\n"),
+    };
+  }
+  return {
+    stderr: "",
+    stdout: [
+      "Usage:",
+      "  vela team-projects pull <projectId> [flags]",
+      "      --expected-version int",
+      "      --live-dir string",
+      "      --ref string",
+      "      --json",
+    ].join("\n"),
+  };
+}
+
+async function matchingVelaCliCommand(
+  _binary: string,
+  args: readonly string[],
+): Promise<{ stderr: string; stdout: string }> {
+  if (args[0] === "--version") {
+    return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
+  }
+  if (args[0] === "billing") {
+    return {
+      stderr: "",
+      stdout: [
+        "Usage:",
+        "  vela billing workspace-snapshot [flags]",
+        "      --workspace-id string",
+        "      --format string",
+      ].join("\n"),
+    };
+  }
+  return {
+    stderr: "",
+    stdout: [
+      "Usage:",
+      "  vela team-projects pull <projectId> <stageDir> [flags]",
+      "      --expected-version int",
+      "      --live-dir string",
+      "      --ref string",
+      "      --json",
+    ].join("\n"),
+  };
+}
+
 describe("domToPptxBundleResource", () => {
   it("derives the vendored bundle path from the workspace root, not the caller cwd", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-resource-"));
@@ -53,7 +168,7 @@ describe("domToPptxBundleResource", () => {
 });
 
 describe("copyBundledResourceTrees", () => {
-  it("includes daemon resource trees", async () => {
+  it("includes daemon resources and the packaged Website Clone main path", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-"));
     const workspaceRoot = join(root, "workspace");
     const resourceRoot = join(root, "resources");
@@ -85,7 +200,26 @@ describe("copyBundledResourceTrees", () => {
         "community",
         "open-design-marketplace.json",
       );
+      const webCloneSkillPath = join(
+        workspaceRoot,
+        "skills",
+        "web-clone",
+        "SKILL.md",
+      );
+      const webCloneBrowserRuntimePath = join(
+        workspaceRoot,
+        "skills",
+        "web-clone",
+        "scripts",
+        "lib",
+        "system-browser.mjs",
+      );
       await mkdir(join(workspaceRoot, "skills", "sample"), { recursive: true });
+      // Packaged Website Clone runs this staged skill from both the UI and the
+      // bundled `od` CLI. Keep the skill and its zero-dependency CDP runtime in
+      // the fixture: losing either file would break a primary product path and
+      // tempt the agent to install Playwright into the user's project again.
+      await mkdir(dirname(webCloneBrowserRuntimePath), { recursive: true });
       // The skills/design-templates split (see specs/current/
       // skills-and-design-templates.md) added a separate top-level
       // `design-templates/` tree that copyBundledResourceTrees now also
@@ -115,6 +249,12 @@ describe("copyBundledResourceTrees", () => {
         recursive: true,
       });
       await writeFile(promptTemplatePath, "{\"id\":\"sample\"}\n", "utf8");
+      await writeFile(webCloneSkillPath, "# Website Clone\n", "utf8");
+      await writeFile(
+        webCloneBrowserRuntimePath,
+        "export const systemChromium = {};\n",
+        "utf8",
+      );
       await writeFile(
         join(workspaceRoot, "data", "plugin-previews", "manifest.json"),
         "{\"previews\":{}}\n",
@@ -130,6 +270,23 @@ describe("copyBundledResourceTrees", () => {
       await writeFile(communityRegistryPath, "{\"plugins\":[]}\n", "utf8");
 
       await copyBundledResourceTrees({ workspaceRoot, resourceRoot });
+
+      await expect(
+        readFile(join(resourceRoot, "skills", "web-clone", "SKILL.md"), "utf8"),
+      ).resolves.toBe("# Website Clone\n");
+      await expect(
+        readFile(
+          join(
+            resourceRoot,
+            "skills",
+            "web-clone",
+            "scripts",
+            "lib",
+            "system-browser.mjs",
+          ),
+          "utf8",
+        ),
+      ).resolves.toBe("export const systemChromium = {};\n");
 
       await expect(
         readFile(
@@ -183,6 +340,96 @@ describe("copyBundledResourceTrees", () => {
 });
 
 describe("copyOptionalVelaCliBinary", () => {
+  it("rejects a strict build when the Vela CLI version does not match the package pin", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-version-"));
+    const source = join(root, "source", "vela");
+    const resourceRoot = join(root, "resources", "open-design");
+
+    try {
+      await mkdir(join(root, "source"), { recursive: true });
+      await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
+      await writeFakeOpenCodeCompanion(source);
+
+      await expect(
+        copyOptionalVelaCliBinary({
+          env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+          platform: "mac",
+          requireBundled: true,
+          resourceRoot,
+          runCommand: async () => ({
+            stderr: "",
+            stdout: "0.0.0-test.0\n",
+          }),
+        }),
+      ).rejects.toThrow(/Vela CLI version.*package pin/i);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a strict build when Vela lacks authorized staged pulls", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-capability-"));
+    const source = join(root, "source", "vela");
+    const resourceRoot = join(root, "resources", "open-design");
+    const expectedVersion = await pinnedVelaCliVersion();
+
+    try {
+      await mkdir(join(root, "source"), { recursive: true });
+      await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
+      await writeFakeOpenCodeCompanion(source);
+
+      await expect(
+        copyOptionalVelaCliBinary({
+          env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+          platform: "mac",
+          requireBundled: true,
+          resourceRoot,
+          runCommand: async (_binary, args) => {
+            if (args[0] === "--version") {
+              return { stderr: "", stdout: `${expectedVersion}\n` };
+            }
+            throw new Error('unknown command "pull" for "vela team-projects"');
+          },
+        }),
+      ).rejects.toThrow(/authorized staged pull/i);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a strict build when Vela lacks workspace billing snapshots", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-billing-"));
+    const source = join(root, "source", "vela");
+    const resourceRoot = join(root, "resources", "open-design");
+    const expectedVersion = await pinnedVelaCliVersion();
+
+    try {
+      await mkdir(join(root, "source"), { recursive: true });
+      await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
+      await writeFakeOpenCodeCompanion(source);
+
+      await expect(
+        copyOptionalVelaCliBinary({
+          env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+          platform: "mac",
+          requireBundled: true,
+          resourceRoot,
+          runCommand: async (_binary, args) => {
+            if (args[0] === "--version") {
+              return { stderr: "", stdout: `${expectedVersion}\n` };
+            }
+            if (args[0] === "team-projects") {
+              return matchingVelaCliCommand(source, args);
+            }
+            throw new Error('unknown command "workspace-snapshot" for "vela billing"');
+          },
+        }),
+      ).rejects.toThrow(/workspace billing snapshot/i);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("copies the installed Vela CLI through the default npm resolver", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-installed-"));
     const resourceRoot = join(root, "resources", "open-design");
@@ -206,6 +453,60 @@ describe("copyOptionalVelaCliBinary", () => {
     }
   });
 
+  it("accepts a Vela CLI whose pull usage line marks stageDir optional", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-optional-stage-"));
+    const source = join(root, "source", "vela");
+    const resourceRoot = join(root, "resources", "open-design");
+
+    try {
+      await mkdir(join(root, "source"), { recursive: true });
+      await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
+      await writeFakeOpenCodeCompanion(source, "#!/bin/sh\necho opencode\n");
+
+      // Validation must gate on the capability, not on whether an argument is
+      // spelled <required> or [optional]; otherwise a purely cosmetic usage
+      // change in Vela blocks packaging for no reason.
+      const copied = await copyOptionalVelaCliBinary({
+        env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+        platform: "mac",
+        requireBundled: true,
+        resourceRoot,
+        runCommand: velaCliCommandWithOptionalStageDir,
+      });
+
+      expect(copied?.target).toBe(join(resourceRoot, "bin", "vela"));
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("refuses a Vela CLI whose pull usage dropped the staging directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-no-stage-"));
+    const source = join(root, "source", "vela");
+    const resourceRoot = join(root, "resources", "open-design");
+
+    try {
+      await mkdir(join(root, "source"), { recursive: true });
+      await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
+      await writeFakeOpenCodeCompanion(source, "#!/bin/sh\necho opencode\n");
+
+      // The daemon invokes `pull <projectId> <stageDir> --live-dir …`, so a CLI
+      // that no longer takes the positional must fail packaging rather than
+      // ship and reject that invocation at runtime.
+      await expect(
+        copyOptionalVelaCliBinary({
+          env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+          platform: "mac",
+          requireBundled: true,
+          resourceRoot,
+          runCommand: velaCliCommandWithoutStageDir,
+        }),
+      ).rejects.toThrow(/staged pull capability markers/u);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("copies a configured Vela CLI binary into the POSIX resource bin", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-"));
     const source = join(root, "source", "vela");
@@ -221,6 +522,7 @@ describe("copyOptionalVelaCliBinary", () => {
         platform: "mac",
         requireBundled: true,
         resourceRoot,
+        runCommand: matchingVelaCliCommand,
       });
 
       const target = join(resourceRoot, "bin", "vela");
@@ -256,6 +558,7 @@ describe("copyOptionalVelaCliBinary", () => {
           platform: "mac",
           requireBundled: true,
           resourceRoot,
+          runCommand: matchingVelaCliCommand,
         }),
       ).rejects.toThrow(/OpenCode companion directory is missing.*OPEN_DESIGN_VELA_CLI_BIN/);
     } finally {
@@ -333,6 +636,7 @@ describe("copyOptionalVelaCliBinary", () => {
         platform: "mac",
         requireBundled: true,
         resourceRoot,
+        runCommand: matchingVelaCliCommand,
       });
 
       const target = join(resourceRoot, "bin", "vela");

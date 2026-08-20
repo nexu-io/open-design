@@ -188,6 +188,14 @@ export function buildSpeakerNotesPresenterHtml(options: {
       overflow: hidden;
       display: grid;
       grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+      /* Explicitly lock the implicit row to the viewport height so long notes
+         scroll inside .notes-body instead of growing the body grid row past
+         the viewport and getting clipped by overflow: hidden. Without this
+         constraint, an auto grid row expands to the natural content height,
+         and a several-hundred-word speaker note balloons .notes past the
+         window — .notes-body { overflow: auto } then never fires because
+         its parent never constrains it. See issue #6271. */
+      grid-template-rows: minmax(0, 1fr);
       background: #171717;
       color: #f3f3f3;
       font: inherit;
@@ -228,7 +236,7 @@ export function buildSpeakerNotesPresenterHtml(options: {
     .thumb-label { color: #8f8f8f; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
     .thumb-frame { height: 160px; border: 1px solid #2f2f2f; border-radius: 8px; overflow: hidden; background: #101010; transition: border-color 140ms cubic-bezier(0.23, 1, 0.32, 1); }
     .filmstrip section:hover .thumb-frame { border-color: #4a4a4a; }
-    .notes { min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #1b1b1b; }
+    .notes { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #1b1b1b; }
     .notes-head { height: 58px; display: flex; align-items: center; gap: 14px; padding: 0 22px; border-bottom: 1px solid #303030; }
     .notes-title { font-size: 16px; font-weight: 800; color: #d6d6d6; }
     .notes-body { min-height: 0; padding: 28px; overflow: auto; cursor: text; }

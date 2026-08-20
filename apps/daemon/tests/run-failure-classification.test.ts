@@ -115,6 +115,7 @@ describe('classifyRunFailure', () => {
       classifyRunFailure({
         result: 'cancelled',
         status: { status: 'canceled' },
+        cancelOrigin: 'user_stop',
       }),
     ).toEqual({
       failure_category: 'user_cancel',
@@ -122,9 +123,26 @@ describe('classifyRunFailure', () => {
       failure_stage: 'first_token_wait',
       retryable: false,
       user_action: 'none',
+      cancel_origin: 'user_stop',
+      terminal_trigger: 'user_stop',
     });
   });
 
+  it.each(['project_cleanup', 'daemon_shutdown'] as const)(
+    'keeps lifecycle cancellation origin %s out of the user-stop signal',
+    (cancelOrigin) => {
+      expect(
+        classifyRunFailure({
+          result: 'cancelled',
+          status: { status: 'canceled' },
+          cancelOrigin,
+        }),
+      ).toMatchObject({
+        cancel_origin: cancelOrigin,
+        terminal_trigger: cancelOrigin,
+      });
+    },
+  );
 
   it('prefers user cancellation over timeout-flavored status text when the run result is cancelled', () => {
     expect(
@@ -152,6 +170,8 @@ describe('classifyRunFailure', () => {
       failure_stage: 'first_token_wait',
       retryable: false,
       user_action: 'none',
+      cancel_origin: 'unknown',
+      terminal_trigger: 'unknown',
     });
   });
 
@@ -370,6 +390,22 @@ describe('classifyRunFailure', () => {
     expect(
       classify(
         'AGENT_EXECUTION_FAILED',
+        'json-rpc id 4: opencode event stream: {"type":"session.error","properties":{"error":{"data":{"message":"\\"[code=upstream_error] stream idle timeout: no data received within configured window\\""}}}}',
+        [errorEvent(
+          'AGENT_EXECUTION_FAILED',
+          'json-rpc id 4: opencode event stream: {"type":"session.error","properties":{"error":{"data":{"message":"\\"[code=upstream_error] stream idle timeout: no data received within configured window\\""}}}}',
+          true,
+        )],
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      retryable: true,
+      user_action: 'retry',
+    });
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
         'json-rpc id 4: Cannot connect to API: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()',
       ),
     ).toMatchObject({
@@ -553,6 +589,85 @@ describe('classifyRunFailure', () => {
         },
         errorCode: 'AGENT_SIGNAL_SIGTERM',
         events: [],
+      }),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'first_token_wait',
+      terminal_trigger: 'inactivity_watchdog',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('distinguishes the absolute first-output deadline from inactivity', () => {
+    const timeoutMessage = 'Agent stalled without emitting a first output for 120s.';
+
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: timeoutMessage,
+          signal: 'SIGTERM',
+          exitCode: null,
+          errorCode: 'AGENT_SIGNAL_SIGTERM',
+        },
+        errorCode: 'AGENT_SIGNAL_SIGTERM',
+        events: [errorEvent('AGENT_SIGNAL_SIGTERM', timeoutMessage, true)],
+      }),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      terminal_trigger: 'first_output_deadline',
+    });
+  });
+
+  it('keeps an explicit watchdog trigger when a provider error supplies the failure bucket', () => {
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: 'HTTP 429: too many requests',
+          exitCode: 1,
+          signal: null,
+          errorCode: 'RATE_LIMITED',
+        },
+        errorCode: 'RATE_LIMITED',
+        terminalTrigger: 'inactivity_watchdog',
+        events: [errorEvent('RATE_LIMITED', 'HTTP 429: too many requests', true)],
+      }),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      terminal_trigger: 'inactivity_watchdog',
+    });
+  });
+
+  it('classifies only the terminal attempt after an automatic retry', () => {
+    const timeoutMessage = 'Agent stalled without emitting any new output for 120s.';
+
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: timeoutMessage,
+          signal: 'SIGTERM',
+          exitCode: null,
+          errorCode: 'AGENT_SIGNAL_SIGTERM',
+        },
+        errorCode: 'AGENT_SIGNAL_SIGTERM',
+        agentId: 'claude',
+        events: [
+          { event: 'start', data: { attempt: 1 } },
+          { event: 'agent', data: { type: 'text_delta', delta: 'Working.' } },
+          { event: 'agent', data: { type: 'tool_use', id: 'tool-1', name: 'Read' } },
+          errorEvent('UPSTREAM_UNAVAILABLE', '503 upstream unavailable', true),
+          { event: 'run_retry_attempted', data: { attempt: 2 } },
+          { event: 'start', data: { attempt: 2 } },
+          errorEvent('AGENT_SIGNAL_SIGTERM', timeoutMessage, true),
+        ],
       }),
     ).toMatchObject({
       failure_category: 'timeout',
@@ -1101,6 +1216,21 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       user_action: 'reduce_context',
     });
 
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'json-rpc id 4: opencode event stream: {"properties":{"error":{"data":{"message":"[code=request_too_large] request body exceeds configured limit"}}}}',
+      ),
+    ).toMatchObject({
+      failure_category: 'prompt_too_large',
+      // main 把带 [code=request_too_large] 的上游错误单独归到 request_too_large,
+      // 与「上下文放不下」的 prompt_too_large 区分开(分类仍是 prompt_too_large)。
+      failure_detail: 'request_too_large',
+      failure_stage: 'prompt_send',
+      retryable: false,
+      user_action: 'reduce_context',
+    });
+
     expect(classify('AGENT_EXECUTION_FAILED', 'Codex CLI was not found. Please update or reinstall OpenAI Codex.')).toMatchObject({
       failure_category: 'process_exit',
       failure_detail: 'cli_not_installed',
@@ -1536,6 +1666,33 @@ describe('classifyRunFailure — AMR/vela reclassification out of execution_fail
     expect(result?.retryable).toBe(true);
   });
 
+  // vela's rolling 5-hour model window (`model_limit_exceeded`, link
+  // handlers/openai.go) is NOT a hard quota: the window resets on its own at
+  // `reset_at`, the request was never charged, and retrying after that instant
+  // succeeds. Reading it as `hard_quota` both mislabels the cause and marks the
+  // run non-retryable, which pollutes the reliability numerator.
+  it('classifies vela 5-hour model window limits as a retryable model_window_limit', () => {
+    const result = classifyForAgent(
+      'amr',
+      'RATE_LIMITED',
+      'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z. This request was not charged to Wallet Credits.',
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('model_window_limit');
+    expect(result?.retryable).toBe(true);
+  });
+
+  // A genuine quota exhaustion must keep its existing hard_quota reading — the
+  // window-limit branch above must not swallow the whole `usage limit` family.
+  it('keeps a genuine session-limit exhaustion on hard_quota', () => {
+    const result = classify(
+      'RATE_LIMITED',
+      "You've hit your session limit; resets at 3:10am.",
+    );
+    expect(result?.failure_detail).toBe('hard_quota');
+    expect(result?.retryable).toBe(false);
+  });
+
   it('classifies a vela "model not in allowed list" rejection as model_unavailable', () => {
     const result = classify(
       'AGENT_EXECUTION_FAILED',
@@ -1580,6 +1737,18 @@ describe('classifyRunFailure — batch A reclassification out of execution_faile
     );
     expect(result?.failure_category).toBe('prompt_too_large');
     expect(result?.failure_detail).toBe('prompt_too_large');
+  });
+
+  it('classifies a text-only Claude "Prompt is too long" failure as prompt_too_large (#6979)', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'API Error: Prompt is too long.',
+    );
+
+    expect(result?.failure_category).toBe('prompt_too_large');
+    expect(result?.failure_detail).toBe('prompt_too_large');
+    expect(result?.retryable).toBe(false);
+    expect(result?.user_action).toBe('reduce_context');
   });
 
   it('classifies AMR request body limits as prompt_too_large', () => {

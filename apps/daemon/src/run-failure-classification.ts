@@ -1,9 +1,12 @@
 import type {
+  TrackingRunCancelOrigin,
   TrackingRunFailureCategory,
   TrackingRunFailureDetail,
   TrackingRunFailureStage,
   TrackingRunFailureUserAction,
+  TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
+import { isModelWindowLimitFailure } from '@open-design/contracts';
 
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
@@ -22,6 +25,8 @@ export interface RunFailureClassificationInput {
   };
   errorCode?: string;
   agentId?: string | null;
+  cancelOrigin?: TrackingRunCancelOrigin | null;
+  terminalTrigger?: TrackingRunTerminalTrigger | null;
   events?: RunEventForFailureClassification[];
 }
 
@@ -31,6 +36,10 @@ export interface RunFailureClassification {
   failure_stage: TrackingRunFailureStage;
   retryable: boolean;
   user_action: TrackingRunFailureUserAction;
+  /** Distinguishes an explicit user stop from lifecycle-driven cancellation. */
+  cancel_origin?: TrackingRunCancelOrigin;
+  /** Lifecycle or watchdog mechanism that forced the terminal state. */
+  terminal_trigger?: TrackingRunTerminalTrigger;
 }
 
 function normalizeCode(value: string | undefined | null): string {
@@ -97,6 +106,21 @@ function latestRetryable(
     if (retryable !== undefined) return retryable;
   }
   return undefined;
+}
+
+/**
+ * Automatic retries reuse one durable run and append another `start` event.
+ * Failure telemetry must describe the terminal attempt, not stale provider,
+ * tool, or phase evidence left behind by an earlier retry attempt.
+ */
+function terminalAttemptEvents(
+  events: RunEventForFailureClassification[] | undefined,
+): RunEventForFailureClassification[] {
+  const records = events ?? [];
+  for (let i = records.length - 1; i >= 0; i -= 1) {
+    if (records[i]?.event === 'start') return records.slice(i);
+  }
+  return records;
 }
 
 function inferFailureStageFromEvents(
@@ -258,8 +282,11 @@ function promptTooLargeDetail(text: string): TrackingRunFailureDetail | null {
   }
   // `prefill context too large` is the local-runtime (MLX) shape of the same
   // "the prompt does not fit" failure that currently leaks into execution_failed.
+  // Claude Code's terminal result uses the distinct literal `Prompt is too
+  // long`; keep it here as a fallback for persisted or legacy failures that
+  // do not carry the structured AGENT_PROMPT_TOO_LARGE code.
   if (
-    /\b(context window|context size (?:has been )?exceeded|prompt too large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i.test(text)
+    /\b(context window|context size (?:has been )?exceeded|prompt too large|prompt is too long|request_too_large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i.test(text)
   ) {
     return 'prompt_too_large';
   }
@@ -292,7 +319,7 @@ function clientRequestFailureDetail(text: string): TrackingRunFailureDetail | nu
 
 function isUpstreamDetailText(text: string): boolean {
   return isUpstreamClientErrorText(text) ||
-    /\b(stream disconnected before completion|(?:stream|upstream) idle timeout|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|ConnectionRefused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|peer closed connection|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Unexpected server error|Streaming response failed|Failed to process error response|AMR model catalog is (?:temporarily )?unavailable)\b/i
+    /\b(stream disconnected before completion|(?:stream|upstream) idle timeout|no data received within configured window|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|ConnectionRefused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|peer closed connection|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Unexpected server error|Streaming response failed|Failed to process error response|AMR model catalog is (?:temporarily )?unavailable)\b/i
       .test(text);
 }
 
@@ -387,7 +414,7 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
     return 'provider_routing_error';
   }
   if (/\bhigh demand|temporary errors|model is at capacity|selected model is at capacity\b/i.test(text)) return 'provider_high_demand';
-  if (/\b(stream disconnected before completion|(?:stream|upstream) idle timeout|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Streaming response failed)\b/i
+  if (/\b(stream disconnected before completion|(?:stream|upstream) idle timeout|no data received within configured window|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Streaming response failed)\b/i
     .test(text)) {
     return 'stream_disconnected';
   }
@@ -621,23 +648,31 @@ function classification(
   };
 }
 
-export function classifyRunFailure(
+function classifyRunFailureBase(
   input: RunFailureClassificationInput,
 ): RunFailureClassification | undefined {
   if (input.result === 'success') return undefined;
+  const events = terminalAttemptEvents(input.events);
   if (input.result === 'cancelled') {
-    return classification(
-      'user_cancel',
-      'user_cancelled',
-      inferFailureStageFromEvents(input.events, 'first_token_wait'),
-      false,
-      'none',
-    );
+    const cancelOrigin = input.cancelOrigin ?? 'unknown';
+    return {
+      // Preserve the legacy category/detail for dashboard compatibility.
+      // `cancel_origin` is the authoritative SLO eligibility signal.
+      ...classification(
+        'user_cancel',
+        'user_cancelled',
+        inferFailureStageFromEvents(events, 'first_token_wait'),
+        false,
+        'none',
+      ),
+      cancel_origin: cancelOrigin,
+      terminal_trigger: cancelOrigin,
+    };
   }
 
   const errorCode = normalizeCode(input.errorCode ?? input.status.errorCode);
-  const text = collectFailureText(input);
-  const retryableHint = latestRetryable(input.events);
+  const text = collectFailureText({ ...input, events });
+  const retryableHint = latestRetryable(events);
   const amrFailure = classifyAmrAccountFailure(text);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
@@ -704,7 +739,7 @@ export function classifyRunFailure(
       'model_unavailable',
       modelDetail,
       modelDetail === 'cli_version_incompatible' &&
-        wasBlockedByModelCapabilityPreflight(input.events)
+        wasBlockedByModelCapabilityPreflight(events)
         ? 'preflight'
         : 'model_select',
       false,
@@ -811,6 +846,19 @@ export function classifyRunFailure(
   }
 
   if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || isHardQuotaText(text) || isRateLimitText(text)) {
+    // Checked BEFORE the hard-quota reading: vela phrases its rolling per-model
+    // window as "…usage limit…", which `isHardQuotaText` matches, so without
+    // this branch a self-resetting window is reported as an exhausted quota —
+    // non-retryable, and counted against reliability as a real failure.
+    if (isModelWindowLimitFailure(text)) {
+      return classification(
+        'rate_limit',
+        'model_window_limit',
+        'session_init',
+        true,
+        'retry',
+      );
+    }
     const hardQuota = isHardQuotaText(text);
     const workspaceCredits = isWorkspaceCreditsText(text);
     const retryable = hardQuota ? false : (retryableHint ?? true);
@@ -843,7 +891,7 @@ export function classifyRunFailure(
     return classification(
       'upstream_unavailable',
       upstreamClientError ? 'upstream_client_error' : upstreamDetail(text),
-      inferFailureStageFromEvents(input.events, 'first_token_wait'),
+      inferFailureStageFromEvents(events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',
     );
@@ -853,7 +901,7 @@ export function classifyRunFailure(
     return classification(
       'empty_output',
       'empty_output',
-      inferFailureStageFromEvents(input.events, 'first_token_wait'),
+      inferFailureStageFromEvents(events, 'first_token_wait'),
       retryableHint ?? true,
       'retry',
     );
@@ -861,15 +909,23 @@ export function classifyRunFailure(
 
   if (isTimeoutText(text) || errorCode === 'TIMEOUT') {
     const retryable = retryableHint ?? true;
-    return classification(
-      'timeout',
-      /inactivity|stalled|hung|no new output|without emitting any new output/i.test(text)
-        ? 'inactivity_timeout'
-        : 'timeout',
-      inferFailureStageFromEvents(input.events, 'first_token_wait'),
-      retryable,
-      retryable ? 'retry' : 'none',
-    );
+    const inactivityTimeout = /inactivity|stalled|hung|no new output|without emitting any new output/i.test(text);
+    const terminalTrigger: TrackingRunTerminalTrigger | undefined =
+      /without emitting a first output/i.test(text)
+        ? 'first_output_deadline'
+        : inactivityTimeout
+          ? 'inactivity_watchdog'
+          : undefined;
+    return {
+      ...classification(
+        'timeout',
+        inactivityTimeout ? 'inactivity_timeout' : 'timeout',
+        inferFailureStageFromEvents(events, 'first_token_wait'),
+        retryable,
+        retryable ? 'retry' : 'none',
+      ),
+      ...(terminalTrigger ? { terminal_trigger: terminalTrigger } : {}),
+    };
   }
 
   if (isToolErrorText(text)) {
@@ -914,7 +970,7 @@ export function classifyRunFailure(
     return classification(
       'process_exit',
       'cpu_unsupported',
-      inferFailureStageFromEvents(input.events, 'session_init'),
+      inferFailureStageFromEvents(events, 'session_init'),
       false,
       'none',
     );
@@ -926,7 +982,7 @@ export function classifyRunFailure(
   // had a chance to claim auth, quota, upstream, prompt-size, and other known
   // failures. Unlike stream_error, fatal_rpc_error may have no structured SSE
   // error code at all, so it must also refine signal/unknown/exit fallbacks.
-  const runtimeCloseReason = readRuntimeCloseReason(input.events);
+  const runtimeCloseReason = readRuntimeCloseReason(events);
   if (
     runtimeCloseReason === 'fatal_rpc_error' &&
     (
@@ -940,7 +996,7 @@ export function classifyRunFailure(
     return classification(
       'process_exit',
       'fatal_rpc_error',
-      inferFailureStageFromEvents(input.events, 'child_close'),
+      inferFailureStageFromEvents(events, 'child_close'),
       retryable,
       retryable ? 'retry' : 'none',
     );
@@ -955,7 +1011,7 @@ export function classifyRunFailure(
     errorCode === 'AGENT_EXECUTION_FAILED'
   ) {
     const baseDetail = processExitDetail(errorCode, text);
-    const refinedDetail = baseDetail === 'execution_failed' ? executionFailedDetail(input.events) : baseDetail;
+    const refinedDetail = baseDetail === 'execution_failed' ? executionFailedDetail(events) : baseDetail;
     const defaultRetryable =
       refinedDetail === 'stream_error' ||
       refinedDetail === 'fatal_rpc_error';
@@ -964,7 +1020,7 @@ export function classifyRunFailure(
       // Only the generic AGENT_EXECUTION_FAILED catch-all is refined; the
       // specific exit_code / terminated_unknown labels already carry meaning.
       refinedDetail,
-      inferFailureStageFromEvents(input.events, 'child_close'),
+      inferFailureStageFromEvents(events, 'child_close'),
       retryableHint ?? defaultRetryable,
       (retryableHint ?? defaultRetryable) ? 'retry' : 'none',
     );
@@ -977,4 +1033,15 @@ export function classifyRunFailure(
     retryableHint ?? false,
     retryableHint ? 'retry' : 'none',
   );
+}
+
+export function classifyRunFailure(
+  input: RunFailureClassificationInput,
+): RunFailureClassification | undefined {
+  const failure = classifyRunFailureBase(input);
+  if (!failure || !input.terminalTrigger) return failure;
+  return {
+    ...failure,
+    terminal_trigger: input.terminalTrigger,
+  };
 }

@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectorDetail } from '@open-design/contracts';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type ConnectorDetail,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import {
   buildDesignSystemPackageAuditRepairPrompt,
@@ -13,7 +18,15 @@ import {
   DesignSystemDetailView,
 } from '../../src/components/DesignSystemFlow';
 import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
-import type { AppConfig, Conversation, DesignSystemDetail, DesignSystemSummary, Project, ProjectFile } from '../../src/types';
+import type {
+  AppConfig,
+  ChatMessage,
+  Conversation,
+  DesignSystemDetail,
+  DesignSystemSummary,
+  Project,
+  ProjectFile,
+} from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 
 const mocks = vi.hoisted(() => ({
@@ -26,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   fetchDesignSystemRevisions: vi.fn(),
   fetchProjectDesignSystemPackageAudit: vi.fn(),
   fetchProjectFiles: vi.fn(),
+  fileWorkspaceProps: vi.fn(),
   getProject: vi.fn(),
   openFolderDialog: vi.fn(),
   patchProject: vi.fn(),
@@ -41,25 +55,48 @@ const mocks = vi.hoisted(() => ({
   writeProjectTextFile: vi.fn(),
 }));
 
+const workspaceContextState = vi.hoisted(() => ({
+  context: null as WorkspaceCollabContext | null,
+}));
+
+vi.mock('../../src/collab/useWorkspaceContext', () => ({
+  useWorkspaceContext: () => ({
+    context: workspaceContextState.context,
+    loading: false,
+  }),
+}));
+
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: ({
     error,
     initialDraft,
+    messages,
     onNewConversation,
+    onSelectConversation,
     onSend,
     projectFileNames,
     onRequestOpenFile,
+    sendDisabled,
   }: {
     error?: string | null;
     initialDraft?: string;
+    messages?: ChatMessage[];
     onNewConversation?: () => void;
+    onSelectConversation?: (conversationId: string) => void;
     onSend: (prompt: string, attachments: unknown[], commentAttachments: unknown[]) => void;
     projectFileNames?: Set<string>;
     onRequestOpenFile?: (name: string) => void;
+    sendDisabled?: boolean;
   }) => (
     <>
       {error ? <div role="alert">{error}</div> : null}
       {initialDraft ? <div data-testid="chat-initial-draft">{initialDraft}</div> : null}
+      <div
+        data-testid="design-system-chat-state"
+        data-send-disabled={sendDisabled ? 'true' : 'false'}
+      >
+        {messages?.map((message) => <span key={message.id}>{message.content}</span>)}
+      </div>
       <div data-testid="chat-file-names">{[...(projectFileNames ?? [])].join(',')}</div>
       <button
         type="button"
@@ -77,6 +114,13 @@ vi.mock('../../src/components/ChatPane', () => ({
       </button>
       <button
         type="button"
+        data-testid="select-other-conversation"
+        onClick={() => onSelectConversation?.('conv-other')}
+      >
+        Select other
+      </button>
+      <button
+        type="button"
         data-testid="design-system-chat-send"
         onClick={() => onSend('Update the design tokens', [], [])}
       >
@@ -88,9 +132,45 @@ vi.mock('../../src/components/ChatPane', () => ({
 
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: ({ openRequest }: { openRequest?: { name: string } | null }) => (
-    <div data-testid="design-system-files" data-open-request={openRequest?.name ?? ''} />
-  ),
+  FileWorkspace: (props: {
+    files?: ProjectFile[];
+    filesGeneration?: number;
+    onRefreshFiles?: (options?: { fresh?: boolean }) => Promise<{
+      acceptedGeneration: number | null;
+    }> | void;
+    openRequest?: { name: string } | null;
+  }) => {
+    mocks.fileWorkspaceProps(props);
+    const {
+      files = [],
+      filesGeneration,
+      onRefreshFiles,
+      openRequest,
+    } = props;
+    return (
+      <div
+        data-testid="design-system-files"
+        data-file-names={files.map((file) => file.name).join(',')}
+        data-files-generation={filesGeneration ?? ''}
+        data-open-request={openRequest?.name ?? ''}
+      >
+        <button
+          type="button"
+          data-testid="refresh-design-system-files"
+          onClick={() => void onRefreshFiles?.()}
+        >
+          refresh files
+        </button>
+        <button
+          type="button"
+          data-testid="fresh-refresh-design-system-files"
+          onClick={() => void onRefreshFiles?.({ fresh: true })}
+        >
+          fresh refresh files
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
@@ -138,12 +218,14 @@ vi.mock('../../src/state/projects', async () => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   window.sessionStorage.clear();
 });
 
 beforeEach(() => {
+  workspaceContextState.context = null;
   mocks.connectConnector.mockResolvedValue({ connector: null });
   mocks.disconnectConnector.mockResolvedValue(null);
   mocks.fetchDesignSystem.mockResolvedValue(null);
@@ -176,6 +258,23 @@ beforeEach(() => {
     mime: 'text/markdown',
   }));
 });
+
+function teamContext(): WorkspaceCollabContext {
+  return {
+    workspaceId: 'workspace-a',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-a',
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: 'team-a',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 1 }),
+    permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+  };
+}
 
 function continueToGeneration() {
   fireEvent.click(screen.getByRole('button', { name: /^(continue to generation|generate)$/i }));
@@ -775,7 +874,7 @@ describe('DesignSystemCreationFlow', () => {
     await waitFor(() => expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
-        pendingPrompt: expect.stringContaining('Create this project as a complete Open Design design system workspace.'),
+        pendingPrompt: expect.stringContaining('Create this project as a complete OpenDesign design system workspace.'),
       }),
     ));
     await waitFor(() => expect(onProjectPrepared).toHaveBeenCalledWith(
@@ -862,7 +961,7 @@ describe('DesignSystemCreationFlow', () => {
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
-        pendingPrompt: expect.stringContaining('Create this project as a complete Open Design design system workspace.'),
+        pendingPrompt: expect.stringContaining('Create this project as a complete OpenDesign design system workspace.'),
       }),
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
@@ -1282,6 +1381,9 @@ describe('DesignSystemCreationFlow', () => {
       expect.stringContaining('Placeholder component shells are not sufficient'),
     );
     expect(window.sessionStorage.getItem(`od:auto-send-first:${project.id}`)).toBe('1');
+    expect(window.sessionStorage.getItem(`od:auto-send-prompt:${project.id}`)).toContain(
+      'context/source-context.md',
+    );
     expect(onCreated).toHaveBeenCalledWith(project.id, project, `conv-${project.id}`);
     expect(onSystemsRefresh).toHaveBeenCalled();
   });
@@ -1345,27 +1447,35 @@ describe('DesignSystemCreationFlow', () => {
         }),
         pendingPrompt: expect.stringContaining('Read the linked local code folders'),
       }),
+      null,
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('tools connectors local-design-context --path'),
       }),
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('/Users/qingyu/work/comfyui'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('## Local Folder Intake Runbook'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('tools connectors local-design-context --path'),
+      undefined,
+      null,
     );
   });
 
@@ -1426,19 +1536,26 @@ describe('DesignSystemCreationFlow', () => {
       project.id,
       tokenFile,
       'context/local-code/comfyui/src/tokens.css',
+      null,
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('context/local-code/comfyui/src/tokens.css'),
       }),
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('context/local-code/comfyui/src/tokens.css'),
+      undefined,
+      null,
     );
     expect(window.sessionStorage.getItem(`od:auto-send-first:${project.id}`)).toBe('1');
+    expect(window.sessionStorage.getItem(`od:auto-send-prompt:${project.id}`)).toContain(
+      'context/source-context.md',
+    );
     expect(onCreated).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({ id: project.id }),
@@ -1708,16 +1825,20 @@ describe('DesignSystemCreationFlow', () => {
       project.id,
       tokenFile,
       'context/local-code/comfyui/src/tokens.css',
+      null,
     );
     expect(mocks.uploadProjectFile).toHaveBeenCalledWith(
       project.id,
       buttonFile,
       'context/local-code/comfyui/src/Button.tsx',
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('context/local-code/comfyui/src/Button.tsx'),
+      undefined,
+      null,
     );
   });
 
@@ -1783,12 +1904,15 @@ describe('DesignSystemCreationFlow', () => {
       project.id,
       'context/source-context.md',
       expect.stringContaining('figma/DESIGN-context.md'),
+      undefined,
+      null,
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('Each .fig was decoded into a real design snapshot'),
       }),
+      null,
     );
     expect(mocks.uploadProjectFile).not.toHaveBeenCalled();
   });
@@ -1848,18 +1972,21 @@ describe('DesignSystemCreationFlow', () => {
     confirmExtraction();
 
     await waitFor(() => expect(mocks.uploadProjectFile).toHaveBeenCalledTimes(2));
-    expect(mocks.uploadProjectFile).toHaveBeenCalledWith(project.id, logoFile, 'assets/logo.svg');
-    expect(mocks.uploadProjectFile).toHaveBeenCalledWith(project.id, fontFile, 'assets/brand.woff2');
+    expect(mocks.uploadProjectFile).toHaveBeenCalledWith(project.id, logoFile, 'assets/logo.svg', null);
+    expect(mocks.uploadProjectFile).toHaveBeenCalledWith(project.id, fontFile, 'assets/brand.woff2', null);
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('assets/logo.svg'),
+      undefined,
+      null,
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('Use uploaded brand assets in `assets/`'),
       }),
+      null,
     );
   });
 
@@ -1938,12 +2065,12 @@ describe('DesignSystemCreationFlow', () => {
   it.skip('adds website source links with Enter and keeps them out of GitHub intake', async () => {
     const system: DesignSystemDetail = {
       id: 'user:open-design-website-design-system',
-      title: 'Open Design Website Design System',
+      title: 'OpenDesign Website Design System',
       category: 'Custom',
-      summary: 'Open Design website source.',
+      summary: 'OpenDesign website source.',
       swatches: [],
       surface: 'web',
-      body: '# Open Design Website Design System\n',
+      body: '# OpenDesign Website Design System\n',
       source: 'user',
       status: 'draft',
       isEditable: true,
@@ -1951,7 +2078,7 @@ describe('DesignSystemCreationFlow', () => {
     };
     const project: Project = {
       id: 'ds-open-design-website-design-system',
-      name: 'Open Design Website Design System',
+      name: 'OpenDesign Website Design System',
       skillId: null,
       designSystemId: system.id,
       createdAt: 1,
@@ -1985,7 +2112,7 @@ describe('DesignSystemCreationFlow', () => {
     expect(sourceInput.value).toBe('');
 
     fireEvent.change(screen.getByPlaceholderText(/Mission Impastabowl/i), {
-      target: { value: 'Open Design website source' },
+      target: { value: 'OpenDesign website source' },
     });
     continueToGeneration();
     continueToGeneration();
@@ -2038,7 +2165,7 @@ describe('DesignSystemCreationFlow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show access methods' }));
     expect(screen.getByText('This device')).toBeTruthy();
-    expect(screen.getByText('Open Design account')).toBeTruthy();
+    expect(screen.getByText('OpenDesign account')).toBeTruthy();
     expect(screen.getByText('Connector platform')).toBeTruthy();
     expect(screen.getByText('Coming soon')).toBeTruthy();
     expect(screen.getByText('Not configured')).toBeTruthy();
@@ -2055,42 +2182,32 @@ describe('DesignSystemCreationFlow', () => {
   });
 
   it('stops checking GitHub connector if the status request hangs', async () => {
-    const originalSetTimeout = window.setTimeout;
-    type WindowSetTimeout = typeof window.setTimeout;
-    const timeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((...params: Parameters<WindowSetTimeout>) => {
-      const [handler, timeout, ...args] = params;
-      if (timeout === 5000 && typeof handler === 'function') {
-        handler(...args);
-        return 1;
-      }
-      return originalSetTimeout(...params);
-    }) as typeof window.setTimeout);
+    vi.useFakeTimers();
     mocks.fetchConnectorStatuses.mockReturnValue(new Promise(() => {}));
     const config = {
       composio: { apiKeyConfigured: true, apiKeyTail: 'uQEg' },
     } as AppConfig;
 
-    try {
-      render(
-        <DesignSystemCreationFlow
-          onBack={() => {}}
-          onCreated={() => {}}
-          config={config}
-        />,
-      );
+    render(
+      <DesignSystemCreationFlow
+        onBack={() => {}}
+        onCreated={() => {}}
+        config={config}
+      />,
+    );
 
-      expect(screen.getByText('GitHub access: Auto')).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: 'Show access methods' }));
-      expect(screen.queryByText('Checking GitHub connector')).toBeNull();
+    expect(screen.getByText('GitHub access: Auto')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show access methods' }));
+    expect(screen.queryByText('Checking GitHub connector')).toBeNull();
 
-      await waitFor(() => expect(screen.getByText('Needs attention')).toBeTruthy());
-      expect(screen.queryByText('Checking GitHub connector')).toBeNull();
-      expect(screen.getByText(/Could not finish checking GitHub connector/i)).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Connect via Composio' })).toBeTruthy();
-      expect(mocks.fetchConnectorStatuses.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
-    } finally {
-      timeoutSpy.mockRestore();
-    }
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(screen.getByText('Needs attention')).toBeTruthy();
+    expect(screen.queryByText('Checking GitHub connector')).toBeNull();
+    expect(screen.getByText(/Could not finish checking GitHub connector/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Connect via Composio' })).toBeTruthy();
+    expect(mocks.fetchConnectorStatuses.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
   });
 
   it('surfaces GitHub connector status errors from the connector status endpoint', async () => {
@@ -2212,7 +2329,7 @@ describe('DesignSystemCreationFlow', () => {
         redirectUrl: 'https://example.com/oauth',
         expiresAt: '2099-05-08T10:00:00.000Z',
       },
-      error: 'Popup blocked. Allow popups for Open Design and try again.',
+      error: 'Popup blocked. Allow popups for OpenDesign and try again.',
     });
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => ({ closed: false } as Window));
     const config = {
@@ -2233,7 +2350,7 @@ describe('DesignSystemCreationFlow', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Connect via Composio' }));
 
       await waitFor(() => expect(screen.getByText('Pending')).toBeTruthy());
-      expect(screen.getByText('Popup blocked. Allow popups for Open Design and try again.')).toBeTruthy();
+      expect(screen.getByText('Popup blocked. Allow popups for OpenDesign and try again.')).toBeTruthy();
 
       fireEvent.click(screen.getByRole('button', { name: 'Open authorization' }));
 
@@ -2311,21 +2428,29 @@ describe('DesignSystemCreationFlow', () => {
       project.id,
       'context/source-context.md',
       expect.stringContaining('Connector status: connected as qiongyu1999.'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('https://github.com/nexu-io/open-design'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('GitHub Connector Intake Runbook'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('"$OD_NODE_BIN" "$OD_BIN" tools connectors github-design-context --repo \'https://github.com/nexu-io/open-design\' --output context/github/nexu-io-open-design.md'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).not.toHaveBeenCalledWith(
       project.id,
@@ -2337,71 +2462,91 @@ describe('DesignSystemCreationFlow', () => {
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('GitHub repository intake is required before drafting the design system'),
       }),
+      null,
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('Do not call GitHub connector tree/content/raw tools directly from the agent.'),
       }),
+      null,
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('The command tries this-device access first'),
       }),
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('GitHub evidence must come from the bounded `github-design-context` command'),
+      undefined,
+      null,
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('Do not call GitHub connector tree/content/raw tools directly from the agent.'),
       }),
+      null,
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('Treat `Read method: git-clone` as the preferred this-device path.'),
       }),
+      null,
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
         pendingPrompt: expect.stringContaining('selects design-system-relevant source files plus available logos/icons/fonts'),
       }),
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('assets/, build/, fonts/, and context/ should preserve logos'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('Claude-style build asset contract:'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('copy representative runtime assets there with their original filenames'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('Copy those runtime assets byte-for-byte from the captured `context/.../files/...` snapshots.'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('Do not satisfy build/runtime icon evidence by only renaming those files into `assets/`'),
+      undefined,
+      null,
     );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
       expect.stringContaining('preview/brand-assets.html should visibly reference preserved files'),
+      undefined,
+      null,
     );
   });
 
@@ -2469,6 +2614,245 @@ describe('DesignSystemCreationFlow', () => {
 });
 
 describe('DesignSystemDetailView', () => {
+  it('keeps a fresh R2 file snapshot when an older R1 resolves afterward', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:refresh-race-design-system',
+      title: 'Refresh Race Design System',
+      category: 'Custom',
+      summary: 'Exercises file refresh ordering.',
+      swatches: [],
+      surface: 'web',
+      body: '# Refresh Race Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-refresh-race',
+    };
+    const project: Project = {
+      id: 'ds-refresh-race',
+      name: 'Refresh Race Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const initialFile: ProjectFile = {
+      name: 'initial.html',
+      size: 10,
+      mtime: 1,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const staleR1File: ProjectFile = { ...initialFile, name: 'stale-r1.html', mtime: 2 };
+    const freshR2File: ProjectFile = { ...initialFile, name: 'fresh-r2.html', mtime: 3 };
+    let resolveR1!: (files: ProjectFile[]) => void;
+    let resolveR2!: (files: ProjectFile[]) => void;
+    const r1 = new Promise<ProjectFile[]>((resolve) => { resolveR1 = resolve; });
+    const r2 = new Promise<ProjectFile[]>((resolve) => { resolveR2 = resolve; });
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [initialFile] });
+    mocks.fetchProjectFiles
+      .mockImplementationOnce(() => r1)
+      .mockImplementationOnce(() => r2);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={{ mode: 'daemon', agentId: 'agent-1' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
+    const workspace = await screen.findByTestId('design-system-files');
+    await waitFor(() => expect(workspace.getAttribute('data-file-names')).toBe('initial.html'));
+    const initialGeneration = Number(workspace.getAttribute('data-files-generation'));
+
+    const onRefreshFiles = mocks.fileWorkspaceProps.mock.calls.at(-1)?.[0]?.onRefreshFiles as
+      | ((options?: { fresh?: boolean }) => Promise<{ acceptedGeneration: number | null }>)
+      | undefined;
+    const r1Refresh = onRefreshFiles?.();
+    const r2Refresh = onRefreshFiles?.({ fresh: true });
+    await waitFor(() => expect(mocks.fetchProjectFiles).toHaveBeenCalledTimes(2));
+
+    resolveR2([freshR2File]);
+    await expect(r2Refresh).resolves.toEqual({ acceptedGeneration: initialGeneration + 1 });
+    await waitFor(() => {
+      expect(workspace.getAttribute('data-file-names')).toBe('fresh-r2.html');
+      expect(Number(workspace.getAttribute('data-files-generation'))).toBe(initialGeneration + 1);
+    });
+
+    resolveR1([staleR1File]);
+    await expect(r1Refresh).resolves.toEqual({ acceptedGeneration: null });
+    await Promise.resolve();
+
+    expect(workspace.getAttribute('data-file-names')).toBe('fresh-r2.html');
+    expect(Number(workspace.getAttribute('data-files-generation'))).toBe(initialGeneration + 1);
+  });
+
+  it('keeps the current file snapshot and generation when an authoritative refresh fails', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:failed-refresh-design-system',
+      title: 'Failed Refresh Design System',
+      category: 'Custom',
+      summary: 'Exercises authoritative refresh failure.',
+      swatches: [],
+      surface: 'web',
+      body: '# Failed Refresh Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-failed-refresh',
+    };
+    const project: Project = {
+      id: system.projectId!,
+      name: system.title,
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const file: ProjectFile = {
+      name: 'kept.html',
+      size: 10,
+      mtime: 1,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [file] });
+    mocks.fetchProjectFiles.mockRejectedValueOnce(new Error('files unavailable'));
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={{ mode: 'daemon', agentId: 'agent-1' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
+    const workspace = await screen.findByTestId('design-system-files');
+    await waitFor(() => expect(workspace.getAttribute('data-file-names')).toBe('kept.html'));
+    const generationBeforeFailure = workspace.getAttribute('data-files-generation');
+    const onRefreshFiles = mocks.fileWorkspaceProps.mock.calls.at(-1)?.[0]?.onRefreshFiles as
+      | ((options?: { fresh?: boolean }) => Promise<{ acceptedGeneration: number | null }>)
+      | undefined;
+
+    await expect(onRefreshFiles?.({ fresh: true })).resolves.toEqual({
+      acceptedGeneration: null,
+    });
+
+    expect(mocks.fetchProjectFiles).toHaveBeenCalledWith(project.id, {
+      fresh: true,
+      requireAuthoritative: true,
+    });
+    expect(workspace.getAttribute('data-file-names')).toBe('kept.html');
+    expect(workspace.getAttribute('data-files-generation')).toBe(generationBeforeFailure);
+  });
+
+  it.each(['system', 'workspace'] as const)(
+    'ignores an in-flight file refresh after the %s identity changes',
+    async (switchKind) => {
+      const makeSystem = (suffix: string): DesignSystemDetail => ({
+        id: `user:scope-${suffix}`,
+        title: `Scope ${suffix}`,
+        category: 'Custom',
+        summary: 'Exercises file refresh lifetime isolation.',
+        swatches: [],
+        surface: 'web',
+        body: `# Scope ${suffix}\n`,
+        source: 'user',
+        status: 'draft',
+        isEditable: true,
+        projectId: `ds-scope-${suffix}`,
+      });
+      const makeProject = (system: DesignSystemDetail): Project => ({
+        id: system.projectId!,
+        name: system.title,
+        skillId: null,
+        designSystemId: system.id,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const systemA = makeSystem('a');
+      const systemB = makeSystem('b');
+      const projectA = makeProject(systemA);
+      const projectB = makeProject(systemB);
+      const fileA: ProjectFile = {
+        name: 'scope-a.html',
+        size: 10,
+        mtime: 1,
+        kind: 'html',
+        mime: 'text/html',
+      };
+      const fileB: ProjectFile = { ...fileA, name: 'scope-b.html', mtime: 2 };
+      const staleFile: ProjectFile = { ...fileA, name: 'late-scope-a.html', mtime: 3 };
+      const contextA = { ...teamContext(), workspaceId: 'workspace-a', teamId: 'team-a' };
+      const contextB = { ...teamContext(), workspaceId: 'workspace-b', teamId: 'team-b' };
+      let resolveStale!: (files: ProjectFile[]) => void;
+      const staleRefresh = new Promise<ProjectFile[]>((resolve) => { resolveStale = resolve; });
+
+      workspaceContextState.context = switchKind === 'workspace' ? contextA : null;
+      mocks.fetchDesignSystem.mockImplementation(async (systemId: string) => (
+        systemId === systemB.id ? systemB : systemA
+      ));
+      mocks.ensureDesignSystemWorkspace.mockImplementation(async (
+        systemId: string,
+        context: WorkspaceCollabContext | null,
+      ) => {
+        const useB = systemId === systemB.id || context?.workspaceId === contextB.workspaceId;
+        return useB
+          ? { project: projectB, files: [fileB] }
+          : { project: projectA, files: [fileA] };
+      });
+      mocks.fetchProjectFiles.mockImplementationOnce(() => staleRefresh);
+
+      const renderDetail = (systemId: string) => (
+        <DesignSystemDetailView
+          id={systemId}
+          selectedId={systemId}
+          config={{ mode: 'daemon', agentId: 'agent-1' } as AppConfig}
+          agents={[]}
+          onBack={() => {}}
+          onSetDefault={() => {}}
+        />
+      );
+      const { rerender } = render(renderDetail(systemA.id));
+      fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
+      let workspace = await screen.findByTestId('design-system-files');
+      await waitFor(() => expect(workspace.getAttribute('data-file-names')).toBe('scope-a.html'));
+      fireEvent.click(screen.getByTestId('refresh-design-system-files'));
+      await waitFor(() => expect(mocks.fetchProjectFiles).toHaveBeenCalledTimes(1));
+
+      if (switchKind === 'workspace') workspaceContextState.context = contextB;
+      rerender(renderDetail(switchKind === 'system' ? systemB.id : systemA.id));
+      workspace = await screen.findByTestId('design-system-files');
+      await waitFor(() => expect(workspace.getAttribute('data-file-names')).toBe('scope-b.html'));
+      const generationAfterSwitch = workspace.getAttribute('data-files-generation');
+
+      resolveStale([staleFile]);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(workspace.getAttribute('data-file-names')).toBe('scope-b.html');
+      expect(workspace.getAttribute('data-files-generation')).toBe(generationAfterSwitch);
+    },
+  );
+
   it('opens chat file links through the Files tab workspace (#5611 round 9)', async () => {
     // The design-system chat must thread the workspace's known-file set and
     // an opener into ChatPane; without them a current-project file link is
@@ -2554,6 +2938,150 @@ describe('DesignSystemDetailView', () => {
     expect(workspace.getAttribute('data-open-request')).toBe('index.html');
   });
 
+  // recvqb6mfyqXLD: `canMutate` mirrors the daemon's own `canMutateUserDesignSystem`
+  // PATCH/DELETE verdict onto the GET response — false only for a team-synced
+  // design system the caller (a plain member, not the original sharer or a
+  // workspace owner/admin) may not manage. This surface is the direct
+  // `/design-systems/:id` route (e.g. the Library's "Open design system"
+  // link), separate from — and previously ungated unlike — DesignSystemsTab's
+  // own team-tab detail pane.
+  it('disables the Publish toggle, DESIGN.md save, and revision accept/reject when canMutate is false', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:teammate-ds',
+      title: 'Teammate Design System',
+      category: 'Custom',
+      summary: 'Synced from a teammate.',
+      swatches: [],
+      surface: 'web',
+      body: '# Teammate Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      teamSynced: true,
+      canMutate: false,
+      projectId: 'ds-teammate-design-system',
+    };
+    const project: Project = {
+      id: 'ds-teammate-design-system',
+      name: 'Teammate Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const config: AppConfig = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      agentId: 'agent-1',
+      agentModels: {},
+      skillId: null,
+      designSystemId: null,
+    };
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [] });
+    mocks.fetchDesignSystemRevisions.mockResolvedValue([
+      {
+        id: 'rev-1',
+        designSystemId: system.id,
+        status: 'pending',
+        feedback: 'Tighten the spacing scale.',
+        baseBody: system.body,
+        proposedBody: `${system.body}\nMore.`,
+        createdAt: '2026-07-24T00:00:00.000Z',
+        updatedAt: '2026-07-24T00:00:00.000Z',
+      },
+    ]);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={null}
+        config={config}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await screen.findByText('Teammate Design System');
+
+    expect(screen.getByRole('checkbox', { name: 'Published' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save DESIGN.md' })).toBeDisabled();
+
+    const acceptButton = await screen.findByRole('button', { name: /Accept/i });
+    const rejectButton = screen.getByRole('button', { name: /Reject/i });
+    expect(acceptButton).toBeDisabled();
+    expect(rejectButton).toBeDisabled();
+  });
+
+  it('keeps the Publish toggle and DESIGN.md save enabled for the caller\'s own design system', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:my-design-system',
+      title: 'My Design System',
+      category: 'Custom',
+      summary: 'Authored by the caller.',
+      swatches: [],
+      surface: 'web',
+      body: '# My Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-my-design-system',
+    };
+    const project: Project = {
+      id: 'ds-my-design-system',
+      name: 'My Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const config: AppConfig = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      agentId: 'agent-1',
+      agentModels: {},
+      skillId: null,
+      designSystemId: null,
+    };
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [] });
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={null}
+        config={config}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await screen.findByText('My Design System');
+
+    expect(screen.getByRole('checkbox', { name: 'Published' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save DESIGN.md' })).not.toBeDisabled();
+  });
+
   it('does not silently seed audit repair prompts into the composer after manual runs', async () => {
     const system: DesignSystemDetail = {
       id: 'user:acme-design-system',
@@ -2632,7 +3160,9 @@ describe('DesignSystemDetailView', () => {
     await screen.findByText('Acme Design System');
     fireEvent.click(screen.getByTestId('design-system-chat-send'));
 
-    await waitFor(() => expect(mocks.fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith(project.id));
+    await waitFor(() =>
+      expect(mocks.fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith(project.id, null),
+    );
     await waitFor(() =>
       expect(screen.getAllByText(/Package audit found 1 error/).length).toBeGreaterThan(0),
     );
@@ -2698,12 +3228,16 @@ describe('DesignSystemDetailView', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
 
-    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
+    await waitFor(() =>
+      expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id, null),
+    );
     await waitFor(() => expect(screen.getByTestId('design-system-files')).toBeTruthy());
     expect(screen.queryByText('Opening the design system workspace...')).toBeNull();
   });
 
   it('opens the existing project fallback when workspace creation returns null', async () => {
+    const workspaceContext = teamContext();
+    workspaceContextState.context = workspaceContext;
     const system: DesignSystemDetail = {
       id: 'user:acme-design-system',
       title: 'Acme Design System',
@@ -2768,9 +3302,14 @@ describe('DesignSystemDetailView', () => {
       />,
     );
 
-    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
-    await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith(project.id));
-    expect(mocks.fetchProjectFiles).toHaveBeenCalledWith(project.id);
+    await waitFor(() =>
+      expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id, workspaceContext),
+    );
+    await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith(project.id, workspaceContext));
+    expect(mocks.fetchProjectFiles).toHaveBeenCalledWith(project.id, {
+      workspaceContext,
+      requireAuthoritative: true,
+    });
     expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
     expect(onOpenProject).toHaveBeenCalledWith(project.id);
     expect(screen.queryByText('Could not open the design system workspace.')).toBeNull();
@@ -2818,13 +3357,61 @@ describe('DesignSystemDetailView', () => {
       />,
     );
 
-    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
-    await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith(system.projectId));
+    await waitFor(() =>
+      expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id, null),
+    );
+    await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith(system.projectId, null));
     expect(mocks.fetchProjectFiles).not.toHaveBeenCalled();
     expect(onOpenProject).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
     await waitFor(() => expect(screen.getByText('Could not open the design system workspace.')).toBeTruthy());
     expect(screen.queryByText('Opening the design system workspace...')).toBeNull();
+    expect(screen.queryByTestId('design-system-files')).toBeNull();
+  });
+
+  it('shows a terminal error when the fallback project file snapshot is not authoritative', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:fallback-read-failure',
+      title: 'Fallback Read Failure',
+      category: 'Custom',
+      summary: 'Fallback file read failure.',
+      swatches: [],
+      surface: 'web',
+      body: '# Fallback Read Failure\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-fallback-read-failure',
+    };
+    const project: Project = {
+      id: system.projectId!,
+      name: system.title,
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue(null);
+    mocks.getProject.mockResolvedValue(project);
+    mocks.fetchProjectFiles.mockRejectedValue(new Error('files unavailable'));
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={{ mode: 'daemon', agentId: 'agent-1' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(mocks.fetchProjectFiles).toHaveBeenCalledWith(project.id, {
+      requireAuthoritative: true,
+    }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
+    await waitFor(() => expect(screen.getByText('Could not open the design system workspace.')).toBeTruthy());
     expect(screen.queryByTestId('design-system-files')).toBeNull();
   });
 
@@ -2901,9 +3488,13 @@ describe('DesignSystemDetailView', () => {
 
     await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(mocks.streamViaDaemon).toHaveBeenCalledTimes(1));
-    expect(mocks.getProject).toHaveBeenCalledWith(project.id);
-    expect(mocks.fetchProjectFiles).toHaveBeenCalledWith(project.id);
-    expect(mocks.createConversation).toHaveBeenCalledWith(project.id, 'Design system');
+    expect(mocks.getProject).toHaveBeenCalledWith(project.id, null);
+    expect(mocks.fetchProjectFiles).toHaveBeenCalledWith(project.id, {
+      requireAuthoritative: true,
+    });
+    expect(mocks.createConversation).toHaveBeenCalledWith(project.id, 'Design system', {
+      workspaceContext: null,
+    });
     expect(mocks.streamViaDaemon).toHaveBeenCalledWith(
       expect.objectContaining({
         projectId: project.id,
@@ -2968,11 +3559,93 @@ describe('DesignSystemDetailView', () => {
     const button = await screen.findByTestId('new-conversation');
     fireEvent.click(button);
 
-    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
-    await waitFor(() => expect(mocks.createConversation).toHaveBeenCalledWith(project.id, 'Design system'));
+    await waitFor(() =>
+      expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id, null),
+    );
+    await waitFor(() =>
+      expect(mocks.createConversation).toHaveBeenCalledWith(project.id, 'Design system', {
+        workspaceContext: null,
+      }),
+    );
     expect(mocks.createConversation).toHaveBeenCalledTimes(1);
     expect(mocks.listConversations).not.toHaveBeenCalled();
-    await waitFor(() => expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id));
+    await waitFor(() =>
+      expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id, null),
+    );
+  });
+
+  it('does not expose or submit the previous transcript when the selected conversation read fails', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:conversation-read-failure',
+      title: 'Conversation Read Failure',
+      category: 'Custom',
+      summary: 'Conversation switching regression fixture.',
+      swatches: [],
+      surface: 'web',
+      body: '# Conversation Read Failure\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-conversation-read-failure',
+    };
+    const project: Project = {
+      id: system.projectId!,
+      name: system.title,
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const previousConversation: Conversation = {
+      id: 'conv-previous',
+      projectId: project.id,
+      title: 'Previous',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const otherConversation: Conversation = {
+      id: 'conv-other',
+      projectId: project.id,
+      title: 'Other',
+      createdAt: 2,
+      updatedAt: 2,
+    };
+    const previousMessage: ChatMessage = {
+      id: 'previous-message',
+      role: 'assistant',
+      content: 'Previous conversation transcript',
+      createdAt: 1,
+    };
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [] });
+    mocks.listConversations.mockResolvedValue([previousConversation, otherConversation]);
+    mocks.listMessages
+      .mockResolvedValueOnce([previousMessage])
+      .mockRejectedValueOnce(new Error('workspace directory unavailable'));
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={{ mode: 'daemon', agentId: 'codex' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await screen.findByText(previousMessage.content);
+
+    fireEvent.click(screen.getByTestId('select-other-conversation'));
+
+    await waitFor(() => expect(mocks.listMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.queryByText(previousMessage.content)).toBeNull();
+      expect(screen.getByTestId('design-system-chat-state').dataset.sendDisabled).toBe('true');
+    });
+    fireEvent.click(screen.getByTestId('design-system-chat-send'));
+    expect(mocks.streamViaDaemon).not.toHaveBeenCalled();
   });
 
   it('clears a stale creation error after a successful new conversation retry', async () => {
@@ -3039,7 +3712,9 @@ describe('DesignSystemDetailView', () => {
     await waitFor(() => {
       expect(screen.queryByText('Could not create a design system conversation.')).toBeNull();
     });
-    await waitFor(() => expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id));
+    await waitFor(() =>
+      expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id, null),
+    );
   });
 
   it('passes the current UI locale to daemon workspace chat runs', async () => {

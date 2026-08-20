@@ -5,6 +5,10 @@ import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
+import {
+  trackRunRecoveryActionClick,
+  trackRunRecoveryActionSurfaceView,
+} from '../../src/analytics/events';
 import type { AppConfig, ChatMessage } from '../../src/types';
 
 // Red spec for the resume-on-failure affordance: a failed assistant message
@@ -14,13 +18,16 @@ import type { AppConfig, ChatMessage } from '../../src/types';
 // distinct from the from-scratch Retry. On origin/main there is no `resumable`
 // field, no `onResumeRun` prop, and no such button, so this goes red there.
 
+const translate = (key: string, vars?: Record<string, string | number>) => {
+  if (vars && Object.keys(vars).length > 0) {
+    return `${key} ${Object.values(vars).join(' ')}`;
+  }
+  return key;
+};
+
 vi.mock('../../src/i18n', () => ({
-  useT: () => (key: string, vars?: Record<string, string | number>) => {
-    if (vars && Object.keys(vars).length > 0) {
-      return `${key} ${Object.values(vars).join(' ')}`;
-    }
-    return key;
-  },
+  useI18n: () => ({ locale: 'en', setLocale: () => undefined, t: translate }),
+  useT: () => translate,
 }));
 
 vi.mock('../../src/components/AssistantMessage', () => ({
@@ -39,6 +46,8 @@ vi.mock('../../src/analytics/events', async (importOriginal) => {
     ...actual,
     trackChatPanelClick: vi.fn(),
     trackRunFailedToastSurfaceView: vi.fn(),
+    trackRunRecoveryActionClick: vi.fn(),
+    trackRunRecoveryActionSurfaceView: vi.fn(),
   };
 });
 
@@ -115,6 +124,15 @@ describe('ChatPane resume-on-failure', () => {
       '[data-user-action-card="run-recovery"] [data-user-action-footer="true"]',
     );
     expect(footer?.contains(continueBtn)).toBe(true);
+    expect(trackRunRecoveryActionSurfaceView).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(trackRunRecoveryActionSurfaceView).mock.calls[0]![1]).toMatchObject({
+      element: 'run_recovery_action',
+      task_execution_id: 'msg-upstream',
+      recovery_action_instance_id: 'recovery:msg-upstream:resume_run',
+      recovery_action_type: 'resume_run',
+      source_run_id: 'run-upstream',
+      source_agent_provider_id: 'claude_code',
+    });
 
     const detailsToggle = screen.getByRole('button', { name: 'brand.viewDetails' });
     const disclosure = container.querySelector('[data-user-action-card="run-recovery"] .accordion-collapsible');
@@ -124,6 +142,12 @@ describe('ChatPane resume-on-failure', () => {
     expect(disclosure?.classList.contains('open')).toBe(true);
 
     fireEvent.click(continueBtn);
+    expect(trackRunRecoveryActionClick).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(trackRunRecoveryActionClick).mock.calls[0]![1]).toMatchObject({
+      task_execution_id: 'msg-upstream',
+      recovery_action_instance_id: 'recovery:msg-upstream:resume_run',
+      recovery_action_type: 'resume_run',
+    });
     expect(onResumeRun).toHaveBeenCalledTimes(1);
     expect(onResumeRun.mock.calls[0]![0]).toMatchObject({ id: 'msg-upstream' });
     expect(onRetry).not.toHaveBeenCalled();

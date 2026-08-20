@@ -1,4 +1,4 @@
-# Open Design — landing page (https://open-design.ai/)
+# OpenDesign — landing page (https://open-design.ai/)
 #
 # This file is served verbatim from the apex of the Cloudflare Pages
 # deployment. The sitemap URL must match `astro.config.ts`'s `site`

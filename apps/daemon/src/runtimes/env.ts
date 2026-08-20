@@ -29,7 +29,7 @@ const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
 //
 // Auth/config precedence for Local CLI launches:
 //
-// 1. Provider BYOK is separate. It is used by Open Design's direct provider
+// 1. Provider BYOK is separate. It is used by OpenDesign's direct provider
 //    API calls and is not automatically mapped into Local CLI launches.
 // 2. The inherited launch env represents the user's local CLI setup
 //    (OAuth/login files, CLI homes, or user-owned API-key env). Preserve it
@@ -99,7 +99,7 @@ export function spawnEnvForAgent(
       const home = os.homedir();
       if (home) env.HOME = home;
     }
-    // Identify Open Design as the host so the vela CLI tags its command +
+    // Identify OpenDesign as the host so the vela CLI tags its command +
     // model_request analytics with source=open_design (revenue attribution).
     // Not PII (unlike the installation id above), so set it regardless of the
     // telemetry-consent gate that amrAnalyticsIdentityEnv applies.
@@ -195,6 +195,11 @@ export function openDesignAmrTraceEnv(input: {
   runId: string;
   conversationId?: string | null;
   runAttempt: number;
+  // The exact persisted Workspace binding for this run's project, whether
+  // Team or Personal. Never derive it from an account-level current/active
+  // selection. Omission means the historical project is genuinely unbound;
+  // Vela/AMR owns the resulting wallet and membership decision.
+  workspaceId?: string | null;
   externalPluginAnalytics?: Record<string, unknown> | null;
 }): NodeJS.ProcessEnv {
   if (input.agentId !== 'amr') return {};
@@ -208,6 +213,7 @@ export function openDesignAmrTraceEnv(input: {
   }
 
   const conversationId = input.conversationId?.trim();
+  const workspaceId = input.workspaceId?.trim();
   const plugin = input.externalPluginAnalytics;
   const bounded = (key: string, max = 128): string | null => {
     const value = plugin?.[key];
@@ -225,6 +231,7 @@ export function openDesignAmrTraceEnv(input: {
     OPEN_DESIGN_RUN_ID: runId,
     OPEN_DESIGN_RUN_ATTEMPT: String(Math.floor(input.runAttempt)),
     ...(conversationId ? { OPEN_DESIGN_SESSION_ID: conversationId } : {}),
+    ...(workspaceId ? { OPEN_DESIGN_WORKSPACE_ID: workspaceId } : {}),
     ...(bounded('pluginWorkflowId')
       ? { OPEN_DESIGN_PLUGIN_WORKFLOW_ID: bounded('pluginWorkflowId')! }
       : {}),

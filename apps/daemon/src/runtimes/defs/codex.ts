@@ -113,6 +113,70 @@ const GPT_5_5_SERVICE_TIER_OPTIONS: RuntimeModelOption[] = [
   { id: 'priority', label: 'Fast' },
 ];
 
+// Codex applies `shell_environment_policy` again when its shell tool starts a
+// command. That second boundary is independent from the environment the daemon
+// passes to the Codex process itself. In particular, the supported
+// `inherit = "core"` policy removes every OpenDesign wrapper variable, so a
+// prompt can see the documented `$OD_NODE_BIN` / `$OD_BIN` invocation yet the
+// actual command expands both paths to empty strings.
+//
+// Start from the daemon-built process environment, then use Codex's
+// `include_only` policy to retain only the small cross-platform shell baseline
+// plus the run-scoped wrapper contract. Credentials inherited by the daemon
+// remain unavailable unless they are one of the explicit OpenDesign
+// capabilities below. `OD_TOOL_TOKEN` stays in the environment channel rather
+// than being copied into argv, process listings, or Codex config files.
+const CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'COLORTERM',
+  'SYSTEMROOT',
+  'COMSPEC',
+  'PATHEXT',
+  'USERPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'OD_BIN',
+  'OD_HYPERFRAMES_BIN',
+  'OD_NODE_BIN',
+  'OD_DAEMON_URL',
+  'OD_TOOL_TOKEN',
+  'OD_DATA_DIR',
+  'OD_PROJECT_ID',
+  'OD_PROJECT_DIR',
+] as const;
+
+export function codexOpenDesignShellEnvironmentArgs(): string[] {
+  const includeOnly = CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS
+    .map((key) => `"${key}"`)
+    .join(',');
+  return [
+    '-c',
+    // A login shell can source user profile files after Codex applies the
+    // whitelist and reintroduce credentials that the daemon intentionally
+    // withheld. Structured DS wrappers need a deterministic, run-scoped
+    // environment, so keep tool shells non-login for daemon-launched Codex.
+    'allow_login_shell=false',
+    '-c',
+    'shell_environment_policy.inherit="all"',
+    '-c',
+    'shell_environment_policy.ignore_default_excludes=true',
+    '-c',
+    `shell_environment_policy.include_only=[${includeOnly}]`,
+  ];
+}
+
 export function codexNeedsDangerFullAccessSandbox(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
@@ -234,6 +298,7 @@ export const codexAgentDef = {
       ) {
         args.push('--disable', 'plugins');
       }
+      args.push(...codexOpenDesignShellEnvironmentArgs());
       // `-C <cwd>` and `--add-dir <dir>` are CREATE-only flags: `codex exec
       // resume` rejects both (`error: unexpected argument '-C' found`), so
       // appending them on a resume turn would make the follow-up turn die

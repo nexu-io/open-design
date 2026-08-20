@@ -1,4 +1,4 @@
-/* Shared Open Design plan nameplate (free / plus / pro / max). Defined as a
+/* Shared OpenDesign plan nameplate (free / plus / pro / max). Defined as a
    GLOBAL class rather than a CSS Module: this dev setup's CSS-Module HMR is
    unreliable for this surface (the badge intermittently dropped its styles and
    rendered as plain text), and the three existing per-surface badges that this

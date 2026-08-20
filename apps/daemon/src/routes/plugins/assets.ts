@@ -1,9 +1,21 @@
 import type { Express, Request, Response } from 'express';
 import type * as BetterSqlite3 from 'better-sqlite3';
 import path from 'node:path';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+import {
+  resolveOptionalLocalWorkspaceRequestAuthority,
+  type VerifyWorkspaceRequestAuthority,
+} from '../../collab/workspace-resource-mutation.js';
 
 export interface RegisterPluginAssetRoutesDeps {
   db: PluginDbLike;
+  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
+  getWorkspacePlugin?: (
+    db: PluginDbLike,
+    id: string,
+    workspaceId: string | null,
+    workspaceMemberId?: string | null,
+  ) => InstalledPluginLike | null | Promise<InstalledPluginLike | null>;
   pluginAssetCache: { get(url: string): Promise<{ buf: Buffer; contentType: string }> };
   AssetCacheError: new (...args: unknown[]) => Error & { status: number };
   assetCacheRewriteUrl: (url: string) => string;
@@ -38,11 +50,86 @@ interface InstalledPluginLike {
 export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAssetRoutesDeps): void {
   const { db, pluginAssetCache, AssetCacheError, assetCacheRewriteUrl, isCacheableExternalUrl, assembleExample } = deps;
   const routeParam = (value: string | string[] | undefined): string => Array.isArray(value) ? value[0] ?? '' : value ?? '';
+  const requestWithNavigationScope = (req: Request): Request | 'conflict' => {
+    const workspaceId = typeof req.query.workspaceId === 'string'
+      ? req.query.workspaceId.trim()
+      : '';
+    const workspaceMemberId = typeof req.query.workspaceMemberId === 'string'
+      ? req.query.workspaceMemberId.trim()
+      : '';
+    if (!workspaceId && !workspaceMemberId) return req;
+    const headerWorkspaceId = req.get('x-od-workspace-id')?.trim() ?? '';
+    const headerWorkspaceMemberId =
+      req.get('x-od-workspace-member-id')?.trim() ?? '';
+    if (
+      (headerWorkspaceId || headerWorkspaceMemberId)
+      && (
+        headerWorkspaceId !== workspaceId
+        || headerWorkspaceMemberId !== workspaceMemberId
+      )
+    ) {
+      return 'conflict';
+    }
+    return {
+      get(name: string) {
+        const normalized = name.toLowerCase();
+        if (normalized === 'x-od-workspace-id') return workspaceId || undefined;
+        if (normalized === 'x-od-workspace-member-id') {
+          return workspaceMemberId || undefined;
+        }
+        return req.get(name);
+      },
+    } as Request;
+  };
+  const resolveWorkspaceAuthority = async (
+    req: Request,
+    res: Response,
+  ): Promise<WorkspaceCollabContext | null | undefined> => {
+    const scopedRequest = requestWithNavigationScope(req);
+    if (scopedRequest === 'conflict') {
+      res.status(400).json({
+        error: 'WORKSPACE_CONTEXT_CONFLICT',
+        message: 'workspace header and navigation scope must match',
+      });
+      return undefined;
+    }
+    const authority = resolveOptionalLocalWorkspaceRequestAuthority(scopedRequest);
+    if (!authority.ok) {
+      res.status(authority.status).json({
+        error: authority.code,
+        message: authority.message,
+        ...(authority.retryable ? { retryable: true } : {}),
+      });
+      return undefined;
+    }
+    return authority.context;
+  };
+  const resolvePlugin = async (
+    id: string,
+    authority: WorkspaceCollabContext | null,
+  ): Promise<InstalledPluginLike | null> => {
+    if (deps.getWorkspacePlugin) {
+      return deps.getWorkspacePlugin(
+        db,
+        id,
+        authority?.workspaceId ?? null,
+        authority?.workspaceMemberId ?? null,
+      );
+    }
+    const { getInstalledPlugin } = await import('../../plugins/index.js');
+    return getInstalledPlugin(db, id) as InstalledPluginLike | null;
+  };
+  const navigationScopeQuery = (
+    authority: WorkspaceCollabContext | null,
+  ): string => authority
+    ? `?workspaceId=${encodeURIComponent(authority.workspaceId)}&workspaceMemberId=${encodeURIComponent(authority.workspaceMemberId)}`
+    : '';
 
   async function servePluginSandboxedHtml(req: Request, res: Response, pickCandidates: (plugin: InstalledPluginLike) => Promise<string[]> | string[]) {
     try {
-      const { getInstalledPlugin } = await import('../../plugins/index.js');
-      const plugin = getInstalledPlugin(db, routeParam(req.params.id)) as InstalledPluginLike | null;
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const plugin = await resolvePlugin(routeParam(req.params.id), authority);
       if (!plugin) return res.status(404).json({ error: 'plugin not found' });
       const candidates = (await pickCandidates(plugin)).filter((p): p is string => typeof p === 'string' && p.length > 0);
       const fsp = await import('node:fs/promises');
@@ -108,10 +195,18 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'");
       res.setHeader('X-Content-Type-Options', 'nosniff');
       const ext = path.extname(contentPath).toLowerCase();
-      const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
+      const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.md' || ext === '.markdown' ? 'text/markdown; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
       if (ext === '.html' && typeof contentRel === 'string') {
-        buf = Buffer.from(rewritePluginAssetUrls(buf.toString('utf8'), routeParam(req.params.id), path.posix.dirname(contentRel.replace(/\\/g, '/'))), 'utf8');
+        buf = Buffer.from(
+          rewritePluginAssetUrls(
+            buf.toString('utf8'),
+            routeParam(req.params.id),
+            path.posix.dirname(contentRel.replace(/\\/g, '/')),
+            navigationScopeQuery(authority),
+          ),
+          'utf8',
+        );
       }
       res.send(buf);
     } catch (err) {
@@ -132,8 +227,23 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
     return /\.html?$/i.test(pathOnly) ? pathOnly : null;
   }
 
-  function rewritePluginAssetUrls(html: string, pluginId: string, baseDir: string): string {
+  function rewritePluginAssetUrls(
+    html: string,
+    pluginId: string,
+    baseDir: string,
+    workspaceQuery = '',
+  ): string {
     if (!html) return html;
+    const scopeAssetSuffix = (suffix: string): string => {
+      if (!workspaceQuery) return suffix;
+      const scope = workspaceQuery.slice(1);
+      if (!suffix) return workspaceQuery;
+      if (suffix.startsWith('#')) return `${workspaceQuery}${suffix}`;
+      const hashAt = suffix.indexOf('#');
+      return hashAt === -1
+        ? `${suffix}&${scope}`
+        : `${suffix.slice(0, hashAt)}&${scope}${suffix.slice(hashAt)}`;
+    };
     const safeBase = baseDir === '.' ? '' : baseDir;
     const withAttrs = html.replace(/(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi, (match, attr, quote, rawValue, closeQuote) => {
       const value = String(rawValue).trim();
@@ -146,7 +256,7 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       const suffix = splitAt === -1 ? '' : value.slice(splitAt);
       const normalized = path.posix.normalize(path.posix.join(safeBase, rel));
       if (normalized === '.' || normalized === '..' || normalized.startsWith('../') || path.posix.isAbsolute(normalized)) return match;
-      return `${attr}${quote}/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${suffix}${closeQuote}`;
+      return `${attr}${quote}/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${scopeAssetSuffix(suffix)}${closeQuote}`;
     });
     const withQuoted = withAttrs.replace(/(['"])(https?:\/\/[^'"]+)\1/g, (match, quote, rawValue) => {
       const value = String(rawValue).trim();
@@ -225,8 +335,9 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
   });
   app.get('/api/plugins/:id/asset/*splat', async (req, res) => {
     try {
-      const { getInstalledPlugin } = await import('../../plugins/index.js');
-      const plugin = getInstalledPlugin(db, routeParam(req.params.id)) as InstalledPluginLike | null;
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const plugin = await resolvePlugin(routeParam(req.params.id), authority);
       if (!plugin) return res.status(404).json({ error: 'plugin not found' });
       const splatParam = req.params.splat;
       const relpath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
@@ -262,7 +373,7 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'");
       res.setHeader('X-Content-Type-Options', 'nosniff');
       const ext = path.extname(resolved).toLowerCase();
-      const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
+      const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.md' || ext === '.markdown' ? 'text/markdown; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
       res.send(buf);
     } catch (err) {

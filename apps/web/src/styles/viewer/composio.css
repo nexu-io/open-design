@@ -159,7 +159,7 @@
 }
 .deploy-result-block.protected,
 .deploy-result-block.failed {
-  border-color: color-mix(in srgb, #c96442 38%, var(--border));
+  border-color: color-mix(in srgb, #87ea5c 38%, var(--border));
 }
 .deploy-result-summary {
   display: flex;
@@ -188,7 +188,7 @@
   min-height: 24px;
   padding: 0 9px;
   border-radius: var(--radius-pill);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -210,8 +210,8 @@
 .deploy-result-link-state.protected,
 .deploy-result-link-state.failed {
   color: #a34828;
-  background: color-mix(in srgb, #c96442 14%, transparent);
-  border: 1px solid color-mix(in srgb, #c96442 30%, var(--border));
+  background: color-mix(in srgb, #87ea5c 14%, transparent);
+  border: 1px solid color-mix(in srgb, #87ea5c 30%, var(--border));
 }
 .deploy-result-label {
   font-size: 12px;
@@ -370,18 +370,12 @@
   align-items: center;
   padding: 6px 12px;
   font-size: 12px;
-  background: var(--bg-elevated);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background var(--dur-quick) var(--ease-out);
 }
-.present-exit:hover { background: var(--bg-muted); }
-.present-exit:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+.present-exit:hover { background: white; }
 
 /* Picker (legacy in some surfaces) */
 .picker {
@@ -394,7 +388,7 @@
   border-radius: var(--radius-sm);
 }
 .picker-label {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -436,7 +430,7 @@
   display: flex; align-items: center; gap: 10px; min-width: 0;
 }
 .preview-actions { display: flex; gap: 8px; align-items: center; }
-.preview-actions .muted { font-size: 11px; }
+.preview-actions .muted { font-size: 12px; }
 .preview-actions button { padding: 4px 10px; font-size: 12px; }
 .preview-body { flex: 1; min-height: 0; position: relative; }
 .preview-body iframe {
@@ -507,15 +501,17 @@
   border-radius: var(--radius);
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .conv-menu {
   position: fixed;
   width: 320px;
   max-height: 420px;
   overflow-y: auto;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   z-index: 200;
@@ -528,12 +524,12 @@
   padding: 4px 6px 8px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.conv-add-btn { padding: 2px 8px; font-size: 11px; }
+.conv-add-btn { padding: 2px 8px; font-size: 12px; }
 .conv-menu-empty {
   padding: 16px 8px;
   font-size: 12px;
@@ -568,7 +564,7 @@
   white-space: nowrap;
 }
 .conv-item-meta {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .conv-item-del {
@@ -621,12 +617,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.system-reminder-chev { color: var(--text-muted); font-size: 10px; }
+.system-reminder-chev { color: var(--text-muted); font-size: 12px; }
 .system-reminder-body {
   margin: 0;
   padding: 0 12px 10px 12px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);
   white-space: pre-wrap;
@@ -669,7 +665,7 @@
   min-width: 0;
   max-width: 100%;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   background: var(--bg-panel);
   padding: 1px 6px;
   border-radius: var(--radius-xs);
@@ -679,7 +675,7 @@
 }
 .op-waiting-hint {
   flex-basis: 100%;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-soft);
   font-style: italic;
 }
@@ -698,13 +694,13 @@
 .op-todo .op-title {
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-strong);
 }
 .op-todo .op-meta {
   margin-left: 0;
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-strong);
 }
 
@@ -804,6 +800,10 @@
   display: inline-flex;
   align-items: center;
   margin: 6px 10px 6px 0;
+  padding: 2px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--green-border);
   padding: 2px 10px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
@@ -829,6 +829,8 @@
   flex: 1;
 }
 .op-todo-chev {
+  margin-left: 4px;
+  font-size: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -895,7 +897,7 @@
   line-height: 1.45;
 }
 .question-form-pill {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 3px 8px;
@@ -945,7 +947,7 @@
   line-height: 1.2;
 }
 .qf-help {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   margin-top: -2px;
   word-wrap: break-word;
@@ -989,8 +991,8 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 }
 .qf-chip-desc {
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 400;
+  font-size: 12px;
+  font-weight: 500;
 }
 .qf-chip-on .qf-chip-desc {
   color: inherit;
@@ -1003,8 +1005,8 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 }
 .qf-chip-disabled:hover { border-color: var(--border); }
 .qf-chip-on {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-subtle) 45%, var(--bg-panel));
   color: var(--accent-hover);
   font-weight: 500;
 }
@@ -1149,6 +1151,13 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 .question-form-locked .qf-switch {
   cursor: not-allowed;
 }
+/* Quiet neutral focus for form fields: the global --selected focus border is
+   near-black and reads like the chosen-chip state sitting right above. */
+.qf-input:focus,
+.qf-select:focus,
+.qf-textarea:focus {
+  border-color: var(--border-strong);
+}
 .question-form-foot {
   display: flex;
   align-items: center;
@@ -1160,7 +1169,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 .qf-hint,
 .qf-locked-note {
   flex: 1;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -1208,9 +1217,9 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 .qf-card:hover { border-color: var(--border-strong); }
 .qf-card:active { transform: translateY(1px); }
 .qf-card-on {
-  border-color: var(--accent, #c96442);
-  background: color-mix(in oklch, var(--accent, #c96442) 4%, var(--bg));
-  box-shadow: 0 0 0 1px var(--accent, #c96442) inset;
+  border-color: var(--accent, #87ea5c);
+  background: color-mix(in oklch, var(--accent, #87ea5c) 4%, var(--bg));
+  box-shadow: 0 0 0 1px var(--accent, #87ea5c) inset;
 }
 .qf-card-disabled { cursor: not-allowed; opacity: 0.6; }
 .qf-card-head {
@@ -1228,11 +1237,11 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 }
 .qf-card-pill {
   font-family: ui-monospace, 'JetBrains Mono', monospace;
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 2px 6px;
-  background: var(--accent, #c96442);
+  background: var(--accent, #87ea5c);
   color: #fff;
   border-radius: var(--radius-pill);
   flex-shrink: 0;
@@ -1280,13 +1289,13 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 }
 .qf-card-refs {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
 }
 .qf-card-refs-label {
   font-family: ui-monospace, 'JetBrains Mono', monospace;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -2004,12 +2013,12 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   padding: 16px 18px;
 }
 .questions-panel-body .question-form-title {
-  font-size: 15px;
+  font-size: 16px;
 }
 .questions-panel-body .question-form-icon {
   width: 30px;
   height: 30px;
-  font-size: 15px;
+  font-size: 16px;
 }
 .questions-panel-foot {
   display: flex;
@@ -2111,7 +2120,8 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   inset: 0;
   z-index: 1700;
   background: rgba(28, 27, 26, 0.42);
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   -webkit-app-region: no-drag;
   display: flex;
   align-items: stretch;
@@ -2181,7 +2191,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   color: var(--text-strong, var(--text));
 }
 .ds-modal-subtitle {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-muted);
   line-height: 1.55;
   /* Clamp to two lines so a long brief stays readable without growing
@@ -2212,7 +2222,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   border: none;
   border-radius: var(--radius-pill);
   padding: 6px 16px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-muted);
   cursor: pointer;
@@ -2238,6 +2248,10 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 .ds-modal-actions .share-menu > button {
   white-space: nowrap;
   flex-shrink: 0;
+  /* Every header action reads as a capsule. The split primary action keeps its
+     inner corners square (see --split / -caret below) so its two halves join
+     into one pill. */
+  border-radius: var(--radius-pill);
 }
 /* Uniform control height so the accent "Use" CTA and the ghost actions (Share,
    etc.) read as one aligned row — the accent button used to sit a hair taller
@@ -2296,7 +2310,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-large, 8px);
   background: var(--bg-panel);
   color: var(--text-muted);
   cursor: pointer;
@@ -2305,6 +2319,13 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   transition: opacity 140ms ease, transform 140ms ease, color 140ms ease,
     background 140ms ease;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+}
+/* Force the stroke-based icon to paint with the button's color — guards against
+   any stray global svg reset that would otherwise leave the button blank. */
+.ds-modal-stage-fullscreen svg {
+  display: block;
+  stroke: currentColor;
+  fill: none;
 }
 .ds-modal-stage-iframe:hover .ds-modal-stage-fullscreen,
 .ds-modal-stage-fullscreen:focus-visible {
@@ -2513,7 +2534,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   gap: 10px;
 }
 .plugin-media-sidebar__prompt-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2524,7 +2545,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2616,11 +2637,11 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   align-items: center;
   gap: 6px;
   padding: 7px 16px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   border: 1px solid var(--accent);
   background: var(--accent);
   color: white;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -2669,6 +2690,14 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 }
 .ds-modal-primary-action-option {
   align-items: flex-start;
+  /* Reset the global `button` rule in styles/primitives.css
+     (`height: 36px; white-space: nowrap`). Each option stacks a bold label over
+     a muted description, so the fixed 36px clamped both lines into one box and
+     the description bled into the next option's label; `nowrap` also stopped a
+     long description from wrapping. Same reset as `.artifact-version-card` in
+     styles/shell.css, which is the other multi-line button in the app. */
+  height: auto;
+  white-space: normal;
 }
 .ds-modal-primary-action-option__body {
   display: flex;
@@ -2681,8 +2710,12 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   color: var(--text);
 }
 .ds-modal-primary-action-option__desc {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
+  /* Now that the option can wrap (see the height/white-space reset above), the
+     inherited `line-height: 1` from the global `button` rule would let wrapped
+     description lines touch. 1.4 matches `.artifact-version-card__summary`. */
+  line-height: 1.4;
 }
 /* Dedicated icon-button shape for the modal close affordance. Matches the
    visual language used by plugin-media-detail__close and
@@ -2750,13 +2783,13 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 }
 .design-spec-pre code { font: inherit; color: inherit; background: transparent; }
 .design-spec-line { display: inline; }
-.design-spec-line.is-h1 { color: #2563eb; font-weight: 700; }
+.design-spec-line.is-h1 { color: #1A74FF; font-weight: 700; }
 .design-spec-line.is-h2 { color: #0891b2; font-weight: 700; }
 .design-spec-line.is-h3 { color: #0d9488; font-weight: 600; }
 .design-spec-line.is-h4 { color: #16a34a; font-weight: 600; }
 .design-spec-line.is-quote { color: #6b7280; font-style: italic; }
 .design-spec-line.is-list { color: var(--text); }
-.design-spec-line.is-table { color: #7c3aed; }
+.design-spec-line.is-table { color: #353535; }
 .design-spec-line.is-fence { color: #dc2626; }
 .design-spec-line.is-blank { color: var(--text-muted); }
 .md-tk-bold { font-weight: 700; color: var(--text); }
@@ -2866,7 +2899,6 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 .examples-search input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .examples-search .search-icon {
   position: absolute;
@@ -2885,7 +2917,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   align-items: center;
 }
 .examples-filter-label {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -2930,7 +2962,7 @@ button.filter-pill.active:hover:not(:disabled) {
   color: var(--text);
 }
 .filter-pill-count {
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0.7;
 }
 button.filter-pill:hover:not(:disabled) .filter-pill-count,
@@ -2974,7 +3006,7 @@ button.filter-pill:hover:not(:disabled) .filter-pill-count,
   bottom: 10px;
   right: 10px;
   padding: 5px 12px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   color: white;
   background: rgba(28, 27, 26, 0.78);
@@ -3044,7 +3076,7 @@ button.filter-pill:hover:not(:disabled) .filter-pill-count,
   padding: 48px 12px;
   color: var(--text-muted);
 }
-.centered-loader-label { font-size: 12.5px; letter-spacing: 0.01em; }
+.centered-loader-label { font-size: 13px; letter-spacing: 0.01em; }
 
 /* ============================================================
    Resizable entry sidebar
@@ -3085,8 +3117,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   bottom: calc(100% + 6px);
   left: 0;
   min-width: 240px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
   padding: 6px;
@@ -3106,7 +3140,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: not-allowed;
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
   width: 100%;
 }
@@ -3124,7 +3158,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .composer-import-item-label { flex: 1; }
 .composer-import-item-soon {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -3154,7 +3188,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
   background: var(--accent);
@@ -3168,18 +3202,28 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .chat-history-menu {
   position: absolute;
   top: calc(100% + 6px);
-  left: 12px;
+  /* Right-anchored to the conversations icon: the sticky .chat-project-header
+     is the containing block and pads 12px, and the icon is its last (and
+     right-most) child — so right:12px lands the menu's right edge exactly on
+     the icon's. This is also what `transform-origin: top right` below already
+     assumed. Width stays 80% of the header's inner span, growing leftward. */
+  left: auto;
   right: 12px;
-  width: auto;
+  width: calc((100% - 24px) * 0.8);
   max-height: min(360px, calc(100vh - 160px));
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: var(--radius);
+  /* Solid panel, not glass: this menu lives inside .chat-project-header,
+     whose own backdrop-filter makes it a backdrop root — a descendant's
+     backdrop-filter cannot sample the chat content behind the header, so a
+     translucent fill just lets un-blurred text bleed through. Solid matches
+     the app's other anchored menus (working-dir picker, plus menu). */
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-lg);
   box-shadow:
-    0 18px 48px color-mix(in srgb, #000 12%, transparent),
-    0 1px 0 color-mix(in srgb, #fff 42%, transparent) inset;
+    0 1px 2px color-mix(in srgb, #000 4%, transparent),
+    0 12px 32px -12px color-mix(in srgb, #000 22%, transparent);
   z-index: 30;
   overflow: hidden;
   transform-origin: top right;
@@ -3189,12 +3233,13 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 8px 5px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg));
+  /* No divider, no tinted band — the header shares one continuous surface
+     with the search field and list so the popover reads as a single clean
+     sheet, matching the app's other anchored menus. */
+  padding: 8px 8px 4px;
 }
 .chat-history-menu-title {
-  font-size: 10.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -3202,7 +3247,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .chat-history-menu-count {
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1;
   margin-left: 6px;
@@ -3214,9 +3259,12 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: flex;
   align-items: center;
   gap: 5px;
-  height: 28px;
+  /* Matches the app's standard control height (primitives.css `button`); at
+     28px this field read as a cramped slot against the list rows below it.
+     The inner input stays 20px and is centered by `align-items`. */
+  height: 36px;
   margin: 6px 8px 3px;
-  padding: 0 7px;
+  padding: 0 9px;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg) 88%, var(--bg-panel));
@@ -3232,7 +3280,6 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .chat-history-search:focus-within {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .chat-history-search svg {
   width: 11px;
@@ -3247,7 +3294,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   outline: none;
   background: transparent;
   color: var(--text);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 20px;
 }
 .chat-history-search input::placeholder { color: var(--text-faint); }
@@ -3277,7 +3324,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   margin-left: auto;
   height: 22px;
   padding: 0 7px;
-  font-size: 10.5px;
+  font-size: 12px;
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg-subtle) 84%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
@@ -3300,10 +3347,13 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 3px 6px 6px;
+  /* 8px sides so row edges line up with the search field above
+     (.chat-history-search margins 8px). No scrollbar-gutter: with classic
+     scrollbars enabled it reserves a right-side strip even when nothing
+     overflows, leaving rows visibly narrower than the search field. */
+  padding: 3px 8px 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
 }
 .chat-history-list.is-virtualized {
   gap: 0;
@@ -3322,7 +3372,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .chat-history-empty {
   padding: 14px 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   text-align: center;
   font-style: italic;
@@ -3332,7 +3382,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  padding: 4px 7px;
+  /* Roomier left inset so the title has breathing room from the card edge;
+     right keeps room for the hover delete button. */
+  padding: 4px 6px 4px 12px;
   border-radius: var(--radius);
   background: transparent;
   border: 1px solid transparent;
@@ -3361,6 +3413,12 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .chat-conv-item-name {
   flex: 1;
+  /* This is a <button>, and the global `button` rule makes it an inline-flex
+     box with `justify-content: center` — which centers short titles like
+     "未命名对话". Left-align the content so all rows read flush-left (long
+     titles already fill the width so they looked left-aligned regardless). */
+  justify-content: flex-start;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3373,7 +3431,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   gap: 5px;
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
@@ -3428,8 +3486,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   gap: 6px;
   padding: 6px 12px;
   border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
+  /* Surface comes from .od-glass-refract (frosted base, SDF refraction on
+     Chromium via useLiquidGlass in ChatPane); the white→transparent wash is
+     layered on top via the higher-specificity rule below. */
+  border: 1px solid var(--material-separator);
   color: var(--text);
   font-size: 12px;
   box-shadow: var(--shadow-sm);
@@ -3451,6 +3511,23 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
     opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
     visibility 0s linear 140ms;
+}
+/* The pill sits directly over the scrolling transcript, so its surface has to
+   be opaque enough to read against arbitrary message text. The previous wash
+   faded to fully transparent at the bottom, which let chat copy show straight
+   through the label ("回到最新" appeared to have text baked into it) and made
+   the pill look half-erased. It also hardcoded a white fill, so in dark theme
+   a white pill carried light `var(--text)` copy and became unreadable.
+   Keep the top-to-bottom fade — it is what makes the pill feel like it belongs
+   to the composer below — but floor it at an opacity that still occludes, and
+   source the colour from the theme surface. */
+.chat-jump-btn.od-glass-refract,
+.chat-jump-btn.od-glass-refract[data-od-glass-sdf] {
+  background: linear-gradient(
+    180deg,
+    var(--bg-panel) 0%,
+    color-mix(in srgb, var(--bg-panel) 88%, transparent) 100%
+  );
 }
 .chat-jump-btn-active {
   opacity: 1;
@@ -3481,7 +3558,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: none;
   border: none;
   border-radius: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-faint);
   width: fit-content;
   opacity: 0;
@@ -3489,7 +3566,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .msg.assistant:hover .assistant-footer,
 .msg.assistant:focus-within .assistant-footer,
-.assistant-footer[data-streaming="true"] { opacity: 1; }
+.assistant-footer[data-streaming="true"],
+.assistant-footer[data-last="true"] { opacity: 1; }
 @media (hover: none) {
   .assistant-footer { opacity: 1; }
 }
@@ -3504,9 +3582,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   animation: pulse 1.2s ease-in-out infinite;
 }
 .assistant-footer .assistant-label {
-  font-weight: 400;
+  font-weight: 500;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
+}
+.assistant-footer .assistant-stats {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  font-size: 12px;
 }
 .assistant-footer[data-unfinished="true"] {
   background: none;

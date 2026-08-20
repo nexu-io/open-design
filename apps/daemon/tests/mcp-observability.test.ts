@@ -31,7 +31,7 @@ describe('local MCP plugin observability contract', () => {
     globalThis.fetch = originalFetch;
   });
 
-  it('accepts the bounded Open Design context and rejects extra or secret fields', () => {
+  it('accepts the bounded OpenDesign context and rejects extra or secret fields', () => {
     expect(validateExternalPluginContext(pluginContext)).toEqual(pluginContext);
 
     expect(() => validateExternalPluginContext({
@@ -305,7 +305,7 @@ describe('local MCP plugin observability contract', () => {
   it('keeps MCP transport failures and delivery completeness as separate facts', () => {
     expect(mcpFailureFacts('start_run', {
       isError: true,
-      content: [{ type: 'text', text: 'cannot reach the Open Design daemon' }],
+      content: [{ type: 'text', text: 'cannot reach the OpenDesign daemon' }],
     })).toEqual({
       error_code: 'DAEMON_UNREACHABLE',
       failure_stage: 'run_accept',
@@ -440,6 +440,35 @@ describe('local MCP plugin observability contract', () => {
     );
     expect(missingRequest.content[0]?.text).toContain(
       'requestId is required for attributed start_run calls',
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => String(url).endsWith('/api/runs'),
+      ),
+    ).toBe(false);
+
+    const invalidRequest = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'start_run',
+      {
+        project: 'Demo',
+        prompt: 'Create a launch page',
+        requestId: 'od-mscwn4y2-tlnx02dig7',
+        pluginWorkflowId: '018f6f2e-4444-7444-8444-444444444444',
+      },
+      {
+        pluginAttribution: {
+          pluginWorkflowId: '018f6f2e-4444-7444-8444-444444444444',
+          context: pluginContext,
+        },
+      },
+    );
+    expect(invalidRequest).toMatchObject({ isError: true });
+    expect(invalidRequest.content[0]?.text).toContain(
+      'requestId must be a canonical UUID or ULID',
+    );
+    expect(invalidRequest.content[0]?.text).not.toContain(
+      'pluginWorkflowId must be a canonical UUID or ULID',
     );
     expect(
       fetchMock.mock.calls.some(

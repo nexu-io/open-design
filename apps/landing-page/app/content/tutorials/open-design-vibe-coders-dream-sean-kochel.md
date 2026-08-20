@@ -1,7 +1,7 @@
 ---
-title: 'Open Design Is Every Vibe Coder''s Dream'
+title: 'OpenDesign Is Every Vibe Coder''s Dream'
 youtubeId: MmTBkDmunk4
-summary: A vibe-coder's playbook for Open Design — bring your own agent, pick a design system to kill AI slop, prompt for a structure that converts, and turn rough PRDs into a landing page, a mobile app, and a desktop app in minutes. Based on Sean Kochel's hands-on demos.
+summary: A vibe-coder's playbook for OpenDesign — bring your own agent, pick a design system to kill AI slop, prompt for a structure that converts, and turn rough PRDs into a landing page, a mobile app, and a desktop app in minutes. Based on Sean Kochel's hands-on demos.
 date: 2026-05-04
 category: Demo
 durationSeconds: 815
@@ -9,14 +9,14 @@ author: Sean Kochel
 official: false
 ---
 
-This guide is a vibe-coder's playbook for Open Design: bring the agent you already use, pick a design system so your output doesn't scream "AI generated," prompt for a structure that actually converts, then iterate by conversation. It follows the three back-to-back builds **Sean Kochel** runs in [his hands-on demos](https://www.youtube.com/watch?v=MmTBkDmunk4) — a landing page, a mobile app, and a desktop app — rewritten and brought up to date with the current release. Watch the video above for the live run, or read on for the written version.
+This guide is a vibe-coder's playbook for OpenDesign: bring the agent you already use, pick a design system so your output doesn't scream "AI generated," prompt for a structure that actually converts, then iterate by conversation. It follows the three back-to-back builds **Sean Kochel** runs in [his hands-on demos](https://www.youtube.com/watch?v=MmTBkDmunk4) — a landing page, a mobile app, and a desktop app — rewritten and brought up to date with the current release. Watch the video above for the live run, or read on for the written version.
 
-![The Open Design workspace — what you land on after install.](/tutorials/open-design-vibe-coders-dream-sean-kochel/01-workspace.webp)
-*The Open Design workspace — prototypes, slide decks, images, and video in one calm, familiar canvas.*
+![The OpenDesign workspace — what you land on after install.](/tutorials/open-design-vibe-coders-dream-sean-kochel/01-workspace.webp)
+*The OpenDesign workspace — prototypes, slide decks, images, and video in one calm, familiar canvas.*
 
-## What is Open Design?
+## What is OpenDesign?
 
-Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. It detects the CLIs already on your machine — Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a couple of dozen more — and lets that agent drive generation. As Sean puts it: there's a CLI layer where you configure your agent, a system prompt that drives the quality, and then the parts that make it valuable — skill support and a deep library of design systems. The outputs are real HTML files, so whatever you make drops straight into your actual project.
+OpenDesign is an open-source, local-first design platform that runs **on top of the coding agent you already use**. It detects the CLIs already on your machine — Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a couple of dozen more — and lets that agent drive generation. As Sean puts it: there's a CLI layer where you configure your agent, a system prompt that drives the quality, and then the parts that make it valuable — skill support and a deep library of design systems. The outputs are real HTML files, so whatever you make drops straight into your actual project.
 
 Why vibe coders care:
 
@@ -54,7 +54,7 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
-Open the local URL it prints (it uses a dynamic port — don't hardcode one). On first launch, point Open Design at the agent you want driving the work, or bring your own API key.
+Open the local URL it prints (it uses a dynamic port — don't hardcode one). On first launch, point OpenDesign at the agent you want driving the work, or bring your own API key.
 
 ## Step 2 — Build a landing page that converts
 
@@ -66,7 +66,7 @@ This is Sean's first demo, and it's the template for everything else:
 *The design-systems library: each entry breaks a real brand down into palette, typography, components, and visual atmosphere you can reuse.*
 
 2. **Prompt the structure, not just the vibe.** Sean tells it exactly which sections to build — eleven of them — and pastes the executive summary from his PRD (product vision, problem statement, target user, proposed solution, primary features) so the copy has real context to work from.
-3. **Answer the discovery questions.** Just like Claude Design, Open Design asks clarifying questions before it writes. Here it reaches for its **SaaS landing-page skill** to execute — and because skills are just files, you could load your own copywriting guidelines or section structure as a skill instead.
+3. **Answer the discovery questions.** Just like Claude Design, OpenDesign asks clarifying questions before it writes. Here it reaches for its **SaaS landing-page skill** to execute — and because skills are just files, you could load your own copywriting guidelines or section structure as a skill instead.
 4. **Let it run.** About five minutes later he has a professional first pass — a real conversion-oriented structure, a clean comparison table, a nicely styled case-study card, a solid FAQ.
 
 Want a different feel? Sean reruns the exact same brief with a **brutalist** tone instead of editorial and gets a meaningfully different design — same structure, different skin, because the design system does the heavy lifting.
@@ -98,7 +98,7 @@ Even a vague prompt plus reference images gets you a usable starting point. With
 ## FAQ
 
 **Do I have to use a specific model?**
-No. Open Design drives whatever supported agent you've configured — Claude Code, Codex, Cursor, OpenCode, Qwen, and more — or a configured BYOK provider. No provider lock-in.
+No. OpenDesign drives whatever supported agent you've configured — Claude Code, Codex, Cursor, OpenCode, Qwen, and more — or a configured BYOK provider. No provider lock-in.
 
 **How is this different from Claude Design?**
 Same familiar feel, but free, open-source, local-first, model-agnostic, and far more customizable — you can add your own skills and processes. Plus image and video generation a single-provider tool doesn't give you.

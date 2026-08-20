@@ -8,6 +8,7 @@ import {
   historyWithCommentAttachmentContext,
   liveCommentTargetMapsEqual,
   liveSnapshotForComment,
+  resolveCommentAnchor,
   mergeAttachedComments,
   mergePreviewCommentAttachments,
   messageContentWithCommentAttachments,
@@ -179,7 +180,7 @@ describe('preview comment attachment helpers', () => {
         elementId: 'hero-title',
         selector: '[data-od-id="hero-title"]',
         label: 'Hero title',
-        text: 'Open Design',
+        text: 'OpenDesign',
         position: { x: 10, y: 20, width: 300, height: 80 },
         htmlHint: '<h1 data-od-id="hero-title">',
         selectionKind: 'element',
@@ -506,6 +507,80 @@ function comment(patch: Partial<PreviewComment>): PreviewComment {
     ...patch,
   };
 }
+
+describe('resolveCommentAnchor drift ladder', () => {
+  function snap(patch: Partial<PreviewCommentSnapshot> & { elementId: string }): PreviewCommentSnapshot {
+    return {
+      filePath: 'index.html',
+      selector: '[data-od-id="hero-title"]',
+      label: 'h1.hero-title',
+      text: 'Current title',
+      htmlHint: '<h1 data-od-id="hero-title">',
+      position: { x: 10, y: 20, width: 300, height: 80 },
+      ...patch,
+    };
+  }
+
+  it('anchors on an exact live hit', () => {
+    const snapshots = new Map([['hero-title', snap({ elementId: 'hero-title' })]]);
+    const res = resolveCommentAnchor(comment({ elementId: 'hero-title' }), snapshots);
+    expect(res.state).toBe('anchored');
+    expect(res.snapshot?.elementId).toBe('hero-title');
+  });
+
+  it('flags an exact hit against an older content version as reanchored', () => {
+    const snapshots = new Map([['hero-title', snap({ elementId: 'hero-title' })]]);
+    const saved = comment({ elementId: 'hero-title', anchoredVersion: 3 });
+    expect(resolveCommentAnchor(saved, snapshots, 3).state).toBe('anchored');
+    expect(resolveCommentAnchor(saved, snapshots, 5).state).toBe('reanchored');
+  });
+
+  it('recovers a moved element by content (stale) when the id no longer matches', () => {
+    // The author restructured: the same element now lives under a different
+    // render-time id, but its selector + htmlHint are unchanged.
+    const snapshots = new Map([
+      ['path-2-9', snap({ elementId: 'path-2-9', position: { x: 40, y: 900, width: 300, height: 80 } })],
+    ]);
+    const res = resolveCommentAnchor(
+      comment({ elementId: 'path-1-0', lastGoodPosition: { x: 10, y: 20, width: 300, height: 80 } }),
+      snapshots,
+    );
+    expect(res.state).toBe('stale');
+    expect(res.snapshot?.elementId).toBe('path-2-9');
+  });
+
+  it('does not fuzzy-match on position alone without a content signal', () => {
+    const snapshots = new Map([
+      ['other', snap({
+        elementId: 'other',
+        selector: '[data-od-id="unrelated"]',
+        htmlHint: '<section data-od-id="unrelated">',
+        text: 'Something else entirely',
+        position: { x: 10, y: 20, width: 300, height: 80 },
+      })],
+    ]);
+    // Same position, but nothing about the content matches → lost, not stale.
+    const res = resolveCommentAnchor(comment({ elementId: 'gone' }), snapshots);
+    expect(res.state).toBe('lost');
+  });
+
+  it('loses the anchor and ghosts at the last-good position', () => {
+    const res = resolveCommentAnchor(
+      comment({
+        elementId: 'gone',
+        selector: '[data-od-id="gone"]',
+        htmlHint: '<div data-od-id="gone">',
+        text: 'No live match',
+        position: { x: 1, y: 1, width: 5, height: 5 },
+        lastGoodPosition: { x: 200, y: 300, width: 120, height: 40 },
+      }),
+      new Map(),
+    );
+    expect(res.state).toBe('lost');
+    // Ghost renders at last-good, NOT the (possibly stale) creation position.
+    expect(res.snapshot?.position).toEqual({ x: 200, y: 300, width: 120, height: 40 });
+  });
+});
 
 describe('queuedSlideNavTarget', () => {
   it('returns the slide a queued send should flip the deck to', () => {

@@ -2,16 +2,16 @@
 
 语言：[English](AGENT-DEVELOPMENT.md) | 简体中文
 
-当你希望一个编码 agent 创建或改进 Open Design 插件时，可以把这个文件直接交给它。
+当你希望一个编码 agent 创建或改进 OpenDesign 插件时，可以把这个文件直接交给它。
 
 ## 任务目标
 
-创建一个可移植的 Open Design 插件，使它可以：
+创建一个可移植的 OpenDesign 插件，使它可以：
 
 1. 通过 `SKILL.md` 作为普通 Agent Skill 运行。
-2. 通过 `open-design.json` 安装到 Open Design。
+2. 通过 `open-design.json` 安装到 OpenDesign。
 3. 在本地完成校验。
-4. 发布为独立开源仓库，或作为 PR 提交给 Open Design。
+4. 发布为独立开源仓库，或作为 PR 提交给 OpenDesign。
 
 ## 必读文件
 
@@ -20,7 +20,7 @@
 - `plugins/spec/SPEC.zh-CN.md`
 - `docs/schemas/open-design.plugin.v1.json`
 - 需要更深入产品语义时阅读 `docs/plugins-spec.zh-CN.md`
-- 当用户要求发布到 Open Design 以外的 registry 时，阅读 `plugins/spec/PUBLISHING-REGISTRIES.zh-CN.md`
+- 当用户要求发布到 OpenDesign 以外的 registry 时，阅读 `plugins/spec/PUBLISHING-REGISTRIES.zh-CN.md`
 - `plugins/spec/examples/` 下最接近的示例
 
 ## 构建流程
@@ -35,7 +35,7 @@
   README.md
 ```
 
-3. 保持 `SKILL.md` 可移植。它可以提到 Open Design 行为，但核心 workflow 必须在任何 Agent Skills 兼容 agent 中都能理解。
+3. 保持 `SKILL.md` 可移植。它可以提到 OpenDesign 行为，但核心 workflow 必须在任何 Agent Skills 兼容 agent 中都能理解。
 4. 把 OD 专属 display、`specVersion`、插件 `version`、inputs、preview、pipeline、atoms、connectors 和 capabilities 放进 `open-design.json`。
 5. 只有在能明显提升 agent 输出质量时，才添加 `examples/`、`preview/`、`assets/` 或 `references/`。
 6. 当插件行为足够复杂、容易回归时，添加 `evals/evals.json`。

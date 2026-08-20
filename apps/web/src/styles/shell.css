@@ -9,7 +9,7 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   height: 100vh;
-  background: var(--bg-app);
+  background: var(--veil-shell);
   overflow: hidden;
 }
 .app > .split {
@@ -17,7 +17,7 @@
 }
 
 .workspace-shell {
-  --workspace-tabs-chrome-height: 38px;
+  --workspace-tabs-chrome-height: 44px;
   width: 100vw;
   max-width: 100vw;
   height: 100vh;
@@ -25,11 +25,28 @@
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 36px minmax(0, 1fr);
-  background: var(--bg-app);
+  grid-template-rows: 44px minmax(0, 1fr);
+  /* Same ground as the home page: paint nothing, let the body app-wash
+     (browser) / wallpaper vibrancy + cream scrim (desktop) show through —
+     the project view and home share one identical frosted ground by
+     construction. --veil-shell restores the solid --bg-app under reduced
+     transparency / missing backdrop-filter (app-wash.css), so degradation
+     stays intact. */
+  background: var(--veil-shell);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   overflow: hidden;
 }
+/* The shell grid owns exactly two children: the tabs chrome and the body.
+   Pin each to its row so a stray extra shell child (e.g. an inline popover
+   anchor mounted at shell level — the floating account cluster renders its
+   MessageCenter anchor there) falls into a zero-height implicit row instead
+   of auto-placing into (and stealing) the 1fr body row. */
+.workspace-shell > .workspace-tabs-chrome {
+  grid-row: 1;
+}
 .workspace-shell__body {
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -51,39 +68,29 @@
 .workspace-tabs-chrome.app-chrome-header {
   min-width: 0;
   max-width: 100%;
-  min-height: 38px;
-  height: 38px;
-  padding: 0 8px 0 6px;
+  min-height: 44px;
+  height: 44px;
+  padding: 0 10px 0 8px;
   gap: 0;
-  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle));
+  /* Flush with the content below: same surface, no bottom hairline. */
+  background: var(--bg);
   border-bottom: 0;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--bg-panel) 80%, transparent) inset;
   user-select: none;
   -webkit-app-region: drag;
   overflow: hidden;
   position: relative;
   z-index: 120;
 }
-.workspace-tabs-chrome.app-chrome-header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: color-mix(in srgb, var(--border) 64%, transparent);
-  transform: scaleY(0.5);
-  transform-origin: center bottom;
-  pointer-events: none;
-  z-index: 0;
-}
 .workspace-tabs-chrome .workspace-tabs-traffic {
   margin-right: var(--app-chrome-traffic-margin);
 }
 .workspace-tabs-new-btn {
-  width: 28px;
-  height: 28px;
-  margin-left: 5px;
+  width: 30px;
+  height: 30px;
+  /* Always pinned to the strip's right edge: auto margin absorbs the free
+     space when tabs don't fill the row; the sticky rule below takes over
+     once the strip overflows and scrolls. */
+  margin-left: auto;
   margin-right: 0;
   padding: 0;
   border: 0;
@@ -104,9 +111,117 @@
   background: var(--bg-panel);
   box-shadow: -8px 0 10px -9px color-mix(in srgb, var(--text) 30%, transparent);
 }
+/* Corner-anchored radial fan menu for the "+" button. */
+.workspace-radial-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1900;
+  /* Click-catcher + light tint only. The blur itself lives on the shell
+     content below (html.od-radial-open) so EVERYTHING under the overlay
+     blurs uniformly — backdrop-filter here sampled composited layers
+     unevenly (some elements stayed crisp). */
+  background: color-mix(in srgb, var(--bg-app) 14%, transparent);
+  animation: workspace-radial-scrim 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Uniform under-blur while the radial menu is open; the fan portals to
+   <body> outside the shell, so it stays crisp. */
+html.od-radial-open .workspace-shell {
+  filter: blur(8px);
+}
+@media (prefers-reduced-transparency: reduce) {
+  html.od-radial-open .workspace-shell {
+    filter: none;
+  }
+}
+@keyframes workspace-radial-scrim {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.workspace-radial-menu {
+  position: fixed;
+  overflow: visible;
+  /* Purely visual container — only the wedge paths take hits, so the close
+     button at the anchor corner stays clickable. */
+  pointer-events: none;
+  filter: drop-shadow(0 14px 34px rgba(0, 0, 0, 0.18));
+  animation: workspace-radial-pop 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  transform-origin: calc(100% - 24px) 24px;
+}
+@keyframes workspace-radial-pop {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+.workspace-radial-menu svg { display: block; overflow: visible; pointer-events: auto; }
+/* Concentric-band wedges: each is a frosted sheet segment over the blurred
+   page, separated by hairline strokes (the band/segment grid of the ref). The
+   whole wedge is the click/hover target; the icon rides on top, inert. */
+.workspace-radial-sector-path {
+  pointer-events: fill;
+  cursor: pointer;
+  fill: color-mix(in srgb, var(--bg) 72%, transparent);
+  stroke: color-mix(in srgb, var(--text) 10%, transparent);
+  stroke-width: 1.25;
+  transition: fill 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.workspace-radial-sector-path:hover,
+.workspace-radial-sector-path.is-hover {
+  /* Whisper brand tint — same as the composer picker's hovered wedge. */
+  fill: #f9fff4;
+}
+/* Template icons ride each wedge's mid-radius/mid-angle as HTML spans (the Icon
+   component renders a Remix font glyph, which SVG <text> can't host). Inert, so
+   the wedge underneath owns hover + click. */
+.workspace-radial-icon-btn {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  pointer-events: none;
+  transition: color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.workspace-radial-icon-btn.is-hover {
+  /* Deep brand green — mirrors the composer picker's hovered icon. */
+  color: #2f781d;
+}
+/* The "+" re-appears over the fan's anchor rotated 45° (reads as ×);
+   clicking it closes the menu. */
+.workspace-radial-close {
+  position: fixed;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transform: translate(-50%, -50%) rotate(45deg);
+  transition: color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.workspace-radial-close:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: #2f781d;
+  box-shadow: none;
+}
+/* Keep the centering transform under the global button:active translateY —
+   losing translate(-50%, -50%) shifts the button off the pointer mid-click. */
+.workspace-radial-close:active:not(:disabled) {
+  transform: translate(-50%, -50%) rotate(45deg) scale(0.92);
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-radial-menu { animation: none; }
+}
 .workspace-tabs-new-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-subtle));
-  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
 }
 .workspace-tabs-new-btn:disabled {
   opacity: 0.4;
@@ -114,8 +229,8 @@
   background: transparent;
 }
 .workspace-tabs-icon-btn {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border-radius: var(--radius-sm);
   border-color: transparent;
@@ -130,17 +245,18 @@
 .workspace-tabs-icon-btn:hover:not(:disabled),
 .workspace-tabs-icon-btn.is-active {
   color: var(--text-strong);
-  background: color-mix(in srgb, var(--bg-panel) 78%, var(--bg-subtle));
-  border-color: var(--border);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-color: transparent;
 }
 .workspace-tabs-strip {
+  --workspace-tabs-edge-inset: 10px;
   align-self: stretch;
   min-width: 0;
   flex: 1 1 0;
   display: flex;
-  align-items: center;
-  gap: 0;
-  padding-left: 0;
+  align-items: end;
+  gap: 2px;
+  padding-left: var(--workspace-tabs-edge-inset);
   position: relative;
   z-index: 1;
   /* Horizontal scroll inside the strip — tabs keep their natural width
@@ -161,25 +277,64 @@
   height: 0;
   display: none;
 }
+/* Sliding liquid-glass active-tab indicator. Positioned in the strip's
+   CONTENT coordinates (absolute child of the scroll container) so it scrolls
+   together with the tabs. All paint lives on the inner __pill; this shell
+   only carries transform/width so the glass filter never re-attaches while
+   moving. Sits under every .workspace-tab (they are z-index: 1). The
+   overshoot bezier (y1 > 1) is the elastic "snap" on arrival. */
+.workspace-tabs-glide {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  /* Hidden until useGlideIndicator has measured once (prevents a flash of a
+     zero-width pill at x=0 on first paint). */
+  opacity: 0;
+  will-change: transform, width;
+  transition:
+    transform 300ms cubic-bezier(0.32, 1.28, 0.36, 1),
+    width 300ms cubic-bezier(0.32, 1.28, 0.36, 1);
+}
+.workspace-tabs-glide[data-ready] {
+  opacity: 1;
+}
+.workspace-tabs-glide__pill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-tabs-glide {
+    transition: none;
+  }
+  .workspace-tabs-glide__pill {
+    animation: none !important;
+  }
+}
 .workspace-tab {
   position: relative;
-  height: 24px;
-  /* Auto-shrink: tabs sit at their natural 124px when there's room and
+  height: 34px;
+  /* Auto-shrink: tabs sit at their compact natural width when there's room and
      shrink down toward --workspace-tab-min-width as more tabs open, so the
      whole row stays visible without scrolling for as long as possible. They
-     never grow past 124px (flex-grow 0) so a lone project tab doesn't balloon
+     never grow past this compact width (flex-grow 0) so a lone project tab doesn't balloon
      to fill the bar. Only once every tab has hit its min width does the strip
      fall back to horizontal scroll. */
-  width: 124px;
-  flex: 0 1 124px;
+  width: 96px;
+  flex: 0 1 96px;
   min-width: var(--workspace-tab-min-width, 56px);
-  max-width: 124px;
+  max-width: 96px;
   padding: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22px;
   align-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  border-bottom-color: transparent;
+  border-radius: var(--radius-large, 8px) 9px 0 0;
   background: transparent;
   color: var(--text-muted);
   overflow: visible;
@@ -201,15 +356,32 @@
    visible even after the project tabs overflow into horizontal scroll. The
    opaque background keeps scrolled tabs from showing through it. */
 .workspace-tab.is-pinned {
-  width: 96px;
-  flex: 0 0 96px;
-  min-width: 96px;
-  max-width: 96px;
-  grid-template-columns: minmax(0, 1fr);
+  width: 52px;
+  flex: 0 0 52px;
+  min-width: 52px;
+  max-width: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  grid-template-columns: none;
   position: sticky;
-  left: 0;
+  left: var(--workspace-tabs-edge-inset);
   z-index: 2;
-  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle));
+  background: transparent;
+}
+.workspace-tab.is-pinned .workspace-tab__label {
+  display: none;
+}
+.workspace-tab.is-pinned .workspace-tab__icon {
+  opacity: 0.88;
+  margin: 0 auto;
+}
+.workspace-tab.is-pinned .workspace-tab__main {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
 }
 .workspace-tab.is-dragging {
   opacity: 0.88;
@@ -223,26 +395,26 @@
   background: color-mix(in srgb, var(--bg-panel) 84%, var(--bg-subtle));
   border-color: color-mix(in srgb, var(--border-strong) 42%, transparent);
   color: var(--text);
-}
-.workspace-tab.is-drag-over-before {
-  transform: translateX(6px);
-}
-.workspace-tab.is-drag-over-after {
-  transform: translateX(-6px);
+  /* No translateX nudge here: tabs live-reorder while dragging, so the row
+     itself already shows the result — and a transform on the hovered tab
+     used to shift the very rects the drop hit-testing read, making the
+     before/after edge flip-flop (visible jitter). Reorder motion comes from
+     the FLIP animation in WorkspaceTabsBar instead. */
 }
 .workspace-tab + .workspace-tab::before {
   display: none;
 }
 .workspace-tab:hover {
-  background: color-mix(in srgb, var(--bg-panel) 64%, transparent);
-  border-color: color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-color: transparent;
   color: var(--text);
 }
 .workspace-tab.is-active {
-  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
-  border-color: color-mix(in srgb, var(--border-strong) 52%, transparent);
+  background: var(--bg-panel);
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  border-bottom-color: var(--bg-panel);
   color: var(--text-strong);
-  box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 6%, transparent);
+  box-shadow: 0 -1px 0 color-mix(in srgb, #ffffff 68%, transparent) inset;
 }
 .workspace-tab:hover::before,
 .workspace-tab:hover + .workspace-tab::before,
@@ -255,7 +427,7 @@
 .workspace-tab__main {
   min-width: 0;
   height: 100%;
-  padding: 0 6px 0 9px;
+  padding: 0 5px 0 8px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -293,9 +465,74 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
-  font-weight: 520;
+  font-size: 13px;
+  font-weight: 500;
   letter-spacing: 0;
+}
+/* Hairline between the home icon and the sidebar toggle in the pinned pill. */
+.workspace-tab__divider {
+  width: 1px;
+  height: 16px;
+  align-self: center;
+  background: var(--material-separator, var(--border));
+  flex: 0 0 auto;
+}
+/* Sidebar toggle inside the pinned Home pill — expands/collapses the entry
+   rail (visible only while the Home tab is active, where the rail lives). */
+.workspace-tab__rail-toggle {
+  width: 20px;
+  height: 20px;
+  margin-right: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.workspace-tab__rail-toggle:hover:not(:disabled) {
+  background: var(--bg-fill-secondary);
+  border-color: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+/* Home glyph riding the chrome's corner buttons (pinned Home pill + the
+   docked-mode stand-in). Plain currentColor icon, sized to match the old
+   14-16px chrome icons. */
+.workspace-chrome-logo {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  user-select: none;
+}
+/* Home view with the rail open: the logo has nothing to do (collapse lives in
+   the rail's search row) — drop the button affordance so it reads as a mark,
+   not a control. */
+.workspace-tab__rail-toggle.is-inert {
+  cursor: default;
+}
+.workspace-tab__rail-toggle.is-inert:hover:not(:disabled) {
+  background: transparent;
+}
+/* Collapsed rail: hovering the corner swaps the logo for the expand-sidebar
+   glyph, so the button telegraphs its one action. The rail-open (.is-inert)
+   button never swaps — it is a mark, not a control. */
+.workspace-chrome-logo-swap {
+  display: none;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+.workspace-tab__rail-toggle:not(.is-inert):hover .workspace-chrome-logo {
+  display: none;
+}
+.workspace-tab__rail-toggle:not(.is-inert):hover .workspace-chrome-logo-swap {
+  display: block;
 }
 .workspace-tab__close {
   width: 18px;
@@ -391,8 +628,8 @@
   justify-content: space-between;
   padding: 4px 5px 0;
   color: var(--text-muted);
-  font-size: 11.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0;
 }
 .workspace-tabs-list {
@@ -427,6 +664,11 @@
   color: var(--text);
   display: flex;
   align-items: center;
+  /* The global `button` primitive centers its content. Each row's content is a
+     different width (a short "主页" vs a long project title), so centering gave
+     every row a different left offset and the list read as a random staircase
+     (acceptance #46). Label-led list entries have to opt back out. */
+  justify-content: flex-start;
   gap: 9px;
   text-align: left;
 }
@@ -465,12 +707,12 @@
 }
 .workspace-tabs-list__title {
   color: var(--text-strong);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 .workspace-tabs-list__meta {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .workspace-tabs-list__close {
   width: 22px;
@@ -492,72 +734,7 @@
   padding: 18px 8px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 12.5px;
-}
-.workspace-tab-preview {
-  position: fixed;
-  z-index: 140;
-  box-sizing: border-box;
-  min-width: 220px;
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-lg);
-  pointer-events: none;
-  animation: workspace-tab-preview-in 130ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.workspace-tab-preview__icon {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-}
-.workspace-tab-preview__text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.workspace-tab-preview__title {
-  color: var(--text-strong);
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  word-break: break-word;
-}
-.workspace-tab-preview__meta {
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.3;
-}
-.workspace-tab-preview__detail {
-  margin-top: 3px;
-  color: var(--text-muted);
-  font-size: 11.5px;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: break-word;
-}
-@keyframes workspace-tab-preview-in {
-  from { opacity: 0; transform: translateY(-3px); }
-  to { opacity: 1; transform: translateY(0); }
+  font-size: 13px;
 }
 @media (max-width: 720px) {
   .workspace-tabs-chrome.app-chrome-header {
@@ -682,7 +859,7 @@
   height: 30px;
   padding: 0 12px;
   border-radius: var(--radius);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -700,6 +877,15 @@
 }
 .chrome-action:hover:not(:disabled) {
   background: var(--bg-subtle);
+}
+.chrome-action.is-active {
+  background: var(--bg-panel);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+}
+.chrome-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
 }
 .chrome-action-secondary {
   border-color: var(--border);
@@ -753,7 +939,606 @@
 .chrome-share-menu .share-menu-popover,
 .chrome-present-wrap .present-menu {
   top: calc(100% + 6px);
+}
+.chrome-share-menu .share-menu-popover {
   right: 0;
+}
+.chrome-present-wrap .present-menu {
+  /* Right-anchored like the share menu beside it. It used to grow rightward
+     from `left: 0`, and its trigger sits near the window's right edge, so the
+     menu ran off screen — the 演讲者备注 row was cut mid-sentence. The share
+     menu never had this because it kept the shared `right: 0`. */
+  right: 0;
+  left: auto;
+}
+.comment-side-composer {
+  flex: 0 0 auto;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+/* Share and Export are separate header buttons that share one popover shell
+   (the popover swaps its panel instead of remounting, so switching intents
+   keeps the menu anchored in place). The 0.18.0 three-tab strip that lived
+   inside this popover is gone — handoff is a standalone header control now. */
+/* Doubled class beats `.share-menu`'s `display: inline-block` in
+   viewer/tools.css, which is imported after this sheet — without the flex
+   display the Share and Export buttons render flush against each other. */
+.share-menu.chrome-share-menu--unified {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chrome-share-menu--unified .chrome-unified-popover {
+  /* Hug the content instead of a fixed 360px: the rows are short labels, so a
+     fixed width left a wide empty gutter on the right. The floor keeps narrow
+     menus (Export) from looking cramped; the ceiling keeps long ones (a
+     published URL, deploy labels) from running off the viewport. */
+  width: max-content;
+  min-width: min(248px, calc(100vw - 32px));
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 6px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-md);
+}
+.chrome-unified-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+}
+.chrome-unified-panel--share {
+  gap: 8px;
+}
+.chrome-access-select {
+  position: relative;
+  /* Inset to the rows' own 10px so the access control lines up with the
+     publish / deploy / save rows below it. */
+  padding: 0 10px 8px;
+}
+.chrome-access-trigger,
+.chrome-access-options button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.chrome-access-trigger {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+.chrome-access-options {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-md);
+}
+.chrome-access-options button {
+  border-inline: 0;
+  border-bottom: 0;
+  border-radius: 0;
+}
+.chrome-access-options button:first-child {
+  border-top: 0;
+}
+.chrome-access-options button.is-active {
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+  color: var(--text-strong);
+}
+.chrome-publish-url {
+  overflow: hidden;
+  padding: 7px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chrome-publish-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+/* De-shelled publish hero: no grey card — a vertical stack of the primary
+   button, a muted one-line hint, and (when relevant) the error line, sharing
+   the panel's plain visual language. */
+/* Published state: the link + its actions are content, not a menu row, so
+   they keep a column layout inset to the same 10px as the rows around them. */
+.chrome-publish-plain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 10px 8px;
+}
+/* A section label that carries a trailing "?" — used where the explanation is
+   state-dependent (access control) or is something the user wants to read
+   BEFORE acting (publish). Both keep the "?" on the label rather than inside
+   the actionable row, so reading the help can never trigger the action. */
+.share-menu-section-label--help {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Trailing "?" — pushed to the end of its label/row; its od-tooltip carries the
+   explanation. It is a real <button> so keyboard and touch users can reach the
+   explanation at all: the tooltip layer opens on `focusin`, which a <span> can
+   never receive, and touch has no hover path. That means it must also shed the
+   global button box (36px tall, bordered, filled) to stay an inline glyph. */
+.share-menu-help {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  height: auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: help;
+}
+.share-menu-help:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.share-menu-help:active:not(:disabled) {
+  transform: none;
+}
+/* Inherits primitives.css's `button:focus-visible` ring; only the radius is set
+   so the outline hugs the round glyph. */
+.share-menu-help:focus-visible {
+  border-radius: 4px;
+}
+.share-menu-item:hover:not(:disabled) .share-menu-help {
+  color: var(--text);
+}
+/* Why a publish attempt failed. Wraps: the copy is a sentence, not a code.
+   Sits outside the row, so it carries the rows' own horizontal inset. */
+.chrome-publish-error {
+  margin: 0;
+  padding: 0 10px 4px;
+  color: var(--danger, #d64545);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.chrome-publish-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.chrome-publish-button--ghost {
+  border-color: var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);}
+.chrome-cloud-guide {
+  margin-top: 2px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--text);
+}
+.chrome-action-unified.export-ready-nudge {
+  animation: export-ready-nudge 1600ms cubic-bezier(0.23, 1, 0.32, 1) 1;
+}
+body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
+  display: none;
+}
+.artifact-version-panel {
+  position: fixed;
+  top: 58px;
+  right: 24px;
+  z-index: 85;
+  width: min(390px, calc(100vw - 48px));
+  max-height: min(76vh, 720px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-panel) 96%, white 4%);
+  box-shadow: var(--shadow-lg);
+}
+.artifact-version-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* The title block must shrink, not the actions: with a fixed title width the
+   head could total wider than the panel (290 + gap + 2×28 buttons + padding
+   ≈ 392 > 390) and push the close button past the panel edge. :first-child
+   only — a bare `> div` also catches the actions container and inflates it,
+   which floats the close button into the middle of the panel instead of
+   flush with the cards' right edge. */
+.artifact-version-panel__head > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.artifact-version-panel__head p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+/* While the history panel is open it floats over the tab-row file actions,
+   but the dark 分享 button's right sliver still peeked past the panel's edge
+   and read as a control overflowing the panel frame (dogfood 2026-07-27).
+   The cluster is unreachable behind the fixed panel anyway — hide it. */
+body:has(.artifact-version-panel) .ws-tabs-file-actions,
+body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
+  visibility: hidden;
+}
+.artifact-version-panel__head strong {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 16px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifact-version-panel__close {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.artifact-version-panel__preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent 46%),
+    linear-gradient(180deg, var(--bg-subtle), var(--bg-panel));
+}
+.artifact-version-panel__preview iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+  pointer-events: none;
+  transform: scale(0.62);
+  transform-origin: top left;
+  width: 161.3%;
+  height: 161.3%;
+}
+.artifact-version-panel__preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 48%, color-mix(in srgb, var(--bg-panel) 88%, transparent));
+  pointer-events: none;
+}
+.artifact-version-panel__preview-caption {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.artifact-version-panel__preview-caption span {
+  width: max-content;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.artifact-version-panel__preview-caption strong {
+  color: var(--text-strong);
+  font-size: 16px;
+}
+.artifact-version-panel__foot button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.artifact-version-panel__foot button:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+.artifact-version-panel__foot button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.artifact-version-panel__note {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.artifact-version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  /* Give the scrollbar its own lane in the panel's right padding instead of
+     overlapping the cards: extend the list into the padding and re-inset the
+     cards by the same amount, so the cards keep their width while the bar
+     sits ~10px further right. */
+  margin-right: -10px;
+  padding-right: 10px;
+}
+.artifact-version-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  /* The v-mark tops-align with the first text line instead of floating at the
+     card's vertical center next to a tall prompt body. */
+  align-items: start;
+  gap: 10px;
+  /* Reset the global `button` rule (height: 36px; white-space: nowrap) — it
+     clamped the multi-line card to 36px so the rows overlapped, and stopped the
+     meta/summary from wrapping. */
+  height: auto;
+  white-space: normal;
+  padding: 10px;
+  /* Borderless cards (dogfood 2026-07-27): fills alone carry the states —
+     the transparent 1px keeps the box size stable. */
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+/* Package-tracking timeline treatment (dogfood 2026-07-27): the rows read as
+   stops on one vertical route — a dashed connector runs through the v-node
+   column. Each card owns two segments so the line stays continuous across
+   the 8px list gap: ::before climbs from the gap above down to its node,
+   ::after drops from its node to the card's bottom edge. 26.5px centers the
+   1px line on the 34px node inside the 10px card padding. */
+.artifact-version-card::before,
+.artifact-version-card::after {
+  content: '';
+  position: absolute;
+  left: 26.5px;
+  width: 0;
+  border-left: 1px dashed var(--border-strong);
+  pointer-events: none;
+}
+.artifact-version-card::before {
+  top: -8px;
+  height: calc(8px + 10px);
+}
+.artifact-version-card::after {
+  top: calc(10px + 34px);
+  bottom: 0;
+}
+.artifact-version-card:first-child::before,
+.artifact-version-card:last-child::after {
+  content: none;
+}
+/* The current stop's outgoing segment runs solid green, like the reference
+   tracker's active leg; the rest of the route stays dashed. */
+.artifact-version-card.is-current::after {
+  border-left-style: solid;
+  border-left-color: var(--green);
+}
+/* Selection lives on the NODE, not the row (dogfood 2026-07-27 v2): picking a
+   version turns only its v-mark into the ink/green pill — the row itself adds
+   no plate. The CURRENT row keeps its green plate as the "you are here" stop.
+   border-color stays pinned transparent so no lower-layer rule leaks a stroke
+   back in. */
+.artifact-version-card.is-selected {
+  border-color: transparent;
+  background: transparent;
+}
+/* No plate on the current row either (dogfood 2026-07-27 v3): the ink/green
+   node alone marks 当前 — rows stay surfaceless across the board. */
+.artifact-version-card.is-current {
+  border-color: transparent;
+  background: transparent;
+}
+/* Round timeline node, ringed like the reference tracker's stops; the solid
+   panel fill masks the connector line passing behind it. */
+.artifact-version-card__mark {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+/* The current stop keeps a green ring + green label so 当前 stays findable,
+   while the ink/green pill below is reserved for the SELECTION. When the
+   current row IS the selection (panel just opened), the selected rule after
+   this one wins and it renders as the ink pill. */
+.artifact-version-card.is-current .artifact-version-card__mark {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green) inset;
+  color: var(--green);
+}
+/* Selected node — the ink/green pill. Declared after the current-stop rule
+   so selection wins whenever both states sit on one row. */
+.artifact-version-card.is-selected .artifact-version-card__mark {
+  border-color: var(--text-strong);
+  background: var(--text-strong);
+  box-shadow: none;
+  color: var(--brand, #87ea5c);
+}
+.artifact-version-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.artifact-version-card__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+.artifact-version-card__title em {
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+}
+.artifact-version-card__meta,
+.artifact-version-card__summary {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.artifact-version-panel__foot {
+  padding-top: 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(108px, 0.8fr);
+  gap: 8px;
+}
+.artifact-version-panel__restore {
+  background: var(--text-strong) !important;
+  border-color: var(--text-strong) !important;
+  color: var(--bg) !important;
+}
+.artifact-version-panel__restore:hover:not(:disabled) {
+  background: var(--text) !important;
+  border-color: var(--text) !important;
+}
+/* Real-data affordances that the reference panel skeleton has no slot for.
+   Everything above this comment is the shared panel shape; everything below
+   attaches our live version-history capabilities (open-in-tab, filter box,
+   source badges, restore-confirm / download popovers) to that shape without
+   editing the shared rules. */
+.artifact-version-panel__head-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.artifact-version-panel__close:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+/* The filter box only appears once the history is long enough to need it; the
+   sidebar margins it carries from the old modal do not apply inside the panel. */
+.artifact-version-panel .file-version-search {
+  margin: 0;
+}
+/* Real prompts are far longer than the reference's hand-written titles, so the
+   title row wraps instead of squeezing the `当前` pill down to one glyph. */
+.artifact-version-panel .artifact-version-card__title {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.artifact-version-panel .artifact-version-card__title-text {
+  min-width: 0;
+  /* Long prompts fold at 3 lines — the card is a picker row, not a reading
+     surface; the full text still lives in the preview/restore flow. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.artifact-version-panel .artifact-version-card__title em {
+  flex: 0 0 auto;
+}
+/* The meta row carries the source badge chip next to the timestamp, so it lays
+   out as a wrapping flex line instead of the reference's plain text run. */
+.artifact-version-panel .artifact-version-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.artifact-version-panel__download {
+  min-width: 0;
+}
+.artifact-version-panel__download span,
+.artifact-version-panel__restore span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The panel clips its own overflow (rounded corners + inner scroll), so foot
+   popovers open INSIDE it, stacked over the list, rather than escaping the
+   rounded box the way the old full-screen modal's popovers could. */
+.artifact-version-panel .artifact-version-panel__popover.file-version-restore-confirm,
+.artifact-version-panel .artifact-version-panel__popover.file-version-download-menu.share-menu-popover {
+  position: absolute;
+  z-index: 3;
+  left: 14px;
+  right: 14px;
+  bottom: 62px;
+  top: auto;
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  transform-origin: bottom center;
 }
 .zoom-menu { position: relative; display: inline-block; }
 .zoom-menu .zoom-trigger {
@@ -796,7 +1581,7 @@
   border: none;
   border-radius: var(--radius-sm);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
   text-align: left;
 }
@@ -870,7 +1655,7 @@
 .project-target-platforms-label,
 .project-feature-chips-label {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 18px;
   font-weight: 600;
   text-transform: uppercase;
@@ -890,7 +1675,7 @@
   border-radius: var(--radius-pill);
   color: var(--text-muted);
   background: color-mix(in srgb, var(--bg-subtle) 88%, transparent);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 18px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -948,7 +1733,7 @@
 .topbar-left { display: flex; flex-direction: row; align-items: center; gap: 12px; min-width: 0; }
 .topbar-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .topbar .title { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar .meta { color: var(--text-muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar .meta { color: var(--text-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-right { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
 
 .topbar .brand-mark {
@@ -1008,6 +1793,19 @@
 .avatar-agent-trigger > svg:last-child {
   color: var(--text-muted);
 }
+/* Selected-model readout inside the trigger. Hidden by default (the tabs-bar
+   trigger keeps its two-column mark+chevron grid); the composer-row context
+   in viewer/routines.css opts it in next to the Send button. */
+.avatar-agent-trigger__model {
+  display: none;
+}
+/* The composer trigger swaps the model-name text for the provider brand mark. */
+.avatar-agent-trigger__model-logo {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
 .avatar-btn {
   width: 32px;
   height: 32px;
@@ -1041,15 +1839,39 @@
   -webkit-user-drag: none;
   pointer-events: none;
 }
+/* Pinned to the bottom of the popover's scroll port so a long model list
+   cannot scroll the one link out to 设置 → 执行 away. Opaque, because the
+   popover itself is translucent glass and rows would otherwise read through.
+
+   Qualified with `.avatar-item` (like `.avatar-item.avatar-amr-row` below) for
+   the same reason: that class is declared further down this file and resets
+   `background` to transparent — a bare `.avatar-item--pinned` loses that
+   property on source order alone, which let the model row underneath the
+   sticky footer show/bleed through instead of being covered by it. */
+.avatar-item.avatar-item--pinned {
+  position: sticky;
+  bottom: -6px;
+  z-index: 1;
+  margin-top: 2px;
+  /* Soft divider, matching .inline-switcher__more — the material separator
+     read as a heavy near-black rule over this popover's glass. */
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-elevated);
+}
+
 .avatar-popover {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
   z-index: 80;
-  min-width: 280px;
+  /* Width comes from AvatarMenu's inline style (compact popover); the old
+     280px min-width kept forcing the menu wide. */
+  min-width: 0;
   padding: 6px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   display: flex;
@@ -1061,7 +1883,7 @@
   left: 0;
 }
 .avatar-popover-head {
-  padding: 10px 10px 8px;
+  padding: 10px 10px 8px 38px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1069,127 +1891,122 @@
   margin-bottom: 4px;
 }
 .avatar-popover-head .who { font-weight: 600; font-size: 13px; }
-.avatar-popover-head .where { font-size: 11.5px; color: var(--text-muted); }
-.avatar-amr-account-link,
-.avatar-amr-account-link:visited {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 14px;
-  align-items: center;
-  gap: 10px;
-  margin: 0 6px 6px;
-  padding: 9px 10px;
-  color: var(--text);
-  text-decoration: none;
+.avatar-popover-head .where { font-size: 12px; color: var(--text-muted); }
+/* OpenDesign (AMR) account row.
+
+   This row is a container, not a single button: the icon+name+plan+balance
+   block is the agent selector, while Upgrade stays a sibling link so it never
+   nests inside that button. Every child therefore needs explicit sizing —
+   without it the unstyled `<a>` collapses to one glyph wide and "Upgrade"
+   stacks vertically next to a `__select` that has already claimed the row.
+
+   It is framed as its own card rather than a plain list row because it carries
+   an account (plan + balance) plus two actions, so it is taller and denser
+   than the single-line agent rows it sits among.
+
+   Deliberately mirrors `.inline-switcher__account-*` in
+   `styles/home/entry-layout.css`: the same card is rendered by the home-hero
+   switcher, so the two surfaces must read identically. Keep them in sync.
+
+   Container rules are qualified with `.avatar-item` because that class is
+   declared further down this file and resets background/border — the extra
+   class wins on specificity instead of relying on source order. */
+.avatar-item.avatar-amr-row {
+  gap: 8px;
+  width: auto;
+  margin: 2px 0 4px;
+  padding: 8px 9px;
+  /* The popover is a compact 208px column, which is too narrow to fit
+     icon + name + plan badge + Upgrade on one line — the account name would
+     ellipsise down to "Ope…". Let Upgrade drop to its own line instead. */
+  flex-wrap: wrap;
   border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border-soft));
-  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-tint) 34%, var(--bg-panel));
+  cursor: default;
+  transition:
+    background-color 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Hover previews selectability of the agent, so it follows the clickable
+   block rather than the whole row (Upgrade has its own hover). */
+.avatar-item.avatar-amr-row:hover {
   background: color-mix(in srgb, var(--accent-tint) 34%, var(--bg-panel));
 }
-.avatar-amr-account-link:hover {
+.avatar-item.avatar-amr-row:has(.avatar-amr-row__select:hover) {
   background: color-mix(in srgb, var(--accent-tint) 52%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
 }
-.avatar-amr-account-link__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent-strong);
-}
-.avatar-amr-account-link__copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.avatar-amr-account-link__copy span:first-child {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 12.5px;
-  font-weight: 650;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.avatar-amr-account-link__copy span:last-child {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Selected agent / active mode highlight (mirrors the inline-switcher grid). */
-.avatar-item.active {
-  background: var(--accent-tint);
-  color: var(--text-strong);
-}
-.avatar-item.active:hover {
-  background: color-mix(in srgb, var(--accent-tint) 82%, var(--bg-subtle));
-}
-/* Mode rows (本机 CLI / API·BYOK) mark the current choice with a trailing check
-   + bold text instead of a filled block, so they don't compete with the agent
-   row's filled selection highlight directly below. */
-.avatar-item--mode.active {
-  background: transparent;
-  font-weight: 600;
-}
-.avatar-item--mode.active:hover {
-  background: var(--bg-subtle);
-}
-.avatar-item__check {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
-  color: var(--accent-strong);
-}
-
-/* Open Design agent row carries account info + actions inline. */
-.avatar-amr-row {
-  gap: 8px;
-}
-.avatar-amr-row.active {
-  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--accent-tint));
-  color: var(--text-strong);
-}
-.avatar-amr-row.active:hover {
-  background: color-mix(in srgb, var(--bg-panel) 74%, var(--accent-tint));
-}
 .avatar-amr-row__select {
-  flex: 1 1 auto;
+  flex: 1 1 100%;
   min-width: 0;
   display: flex;
   align-items: center;
+  /* The popover's generic button styling centers content; this row is a
+     label-led list entry, so it has to opt back out. */
+  justify-content: flex-start;
   gap: 10px;
+  appearance: none;
   margin: 0;
   padding: 0;
   border: 0;
-  background: transparent;
-  font: inherit;
+  background: none;
   color: inherit;
+  font: inherit;
   text-align: left;
   cursor: pointer;
 }
-/* The select button fills the row; let the row's own background (highlight when
-   selected) show through instead of the global `button:hover` grey reset —
-   which otherwise paints a meaningless grey box over the selected row. */
-.avatar-amr-row__select:hover:not(:disabled) {
-  background: transparent;
-}
-.avatar-amr-row__name {
-  flex: 0 0 auto;
+.avatar-amr-row__select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 .avatar-amr-row__text {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.avatar-amr-row__wallet {
+  flex: 1 1 auto;
   min-width: 0;
+  appearance: none;
+  margin: 0 0 0 34px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.avatar-amr-row__wallet:hover .avatar-amr-row__stat-value {
+  color: var(--accent);
+}
+.avatar-amr-row__wallet:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.avatar-amr-row__wallet--static {
+  cursor: default;
 }
 .avatar-amr-row__name-row {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
 }
+.avatar-amr-row__name {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Balance reads as a muted subtitle under the name. Each stat is
+   "label value"; the gap (not a literal separator) keeps stats apart. */
 .avatar-amr-row__subtitle {
   display: flex;
   align-items: baseline;
@@ -1201,6 +2018,7 @@
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
+  min-width: 0;
 }
 .avatar-amr-row__stat-label {
   flex: 0 0 auto;
@@ -1219,6 +2037,9 @@
 .avatar-amr-row__upgrade,
 .avatar-amr-row__upgrade:visited {
   flex: 0 0 auto;
+  /* Trails the account block on its own wrapped line. */
+  margin-left: auto;
+  appearance: none;
   display: inline-flex;
   align-items: center;
   height: 22px;
@@ -1230,8 +2051,11 @@
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.02em;
-  text-decoration: none;
+  line-height: 1;
+  /* The actual fix for the vertically-stacked label. */
   white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
@@ -1240,14 +2064,6 @@
     background-color 150ms ease,
     box-shadow 150ms ease;
 }
-@media (hover: hover) and (pointer: fine) {
-  .avatar-amr-row__upgrade:hover {
-    background: var(--accent-hover);
-    box-shadow:
-      0 2px 8px color-mix(in srgb, var(--accent) 42%, transparent),
-      inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent);
-  }
-}
 .avatar-amr-row__upgrade:active {
   transform: scale(0.96);
 }
@@ -1255,21 +2071,16 @@
   outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: 2px;
 }
-@media (prefers-reduced-motion: reduce) {
-  .avatar-amr-row__upgrade {
-    transition: background-color 150ms ease;
-  }
-  .avatar-amr-row__upgrade:active {
-    transform: none;
-  }
-}
 .avatar-item {
   display: flex;
   align-items: center;
+  /* The global `button` rule centers flex content; menu rows read left-aligned
+     (icon + label flush left) to match the model options above. */
+  justify-content: flex-start;
   gap: 10px;
   width: 100%;
   padding: 8px 10px;
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
   background: transparent;
   border: none;
@@ -1299,39 +2110,53 @@ a.avatar-item:visited {
 }
 .avatar-item .avatar-item-meta {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .avatar-section-label {
-  font-size: 10.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-faint);
   font-weight: 600;
-  padding: 8px 10px 4px;
+  padding: 8px 10px 4px 38px;
 }
 .avatar-model-section {
-  padding: 2px 10px 6px;
+  padding: 4px 6px 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  border-top: 1px dashed var(--border-soft);
-  margin-top: 4px;
+  gap: 5px;
 }
 .avatar-select-row {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   font-size: 12px;
   color: var(--text-muted);
+  text-align: left;
 }
 .avatar-select-label {
   flex-shrink: 0;
   min-width: 0;
+}
+.avatar-static-value {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .avatar-select {
   display: block;
@@ -1346,6 +2171,91 @@ a.avatar-item:visited {
   cursor: pointer;
 }
 .avatar-select:focus { outline: 2px solid var(--accent-soft, var(--border-strong)); }
+
+/* Model picker rendered inline as an always-expanded, left-aligned list (no
+   click-to-open dropdown): every option is laid out directly and clicking a row
+   selects it. The active row is highlighted with a trailing check. */
+.avatar-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  /* Cap the visible list at six rows (6 × 36px row + 5 × 2px gap); longer
+     catalogs scroll inside so the settings footer stays on screen. */
+  max-height: 226px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.avatar-model-option {
+  appearance: none;
+  /* Keep full row height inside the capped, scrolling list — without this the
+     column flex parent squeezes rows to fit max-height instead of scrolling. */
+  flex: none;
+  display: flex;
+  align-items: center;
+  /* Logo + label read as one left-aligned run; the check is pushed to the
+     right edge via margin-left:auto below. */
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 100ms var(--ease-out),
+    color 100ms var(--ease-out);
+}
+.avatar-model-option:hover {
+  background: var(--bg-subtle);
+}
+.avatar-model-option.is-active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* Plan-gated OpenDesign models. They stay listed (so users can see what a
+   higher plan unlocks) but read as unavailable; clicking one opens the plans
+   page instead of selecting a model the run would reject. */
+.avatar-model-option.is-locked {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.avatar-model-option-logo {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+.avatar-model-option-logo img,
+.avatar-model-option-logo svg {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+}
+.avatar-model-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.avatar-model-option-check {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--accent);
+}
+.avatar-model-option.is-locked .avatar-model-option-check {
+  color: var(--text-muted);
+}
 
 /* Environment pill — only used in entry view header now */
 .env-pill {
@@ -1378,21 +2288,56 @@ a.avatar-item:visited {
 }
 
 /* -------- Split / panes -------------------------------------------- */
+/* Registered as animatable lengths so the `.split` <-> `.split-focus` grid
+   collapse (below) can transition smoothly instead of hard-cutting between a
+   3-column and 1-column `grid-template-columns`. Un-registered custom
+   properties are just token strings to the animation engine — no
+   `@property` means no interpolation, which was the root cause of the
+   expand/collapse jump this file fixes. */
+@property --project-chat-panel-width {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 460px;
+}
+@property --project-chat-handle-width {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 8px;
+}
 .split {
   --project-chat-panel-width: 460px;
+  --project-chat-handle-width: 8px;
   --project-workspace-panel-track: minmax(400px, 1fr);
   display: grid;
+  /* Always three tracks — collapsing never drops to a 1-column layout.
+     `.split-focus` below transitions the first two tracks to 0 instead, so
+     the workspace track (a plain `1fr`/`minmax` share, not a registered
+     length) smoothly reclaims the freed space frame-by-frame. */
   grid-template-columns:
     var(--project-chat-panel-width)
-    8px
+    var(--project-chat-handle-width)
     var(--project-workspace-panel-track);
   min-height: 0;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  background: var(--bg);
+  /* Translucent: the app wash peeks through the resize gutter between the
+     chat pane and workspace, so panels read as floating on the wash. */
+  background: var(--veil-page);
+  /* Default ("enter") duration — this is the after-change style whenever
+     `.split-focus` is REMOVED (expanding back to the 3-column layout), so it
+     governs the expand direction. `.split.split-focus` below overrides both
+     durations to the faster "exit" timing for the collapse direction. */
+  transition:
+    --project-chat-panel-width 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    --project-chat-handle-width 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .split.is-resizing-chat {
+  /* Pointer/keyboard resize writes `--project-chat-panel-width` directly on
+     every frame (see `applySplitChatPanelWidth` in ProjectView.tsx); animating
+     those writes would make the panel visibly lag behind the cursor, so the
+     transition is suspended for the duration of an interactive resize. */
+  transition: none;
   cursor: col-resize;
   user-select: none;
 }
@@ -1410,50 +2355,85 @@ a.avatar-item:visited {
   background: var(--text-strong);
 }
 .split.split-focus {
-  grid-template-columns: minmax(0, 1fr);
+  --project-chat-panel-width: 0px;
+  --project-chat-handle-width: 0px;
+  /* Focused mode never needed the workspace track's 400px floor (there's no
+     chat column competing for space), and matches the previous hardcoded
+     `minmax(0, 1fr)` collapse target exactly. */
+  --project-workspace-panel-track: minmax(0, 1fr);
+  transition:
+    --project-chat-panel-width 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    --project-chat-handle-width 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .split-chat-slot {
+  grid-column: 1;
   position: relative;
   display: flex;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
 }
-.split-chat-slot[hidden] {
-  display: none;
+.split-chat-slot-hidden {
+  visibility: hidden;
+  pointer-events: none;
 }
 .split-chat-slot > .pane {
   flex: 1 1 auto;
   min-width: 0;
 }
 .split-edit-divider {
+  grid-column: 2;
   width: 8px;
   min-width: 8px;
   height: 100%;
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
 }
-.comment-left-host {
-  position: absolute;
-  inset: 0;
-  z-index: 30;
+/* Full-screen preview: the chat column (the comment panel's usual dock) is
+   hidden, so the panel floats as a card over the workspace instead of being
+   occluded by it. Fixed to the viewport's right edge, clear of the workspace
+   chrome rows above. */
+.comment-float-host {
+  position: fixed;
+  z-index: 60;
+  top: 96px;
+  right: 16px;
+  bottom: 16px;
   display: flex;
-  width: 100%;
-  height: 100%;
+  width: min(360px, calc(100vw - 32px));
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
 }
-.comment-left-host > .comment-side-dock {
+/* The portal target is pre-mounted so opening comments never waits a frame
+   for parent state. An empty host must be visually and interactively absent. */
+.comment-float-host:empty {
+  display: none;
+}
+/* Collapsed: the host steps back to a bare frame around the 42px rail — the
+   rail brings its own pill chrome, and it sizes off the host's height, so
+   only the width and the card decoration come off here. */
+.comment-float-host:has(.comment-side-rail) {
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.comment-float-host > .comment-side-dock {
   flex: 1 1 auto;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
 }
-.comment-left-host > .comment-side-panel,
-.comment-left-host > .comment-side-dock > .comment-side-panel {
+.comment-float-host > .comment-side-panel,
+.comment-float-host > .comment-side-dock > .comment-side-panel {
   position: relative;
   top: auto;
   right: auto;
@@ -1467,16 +2447,18 @@ a.avatar-item:visited {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  background: transparent;
   z-index: 20;
 }
-.comment-left-host .comment-side-header {
+.comment-float-host .comment-side-header {
   min-height: 40px;
 }
-.comment-left-host .comment-side-list {
+.comment-float-host .comment-side-list {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 16px 12px;
+  padding: 16px 12px 12px;
 }
+
 .comment-side-composer {
   flex: 0 0 auto;
   padding: 12px;
@@ -1488,10 +2470,14 @@ a.avatar-item:visited {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: var(--bg-panel);
+  /* Content-layer panel: Regular standard material (材质规范). */
+  background: var(--material-regular);
+  -webkit-backdrop-filter: var(--material-regular-backdrop);
+  backdrop-filter: var(--material-regular-backdrop);
   overflow: hidden;
 }
 .split-resize-handle {
+  grid-column: 2;
   position: relative;
   z-index: 45;
   width: 8px;
@@ -1501,16 +2487,16 @@ a.avatar-item:visited {
   background: transparent;
   touch-action: none;
 }
+.split > .workspace {
+  grid-column: 3;
+}
 .split-resize-handle::before {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  /* Invariant: the extended hitbox must never cross the inline-start edge —
-     the chat panel's scrollbar gutter sits flush against it (LTR and RTL).
-     Extra grab room is allowed on the workspace (inline-end) side only. */
-  inset-inline-start: 0;
-  inset-inline-end: -8px;
+  left: -10px;
+  right: -10px;
   cursor: col-resize;
 }
 .split-resize-handle::after {
@@ -1521,7 +2507,10 @@ a.avatar-item:visited {
   left: calc(50% - 0.5px);
   width: 1px;
   pointer-events: none;
-  background: color-mix(in srgb, var(--border) 92%, transparent);
+  /* No static divider line — the floating chat card's own border + inset gap
+     already separate it from the workspace. The bar only appears on hover /
+     while resizing (rules below, higher specificity via :hover). */
+  background: transparent;
   opacity: 0.9;
   transition:
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),

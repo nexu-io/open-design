@@ -25,7 +25,7 @@ export interface AmrGuidanceProps {
 
 // Theme-color promotion card under a failed run's gray error card, shown when a
 // non-AMR agent hits a model/auth/quota wall. Offers a one-click switch to
-// Open Design's hosted AMR with auto-retry. Fires `surface_view`
+// OpenDesign's hosted AMR with auto-retry. Fires `surface_view`
 // (element=run_failed_toast) once on mount and `ui_click` (element=go_amr) on
 // the action. `useAnalytics()` returns a no-op stub outside the provider, so
 // this is safe in isolated tests.
@@ -75,7 +75,11 @@ export function AmrGuidance({
       tone="brand"
       title={t('chat.amrCard.switchTitle')}
       detailsLabel={t('brand.viewDetails')}
-      actions={
+      // Long localized CTA belongs in the footer row (same shell as run-
+      // recovery). Head `actions` share a 3-column grid with the title; a
+      // narrow ChatPane leaves the title a single CJK character wide and
+      // `overflow-wrap: anywhere` turns "模型调用失败…" into a vertical stack.
+      footerActions={
         <button
           type="button"
           className="amr-card__cta"

@@ -112,6 +112,7 @@ async function bootAppWithCritiqueEnabled(page: Page): Promise<void> {
         skillId: null,
         designSystemId: null,
         onboardingCompleted: true,
+        privacyDecisionAt: 1,
         agentModels: {},
         critiqueTheaterEnabled: true,
       }),

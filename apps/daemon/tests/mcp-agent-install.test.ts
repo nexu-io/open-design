@@ -190,6 +190,28 @@ describe('JSON-config agents', () => {
     expect(linux.configPath).toContain('.config/Code/User');
     expect(mac.configPath).toContain('saoudrizwan.claude-dev');
   });
+
+  it('claude-desktop on macOS writes to Library/Application Support/Claude', () => {
+    const plan = planAgentInstall('claude-desktop', SPEC, ctx('darwin'));
+    if (plan.kind !== 'json') throw new Error('expected json');
+    expect(plan.configPath).toBe('/home/u/Library/Application Support/Claude/claude_desktop_config.json');
+    expect(plan.keyPath).toEqual(['mcpServers']);
+    expect(plan.serverKey).toBe('open-design');
+    expect(plan.entry).toEqual({
+      command: SPEC.command,
+      args: SPEC.args,
+      type: 'stdio',
+      env: SPEC.env,
+    });
+  });
+
+  it('claude-desktop on Linux returns manual plan (unsupported platform)', () => {
+    const plan = planAgentInstall('claude-desktop', SPEC, ctx('linux'));
+    expect(plan.kind).toBe('manual');
+    if (plan.kind !== 'manual') throw new Error('expected manual');
+    expect(plan.configPath).toBeNull();
+    expect(plan.reason).toContain('Automatic MCP configuration');
+  });
 });
 
 describe('manual (unverified) agents', () => {

@@ -89,7 +89,7 @@ function renderHtmlPreview(
 }
 
 async function openImageExportDialog() {
-  fireEvent.click(screen.getByRole('button', { name: /download/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /export/i }));
   fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
   expect(await screen.findByRole('dialog', { name: /export as image/i })).toBeTruthy();
 }
@@ -151,7 +151,7 @@ describe('FileViewer image export', () => {
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
 
     renderHtmlPreview();
-    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /export/i }));
     expect(screen.getByRole('menu')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
@@ -448,12 +448,17 @@ describe('FileViewer image export', () => {
     expect(saveImageBlobMock).not.toHaveBeenCalled();
   });
 
-  it('Copy screenshot of a runtime-managed deck uses the visible snapshot, not off-screen slide 0', async () => {
+  it('screenshot of a runtime-managed deck uses the visible snapshot, not off-screen slide 0', async () => {
     // A `<deck-stage>` / `data-screen-label` deck is exportable, but the viewer
     // doesn't track its active slide (no `class="slide"` → no slide-state
     // bridge). A current-slide capture must therefore use the visible host
     // snapshot (= the slide on screen), NOT off-screen-render slide 0 — otherwise
-    // Copy screenshot always returns the cover regardless of where the user is.
+    // a screenshot always returns the cover regardless of where the user is.
+    //
+    // Driven through screenshot-to-chat, which is now the viewer's only capture
+    // affordance: the export menu's 截图 row was removed (export produces files
+    // and links; a capture is a different job). Both always shared this one
+    // `captureExportImageSnapshot` path, which is what this test pins.
     isOpenDesignHostAvailableMock.mockReturnValue(true);
     captureHostIframeSnapshotMock.mockResolvedValue({ dataUrl: 'data:image/png;base64,host', w: 1280, h: 720 });
 
@@ -469,7 +474,7 @@ describe('FileViewer image export', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('screenshot-copy-button'));
+    fireEvent.click(screen.getByTestId('edit-screenshot-to-chat-button'));
 
     await waitFor(() => {
       expect(captureHostIframeSnapshotMock).toHaveBeenCalled();

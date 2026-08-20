@@ -12,9 +12,9 @@ type Swatch = { id: PaletteId; label: string; stripe: string[] };
 
 const PALETTES: Swatch[] = [
   { id: 'coral',       label: 'Coral - default', stripe: ['#ff5a3c', '#ff7a5c', '#fde2d6', '#171717'] },
-  { id: 'electric',    label: 'Electric',        stripe: ['#7c3aed', '#a855f7', '#e9d5ff', '#171717'] },
+  { id: 'electric',    label: 'Electric',        stripe: ['#353535', '#a855f7', '#e9d5ff', '#171717'] },
   { id: 'acid-forest', label: 'Acid forest',     stripe: ['#16a34a', '#22c55e', '#bbf7d0', '#0f1d14'] },
-  { id: 'risograph',   label: 'Risograph',       stripe: ['#e11d48', '#2563eb', '#fde68a', '#171717'] },
+  { id: 'risograph',   label: 'Risograph',       stripe: ['#e11d48', '#1A74FF', '#fde68a', '#171717'] },
   { id: 'mono-noir',   label: 'Mono noir',       stripe: ['#0a0a0a', '#262626', '#e5e5e5', '#fafafa'] },
 ];
 
@@ -89,7 +89,7 @@ export function PaletteTweaks({ open, selected, onChange, onPreview, onClose }: 
           <span className="palette-tweaks-label">Original</span>
           {isOriginal ? (
             <span className="palette-tweaks-check" aria-hidden>
-              <Icon name="check" size={12} />
+              <Icon name="check" size={14} />
             </span>
           ) : null}
         </li>
@@ -117,7 +117,7 @@ export function PaletteTweaks({ open, selected, onChange, onPreview, onClose }: 
               <span className="palette-tweaks-label">{p.label}</span>
               {isSelected ? (
                 <span className="palette-tweaks-check" aria-hidden>
-                  <Icon name="check" size={12} />
+                  <Icon name="check" size={14} />
                 </span>
               ) : null}
             </li>

@@ -139,7 +139,7 @@ against a design-template id continue to compose its instructions.
 
 ### Runtime resource staging
 
-Open Design does not distribute an active bundle by symlinking it into every
+OpenDesign does not distribute an active bundle by symlinking it into every
 agent's global configuration. Before a project run, the daemon makes a real
 copy of every active skill/template with side files under the project's
 `.od-skills/` alias. The prompt preamble advertises that CWD-relative copy and
@@ -182,7 +182,7 @@ The daemon normalizes `od.mode` to one of seven values. These values classify bo
 - **Purpose:** classify a functional workflow that creates, extracts, audits,
   or transforms design-system material.
 - **Output:** defined by the skill. A portable workflow may emit only
-  `DESIGN.md`; current Open Design import/create flows build a package with
+  `DESIGN.md`; current OpenDesign import/create flows build a package with
   `manifest.json`, `DESIGN.md`, `tokens.css`, and optional rich resources.
 - **Schema:** no fixed nine headings. Repository packages require substantive
   coverage and keep prose synchronized with the token contract; see
@@ -272,26 +272,35 @@ od skills list
 
 od skills show <id>
 # → the daemon's JSON representation of one skill
+
+od skill install github:owner/repo
+od skill install https://example.com/my-skill.tar.gz
+# → installs one public skill bundle through POST /api/skills/install
 ```
 
-The current `od skills` surface is read-only; it does not ship `add` or
-`remove` subcommands. Installable marketplace bundles use `od plugin`, while
-repository-owned functional skills and rendering templates live under
-`skills/` and `design-templates/` respectively. Do not document a concrete
-daemon-managed install path here; the root `AGENTS.md` **Daemon data directory
-contract** is the only path authority.
+Remote skill import accepts the same source grammar as Plugin URL import:
+`github:owner/repo` or a public HTTPS `.tar.gz` / `.tgz` archive containing one
+top-level `SKILL.md`. Downloads are size-capped and reject private-network
+targets, path traversal, symbolic/hard links, malformed manifests, and
+duplicate skill ids. An intentional replacement is explicit: uninstall the
+existing user skill first, then install the new bundle. `od skills` remains the
+compatibility alias for list/show/install/uninstall. Repository-owned
+functional skills and rendering templates still live under `skills/` and
+`design-templates/` respectively. Do not document a concrete daemon-managed
+install path here; the root `AGENTS.md` **Daemon data directory contract** is
+the only path authority.
 
 ## 7. Worked example — running the bundled guizang deck template
 
 The upstream-inspired bundle ships at
 [`design-templates/guizang-ppt/`](../design-templates/guizang-ppt/) with its
-license preserved and Open Design metadata applied:
+license preserved and OpenDesign metadata applied:
 
 1. The daemon lists it through `/api/design-templates`, independently of the
    functional `/api/skills` registry.
 2. The user opens the Deck creation tab and selects the guizang template from
    the rendering catalogue.
-3. Open Design stores the selected template id as the project's primary
+3. OpenDesign stores the selected template id as the project's primary
    `skillId`. The daemon's combined skill-like resolver loads that template's
    `SKILL.md` and resources; it does not also inject the Deck tab's default
    functional skill.
@@ -354,9 +363,10 @@ changed. Plugin bundles have their own validation and doctor surfaces.
 
 ## 10. Open questions
 
-- **Skill provenance.** Functional skills do not currently have a standalone
-  install command. External distribution should use the plugin trust and
-  provenance model rather than inventing an unverified `od skills add` flow.
+- **Skill provenance.** URL-imported functional skills do not yet persist their
+  source after installation; richer provenance, integrity pinning, and trust
+  UI should reuse the plugin model instead of growing a second incompatible
+  one.
 - **Skill composition.** Can a prototype-mode instruction bundle invoke a
   deck-mode bundle for a sub-artifact? The current registries treat them as
   leaf-level inputs; composition requires an explicit orchestration contract.

@@ -7,10 +7,17 @@ type ParserState = {
   cursorTextSoFar: string;
   cursorTurnStart: number;
   openCodeToolUses: Set<string>;
+  openCodeToolResults: Set<string>;
   codexToolUses: Set<string>;
   codexErrorEmitted: boolean;
   codexPreviousEventWasAgentMessage: boolean;
   codexLastAgentMessageEndedWithNewline: boolean;
+  // Per reasoning-item chars already emitted as thinking deltas, keyed by
+  // item id. Codex replays the accumulated summary text on every lifecycle
+  // event of the same item (started → updated → completed), so only the
+  // unseen suffix may be re-emitted.
+  codexReasoningEmittedByItem: Map<string, number>;
+  codexReasoningEmittedAny: boolean;
   suppressNextArtifactText: boolean;
   suppressDuplicateArtifactText: boolean;
   artifactOpenCandidate: string;
@@ -147,6 +154,48 @@ function formatOpenCodeUsage(tokens: unknown): Usage | null {
   return Object.keys(usage).length > 0 ? usage : null;
 }
 
+function isPowerShellErrorRecord(toolName: string, output: unknown): boolean {
+  const normalizedTool = toolName.toLowerCase();
+  if (normalizedTool !== 'bash' && normalizedTool !== 'shell') return false;
+  if (typeof output !== 'string') return false;
+
+  // A PowerShell non-terminating error can leave the shell process at exit 0.
+  // Require both canonical ErrorRecord fields so ordinary output containing a
+  // word such as "failed" does not become an error result.
+  return (
+    /(?:^|\r?\n)\s*\+\s*CategoryInfo\s*:/u.test(output) &&
+    /(?:^|\r?\n)\s*\+\s*FullyQualifiedErrorId\s*:/u.test(output)
+  );
+}
+
+function openCodeToolResult(
+  toolName: string,
+  statePart: JsonObject,
+): { content: string; isError: boolean } | null {
+  const status = typeof statePart.status === 'string' ? statePart.status.toLowerCase() : '';
+  if (status !== 'completed' && status !== 'error' && status !== 'failed') return null;
+
+  const metadata = isRecord(statePart.metadata) ? statePart.metadata : {};
+  const exitCodes = [statePart.exit, statePart.exitCode, metadata.exit];
+  const hasNonZeroExit = exitCodes.some(
+    (exitCode) => typeof exitCode === 'number' && Number.isFinite(exitCode) && exitCode !== 0,
+  );
+  const explicitError =
+    (typeof statePart.error === 'string' && statePart.error.trim().length > 0) ||
+    (isRecord(statePart.error) && Object.keys(statePart.error).length > 0)
+      ? statePart.error
+      : null;
+  const isError =
+    status === 'error' ||
+    status === 'failed' ||
+    explicitError !== null ||
+    hasNonZeroExit ||
+    isPowerShellErrorRecord(toolName, statePart.output);
+  const contentSource = explicitError ?? statePart.output;
+
+  return { content: stringifyContent(contentSource), isError };
+}
+
 function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
   const part = isRecord(obj.part) ? obj.part : {};
@@ -182,12 +231,14 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
         input: safeParseJson(statePart?.input) ?? statePart?.input ?? null,
       });
     }
-    if (statePart?.status === 'completed') {
+    const result = statePart ? openCodeToolResult(part.tool, statePart) : null;
+    if (result && !state.openCodeToolResults.has(key)) {
+      state.openCodeToolResults.add(key);
       onEvent({
         type: 'tool_result',
         toolUseId: part.callID,
-        content: stringifyContent(statePart.output),
-        isError: false,
+        content: result.content,
+        isError: result.isError,
       });
     }
     return true;
@@ -655,6 +706,42 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
   return false;
 }
 
+/**
+ * Codex streams model reasoning as summary items (`item.started` /
+ * `item.updated` / `item.completed` with `item.type === 'reasoning'`, the
+ * summary text accumulated on `item.text`). Emit the unseen suffix of each
+ * item as `thinking_delta` so the web's collapsible thinking block has real
+ * content behind the "Thinking" label; distinct reasoning items are joined
+ * with a blank line because the web folds consecutive thinking deltas into
+ * one block. Idempotent across repeated lifecycle events of the same item.
+ */
+function emitCodexReasoningItem(
+  obj: JsonObject,
+  onEvent: StreamEventHandler,
+  state: ParserState,
+): boolean {
+  if (
+    obj.type !== 'item.started' &&
+    obj.type !== 'item.updated' &&
+    obj.type !== 'item.completed'
+  ) {
+    return false;
+  }
+  if (!isRecord(obj.item) || obj.item.type !== 'reasoning') return false;
+  const key = typeof obj.item.id === 'string' ? obj.item.id : '';
+  const text = typeof obj.item.text === 'string' ? obj.item.text : '';
+  const emitted = state.codexReasoningEmittedByItem.get(key) ?? 0;
+  if (text.length > emitted) {
+    const suffix = text.slice(emitted);
+    const delta =
+      emitted === 0 && state.codexReasoningEmittedAny ? `\n\n${suffix}` : suffix;
+    onEvent({ type: 'thinking_delta', delta });
+    state.codexReasoningEmittedByItem.set(key, text.length);
+    state.codexReasoningEmittedAny = true;
+  }
+  return true;
+}
+
 function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
 
@@ -709,6 +796,8 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
     return true;
   }
 
+  if (emitCodexReasoningItem(obj, onEvent, state)) return true;
+
   if (obj.type === 'item.started' && isRecord(obj.item)) {
     const item = obj.item;
     if (emitCodexTodoList(item, onEvent)) {
@@ -748,6 +837,16 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
     if (emitCodexTodoList(item, onEvent)) {
       state.codexPreviousEventWasAgentMessage = false;
       state.codexLastAgentMessageEndedWithNewline = false;
+      return true;
+    }
+    // Codex reports non-fatal in-stream notices (e.g. the skills
+    // context-budget warning) as `error` ITEMS while the turn keeps running;
+    // fatal failures arrive separately as top-level `error` / `turn.failed`
+    // events. Surface these as a visible warning pill instead of dropping
+    // them as raw noise — during a silent provider hang such an item can be
+    // the only signal the user ever gets (incident recvqgLmAkUM6G).
+    if (item.type === 'error' && typeof item.message === 'string' && item.message.length > 0) {
+      onEvent({ type: 'status', label: 'warning', detail: item.message });
       return true;
     }
     if (item.type === 'command_execution' && typeof item.id === 'string') {
@@ -822,10 +921,13 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
     cursorTextSoFar: '',
     cursorTurnStart: 0,
     openCodeToolUses: new Set<string>(),
+    openCodeToolResults: new Set<string>(),
     codexToolUses: new Set<string>(),
     codexErrorEmitted: false,
     codexPreviousEventWasAgentMessage: false,
     codexLastAgentMessageEndedWithNewline: false,
+    codexReasoningEmittedByItem: new Map<string, number>(),
+    codexReasoningEmittedAny: false,
     suppressNextArtifactText: false,
     suppressDuplicateArtifactText: false,
     artifactOpenCandidate: '',

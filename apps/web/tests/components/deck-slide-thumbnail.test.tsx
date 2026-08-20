@@ -60,6 +60,16 @@ describe('DeckSlideThumbnail', () => {
     expect(root.querySelector('.deck-counter')).toBeNull();
   });
 
+  it('does not override the deck slide display layout with block', () => {
+    const { container } = render(<DeckSlideThumbnail parsed={parsed()} index={0} />);
+    const root = (container.querySelector('.deck-thumbnail-shadow-host') as HTMLElement).shadowRoot!;
+    const styleText = Array.from(root.querySelectorAll('style'))
+      .map((style) => style.textContent ?? '')
+      .join('\n');
+
+    expect(styleText).not.toContain('[data-od-thumb-slide]{display:block!important');
+  });
+
   it('reconstructs the wrapper chain with data-od-thumb-wrap markers', () => {
     const { container } = render(<DeckSlideThumbnail parsed={parsed()} index={0} />);
     const root = (container.querySelector('.deck-thumbnail-shadow-host') as HTMLElement).shadowRoot!;

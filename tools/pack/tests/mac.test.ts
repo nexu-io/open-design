@@ -1,4 +1,4 @@
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -75,6 +75,12 @@ afterEach(() => {
 });
 
 describe("resolveSeededAppConfigPaths", () => {
+  it("declares the Workspace invite URL scheme in the packaged app metadata", async () => {
+    const source = await readFile(new URL("../src/mac/builder.ts", import.meta.url), "utf8");
+    expect(source).toContain("protocols: [");
+    expect(source).toContain('schemes: ["opendesign"]');
+  });
+
   it("uses workspace .od by default", () => {
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
@@ -175,10 +181,28 @@ describe("copyResourceTree", () => {
       for (const name of resourceNames) {
         await mkdir(join(root, name), { recursive: true });
       }
+      const dshRuntimeRoot = join(root, "packages", "dsh-runtime");
+      await mkdir(join(dshRuntimeRoot, "dist", "types"), { recursive: true });
+      await writeFile(
+        join(dshRuntimeRoot, "package.json"),
+        `${JSON.stringify({
+          name: "@open-design/dsh-runtime",
+          version: "0.1.0",
+          files: ["dist"],
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      await writeFile(join(dshRuntimeRoot, "dist", "index.js"), "export {};\n", "utf8");
+      await writeFile(join(dshRuntimeRoot, "dist", "types", "index.d.ts"), "export {};\n", "utf8");
 
       await copyResourceTree(config, paths);
 
       expect(await pathExists(join(paths.resourceRoot, "bin", "node"))).toBe(false);
+      const dshRuntimeResourceRoot = join(paths.resourceRoot, "agent-runtimes", "deepseek-harness");
+      await expect(readFile(join(dshRuntimeResourceRoot, "manifest.json"), "utf8")).resolves.toContain(
+        '"packageName": "@open-design/dsh-runtime"',
+      );
+      expect((await readdir(dshRuntimeResourceRoot)).filter((entry) => entry.endsWith(".tgz"))).toHaveLength(1);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -266,6 +290,49 @@ describe("renderMacPackagedConfig", () => {
       ) as Record<string, unknown>;
 
       expect(packagedConfig.updateMetadataUrl).toBe("http://127.0.0.1:4567/beta/latest/metadata.json");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  // The vela web origin is the workspace-team console link the daemon derives
+  // its settings / members / dashboard URLs from. It arrives from a CI secret
+  // rather than the source tree, so packaging has to carry it into the bundle
+  // (same chain as posthogKey) or the feature stays dark in the packaged app.
+  it("bakes the injected vela web origin for a workspace-team build", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const config = makeConfig(root, {
+        amrProfile: "feature-test",
+        velaWebUrl: "https://vela.example.invalid",
+      });
+
+      const packagedConfig = JSON.parse(
+        renderMacPackagedConfig({
+          appVersion: "1.2.3-beta.0",
+          config,
+          usePrebundledStandaloneWeb: true,
+        }),
+      ) as Record<string, unknown>;
+
+      expect(packagedConfig.velaWebUrl).toBe("https://vela.example.invalid");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("omits the vela web origin when the build was given none", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const packagedConfig = JSON.parse(
+        renderMacPackagedConfig({
+          appVersion: "1.2.3",
+          config: makeConfig(root),
+          usePrebundledStandaloneWeb: true,
+        }),
+      ) as Record<string, unknown>;
+
+      expect(packagedConfig).not.toHaveProperty("velaWebUrl");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

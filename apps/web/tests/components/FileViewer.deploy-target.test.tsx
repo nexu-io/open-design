@@ -98,7 +98,9 @@ async function openCloudflareDeployModal(file: ProjectFile) {
     />,
   );
 
-  fireEvent.click(screen.getByRole('button', { name: /share/i }));
+  // Deploy providers live on the Share panel ("publish online" is sharing),
+  // so reaching a provider takes Share button -> menu item.
+  fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
   fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
   const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });

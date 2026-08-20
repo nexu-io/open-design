@@ -114,7 +114,7 @@ vi.mock('../../src/components/AssistantMessage', () => ({
           disabled={shareToOpenDesignBusy}
           onClick={onShareToOpenDesign}
         >
-          {shareToOpenDesignBusy ? 'Preparing package…' : 'Share to Open Design'}
+          {shareToOpenDesignBusy ? 'Preparing package…' : 'Share to OpenDesign'}
         </button>
       ) : null}
     </>
@@ -341,6 +341,198 @@ describe('ChatPane streaming state', () => {
       .toBeNull();
   });
 
+  it('hides a stale run-recovery card after a later assistant run succeeds', () => {
+    const restartError = 'Run interrupted because the daemon restarted.';
+    const messages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', content: 'Build the report', createdAt: 0 },
+      {
+        id: 'assistant-failed',
+        role: 'assistant',
+        content: 'I started the report.',
+        createdAt: 1,
+        endedAt: 2,
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: restartError,
+            code: 'DAEMON_RESTARTED',
+          },
+        ],
+      },
+      { id: 'user-2', role: 'user', content: 'Continue', createdAt: 3 },
+      {
+        id: 'assistant-succeeded',
+        role: 'assistant',
+        content: 'The report is complete.',
+        createdAt: 4,
+        endedAt: 5,
+        runStatus: 'succeeded',
+      },
+    ];
+
+    const { container } = render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error={restartError}
+        errorSourceAssistantId="assistant-failed"
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeNull();
+  });
+
+  it('keeps a repeated current daemon-restart error visible before its failure is persisted', () => {
+    const restartError = 'Run interrupted because the daemon restarted.';
+    const messages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', content: 'Build the report', createdAt: 0 },
+      {
+        id: 'assistant-failed',
+        role: 'assistant',
+        content: 'I started the report.',
+        createdAt: 1,
+        endedAt: 2,
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: restartError,
+            code: 'DAEMON_RESTARTED',
+          },
+        ],
+      },
+      { id: 'user-2', role: 'user', content: 'Continue', createdAt: 3 },
+      {
+        id: 'assistant-succeeded',
+        role: 'assistant',
+        content: 'The report is complete.',
+        createdAt: 4,
+        endedAt: 5,
+        runStatus: 'succeeded',
+      },
+      { id: 'user-3', role: 'user', content: 'Make one more change', createdAt: 6 },
+    ];
+
+    const { container } = render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error={restartError}
+        errorSourceAssistantId="assistant-current"
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeTruthy();
+  });
+
+  it('keeps a current non-run error visible after an assistant run succeeds', () => {
+    const messages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', content: 'Build the report', createdAt: 0 },
+      {
+        id: 'assistant-succeeded',
+        role: 'assistant',
+        content: 'The report is complete.',
+        createdAt: 1,
+        endedAt: 2,
+        runStatus: 'succeeded',
+      },
+    ];
+
+    const { container } = render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error="Could not load the conversation."
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeTruthy();
+  });
+
+  it('prefers a current non-run error over the latest failed-run detail', () => {
+    const currentError = 'Could not load the conversation.';
+    const messages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', content: 'Build the report', createdAt: 0 },
+      {
+        id: 'assistant-failed',
+        role: 'assistant',
+        content: 'I started the report.',
+        createdAt: 1,
+        endedAt: 2,
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'Run interrupted because the daemon restarted.',
+            code: 'DAEMON_RESTARTED',
+          },
+        ],
+      },
+    ];
+
+    const { container } = render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error={currentError}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    const recoveryCard = container.querySelector<HTMLElement>(
+      '[data-user-action-card="run-recovery"]',
+    );
+    expect(recoveryCard).toBeTruthy();
+    expect(within(recoveryCard!).getByText(currentError)).toBeTruthy();
+  });
+
   it.each(['no_result', 'delivery_failed'] as const)(
     'exposes retry for a %s delivery failure',
     (resultDeliveryState) => {
@@ -412,7 +604,7 @@ describe('ChatPane streaming state', () => {
     expect(copied).toContain('error_code: AGENT_EXECUTION_FAILED');
     expect(copied).toContain('project_id: project-1');
     expect(copied).toContain('conversation_id: conv-1');
-    expect(copied).toMatch(/^json-rpc id 4: Connection reset by server\n\nOpen Design run error diagnostics/);
+    expect(copied).toMatch(/^json-rpc id 4: Connection reset by server\n\nOpenDesign run error diagnostics/);
     expect(copied).not.toContain('raw_error:');
     expect(copied).not.toContain('\nerror:\n');
   });
@@ -429,7 +621,7 @@ describe('ChatPane streaming state', () => {
       agentId: 'amr',
     });
 
-    expect(text).toMatch(/^json-rpc id 4: Connection reset by server\n\nOpen Design run error diagnostics/);
+    expect(text).toMatch(/^json-rpc id 4: Connection reset by server\n\nOpenDesign run error diagnostics/);
     expect(text).not.toContain('raw_error:');
     expect(text).toContain('error_code: UPSTREAM_UNAVAILABLE');
     expect(text).not.toContain('\nerror:\n');
@@ -447,7 +639,7 @@ describe('ChatPane streaming state', () => {
       agentId: 'amr',
     });
 
-    expect(text).toMatch(/^Connection dropped\. Try again\.\n\nOpen Design run error diagnostics/);
+    expect(text).toMatch(/^Connection dropped\. Try again\.\n\nOpenDesign run error diagnostics/);
     expect(text).not.toContain('raw_error:');
     expect(text).toContain('error_code: AGENT_CONNECTION_DROPPED');
     expect(text).not.toContain('\nerror:\n');
@@ -846,7 +1038,7 @@ Expected output:
     expect(screen.getByTestId('assistant-streaming-assistant-1').textContent).toBe('streaming');
   });
 
-  it('keeps Share to Open Design busy on the assistant turn that started packaging', () => {
+  it('keeps Share to OpenDesign busy on the assistant turn that started packaging', () => {
     const onShareToOpenDesign = vi.fn();
     const completedAssistant: ChatMessage = {
       id: 'assistant-1',
@@ -894,7 +1086,7 @@ Expected output:
         {...commonProps}
         messages={[
           ...initialMessages,
-          { id: 'user-2', role: 'user', content: 'Share to Open Design', createdAt: 4 },
+          { id: 'user-2', role: 'user', content: 'Share to OpenDesign', createdAt: 4 },
           {
             id: 'assistant-2',
             role: 'assistant',

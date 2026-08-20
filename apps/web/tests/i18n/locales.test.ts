@@ -53,6 +53,37 @@ describe('i18n locales', () => {
     expect((LOCALE_LABEL as Record<string, string>).ja).toBe('日本語');
   });
 
+  it('localizes the Home prototype creation type in every supported locale', async () => {
+    const expected: Record<Locale, string> = {
+      ar: 'نموذج أولي',
+      de: 'Prototyp',
+      en: 'Prototype',
+      'es-ES': 'Prototipo',
+      fa: 'نمونه اولیه',
+      fr: 'Prototype',
+      hu: 'Prototípus',
+      id: 'Prototipe',
+      it: 'Prototipo',
+      ja: 'プロトタイプ',
+      ko: '프로토타입',
+      pl: 'Prototyp',
+      'pt-BR': 'Protótipo',
+      ru: 'Прототип',
+      th: 'ต้นแบบ',
+      tr: 'Prototip',
+      uk: 'Прототип',
+      'zh-CN': '原型',
+      'zh-TW': '原型',
+    };
+
+    for (const locale of LOCALES) {
+      const dict = await loadDict(locale);
+      expect(dict['homeHero.chip.prototype'], `${locale}.homeHero.chip.prototype`).toBe(
+        expected[locale],
+      );
+    }
+  });
+
   it('keeps locale dictionaries aligned with English keys and placeholders', async () => {
     const englishKeys = Object.keys(en).sort();
 
@@ -66,6 +97,94 @@ describe('i18n locales', () => {
           placeholders(en[dictKey]),
         );
       }
+    }
+  });
+
+  it('labels workspace USD spending power as allowance instead of points or account balance', async () => {
+    const expected: Record<Locale, string> = {
+      ar: 'الحصة',
+      de: 'Kontingent',
+      en: 'Allowance',
+      'es-ES': 'Cuota',
+      fa: 'سهمیه',
+      fr: 'Quota',
+      hu: 'Keret',
+      id: 'Kuota',
+      it: 'Quota',
+      ja: '利用枠',
+      ko: '사용 한도',
+      pl: 'Limit',
+      'pt-BR': 'Cota',
+      ru: 'Лимит',
+      th: 'โควตา',
+      tr: 'Kota',
+      uk: 'Ліміт',
+      'zh-CN': '额度',
+      'zh-TW': '額度',
+    };
+
+    for (const locale of LOCALES) {
+      const dict = await loadDict(locale);
+      expect(dict['entry.credits'], `${locale}.entry.credits`).toBe(expected[locale]);
+      expect(dict['settings.amrBalance'], `${locale}.settings.amrBalance`).toBe(
+        expected[locale],
+      );
+    }
+  });
+
+  it('keeps Chinese workspace wallet and pre-run gate copy on the 额度 terminology', () => {
+    const keys: Array<keyof Dict> = [
+      'chat.amrError.balanceMessage',
+      'chat.amrBalanceGate.message',
+      'chat.amrBalanceGate.watchingWallet',
+      'chat.amrLowBalance.title',
+      'chat.amrLowBalance.message',
+      'chat.runError.title.balance',
+      'entry.creditsAria',
+      'entry.creditsAriaWithBalance',
+      'entry.creditsGrantTip',
+      'entry.creditsRemaining',
+    ];
+
+    for (const [locale, dict, quota] of [
+      ['zh-CN', zhCN, '额度'],
+      ['zh-TW', zhTW, '額度'],
+    ] as const) {
+      for (const key of keys) {
+        expect(dict[key], `${locale}.${key}`).toContain(quota);
+        expect(dict[key], `${locale}.${key}`).not.toMatch(/余额|餘額|积分|積分/);
+      }
+    }
+  });
+
+  it('keeps the recharge recovery action concise enough to sit beside retry', async () => {
+    const expected: Record<Locale, string> = {
+      ar: 'شحن',
+      de: 'Aufladen',
+      en: 'Top up',
+      'es-ES': 'Recargar',
+      fa: 'شارژ',
+      fr: 'Recharger',
+      hu: 'Feltöltés',
+      id: 'Isi ulang',
+      it: 'Ricarica',
+      ja: 'チャージ',
+      ko: '충전',
+      pl: 'Doładuj',
+      'pt-BR': 'Recarregar',
+      ru: 'Пополнить',
+      th: 'เติมเงิน',
+      tr: 'Bakiye yükle',
+      uk: 'Поповнити',
+      'zh-CN': '充值',
+      'zh-TW': '儲值',
+    };
+
+    for (const locale of LOCALES) {
+      const dict = await loadDict(locale);
+      expect(dict['chat.amrError.rechargeCta'], `${locale}.chat.amrError.rechargeCta`).toBe(
+        expected[locale],
+      );
     }
   });
 
@@ -157,15 +276,15 @@ describe('i18n locales', () => {
     }
   });
 
-  it('explains BYOK draft activation in English and Chinese', () => {
+  it('explains API provider draft activation in English and Chinese', () => {
     expect(en['settings.byokDraftNotice']).toBe(
-      'This setup remains a draft until the required fields are complete. Your current execution setup stays active.',
+      'Complete the required fields to save this provider. Your current setup will remain active.',
     );
     expect(zhCN['settings.byokDraftNotice']).toBe(
-      '必填项补全前，此配置只会保存为草稿；当前执行配置将继续保持生效。',
+      '填写必填项后即可保存此提供商；当前配置将继续保持生效。',
     );
     expect(zhTW['settings.byokDraftNotice']).toBe(
-      '必填項補齊前，此設定只會儲存為草稿；目前的執行設定將繼續維持生效。',
+      '填寫必填欄位後即可儲存此供應商；目前的設定將繼續維持生效。',
     );
   });
 

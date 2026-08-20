@@ -19,6 +19,7 @@ import {
   type DesktopScreenshotInput,
   type DesktopStatusSnapshot,
   type DesktopUpdateStatusSnapshot,
+  type DaemonStatusSnapshot,
   type DesktopUpdateInput,
   type RegisterDesktopAuthResult,
   type SidecarStamp,
@@ -39,6 +40,8 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { dispatchInviteDeeplink, registerInviteDeeplink } from "./invite-deeplink.js";
+import { focusDesktopForDeeplink } from "./deeplink-focus.js";
 import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
 import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning } from "./session-lifecycle.js";
 import {
@@ -104,7 +107,7 @@ export {
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 const AMR_PROFILE_ENV_KEY = "OPEN_DESIGN_AMR_PROFILE";
 const AMR_PROFILE_AGENT_ID = "amr";
-const AMR_ENVIRONMENT_PROFILES = ["prod", "test", "local"] as const;
+const AMR_ENVIRONMENT_PROFILES = ["prod", "test", "feature-test", "local"] as const;
 const APP_CONFIG_CHANGED_IPC_CHANNEL = "od:app-config-changed";
 type AmrEnvironmentProfile = (typeof AMR_ENVIRONMENT_PROFILES)[number];
 type DesktopAppConfigPrefs = {
@@ -140,6 +143,27 @@ export function applyOsLocaleSwitch(electronApp: Electron.App): string {
   return osLocale;
 }
 
+/**
+ * Lift Chromium's hardcoded 6-connections-per-origin socket cap for the
+ * loopback hosts every OpenDesign renderer talks to (directly in dev,
+ * through the od:// proxy's main-process net.fetch when packaged).
+ *
+ * Long-lived SSE streams pin pool slots, and once the pool saturates,
+ * queued requests cannot even be aborted before a Response exists
+ * (electron/electron#47097), which deadlocked the packaged app until
+ * restart. `ignore-connections-limit` is Electron's own escape hatch:
+ * matching hosts get LOAD_IGNORE_LIMITS. Loopback-only, so the extra
+ * parallelism has no upstream cost.
+ *
+ * Must run before `app.whenReady()`; Chromium consumes the switch at
+ * network-service startup.
+ */
+export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): void {
+  if (!electronApp.isReady()) {
+    electronApp.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
+  }
+}
+
 export type DesktopMainOptions = {
   beforeShutdown?: () => Promise<void>;
   onExternalShow?: () => void | Promise<void>;
@@ -154,9 +178,14 @@ export type DesktopMainOptions = {
    * Node fetch can hit.
    */
   discoverDaemonUrl?: () => Promise<string | null>;
+  /** Stable installed launcher used for Windows opendesign:// registration. */
+  inviteProtocolClientPath?: string | null;
   preloadPath?: string;
   windowTitle?: string;
-  onDesktopReady?: (controls: { show(): void }) => void;
+  onDesktopReady?: (controls: {
+    dispatchInviteDeeplink(url: string | null): void;
+    show(): void;
+  }) => void;
   /**
    * Optional pre-created splash window. The packaged entry creates it before
    * awaiting the daemon/web sidecars so the brand animation overlaps the cold
@@ -222,25 +251,52 @@ function createWebDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () =>
   };
 }
 
-// Resolve the daemon base URL the same way app-config reads/writes do: an
-// explicit daemon URL, else the web URL (which proxies `/api/*` to the daemon),
-// else sidecar web discovery. Shared by app-config menu actions and the
-// diagnostics export so they all target the same daemon. Throws when none is
-// available.
+function createDaemonDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () => Promise<string | null> {
+  return async () => {
+    const daemonIpc = resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace: runtime.namespace,
+    });
+    const daemon = await requestJsonIpc<DaemonStatusSnapshot>(
+      daemonIpc,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs: 600 },
+    ).catch(() => null);
+    return daemon?.url ?? null;
+  };
+}
+
+type BaseUrlDiscovery = () => Promise<string | null | undefined>;
+
+export async function resolveFirstAvailableBaseUrl(
+  discoveries: readonly BaseUrlDiscovery[],
+): Promise<string> {
+  for (const discover of discoveries) {
+    try {
+      const baseUrl = await discover();
+      if (baseUrl?.trim()) return baseUrl;
+    } catch {
+      // One sidecar may be starting or temporarily busy. Keep walking the
+      // ordered fallbacks instead of turning that transient into a menu error.
+    }
+  }
+  throw new Error("daemon URL is unavailable");
+}
+
+// Resolve the daemon base URL from explicit wiring or either sidecar. Prefer
+// the direct daemon before the web `/api/*` proxy so a compiling web renderer
+// cannot make native app-config actions temporarily unavailable.
 function resolveDaemonBaseUrl(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl">,
 ): () => Promise<string> {
-  return async () => {
-    const baseUrl =
-      (await options.discoverDaemonUrl?.()) ??
-      (await options.discoverWebUrl?.()) ??
-      (await createWebDiscovery(runtime)());
-    if (!baseUrl) {
-      throw new Error("daemon URL is unavailable");
-    }
-    return baseUrl;
-  };
+  return () => resolveFirstAvailableBaseUrl([
+    ...(options.discoverDaemonUrl ? [options.discoverDaemonUrl] : []),
+    createDaemonDiscovery(runtime),
+    ...(options.discoverWebUrl ? [options.discoverWebUrl] : []),
+    createWebDiscovery(runtime),
+  ]);
 }
 
 export function normalizeAmrEnvironmentProfile(profile: unknown): AmrEnvironmentProfile {
@@ -256,7 +312,9 @@ export function mergeAmrEnvironmentProfileConfig(
   profile: AmrEnvironmentProfile,
 ): DesktopAppConfigPrefs {
   if (!AMR_ENVIRONMENT_PROFILES.includes(profile)) {
-    throw new Error(`Unsupported AMR Environment Profile: ${String(profile)}`);
+    throw new Error(
+      `AMR Environment Profile must be prod, test, feature-test, or local: ${String(profile)}`,
+    );
   }
   const currentProfile = normalizeAmrEnvironmentProfile(
     config.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY],
@@ -680,6 +738,9 @@ export async function runDesktopMain(
   // its own `whenReady`; this call is then a no-op for the switch and
   // only recovers the locale string for the BrowserWindow below.
   const osLocale = applyOsLocaleSwitch(app);
+  // Same dev-vs-packaged split as the locale switch above: dev lands the
+  // switch here, packaged has already applied it pre-whenReady.
+  applyLoopbackConnectionLimitSwitch(app);
 
   await app.whenReady();
   configureAboutPanel(options);
@@ -868,6 +929,7 @@ export async function runDesktopMain(
             return activeDesktop.console();
           case SIDECAR_MESSAGES.SHOW:
             activeDesktop.show();
+            dispatchInviteDeeplink(request.input?.deeplinkUrl ?? null);
             notifyDesktopExternalShow(options.onExternalShow);
             return { accepted: true };
           case SIDECAR_MESSAGES.CLICK:
@@ -944,6 +1006,7 @@ export async function runDesktopMain(
   }
   console.info("[open-design desktop] desktop runtime created");
   options.onDesktopReady?.({
+    dispatchInviteDeeplink,
     show: () => {
       void Promise.resolve(options.onExternalShow?.()).finally(() => desktop?.show());
     },
@@ -974,6 +1037,15 @@ export async function runDesktopMain(
   );
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
     discoverDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
+  });
+  // Route opendesign:// team-invite deeplinks to the daemon (desktop wake-up).
+  registerInviteDeeplink({
+    resolveDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
+    focus: () => focusDesktopForDeeplink(desktop),
+    onCompleted: (outcome) => {
+      console.info("[open-design desktop] invite deeplink continuation completed", outcome);
+    },
+    protocolClientPath: options.inviteProtocolClientPath,
   });
   const discoverUpdaterAppConfigBaseUrl = resolveDaemonBaseUrl(runtime, options);
   updateScheduler = createDesktopUpdaterScheduler(updater, {

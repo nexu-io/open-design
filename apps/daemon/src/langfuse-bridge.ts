@@ -12,7 +12,11 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
-import { modelIdForTracking } from '@open-design/contracts/analytics';
+import {
+  modelIdForTracking,
+  type TrackingRunCancelOrigin,
+  type TrackingRunTerminalTrigger,
+} from '@open-design/contracts/analytics';
 
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
@@ -21,6 +25,7 @@ import { normalizeOpenDesignTelemetryRelayUrl } from './integrations/telemetry-r
 import {
   deriveLangfuseDeliveryState,
   readFeedbackTelemetrySinkConfig,
+  readRunTelemetrySinkConfig,
   reportRunCompleted,
   reportRunFeedback,
   type AgentEventSummary,
@@ -76,6 +81,8 @@ interface DaemonRunRecord {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  cancelOrigin?: TrackingRunCancelOrigin | null;
+  terminalTrigger?: TrackingRunTerminalTrigger | null;
   analyticsTelemetry?: RunTelemetryTimestamps | null;
   createdAt: number;
   updatedAt: number;
@@ -552,6 +559,7 @@ function collectAgentEvents(
         typeof data.label === 'string' && data.label.length > 0
           ? data.label
           : 'working';
+      if (label === 'tool_call' || label === 'tool_call_update') continue;
       const index = statusCounts.get(label) ?? 0;
       statusCounts.set(label, index + 1);
       out.push({
@@ -1060,6 +1068,8 @@ export async function reportRunCompletedFromDaemon(
       },
       ...(errorCode ? { errorCode } : {}),
       agentId: run.agentId,
+      cancelOrigin: run.cancelOrigin ?? null,
+      terminalTrigger: run.terminalTrigger ?? null,
       events: run.events,
     });
     const timings = summarizeRunTimingAnalytics({
@@ -1177,26 +1187,43 @@ export async function reportRunCompletedFromDaemon(
       ...objectManifestOptions,
       uploadMode: 'manifest-only',
     });
+    const finalTelemetryConfig = readRunTelemetrySinkConfig(
+      process.env,
+      configuredAmrEnv,
+    );
+    let uploadedManifests: TraceObjectUploadManifests | undefined;
+    let finalObjectManifests = registrationManifests;
+
     if (registrationManifests) {
-      await reportRunCompleted(
-        buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
-        {
-          config: objectRegistrationTelemetryConfig(),
-          deliveryPurpose: 'object-registration',
-          ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
-        },
-      );
+      // Authenticated runs register object authority through Vela's signed
+      // service path. Anonymous/direct runs retain the legacy relay boundary.
+      // The authority worker handles registration_only without writing a
+      // content-free Langfuse trace.
+      const registrationTelemetryConfig = finalTelemetryConfig?.kind === 'vela'
+        ? finalTelemetryConfig
+        : objectRegistrationTelemetryConfig();
+      if (registrationTelemetryConfig) {
+        await reportRunCompleted(
+          buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
+          {
+            config: registrationTelemetryConfig,
+            deliveryPurpose: 'object-registration',
+            ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+          },
+        );
+        uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
+        finalObjectManifests = uploadedManifests ?? registrationManifests;
+      }
     }
 
-    const uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
-    const finalManifests = mergeTraceSafeManifests(manifests, uploadedManifests);
+    const finalManifests = mergeTraceSafeManifests(manifests, finalObjectManifests);
     return await reportRunCompleted(
       buildContext(finalManifests, buildTraceObjectSummary({
         traceObjectFilesRaw,
         ...(uploadedManifests ? { uploaded: uploadedManifests } : {}),
       })),
       {
-        configuredEnv: configuredAmrEnv,
+        config: finalTelemetryConfig,
         ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
       },
     );

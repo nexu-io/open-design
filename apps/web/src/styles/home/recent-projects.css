@@ -3,16 +3,63 @@
    on the Home view, with a "View all" anchor that switches to the
    Projects view.
    ============================================================ */
+/* Scoped under .modal to out-specify `.modal label { flex-direction: column }`,
+   which would otherwise stack the checkbox above the "不再提示" text. */
+.modal .recent-projects__move-remind {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.modal-confirm .recent-projects__move-remind {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+}
+/* Move-to-team / move-out confirmations: dim the page but keep it sharp — no
+   frosted blur behind the dialog (the shared Dialog backdrop blurs by
+   default; the doubled class outweighs its module rule). */
+.modal-backdrop--no-blur.modal-backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.recent-projects__move-remind input {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
 .recent-projects {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Named size container so the grid below can drop columns based on the
+     strip's own width (sidebar state included), not the viewport. */
+  container: recent-projects / inline-size;
 }
 .recent-projects__head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+}
+.recent-projects__title-block {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-8);
+  min-width: 0;
+}
+.recent-projects__description {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.2;
 }
 .recent-projects__title {
   margin: 0;
@@ -27,7 +74,7 @@
   background: transparent;
   border: none;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -50,29 +97,84 @@
 .recent-projects__row {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
+  gap: var(--spacing-12);
+}
+.recent-projects__row--grid {
+  /* Equal-width grid, 5-across at full width: each card is an exact fraction
+     of the module width so the row's right edge aligns with the header/
+     filters. Extra items wrap downward. Column count steps down with the
+     strip's container width (breakpoints ≈ 180px min card width + gaps) so
+     cards never get crushed when the window narrows. */
+  grid-auto-flow: row;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-rows: auto;
+  align-items: stretch;
+  /* Cards have no base-card surface or padding, so the grid gap alone is the
+     visible spacing between cards: fixed at 16px (compact rhythm). */
+  gap: var(--spacing-16);
+}
+@container recent-projects (max-width: 947px) {
+  .recent-projects__row--grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@container recent-projects (max-width: 755px) {
+  .recent-projects__row--grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container recent-projects (max-width: 563px) {
+  .recent-projects__row--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container recent-projects (max-width: 371px) {
+  .recent-projects__row--grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.recent-projects__row--grid .recent-projects__card {
+  min-height: 0;
+}
+.recent-projects__row--grid .recent-projects__card-thumb {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 0;
+  margin-top: 0;
+}
+.recent-projects__row--grid .recent-projects__card-meta {
+  flex: 0 0 auto;
 }
 .recent-projects__card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
   padding: 0;
-  border: 1px solid var(--border);
+  /* Borderless card: the transparent 1px keeps the box size stable for the
+     selection / design-system rings that do draw a border. */
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  /* Surfaceless: no fill, blur, or shadow — the thumbnail and meta sit
+     directly on the page wash. Selection / design-system states still draw
+     their rings via border/box-shadow. */
+  background: transparent;
   text-align: left;
+  overflow: hidden;
+  transition: border-color 120ms var(--ease-out);
+}
+.recent-projects__card.is-menu-open {
   overflow: visible;
-  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
 .recent-projects__card-main {
   appearance: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
   width: 100%;
+  height: 100%;
   min-width: 0;
-  padding: 0;
+  padding: var(--spacing-8);
   border: 0;
   border-radius: inherit;
   background: transparent;
@@ -82,34 +184,86 @@
   text-align: left;
   overflow: hidden;
 }
+.recent-projects__row--grid .recent-projects__card-main {
+  align-items: stretch;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
+  /* No inner fill: the thumbnail spans the full card width and the 32px grid
+     gap is the only spacing between cards. */
+  padding: 0;
+}
+.recent-projects__card-main:hover:not(:disabled),
+.recent-projects__card-main:active:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  transform: none;
+}
 .recent-projects__card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
+  border-color: transparent;
 }
+.recent-projects__card.is-selected {
+  /* Selection ring floats 4px outside the card on all sides (outline follows
+     the border-radius), instead of hugging the card edge. Hairline light
+     gray, not the near-black accent — the check badge already carries the
+     selected state. */
+  outline: 1px solid var(--border-strong);
+  outline-offset: 4px;
+}
+/* Read-only shared projects stay surfaceless like every other card — the
+   "共享" badge already signals the state, so no extra border or desaturation
+   (that edge was a merge artifact against the borderless home design). The
+   class is retained for the viewer-only interaction gating in the JSX. */
+.recent-projects__card.is-readonly-shared {
+  border-color: transparent;
+}
+.recent-projects__row.is-selecting .recent-projects__card-main {
+  cursor: default;
+}
+.recent-projects__row.is-selecting .recent-projects__card:hover {
+  transform: none;
+}
+/* Design-system projects no longer draw a red outer border / ring — the card
+   reads like any other; the "Design System" tag alone marks the kind. */
 .recent-projects__card.is-design-system-project {
-  border-color: color-mix(in srgb, var(--red) 62%, var(--border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 42%, transparent);
-}
-.recent-projects__card.is-design-system-project:hover {
-  border-color: var(--red);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--red) 54%, transparent),
-    var(--shadow-sm);
+  border-color: transparent;
+  box-shadow: none;
 }
 .recent-projects__card-thumb {
   aspect-ratio: 16 / 9;
-  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--bg-subtle) 100%);
+  background: linear-gradient(135deg, var(--bg-subtle) 0%, var(--bg-panel) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   overflow: hidden;
+  border-radius: var(--radius-medium);
   /* Container for the HTML preview iframe's responsive scale (below): the
    * iframe renders at a fixed desktop design width and is scaled by the
    * card's own width so the page reads as a faithful thumbnail instead of
    * collapsing at the narrow card width. */
   container-type: inline-size;
+}
+/* Hairline ring over the cover media so light covers don't melt into the
+   page. Drawn as an overlay (not a border) so layout and the media crop
+   stay untouched. */
+.recent-projects__card-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: inherit;
+  pointer-events: none;
+}
+/* No-preview cards fall back to a saturated hue gradient (see `projectCover`),
+ * not the neutral --bg-subtle real covers sit on — the shared 8%-opacity ring
+ * above reads clearly against a flat light background but melts into the
+ * gradient's own color variation, leaving the card looking borderless next to
+ * every other card in the grid (recvqai6OAfG4k). Bump the ring's contrast
+ * just for this state instead of raising it everywhere. */
+.recent-projects__card-thumb-fallback::after {
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
 }
 .recent-projects__card-thumb-html,
 .recent-projects__card-thumb-image,
@@ -127,7 +281,14 @@
 }
 .recent-projects__thumb-media {
   object-fit: cover;
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
+/* NO cover zoom on hover. This block used to scale the thumb media to 1.04,
+   and the whole "cover zoom" family (community cards, plugins gallery, design
+   files, project drawer, prompt templates, hero presets) referenced it as the
+   origin. Scaling raster/video/iframe thumbs resamples them and the covers go
+   visibly soft — removed on dogfood feedback (2026-07-27). Do not re-add here
+   or in any of the sibling card galleries. */
 .recent-projects__card-thumb-logo .recent-projects__thumb-media {
   inset: 22%;
   width: 56%;
@@ -147,7 +308,12 @@
   width: 1280px;
   height: 720px;
   transform-origin: 0 0;
-  transform: scale(calc(100cqw / 1280px));
+  /* --thumb-zoom multiplies the fit scale so an optional zoom composes with
+     (never replaces) the responsive fitting transform. Nothing sets it today —
+     the hover cover zoom was removed — but the seam stays cheap. */
+  --thumb-zoom: 1;
+  transform: scale(calc(100cqw / 1280px * var(--thumb-zoom)));
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .recent-projects__deck-frame,
 .recent-projects__deck-iframe,
@@ -179,34 +345,72 @@
   font-family: var(--serif);
   font-size: 32px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text-soft);
   letter-spacing: -0.02em;
 }
 .recent-projects__card-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px 12px;
+  /* Tight gap so the title and its owner·time/tag line read as one grouped
+     caption under the thumbnail (thumbnail→title spacing stays via margin-top). */
+  gap: var(--spacing-4);
+  width: 100%;
+  margin-top: var(--spacing-8);
+  padding: 0;
   min-width: 0;
+}
+.recent-projects__card-name-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
 }
 .recent-projects__card-name {
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.25;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Bottom row: owner·time on the left, kind tag (原型/幻灯片…) pushed to the
+   bottom-right corner. */
+.recent-projects__card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-8);
+  min-width: 0;
+}
+.recent-projects__card-footer .design-card-tag-row {
+  flex: 0 0 auto;
+  margin: 0;
+}
 .recent-projects__card-time {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .recent-projects__card-sep {
   color: var(--text-muted);
+  flex: 0 0 auto;
+}
+/* "转入团队空间" confirm button: green label on the dark filled button to read
+   as the positive, forward action. The selector mirrors mention-home.css's
+   `.modal-confirm .row button.primary` ink-pill restyle (color: #fafafa,
+   including :hover/:active) with one extra class so the green label wins in
+   every interaction state. */
+.modal-confirm .row button.recent-projects__move-confirm.primary,
+.modal-confirm .row button.recent-projects__move-confirm.primary:hover,
+.modal-confirm .row button.recent-projects__move-confirm.primary:active {
+  color: var(--brand);
 }
 .recent-projects__card-status {
   display: inline-flex;
@@ -300,16 +504,21 @@
   background: var(--bg-panel);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
 }
+.recent-projects__card-menu[data-placement='up'] {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
 .recent-projects__card-menu button {
   appearance: none;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
   min-height: 34px;
   padding: 0 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-large, 8px);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -322,13 +531,67 @@
   background: var(--bg-subtle);
   color: var(--text-strong);
 }
+.recent-projects__card-menu button:disabled {
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--text-faint);
+}
 .recent-projects__card-menu button.danger {
   color: var(--red);
+}
+.recent-projects__select-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--bg-panel);
+  color: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+}
+.recent-projects__select-check[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+/* The global `button:hover:not(:disabled)` primitive (primitives.css) is
+   MORE specific than the bare `[aria-pressed="true"]` rule above (it adds a
+   type selector on top of the same two pseudo/attribute slots), so hovering
+   an already-selected card's check button let that generic rule win and
+   flatten the filled black-with-checkmark badge back to a hollow
+   light-background / gray-border circle. Re-assert the filled state at
+   matching specificity so "selected" stays solid on hover instead of
+   regressing to the unselected/outline look. */
+.recent-projects__select-check[aria-pressed="true"]:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+.recent-projects__select-check span {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
 }
 @media (hover: none) {
   .recent-projects__card-more {
     opacity: 1;
     transform: none;
+  }
+  /* The floating "共享" badge is otherwise gated entirely behind :hover /
+     :focus-within (see .recent-projects__card-badge below) — on a touch
+     device that never satisfies either, it would stay permanently invisible
+     instead of just fading in on hover. Same fallback shape as the "more"
+     button above. */
+  .recent-projects__card-badge {
+    opacity: 1;
+    pointer-events: none;
   }
 }
 @keyframes recent-projects-pulse {
@@ -339,4 +602,577 @@
   to {
     background-position: -200% 0, 0 0;
   }
+}
+
+/* ============================================================
+   Home browser: Projects / Design systems / Templates tabs,
+   search, and grid/list view toggle (added for the unified
+   Home browse surface).
+   ============================================================ */
+.recent-projects__head {
+  align-items: center;
+}
+.recent-projects__tabs {
+  display: flex;
+  gap: 2px;
+}
+.recent-projects__tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.recent-projects__tab:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.recent-projects__tab.is-active {
+  color: var(--text-strong);
+  background: var(--bg-fill-secondary);
+}
+.recent-projects__tab-count {
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 600;
+}
+.recent-projects__tab.is-active .recent-projects__tab-count {
+  color: var(--text-muted);
+}
+.recent-projects__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+}
+.recent-projects__select-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-6);
+  height: 28px;
+  padding: 0 var(--spacing-12);
+  border: var(--stroke-thin) solid var(--border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    border-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    color var(--duration-ultra-fast) var(--curve-easy-ease),
+    transform var(--duration-faster) var(--curve-easy-ease);
+}
+.recent-projects__select-toggle:hover {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.recent-projects__select-toggle:active {
+  background: var(--bg-muted);
+  transform: translateY(1px);
+}
+.recent-projects__select-toggle:focus-visible {
+  outline: var(--stroke-thin) solid var(--blue);
+  outline-offset: 2px;
+}
+.recent-projects__select-toggle:disabled {
+  border-color: transparent;
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  cursor: not-allowed;
+  transform: none;
+}
+.recent-projects__select-toggle:disabled .od-icon,
+.recent-projects__select-toggle:disabled svg {
+  color: var(--text-faint);
+}
+.recent-projects__select-toggle.is-active {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.recent-projects__bulkbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.recent-projects__bulkbar-count {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.recent-projects__bulkbar-count strong {
+  color: var(--text-strong);
+}
+.recent-projects__bulkbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.recent-projects__bulkbar-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.recent-projects__bulkbar-actions button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+.recent-projects__bulkbar-actions button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.recent-projects__bulkbar-actions button.danger {
+  color: var(--red);
+}
+.recent-projects__bulkbar-actions button.ghost {
+  color: var(--text-muted);
+}
+.recent-projects__filter-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.recent-projects__search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-soft);
+  width: 200px;
+}
+.recent-projects__search input {
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  width: 100%;
+}
+.recent-projects__search input::placeholder {
+  color: var(--text-faint);
+}
+.recent-projects__view {
+  display: flex;
+  gap: var(--spacing-6);
+}
+.recent-projects__view-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: var(--stroke-thin) solid var(--border);
+  border-radius: var(--radius-circular);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-13);
+  cursor: pointer;
+  transition:
+    color var(--duration-ultra-fast) var(--curve-easy-ease),
+    border-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    background-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    transform var(--duration-faster) var(--curve-easy-ease);
+}
+.recent-projects__view-btn:hover {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+  border-color: var(--border);
+}
+.recent-projects__view-btn:active {
+  background: var(--bg-muted);
+  transform: translateY(1px);
+}
+.recent-projects__view-btn:focus-visible {
+  outline: var(--stroke-thin) solid var(--blue);
+  outline-offset: 2px;
+}
+.recent-projects__view-btn.is-active {
+  color: var(--text-strong);
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+.recent-projects__view-btn:disabled {
+  border-color: transparent;
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* List view — one card per row, thumbnail left + meta inline. */
+.recent-projects__row--list {
+  grid-template-columns: 1fr;
+  grid-auto-flow: row;
+  grid-auto-columns: auto;
+  grid-template-rows: none;
+  overflow: visible;
+  padding-bottom: 0;
+  scroll-snap-type: none;
+  gap: 8px;
+}
+.recent-projects__row--list .recent-projects__card {
+  position: relative;
+  min-height: 88px;
+}
+/* Row separator: a hairline pinned to the card's bottom edge that starts
+   AFTER the thumbnail (content padding 10px + 128px thumb + 14px gap), so the
+   image column stays divider-free. The last row draws none. */
+.recent-projects__row--list .recent-projects__card::after {
+  content: '';
+  position: absolute;
+  left: calc(10px + 128px + 14px);
+  right: 10px;
+  bottom: 0;
+  height: 1px;
+  background: var(--border-soft, rgba(0, 0, 0, 0.08));
+  pointer-events: none;
+}
+.recent-projects__row--list .recent-projects__card:last-child::after {
+  display: none;
+}
+/* List rows pad their content 8px, so pulling the ring 4px inside the card
+   edge leaves exactly 4px between the stroke and the content. */
+.recent-projects__row--list .recent-projects__card.is-selected {
+  outline-offset: -4px;
+}
+.recent-projects__row--list .recent-projects__card-main {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  min-height: 88px;
+  padding: 8px 48px 8px 10px;
+}
+.recent-projects__row--list .recent-projects__card-thumb {
+  width: 128px;
+  height: auto;
+  flex: 0 0 128px;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  margin: 0;
+}
+.recent-projects__row--list .recent-projects__card-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 0;
+  flex: 1;
+}
+.recent-projects__row--list .recent-projects__card-name-row {
+  min-width: 0;
+}
+.recent-projects__row--list .recent-projects__card-footer {
+  display: contents;
+}
+.recent-projects__row--list .recent-projects__card-time {
+  grid-column: 1;
+  min-width: 0;
+}
+.recent-projects__row--list .design-card-tag-row {
+  grid-column: 2;
+  justify-self: end;
+}
+.recent-projects__row--list .recent-projects__card-glyph {
+  font-size: 20px;
+}
+
+/* Canva-style "Recently used" heading + right-side filter controls. */
+.recent-projects__heading {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+.recent-projects__filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-6);
+  height: 28px;
+  padding: 0 var(--spacing-12);
+  border: var(--stroke-thin) solid var(--border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    border-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    color var(--duration-ultra-fast) var(--curve-easy-ease),
+    transform var(--duration-faster) var(--curve-easy-ease);
+}
+.recent-projects__filter:hover {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.recent-projects__filter:hover svg {
+  color: var(--text-strong);
+}
+.recent-projects__filter:active {
+  background: var(--bg-muted);
+  transform: translateY(1px);
+}
+.recent-projects__filter:focus-visible {
+  outline: var(--stroke-thin) solid var(--blue);
+  outline-offset: 2px;
+}
+.recent-projects__filter:disabled {
+  border-color: transparent;
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  cursor: not-allowed;
+  transform: none;
+}
+.recent-projects__filter:disabled .od-icon,
+.recent-projects__filter:disabled svg {
+  color: var(--text-faint);
+}
+.recent-projects__filter svg {
+  color: var(--text-soft);
+}
+/* Only rendered while owner/kind narrows the grid (recvqbipG9QDTt): an
+   accent-tinted chip — same "active state" tint the design-files batch bar
+   uses (workspace/design-files.css .df-batch-bar) — so a filtered Recent
+   Projects grid always carries a visible, one-click way back to the full
+   list instead of quietly looking like the projects are gone. */
+.recent-projects__filter-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-6);
+  height: 28px;
+  padding: 0 var(--spacing-12) 0 var(--spacing-8);
+  border: var(--stroke-thin) solid var(--accent-soft);
+  border-radius: var(--radius-pill);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    border-color var(--duration-ultra-fast) var(--curve-easy-ease);
+}
+.recent-projects__filter-clear:hover {
+  border-color: var(--accent);
+}
+.recent-projects__filter-clear:active {
+  transform: translateY(1px);
+}
+.recent-projects__filter-clear:focus-visible {
+  outline: var(--stroke-thin) solid var(--blue);
+  outline-offset: 2px;
+}
+.recent-projects__filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  min-width: 148px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-md);
+}
+.recent-projects__filter-wrap:first-of-type .recent-projects__filter-menu,
+.recent-projects__filter-wrap:nth-of-type(2) .recent-projects__filter-menu {
+  left: 0;
+  right: auto;
+}
+.recent-projects__filter-menu {
+  display: grid;
+  gap: 2px;
+}
+.recent-projects__filter-menu button {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  justify-content: flex-start;
+  cursor: pointer;
+}
+.recent-projects__filter-menu button:hover,
+.recent-projects__filter-menu button.is-active {
+  background: var(--bg-subtle);
+  color: var(--accent);
+}
+
+/* "邀请同事" entry on the team "全部项目" header (UC-2 entry point 2). */
+.recent-projects__invite {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* Match the 多选 / filter pills beside it (28px). */
+  height: 28px;
+  padding: 0 14px;
+  margin-right: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.recent-projects__invite:hover:not(:disabled) {
+  /* Re-assert the accent fill (see primitives.css global button:hover). */
+  background: var(--accent);
+  border-color: transparent;
+  filter: brightness(1.05);
+}
+
+/* Shared badge on the thumbnail + creator avatar in the meta row. Private projects stay unbadged. */
+.recent-projects__card-badge {
+  /* 4px inside the thumb's top-left corner (the thumb is the positioned
+     ancestor), pill-shaped. Hidden at rest — it fades in on card hover so
+     covers stay clean. */
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms var(--ease-out);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  border: var(--stroke-thin) solid color-mix(in srgb, var(--green) 24%, transparent);
+  background: color-mix(in srgb, var(--green) 10%, var(--bg-panel));
+  color: color-mix(in srgb, var(--green) 72%, var(--text-strong));
+  font-size: 12px;
+  font-weight: 600;
+}
+.recent-projects__card:hover .recent-projects__card-badge,
+.recent-projects__card:focus-within .recent-projects__card-badge {
+  opacity: 1;
+}
+/* Title + inline shared badge. In list view the thumbnail is only 96px wide,
+   so the overlay badge is dropped from the thumb and rendered inline here
+   instead of covering the glyph. */
+.recent-projects__card-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.recent-projects__card-name-row .recent-projects__card-name {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.recent-projects__card-badge--inline {
+  position: static;
+  top: auto;
+  left: auto;
+  flex: 0 0 auto;
+  height: 18px;
+  /* Inline (list view) badge is part of the name row — always visible. */
+  opacity: 1;
+}
+.recent-projects__card-owner {
+  position: relative;
+  overflow: hidden;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: #1a1917;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex: 0 0 16px;
+}
+
+.recent-projects__card-owner img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+/* First open of a team-shared card runs a full content pull before the
+   project can open; the overlay makes that wait visible (previously the
+   click looked dead for the whole pull). */
+.recent-projects__card.is-opening .recent-projects__card-main {
+  cursor: progress;
+}
+.recent-projects__card-opening {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  color: var(--text-strong);
 }

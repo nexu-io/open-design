@@ -1,7 +1,7 @@
 /**
  * @module host
  *
- * Public barrel for `@open-design/host` — the Open Design renderer host-bridge
+ * Public barrel for `@open-design/host` — the OpenDesign renderer host-bridge
  * protocol. Re-exports the exact prior flat surface from the cohesive sibling
  * modules: the wire protocol (constants + types), bridge detection/validation,
  * adapter-result normalizers, and the renderer-facing action wrappers. This
@@ -12,6 +12,7 @@
 export {
   OPEN_DESIGN_HOST_GLOBAL,
   OPEN_DESIGN_HOST_VERSION,
+  OPEN_DESIGN_HOST_APPEARANCE_THEMES,
   OPEN_DESIGN_HOST_CLIENT_TYPES,
   OPEN_DESIGN_HOST_UPDATER_ACTIONS,
   OPEN_DESIGN_HOST_UPDATER_STATES,
@@ -21,6 +22,7 @@ export type {
   OpenDesignHostClient,
   OpenDesignHostFailure,
   OpenDesignHostActionResult,
+  OpenDesignHostWorkspaceContext,
   OpenDesignHostProjectImportInit,
   OpenDesignHostProjectImportSuccess,
   OpenDesignHostProjectImportResult,
@@ -33,6 +35,9 @@ export type {
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureSuccess,
   OpenDesignHostCaptureResult,
+  OpenDesignHostPreviewNavigationFailure,
+  OpenDesignHostPreviewNavigationFailureListener,
+  OpenDesignHostAppearanceTheme,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostUpdaterAction,
   OpenDesignHostUpdaterState,
@@ -96,7 +101,9 @@ export {
   downloadHostUpdater,
   installHostUpdater,
   quitHostAfterUpdaterInstallerOpen,
+  getLatestHostPreviewNavigationFailure,
   subscribeHostUpdater,
   subscribeHostUpdaterOpenDialog,
+  subscribeHostPreviewNavigationFailure,
   setHostUpdaterMenuLabels,
 } from "./actions.js";

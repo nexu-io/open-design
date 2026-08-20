@@ -9,7 +9,7 @@ const zh: DeepPartial<CodexSlidesCopy> = {
   heading: "住在你编码 agent 里的 AI 幻灯片工作室",
   lead:
     "大多数 AI 幻灯片生成器把活儿都藏在一次请求背后，最后甩给你一个文件。Codex Slides 不一样：调研、大纲、视觉方向、渲染、编辑、演示、导出，这整条链路都在 Codex 里全程可见、随时可调。每一套幻灯片都是一个留在你自己磁盘上、明天回来还能接着做的项目。而且它是 image-native 的，每一页都是一整张视觉画布，而不是换了文字的模板。",
-  downloadCta: "下载 Open Design 桌面端",
+  downloadCta: "下载 OpenDesign 桌面端",
   heroAlt:
     "Codex Slides — 左侧 Codex 正在驱动浏览器里的幻灯片工作室，右侧是渲染完成的市场报告页",
 
@@ -105,9 +105,9 @@ const zh: DeepPartial<CodexSlidesCopy> = {
     "把仓库添加为插件市场，装上插件，重启 Codex，再开一个新任务。你只需要支持插件的 Codex、Node.js 20 或更高版本，以及一次 `codex login`——默认流程既不用单配 OpenAI key，也不用 `.env` 文件。",
 
   finalEyebrow: "下一步",
-  tiebackTitle: "来自 Open Design 家族",
+  tiebackTitle: "来自 OpenDesign 家族",
   tiebackBody:
-    "Open Design 是一个开放、local-first 的设计工作空间，它位于你已经在用的编码 agent 之外。Codex Slides 就是同一个想法瞄准演示场景的产物：agent 在明处干活，项目留在你自己的机器上，没有任何东西被锁在订阅背后。想要幻灯片之外那整套设计工具箱，装上 Open Design 应用就好。",
+    "OpenDesign 是一个开放、local-first 的设计工作空间，它位于你已经在用的编码 agent 之外。Codex Slides 就是同一个想法瞄准演示场景的产物：agent 在明处干活，项目留在你自己的机器上，没有任何东西被锁在订阅背后。想要幻灯片之外那整套设计工具箱，装上 OpenDesign 应用就好。",
 
   schemaAlternateName: "住在 Codex 里的开源 AI 幻灯片工作室",
   schemaWhatQuestion: "Codex Slides 是什么？",
@@ -119,9 +119,9 @@ const zh: DeepPartial<CodexSlidesCopy> = {
   schemaExportQuestion: "Codex Slides 能导出真正的 PowerPoint 文件吗？",
   schemaExportAnswer:
     "能。Codex Slides 会导出真正的 PPTX 和可付印的 PDF，两者都保留项目里的演讲者备注，渲染画质支持 1K/2K/4K，并覆盖五种画幅比例（16:9、4:3、1:1、9:16、3:4）。由于它是 image-native 的，导出的 PPTX 每页是整页图像，而不是可以逐个编辑的 PowerPoint 图形；可编辑图形的导出也在计划之中。",
-  schemaRelationQuestion: "Codex Slides 和 Open Design 有关系吗？",
+  schemaRelationQuestion: "Codex Slides 和 OpenDesign 有关系吗？",
   schemaRelationAnswer:
-    "有。Codex Slides 是 Open Design 背后团队推出的姊妹项目——同样开放、local-first、agent-native 的思路，只不过用在了演示文稿而不是设计文件上。",
+    "有。Codex Slides 是 OpenDesign 背后团队推出的姊妹项目——同样开放、local-first、agent-native 的思路，只不过用在了演示文稿而不是设计文件上。",
 };
 
 export default zh;

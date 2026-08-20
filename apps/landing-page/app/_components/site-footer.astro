@@ -10,6 +10,7 @@ import {
 } from '../i18n';
 import { getFooterLegalCopy } from '../footer-legal-i18n';
 import { getSolutionPageCopy, type SolutionPageKey } from '../solution-pages-i18n';
+import DownloadEngagementPrompt from './download-engagement-prompt.astro';
 
 interface Props {
   counts: HeaderProps['counts'];
@@ -76,10 +77,11 @@ const l = getFooterLegalCopy(locale);
       <div class='sub-footer-col'>
         <h5>{menu.product}</h5>
         <ul>
-          <li><a href={href('/')}>Open Design</a></li>
+          <li><a href={href('/')}>OpenDesign</a></li>
           <li><a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a></li>
           <li><a href={href('/html-video/')}>{ui.footer.htmlVideo}</a></li>
           <li><a href={href('/codex-slides/')}>Codex Slides</a></li>
+          <li><a href={href('/codex-plugin/')}>Codex Plugin</a></li>
         </ul>
       </div>
 
@@ -201,7 +203,7 @@ const l = getFooterLegalCopy(locale);
     {/* Masthead sign-off — the giant two-tone wordmark. */}
     <div class='foot-masthead' data-od-id='footer-masthead'>
       <p class='foot-masthead-wordmark'>
-        Open <span class='foot-masthead-accent'>Design</span><span class='foot-masthead-period'>.</span>
+        Open<span class='foot-masthead-accent'>Design</span><span class='foot-masthead-period'>.</span>
       </p>
     </div>
   </div>
@@ -260,3 +262,5 @@ const l = getFooterLegalCopy(locale);
     }
   </style>
 </footer>
+
+<DownloadEngagementPrompt locale={locale} />

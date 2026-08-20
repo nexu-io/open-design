@@ -15,7 +15,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
 
 // Claude Code owns its own auth resolution. Preserve credentials from the
 // inherited environment so users who run the local CLI with API-key auth get
-// the same behavior through Open Design.
+// the same behavior through OpenDesign.
 test('spawnEnvForAgent preserves inherited Anthropic API credentials for the claude adapter', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
@@ -338,7 +338,7 @@ test('spawnEnvForAgent injects the resolved AMR profile after configured env', (
   const env = spawnEnvForAgent(
     'amr',
     {
-      OPEN_DESIGN_AMR_PROFILE: 'test',
+      OPEN_DESIGN_AMR_PROFILE: 'feature-test',
       VELA_PROFILE: 'prod',
       PATH: '/usr/bin',
     },
@@ -347,8 +347,8 @@ test('spawnEnvForAgent injects the resolved AMR profile after configured env', (
     },
   );
 
-  assert.equal(env.VELA_PROFILE, 'test');
-  assert.equal(env.OPEN_DESIGN_AMR_PROFILE, 'test');
+  assert.equal(env.VELA_PROFILE, 'feature-test');
+  assert.equal(env.OPEN_DESIGN_AMR_PROFILE, 'feature-test');
   assert.equal(env.PATH, '/usr/bin');
 });
 
@@ -1302,7 +1302,7 @@ test('spawnEnvForAgent preserves Anthropic credentials for non-claude adapters',
 
 // Codex CLI owns its own auth resolution. Preserve credentials from the
 // inherited environment so users who run the local CLI with API-key auth get
-// the same behavior through Open Design.
+// the same behavior through OpenDesign.
 test('spawnEnvForAgent preserves inherited OPENAI_API_KEY for the codex adapter', () => {
   const env = spawnEnvForAgent('codex', {
     OPENAI_API_KEY: 'sk-stale-byok',

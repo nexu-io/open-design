@@ -43,10 +43,10 @@ describe('parseDeckThumbnails', () => {
     expect(parsed.ancestors[1]!.attributes).toContainEqual(['id', 'deck-stage']);
   });
 
-  it('rewrites :root / html / body selectors to :host', () => {
+  it('rewrites root selectors to :host and body selectors to the thumbnail canvas', () => {
     const parsed = parseDeckThumbnails(frameworkDeck(1));
     expect(parsed.styleText).toContain(':host { --bg: #fff');
-    expect(parsed.styleText).toContain(':host { background: var(--shell)');
+    expect(parsed.styleText).toContain(':host, .od-thumb-canvas { background: var(--shell)');
     expect(parsed.styleText).not.toMatch(/:root\s*\{/);
     // Compound selectors are left alone.
     expect(parsed.styleText).toContain('.deck-stage {');
@@ -120,6 +120,55 @@ describe('parseDeckThumbnails', () => {
     expect(parsed.ancestors.map((a) => a.tag)).toEqual(['deck-stage']);
   });
 
+  it('prefers deck-stage children over unrelated screen labels elsewhere in the document', () => {
+    const html = `<!doctype html><html><head><style>
+      deck-stage > section { width: 1280px; height: 720px; }
+    </style></head><body>
+      <aside data-screen-label="Prototype navigation">Not a slide</aside>
+      <deck-stage width="1280" height="720">
+        <section data-screen-label="01 Cover">A</section>
+        <section data-screen-label="02 Agenda">B</section>
+      </deck-stage>
+    </body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.slides).toHaveLength(2);
+    expect(parsed.slides[0]).toContain('01 Cover');
+    expect(parsed.slides[1]).toContain('02 Agenda');
+  });
+
+  it('does not treat ordinary prototype annotations as deck slides', () => {
+    const html = `<!doctype html><html><head><style>
+      h1 { color: tomato; }
+    </style></head><body><main>
+      <h1 data-screen-label="Hero title">Prototype headline</h1>
+      <button data-screen-label="CTA">Buy now</button>
+    </main></body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('no-slides');
+  });
+
+  it('requires containerless legacy slides to be numbered direct siblings', () => {
+    const separated = `<!doctype html><html><head><style>
+      section { width: 1920px; height: 1080px; }
+    </style></head><body><main>
+      <section data-screen-label="01 Cover">A</section>
+      <div><section data-screen-label="02 Agenda">B</section></div>
+    </main></body></html>`;
+    expect(parseDeckThumbnails(separated).reason).toBe('no-slides');
+
+    const siblings = separated.replace(
+      '<div><section data-screen-label="02 Agenda">B</section></div>',
+      '<section data-screen-label="02 Agenda">B</section>',
+    );
+    expect(parseDeckThumbnails(siblings).slides).toHaveLength(2);
+  });
+
   it('rewrites viewport units in CSS to canvas px (renderable, faithful)', () => {
     // No explicit px canvas → defaults to 1920×1080; 100vw→1920px, 100vh→1080px.
     const html = `<!doctype html><html><head><style>
@@ -161,6 +210,121 @@ describe('parseDeckThumbnails', () => {
     expect(parsed.designWidth).toBe(1920);
     // Percent sizing is left untouched — it already resolves to the canvas.
     expect(parsed.styleText).toContain('width: 100%');
+  });
+
+  it('falls back when viewport media queries would diverge from the preview iframe', () => {
+    const html = `<!doctype html><html><head><style>
+      .slide { width: 100vw; height: 100vh; display: flex; }
+      @media (max-width: 768px) {
+        .slide { padding: 24px; display: grid; }
+      }
+    </style></head><body>
+      <section class="slide">A</section>
+      <section class="slide">B</section>
+    </body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('viewport-media-query');
+  });
+
+  it.each([
+    ['one-sided width range', '(width <= 768px)'],
+    ['reversed height range', '(900px >= height)'],
+    ['chained width range', '(400px < width < 900px)'],
+    ['aspect-ratio range', '(4 / 3 < aspect-ratio)'],
+    ['exact width range', '(width = 768px)'],
+  ])('falls back for Media Queries Level 4 %s', (_label, query) => {
+    const html = `<!doctype html><html><head><style>
+      .slide { width: 1920px; height: 1080px; display: flex; }
+      @media ${query} {
+        .slide { display: grid; }
+      }
+    </style></head><body>
+      <section class="slide">A</section>
+      <section class="slide">B</section>
+    </body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('viewport-media-query');
+  });
+
+  it('keeps non-viewport media queries on the static thumbnail path', () => {
+    const html = `<!doctype html><html><head><style>
+      .slide { width: 1920px; height: 1080px; display: flex; }
+      @media (prefers-reduced-motion: reduce) {
+        .slide { animation: none; }
+      }
+    </style></head><body>
+      <section class="slide">A</section>
+      <section class="slide">B</section>
+    </body></html>`;
+
+    expect(parseDeckThumbnails(html).renderable).toBe(true);
+  });
+
+  it('does not mistake a slide descendant decoration for the design canvas', () => {
+    const html = `<!doctype html><html><head><style>
+      body { display: flex; width: 200vw; height: 100vh; }
+      .slide { width: 100vw; height: 100vh; flex: none; }
+      .slide .kicker-line { width: 72px; height: 6px; }
+      .slide::before { width: 40px; height: 40px; }
+    </style></head><body>
+      <section class="slide"><span class="kicker-line">A</span></section>
+      <section class="slide">B</section>
+    </body></html>`;
+    const parsed = parseDeckThumbnails(html);
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.designWidth).toBe(1920);
+    expect(parsed.designHeight).toBe(1080);
+  });
+
+  it('reads a 4:3 canvas size from a tag-prefixed slide class selector', () => {
+    const html = `<!doctype html><html><head><style>
+      section.slide { width: 1200px; height: 900px; }
+    </style></head><body><main class="deck">
+      <section class="slide">A</section>
+      <section class="slide">B</section>
+    </main></body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.designWidth).toBe(1200);
+    expect(parsed.designHeight).toBe(900);
+  });
+
+  it('reads a portrait canvas size from a tag-prefixed screen-label selector', () => {
+    const html = `<!doctype html><html><head><style>
+      section[data-screen-label] { width: 900px; height: 1200px; }
+    </style></head><body><main class="deck">
+      <section data-screen-label="01 Cover">A</section>
+      <section data-screen-label="02 Detail">B</section>
+    </main></body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.designWidth).toBe(900);
+    expect(parsed.designHeight).toBe(1200);
+  });
+
+  it('reads the design size from the shared slide-frame marker', () => {
+    const html = `<!doctype html><html><head><style>
+      .slide-frame { width: 1280px; height: 720px; }
+    </style></head><body><main class="deck">
+      <section class="slide-frame" data-screen-label="01 Cover">A</section>
+      <section class="slide-frame" data-screen-label="02 Detail">B</section>
+    </main></body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.designWidth).toBe(1280);
+    expect(parsed.designHeight).toBe(720);
   });
 
   it('falls back when the deck depends on an external layout stylesheet', () => {
@@ -311,7 +475,97 @@ describe('parseDeckThumbnails', () => {
     expect(parsed.fontLinks).toContain('https://fonts.googleapis.com/css2?family=Inter');
   });
 
-  it('drops a slide-nested <style> element from the sanitized slide body', () => {
+  it('lifts an approved font @import into the host so thumbnail typography matches', () => {
+    const fontHref = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,700&display=swap';
+    const deck = [
+      '<!doctype html><html><head><style>',
+      `  @import url('${fontHref}');`,
+      '  .deck-stage { width: 1920px; height: 1080px; }',
+      '</style></head><body>',
+      '  <div class="deck-stage" id="deck-stage"><section class="slide active"><h1>Title</h1></section></div>',
+      '</body></html>',
+    ].join('\n');
+
+    const parsed = parseDeckThumbnails(deck, '/api/projects/p1/raw/');
+
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.fontLinks).toContain(fontHref);
+    expect(parsed.styleText).not.toContain('@import');
+  });
+
+  it.each([
+    ['quoted content', `.deck-stage::after { content: "@import url('https://fonts.googleapis.com/css2?family=Fake');"; }`],
+    ['a quoted custom property', `.deck-stage { --example: "@import url('https://fonts.googleapis.com/css2?family=Fake');"; }`],
+  ])('does not treat @import text inside %s as a stylesheet import', (_case, declaration) => {
+    const deck = frameworkDeck(1).replace(
+      '.deck-stage { width: 1920px; height: 1080px; background: var(--bg); }',
+      `${declaration}\n.deck-stage { width: 1920px; height: 1080px; background: var(--bg); }`,
+    );
+
+    const parsed = parseDeckThumbnails(deck);
+
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.fontLinks).toEqual([]);
+    expect(parsed.styleText).toContain('@import url');
+    expect(parsed.styleText).toContain('.deck-stage { width: 1920px');
+  });
+
+  it('lifts a top-level import with a directly quoted URL', () => {
+    const fontHref = 'https://fonts.googleapis.com/css2?family=Inter';
+    const deck = frameworkDeck(1).replace('<style>', `<style>@import "${fontHref}";`);
+
+    const parsed = parseDeckThumbnails(deck);
+
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.fontLinks).toContain(fontHref);
+    expect(parsed.styleText).not.toContain('@import');
+  });
+
+  it.each([
+    ['a malformed import', '@import url("https://fonts.googleapis.com/css2?family=Inter";'],
+    ['a non-font import', '@import url("https://cdn.example.com/layout.css");'],
+  ])('falls back for %s', (_case, importRule) => {
+    const deck = frameworkDeck(1).replace('<style>', `<style>${importRule}`);
+
+    const parsed = parseDeckThumbnails(deck);
+
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('external-stylesheet');
+  });
+
+  it.each([
+    ['print media', '@import url("https://fonts.googleapis.com/css2?family=Inter") print;'],
+    [
+      'a true supports condition',
+      '@import url("https://fonts.googleapis.com/css2?family=Inter") supports(display: grid);',
+    ],
+    [
+      'a false supports condition',
+      '@import url("https://fonts.googleapis.com/css2?family=Inter") supports(display: unknown-value);',
+    ],
+    ['a named layer', '@import url("https://fonts.googleapis.com/css2?family=Inter") layer(deck-fonts);'],
+  ])('falls back rather than changing the semantics of %s', (_case, importRule) => {
+    const deck = frameworkDeck(1).replace('<style>', `<style>${importRule}`);
+
+    const parsed = parseDeckThumbnails(deck);
+
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('external-stylesheet');
+  });
+
+  it('falls back for an import after a normal rule', () => {
+    const deck = frameworkDeck(1).replace(
+      '</style>',
+      '@import url("https://fonts.googleapis.com/css2?family=Inter");</style>',
+    );
+
+    const parsed = parseDeckThumbnails(deck);
+
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('external-stylesheet');
+  });
+
+  it('falls back when a slide-nested style imports unapproved CSS', () => {
     const deck = [
       '<!doctype html><html><head><style>.deck-stage { width: 1920px; height: 1080px; }</style></head><body>',
       '  <div class="deck-stage" id="deck-stage">',
@@ -323,18 +577,11 @@ describe('parseDeckThumbnails', () => {
       '</body></html>',
     ].join('\n');
     const parsed = parseDeckThumbnails(deck, '/api/projects/p1/raw/');
-    expect(parsed.renderable).toBe(true);
-    const slide = parsed.slides[0] ?? '';
-    // DOMPurify removes the <style> element from the slide body markup.
-    expect(slide).not.toMatch(/<style/i);
-    expect(slide).not.toContain('evil.example');
-    expect(slide).toContain('Title');
-    // Note the deferred gap: parseDeckThumbnails harvests every <style> in the
-    // document into styleText independently of this DOMPurify pass, so the
-    // nested rule's CSS (including its @import) still lands in styleText. CSS
-    // @import stripping is intentionally left to the CSS-tokenizer follow-up,
-    // so this stays unchanged from main and is asserted here, not silently
-    // assumed closed.
-    expect(parsed.styleText).toContain('evil.example');
+    // Every style block contributes to the shadow stylesheet, including one
+    // nested inside a slide before the markup sanitizer removes that element.
+    // An unapproved import therefore makes static rendering unsafe/incomplete
+    // and must use the isolated iframe fallback.
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('external-stylesheet');
   });
 });

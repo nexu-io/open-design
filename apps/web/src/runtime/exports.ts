@@ -19,6 +19,12 @@ import {
   isOpenDesignHostAvailable,
   printHostPdf,
 } from '@open-design/host';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+import {
+  workspaceProjectHeaders,
+  workspaceResourceUrl,
+} from '../collab/workspace-identity';
+import { sourceHasLegacyDeckScreenSlides } from './deck-slide-structure';
 
 // Re-exported so app components can gate desktop-only export paths without
 // importing the host package directly.
@@ -78,27 +84,37 @@ export function exportAsHtml(html: string, title: string): void {
 export async function exportProjectAsHtml(opts: {
   projectId: string;
   filePath: string;
-  fallbackHtml: string;
   fallbackTitle: string;
   versionId?: string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<void> {
-  const segments = opts.filePath
-    .split('/')
-    .filter(Boolean)
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
-  const query = new URLSearchParams({ inline: '1' });
-  if (opts.versionId) query.set('versionId', opts.versionId);
-  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?${query.toString()}`;
-  try {
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`html export request failed (${resp.status})`);
-    const blob = await resp.blob();
-    triggerDownload(blob, `${safeFilename(opts.fallbackTitle, 'artifact')}.html`);
-  } catch (err) {
-    console.warn('[exportProjectAsHtml] falling back to source HTML export:', err);
-    exportAsHtml(opts.fallbackHtml, opts.fallbackTitle);
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/html`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(opts.workspaceContext ? workspaceProjectHeaders(opts.workspaceContext) : {}),
+    },
+    body: JSON.stringify({
+      fileName: opts.filePath,
+      title: opts.fallbackTitle,
+      ...(opts.versionId ? { versionId: opts.versionId } : {}),
+    }),
+  });
+  if (!resp.ok) {
+    let message = `html export request failed (${resp.status})`;
+    try {
+      const body = await resp.json();
+      if (body?.error?.message) message = String(body.error.message);
+    } catch {
+      // Keep the status-based fallback when the response is not JSON.
+    }
+    throw new Error(message);
   }
+  const blob = await resp.blob();
+  const filename = filenameFromContentDisposition(resp)
+    ?? `${safeFilename(opts.fallbackTitle, 'artifact')}.html`;
+  triggerDownload(blob, filename);
 }
 
 // A file is treated as a preview-chrome wrapper only when it lives inside
@@ -141,7 +157,7 @@ export function buildDesignManifestContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Design artifact';
+  const title = opts.title || 'OpenDesign artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
@@ -232,7 +248,7 @@ export function buildDesignHandoffContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Design artifact';
+  const title = opts.title || 'OpenDesign artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const accentLikelyBrandLed =
@@ -255,7 +271,7 @@ This archive is the source of truth for turning the design into production code.
 - Build production UI from the exported design, not a loose reinterpretation.
 - Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
 - Replace static placeholders only when the target app has real data or functional equivalents.
-- Keep generated product UI free of Open Design chrome, preview labels, or design-process annotations.
+- Keep generated product UI free of OpenDesign chrome, preview labels, or design-process annotations.
 - Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
 
 ## Source map
@@ -286,7 +302,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
 - Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
 - Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
-- Do not keep prototype-only annotations, frame labels, or Open Design chrome in the production UI.
+- Do not keep prototype-only annotations, frame labels, or OpenDesign chrome in the production UI.
 
 ## CJX-ready UX contract
 - Use \`${DESIGN_MANIFEST_FILENAME}\` as the machine-readable map for screens, app modules, OS widgets, landing pages, tokens, interactions, and viewport checks.
@@ -762,6 +778,7 @@ export async function exportProjectAsPdf(opts: {
   projectId: string;
   title: string;
   versionId?: string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<ProjectPdfExportResult> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(opts.projectId)}/export/pdf`, {
@@ -771,7 +788,12 @@ export async function exportProjectAsPdf(opts: {
         title: opts.title,
         ...(opts.versionId ? { versionId: opts.versionId } : {}),
       }),
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(opts.workspaceContext
+          ? workspaceProjectHeaders(opts.workspaceContext)
+          : {}),
+      },
       method: 'POST',
     });
     if (!resp.ok) throw new Error(`desktop PDF export unavailable (${resp.status})`);
@@ -848,6 +870,7 @@ export async function exportProjectAsZip(opts: {
   fallbackHtml: string;
   fallbackTitle: string;
   versionId?: string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<void> {
   if (opts.versionId) {
     const segments = opts.filePath
@@ -857,7 +880,12 @@ export async function exportProjectAsZip(opts: {
       .join('/');
     const query = new URLSearchParams({ inline: '1', versionId: opts.versionId });
     try {
-      const resp = await fetch(`/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?${query.toString()}`);
+      const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?${query.toString()}`;
+      const resp = opts.workspaceContext
+        ? await fetch(url, {
+            headers: workspaceProjectHeaders(opts.workspaceContext),
+          })
+        : await fetch(url);
       if (!resp.ok) throw new Error(`version html export request failed (${resp.status})`);
       exportAsZip(await resp.text(), opts.fallbackTitle);
       return;
@@ -872,7 +900,11 @@ export async function exportProjectAsZip(opts: {
     root ? `?root=${encodeURIComponent(root)}` : ''
   }`;
   try {
-    const resp = await fetch(url);
+    const resp = opts.workspaceContext
+      ? await fetch(url, {
+          headers: workspaceProjectHeaders(opts.workspaceContext),
+        })
+      : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
@@ -909,6 +941,7 @@ export async function exportProjectAsPptx(opts: {
   // pptx only: produce an editable deck (native shapes/text) instead of a
   // screenshot one (one image per slide).
   editable?: boolean;
+  workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<ProjectScreenshotExportResult> {
   const format = opts.format ?? 'pptx';
   const path = format === 'pdf' ? 'export/pdf-image' : 'export/pptx';
@@ -917,7 +950,12 @@ export async function exportProjectAsPptx(opts: {
   try {
     resp = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(opts.workspaceContext
+          ? workspaceProjectHeaders(opts.workspaceContext)
+          : {}),
+      },
       body: JSON.stringify({
         fileName: opts.fileName,
         ...(opts.title ? { title: opts.title } : {}),
@@ -973,10 +1011,9 @@ export async function exportProjectAsPptx(opts: {
 // structure such as `data-title` or a `.deck` wrapper. Deliberately DO NOT treat
 // a plain `.slide` class as proof of a deck: ordinary pages often use that token
 // for carousels/testimonials and still need full-page/scroll-stitch capture.
-export function sourceLooksLikeExportableDeck(source: string | null | undefined): boolean {
-  if (!source) return false;
+function sourceLooksLikeStructuredDeck(source: string): boolean {
   return (
-    /<deck-stage[\s/>]|\bdata-screen-label\s*=|class\s*=\s*['"](?:[^'"]*\s)?(?:deck-slide|ppt-slide)(?:\s|['"])/i.test(
+    /<deck-stage[\s/>]|class\s*=\s*['"](?:[^'"]*\s)?(?:deck-slide|ppt-slide)(?:\s|['"])/i.test(
       source,
     ) ||
     /<[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])[^>]*\bdata-title\s*=|<[^>]*\bdata-title\s*=[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(
@@ -986,6 +1023,23 @@ export function sourceLooksLikeExportableDeck(source: string | null | undefined)
       source,
     )
   );
+}
+
+export function sourceLooksLikeExportableDeck(source: string | null | undefined): boolean {
+  if (!source) return false;
+  return sourceLooksLikeStructuredDeck(source) || /\bdata-screen-label\s*=/i.test(source);
+}
+
+/**
+ * Viewer navigation needs stronger evidence than export. `data-screen-label`
+ * is shared with ordinary prototype annotations, so only explicit deck
+ * structure or a numbered sibling collection of legacy slide sections may
+ * turn the live preview into deck mode.
+ */
+export function sourceLooksLikeNavigableDeck(source: string | null | undefined): boolean {
+  if (!source) return false;
+  if (sourceLooksLikeStructuredDeck(source)) return true;
+  return sourceHasLegacyDeckScreenSlides(source);
 }
 
 // Decides how a current-slide / whole-deck / page image capture should run.
@@ -1042,13 +1096,19 @@ export async function exportProjectImageDataUrl(opts: {
   width?: number;
   height?: number;
   versionId?: string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<ProjectImageExportResult> {
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/image`;
   let resp: Response;
   try {
     resp = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(opts.workspaceContext
+          ? workspaceProjectHeaders(opts.workspaceContext)
+          : {}),
+      },
       body: JSON.stringify({
         fileName: opts.fileName,
         ...(typeof opts.index === 'number' ? { index: opts.index } : {}),
@@ -1098,6 +1158,7 @@ export function exportProjectScreenshotPdf(opts: {
   title?: string;
   deck?: boolean;
   versionId?: string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<ProjectScreenshotExportResult> {
   return exportProjectAsPptx({ ...opts, format: 'pdf' });
 }
@@ -1118,10 +1179,16 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 export async function downloadDesignSystemArchive(opts: {
   designSystemId: string;
   fallbackTitle: string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<boolean> {
-  const url = `/api/design-systems/${encodeURIComponent(opts.designSystemId)}/archive`;
+  const url = workspaceResourceUrl(
+    `/api/design-systems/${encodeURIComponent(opts.designSystemId)}/archive`,
+    opts.workspaceContext,
+  );
   try {
-    const resp = await fetch(url);
+    const resp = opts.workspaceContext
+      ? await fetch(url, { headers: workspaceProjectHeaders(opts.workspaceContext) })
+      : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, ''));
@@ -1136,13 +1203,18 @@ export async function downloadProjectArchive(opts: {
   projectId: string;
   fallbackTitle: string;
   root?: string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<boolean> {
   const root = opts.root?.replace(/^\/+|\/+$/g, '') ?? '';
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/archive${
     root ? `?root=${encodeURIComponent(root)}` : ''
   }`;
   try {
-    const resp = await fetch(url);
+    const resp = opts.workspaceContext
+      ? await fetch(url, {
+          headers: workspaceProjectHeaders(opts.workspaceContext),
+        })
+      : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));

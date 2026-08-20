@@ -144,6 +144,21 @@ const blog = defineCollection({
        * point at noindexed URLs.
        */
       noindexLocaleVariants: z.boolean().optional(),
+      /**
+       * Keep EVERY variant of this post out of the search index, the English
+       * original included.
+       *
+       * Escalation of `noindexLocaleVariants` for posts where the English
+       * page itself only attracts navigational brand-name queries (`marp`,
+       * `slidev`, `reveal js`) at a near-zero click-through rate: Search
+       * Console shows tens of thousands of impressions per week against
+       * single-digit clicks, which drowns the site-wide CTR signal without
+       * bringing readers. The post stays published and reachable through
+       * internal links (robots emit `noindex, follow`), it just stops being
+       * advertised to search engines; the sitemap filter in
+       * `astro.config.ts` drops the English URL as well.
+       */
+      noindex: z.boolean().optional(),
       ctaHref: z.string().url().optional(),
       ctaTitle: z.string().min(1).optional(),
       ctaBody: z.string().min(1).optional(),

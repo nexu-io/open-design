@@ -1,0 +1,219 @@
+---
+import Layout from '../../../../_components/sub-page-layout.astro';
+import { localeFromPath } from '../../../../i18n';
+import '../../../../globals.css';
+import '../../../../sub-pages.css';
+import '../../../../_partials/launch-week.css';
+import { LW_BODY, LW_META, LW_STATUS } from '../../../../_partials/launch-week-i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const meta = LW_META[locale] ?? LW_META.en;
+const launchWeekMain = LW_BODY[locale] ?? LW_BODY.en;
+
+/**
+ * Drop schedule. Each day flips at 12:00 UTC+8 (= 04:00 UTC) — ahead of the
+ * day's posts, so a link from one never lands on a card that is still sealed.
+ * UTC+8 has no daylight saving, so a plain UTC offset is the whole story.
+ * Rendered per build; the inline script below re-resolves it in the visitor's
+ * browser so a cached page still shows the right state.
+ */
+const DROPS = [
+  { day: 1, date: 'AUG 10', iso: '2026-08-10' },
+  { day: 2, date: 'AUG 11', iso: '2026-08-11' },
+  { day: 3, date: 'AUG 12', iso: '2026-08-12' },
+  { day: 4, date: 'AUG 13', iso: '2026-08-13' },
+  { day: 5, date: 'AUG 14', iso: '2026-08-14' },
+];
+
+// The client script rewrites drop states, so it needs this locale's words too.
+const statusCopy = Object.fromEntries(
+  Object.entries(LW_STATUS).map(([state, byLocale]) => [state, byLocale[locale] ?? byLocale.en]),
+);
+
+const title = meta.title;
+const description = meta.description;
+const fallbackSite = 'https://open-design.ai/';
+const ogImage = new URL('/launch-week/launch-week-og.jpg', Astro.site ?? fallbackSite).toString();
+
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Event',
+  name: title,
+  description,
+  startDate: '2026-08-10T12:00:00+08:00',
+  endDate: '2026-08-14T23:59:00+08:00',
+  eventAttendanceMode: 'https://schema.org/OnlineEventAttendanceMode',
+  eventStatus: 'https://schema.org/EventScheduled',
+  location: {
+    '@type': 'VirtualLocation',
+    url: new URL(Astro.url.pathname, Astro.site ?? fallbackSite).toString(),
+  },
+  organizer: { '@type': 'Organization', name: 'OpenDesign', url: fallbackSite },
+  image: [ogImage],
+  performer: { '@type': 'Organization', name: 'OpenDesign' },
+  isAccessibleForFree: true,
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+    availability: 'https://schema.org/InStock',
+    url: new URL(Astro.url.pathname, Astro.site ?? fallbackSite).toString(),
+    validFrom: '2026-08-10T12:00:00+08:00',
+  },
+};
+---
+
+<Layout
+  title={title}
+  description={description}
+  active="community"
+  ogImage={ogImage}
+  jsonLd={jsonLd}
+  mainClassName="lw"
+>
+  <Fragment set:html={launchWeekMain} />
+</Layout>
+
+<script is:inline define:vars={{ DROPS, statusCopy, PAGE_LOCALE: locale }}>
+  // Resolve drop state on the client too: the page is statically built, so a
+  // visitor on a cached copy must still see the correct day without a redeploy.
+  (() => {
+    const now = Date.now();
+    const stateFor = (iso) => {
+      const opens = Date.parse(iso + 'T04:00:00Z'); // 12:00 UTC+8
+      const closes = opens + 86400000;
+      if (now < opens) return 'classified';
+      return now < closes ? 'live' : 'released';
+    };
+
+    // Preview lets the team rehearse a day before it happens. The page holds no
+    // key — it would be readable by every visitor, which is the whole thing the
+    // schedule protects against. It forwards whatever `?preview=` and `?key=`
+    // are in the URL and the endpoint decides; `states` is rebuilt from the
+    // preview the endpoint says it honoured.
+    const params = new URLSearchParams(location.search);
+    const simulate = (day, preview) => {
+      if (preview === 'all') return 'released';
+      const n = Number(preview);
+      if (!Number.isInteger(n) || n < 1 || n > 5) return null;
+      return day < n ? 'released' : day === n ? 'live' : 'classified';
+    };
+
+    let states = {};
+    const resolveStates = (preview) => {
+      states = {};
+      DROPS.forEach((d) => (states[d.day] = simulate(d.day, preview) ?? stateFor(d.iso)));
+      // Before the week opens, day 1 is the one we tease as next up.
+      document.documentElement.dataset.launchWeek = Object.values(states).includes('live')
+        ? 'running'
+        : now < Date.parse(DROPS[0].iso + 'T04:00:00Z')
+          ? 'before'
+          : 'after';
+    };
+    resolveStates(null);
+
+    const applyStates = () => {
+      document.querySelectorAll('.drop[data-launch-day]').forEach((card) => {
+      const state = states[card.dataset.launchDay];
+      const sealed = card.classList.contains('is-classified');
+      // A sealed card only belongs on screen while its day is still secret;
+      // the revealed twin takes over the moment it opens.
+      card.hidden = sealed ? state !== 'classified' : state === 'classified';
+      if (!sealed) card.dataset.state = state;
+    });
+
+    document.querySelectorAll('.killticker li[data-launch-day]').forEach((li) => {
+      const state = states[li.dataset.launchDay];
+      li.classList.toggle('is-today', state === 'live');
+      const slot = li.querySelector('[data-state-label]');
+      if (!slot) return;
+      slot.textContent =
+        state === 'live' ? statusCopy.LIVE : state === 'released' ? statusCopy.RELEASED : statusCopy.CLASSIFIED;
+      slot.className = state === 'live' ? 'is-live' : state === 'released' ? 'is-done' : 'is-classified';
+    });
+    };
+    applyStates();
+
+    // The revealed drops are not in this HTML — an unopened day must not be
+    // readable from the page source days early. Ask the endpoint, which
+    // releases each one on its date without needing a deploy.
+    const query = new URLSearchParams({ locale: PAGE_LOCALE });
+    if (params.get('key')) {
+      query.set('key', params.get('key'));
+      if (params.get('preview')) query.set('preview', params.get('preview'));
+    }
+    fetch('/launch-week/drops?' + query)
+      .then((r) => (r.ok ? r.json() : { drops: [], preview: null }))
+      .then(({ drops, preview }) => {
+        if (preview) resolveStates(preview);
+        const stack = document.querySelector('.lw .drop-stack');
+        if (!stack) return;
+        drops.forEach(({ day, html }) => {
+          const sealed = stack.querySelector('.drop.is-classified[data-launch-day="' + day + '"]');
+          if (!sealed) return;
+          sealed.insertAdjacentHTML('beforebegin', html);
+          sealed.remove();
+        });
+        applyStates();
+        document.dispatchEvent(new CustomEvent('lw:drops-ready'));
+      })
+      .catch(() => {
+        // Sealed cards stay put: a failed request shows the pre-launch page,
+        // which is the safe direction to fail in.
+      });
+  })();
+
+  // Count the Feishu joins. The site-wide tracker recognises `discord.gg/`
+  // and nothing else, so without this the page's only conversion is half
+  // measured — and Feishu is where the campaign's China-side community lives.
+  // Discord is deliberately left to the shared tracker rather than counted
+  // again here, which would double every click.
+  (() => {
+    // Listen on the document and resolve the tracker at click time. The shared
+    // `__odTrack` is defined by the analytics snippet in <head>, which is absent
+    // whenever PostHog has no key (CI and PR previews build without one) — a
+    // check at attach time would silently drop the listener for good.
+    document.addEventListener('click', (event) => {
+      const link = event.target.closest?.('a[href*="applink.feishu.cn"]');
+      if (!link || !link.closest('main.lw')) return;
+      if (typeof window.__odTrack !== 'function') return;
+      window.__odTrack('ui_click', {
+        element: 'join_feishu',
+        link_url: link.href,
+        link_text: (link.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 120),
+      });
+    });
+  })();
+
+  // Scroll reveal. Lives here rather than in the partial so the markup stays
+  // pure content; no-ops entirely when the visitor asks for reduced motion.
+  (() => {
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const obs =
+      reduce || !('IntersectionObserver' in window)
+        ? null
+        : new IntersectionObserver(
+            (entries) => {
+              entries.forEach((e) => {
+                if (!e.isIntersecting) return;
+                e.target.classList.add('is-in');
+                obs.unobserve(e.target);
+              });
+            },
+            { rootMargin: '0px 0px -12% 0px', threshold: 0.12 },
+          );
+
+    // Runs again when the fetched drops arrive, so cards that were not in the
+    // document at load still animate in — and still show without motion.
+    const observe = () => {
+      document.querySelectorAll('.lw .reveal, .lw .drop.is-classified .tba').forEach((el) => {
+        if (el.classList.contains('is-in')) return;
+        if (obs) obs.observe(el);
+        else el.classList.add('is-in');
+      });
+    };
+    observe();
+    document.addEventListener('lw:drops-ready', observe);
+  })();
+</script>

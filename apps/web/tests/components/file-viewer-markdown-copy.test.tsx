@@ -3,9 +3,18 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FileViewer, markdownImageSourceUrl } from '../../src/components/FileViewer';
+import {
+  FileViewer,
+  fileViewerSourceAuthorizationScopeKey,
+  markdownImageSourceUrl,
+} from '../../src/components/FileViewer';
 import type { ProjectFile } from '../../src/types';
 import { fetchProjectFileText, writeProjectTextFile } from '../../src/providers/registry';
+import {
+  CollabProvider,
+  type CollabContextValue,
+} from '../../src/collab/collab-context';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -43,6 +52,49 @@ function baseFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
     },
     ...overrides,
   };
+}
+
+function teamWorkspaceContext(
+  overrides: Partial<WorkspaceCollabContext> = {},
+): WorkspaceCollabContext {
+  return {
+    workspaceId: 'workspace-team',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-1',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    permissions: {
+      canShareProjects: false,
+      canWriteSyncedFiles: false,
+    },
+    ...overrides,
+  } as WorkspaceCollabContext;
+}
+
+function renderWithWorkspace(ui: React.ReactElement, workspaceContext: WorkspaceCollabContext) {
+  const collab: CollabContextValue = {
+    workspaceContext,
+    workspaceContextLoading: false,
+    enabled: true,
+    member: null,
+    present: [],
+    publishedVersion: null,
+    syncState: 'synced',
+    viewerOnly: false,
+    writerAuthority: 'allowed',
+    isOwner: true,
+    isEffectiveOwner: true,
+    isSharedNonOwner: false,
+    ownerDisplayName: null,
+    ownerRole: 'owner',
+    downloadPending: false,
+    reportChange: () => {},
+    requestPublish: () => {},
+    refreshPresence: () => {},
+    checkStatusNow: () => {},
+  };
+  return render(<CollabProvider value={collab}>{ui}</CollabProvider>);
 }
 
 describe('FileViewer markdown code block copy', () => {
@@ -130,6 +182,42 @@ describe('FileViewer markdown code block copy', () => {
     ]);
   });
 
+  it('renders relative markdown images with server-derived project authority', async () => {
+    mockedFetchProjectFileText.mockResolvedValue('![Team image](./relative.png)');
+    const context = teamWorkspaceContext();
+
+    const { container } = renderWithWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={baseFile()} />,
+      context,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('img[alt="Team image"]')?.getAttribute('src')).toBe(
+        '/api/projects/project-1/raw/relative.png',
+      );
+    });
+  });
+
+  it('partitions source snapshots by every Workspace authority field', () => {
+    const initial = fileViewerSourceAuthorizationScopeKey(false, teamWorkspaceContext());
+
+    expect(fileViewerSourceAuthorizationScopeKey(false, teamWorkspaceContext({
+      role: 'admin',
+    }))).not.toBe(initial);
+    expect(fileViewerSourceAuthorizationScopeKey(false, teamWorkspaceContext({
+      memberStatus: 'removed',
+    }))).not.toBe(initial);
+    expect(fileViewerSourceAuthorizationScopeKey(false, teamWorkspaceContext({
+      permissions: {
+        ...teamWorkspaceContext().permissions,
+        canShareProjects: true,
+        canWriteSyncedFiles: false,
+      },
+    }))).not.toBe(initial);
+    expect(fileViewerSourceAuthorizationScopeKey(true, teamWorkspaceContext())).toBeNull();
+    expect(fileViewerSourceAuthorizationScopeKey(false, null)).toBe('local');
+  });
+
   it('restores focus when the Clipboard API fails and the execCommand fallback succeeds', async () => {
     writeTextMock.mockRejectedValueOnce(new Error('clipboard unavailable'));
     Object.defineProperty(document, 'execCommand', {
@@ -179,6 +267,8 @@ describe('FileViewer markdown code block copy', () => {
         'project-1',
         'notes.md',
         'changed before close',
+        undefined,
+        null,
       );
     });
   });
@@ -235,6 +325,8 @@ describe('FileViewer markdown code block copy', () => {
       'project-1',
       'notes.md',
       'initial draft',
+      undefined,
+      null,
     );
     expect(onFileSaved).not.toHaveBeenCalled();
     expect(screen.queryByText('Saving...')).toBeNull();
@@ -281,6 +373,8 @@ describe('FileViewer markdown code block copy', () => {
       'project-1',
       'document.md',
       '# Document\n\nDraft',
+      undefined,
+      null,
     );
     expect(onFileSaved).not.toHaveBeenCalled();
     expect(screen.getByRole('textbox')).toBe(editor);
@@ -311,6 +405,8 @@ describe('FileViewer markdown code block copy', () => {
       'project-1',
       'notes.md',
       'initial draft',
+      undefined,
+      null,
     );
 
     await act(async () => {

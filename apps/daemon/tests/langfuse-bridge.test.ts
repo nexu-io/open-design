@@ -109,12 +109,22 @@ function bodyOf(
 
 describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
   let dataDir: string;
+  let telemetryRelayUrl: string | undefined;
+  let objectRelayUrl: string | undefined;
 
   beforeEach(async () => {
+    telemetryRelayUrl = process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    objectRelayUrl = process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-bridge-'));
   });
 
   afterEach(async () => {
+    if (telemetryRelayUrl === undefined) delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    else process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = telemetryRelayUrl;
+    if (objectRelayUrl === undefined) delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+    else process.env.OPEN_DESIGN_OBJECT_RELAY_URL = objectRelayUrl;
     await rm(dataDir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
@@ -462,6 +472,87 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
         diagnostic_name: 'acp_artifact_text_suppression',
       },
     });
+  });
+
+  it('keeps canonical tool spans without projecting ACP tool snapshot statuses', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: '',
+              producedFiles: [],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun({
+          agentId: 'amr',
+          events: [
+            {
+              id: 1,
+              event: 'agent',
+              data: { type: 'status', label: 'initializing' },
+            },
+            {
+              id: 2,
+              event: 'agent',
+              data: { type: 'status', label: 'tool_call' },
+            },
+            {
+              id: 3,
+              event: 'agent',
+              data: {
+                type: 'tool_use',
+                id: 'call-1',
+                name: 'Bash',
+                input: { command: 'pwd' },
+              },
+            },
+            {
+              id: 4,
+              event: 'agent',
+              data: { type: 'status', label: 'tool_call_update' },
+            },
+            {
+              id: 5,
+              event: 'agent',
+              data: {
+                type: 'tool_result',
+                toolUseId: 'call-1',
+                content: '/tmp',
+                isError: false,
+              },
+            },
+          ] as any,
+        }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    expect(bodyOf(batch, 'span-create', 'tool:Bash')).toBeTruthy();
+    expect(bodyOf(batch, 'event-create', 'agent-status:initializing')).toBeTruthy();
+    const names = batch
+      .filter((item) => item.type === 'event-create')
+      .map((item) => item.body.name);
+    expect(names).not.toContain('agent-status:tool_call');
+    expect(names).not.toContain('agent-status:tool_call_update');
   });
 
   it('marks trace-safe object manifests partial when object accounting is incomplete', async () => {
@@ -853,6 +944,120 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     });
     expect(finalBatch[0].body.metadata.artifact_manifest[0]).toMatchObject({
       object_class: 'artifact',
+      status: 'ok',
+      stored_in_open_design: true,
+    });
+  });
+
+  it('registers object authority through Vela without an anonymous trace shell', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: true },
+    });
+    const projectDir = path.join(dataDir, 'projects', 'proj-1');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'index.html'), '<!doctype html><h1>artifact body</h1>');
+
+    const velaEnvelopes: any[] = [];
+    const fetchSpy = vi.fn(async (url: string, init: RequestInit) => {
+      if (url === 'https://vela.example.test/api/v1/open-design/telemetry') {
+        const envelope = JSON.parse(init.body as string);
+        velaEnvelopes.push(envelope);
+        return new Response(JSON.stringify({ ok: true }), { status: 202 });
+      }
+      if (url === 'https://telemetry.open-design.ai/api/objects/authorize') {
+        const parsed = JSON.parse(init.body as string) as {
+          run_id: string;
+          objects: Array<{ storage_ref: string }>;
+        };
+        expect(parsed.run_id).toBe('run-id-1');
+        expect(parsed.objects[0]?.storage_ref).toContain('/runs/run-id-1/');
+        return new Response(JSON.stringify({ upload_token: 'upload-token' }), { status: 200 });
+      }
+      if (url === 'https://telemetry.open-design.ai/api/objects/batch') {
+        const parsed = JSON.parse(init.body as string) as {
+          run_id: string;
+          objects: Array<{ storage_ref: string; content_base64: string }>;
+        };
+        expect(parsed.run_id).toBe('run-id-1');
+        expect(parsed.objects[0]?.storage_ref).toContain('/runs/run-id-1/');
+        return new Response(JSON.stringify({
+          objects: parsed.objects.map((object) => ({
+            storage_ref: object.storage_ref,
+            status: 'available',
+            size_bytes: Buffer.from(object.content_base64, 'base64').byteLength,
+            sha256: 'sha256:uploaded-artifact',
+          })),
+        }), { status: 200 });
+      }
+      throw new Error(`unexpected telemetry request: ${url}`);
+    });
+
+    const velaTelemetryEnabled = process.env.OPEN_DESIGN_VELA_TELEMETRY;
+    const velaControlKey = process.env.VELA_CONTROL_KEY;
+    const velaApiUrl = process.env.VELA_API_URL;
+    process.env.OPEN_DESIGN_VELA_TELEMETRY = 'on';
+    process.env.VELA_CONTROL_KEY = 'ck_test';
+    process.env.VELA_API_URL = 'https://vela.example.test';
+    process.env.OPEN_DESIGN_OBJECT_RELAY_URL =
+      'https://telemetry.open-design.ai/api/objects/batch';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            { id: 'user-1', role: 'user', content: 'Build it.' },
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'done',
+              producedFiles: [{ name: 'index.html', kind: 'html', size: 35 }],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun() as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      if (velaTelemetryEnabled === undefined) delete process.env.OPEN_DESIGN_VELA_TELEMETRY;
+      else process.env.OPEN_DESIGN_VELA_TELEMETRY = velaTelemetryEnabled;
+      if (velaControlKey === undefined) delete process.env.VELA_CONTROL_KEY;
+      else process.env.VELA_CONTROL_KEY = velaControlKey;
+      if (velaApiUrl === undefined) delete process.env.VELA_API_URL;
+      else process.env.VELA_API_URL = velaApiUrl;
+      delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+    }
+
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(velaEnvelopes).toHaveLength(2);
+    expect(fetchSpy.mock.calls.map((call) => call[0])).not.toContain(
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
+
+    const velaRegistrationEvent = velaEnvelopes[0].events.find(
+      (event: { kind: string }) => event.kind === 'trace',
+    );
+    const velaRegistrationTrace = velaRegistrationEvent.data;
+    expect(velaRegistrationTrace.id).toBe('run-id-1');
+    expect(velaRegistrationTrace.metadata.registration_only).toBe(true);
+    expect(velaRegistrationTrace.metadata.artifact_manifest[0]).toMatchObject({
+      run_id: 'run-id-1',
+      storage_ref: expect.stringContaining('/runs/run-id-1/'),
+    });
+    expect(velaRegistrationTrace).not.toHaveProperty('input');
+    expect(velaRegistrationTrace).not.toHaveProperty('output');
+
+    const velaFinalEvent = velaEnvelopes[1].events.find(
+      (event: { kind: string }) => event.kind === 'trace',
+    );
+    const velaFinalTrace = velaFinalEvent.data;
+    expect(velaFinalEvent.id).not.toBe(velaRegistrationEvent.id);
+    expect(velaFinalTrace.id).toBe('run-id-1');
+    expect(velaFinalTrace).toHaveProperty('input');
+    expect(velaFinalTrace).toHaveProperty('output');
+    expect(velaFinalTrace.metadata.artifact_manifest[0]).toMatchObject({
+      run_id: 'run-id-1',
+      storage_ref: expect.stringContaining('/runs/run-id-1/'),
       status: 'ok',
       stored_in_open_design: true,
     });

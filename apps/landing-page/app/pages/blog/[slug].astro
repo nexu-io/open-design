@@ -125,8 +125,9 @@ const tocLabel = getInfoPageCopy(locale).common.onThisPage;
 // Each post ships a unified cover at `/blog/<slug>-cover.webp` (see the
 // `od-site-illustration` skill). Surfaced as a hero banner on the post itself,
 // not just on the index card.
-const coverSrc = `/blog/${post.id}-cover.webp`;
-const socialImageSrc = ((post.data as { socialImage?: string }).socialImage ?? coverSrc).trim();
+const defaultCoverSrc = `/blog/${post.id}-cover.webp`;
+const coverSrc = ((post.data as { socialImage?: string }).socialImage ?? defaultCoverSrc).trim();
+const socialImageSrc = coverSrc;
 const coverImage = new URL(socialImageSrc, Astro.site ?? 'https://open-design.ai/').toString();
 
 const DISCORD = 'https://discord.gg/mHAjSMV6gz';
@@ -193,14 +194,19 @@ const postUrl = new URL(Astro.url.pathname, Astro.site ?? 'https://open-design.a
 
 // BreadcrumbList for the blog post. SeoHead already emits the Article
 // JSON-LD via `kind='article'`; the breadcrumb here adds the trail
-// (Open Design → Blog → <post title>) so Google can render the post
+// (OpenDesign → Blog → <post title>) so Google can render the post
 // with breadcrumb-style URLs in the SERP.
 const breadcrumbJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
   itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Open Design', item: origin },
-    { '@type': 'ListItem', position: 2, name: 'Blog', item: new URL('/blog/', origin).toString() },
+    { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: new URL(href('/'), origin).toString() },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: ui.blog.title,
+      item: new URL(href('/blog/'), origin).toString(),
+    },
     { '@type': 'ListItem', position: 3, name: localizedPostField('title'), item: postUrl },
   ],
 };
@@ -234,6 +240,9 @@ const author = getBlogAuthor((post.data as { author?: string }).author);
 // advertise URLs that carry `noindex`.
 const noindexLocaleVariants =
   (post.data as { noindexLocaleVariants?: boolean }).noindexLocaleVariants === true;
+// Full-cluster escalation: `noindex: true` drops the English original too.
+// See the `noindex` docblock in content.config.ts.
+const noindexAllVariants = (post.data as { noindex?: boolean }).noindex === true;
 const isLocalizedVariant = locale !== DEFAULT_LOCALE;
 ---
 
@@ -249,9 +258,9 @@ const isLocalizedVariant = locale !== DEFAULT_LOCALE;
       pathname={Astro.url.pathname}
       image={coverImage}
       datePublished={post.data.date}
-      category={post.data.category}
-      noindex={noindexLocaleVariants && isLocalizedVariant}
-      noindexedLocaleVariants={noindexLocaleVariants}
+      category={localizedPostField('category')}
+      noindex={noindexAllVariants || (noindexLocaleVariants && isLocalizedVariant)}
+      noindexedLocaleVariants={noindexLocaleVariants || noindexAllVariants}
     />
     <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)} />
     <SiteAnalytics />

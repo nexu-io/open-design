@@ -32,11 +32,11 @@ export type MediaModel = {
 
 export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'openai', label: 'OpenAI', hint: 'gpt-image-2 / dall-e-3', integrated: true, defaultBaseUrl: 'https://api.openai.com/v1' },
-  { id: 'codex', label: 'Codex Subscription', hint: 'gpt-image-2 via local Codex CLI login', integrated: true, credentialsRequired: false, docsUrl: 'https://developers.openai.com/codex' },
+  { id: 'vela', label: 'OpenDesign Cloud', hint: 'Managed image and video generation through Vela', integrated: true, credentialsRequired: false, settingsVisible: false },
   { id: 'volcengine', label: 'Volcengine Ark (Doubao)', hint: 'Seedance 2.0 / Seedream', integrated: true, defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
   { id: 'grok', label: 'xAI Grok Imagine', hint: 'grok-imagine — image + video with native audio', integrated: true, defaultBaseUrl: 'https://api.x.ai/v1' },
   { id: 'hyperframes', label: 'HyperFrames', hint: 'Local HTML -> MP4 renderer', integrated: true, credentialsRequired: false, settingsVisible: false },
-  { id: 'nanobanana', label: 'Nano Banana', hint: 'Google official by default; custom gateway configurable', integrated: true, defaultBaseUrl: 'https://generativelanguage.googleapis.com', supportsCustomModel: true },
+  { id: 'nanobanana', label: 'Nano Banana', hint: 'Uses Google’s official API by default. You can also configure a custom gateway.', integrated: true, defaultBaseUrl: 'https://generativelanguage.googleapis.com', supportsCustomModel: true },
   { id: 'imagerouter', label: 'ImageRouter', hint: 'OpenAI-compatible image + video routing', integrated: true, defaultBaseUrl: 'https://api.imagerouter.io/v1/openai', docsUrl: 'https://docs.imagerouter.io/api-reference/image-generation/', supportsCustomModel: true, customModelPlaceholder: 'openai/gpt-image-2 or xAI/grok-imagine-video' },
   { id: 'openrouter', label: 'OpenRouter', hint: 'Unified gateway for image + video models', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://openrouter.ai/api/v1', docsUrl: 'https://openrouter.ai/settings/keys' },
   { id: 'custom-image', label: 'Custom Image API', hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)', integrated: true, docsUrl: 'https://platform.openai.com/docs/api-reference/images', supportsCustomModel: true, customModelPlaceholder: 'my-image-model' },
@@ -85,14 +85,17 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
 ];
 
 export const IMAGE_MODELS: MediaModel[] = [
-  { id: 'gpt-image-2', label: 'gpt-image-2', hint: 'OpenAI · 4K, native multimodal', provider: 'openai', caps: ['t2i', 'i2i', 'inpaint'], default: true },
+  { id: 'vela/gpt-image-2', label: 'gpt-image-2 (Cloud)', hint: 'OpenDesign Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'], default: true },
+  { id: 'vela/nano-banana-2', label: 'nano-banana-2 (Cloud)', hint: 'OpenDesign Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/nano-banana-2-lite', label: 'nano-banana-2-lite (Cloud)', hint: 'OpenDesign Cloud · fast managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/seedream-5.0', label: 'seedream-5.0 (Cloud)', hint: 'OpenDesign Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/seedream-5.0-pro', label: 'seedream-5.0-pro (Cloud)', hint: 'OpenDesign Cloud · high-quality managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'gpt-image-2', label: 'gpt-image-2', hint: 'OpenAI · 4K, native multimodal', provider: 'openai', caps: ['t2i', 'i2i', 'inpaint'] },
   { id: 'gpt-image-1.5', label: 'gpt-image-1.5', hint: 'OpenAI · 4× faster than gpt-image-1', provider: 'openai', caps: ['t2i', 'i2i', 'inpaint'] },
   { id: 'gpt-image-1', label: 'gpt-image-1', hint: 'OpenAI · ChatGPT native', provider: 'openai', caps: ['t2i', 'i2i', 'inpaint'] },
   { id: 'gpt-image-1-mini', label: 'gpt-image-1-mini', hint: 'OpenAI · low-cost variant', provider: 'openai', caps: ['t2i', 'i2i'] },
   { id: 'dall-e-3', label: 'dall-e-3', hint: 'OpenAI · classic', provider: 'openai', caps: ['t2i'] },
   { id: 'dall-e-2', label: 'dall-e-2', hint: 'OpenAI · legacy', provider: 'openai', caps: ['t2i'] },
-  { id: 'codex-gpt-image-2', label: 'gpt-image-2 (Codex)', hint: 'Codex Subscription · local CLI imagegen', provider: 'codex', caps: ['t2i', 'i2i'] },
-
   { id: 'doubao-seedream-3-0-t2i-250415', label: 'seedream-3.0', hint: 'ByteDance · Doubao image', provider: 'volcengine', caps: ['t2i'] },
   { id: 'doubao-seededit-3-0-i2i-250628', label: 'seededit-3.0', hint: 'ByteDance · image edit', provider: 'volcengine', caps: ['i2i'] },
 
@@ -152,6 +155,7 @@ export const IMAGE_MODELS: MediaModel[] = [
 ];
 
 export const VIDEO_MODELS: MediaModel[] = [
+  { id: 'vela/doubao-seedance-2-0-260128', label: 'seedance-2.0 (Cloud)', hint: 'OpenDesign Cloud · managed text/image-to-video · 720p default', provider: 'vela', caps: ['t2v', 'i2v'] },
   { id: 'doubao-seedance-2-0-260128', label: 'seedance-2.0', hint: 'ByteDance · t2v + i2v + audio', provider: 'volcengine', caps: ['t2v', 'i2v', 'audio'], default: true },
   { id: 'doubao-seedance-2-0-fast-260128', label: 'seedance-2.0-fast', hint: 'ByteDance · faster, cheaper', provider: 'volcengine', caps: ['t2v', 'i2v', 'audio'] },
   { id: 'doubao-seedance-1-0-pro-250528', label: 'seedance-1.0-pro', hint: 'ByteDance · 1.0', provider: 'volcengine', caps: ['t2v', 'i2v'] },
@@ -220,6 +224,21 @@ export const MEDIA_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4'];
 export const VIDEO_LENGTHS_SEC = [3, 5, 8, 10, 15, 30];
 export const AUDIO_DURATIONS_SEC = [5, 10, 15, 30, 60, 120];
 
+const MEDIA_MODEL_ALIASES: Readonly<Record<string, string>> = {
+  // Product-facing shorthand. Keep the local Google model on its explicit
+  // registry id (`gemini-3.1-flash-image-preview`) so this unqualified name
+  // cannot silently leave the managed Cloud route.
+  'nano-banana': 'vela/nano-banana-2',
+  'nano-banana-2': 'vela/nano-banana-2',
+  'nano-banana-2-lite': 'vela/nano-banana-2-lite',
+  // Preserve existing project metadata while removing the Codex renderer.
+  'codex-gpt-image-2': 'vela/gpt-image-2',
+};
+
+export function canonicalMediaModelId(id: string): string {
+  return MEDIA_MODEL_ALIASES[id] ?? id;
+}
+
 export function findMediaModel(id: string): MediaModel | null {
   const all = [
     ...IMAGE_MODELS,
@@ -228,7 +247,8 @@ export function findMediaModel(id: string): MediaModel | null {
     ...AUDIO_MODELS_BY_KIND.speech,
     ...AUDIO_MODELS_BY_KIND.sfx,
   ];
-  return all.find((m) => m.id === id) || null;
+  const canonicalId = canonicalMediaModelId(id);
+  return all.find((m) => m.id === canonicalId) || null;
 }
 
 export function findProvider(id: string): MediaProvider | null {

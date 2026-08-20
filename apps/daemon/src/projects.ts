@@ -7,8 +7,10 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
+import { constants as fsConstants, createReadStream } from 'node:fs';
 import { link, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import JSZip from 'jszip';
 import {
   inferLegacyManifest,
@@ -45,6 +47,16 @@ export const projectFileRenameTestHooks = {
 export const projectFileWriteTestHooks = {
   afterCommit: null as null | ((write: { safeName: string; target: string; body: Buffer | string }) => Promise<void> | void),
 };
+
+function createLazyArchiveFileStream(filePath: string): Readable {
+  return Readable.from((async function* readFileChunks() {
+    const noFollow = fsConstants.O_NOFOLLOW ?? 0;
+    const source = createReadStream(filePath, {
+      flags: fsConstants.O_RDONLY | noFollow,
+    });
+    for await (const chunk of source) yield chunk;
+  })());
+}
 
 export function isRunTouchedProjectFile(fileMtimeMs, runStartTimeMs) {
   if (!Number.isFinite(fileMtimeMs) || !Number.isFinite(runStartTimeMs)) return false;
@@ -305,6 +317,21 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
 // menu item, which exports the user's actual project tree (e.g. the
 // uploaded `ui-design/` folder), not just the rendered HTML.
 export async function buildProjectArchive(projectsRoot, projectId, root, metadata?) {
+  const { stream, baseName } = await createProjectArchiveStream(
+    projectsRoot,
+    projectId,
+    root,
+    metadata,
+  );
+  return { buffer: await collectArchiveStream(stream), baseName };
+}
+
+// The HTTP export path uses this streaming form. Unlike buildProjectArchive's
+// compatibility wrapper, it never holds every input file plus the finished ZIP
+// in daemon memory at once. All paths are collected and validated before the
+// first response byte is emitted, preserving the route's fail-before-download
+// behavior for missing, empty, or unsafe roots.
+export async function createProjectArchiveStream(projectsRoot, projectId, root, metadata?) {
   const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   let archiveRoot = projectRoot;
   let archiveBaseName = '';
@@ -350,8 +377,7 @@ export async function buildProjectArchive(projectsRoot, projectId, root, metadat
 
   const zip = new JSZip();
   for (const entry of entries) {
-    const buf = await readFile(entry.fullPath);
-    zip.file(entry.relPath, buf, {
+    zip.file(entry.relPath, createLazyArchiveFileStream(entry.fullPath), {
       date: new Date(entry.mtime),
       binary: true,
     });
@@ -362,18 +388,28 @@ export async function buildProjectArchive(projectsRoot, projectId, root, metadat
   // project trees (HTML/CSS/JS plus a handful of assets). Level 9 buys
   // <5% on already-compressed PNGs/fonts at 2-3× CPU; level 1 produces
   // noticeably larger archives. Revisit only if profiling says so.
-  const buffer = await zip.generateAsync({
+  const stream = zip.generateNodeStream({
     type: 'nodebuffer',
+    streamFiles: true,
     compression: 'DEFLATE',
     compressionOptions: { level: 6 },
   });
-  return { buffer, baseName: archiveBaseName };
+  return { stream, baseName: archiveBaseName };
 }
 
 export async function buildBatchArchive(projectsRoot, projectId, fileNames, metadata?) {
+  const { stream, baseName } = await createBatchArchiveStream(
+    projectsRoot,
+    projectId,
+    fileNames,
+    metadata,
+  );
+  return { buffer: await collectArchiveStream(stream), baseName };
+}
+
+export async function createBatchArchiveStream(projectsRoot, projectId, fileNames, metadata?) {
   const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
-  const zip = new JSZip();
-  let packed = 0;
+  const eligible = [];
   const rejected = [];
 
   for (const name of fileNames) {
@@ -454,12 +490,7 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
       continue;
     }
 
-    const buf = await readFile(filePath);
-    zip.file(name, buf, {
-      date: new Date(st.mtimeMs),
-      binary: true,
-    });
-    packed += 1;
+    eligible.push({ name, filePath, mtime: st.mtimeMs });
   }
 
   // Fail-fast: any rejected entry means the request is invalid — mirror the
@@ -473,18 +504,36 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
     throw err;
   }
 
-  if (packed === 0) {
+  if (eligible.length === 0) {
     const err = new Error('no files could be packed');
     err.code = 'ENOENT';
     throw err;
   }
 
-  const buffer = await zip.generateAsync({
+  const zip = new JSZip();
+  for (const entry of eligible) {
+    zip.file(entry.name, createLazyArchiveFileStream(entry.filePath), {
+      date: new Date(entry.mtime),
+      binary: true,
+    });
+  }
+  const stream = zip.generateNodeStream({
     type: 'nodebuffer',
+    streamFiles: true,
     compression: 'DEFLATE',
     compressionOptions: { level: 6 },
   });
-  return { buffer, baseName: '' };
+  return { stream, baseName: '' };
+}
+
+async function collectArchiveStream(stream) {
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks = [];
+    stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    stream.once('error', reject);
+    stream.once('end', () => resolve(Buffer.concat(chunks)));
+    stream.resume();
+  });
 }
 
 async function collectArchiveEntries(dir, relDir, out) {
@@ -506,7 +555,11 @@ async function collectArchiveEntries(dir, relDir, out) {
       continue;
     }
     if (e.name.endsWith('.artifact.json')) continue;
-    const st = await stat(full);
+    const st = await lstat(full);
+    // A directory entry can be swapped for a symlink between readdir() and
+    // metadata collection. Keep the archive allowlist fail-closed; the lazy
+    // O_NOFOLLOW open below repeats the check when bytes are actually read.
+    if (!st.isFile() || st.isSymbolicLink()) continue;
     out.push({ relPath: rel, fullPath: full, mtime: st.mtimeMs });
   }
 }
@@ -559,7 +612,7 @@ function buildDesignManifest(entries, projectLabel) {
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
   return JSON.stringify({
     schema: 'open-design.design-manifest.v1',
-    title: projectLabel || 'Open Design project',
+    title: projectLabel || 'OpenDesign project',
     entryFile,
     sourceFiles: {
       all: files,
@@ -648,7 +701,7 @@ function buildDesignHandoff(entries, projectLabel) {
     files.some((name) => /(screens?|pages?|components?|app|src)\//i.test(name));
   const list = (items) => items.length > 0 ? items.map((name) => `- \`${name}\``).join('\n') : '- None detected';
 
-  return `# ${projectLabel || 'Open Design project'} implementation handoff
+  return `# ${projectLabel || 'OpenDesign project'} implementation handoff
 
 This archive is the source of truth for turning the design into production code. Start from \`${entryFile}\`, then preserve the visual system, responsive behavior, and interactions found in the exported files.
 
@@ -656,7 +709,7 @@ This archive is the source of truth for turning the design into production code.
 - Build production UI from the exported design, not a loose reinterpretation.
 - Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
 - Replace static placeholders only when the target app has real data or functional equivalents.
-- Keep generated product UI free of Open Design chrome, preview labels, or design-process annotations.
+- Keep generated product UI free of OpenDesign chrome, preview labels, or design-process annotations.
 - Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
 
 ## Source map
@@ -687,7 +740,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
 - Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
 - Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
-- Do not keep prototype-only annotations, frame labels, or Open Design chrome in the production UI.
+- Do not keep prototype-only annotations, frame labels, or OpenDesign chrome in the production UI.
 
 ## CJX-ready UX contract
 - Use \`${DESIGN_MANIFEST_FILENAME}\` as the machine-readable map for screens, app modules, OS widgets, landing pages, tokens, interactions, and viewport checks.
@@ -1339,6 +1392,49 @@ function normalizeManifestProjectRef(ref, ownerName) {
 export async function removeProjectDir(projectsRoot, projectId) {
   const dir = projectDir(projectsRoot, projectId);
   await rm(dir, { recursive: true, force: true });
+}
+
+export async function stageProjectDirsForDelete(projectsRoot, projectIds, batchId) {
+  const uniqueProjectIds = Array.from(new Set(projectIds));
+  const stagingRoot = path.join(projectsRoot, '.delete-staging', batchId);
+  const staged = [];
+  await mkdir(stagingRoot, { recursive: true });
+  try {
+    for (const projectId of uniqueProjectIds) {
+      const source = projectDir(projectsRoot, projectId);
+      const target = path.join(stagingRoot, projectId);
+      try {
+        await rename(source, target);
+        staged.push({ projectId, source, target });
+      } catch (error) {
+        if (error?.code === 'ENOENT') continue;
+        throw error;
+      }
+    }
+  } catch (error) {
+    await Promise.allSettled(
+      staged
+        .slice()
+        .reverse()
+        .map((entry) => rename(entry.target, entry.source)),
+    );
+    await rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+  return {
+    async rollback() {
+      await Promise.allSettled(
+        staged
+          .slice()
+          .reverse()
+          .map((entry) => rename(entry.target, entry.source)),
+      );
+      await rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
+    },
+    async commit() {
+      await rm(stagingRoot, { recursive: true, force: true });
+    },
+  };
 }
 
 function resolveSafe(dir, name) {

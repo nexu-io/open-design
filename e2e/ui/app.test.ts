@@ -1,6 +1,11 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
-import { routeAgents, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
+import {
+  applyStandardMocks,
+  routeAgents,
+  routeSuccessfulRuns,
+  successfulRunEventBody,
+} from '@/playwright/mock-factory';
 import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -57,44 +62,7 @@ function stagedAttachmentName(page: Page, name: string): Locator {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 for (const entry of automatedUiScenarios().filter(
@@ -195,79 +163,11 @@ for (const entry of automatedUiScenarios().filter(
       });
     }
 
-    if (entry.flow === 'question-form-single-selection') {
-      const form = [
-        '<question-form id="discovery" title="Quick brief — 30 seconds">',
-        JSON.stringify(
-          {
-            description: "I'll lock these in before building.",
-            questions: [
-              {
-                id: 'tone',
-                label: 'Visual tone',
-                type: 'radio',
-                options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
-                required: true,
-              },
-            ],
-          },
-          null,
-          2,
-        ),
-        '</question-form>',
-      ].join('\n');
-      await routeSuccessfulRuns(page, {
-        runIdPrefix: 'mock-run',
-        eventBody: successfulRunEventBody([
-          'event: start',
-          'data: {"bin":"mock-agent"}',
-          '',
-          'event: stdout',
-          `data: ${JSON.stringify({ chunk: form })}`,
-          '',
-        ]),
-      });
-    }
-
-    if (entry.flow === 'question-form-submit-persistence') {
-      let requestCount = 0;
-      await routeSuccessfulRuns(page, {
-        runIdPrefix: 'mock-run',
-        eventBody: () => {
-          requestCount += 1;
-          const chunk =
-            requestCount === 1
-              ? [
-                  '<question-form id="discovery" title="Quick brief — 30 seconds">',
-                  JSON.stringify(
-                    {
-                      description: "I'll lock these in before building.",
-                      questions: [
-                        {
-                          id: 'tone',
-                          label: 'Visual tone',
-                          type: 'radio',
-                          options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
-                          required: true,
-                        },
-                      ],
-                    },
-                    null,
-                    2,
-                  ),
-                  '</question-form>',
-                ].join('\n')
-              : 'Thanks — I will use these answers for the next draft.';
-          return successfulRunEventBody([
-            'event: start',
-            'data: {"bin":"mock-agent"}',
-            '',
-            'event: stdout',
-            `data: ${JSON.stringify({ chunk })}`,
-            '',
-          ]);
-        },
-      });
+    if (
+      entry.flow === 'question-form-single-selection'
+      || entry.flow === 'question-form-submit-persistence'
+    ) {
+      await routeSuccessfulRuns(page, { runIdPrefix: 'mock-run' });
     }
 
     if (entry.flow === 'file-mention') {
@@ -589,19 +489,19 @@ async function seedHtmlArtifact(
 }
 
 async function openDesignFile(page: Page, fileName: string) {
-  await openAllProjectFiles(page);
-  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: fileName,
-  });
-  await expect(fileRow).toBeVisible();
-  const mainButton = fileRow.getByRole('button').first();
-  await mainButton.click();
-  const openButton = page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' });
-  if (await openButton.isVisible().catch(() => false)) {
-    await openButton.click();
+  const tab = tabBySuffix(page, fileName);
+  if (await tab.isVisible().catch(() => false)) {
+    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
     return;
   }
-  await mainButton.dblclick();
+  await openAllProjectFiles(page);
+  const fileRow = page.locator(`[data-testid^="design-file-row-"][data-testid$="${fileName}"]`).first();
+  await expect(fileRow).toBeVisible();
+  // #5517 removed the preview pane and its "Open" button: the row's primary
+  // target opens the file in a workspace tab on a single click.
+  await fileRow.getByRole('button').first().click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
 }
 
 async function expectFileSource(
@@ -909,12 +809,53 @@ async function runLiveArtifactProjectRoutingFlow(
   await expectScenarioProjectState(page, entry, projectId);
 }
 
+async function seedQuestionFormMessage(page: Page): Promise<void> {
+  const { projectId, conversationId } = await getCurrentProjectContext(page);
+  const content = [
+    '<question-form id="discovery" title="Quick brief — 30 seconds">',
+    JSON.stringify(
+      {
+        description: "I'll lock these in before building.",
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'radio',
+            options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
+            required: true,
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    '</question-form>',
+  ].join('\n');
+  const response = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/question-form-assistant-${projectId}`,
+    {
+      data: {
+        role: 'assistant',
+        content,
+        runStatus: 'succeeded',
+        events: [{ kind: 'text', text: content }],
+        createdAt: Date.now(),
+      },
+    },
+  );
+  expect(response.ok(), `seed question form: ${await response.text()}`).toBeTruthy();
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await expectWorkspaceReady(page);
+}
+
 
 async function runQuestionFormSingleSelectionFlow(
   page: Page,
-  entry: UiScenario,
+  _entry: UiScenario,
 ) {
-  await sendPrompt(page, entry.prompt);
+  await seedQuestionFormMessage(page);
 
   const toneQuestion = page.locator('.qf-field', { has: page.getByText('Visual tone') });
   await expect(toneQuestion).toBeVisible();
@@ -935,12 +876,9 @@ async function runQuestionFormSingleSelectionFlow(
 
 async function runQuestionFormSubmitPersistenceFlow(
   page: Page,
-  entry: UiScenario,
+  _entry: UiScenario,
 ) {
-  const firstRunRequestPromise = page.waitForRequest(isCreateRunRequest);
-  await sendPrompt(page, entry.prompt);
-  const firstRunBody = (await firstRunRequestPromise).postDataJSON() as Record<string, unknown>;
-  expectScenarioRunRequest(firstRunBody, entry);
+  await seedQuestionFormMessage(page);
 
   // Studio discovery renders the clarification form inline in the chat flow
   // (the legacy Questions workspace tab is gone), so locate the form directly.
@@ -1071,34 +1009,68 @@ async function runCommentAttachmentFlow(
 
 async function runDeckPaginationNextPrevCorrectnessFlow(page: Page) {
   const { projectId } = await getCurrentProjectContext(page);
-  await seedDeckArtifact(page, projectId, 'pagination.html', 'Pagination Deck', ['Slide One', 'Slide Two', 'Slide Three']);
-  await page.reload();
-  await openDesignFile(page, 'pagination.html');
+  await seedDeckStageArtifact(page, projectId, 'pagination.html', 'Pagination Deck', [
+    'Slide One',
+    'Slide Two',
+    'Slide Three',
+  ]);
+  await gotoDesignFile(page, projectId, 'pagination.html');
 
   const frame = artifactPreviewFrame(page);
+  const thumbnails = page.locator('.deck-thumbnail-button');
+  const stage = frame.locator('deck-stage');
+  const speakerNotes = page.getByTestId('speaker-notes-panel');
+  await expect(thumbnails).toHaveCount(3);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await clickDeckNextSlide(page);
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await clickDeckNextSlide(page);
+  await expect(speakerNotes).toContainText('Speaker note for Slide One');
+
+  await thumbnails.nth(2).click();
+  await expect(thumbnails.nth(2)).toHaveAttribute('aria-current', 'true');
+  await expect(stage).toHaveJSProperty('index', 2);
   await expect(frame.getByText('Slide Three')).toBeVisible();
+  await expect(frame.getByText('Slide One')).toBeHidden();
+  await expect(page.locator('.deck-floating-count')).toContainText('3/3');
+  await expect(speakerNotes).toContainText('Speaker note for Slide Three');
+
   await clickDeckPreviousSlide(page);
+  await expect(stage).toHaveJSProperty('index', 1);
   await expect(frame.getByText('Slide Two')).toBeVisible();
+  await expect(page.locator('.deck-floating-count')).toContainText('2/3');
+  await expect(speakerNotes).toContainText('Speaker note for Slide Two');
+
+  await clickDeckNextSlide(page);
+  await expect(stage).toHaveJSProperty('index', 2);
+  await expect(frame.getByText('Slide Three')).toBeVisible();
+
+  await stage.evaluate((element) => {
+    (element as HTMLElement & { goTo(index: number): void }).goTo(0);
+  });
+  await expect(thumbnails.nth(0)).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('.deck-floating-count')).toContainText('1/3');
+  await expect(speakerNotes).toContainText('Speaker note for Slide One');
 }
 
 async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   const { projectId } = await getCurrentProjectContext(page);
   await seedDeckArtifact(page, projectId, 'deck-alpha.html', 'Deck Alpha', ['Alpha One', 'Alpha Two']);
   await seedDeckArtifact(page, projectId, 'deck-beta.html', 'Deck Beta', ['Beta One', 'Beta Two']);
-  await page.reload();
 
-  await openDesignFile(page, 'deck-alpha.html');
+  await gotoDesignFile(page, projectId, 'deck-alpha.html');
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Alpha One')).toBeVisible();
   await clickDeckNextSlide(page);
   await expect(frame.getByText('Alpha Two')).toBeVisible();
 
-  await openAllProjectFiles(page);
-  await openDesignFile(page, 'deck-beta.html');
+  const betaTab = tabBySuffix(page, 'deck-beta.html');
+  if (await betaTab.isVisible().catch(() => false)) {
+    await betaTab.click();
+  } else {
+    await page.getByTestId('workspace-add-tab').click();
+    const launcher = page.getByTestId('tab-launcher-menu');
+    await expect(launcher).toBeVisible();
+    await launcher.getByTestId('tab-launcher-result').filter({ hasText: 'deck-beta.html' }).click();
+  }
+  await expect(betaTab).toHaveAttribute('aria-selected', 'true');
   await expect(frame.getByText('Beta One')).toBeVisible();
   await clickDeckNextSlide(page);
   await expect(frame.getByText('Beta Two')).toBeVisible();
@@ -1107,6 +1079,14 @@ async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   await expect(frame.getByText('Alpha Two')).toBeVisible();
   await page.getByRole('tab', { name: /deck-beta\.html/i }).click();
   await expect(frame.getByText('Beta Two')).toBeVisible();
+}
+
+async function gotoDesignFile(page: Page, projectId: string, fileName: string): Promise<void> {
+  await page.goto(`/projects/${projectId}/files/${encodeURIComponent(fileName)}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await expectWorkspaceReady(page);
+  await expect(tabBySuffix(page, fileName)).toHaveAttribute('aria-selected', 'true');
 }
 
 async function seedDeckArtifact(
@@ -1124,6 +1104,88 @@ async function seedDeckArtifact(
     projectId,
     fileName,
     `<!doctype html><html><body>${slideHtml}</body></html>`,
+    undefined,
+    {
+      version: 1,
+      kind: 'deck',
+      title,
+      entry: fileName,
+      renderer: 'deck-html',
+      exports: ['html', 'pdf'],
+    },
+  );
+}
+
+async function seedDeckStageArtifact(
+  page: Page,
+  projectId: string,
+  fileName: string,
+  title: string,
+  slides: string[],
+) {
+  const slideHtml = slides
+    .map((slide, index) => {
+      let marker = 'class="ppt-slide"';
+      if (index === 0) {
+        marker = `class="slide" data-screen-label="01 ${slide}"`;
+      } else if (index === 1) {
+        marker = `class="agenda" data-screen-label="02 ${slide}"`;
+      }
+      return `<section ${marker}><h1>${slide}</h1></section>`;
+    })
+    .join('\n');
+  const notes = JSON.stringify(slides.map((slide) => `Speaker note for ${slide}`));
+  await seedProjectFile(
+    page,
+    projectId,
+    fileName,
+    `<!doctype html>
+<html>
+<head>
+  <style>
+    body { margin: 0; background: #111827; color: white; font-family: sans-serif; }
+    aside { display: none; }
+    deck-stage { display: block; width: 100vw; height: 100vh; }
+    deck-stage > section { display: none; width: 100%; height: 100%; place-items: center; }
+    deck-stage > section[data-deck-active] { display: grid; }
+  </style>
+</head>
+<body>
+  <aside data-screen-label="Prototype navigation">Not a slide</aside>
+  <deck-stage width="1280" height="720">${slideHtml}</deck-stage>
+  <script>
+    customElements.define('deck-stage', class extends HTMLElement {
+      connectedCallback() {
+        this._slides = Array.from(this.children);
+        this._index = 0;
+        this._apply('init');
+      }
+      get index() { return this._index; }
+      get length() { return this._slides.length; }
+      _apply(reason) {
+        this._slides.forEach((slide, index) => {
+          slide.toggleAttribute('data-deck-active', index === this._index);
+          slide.setAttribute('aria-hidden', index === this._index ? 'false' : 'true');
+        });
+        window.postMessage({ slideIndexChanged: this._index }, '*');
+        this.dispatchEvent(new CustomEvent('slidechange', {
+          detail: { index: this._index, total: this._slides.length, reason },
+          bubbles: true,
+          composed: true,
+        }));
+      }
+      goTo(index) {
+        this._index = Math.max(0, Math.min(this._slides.length - 1, index));
+        this._apply('api');
+      }
+      next() { this.goTo(this._index + 1); }
+      prev() { this.goTo(this._index - 1); }
+      reset() { this.goTo(0); }
+    });
+  </script>
+  <script type="application/json" id="speaker-notes">${notes}</script>
+</body>
+</html>`,
     undefined,
     {
       version: 1,
@@ -1187,7 +1249,7 @@ async function clickVisible(locator: Locator) {
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -1201,7 +1263,7 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function getCurrentProjectContext(
@@ -1362,18 +1424,27 @@ async function findProjectFileContaining(
   projectId: string,
   expected: string,
 ): Promise<string> {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const files = await listProjectFilesFromApi(page, projectId);
-    for (const file of files) {
-      const response = await page.request.get(`/api/projects/${projectId}/files/${file.name}`);
-      if (!response.ok()) continue;
-      const source = await response.text();
-      if (source.includes(expected)) return file.name;
-    }
-    await page.waitForTimeout(250);
-  }
-  return '';
+  let matchedName = '';
+  await expect
+    .poll(async () => {
+      const listResponse = await page.request.get(`/api/projects/${projectId}/files`);
+      if (!listResponse.ok()) return '';
+      const { files } = (await listResponse.json()) as {
+        files: Array<{ name: string }>;
+      };
+      for (const file of files) {
+        const response = await page.request.get(`/api/projects/${projectId}/files/${file.name}`);
+        if (!response.ok()) continue;
+        const source = await response.text();
+        if (source.includes(expected)) {
+          matchedName = file.name;
+          return file.name;
+        }
+      }
+      return '';
+    }, { timeout: 15_000 })
+    .not.toBe('');
+  return matchedName;
 }
 
 async function expectArtifactVisible(
@@ -1538,7 +1609,6 @@ async function runFileUploadSendFlow(
   await expect((await uploadResponse).ok()).toBeTruthy();
 
   await expect(stagedAttachmentName(page, 'reference.txt')).toBeVisible();
-  await expect(page.getByText('reference.txt', { exact: true })).toBeVisible();
 
   await sendPrompt(page, entry.prompt);
   await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();

@@ -97,7 +97,7 @@ const href = (path: string) => localizedHref(path, locale);
 const copy = getCodexSlidesCopy(locale);
 // Shared `Star on GitHub` label so the ghost CTA matches every other sub-page
 // (already localized per locale). The primary CTA uses this page's own
-// `downloadCta`, which names Open Design explicitly.
+// `downloadCta`, which names OpenDesign explicitly.
 const common = getInfoPageCopy(locale).common;
 const title = copy.title;
 const description = copy.description;
@@ -121,7 +121,7 @@ const jsonLd: Array<Record<string, unknown>> = [
       copy.schemaAlternateName,
     ],
     applicationCategory: 'BusinessApplication',
-    operatingSystem: 'macOS, Linux, Windows',
+    operatingSystem: 'macOS, Windows',
     description,
     url: pageUrl,
     sameAs: [CS_URL],
@@ -129,7 +129,7 @@ const jsonLd: Array<Record<string, unknown>> = [
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     author: {
       '@type': 'Organization',
-      name: 'Open Design',
+      name: 'OpenDesign',
       url: homeUrl,
     },
   },
@@ -137,7 +137,7 @@ const jsonLd: Array<Record<string, unknown>> = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: homeUrl },
       { '@type': 'ListItem', position: 2, name: 'Codex Slides', item: pageUrl },
     ],
   },
@@ -296,7 +296,7 @@ const studioTiles = copy.inside.map((tile, i) => ({ ...tile, src: STUDIO_SHOTS[i
     </div>
   </section>
 
-  {/* Closing CTA: full-bleed painted band ending on the Open Design download,
+  {/* Closing CTA: full-bleed painted band ending on the OpenDesign download,
       reusing the shared .dbfinal primitive from the codex-design collection. */}
   <section class="dbband dbfinal cs-final-band" aria-labelledby="cs-tieback">
     <div class="dbin">

@@ -19,6 +19,16 @@ export interface OrbitConfigPrefs {
   time: string;
   /** Optional skill id from the examples gallery where scenario === "orbit". */
   templateSkillId?: string | null;
+  /**
+   * Workspace selected in the tab that configured Orbit. The daemon verifies
+   * this pair when saving and again before every unattended run.
+   */
+  workspaceScope?: AutomationWorkspaceScope | null;
+}
+
+export interface AutomationWorkspaceScope {
+  workspaceId: string;
+  workspaceMemberId: string;
 }
 
 export interface ProjectLocationPrefs {

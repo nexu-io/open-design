@@ -30,6 +30,14 @@ describe('POST /api/runs headless fallbacks', () => {
     else process.env.OD_AGENT_HOME = oldAgentHome;
   });
 
+  it('does not expose the retired secure BYOK profile API', async () => {
+    started = await startTestServer();
+
+    const response = await fetch(`${started.url}/api/byok/profiles`);
+
+    expect(response.status).toBe(404);
+  });
+
   it('rejects incomplete BYOK OpenCode config before creating a run', async () => {
     started = await startTestServer();
     const incompleteConfigs = [
@@ -81,7 +89,7 @@ describe('POST /api/runs headless fallbacks', () => {
           error: {
             code: 'VALIDATION_FAILED',
             message: expect.stringMatching(
-              /secure credential profile|raw BYOK credentials are not accepted/iu,
+              /complete provider configuration/iu,
             ),
           },
         });
@@ -189,6 +197,60 @@ describe('POST /api/runs headless fallbacks', () => {
     expect(run2.status).toBe(202);
     const run2Body = await run2.json() as { assistantMessageId: string | null };
     expect(run2Body.assistantMessageId).toBe(clientId);
+  });
+
+  it('keeps a client-pinned user message before its assistant when the user PUT arrives late', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(
+      started.url,
+      'Client message pin ordering',
+    );
+    const userMessageId = `user-${randomUUID()}`;
+    const assistantMessageId = `assistant-${randomUUID()}`;
+    const prompt = `ordered user turn ${randomUUID()}`;
+    const createdAt = Date.now();
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        userMessageId,
+        assistantMessageId,
+        message: prompt,
+        currentPrompt: prompt,
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+
+    const lateUserPut = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(userMessageId)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: userMessageId,
+          role: 'user',
+          content: prompt,
+          createdAt,
+        }),
+      },
+    );
+    expect(lateUserPut.status).toBe(200);
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{ id: string; role: string }>;
+    };
+    expect(messagesBody.messages.map(({ id, role }) => ({ id, role }))).toEqual([
+      { id: userMessageId, role: 'user' },
+      { id: assistantMessageId, role: 'assistant' },
+    ]);
   });
 
   it('seeds only currentPrompt when message is a full ChatRequest transcript', async () => {

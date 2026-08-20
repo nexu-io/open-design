@@ -17,7 +17,7 @@
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.3;
   border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--border);
@@ -68,14 +68,14 @@
   }
 }
 .project-actions-label {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-strong, var(--text));
 }
 .project-actions-link {
   background: none;
   border: none;
   color: var(--accent);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
@@ -87,14 +87,14 @@
   gap: 6px;
 }
 .project-actions-chip {
-  font-size: 11.5px;
+  font-size: 12px;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--warning, #d97706) 14%, transparent);
   color: var(--warning, #d97706);
 }
 .project-actions-disabled-hint {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   font-style: italic;
 }
@@ -107,11 +107,24 @@
   left: 50%;
   transform: translateX(-50%);
   max-width: 480px;
-  padding: 10px 36px 10px 14px;
-  border-radius: var(--radius-sm, 4px);
-  background: var(--text-strong, #1f2328);
+  /* Right padding must clear the absolutely-positioned .od-toast-close
+     footprint (right: 8px, width: 26px → 34px inset from the edge), plus a
+     breathing buffer equal to the toast's own left padding — the same ratio
+     the .od-toast-browser-snapshot variant below already uses (52px right
+     padding = 34px close-button footprint + 18px left padding). Without
+     this, the toast's shrink-to-fit width sizes to content + 14px padding
+     on every side, so the message text's right edge always lands inside the
+     close button's 8–34px inset range and gets visually covered by it,
+     regardless of message length (recvqaZAbIdfz1). */
+  padding: 10px 48px 10px 14px;
+  /* Pill toast (dogfood 2026-07-27): single-line confirmations read as fully
+     rounded capsules; multi-block toasts opt back out below. */
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--text-strong, #1f2328) 78%, transparent);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   color: var(--bg, white);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.4;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   z-index: 1000;
@@ -150,6 +163,13 @@
   top: 64px;
   bottom: auto;
   z-index: 1800;
+}
+/* Toasts that stack extra blocks (details / code / browser snapshot) can't
+   wear the capsule radius — their tall rectangular content would clip. */
+.od-toast:has(.od-toast-details),
+.od-toast:has(.od-toast-code),
+.od-toast:has(.od-toast-browser-snapshot) {
+  border-radius: var(--radius, 12px);
 }
 .project-actions-toast-anchor {
   position: relative;
@@ -202,11 +222,72 @@
   animation: none;
   pointer-events: auto;
 }
+/* Launcher/share feedback toasts match the design-systems treatment: pinned
+   near the pane's TOP edge as a pill, success wearing the light-green /
+   medium-green palette. Browser-snapshot toasts keep the bottom anchor —
+   their card carries actions and previews sized for the bottom edge. */
+.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) {
+  inset: 24px 24px auto;
+}
+.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) .od-toast {
+  border-radius: var(--radius-pill, 999px);
+}
+.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) .od-toast.tone-success {
+  border: 1px solid color-mix(in srgb, var(--success, #2da44e) 30%, transparent);
+  background: color-mix(in srgb, var(--success, #2da44e) 15%, var(--bg, #fff));
+  color: var(--success, #2da44e);
+}
 .workspace-toast-anchor .od-toast.od-toast-browser-snapshot {
   width: min(460px, 100%);
   max-width: 100%;
 }
 .workspace-toast-anchor .od-toast.leaving {
+  animation: none;
+}
+/* Design systems tab (home/entry surface, not the project viewer) reuses the
+   same fix: a bare `.od-toast` centers on the full 100vw, so once the nav
+   rail's width shifts the entry content column right, the toast drifts onto
+   the design-system preview's first card instead of floating over the
+   content area (recvqaZAbIdfz1). `.entry-main--scroll` (entry-layout.css) is
+   already `position: relative` and is the tab's scroll pane, so anchoring
+   there — same shape as `.workspace-toast-anchor` above — centers the toast
+   on that column regardless of the pane's own scroll position. */
+.design-systems-toast-anchor {
+  position: absolute;
+  /* Pinned near the pane's TOP edge (product ask): feedback shows where the
+     eye already is after clicking a card action, clear of the footer. */
+  inset: 24px 24px auto;
+  display: flex;
+  justify-content: center;
+  z-index: 60;
+  pointer-events: none;
+}
+.design-systems-toast-anchor .od-toast {
+  position: relative;
+  inset: auto;
+  transform: none;
+  animation: none;
+  pointer-events: auto;
+  border-radius: var(--radius-pill, 999px);
+  /* Light-green status pill with medium-green text (product ask): this
+     page's share/sync feedback wears the success palette even while
+     loading, instead of the base .od-toast dark scrim + white text. */
+  border: 1px solid color-mix(in srgb, var(--success, #2da44e) 30%, transparent);
+  background: color-mix(in srgb, var(--success, #2da44e) 15%, var(--bg, #fff));
+  color: var(--success, #2da44e);
+}
+/* Keep every glyph on the green pill green: out-specify the dark-toast close
+   disc (.od-toast:not(...):not(...) .od-toast-close) and the tone-loading
+   muted spinner, both of which assume the base dark scrim. */
+.design-systems-toast-anchor .od-toast.tone-loading .od-toast-icon {
+  color: inherit;
+}
+.design-systems-toast-anchor .od-toast:not(.tone-success):not(.tone-error) .od-toast-close {
+  border-color: color-mix(in srgb, var(--success, #2da44e) 26%, transparent);
+  background: color-mix(in srgb, var(--success, #2da44e) 10%, transparent);
+  color: inherit;
+}
+.design-systems-toast-anchor .od-toast.leaving {
   animation: none;
 }
 .od-toast.tone-success {
@@ -219,8 +300,8 @@
 }
 .od-toast.tone-error {
   border: 1px solid color-mix(in srgb, var(--danger, #cf222e) 42%, var(--border));
-  background: var(--red-bg);
-  color: var(--red);
+  background: color-mix(in srgb, var(--danger, #cf222e) 13%, var(--bg));
+  color: var(--text);
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.14),
     0 0 0 1px color-mix(in srgb, var(--danger, #cf222e) 12%, transparent);
@@ -292,27 +373,9 @@
 }
 .od-toast-details {
   margin-top: 4px;
-  font-size: 11.5px;
-  opacity: 0.85;
-  font-weight: 400;
-}
-.od-toast-action {
-  margin-top: 8px;
-  background: color-mix(in srgb, var(--accent, #4f46e5) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent, #4f46e5) 34%, var(--border));
-  color: var(--text);
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-}
-.od-toast-action:hover {
-  background: color-mix(in srgb, var(--accent, #4f46e5) 24%, transparent);
-}
-.od-toast.od-toast-browser-snapshot .od-toast-details {
-  margin-top: 6px;
   font-size: 12px;
+  opacity: 0.85;
+  font-weight: 500;
 }
 .od-toast-code {
   margin: 8px 0 0;
@@ -320,7 +383,7 @@
   border-radius: var(--radius-sm, 4px);
   background: rgba(255, 255, 255, 0.08);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
@@ -388,34 +451,13 @@
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: var(--bg, white);
-  font-size: 11.5px;
+  font-size: 12px;
   padding: 4px 10px;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
 }
 .od-toast-dismiss:hover {
   background: rgba(255, 255, 255, 0.18);
-}
-.od-toast-action {
-  margin-top: 8px;
-  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
-  border-radius: var(--radius-sm, 4px);
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  color: currentColor;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-.od-toast.od-toast-browser-snapshot .od-toast-action {
-  margin-top: 10px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-.od-toast-action:hover {
-  background: color-mix(in srgb, currentColor 20%, transparent);
 }
 
 /* ---------------- Routines (Settings → Automations) ---------------- */
@@ -504,7 +546,6 @@
 .routines-project-select:focus {
   outline: none;
   border-color: var(--text);
-  box-shadow: 0 0 0 3px rgba(26, 25, 22, 0.08);
 }
 .routines-field textarea { resize: vertical; min-height: 80px; }
 
@@ -665,7 +706,7 @@
 }
 .routines-item-main { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .routines-item-title { display: flex; align-items: center; gap: 8px; }
-.routines-item-title strong { font-size: 15px; color: var(--text); font-weight: 600; }
+.routines-item-title strong { font-size: 16px; color: var(--text); font-weight: 600; }
 .routines-item-line { font-size: 13px; color: var(--text); }
 .routines-item-meta {
   font-size: 12px;
@@ -682,7 +723,7 @@
   overflow-wrap: anywhere;
 }
 .routines-tag {
-  font-size: 11px;
+  font-size: 12px;
   background: var(--bg-muted);
   color: var(--text-muted);
   padding: 2px 8px;
@@ -715,7 +756,7 @@
 .routines-history-row:hover { background: var(--bg-subtle); }
 .routines-history-time { color: var(--text); }
 .routines-history-trigger {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -755,7 +796,7 @@
   display: inline-block;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -840,7 +881,7 @@
 .newproj-aspect-icon-3-4   { width: 10.5px; height: 14px;  }
 .newproj-aspect-ratio {
   font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.02em;
 }
 
@@ -855,7 +896,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 6px 8px 2px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -866,9 +907,9 @@
 .model-picker .ds-picker-list { padding: 6px; }
 .model-picker .ds-picker-item { padding: 8px 10px; }
 .model-picker .ds-picker-item-title { font-size: 13px; font-weight: 500; }
-.model-picker .ds-picker-item-sub { font-size: 11.5px; }
+.model-picker .ds-picker-item-sub { font-size: 12px; }
 .model-picker .ds-picker-item .ds-picker-item-badge {
-  font-size: 9px;
+  font-size: 12px;
   padding: 1px 5px;
   background: var(--accent-tint);
   color: var(--accent);
@@ -903,12 +944,12 @@
   border-bottom: 1px solid var(--border-subtle, var(--border));
 }
 .palette-tweaks-title { font-size: 12px; font-weight: 600; color: var(--text); }
-.palette-tweaks-sub { font-size: 11px; color: var(--text-muted); }
+.palette-tweaks-sub { font-size: 12px; color: var(--text-muted); }
 .palette-tweaks-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .palette-tweaks-item {
   display: flex; align-items: center; gap: 10px;
   padding: 6px 8px; border-radius: var(--radius-sm, 6px);
-  cursor: pointer; font-size: 12.5px; color: var(--text);
+  cursor: pointer; font-size: 13px; color: var(--text);
   transition: background 100ms var(--ease-out);
 }
 .palette-tweaks-item:hover, .palette-tweaks-item.hovered { background: var(--bg-subtle); }
@@ -936,14 +977,241 @@
 /* Project page audit pass: one final rule set for the active project shell.
    Keep the outer panes flat; only controls and repeated items get radius. */
 .workspace-shell {
-  grid-template-rows: 34px minmax(0, 1fr);
+  /* 52px tab-bar row: 10px above + 32px tab + 10px below, so the tabs get 10px
+     top/bottom breathing room and the row below (sidebar) keeps its own 10px
+     top margin — one consistent 10px rhythm around the strip. */
+  grid-template-rows: 52px minmax(0, 1fr);
+}
+/* ── Project-route tab-strip dock (workspaceTabsDock.ts) ──────────────────
+   On the project route the strip portals into .split-chat-tabs-dock at the
+   top of the chat column, one level below the chrome row and level with the
+   workspace column's 设计文件 row (which stays put). The chrome row remains,
+   keeping only Home (.workspace-tabs-home-chrome) — the floating account
+   cluster rides the window's top-right on its own. No dock registered
+   (home / marketplace, workspace-focused mode) → the strip renders in the
+   classic full-width chrome row again. */
+.split-chat-tabs-dock {
+  display: flex;
+  /* Top-aligned, not centered: the 36px dropdown hugs the row's top edge —
+     no headroom above it — leaving only the 4px below to the chat card. */
+  align-items: flex-start;
+  gap: 8px;
+  height: 40px;
+  min-height: 40px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+/* The chrome row VISUALLY keeps only the pinned Home tab (per product: 顶部
+   只保留 home 和头像/积分) — project tabs surface through the docked
+   dropdown above instead, never as pills in the chrome. Rows still render
+   (they are the tab machinery's state/measurement/drag DOM), so this is
+   presentation-only. Only the undocked strip can match: the docked strip is
+   portaled into .split-chat-tabs-dock, outside .workspace-tabs-chrome. */
+.workspace-tabs-chrome .workspace-tab:not(.is-pinned) {
+  display: none;
+}
+/* With the active project row hidden the glide pill has nothing to hug —
+   hide it rather than let it collapse onto a zero-rect. */
+.workspace-tabs-chrome:has(.workspace-tab.is-active:not(.is-pinned)) .workspace-tabs-glide {
+  display: none;
+}
+/* Collapse-chat control, lifted from the chat card header into the dock row
+   (left of the white tab dropdown). */
+.split-chat-collapse {
+  appearance: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  /* Dock is top-aligned; re-center this 32px button on the 36px dropdown. */
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  /* White seat matching the dropdown beside it. */
+  background: #fff;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+  -webkit-app-region: no-drag;
+}
+.split-chat-collapse:hover {
+  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+}
+.split-chat-tabs-dock .workspace-tabs-strip {
+  align-items: center;
+}
+/* Inside either dock the strip's pinned entry tab hides — Home stays up in
+   the chrome row as .workspace-tabs-home-chrome. */
+.split-chat-tabs-dock .workspace-tab.is-pinned,
+.ws-tabs-project-dock .workspace-tab.is-pinned {
+  display: none;
+}
+/* Focus-mode dock: it still OWNS the strip (registering here is what keeps
+   the strip out of the full-width chrome row), but shows nothing — the
+   workspace tab row keeps its own controls only (per product: 收起侧边栏后不要
+   把项目 tab / 项目下拉带到这一行). The strip stays mounted for its
+   measurement and drag hooks. */
+.ws-tabs-project-dock {
+  display: none;
+}
+/* Docked mode swaps the pill strip for the white dropdown below. The strip
+   stays mounted (its measurement/drag hooks keep their DOM) but invisible. */
+.split-chat-tabs-dock .workspace-tabs-strip {
+  display: none;
+}
+/* ── Docked tab dropdown: one pure-white select spanning the chat column ── */
+.workspace-tabs-dropdown {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-dropdown__trigger {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.workspace-tabs-dropdown__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.workspace-tabs-dropdown__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.workspace-tabs-dropdown__trigger > svg:last-child {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+}
+.workspace-tabs-dropdown__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+}
+.workspace-tabs-dropdown__menu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  border: 1px solid var(--material-separator);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow-lg);
+  /* Six 32px rows plus vertical padding and borders. Global border-box sizing
+     means the border must be included or the sixth row is slightly clipped. */
+  max-height: calc(6 * 32px + 2 * 6px + 2 * 1px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.workspace-tabs-dropdown__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+}
+.workspace-tabs-dropdown__row:hover {
+  background: var(--bg-subtle);
+}
+.workspace-tabs-dropdown__row-main {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+.workspace-tabs-dropdown__row-main > svg:first-child {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.workspace-tabs-dropdown__row.is-active .workspace-tabs-dropdown__row-label {
+  font-weight: 600;
+}
+.workspace-tabs-dropdown__row-main > svg:last-child:not(:first-child) {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.workspace-tabs-dropdown__row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-tabs-home-chrome {
+  /* Same leading inset as .workspace-tabs-strip's padding-left, so the Home
+     icon lands on the IDENTICAL x in both chrome states — docked (this
+     button) and undocked (the strip's pinned entry tab). Without it the icon
+     jumped 10px left on every entry→project→entry trip. */
+  margin-left: 10px;
+  width: 78px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+.workspace-tabs-home-chrome:hover {
+  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+}
+.app .split-chat-slot {
+  /* Column: the docked strip sits above the chat card. */
+  flex-direction: column;
+}
+.app .split-chat-slot > .pane {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .workspace-shell .workspace-tabs-chrome.app-chrome-header {
-  --workspace-tabs-chrome-height: 34px;
-  --workspace-tab-bar-bg: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-subtle));
+  --workspace-tabs-chrome-height: 52px;
+  /* Flush with the page below it — the bar shares the app surface. */
+  --workspace-tab-bar-bg: var(--bg);
   --workspace-active-tab-border: color-mix(in srgb, var(--border-strong) 38%, transparent);
-  height: 34px;
-  min-height: 34px;
+  height: 52px;
+  min-height: 52px;
   padding: 0 8px 0 0;
   background: var(--workspace-tab-bar-bg);
   border-bottom: 0;
@@ -953,14 +1221,14 @@
   align-self: stretch;
 }
 .workspace-shell .workspace-tabs-strip {
-  gap: 3px;
+  gap: 2px;
   align-items: center;
   padding-top: 0;
 }
 .workspace-shell .workspace-tab {
   width: 156px;
-  height: 26px;
-  min-height: 26px;
+  height: 32px;
+  min-height: 32px;
   /* Auto-shrink in the project shell: tabs sit at 156px when there's room and
      shrink toward --workspace-tab-min-width as more open, keeping the whole row
      visible without scrolling for as long as possible. flex-grow 0 stops a lone
@@ -971,15 +1239,39 @@
   flex: 0 1 156px;
   grid-template-columns: minmax(0, 1fr) 22px;
   align-self: center;
-  /* Intentional compact-chrome value (26px tab); kept off the radius scale
-     and pinned by workspace-tabs-chrome.test.ts. */
-  border-radius: 7px;
+  border-radius: 12px;
   border: 1px solid transparent;
   background: transparent;
   box-shadow: none;
 }
+/* Chrome-style hairline separators between tabs, matching #5517: each tab
+   after the first draws a short divider centered in the 2px strip gap before
+   it. Dividers touching the active (or hovered / dragging) tab fade out so
+   its pill reads as one uninterrupted shape. A prior pass here removed this
+   to "stay separator-free" — that reading was wrong, not a real product
+   decision; #5517's own tab strip has always drawn this divider. */
 .workspace-shell .workspace-tab + .workspace-tab::before {
-  display: none;
+  content: '';
+  display: block;
+  position: absolute;
+  left: -1.5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 14px;
+  background: color-mix(in srgb, var(--border-strong) 52%, transparent);
+  pointer-events: none;
+  transition: opacity 100ms var(--ease-out);
+}
+.workspace-shell .workspace-tab.is-active::before,
+.workspace-shell .workspace-tab.is-active + .workspace-tab::before,
+.workspace-shell .workspace-tab:hover::before,
+.workspace-shell .workspace-tab:hover + .workspace-tab::before,
+.workspace-shell .workspace-tab:focus-within::before,
+.workspace-shell .workspace-tab:focus-within + .workspace-tab::before,
+.workspace-shell .workspace-tab.is-dragging::before,
+.workspace-shell .workspace-tab.is-dragging + .workspace-tab::before {
+  opacity: 0;
 }
 /* The pinned Home tab is fixed: it never shrinks with the project tabs and
    stays stuck to the left edge so it remains fully visible after the rest
@@ -987,37 +1279,62 @@
    tabs from showing through it. Declared before .is-active so an active Home
    tab still picks up the active highlight. */
 .workspace-shell .workspace-tab.is-pinned {
-  flex: 0 0 104px;
-  width: 104px;
-  min-width: 104px;
-  max-width: 104px;
+  /* Single-icon pill (~half a project tab): the Home button on a project page,
+     or the sidebar toggle on the Home page. */
+  flex: 0 0 78px;
+  width: 78px;
+  min-width: 78px;
+  max-width: 78px;
   grid-template-columns: minmax(0, 1fr);
   position: sticky;
   left: 0;
   z-index: 3;
   background: var(--workspace-tab-bar-bg);
 }
+/* Active Home tab now shows only the sidebar toggle (no icon + divider), so it
+   is a single centered column. */
+.workspace-shell .workspace-tab.is-pinned:has(.workspace-tab__rail-toggle) {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  padding: 0;
+}
+.workspace-shell .workspace-tab.is-pinned .workspace-tab__rail-toggle {
+  /* Fill the whole pinned tab so the hover target is a full tab-sized box
+     (matching the Home button / a normal tab hover) instead of a cramped 20px
+     icon square. The glyph stays centered via the button's own flex centering. */
+  justify-self: stretch;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+}
 .workspace-shell .workspace-tab.is-active {
-  background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle));
+  border-radius: 12px;
+  background: #ffffff;
   border-color: var(--workspace-active-tab-border);
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
     0 0 0 0.5px color-mix(in srgb, var(--bg-panel) 82%, transparent) inset;
   z-index: 2;
 }
+/* Home view: the pinned tab is just the sidebar toggle — keep it flat (no
+   white "active pill" fill / border / shadow) so it sits like the other tabs
+   on the bar rather than a filled button. Uses the opaque bar fill so scrolled
+   tabs can't bleed through; the toggle's own ghost hover is the affordance. */
+.workspace-shell .workspace-tab.is-pinned.is-active:has(.workspace-tab__rail-toggle) {
+  background: var(--workspace-tab-bar-bg);
+  border-color: transparent;
+  box-shadow: none;
+}
 .workspace-shell .workspace-tab:not(.is-active):hover,
 .workspace-shell .workspace-tab:not(.is-active):focus-within {
-  border-radius: 7px;
-  background:
-    linear-gradient(
-      color-mix(in srgb, var(--bg-panel) 78%, transparent),
-      color-mix(in srgb, var(--bg-panel) 78%, transparent)
-    )
-    0 0 / 100% calc(100% - 2px) no-repeat;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
   border-color: transparent;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--border) 58%, transparent),
-    0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+  /* No inset stroke ring on hover — the soft fill alone is the affordance;
+     a whisper of drop shadow keeps the slight lift. */
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
 }
 /* The sticky Home tab must stay opaque on hover/focus: the translucent panel
    wash above (color-mix(… 78%, transparent)) would otherwise let horizontally
@@ -1030,8 +1347,7 @@
     linear-gradient(
       color-mix(in srgb, var(--bg-panel) 78%, transparent),
       color-mix(in srgb, var(--bg-panel) 78%, transparent)
-    )
-    0 0 / 100% calc(100% - 2px) no-repeat,
+    ),
     var(--workspace-tab-bar-bg);
 }
 .workspace-shell .workspace-tab.is-dragging {
@@ -1039,24 +1355,123 @@
   box-shadow: 0 14px 30px color-mix(in srgb, var(--text) 16%, transparent);
   z-index: 4;
 }
+/* ── Liquid-glass glide indicator ─────────────────────────────────────────
+   One persistent frosted pill (structure in shell.css) replaces the static
+   white active pill above: it glides between tabs with an elastic snap and,
+   on Chromium, refracts its backdrop via useLiquidGlass (SDF displacement).
+   The un-gated .is-active rule above stays as the SSR / pre-hydration
+   fallback until the hook stamps data-glide-ready on the strip. */
+.workspace-shell .workspace-tabs-chrome {
+  /* Light mode leans whiter than raw --glass-regular so the pill reads as
+     "the active tab", close to the solid #fff it replaces. Dark mode uses
+     the glass token as-is (also fixes the old hardcoded-#fff dark pill). */
+  --workspace-glide-frost: color-mix(in srgb, #ffffff 34%, var(--glass-regular));
+}
+[data-theme="dark"] .workspace-shell .workspace-tabs-chrome {
+  --workspace-glide-frost: var(--glass-regular);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .workspace-shell .workspace-tabs-chrome {
+    --workspace-glide-frost: var(--glass-regular);
+  }
+}
+.workspace-shell .workspace-tabs-glide {
+  top: calc(50% - 16px);
+  height: 32px; /* matches .workspace-shell .workspace-tab */
+  /* 12px (not a full pill) so the active tab reads as a rounded rect. */
+  border-radius: 12px;
+}
+.workspace-shell .workspace-tabs-glide__pill {
+  border: 1px solid var(--workspace-active-tab-border);
+  background: var(--workspace-glide-frost);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
+    0 0 0 0.5px color-mix(in srgb, var(--bg-panel) 82%, transparent) inset;
+}
+/* Chromium SDF state: keep the tint for label legibility, add the refraction
+   ring, and replace material.css's heavy 0 6px 18px shadow — wrong scale for
+   a 32px pill. (routines.css imports after material.css; the attribute
+   selector also out-specifies the base .od-glass-refract rule.) */
+.workspace-shell .workspace-tabs-glide__pill[data-od-glass-sdf] {
+  background: var(--workspace-glide-frost);
+  -webkit-backdrop-filter: var(--flt) blur(12px) saturate(1.35);
+  backdrop-filter: var(--flt) blur(12px) saturate(1.35);
+  box-shadow:
+    inset 0 1px 0.5px var(--glass-refract-ring-top),
+    inset 0 0 0 1px var(--glass-refract-ring-edge),
+    0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+}
+/* Liquid stretch: the pill elongates toward the travel direction and settles.
+   data-dir is stamped per activation by useGlideIndicator, which also replays
+   the animation (style.animation reset), so it fires once per switch. */
+.workspace-shell .workspace-tabs-glide[data-dir="right"] .workspace-tabs-glide__pill {
+  transform-origin: left center;
+}
+.workspace-shell .workspace-tabs-glide[data-dir="left"] .workspace-tabs-glide__pill {
+  transform-origin: right center;
+}
+.workspace-shell .workspace-tabs-glide[data-dir] .workspace-tabs-glide__pill {
+  animation: od-glide-stretch 300ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes od-glide-stretch {
+  0% {
+    transform: scale(1, 1);
+  }
+  38% {
+    transform: scale(1.07, 0.965);
+  }
+  72% {
+    transform: scale(0.99, 1.005);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+/* Once the indicator is live the active tab stops painting its own pill —
+   the glass pill underneath is now the active marker. */
+.workspace-shell .workspace-tabs-strip[data-glide-ready] .workspace-tab.is-active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+/* Reduced transparency: our skin rule above would out-cascade material.css's
+   token-level fallback, so pin an explicit solid pill here. */
+@media (prefers-reduced-transparency: reduce) {
+  .workspace-shell .workspace-tabs-glide__pill {
+    background: var(--bg-elevated);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 .workspace-shell .workspace-tab__main {
   position: relative;
   z-index: 2;
   gap: 5px;
   padding-inline: 9px 3px;
 }
+.workspace-shell .workspace-tab.is-pinned .workspace-tab__main {
+  width: 100%;
+  padding-inline: 0;
+  justify-content: center;
+}
 .workspace-shell .workspace-tab__close {
   position: relative;
   z-index: 2;
 }
 .workspace-shell .workspace-tab__label {
-  font-size: 11.5px;
-  font-weight: 540;
+  font-size: 13px;
+  font-weight: 500;
+}
+.workspace-shell .workspace-tab.is-active .workspace-tab__label {
+  font-size: var(--font-size-13, 13px);
 }
 .workspace-shell .workspace-tab__close {
   width: 18px;
   height: 18px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-circular, 50%);
+}
+.workspace-shell .workspace-tab__close:hover {
+  border-radius: var(--radius-circular, 50%);
 }
 .workspace-shell .workspace-tabs-new-btn,
 .workspace-shell .workspace-tabs-icon-btn {
@@ -1066,7 +1481,11 @@
 }
 
 .app {
-  background: var(--bg-panel);
+  /* Transparent like the home page's containers — the project view rides
+     the same shared ground (app-wash / wallpaper vibrancy) instead of
+     re-painting a solid panel over it. Restores --bg-app under reduced
+     transparency via the veil token (app-wash.css). */
+  background: var(--veil-shell, var(--bg-panel));
 }
 .app > .app-chrome-header {
   height: 44px;
@@ -1094,8 +1513,8 @@
   gap: 8px;
 }
 .app .app-project-title .title {
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 16px;
+  font-weight: 600;
   line-height: 18px;
   letter-spacing: 0;
 }
@@ -1106,32 +1525,83 @@
 }
 
 .app .split {
-  background: var(--bg-panel);
-}
-.app .split:not(.split-focus) {
-  grid-template-columns: minmax(320px, var(--chat-panel-width, 460px)) 8px minmax(400px, 1fr);
-}
-.app .split.split-focus {
-  grid-template-columns: minmax(0, 1fr);
+  /* Same material as the tab strip above: nothing painted here, the app
+     wash / window vibrancy shows through (veil tokens in app-wash.css). */
+  background: var(--veil-page, transparent);
 }
 .app .split-chat-slot {
-  padding: 0;
+  /* Inset the pane so it reads as a floating card (same treatment as the home
+     sidebar's .entry-nav-rail__panel). Top inset is 0 so the card sits 8px
+     higher — the tab strip's own 10px bottom breathing is the only gap to it,
+     giving a 10px tab-to-content spacing (was 18px). Bottom/left stay 8px; the
+     slot's overflow:hidden (shell.css) clips the card's shadow cleanly at the
+     slot edge. Right side is 0 so the gap to the workspace card is just the
+     8px resize-handle column (not 8+8+8=24px). */
+  padding: 0 0 8px 8px;
+  background: var(--veil-page, transparent);
 }
 .app .split-chat-slot > .pane {
+  /* overflow:hidden still rounds the content (the composer is a separate
+     fixed/portaled layer, so it isn't clipped and auto-follows the inset via
+     composerPortalRect). */
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-lg);
   box-shadow: none;
-  background: var(--bg-panel);
+  /* Pure-white frosted glass: a white tint over the regular blur so the chat
+     panel reads paper-white instead of showing the raw ground. Dark theme
+     falls back to the standard Regular material, and the degraded blocks
+     below flatten it to a solid surface. */
+  background: color-mix(in srgb, #fff 85%, transparent);
+  -webkit-backdrop-filter: var(--material-regular-backdrop);
+  backdrop-filter: var(--material-regular-backdrop);
+  overflow: hidden;
+}
+[data-theme='dark'] .app .split-chat-slot > .pane {
+  background: var(--material-regular);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .app .split-chat-slot > .pane {
+    background: var(--material-regular);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .app .split-chat-slot > .pane {
+    background: var(--bg-elevated);
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .app .split-chat-slot > .pane {
+    background: var(--bg-elevated);
+  }
 }
 .app .split-resize-handle {
+  --split-resize-gradient-surface: #fff;
   width: 8px;
   min-width: 8px;
   background: transparent;
 }
+
+.app .split-resize-handle::after {
+  /* No painted strip in any state (rest, hover, or drag) — the gutter always
+     shows the shared ground. The col-resize cursor on the handle remains the
+     drag affordance. */
+  display: none;
+}
+
 .app .split-resize-handle:hover,
 .app .split-resize-handle:focus-visible,
 .app .split.is-resizing-chat .split-resize-handle {
   background: transparent;
+}
+
+[data-theme="dark"] .app .split-resize-handle {
+  --split-resize-gradient-surface: var(--bg-panel);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .app .split-resize-handle {
+    --split-resize-gradient-surface: var(--bg-panel);
+  }
 }
 
 .app .chat-header,
@@ -1141,7 +1611,9 @@
   border-radius: 0;
   border: none;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  /* Functional toolbar → Liquid Glass regular (材质规范). */
+  /* Functional toolbar → Liquid Glass regular (材质规范). */
+  background: var(--glass-regular);
   box-shadow: none;
 }
 .app .chat-header {
@@ -1157,7 +1629,7 @@
   min-height: 28px;
   padding: 0 10px;
   border-radius: var(--radius);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .app .chat-header-tab.active {
   background: var(--bg-subtle);
@@ -1172,7 +1644,9 @@
 .app .chat-log {
   gap: 14px;
   padding: 18px 18px 20px;
-  background: var(--bg-panel);
+  /* Let the pane's clear glass show — the card material stays uniform with
+     the tab strip instead of re-painting an opaque transcript slab. */
+  background: transparent;
 }
 /* Cancel the 14px flex gap so the idle spacer adds no trailing space. */
 .app .chat-log-tail-spacer {
@@ -1198,15 +1672,15 @@
 .app .msg .role {
   margin-bottom: 5px;
   gap: 7px;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.25;
   color: var(--text-muted);
-  font-weight: 560;
+  font-weight: 500;
 }
 .app .msg .role > span:first-child,
 .app .msg .role .role-name {
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
 }
 .app .msg.assistant .role {
   align-items: center;
@@ -1222,19 +1696,19 @@
   border-radius: var(--radius-sm);
 }
 .app .msg-time {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-soft);
   font-weight: 500;
 }
 .app .msg.user .user-text {
   padding: 8px 12px;
-  border: 1px solid color-mix(in srgb, var(--selected) 88%, #000);
-  border-radius: 14px 14px 4px 14px;
-  background: var(--selected);
-  color: #fff;
+  border: 0;
+  border-radius: var(--radius-lg) var(--radius-none) var(--radius-lg) var(--radius-lg);
+  background: #ededed;
+  color: var(--text);
   line-height: 1.45;
-  font-size: 13.5px;
-  box-shadow: var(--shadow-xs);
+  font-size: 13px;
+  box-shadow: none;
 }
 .app .msg.user .user-copy-btn {
   color: var(--text-soft);
@@ -1272,14 +1746,15 @@
 .app .assistant-footer {
   padding: 4px 0;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-faint);
   opacity: 0;
   transition: opacity 150ms var(--ease-out);
 }
 .app .msg.assistant:hover .assistant-footer,
 .app .msg.assistant:focus-within .assistant-footer,
-.app .assistant-footer[data-streaming="true"] { opacity: 1; }
+.app .assistant-footer[data-streaming="true"],
+.app .assistant-footer[data-last="true"] { opacity: 1; }
 @media (hover: none) {
   .app .assistant-footer { opacity: 1; }
 }
@@ -1293,9 +1768,13 @@
   box-shadow: none;
 }
 .app .assistant-footer .assistant-label {
-  font-weight: 400;
-  font-size: 11px;
+  font-weight: 500;
+  font-size: 12px;
   color: var(--text-faint);
+}
+.app .assistant-footer .assistant-stats {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 .app .op-waiting {
   width: fit-content;
@@ -1392,7 +1871,7 @@
 .app .live-code-box {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: transparent;
+  background: var(--bg-fill-secondary);
 }
 .app .live-code-box .live-code-head {
   cursor: default;
@@ -1441,8 +1920,7 @@
   background: transparent;
   pointer-events: none;
 }
-.app .task-activity-current-row .op-card-head,
-.app .task-activity-current-thinking {
+.app .task-activity-current-row .op-card-head {
   display: flex;
   align-items: center;
   min-height: 36px;
@@ -1459,8 +1937,11 @@
 .app .task-activity-current-row .op-meta {
   color: var(--text-muted);
 }
+/* Strip tool-card disclosures from the compact current row, but keep the
+   thinking block's accordion: streamed reasoning must stay expandable while
+   the run is in progress (incident recvqgLmAkUM6G). */
 .app .task-activity-current-row .op-expand-chev,
-.app .task-activity-current-row .accordion-collapsible,
+.app .task-activity-current-row .op-card .accordion-collapsible,
 .app .task-activity-current-row .live-code-pre,
 .app .task-activity-current-row .op-output {
   display: none;
@@ -1517,7 +1998,7 @@
   box-shadow: none;
 }
 .app .produced-files-label {
-  font-size: 11.5px;
+  font-size: 12px;
   margin-bottom: 10px;
   color: var(--text-muted);
 }
@@ -1548,11 +2029,11 @@
   font-size: 13px;
 }
 .app .produced-file-size {
-  font-size: 11px;
+  font-size: 12px;
 }
 .app .produced-file-actions .ghost,
 .app .produced-file-actions .ghost-link {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   border: none;
@@ -1569,7 +2050,7 @@
   border-radius: 0;
   background: none;
   border: none;
-  font-size: 11.5px;
+  font-size: 12px;
   font-family: var(--mono);
 }
 .app .chat-empty-wrap {
@@ -1587,10 +2068,10 @@
   text-align: left;
 }
 .app .chat-empty-title {
-  font-size: 13.5px;
+  font-size: 13px;
 }
 .app .chat-empty-hint {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
 }
 .app .chat-examples {
@@ -1621,7 +2102,7 @@
   box-shadow: none;
 }
 .app .chat-example-title {
-  font-size: 12.8px;
+  font-size: 13px;
 }
 .app .chat-example-prompt {
   font-size: 12px;
@@ -1689,7 +2170,7 @@
 }
 .app .chat-design-artifact-more-count {
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
 }
 .app .chat-design-artifact-preview {
   aspect-ratio: 16 / 10;
@@ -1723,8 +2204,8 @@
   place-items: center;
   gap: 5px;
   color: var(--text-faint);
-  font-size: 10px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.08em;
 }
 .app .chat-design-artifact-meta {
@@ -1737,8 +2218,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text);
 }
 .app .chat-design-artifact-kind {
@@ -1746,7 +2227,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .app .chat-design-artifacts-empty {
@@ -1758,7 +2239,7 @@
   border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .app .chat-connect-repo {
   max-width: none;
@@ -1776,7 +2257,7 @@
   border-radius: var(--radius);
 }
 .app .chat-connect-repo-title {
-  font-size: 12.8px;
+  font-size: 13px;
 }
 .app .chat-connect-repo-text {
   font-size: 12px;
@@ -1793,8 +2274,12 @@
 }
 .chat-composer-fixed-layer .composer {
   gap: 5px;
-  padding: 8px 10px 10px;
+  padding: 8px;
+  /* Bottommost gray card removed — the white shell sits directly on the chat
+     card. (Dark keeps --bg-panel below, which matches the dark shell, so no
+     separate card shows there either.) */
   background: transparent;
+  border-radius: var(--radius-lg);
 }
 .app .composer-shell {
   padding: 7px;
@@ -1804,21 +2289,30 @@
   box-shadow: var(--shadow-sm);
 }
 .chat-composer-fixed-layer .composer-shell {
-  /* Vertical breathing room only. The side inset is applied as a margin on the
-     children below instead of horizontal padding here, so the shell's
-     content-box width — which is what the shared label-collapse @container in
-     chat.css measures — stays full and that breakpoint can remain generic. */
-  padding: 6px 0;
-  border-color: var(--border);
-  border-radius: var(--radius-md);
+  padding: 5px;
+  gap: 8px;
+  border-color: var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-subtle) 45%, var(--bg-panel));
   box-shadow: none;
 }
-/* Inset the staged chips, the input field and the toolbar off the card's
-   rounded frame (giving + and Send a real side margin) without shrinking the
-   @container width — see the .composer-shell padding note above. */
+
+[data-theme="dark"] .app .chat-log,
+[data-theme="dark"] .chat-composer-fixed-layer .composer,
+[data-theme="dark"] .chat-composer-fixed-layer .composer-shell {
+  background: var(--bg-panel);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .app .chat-log,
+  html:not([data-theme]) .chat-composer-fixed-layer .composer,
+  html:not([data-theme]) .chat-composer-fixed-layer .composer-shell {
+    background: var(--bg-panel);
+  }
+}
 .chat-composer-fixed-layer .composer-shell > * {
-  margin-left: 8px;
-  margin-right: 8px;
+  margin-left: 0;
+  margin-right: 0;
 }
 .app .composer-shell:focus-within {
   border-color: color-mix(in srgb, var(--accent) 34%, var(--border-strong));
@@ -1827,8 +2321,8 @@
     0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent);
 }
 .chat-composer-fixed-layer .composer-shell:focus-within {
-  border-color: var(--border-strong);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 4%, transparent);
+  border-color: var(--border-soft);
+  box-shadow: none;
 }
 .app .composer.drag-active .composer-shell {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
@@ -1838,86 +2332,30 @@
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
-/* QuickSwitcher owns the modal input while open. The fixed composer normally
-   restores pointer-events on its child .composer, so suspend that child too. */
-body.od-quick-switcher-open .chat-composer-fixed-layer {
-  pointer-events: none;
-  opacity: 0.58;
-}
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer {
-  pointer-events: none;
-}
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:focus-within,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer.drag-active .composer-shell {
-  border-color: transparent;
-  box-shadow: none;
-}
-/* Keep the typing area a clean white field with a soft border so it reads as
-   the one input surface inside the tinted card — the resting border replaces
-   the removed toolbar divider as the only separator in the footer. */
 .chat-composer-fixed-layer .composer-input-wrap {
-  background: var(--bg-panel);
-  border-color: var(--border-soft);
-}
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap:focus-within {
-  background: var(--bg-fill-tertiary);
+  background: #fff;
+  /* No inner frame — the input sits directly on the shell surface. The shell
+     keeps its own outer border (see .composer-shell above). */
   border-color: transparent;
-  box-shadow: none;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor .composer-editable,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer textarea,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer input {
-  color: var(--text-muted);
-  caret-color: transparent;
-}
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-placeholder {
-  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
-}
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-design-system-row,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-row {
+.chat-composer-fixed-layer .composer-input-wrap:focus-within {
   border-color: transparent;
 }
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger.picked,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--plugin,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--workspace,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-order,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-open,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-active-file,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__chip {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  color: var(--text-muted);
+.chat-composer-fixed-layer .composer-input-editor,
+.chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
+.chat-composer-fixed-layer .composer-input-editor .composer-editable {
+  border-radius: inherit;
 }
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-name,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-kind,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name strong,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name span {
-  color: var(--text-muted);
+.chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
+.chat-composer-fixed-layer .composer-input-editor .composer-editable {
+  font-size: 13px;
+  font-weight: 500;
 }
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-icon,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-remove,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-icon,
-body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-remove,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__icon,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__remove {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  color: var(--text-muted);
+.chat-composer-fixed-layer .composer-input-placeholder,
+.chat-composer-fixed-layer .composer-input-wrap .home-hero__carousel {
+  font-size: 13px;
 }
 .app .composer textarea {
   min-height: 56px;
@@ -1939,17 +2377,18 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-
   min-height: 30px;
   padding-top: 6px;
   margin-top: 1px;
-  gap: 6px;
+  gap: 4px;
 }
 .chat-composer-fixed-layer .composer-row {
-  /* Match the 28px control height exactly — the old 32px min-height left 4px
-     of dead space that made the footer band feel too tall. */
   min-height: 28px;
-  /* No divider above the toolbar: the white input box already separates it
-     from the textarea, so the extra border-top + its 2px spacing just stacked
-     another line into the footer. Drop both so the card reads as fewer layers. */
+  margin-top: 0;
+  padding: 0 4px;
   padding-top: 0;
+  gap: 4px;
   border-top: none;
+}
+.chat-composer-fixed-layer .composer-row > * {
+  align-self: center;
 }
 .app .composer-row .icon-btn,
 .app .composer-import,
@@ -1977,21 +2416,47 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-
   box-sizing: border-box;
 }
 .app .composer-send {
-  height: 28px;
-  min-height: 28px;
-  min-width: 58px;
-  padding: 0 12px;
-  font-size: 12.5px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  color: var(--bg);
+  font-size: var(--font-size-14);
   font-weight: 600;
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
 }
 .chat-composer-fixed-layer .composer-send {
-  height: 28px;
-  min-height: 28px;
-  padding: 0 12px;
-  font-size: 12.5px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  color: var(--bg);
+  font-size: var(--font-size-14);
   font-weight: 600;
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
+}
+.app .composer-send.stop,
+.chat-composer-fixed-layer .composer-send.stop {
+  /* Executing state: same 36px capsule as Send — dot-matrix bloom + 思考中
+     label, width hugging the content. Geometry must match .app .composer-send
+     above; only the width goes auto for the label. */
+  width: auto;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px 0 10px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
 }
 /* The session-mode ("Design"/CLI) toggle and the agent avatar are authored in
    their own components and default to 32px. The composer now mounts under
@@ -2009,37 +2474,127 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-
   min-height: 28px;
   box-sizing: border-box;
 }
-.app .composer-send:disabled {
-  background: var(--bg-subtle);
-  border-color: var(--border);
-  color: var(--text-faint);
-  cursor: default;
-}
-.chat-composer-fixed-layer .composer-send:disabled {
-  background: var(--bg-subtle);
-  border-color: var(--border);
-  color: var(--text-faint);
-  cursor: default;
-}
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-import,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-research,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger:hover,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger.is-open,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-agent-trigger,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-btn,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send,
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled,
-body.od-quick-switcher-open .chat-composer-fixed-layer .working-dir-pill-trigger {
-  background: transparent;
+.app .composer-row .avatar-agent-trigger,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger {
+  /* Width hugs the content: agent mark + the selected-model readout, so the
+     current model reads right next to the Send button. */
+  width: auto;
+  min-width: 22px;
+  padding: 0 4px;
+  gap: 5px;
+  /* Flex-center the mark instead of grid: a single grid item + implicit-row
+     `align-content` could leave the mark a few px off the vertical center,
+     making it sit low next to the flex `.icon-btn` palette. Flex centers the
+     lone mark exactly on the row centerline. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-color: transparent;
+  background: transparent;
   box-shadow: none;
+}
+.app .composer-row .avatar-agent-trigger .avatar-agent-trigger__model,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger .avatar-agent-trigger__model {
+  display: inline-block;
+  max-width: 148px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-muted);
 }
-body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
-  color: var(--text-faint);
+.app .composer-row .avatar-agent-trigger:hover:not(:disabled),
+.app .composer-row .avatar-agent-trigger:focus-visible,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:hover:not(:disabled),
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:focus-visible {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+/* recvqg3CzK8GcT: the model mark floats between two solid capsules whose ink
+   sits inset from their boxes — to the LEFT the mode pill's × glyph is ~17px
+   of whitespace away (× button slack + pill trailing padding), while to the
+   RIGHT only the 4px row gap + 4px trigger padding (~9px) separated the mark
+   from the run/send capsule's edge, so the icon read as glued to the button.
+   The trigger never paints its hitbox (hover stays transparent above), so ink
+   distance is the only spacing the eye can see; this margin makes the right
+   ink gap match the left one (17px ↔ 17px). */
+.app .composer-row .avatar-agent-trigger,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger {
+  margin-inline-end: 8px;
+}
+/* Hide the dropdown chevron so only the agent mark / model name shows. The
+   chevron is RemixIcon's trailing glyph — this app renders Remix glyphs as
+   inline `<svg>` rather than the icon font (packaged `od://` documents can't
+   load `url()` fonts, see RemixIcon.tsx), and that `<svg>` carries an inline
+   `display: inline-block` style. Inline styles beat any non-`!important`
+   stylesheet rule, so plain `display: none` here was a silent no-op — the
+   chevron rendered right next to the model name. */
+.app .composer-row .avatar-agent-trigger > svg:last-child,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger > svg:last-child {
+  display: none !important;
+}
+/* When the selected-model readout is shown, drop the leading agent mark so the
+   trigger reads as just the model name (icon-only mode, with no readout, keeps
+   the mark). */
+.app .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .avatar-agent-mark,
+.app .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .agent-icon,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .avatar-agent-mark,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger:has(.avatar-agent-trigger__model) .agent-icon {
+  display: none;
+}
+/* Keep the project composer send action visually aligned with the Home
+   composer: deep neutral surface, brand-green foreground, and the same
+   theme-aware disabled treatment. */
+.app .composer-send:not(.stop),
+.chat-composer-fixed-layer .composer-send:not(.stop) {
+  --composer-send-bg: var(--text-strong);
+  --composer-send-fg: #87ea5c;
+
+  position: relative;
+  overflow: hidden;
+  border: var(--stroke-thin) solid transparent;
+  background: var(--composer-send-bg);
+  color: var(--composer-send-fg);
+  box-shadow: none;
+}
+[data-theme="dark"] .app .composer-send:not(.stop),
+[data-theme="dark"] .chat-composer-fixed-layer .composer-send:not(.stop) {
+  --composer-send-bg: var(--accent-tint);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .app .composer-send:not(.stop),
+  html:not([data-theme="light"]) .chat-composer-fixed-layer .composer-send:not(.stop) {
+    --composer-send-bg: var(--accent-tint);
+  }
+}
+.app .composer-send:not(.stop):hover:not(:disabled),
+.app .composer-send:not(.stop):active:not(:disabled),
+.chat-composer-fixed-layer .composer-send:not(.stop):hover:not(:disabled),
+.chat-composer-fixed-layer .composer-send:not(.stop):active:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--composer-send-bg) 86%, #fff);
+  color: var(--composer-send-fg);
+  box-shadow: none;
+  transform: none;
+}
+.app .composer-send:disabled,
+.chat-composer-fixed-layer .composer-send:disabled {
+  /* Idle (nothing typed): gray ground with the deep-green arrow; typing
+     flips to the ink-black ground with the bright #87ea5c arrow. */
+  opacity: 1;
+  background: var(--bg-muted);
+  border-color: transparent;
+  color: #2f781d;
+  box-shadow: none;
+}
+.composer-send:not(.stop) .od-icon {
+  position: relative;
+  z-index: 1;
+  color: currentColor;
+  filter: none;
 }
 /* The pill renders under `.app` (legacy header host) and under
    `.chat-composer-fixed-layer` (its current home in the composer toolbar).
@@ -2051,7 +2606,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   position: relative;
   display: inline-flex;
   margin-top: 0;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .app .working-dir-pill-trigger,
 .chat-composer-fixed-layer .working-dir-pill-trigger {
@@ -2101,7 +2656,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 .chat-composer-fixed-layer .working-dir-pill-menu-path {
   padding: 4px 10px;
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 12px;
   word-break: break-all;
 }
 .app .working-dir-pill-menu-item,
@@ -2122,7 +2677,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 }
 .app .working-dir-pill-menu-item.small,
 .chat-composer-fixed-layer .working-dir-pill-menu-item.small {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .app .working-dir-pill-menu-item:hover,
 .chat-composer-fixed-layer .working-dir-pill-menu-item:hover {
@@ -2147,7 +2702,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 .chat-composer-fixed-layer .working-dir-pill-menu-section {
   padding: 4px 10px;
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -2163,7 +2718,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 .chat-composer-fixed-layer .working-dir-pill-menu-error {
   padding: 4px 10px 6px;
   color: var(--red, #c0392b);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 /* Hosted in the composer's bottom toolbar (left of the spacer): flip the menu
    to open upward and anchor it left so it neither drops below the viewport nor
@@ -2187,7 +2742,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 }
 .app .composer-hint {
   margin: 4px 8px 0;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.35;
   color: color-mix(in srgb, var(--text-muted) 58%, transparent);
   overflow: hidden;
@@ -2215,11 +2770,42 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 }
 
 .app .workspace {
+  /* Matches the top tab strip's effect exactly, same as the chat card
+     (.split-chat-slot > .pane). Inset 8px keeps the ground gutter between
+     the cards; overflow:hidden rounds the content and the toolbar dropdowns
+     open downward into the preview so they aren't clipped. Left side is 0 so
+     the gap to the chat card is just the 8px resize-handle column (focus
+     mode restores it below). Top margin is 0 so the card sits 8px higher,
+     matching the chat card; the tab strip's own 10px bottom breathing is the
+     only tab-to-content gap (10px, was 18px). */
+  margin: 0 8px 8px 0;
   padding: 0;
-  background: var(--bg-panel);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  /* Same effect as the top tab strip: no fill, no frost of its own — the
+     ground (app wash in the browser, wallpaper vibrancy on desktop) shows
+     through identically in the strip, the gutter, and these cards, so the
+     whole shell reads as one continuous material. Veil tokens return to
+     solid surfaces under reduced transparency (app-wash.css). */
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  overflow: hidden;
+}
+/* Focus mode hides the chat card, so the workspace is the only card — give it
+   the 8px left gap back (in split mode the left is 0 to keep the inter-card gap
+   at 8px). */
+.app .split.split-focus .workspace {
+  margin-left: 8px;
 }
 .app .ws-tabs-shell {
   padding: 6px 14px;
+  border-bottom: none;
+  /* Match the solid panel below instead of the shared chat-header glass. */
+  background: var(--bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .app .ws-focus-expand {
   width: 32px;
@@ -2228,22 +2814,67 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 }
 .app .ws-tabs-bar {
   gap: 6px;
+  height: auto;
+  min-height: 38px;
+  padding-block: 4px;
   scrollbar-width: none;
 }
 .app .ws-tabs-bar::-webkit-scrollbar {
   display: none;
 }
 .app .ws-tab {
+  box-sizing: border-box;
+  height: 30px;
   min-height: 30px;
   padding: 0 11px;
-  border-radius: var(--radius);
+  /* Rounded rect (12px), matching the top workspace tab strip — not a full
+     pill — so the Design Files tab and file tabs read as one family. */
+  border-radius: 12px;
   border: 1px solid transparent;
+  line-height: 1;
   box-shadow: none;
+}
+/* Design Files tab keeps only its fill/text change on hover — no stroke (the
+   global `button:hover` border-strong rule would otherwise ring it). */
+.app .ws-tab.design-files-tab:hover {
+  border-color: transparent;
 }
 .app .ws-tab.active {
   background: var(--bg-subtle);
-  border-color: var(--border);
+  border-color: transparent;
   box-shadow: none;
+}
+.app .ws-tab.design-files-tab.active {
+  box-shadow: none;
+}
+/* Light separator between adjacent unselected tabs (Chrome tab-strip
+   pattern). Drawn by the trailing tab at the centre of the 6px gap so a
+   line only ever appears BETWEEN two tabs, and faded out whenever either
+   neighbour shows a pill background (active / hover / drag) so it never
+   abuts a pill. */
+.app .ws-tab + .ws-tab::before {
+  content: '';
+  position: absolute;
+  left: -3.5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  pointer-events: none;
+  transition: opacity 120ms var(--ease-out);
+}
+.app .ws-tab.active::before,
+.app .ws-tab:hover::before,
+.app .ws-tab.dragging::before,
+.app .ws-tab.drag-over-before::before,
+.app .ws-tab.drag-over-after::before,
+.app .ws-tab.active + .ws-tab::before,
+.app .ws-tab:hover + .ws-tab::before,
+.app .ws-tab.dragging + .ws-tab::before,
+.app .ws-tab.drag-over-before + .ws-tab::before,
+.app .ws-tab.drag-over-after + .ws-tab::before {
+  opacity: 0;
 }
 .app .ws-tab .tab-icon,
 .app .ws-tab.active .tab-icon {
@@ -2258,23 +2889,14 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 
 .app .df-panel,
 .app .df-main {
-  background: var(--bg-panel);
-}
-.app .df-panel:not(.no-preview) {
-  /* Keep a usable minimum for the file list (toolbar + names stay
-     clickable) but let the preview pane YIELD instead of forcing a rigid
-     320px track. A rigid min on both columns overflowed the panel on
-     narrow splits (list 460 + preview 320 = 780px), pushing the toolbar
-     buttons and the preview off-screen. With `minmax(0, …)` the preview
-     shrinks first so the panel never exceeds its container width. */
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 360px);
+  background: #fff;
 }
 .app .df-main {
   border-right-color: var(--border);
 }
 .app .df-body {
   padding: 4px 20px 20px;
-  background: var(--bg-panel);
+  background: #fff;
 }
 .app .df-controls-row {
   margin: 0 0 14px;
@@ -2405,49 +3027,19 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   width: 34px;
   padding-right: 6px;
 }
-.app .df-panel:not(.no-preview) .df-th-kind,
-.app .df-panel:not(.no-preview) .df-cell-kind,
-.app .df-panel:not(.no-preview) .df-th-time,
-.app .df-panel:not(.no-preview) .df-cell-time {
-  display: none;
-}
-.app .df-panel:not(.no-preview) .df-table {
-  table-layout: auto;
-}
-.app .df-panel:not(.no-preview) .df-th-name,
-.app .df-panel:not(.no-preview) .df-cell-name {
-  width: auto;
-}
-.app .df-panel:not(.no-preview) .df-cell-name {
-  min-width: 0;
-  max-width: none;
-}
-.app .df-panel:not(.no-preview) .df-row-name-btn,
-.app .df-panel:not(.no-preview) .df-row-name-wrap,
-.app .df-panel:not(.no-preview) .df-row-name {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
-.app .df-panel:not(.no-preview) .df-row-sub-kind,
-.app .df-panel:not(.no-preview) .df-row-sub-time {
-  display: inline;
-}
-.app .df-panel:not(.no-preview) .df-row-name {
-  display: block;
-}
 .app .df-th-sortable {
   padding: 10px 8px 8px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .app .df-section-row td {
   padding: 14px 8px 7px;
   border-top: 0;
 }
 .app .df-section-label {
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 10px;
+  padding: 0;
+  /* Match the "项目" breadcrumb header size so section titles read as one
+     heading family. */
+  font-size: 14px;
 }
 .app .df-cell-name,
 .app .df-cell-kind,
@@ -2482,7 +3074,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 }
 .app .df-row-name {
   font-size: 13px;
-  font-weight: 560;
+  font-weight: 500;
   color: var(--text-strong);
 }
 .app .df-row-name-wrap {
@@ -2572,6 +3164,13 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   justify-content: center;
   min-width: 24px;
   width: 24px;
+  /* Matches `.handoff-trigger`. Without an explicit height the caret inherits the
+     global `button { height: 36px }` while the trigger is 30px, and
+     `.handoff-split`'s `align-items: stretch` then renders an uneven split —
+     visible wherever no host-scoped override sizes the pair (the viewer toolbar
+     mount; `.ws-tabs-actions` sizes both to 28px and was masking this). */
+  height: 30px;
+  min-height: 30px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2598,6 +3197,25 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   overflow: hidden;
   flex: 0 0 auto;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent) inset;
+}
+/* Bundled brand artwork (public/editor-icons/*.png) paints its own tile —
+   no tinted bg or inset ring on top of it. */
+.app .editor-icon-img {
+  background: transparent;
+  box-shadow: none;
+  object-fit: contain;
+}
+/* Bare single-color marks (e.g. Windsurf's wave) follow the theme's text
+   color through a mask, same pattern as .agent-icon-mono. */
+.app .editor-icon-mask {
+  background-color: currentColor;
+  box-shadow: none;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 .app .handoff-menu {
   position: absolute;
@@ -2633,8 +3251,8 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
     color 200ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -2651,6 +3269,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 }
 .app .handoff-path-row {
   display: flex;
+  gap: 8px;
   min-width: 0;
 }
 .app .handoff-path-button {
@@ -2658,8 +3277,9 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 100%;
-  min-height: 34px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 32px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -2667,7 +3287,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   color: var(--text);
   font: inherit;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   transition:
     background 200ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -2720,9 +3340,9 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   padding: 0 2px;
   margin: 0;
   color: var(--text);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 16px;
-  font-weight: 650;
+  font-weight: 600;
 }
 .app .handoff-menu-item {
   display: inline-flex;
@@ -2776,9 +3396,9 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   min-height: 18px;
   padding: 0 2px;
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 18px;
-  font-weight: 650;
+  font-weight: 600;
 }
 .app .handoff-target-rail--unavailable .handoff-target-card {
   border-style: dashed;
@@ -2828,7 +3448,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 14px;
   font-weight: 600;
 }
@@ -2838,15 +3458,8 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 12px;
-}
-.app .handoff-framework-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 3px 0 1px;
 }
 .app .handoff-amr-link {
   display: inline-flex;
@@ -2859,8 +3472,8 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   border-radius: var(--radius);
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
-  font-size: 11.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   text-decoration: none;
   transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -2872,47 +3485,60 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 .app .handoff-amr-link .agent-icon {
   flex: 0 0 auto;
 }
+/* Framework picker: label above a balanced 3-column grid of tag buttons
+   (top/bottom composition) so chips never rag-wrap into orphans. */
+.app .handoff-framework-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 0;
+}
 .app .handoff-framework-label {
   color: var(--text-muted);
-  font-size: 10.5px;
-  line-height: 18px;
-  margin-right: 2px;
+  font-size: 12px;
+  line-height: 16px;
 }
+.app .handoff-framework-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+/* Tag buttons: borderless, selection reads through a deeper neutral fill +
+   strong text at a constant weight, so the selected chip never resizes. */
 .app .handoff-framework-chip {
-  height: 22px;
-  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-width: 0;
+  padding: 0 10px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  background: transparent;
+  border: 0;
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
   color: var(--text-muted);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   transition:
     background 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1),
     color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .app .handoff-framework-chip:hover {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
 }
 .app .handoff-framework-chip.active {
-  color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent) 78%, var(--border));
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg-panel));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
-    0 1px 2px rgba(180, 90, 59, 0.14);
-  font-weight: 700;
+  color: var(--bg-panel);
+  background: var(--text);
 }
 .app .handoff-framework-chip.active:hover {
-  color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent) 88%, var(--border));
-  background: color-mix(in srgb, var(--accent) 22%, var(--bg-panel));
+  color: var(--bg-panel);
+  background: color-mix(in srgb, var(--text) 88%, var(--bg-panel));
 }
 .app .handoff-menu-divider {
   height: 1px;
@@ -2920,14 +3546,14 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   margin: 0;
 }
 .app .handoff-menu-section {
-  font-size: 10.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
   padding: 4px 10px;
 }
 .app .handoff-menu-error {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-danger, #c0392b);
   padding: 4px 10px 6px;
 }
@@ -2949,7 +3575,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -2993,7 +3619,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
      within the viewport. */
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md, 0 18px 48px rgba(0, 0, 0, 0.16));
   display: flex;
   flex-direction: column;
@@ -3003,10 +3629,12 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 .project-ds-picker-search {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  height: 34px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  padding: 0 14px;
+  /* Taller, roomier header row: the search field reads as a proper input
+     instead of a cramped strip, and align-items:center places the icon and
+     the pill actions on the true vertical midline. */
+  height: 52px;
   color: var(--text-muted);
   flex: 0 0 auto;
 }
@@ -3017,7 +3645,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   outline: none;
   background: transparent;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.2;
   color: var(--text);
 }
@@ -3038,44 +3666,41 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
+  height: 30px;
+  padding: 0 13px;
+  border: 0;
+  /* Capsule actions — full pill radius to match the taller header row. */
+  border-radius: 999px;
   background: var(--bg-panel);
   color: var(--text-muted);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
   transition:
     background-color 120ms var(--ease-out),
-    border-color 120ms var(--ease-out),
     color 120ms var(--ease-out);
 }
 .project-ds-picker-action:hover,
 .project-ds-picker-action:focus-visible {
   outline: none;
   background: var(--bg-subtle);
-  border-color: var(--border-strong);
   color: var(--text-strong);
 }
 .project-ds-picker-action--primary {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: var(--accent-tint);
   color: var(--accent);
 }
 .project-ds-picker-action--primary:hover,
 .project-ds-picker-action--primary:focus-visible {
   background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
-  border-color: var(--accent);
   color: var(--accent);
 }
 .project-ds-picker-body {
   display: grid;
-  grid-template-columns: minmax(210px, 0.84fr) minmax(300px, 1.16fr);
+  grid-template-columns: minmax(180px, 1fr) minmax(200px, 1.1fr);
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -3086,7 +3711,6 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  border-right: 1px solid var(--border);
 }
 /* Group heading separating "your systems" from "official presets", matching the
    Design Systems tab split. Sticks to the top while scrolling the list. */
@@ -3095,12 +3719,15 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   top: -5px;
   z-index: 1;
   padding: 8px 8px 4px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-faint);
-  background: var(--bg, var(--surface, #fff));
+  /* Match the popover surface: an off-tone band here reads as a divider line
+     against the panel background. Still opaque so the sticky label masks the
+     list rows scrolling beneath it. */
+  background: var(--bg-panel, var(--surface, #fff));
 }
 .project-ds-picker-group-label:first-child {
   padding-top: 4px;
@@ -3131,7 +3758,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 }
 .project-ds-picker-option-title {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-strong, var(--text));
   min-width: 0;
   overflow: hidden;
@@ -3139,14 +3766,14 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   white-space: nowrap;
 }
 .project-ds-picker-option-cat {
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   color: var(--text-muted);
 }
 .project-ds-picker-option-summary {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
   display: -webkit-box;
@@ -3187,15 +3814,21 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   flex-direction: column;
   gap: 8px;
 }
-.project-ds-picker-preview-kit-wrap,
-.project-ds-picker-preview-kit {
+/* When the previewed design system is a brand, the rich Brand Kit card
+   (BrandPreviewCard, compact variant) owns the right pane and stretches to its
+   full width. */
+.project-ds-picker-preview-brand {
   width: 100%;
 }
-.project-ds-picker-preview-kit-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
+/* The kit preview reuses DesignKitView, whose module/swatch cards carry their
+   own hairline frames. Inside the picker's already-framed right pane that
+   reads as double-boxing — strip every stroke here (transparent, not 0, so
+   nothing reflows). Scoped to the picker only; the brand detail page keeps
+   its frames. */
+.project-ds-picker-preview-kit *,
+.project-ds-picker-preview-kit-wrap * {
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 .project-ds-picker-preview-open {
   margin-top: 8px;
@@ -3210,7 +3843,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   background: var(--bg-panel);
   color: var(--accent);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   transition:
     background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -3219,27 +3852,6 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
 .project-ds-picker-preview-open:hover {
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-}
-.design-system-kit-preview-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 180px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 12px;
-  text-align: center;
-}
-.ds-modal-kit-preview {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  padding: 24px;
-  background: var(--bg);
 }
 .project-ds-picker-preview-head {
   display: flex;
@@ -3258,8 +3870,53 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   overflow: hidden;
   background: var(--bg-panel);
 }
+.project-ds-picker-preview-expand {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translate(-50%, 6px);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--material-separator);
+  background: var(--material-thin);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
+  color: var(--text-strong, var(--text));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0;
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.4);
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-ds-picker-preview-stage:hover .project-ds-picker-preview-expand,
+.project-ds-picker-preview-expand:focus-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.project-ds-picker-preview-expand:hover {
+  background: var(--bg-panel);
+}
+.project-ds-picker-preview-expand svg {
+  display: block;
+  width: 13px !important;
+  height: 13px !important;
+}
+.project-ds-picker-preview-expand:hover {
+  color: var(--accent);
+  border-color: var(--border-strong, var(--border));
+  background: color-mix(in srgb, var(--text-muted) 8%, var(--bg-panel));
+}
 .project-ds-picker-preview-cat {
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);
@@ -3270,6 +3927,34 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
+}
+.project-ds-picker-preview-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.project-ds-picker-preview-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+}
+.project-ds-picker-preview-frame {
+  /* Render the design-system page at desktop width (1280×720), then scale
+     the whole thing down so the 16:9 stage shows a faithful first-screen
+     thumbnail rather than a cramped narrow-viewport reflow. scale() needs a
+     unitless ratio, so this is pinned to the stage's resolved width
+     (popover≈440 → right column≈232px ⇒ 232/1280 ≈ 0.181). */
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  border: 0;
+  background: #fff;
+  transform: scale(0.181);
+  transform-origin: top left;
+  pointer-events: none;
 }
 .project-ds-picker-preview-empty,
 .project-ds-picker-preview-loading {
@@ -3288,7 +3973,8 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   inset: 0;
   z-index: 1800;
   background: color-mix(in srgb, var(--text) 38%, transparent);
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3375,3 +4061,118 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
     border-radius: var(--radius-md);
   }
 }
+
+
+/* quick-switcher composer isolation — restored from feat/workspace-team (functional rules the demo redesign dropped) */
+/* QuickSwitcher owns the modal input while open. The fixed composer normally
+   restores pointer-events on its child .composer, so suspend that child too. */
+body.od-quick-switcher-open .chat-composer-fixed-layer {
+  pointer-events: none;
+  opacity: 0.58;
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer {
+  pointer-events: none;
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:focus-within,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer.drag-active .composer-shell {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap:focus-within {
+  background: var(--bg-fill-tertiary);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor .composer-editable,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer textarea,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer input {
+  color: var(--text-muted);
+  caret-color: transparent;
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-placeholder {
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-design-system-row,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-row {
+  border-color: transparent;
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger.picked,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--plugin,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--workspace,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-order,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-open,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-active-file,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__chip {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-name,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-kind,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name strong,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name span {
+  color: var(--text-muted);
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-icon,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-remove,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-icon,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-remove,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__icon,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__remove {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-import,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-research,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger.is-open,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-agent-trigger,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-btn,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled,
+body.od-quick-switcher-open .chat-composer-fixed-layer .working-dir-pill-trigger {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
+  color: var(--text-faint);
+}
+
+
+/* The design-files preview pane is gone (#5517: a click opens the file in a
+   workspace tab), so the split-grid block that used to live here — a second
+   360px track plus the row-density overrides that came with it — was
+   removed. Leaving the grid rule behind reserved an empty 360px column and
+   the panel content stopped short of the panel edge. */

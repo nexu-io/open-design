@@ -78,14 +78,14 @@ design-templates/open-design-landing/
 ├── README.md                # ← you are here
 ├── schema.ts                # typed inputs (single source of truth)
 ├── styles.css               # Atelier Zero stylesheet (single source of truth)
-├── inputs.example.json      # Open Design as the worked example
+├── inputs.example.json      # OpenDesign as the worked example
 ├── example.html             # canonical rendering, regenerable from inputs.example.json
 ├── scripts/
 │   ├── compose.ts           # inputs.json + styles.css → index.html
 │   ├── imagegen.ts          # gpt-image-2 wrapper (fal.ai backend)
 │   └── placeholder.ts       # SVG paper-textured frames
 └── assets/
-    ├── *.png                # 16 collage plates (Open Design instance)
+    ├── *.png                # 16 collage plates (OpenDesign instance)
     ├── image-manifest.json  # slot → file / dimensions / prompt mapping
     └── imagegen-prompts.md  # human-readable prompt pack
 ```

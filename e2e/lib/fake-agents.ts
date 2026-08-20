@@ -156,6 +156,14 @@ async function emitRun(promptText) {
     emitServiceFailure(503);
     return;
   }
+  if (promptText.includes('Return a daemon model-not-found failure')) {
+    emitModelUnavailableFailure();
+    return;
+  }
+  if (promptText.includes('Return a daemon timeout failure')) {
+    emitTimeoutFailure();
+    return;
+  }
   if (promptText.includes('Return a daemon socket-drop failure')) {
     emitSocketDropFailure();
     return;
@@ -171,7 +179,7 @@ async function emitRun(promptText) {
     return;
   }
   if (
-    promptText.includes('Create an Open Design plugin for:') &&
+    promptText.includes('Create an OpenDesign plugin for:') &&
     promptText.includes('produce a folder named generated-plugin')
   ) {
     await emitPluginAuthoringRun();
@@ -182,6 +190,10 @@ async function emitRun(promptText) {
   // text as conversation history.
   if (promptText.includes('Generate the deterministic artifact from the plan document')) {
     await emitPlanArtifactGenerateRun();
+    return;
+  }
+  if (promptText.includes('Create a deterministic media-only artifact')) {
+    await emitMediaOnlyRun();
     return;
   }
   if (promptText.includes('Create a deterministic plan document')) {
@@ -311,6 +323,17 @@ async function emitPlanDocumentRun() {
     'utf8',
   );
   emitSuccess('Created plan.md with a deterministic planning outline.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+async function emitMediaOnlyRun() {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await writeFileFs(join(projectDir(), 'media-only.png'), png);
+  emitSuccess('Created media-only.png as the only file produced by this turn.', false, false);
   process.exitCode = 0;
   exitSoon(0);
 }
@@ -690,6 +713,24 @@ function emitServiceFailure(statusCode) {
       process.exitCode = 1;
       exitSoon(1);
   }
+}
+
+function emitModelUnavailableFailure() {
+  const message = 'The selected model is not available for this account: model not found.';
+  writeJson({ type: 'thread.started' });
+  writeJson({ type: 'turn.started' });
+  writeJson({ type: 'turn.failed', error: { message } });
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+function emitTimeoutFailure() {
+  const message = 'The upstream model request timed out while waiting for a response.';
+  writeJson({ type: 'thread.started' });
+  writeJson({ type: 'turn.started' });
+  writeJson({ type: 'turn.failed', error: { message } });
+  process.exitCode = 0;
+  exitSoon(0);
 }
 
 // Reproduces a connection that dropped mid-response. This shape is NOT guessed:

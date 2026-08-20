@@ -119,6 +119,17 @@ export interface StartBrandExtractionOptions {
    *  brand stays `extracting` for the agent to drive (the legacy behavior tests
    *  use). */
   userDesignSystemsRoot?: string;
+  /** Workspace-aware creator supplied by the HTTP composition root. */
+  createUserDesignSystem?: typeof createUserDesignSystem;
+  /** Matching rollback for a workspace-aware draft creator. */
+  deleteUserDesignSystem?: typeof deleteUserDesignSystem;
+  /** Final synchronous creation fence; throws to roll back the whole startup. */
+  bindCreatedProject?: (projectId: string) => void;
+  /** Workspace to claim the extracted design system for (#145). Design systems
+   *  share one directory, so the claim is what keeps a brand extracted in one
+   *  workspace out of the next workspace's library. Omitted (signed out /
+   *  single-player) leaves it unclaimed and visible everywhere. */
+  designSystemWorkspaceId?: string | null;
   /** Runtime data dir so the programmatically-built design system is sedimented
    *  into memory. Optional. */
   dataDir?: string;
@@ -224,6 +235,7 @@ async function rollbackBrandExtractionStartup(input: {
   metadata: ProjectMetadata;
   userDesignSystemsRoot?: string | undefined;
   draftDesignSystemId?: string | null;
+  deleteDraftDesignSystem?: typeof deleteUserDesignSystem;
 }): Promise<void> {
   try {
     deleteDbProject(input.db, input.projectId);
@@ -240,7 +252,10 @@ async function rollbackBrandExtractionStartup(input: {
   }
   if (input.draftDesignSystemId && input.userDesignSystemsRoot) {
     try {
-      await deleteUserDesignSystem(input.userDesignSystemsRoot, input.draftDesignSystemId);
+      await (input.deleteDraftDesignSystem ?? deleteUserDesignSystem)(
+        input.userDesignSystemsRoot,
+        input.draftDesignSystemId,
+      );
     } catch (rollbackErr) {
       console.warn(`[brand] failed to roll back draft design system for ${input.brandId}`, rollbackErr);
     }
@@ -341,7 +356,7 @@ export async function startBrandExtraction(
     if (designMd) writeDesignMdInput(brandsRoot, id, designMd);
 
     if (runProgrammatic && opts.userDesignSystemsRoot) {
-      const draft = await createUserDesignSystem(opts.userDesignSystemsRoot, {
+      const draft = await (opts.createUserDesignSystem ?? createUserDesignSystem)(opts.userDesignSystemsRoot, {
         title: host,
         category: 'Brands',
         surface: 'web',
@@ -351,6 +366,9 @@ export async function startBrandExtraction(
           sourceUrls: [url],
           sourceNotes: `Extracting from ${url}`,
         },
+        ...(opts.designSystemWorkspaceId?.trim()
+          ? { workspaceId: opts.designSystemWorkspaceId.trim() }
+          : {}),
       });
       draftDesignSystemId = draft.id;
       meta.designSystemId = draft.id;
@@ -443,6 +461,12 @@ export async function startBrandExtraction(
         : {}),
     });
 
+    // Keep the project row and its Workspace envelope in the same startup
+    // rollback boundary as the draft design system. A route-level bind after
+    // this function returns cannot compensate the already-created brand,
+    // project directory, transcript, and design-system envelope on failure.
+    opts.bindCreatedProject?.(projectId);
+
     // Programmatic-first runs immediately, but never blocks the start response.
     // The caller should land in the project with a real user/assistant transcript
     // and the extracting skeleton already persisted while the deterministic
@@ -523,6 +547,9 @@ export async function startBrandExtraction(
       metadata,
       userDesignSystemsRoot: opts.userDesignSystemsRoot,
       draftDesignSystemId,
+      ...(opts.deleteUserDesignSystem
+        ? { deleteDraftDesignSystem: opts.deleteUserDesignSystem }
+        : {}),
     });
     throw err;
   }
@@ -1264,6 +1291,10 @@ export interface FinalizeBrandOptions {
   id: string;
   brandsRoot: string;
   userDesignSystemsRoot: string;
+  /** Workspace to claim a newly registered design system for (#145). A
+   *  re-finalize reuses the draft, whose claim is already preserved, so this
+   *  only matters on the agent-driven path that registers without a draft. */
+  designSystemWorkspaceId?: string | null;
   projectsRoot: string;
   /** Skills root so the final `brand.html` re-render can read the template. */
   skillsRoot: string;
@@ -1443,6 +1474,9 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
       ...(brand.description ? { companyBlurb: brand.description } : {}),
       sourceNotes: `Extracted from ${meta.sourceUrl}`,
     },
+    ...(opts.designSystemWorkspaceId?.trim()
+      ? { workspaceId: opts.designSystemWorkspaceId.trim() }
+      : {}),
   });
   throwIfProgrammaticExtractionNotCurrent(opts);
   const designSystemId = summary.id;
@@ -2227,11 +2261,12 @@ export async function removeBrand(
   brandsRoot: string,
   userDesignSystemsRoot: string,
   id: string,
+  removeDesignSystem: typeof deleteUserDesignSystem = deleteUserDesignSystem,
 ): Promise<boolean> {
   const meta = readMeta(brandsRoot, id);
   if (meta?.designSystemId) {
     try {
-      await deleteUserDesignSystem(userDesignSystemsRoot, meta.designSystemId);
+      await removeDesignSystem(userDesignSystemsRoot, meta.designSystemId);
     } catch {
       // Best-effort — still remove the brand dir below.
     }

@@ -87,7 +87,7 @@ describe('AmrGuidance', () => {
 
   it('fires ui_click go_amr and calls onActivate on click', () => {
     const { onActivate } = renderGuidance();
-    fireEvent.click(screen.getByRole('button', { name: 'Switch to Open Design Cloud & retry' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to OpenDesign Cloud & retry' }));
     expect(trackRunFailedToastGoAmrClick).toHaveBeenCalledTimes(1);
     expect(vi.mocked(trackRunFailedToastGoAmrClick).mock.calls[0]![1]).toMatchObject({
       page_name: 'chat_panel',
@@ -95,5 +95,14 @@ describe('AmrGuidance', () => {
       element: 'go_amr',
     });
     expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
+  // Long CTA must live in the footer row so a narrow ChatPane does not
+  // squeeze the Chinese title into a vertical one-character stack.
+  it('places the switch CTA in the footer rather than the head actions column', () => {
+    const { container } = renderGuidance();
+    const cta = screen.getByRole('button', { name: 'Switch to OpenDesign Cloud & retry' });
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    expect(footer?.contains(cta)).toBe(true);
   });
 });

@@ -74,6 +74,7 @@ export const DAEMON_RUNTIME_DEFINITION_EXACT = [
 const DAEMON_RUNTIME_DEFINITION_MATRIX_NAMES = [
   "entry-settings",
   "project-workspace",
+  "project-collab",
   "project-runtime",
 ] as const;
 
@@ -147,9 +148,12 @@ export const CERTAIN_EXEMPT_PREFIXES = [
 // proves no gate-lane source reads them.
 export const CERTAIN_EXEMPT_EXACT = ["LICENSE", ".github/CODEOWNERS"] as const;
 
+export const CERTAIN_DAEMON_CORE_EXACT = ["docs/agent-adapters.md"] as const;
+
 const CERTAIN_EXEMPT_SURFACE: RuleMatch = {
   prefixes: CERTAIN_EXEMPT_PREFIXES,
   exact: CERTAIN_EXEMPT_EXACT,
+  excludeWhen: { exact: CERTAIN_DAEMON_CORE_EXACT },
 };
 
 export const CERTAIN_PACKAGED_LEAF_PREFIXES = [
@@ -185,6 +189,7 @@ const CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE: RuleMatch = {
 
 const CERTAIN_DAEMON_CORE_SURFACE: RuleMatch = {
   prefixes: CERTAIN_DAEMON_CORE_PREFIXES,
+  exact: CERTAIN_DAEMON_CORE_EXACT,
   excludeWhen: CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE,
 };
 
@@ -413,6 +418,21 @@ export const scopeRules: readonly ScopeRule[] = [
       regexes: [/^e2e\/ui\/visual-[^/]+\.test\.ts$/],
     },
     effects: ["visual_validation_required"],
+    confidence: "medium",
+  },
+  {
+    // Trusted write-capable rerun atom + its topology/self-check coverage.
+    // web_tests_required arms run_e2e_vitest so PR CI exercises the helper
+    // self-check and packaged-smoke topology assertions before the merge queue.
+    id: "ci-rerun-infra-cancel-surface",
+    match: {
+      exact: [
+        ".github/workflows/rerun.atom.yml",
+        ".github/scripts/rerun_infra_cancel.py",
+        "e2e/tests/packaged-smoke-workflow.test.ts",
+      ],
+    },
+    effects: ["web_tests_required", "workspace_validation_required"],
     confidence: "medium",
   },
   {
@@ -811,7 +831,13 @@ function changedPullRequestFiles(): string[] {
     throw new Error("pull_request event payload did not include pull_request.number");
   }
 
-  const stdout = runGh(["api", "--paginate", `repos/${repository}/pulls/${prNumber}/files`, "--jq", ".[].filename"]);
+  const stdout = runGh([
+    "api",
+    "--paginate",
+    `repos/${repository}/pulls/${prNumber}/files`,
+    "--jq",
+    ".[] | .filename, (.previous_filename // empty)",
+  ]);
   return stdout.split(/\r?\n/).filter(Boolean);
 }
 
@@ -825,7 +851,7 @@ function changedManualFiles(): string[] {
     "--paginate",
     `repos/${repository}/compare/main...${sha}`,
     "--jq",
-    "(.files // [])[] | .filename",
+    "(.files // [])[] | .filename, (.previous_filename // empty)",
   ]);
   return stdout.split(/\r?\n/).filter(Boolean);
 }
@@ -839,22 +865,21 @@ function changedMergeGroupFiles(): string[] {
     throw new Error("merge_group event payload did not include merge_group.base_sha and merge_group.head_sha");
   }
 
-  const stdout = runGh([
-    "api",
-    "--paginate",
-    `repos/${repository}/compare/${baseSha}...${headSha}`,
-    "--jq",
-    "(.files // [])[] | .filename",
-  ]);
-  const files = stdout.split(/\r?\n/).filter(Boolean);
+  const stdout = runGh(["api", `repos/${repository}/compare/${baseSha}...${headSha}`]);
+  const comparison = JSON.parse(stdout) as {
+    files?: Array<{ filename?: unknown; previous_filename?: unknown }>;
+  };
+  const fileRecords = comparison.files ?? [];
   // The compare API caps the complete comparison at 300 files, and only the
-  // first page contains the files array. Exactly 300 names therefore cannot
+  // first page contains the files array. Exactly 300 records therefore cannot
   // prove that the resolution is complete; fail closed before a future
   // certain-confidence rule can trust a truncated merge-group union diff.
-  if (files.length >= 300) {
+  if (fileRecords.length >= 300) {
     throw new Error("merge_group compare result reached GitHub's 300-file ceiling");
   }
-  return files;
+  return fileRecords.flatMap((file) =>
+    [file.filename, file.previous_filename].filter((filename): filename is string => typeof filename === "string"),
+  );
 }
 
 function runGh(args: string[]): string {

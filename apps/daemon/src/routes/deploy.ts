@@ -1,7 +1,10 @@
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
+import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
-export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {}
+export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
+  authorizeProjectRequest: AuthorizeProjectRequest;
+}
 
 export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps) {
   const { db } = ctx;
@@ -10,6 +13,25 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
   const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
+
+  /**
+   * A DeployError now carries a specific `code` (MISSING_REFERENCES,
+   * CF_ASSET_TOO_LARGE, VERCEL_TOKEN_REQUIRED, …). Pass it through instead of
+   * flattening every failure to BAD_REQUEST: the client mirrors the envelope
+   * code into `artifact_deploy_result.error_code`, so without this every
+   * distinct cause — missing token, non-HTML file, unresolved asset reference,
+   * oversized asset — collapsed into one opaque HTTP_400 bucket.
+   *
+   * Provider transport failures deliberately arrive WITHOUT a code (see
+   * cloudflareError / vercelError in apps/daemon/src/deploy.ts): they fall back
+   * to the generic envelope code so the client keeps bucketing them by the real
+   * provider status (HTTP_403 / HTTP_429 / HTTP_502) instead of collapsing
+   * auth, quota and upstream faults into one.
+   */
+  const deployErrorCodeFor = (err: any, status: number): string =>
+    (err instanceof DeployError && err.code) ||
+    (status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST');
+
   // ---- Deploy --------------------------------------------------------------
 
   app.get('/api/deploy/config', async (req, res) => {
@@ -39,7 +61,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       const body = await writeDeployConfig(providerId, input);
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+      sendApiError(res, 400, deployErrorCodeFor(err, 400), String(err?.message || err));
     }
   });
 
@@ -54,12 +76,16 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         err instanceof DeployError && err.details
           ? { details: err.details }
           : {};
-      sendApiError(res, status, 'BAD_REQUEST', String(err?.message || err), init);
+      sendApiError(res, status, deployErrorCodeFor(err, status), String(err?.message || err), init);
     }
   });
 
-  app.get('/api/projects/:id/deployments', (req, res) => {
+  app.get('/api/projects/:id/deployments', async (req, res) => {
     try {
+      if (!getProject(db, req.params.id)) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
       /** @type {import('@open-design/contracts').ProjectDeploymentsResponse} */
       const body = { deployments: publicDeployments(listDeployments(db, req.params.id)) };
       res.json(body);
@@ -102,9 +128,18 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
+      const deployProject = getProject(db, req.params.id);
+      if (!deployProject) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await ctx.authorizeProjectRequest(
+        req,
+        res,
+        req.params.id,
+        { mode: 'write', capability: 'writeFiles' },
+      )) return;
 
       const prior = getDeployment(db, req.params.id, fileName, providerId);
-      const deployProject = getProject(db, req.params.id);
       const files = await buildDeployFileSet(
         PROJECTS_DIR,
         req.params.id,
@@ -165,7 +200,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       sendApiError(
         res,
         status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        deployErrorCodeFor(err, status),
         String(err?.message || err),
         init,
       );
@@ -187,6 +222,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
       const preflightProject = getProject(db, req.params.id);
+      if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
       /** @type {import('@open-design/contracts').DeployPreflightResponse} */
       const body = await prepareDeployPreflight(
         PROJECTS_DIR,
@@ -207,7 +243,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       sendApiError(
         res,
         status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        deployErrorCodeFor(err, status),
         String(err?.message || err),
       );
     }
@@ -215,17 +251,29 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
 
 }
 
-export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'http' | 'deploy'> {}
+export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'http' | 'deploy' | 'projectStore'> {
+  authorizeProjectRequest: AuthorizeProjectRequest;
+}
 
 export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploymentCheckRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
+  const { getProject } = ctx.projectStore;
   const { getDeploymentById, CLOUDFLARE_PAGES_PROVIDER_ID, cloudflarePagesProjectNameFromDeployment, checkCloudflarePagesDeploymentLinks, checkDeploymentUrl, upsertDeployment, publicDeployment } = ctx.deploy;
 
   app.post(
     '/api/projects/:id/deployments/:deploymentId/check-link',
     async (req, res) => {
       try {
+        if (!getProject(db, req.params.id)) {
+          return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        }
+        if (!await ctx.authorizeProjectRequest(
+          req,
+          res,
+          req.params.id,
+          { mode: 'write', capability: 'writeFiles' },
+        )) return;
         const existing = getDeploymentById(
           db,
           req.params.id,

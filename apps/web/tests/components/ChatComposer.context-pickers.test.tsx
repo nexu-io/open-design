@@ -18,7 +18,7 @@ import { ChatComposer, type ChatComposerHandle } from '../../src/components/Chat
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
 import type { AppliedPluginSnapshot, ProjectMetadata } from '@open-design/contracts';
-import { composerText, pressEnter, typeAndSettle } from '../helpers/lexical-composer';
+import { composerText, pressEnter, typeAndSettle, typeInComposer } from '../helpers/lexical-composer';
 
 const COMMUNITY_PLUGIN = {
   id: 'community-deck',
@@ -220,7 +220,10 @@ beforeEach(() => {
         headers: { 'content-type': 'application/json' },
       });
     }
-    if (url.includes('/api/plugins/') && url.endsWith('/apply')) {
+    if (
+      url.includes('/api/plugins/')
+      && (url.endsWith('/apply') || url.endsWith('/apply-local'))
+    ) {
       return new Response(JSON.stringify(APPLY_RESULT), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -410,6 +413,23 @@ describe('ChatComposer context pickers', () => {
     expect(screen.queryByText('No results for “missing”.')).toBeNull();
   });
 
+  it('describes /mcp slash commands as MCP actions instead of pet actions', async () => {
+    renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('/');
+
+    const popover = await screen.findByTestId('slash-popover');
+    const settingsRow = within(popover).getByText('/mcp').closest('button');
+    const mcpRow = within(popover).getByText('/mcp slack').closest('button');
+    expect(settingsRow).toBeTruthy();
+    expect(mcpRow).toBeTruthy();
+    expect(settingsRow?.textContent).toContain('Open MCP server settings or insert a server tool hint.');
+    expect(settingsRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
+    expect(mcpRow?.textContent).toContain('Open MCP server settings or insert a server tool hint.');
+    expect(mcpRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
+  });
+
   it('lists Design Files first in All and picks the first file with Enter', async () => {
     renderComposer({
       projectFiles: [
@@ -491,28 +511,67 @@ describe('ChatComposer context pickers', () => {
     expect(onSend.mock.calls[0]?.[3]?.context?.workspaceItems).toEqual([browserContext]);
   });
 
-  it('does not preserve active file paths as linked dirs when changing the working dir', async () => {
+  // Only directory-shaped contexts (`local-code` / `project`) may contribute a
+  // linked dir; a `file` context never does, no matter what its `absolutePath`
+  // looks like. #5517 removed the in-project working-dir row that used to drive
+  // this, so it is now driven through the surviving "+" → Link local code path:
+  // the linked folder deliberately collides with the active FILE context's
+  // absolutePath. If a file context were ever counted as a directory owner,
+  // `workspaceContextDirStillReferenced` would treat the dir as still in use and
+  // swallow the unlink — the second PATCH below would never happen.
+  it('never counts an active file context path as a linked dir', async () => {
     openFolderPaths = ['/Users/me/new-work-dir'];
-    renderComposer({
-      activeWorkspaceContext: {
-        id: 'file:index.html',
-        kind: 'file',
-        label: 'index.html',
-        path: 'index.html',
-        absolutePath: '/tmp/open-design/project-1/index.html',
-        tabId: 'index.html',
-      },
-      projectMetadata: { kind: 'prototype', linkedDirs: ['/Users/me/work-dir'] },
-    });
+    const onProjectMetadataChange = vi.fn();
+
+    function ControlledComposer() {
+      const [metadata, setMetadata] = useState<ProjectMetadata>({
+        kind: 'prototype',
+        linkedDirs: ['/Users/me/work-dir'],
+      });
+      return composerElement({
+        activeWorkspaceContext: {
+          id: 'file:index.html',
+          kind: 'file',
+          label: 'index.html',
+          path: 'index.html',
+          absolutePath: '/Users/me/new-work-dir',
+          tabId: 'index.html',
+        },
+        projectMetadata: metadata,
+        onProjectMetadataChange: (next) => {
+          onProjectMetadataChange(next);
+          // main 把回调从 ProjectMetadata 拓宽成整个 Project(#5379 之后的
+          // 工作目录流程需要 project 层字段),这里的受控 state 仍只关心 metadata。
+          if (next.metadata) setMetadata(next.metadata);
+        },
+      });
+    }
+
+    render(<ControlledComposer />);
     await flushMounts();
 
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    fireEvent.click(await screen.findByTestId('working-dir-pick'));
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
       expect(projectPatchBodies()).toHaveLength(1);
     });
-    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/Users/me/new-work-dir']);
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual([
+      '/Users/me/work-dir',
+      '/Users/me/new-work-dir',
+    ]);
+
+    fireEvent.click(screen.getByLabelText('Remove new-work-dir'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(2);
+    });
+    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual(['/Users/me/work-dir']);
+    expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ linkedDirs: ['/Users/me/work-dir'] }),
+      }),
+    );
   });
 
   it('removes the linked dir added for a local-code context when its chip is cleared', async () => {
@@ -541,7 +600,9 @@ describe('ChatComposer context pickers', () => {
       expect(screen.queryByText('reference-dir')).toBeNull();
     });
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: [] }) }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({ linkedDirs: [] }),
+      }),
     );
   });
 
@@ -600,12 +661,12 @@ describe('ChatComposer context pickers', () => {
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         metadata: expect.objectContaining({
-          linkedDirs: [
-            '/Users/me/work-dir',
-            '/tmp/open-design/reference-a',
-            '/tmp/open-design/reference-b',
-          ],
-        }),
+        linkedDirs: [
+          '/Users/me/work-dir',
+          '/tmp/open-design/reference-a',
+          '/tmp/open-design/reference-b',
+        ],
+      }),
       }),
     );
   });
@@ -659,7 +720,9 @@ describe('ChatComposer context pickers', () => {
         projectMetadata: metadata,
         onProjectMetadataChange: (next) => {
           onProjectMetadataChange(next);
-          setMetadata(next.metadata ?? { kind: 'prototype' });
+          // main 把回调从 ProjectMetadata 拓宽成整个 Project(#5379 之后的
+          // 工作目录流程需要 project 层字段),这里的受控 state 仍只关心 metadata。
+          if (next.metadata) setMetadata(next.metadata);
         },
         onSend,
       });
@@ -692,7 +755,10 @@ describe('ChatComposer context pickers', () => {
       expect(composerText().trim()).toBe('');
       expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
     });
-    expect(screen.getByTestId('working-dir-trigger').textContent).not.toContain('reference-dir');
+    // The working-dir readout that used to assert "this dir is context-only, not
+    // the project's primary folder" is gone from the project composer (#5517).
+    // The property itself is still pinned below: a dir promoted to primary would
+    // count as still-referenced and the removal would produce no PATCH at all.
 
     fireEvent.click(screen.getByLabelText('Remove reference-dir'));
 
@@ -702,7 +768,9 @@ describe('ChatComposer context pickers', () => {
     expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual([]);
     expect(screen.queryByTestId('staged-contexts')?.textContent ?? '').not.toContain('reference-dir');
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: [] }) }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({ linkedDirs: [] }),
+      }),
     );
   });
 
@@ -760,13 +828,34 @@ describe('ChatComposer context pickers', () => {
     expect(composerText()).toBe('Keep the typed text after clicking remove');
   });
 
-  it('preserves staged local-code linked dirs when changing or clearing the working dir', async () => {
-    openFolderPaths = ['/Users/me/reference-dir', '/Users/me/other-work-dir'];
+  // The "change / clear the working dir while a local-code chip is staged" half
+  // of this case lost its only driver when #5517 removed the in-project
+  // working-dir row — nothing re-binds a project's primary folder mid-project
+  // anymore. What survives, and is still reachable from the "+" menu, is the
+  // other direction of the same invariant: the two kinds of linked dir stay
+  // independent, so linking local code appends to the project's existing primary
+  // dir instead of replacing it, and clearing the chip unlinks only its own dir.
+  it('links a local-code dir alongside the existing working dir and unlinks only that dir', async () => {
+    openFolderPaths = ['/Users/me/reference-dir'];
     const onProjectMetadataChange = vi.fn();
-    renderComposer({
-      projectMetadata: { kind: 'prototype', linkedDirs: ['/Users/me/work-dir'] },
-      onProjectMetadataChange,
-    });
+
+    function ControlledComposer() {
+      const [metadata, setMetadata] = useState<ProjectMetadata>({
+        kind: 'prototype',
+        linkedDirs: ['/Users/me/work-dir'],
+      });
+      return composerElement({
+        projectMetadata: metadata,
+        onProjectMetadataChange: (next) => {
+          onProjectMetadataChange(next);
+          // main 把回调从 ProjectMetadata 拓宽成整个 Project(#5379 之后的
+          // 工作目录流程需要 project 层字段),这里的受控 state 仍只关心 metadata。
+          if (next.metadata) setMetadata(next.metadata);
+        },
+      });
+    }
+
+    render(<ControlledComposer />);
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
@@ -779,30 +868,34 @@ describe('ChatComposer context pickers', () => {
       '/Users/me/work-dir',
       '/Users/me/reference-dir',
     ]);
+    await waitFor(() => {
+      expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
+    });
 
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    fireEvent.click(await screen.findByTestId('working-dir-pick'));
+    fireEvent.click(screen.getByLabelText('Remove reference-dir'));
 
     await waitFor(() => {
       expect(projectPatchBodies()).toHaveLength(2);
     });
-    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual([
-      '/Users/me/other-work-dir',
-      '/Users/me/reference-dir',
-    ]);
-
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    fireEvent.click(await screen.findByTestId('working-dir-clear'));
-
-    await waitFor(() => {
-      expect(projectPatchBodies()).toHaveLength(3);
-    });
-    expect(projectPatchBodies()[2]?.metadata?.linkedDirs).toEqual(['/Users/me/reference-dir']);
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
+    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual(['/Users/me/work-dir']);
+    expect(screen.queryByTestId('staged-contexts')?.textContent ?? '').not.toContain('reference-dir');
+    expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ linkedDirs: ['/Users/me/work-dir'] }),
+      }),
+    );
   });
 
+  // A Home-carried dir is already inside `projectMetadata.linkedDirs` before the
+  // composer mounts (Home linked it at create time), so ownership has to be
+  // reconstructed from `initialWorkspaceContexts`. Context-only means the chip
+  // still owns it: removing the chip unlinks it, instead of it hardening into a
+  // permanent project working dir. This is the mirror of "does not remove a
+  // pre-existing linked dir when a matching workspace chip is cleared" below,
+  // where the same path is staged later and is therefore NOT chip-owned.
+  // (The working-dir readout that used to also show "not displayed as primary"
+  // is gone from the project composer per #5517; the unlink is what pins it now.)
   it('treats Home-carried workspace dirs as context-only after project creation', async () => {
-    openFolderPaths = ['/Users/me/other-work-dir'];
     const onProjectMetadataChange = vi.fn();
 
     function ControlledComposer() {
@@ -821,7 +914,9 @@ describe('ChatComposer context pickers', () => {
         projectMetadata: metadata,
         onProjectMetadataChange: (next) => {
           onProjectMetadataChange(next);
-          setMetadata(next.metadata ?? { kind: 'prototype' });
+          // main 把回调从 ProjectMetadata 拓宽成整个 Project(#5379 之后的
+          // 工作目录流程需要 project 层字段),这里的受控 state 仍只关心 metadata。
+          if (next.metadata) setMetadata(next.metadata);
         },
       });
     }
@@ -829,142 +924,36 @@ describe('ChatComposer context pickers', () => {
     render(<ControlledComposer />);
     await flushMounts();
 
-    expect(screen.getByTestId('working-dir-trigger').textContent).not.toContain('reference-dir');
-
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    expect(screen.queryByTestId('working-dir-clear')).toBeNull();
-    fireEvent.click(await screen.findByTestId('working-dir-pick'));
-
-    await waitFor(() => {
-      expect(projectPatchBodies()).toHaveLength(1);
-    });
-    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual([
-      '/Users/me/other-work-dir',
-      '/Users/me/reference-dir',
-    ]);
-    await waitFor(() => {
-      expect(screen.getByTestId('working-dir-trigger').textContent).toContain('other-work-dir');
-    });
-
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    fireEvent.click(await screen.findByTestId('working-dir-clear'));
-
-    await waitFor(() => {
-      expect(projectPatchBodies()).toHaveLength(2);
-    });
-    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual(['/Users/me/reference-dir']);
     expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
+    // Mounting alone must not rewrite the project — the dir is already linked.
+    expect(projectPatchBodies()).toEqual([]);
 
     fireEvent.click(screen.getByLabelText('Remove reference-dir'));
 
     await waitFor(() => {
-      expect(projectPatchBodies()).toHaveLength(3);
+      expect(projectPatchBodies()).toHaveLength(1);
     });
-    expect(projectPatchBodies()[2]?.metadata?.linkedDirs).toEqual([]);
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual([]);
     expect(screen.queryByTestId('staged-contexts')?.textContent ?? '').not.toContain('reference-dir');
-    expect(screen.getByTestId('working-dir-trigger').textContent).not.toContain('reference-dir');
-  });
-
-  it('keeps a promoted context dir as the working dir when its chip is removed', async () => {
-    openFolderPaths = ['/Users/me/shared', '/Users/me/shared'];
-    const onProjectMetadataChange = vi.fn();
-
-    function ControlledComposer() {
-      const [metadata, setMetadata] = useState<ProjectMetadata>({ kind: 'prototype' });
-      return composerElement({
-        projectMetadata: metadata,
-        onProjectMetadataChange: (next) => {
-          onProjectMetadataChange(next);
-          setMetadata(next.metadata ?? { kind: 'prototype' });
-        },
-      });
-    }
-
-    render(<ControlledComposer />);
-    await flushMounts();
-
-    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    fireEvent.click(await screen.findByText('Link local code'));
-
-    await waitFor(() => {
-      expect(projectPatchBodies()).toHaveLength(1);
-    });
-    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
-
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    fireEvent.click(await screen.findByTestId('working-dir-pick'));
-
-    await waitFor(() => {
-      expect(projectPatchBodies()).toHaveLength(2);
-    });
-    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
-    await waitFor(() => {
-      expect(screen.getByTestId('working-dir-trigger').textContent).toContain('shared');
-    });
-
-    fireEvent.click(screen.getByLabelText('Remove shared'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('staged-contexts')?.textContent ?? '').not.toContain('shared');
-    });
-    expect(projectPatchBodies()).toHaveLength(2);
-    expect(screen.getByTestId('working-dir-trigger').textContent).toContain('shared');
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }) }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({ linkedDirs: [] }),
+      }),
     );
   });
 
-  it('preserves a promoted context dir when clearing the working dir while its chip remains', async () => {
-    openFolderPaths = ['/Users/me/shared', '/Users/me/shared'];
-    const onProjectMetadataChange = vi.fn();
-
-    function ControlledComposer() {
-      const [metadata, setMetadata] = useState<ProjectMetadata>({ kind: 'prototype' });
-      return composerElement({
-        projectMetadata: metadata,
-        onProjectMetadataChange: (next) => {
-          onProjectMetadataChange(next);
-          setMetadata(next.metadata ?? { kind: 'prototype' });
-        },
-      });
-    }
-
-    render(<ControlledComposer />);
-    await flushMounts();
-
-    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    fireEvent.click(await screen.findByText('Link local code'));
-
-    await waitFor(() => {
-      expect(projectPatchBodies()).toHaveLength(1);
-    });
-    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
-
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    fireEvent.click(await screen.findByTestId('working-dir-pick'));
-
-    await waitFor(() => {
-      expect(projectPatchBodies()).toHaveLength(2);
-    });
-    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
-    await waitFor(() => {
-      expect(screen.getByTestId('working-dir-trigger').textContent).toContain('shared');
-    });
-
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    fireEvent.click(await screen.findByTestId('working-dir-clear'));
-
-    await waitFor(() => {
-      expect(projectPatchBodies()).toHaveLength(3);
-    });
-    expect(projectPatchBodies()[2]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('shared');
-    expect(screen.getByTestId('working-dir-trigger').textContent).not.toContain('shared');
-    expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }) }),
-    );
-  });
-
+  // Two cases used to live here — "keeps a promoted context dir as the working
+  // dir when its chip is removed" and "preserves a promoted context dir when
+  // clearing the working dir while its chip remains". Both existed only to cover
+  // *promotion*: picking, as the project's working dir, a folder that a context
+  // chip had already linked. Promotion is set exclusively by the in-project
+  // working-dir row, which #5517 removed, so `promotedWorkspaceContextDir` can
+  // no longer become non-null and the `workingDir === dir` branch of
+  // `workspaceContextDirStillReferenced` is unreachable. There is no remaining
+  // driver — a context dir is always excluded from `workingDir` — so the cases
+  // are deleted rather than re-pointed. The neighbouring "keeps a shared linked
+  // dir while another workspace item uses the same path" still covers the other,
+  // still-live branch of "this dir is still referenced, don't unlink it".
   it('keeps a shared linked dir while another workspace item uses the same path', async () => {
     openFolderPaths = ['/Users/me/shared'];
     const onProjectMetadataChange = vi.fn();
@@ -998,7 +987,9 @@ describe('ChatComposer context pickers', () => {
     });
     expect(projectPatchBodies()).toHaveLength(1);
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }) }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }),
+      }),
     );
   });
 
@@ -1055,6 +1046,25 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByLabelText('Remove Deck Builder'));
     await waitFor(() => expect(composerText().trim()).toBe(''));
     expect(screen.queryByTestId('staged-contexts')).toBeNull();
+  });
+
+  it('does not keep a removed @ skill marked active when the mention picker reopens', async () => {
+    renderComposer({ currentSkillId: 'deck-builder' });
+    await flushMounts();
+
+    await typeAndSettle('@deck');
+    await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
+    fireEvent.click(screen.getByText('Deck Builder'));
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+
+    typeInComposer('');
+    await waitFor(() => expect(screen.queryByTestId('staged-contexts')).toBeNull());
+
+    await typeAndSettle('@deck');
+    const picker = await screen.findByTestId('mention-popover');
+    const skill = within(picker).getByRole('option', { name: /Deck Builder/ });
+
+    expect(skill.textContent).not.toContain('Active');
   });
 
   it('shows all matching skills and ranks exact prefix matches first', async () => {

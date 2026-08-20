@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
 
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { isPanelEvent, type PanelEvent } from '@open-design/contracts/critique';
 
 import {
@@ -9,6 +10,10 @@ import {
   type CritiqueAction,
   type CritiqueState,
 } from '../state/reducer';
+import {
+  workspaceIdentityCacheKey,
+  workspaceProjectHeaders,
+} from '../../../collab/workspace-identity';
 
 export type ReplaySpeed = 'paused' | 'instant' | 'live' | { intervalMs: number };
 
@@ -18,7 +23,10 @@ export interface UseCritiqueReplayOptions {
    * passes through `fetch`. Returns either a UTF-8 string or a binary buffer
    * (for `.gz` payloads we decompress below).
    */
-  fetchTranscript?: (url: string) => Promise<string | ArrayBuffer>;
+  fetchTranscript?: (
+    url: string,
+    init?: RequestInit,
+  ) => Promise<string | ArrayBuffer>;
   /**
    * Decompress a gzip ArrayBuffer to a UTF-8 string. Defaults to
    * `DecompressionStream('gzip')` when the runtime exposes it, with a
@@ -33,6 +41,8 @@ export interface UseCritiqueReplayOptions {
    */
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
+  /** Exact persisted Workspace authority for a project-owned transcript. */
+  workspaceContext?: WorkspaceCollabContext | null;
 }
 
 export interface UseCritiqueReplayResult {
@@ -115,7 +125,11 @@ export function useCritiqueReplay(
     (async () => {
       let raw: string;
       try {
-        const fetched = await fetcher(transcriptUrl);
+        const fetched = options.workspaceContext
+          ? await fetcher(transcriptUrl, {
+              headers: workspaceProjectHeaders(options.workspaceContext),
+            })
+          : await fetcher(transcriptUrl);
         if (cancelled) return;
         if (typeof fetched === 'string') {
           raw = fetched;
@@ -143,7 +157,7 @@ export function useCritiqueReplay(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transcriptUrl]);
+  }, [transcriptUrl, workspaceIdentityCacheKey(options.workspaceContext)]);
 
   // Pace effect: react to both the parsed-events list AND speed changes.
   // Cleanup cancels any in-flight setTimeout, but the cursor ref survives
@@ -250,8 +264,11 @@ function parseTranscript(raw: string): PanelEvent[] {
   return out;
 }
 
-async function defaultFetch(url: string): Promise<string | ArrayBuffer> {
-  const res = await fetch(url);
+async function defaultFetch(
+  url: string,
+  init?: RequestInit,
+): Promise<string | ArrayBuffer> {
+  const res = await fetch(url, init);
   if (!res.ok) throw new Error(`transcript fetch failed: ${res.status}`);
   return url.endsWith('.gz') ? await res.arrayBuffer() : await res.text();
 }

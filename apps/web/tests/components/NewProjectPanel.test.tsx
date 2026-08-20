@@ -486,7 +486,7 @@ describe('NewProjectPanel design system defaults', () => {
         designSystemId: null,
         metadata: expect.objectContaining({
           kind: 'image',
-          imageModel: 'gpt-image-2',
+          imageModel: 'vela/gpt-image-2',
           imageAspect: '3:4',
         }),
       }),

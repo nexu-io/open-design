@@ -8,9 +8,7 @@ import {
   mkdtempSync,
   promises as fsp,
   readFileSync,
-  realpathSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -22,30 +20,25 @@ import {
   composeLiveInstructionPrompt,
   describeStablePromptCache,
   designSystemIdFromPluginSnapshot,
-  resolveGrantedCodexImagegenOverride,
-  resolveCodexGeneratedImagesDir,
   resolveChatExtraAllowedDirs,
   resolveEffectiveDesignSystemSelection,
   resolveResearchCommandContract,
   startServer,
-  validateCodexGeneratedImagesDir,
 } from '../src/server.js';
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
-import { upsertMessage } from '../src/db.js';
-import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 import {
-  ByokCredentialService,
-  type ByokSecretBackend,
-} from '../src/byok/credential-service.js';
+  ensureWorkspaceProject,
+  ensureWorkspaceResource,
+  getProject,
+  upsertMessage,
+} from '../src/db.js';
+import { teamResourceWorkspaceRoot } from '../src/collab/team-resource-materialization.js';
+import { workspaceTeamDesignSystemBindingResourceId } from '../src/design-systems/workspace-team-binding.js';
 
 const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
-
-function symlinkDir(target: string, link: string): void {
-  symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
-}
 
 async function withFakeAgent<T>(
   binName: string,
@@ -103,6 +96,43 @@ describe('/api/chat', () => {
   const originalAgentHome = process.env.OD_AGENT_HOME;
   const tempDirs: string[] = [];
 
+  async function createPersonalWorkspaceBoundProjectFixture(label: string) {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for AMR Workspace scope tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const workspaceId = `personal-ws-${randomUUID()}`;
+    const workspaceMemberId = `personal-member-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: label }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const sqlite = new Database(resolve(process.env.OD_DATA_DIR, 'app.sqlite'));
+    try {
+      ensureWorkspaceProject(sqlite as never, {
+        projectId,
+        workspaceId,
+        visibility: 'personal',
+        createdByWorkspaceMemberId: workspaceMemberId,
+      });
+    } finally {
+      sqlite.close();
+    }
+
+    return {
+      projectId,
+      headers: {
+        'x-od-workspace-id': workspaceId,
+        'x-od-workspace-member-id': workspaceMemberId,
+        'x-od-workspace-type': 'personal',
+        'x-od-workspace-role': 'owner',
+      },
+    };
+  }
+
   async function createPluginFixture(args: {
     pluginId: string;
     dirName: string;
@@ -144,41 +174,9 @@ describe('/api/chat', () => {
         extraction: null,
       });
     }
-    const byokDataDir = mkdtempSync(join(tmpdir(), 'od-chat-route-byok-'));
-    tempDirs.push(byokDataDir);
-    const byokSecrets = new Map<string, string>();
-    const byokBackend: ByokSecretBackend = {
-      kind: 'test-memory',
-      async available() { return true; },
-      async set(profileId, secret) { byokSecrets.set(profileId, secret); },
-      async get(profileId) { return byokSecrets.get(profileId) ?? null; },
-      async delete(profileId) { return byokSecrets.delete(profileId); },
-    };
-    const byokCredentialService = new ByokCredentialService({
-      dataDir: byokDataDir,
-      backend: byokBackend,
-    });
-    await byokCredentialService.upsert({
-      id: 'byok-chat-route-keyful',
-      label: 'Chat route keyful fixture',
-      protocol: 'senseaudio',
-      apiKey: 'sk-test-byok',
-      baseUrl: 'https://api.senseaudio.cn',
-      model: 'deepseek-v4-flash',
-      requiresApiKey: true,
-    });
-    await byokCredentialService.upsert({
-      id: 'byok-chat-route-keyless',
-      label: 'Chat route keyless fixture',
-      protocol: 'openai',
-      baseUrl: 'http://127.0.0.1:8000/v1',
-      model: 'model',
-      requiresApiKey: false,
-    });
     const started = await startServer({
       port: 0,
       returnServer: true,
-      byokCredentialService,
     }) as {
       url: string;
       server: http.Server;
@@ -493,7 +491,13 @@ process.stdin.on('end', () => {
             projectId,
             message: 'hello',
             model: 'deepseek-v4-flash',
-            byokProfileId: 'byok-chat-route-keyful',
+            byokProvider: {
+              protocol: 'senseaudio',
+              apiKey: 'sk-test-byok',
+              baseUrl: 'https://api.senseaudio.cn',
+              model: 'deepseek-v4-flash',
+              requiresApiKey: true,
+            },
           }),
         });
         const body = await response.text();
@@ -580,7 +584,13 @@ process.stdin.on('end', () => {
             projectId,
             message: 'hello',
             model: 'model',
-            byokProfileId: 'byok-chat-route-keyless',
+            byokProvider: {
+              protocol: 'openai',
+              apiKey: '',
+              baseUrl: 'http://127.0.0.1:8000/v1',
+              model: 'model',
+              requiresApiKey: false,
+            },
           }),
         });
         const body = await response.text();
@@ -619,7 +629,7 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('rejects forged BYOK provider config for other local runtimes', async () => {
+  it('does not pass BYOK provider config to other local runtimes', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
     }
@@ -669,10 +679,12 @@ process.stdin.on('end', () => {
         });
         const body = await response.text();
 
-        expect(response.status).toBe(400);
-        expect(body).toContain('Raw BYOK credentials are not accepted');
-        expect(existsSync(keyFile)).toBe(false);
-        expect(existsSync(envFile)).toBe(false);
+        expect(response.ok).toBe(true);
+        expect(body).toContain('opencode-ok');
+        expect(await fsp.readFile(keyFile, 'utf8')).toBe('');
+        const rawConfig = await fsp.readFile(envFile, 'utf8');
+        expect(rawConfig).not.toContain('open-design-byok');
+        expect(rawConfig).not.toContain('sk-test-byok');
       },
     );
   });
@@ -905,6 +917,8 @@ process.exit(1);
       // Unique key so the shared model cache key is unique per test run.
       process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      const workspaceFixture =
+        await createPersonalWorkspaceBoundProjectFixture('Transient AMR catalog fixture');
 
       await withFakeAgent(
         'vela',
@@ -937,9 +951,13 @@ child.on('exit', (code, signal) => {
         async () => {
           const response = await fetch(`${baseUrl}/api/chat`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
             body: JSON.stringify({
               agentId: 'amr',
+              projectId: workspaceFixture.projectId,
               message: 'hello',
               model: 'deepseek-v3.2',
             }),
@@ -951,6 +969,7 @@ child.on('exit', (code, signal) => {
           expect(body).toContain('"type":"text_delta","delta":"vela."');
           expect(body).not.toContain('model_catalog_unavailable');
           expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+          expect(body).not.toContain('AMR_WORKSPACE_SCOPE_REQUIRED');
           // The catalog probe runs at least once (remote attempted, then the
           // run proceeds from the preset seed). We no longer assert an exact
           // synchronous retry count: the remote retry/backoff now happens in
@@ -988,6 +1007,8 @@ child.on('exit', (code, signal) => {
       // cached remote catalog.
       process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      const workspaceFixture =
+        await createPersonalWorkspaceBoundProjectFixture('Cached AMR catalog fixture');
 
       await withFakeAgent(
         'vela',
@@ -1015,9 +1036,13 @@ child.on('exit', (code, signal) => {
         async () => {
           const response = await fetch(`${baseUrl}/api/chat`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
             body: JSON.stringify({
               agentId: 'amr',
+              projectId: workspaceFixture.projectId,
               message: 'hello',
               // Present in the preset seed (DEFAULT_MODEL_PRESET_JSON) but the
               // live `model list` is unavailable, so only the preset path can
@@ -1032,6 +1057,7 @@ child.on('exit', (code, signal) => {
           expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
           expect(body).not.toContain('model_catalog_unavailable');
           expect(body).not.toContain('is not available from Vela');
+          expect(body).not.toContain('AMR_WORKSPACE_SCOPE_REQUIRED');
           // It must actually proceed into the ACP run and stream assistant text.
           expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
           expect(body).toContain('"type":"text_delta","delta":"vela."');
@@ -1188,7 +1214,7 @@ process.stdin.on('end', () => {
   fs.writeFileSync(path.join(pluginDir, 'open-design.json'), JSON.stringify({ name: 'generated-plugin' }, null, 2));
   fs.writeFileSync(path.join(pluginDir, 'SKILL.md'), '# Generated plugin\\n');
   console.log(JSON.stringify({ type: 'step_start' }));
-  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 OpenDesign 插件脚手架。先读取文档规范，再生成插件文件。' } }));
   console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
   process.exit(0);
 });
@@ -1202,7 +1228,7 @@ process.stdin.on('end', () => {
             projectId,
             conversationId,
             pluginId: 'od-plugin-authoring',
-            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 OpenDesign 插件脚手架。',
           }),
         });
         expect(createResponse.status).toBe(202);
@@ -1252,7 +1278,7 @@ process.stdin.on('end', () => {
 process.stdin.resume();
 process.stdin.on('end', () => {
   console.log(JSON.stringify({ type: 'step_start' }));
-  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 OpenDesign 插件脚手架。先读取文档规范，再生成插件文件。' } }));
   console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
   process.exit(0);
 });
@@ -1266,7 +1292,7 @@ process.stdin.on('end', () => {
             projectId,
             conversationId,
             pluginId: 'od-plugin-authoring',
-            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 OpenDesign 插件脚手架。',
           }),
         });
         expect(createResponse.status).toBe(202);
@@ -2213,7 +2239,7 @@ process.stdin.on('end', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             agentId: 'opencode',
-            message: 'build the Open Design landing page',
+            message: 'build the OpenDesign landing page',
             skillId: 'editorial-collage',
             skillIds: ['open-design-landing'],
           }),
@@ -3014,6 +3040,108 @@ process.exit(1);
     );
   });
 
+  it('prefers a terminal Claude prompt-length error over auth-shaped stderr (#6979)', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.error(JSON.stringify({ apiKeySource: 'none' }));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'Prompt is too long',
+  stop_reason: null,
+}));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        await waitForRunStatus(baseUrl, runId);
+        const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+        const statusBody = await statusResponse.json() as {
+          status: string;
+          failureCategory: string | null;
+          failureDetail: string | null;
+        };
+
+        expect(eventsBody).toContain('AGENT_PROMPT_TOO_LARGE');
+        expect(eventsBody).toContain('Prompt is too long');
+        expect(eventsBody).toContain('"retryable":false');
+        expect(eventsBody).not.toContain('could not authenticate');
+        expect(statusBody).toMatchObject({
+          status: 'failed',
+          failureCategory: 'prompt_too_large',
+          failureDetail: 'prompt_too_large',
+        });
+      },
+    );
+  });
+
+  it('does not treat prompt-length text in an assistant payload as the terminal cause (#6979)', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  parent_tool_use_id: null,
+  message: {
+    id: 'msg-prompt-text',
+    content: [{ type: 'text', text: 'The upstream phrase was: Prompt is too long.' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'A different terminal failure',
+  stop_reason: null,
+}));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).toContain('A different terminal failure');
+        expect(eventsBody).not.toContain('AGENT_PROMPT_TOO_LARGE');
+      },
+    );
+  });
+
   it('caps oversized inactivity overrides so Node does not fire the timer immediately', async () => {
     const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
     process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '10000000000';
@@ -3365,6 +3493,393 @@ process.stdin.on('end', () => {
     );
   });
 
+  it('does not compose another member Personal design system from a persisted project id', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for Workspace design-system prompt tests');
+    }
+    const workspaceFixture =
+      await createPersonalWorkspaceBoundProjectFixture('Foreign Personal DS prompt fixture');
+    const workspaceId = workspaceFixture.headers['x-od-workspace-id'];
+    const foreignMemberId = `foreign-member-${randomUUID()}`;
+    const dirId = `foreign-prompt-${randomUUID()}`;
+    const designSystemId = `user:${dirId}`;
+    const secretMarker = `FOREIGN_PERSONAL_DS_${randomUUID()}`;
+    const designSystemDir = resolve(process.env.OD_DATA_DIR, 'design-systems', dirId);
+    await fsp.mkdir(designSystemDir, { recursive: true });
+    await fsp.writeFile(
+      resolve(designSystemDir, 'DESIGN.md'),
+      `# Foreign Personal design system\n\n${secretMarker}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(designSystemDir, 'metadata.json'),
+      `${JSON.stringify({
+        title: 'Foreign Personal design system',
+        status: 'published',
+        workspaceId,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+
+    const sqlite = new Database(resolve(process.env.OD_DATA_DIR, 'app.sqlite'));
+    try {
+      ensureWorkspaceResource(
+        sqlite as never,
+        'design_system',
+        workspaceId,
+        designSystemId,
+        {
+          visibility: 'personal',
+          resourceState: 'active',
+          createdByWorkspaceMemberId: foreignMemberId,
+          updatedByWorkspaceMemberId: foreignMemberId,
+        },
+      );
+      sqlite.prepare('UPDATE projects SET design_system_id = ? WHERE id = ?')
+        .run(designSystemId, workspaceFixture.projectId);
+    } finally {
+      sqlite.close();
+    }
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { prompt += chunk; });
+process.stdin.on('end', () => {
+  const result = prompt.includes(${JSON.stringify(secretMarker)})
+    ? 'foreign-personal-design-system-leaked'
+    : 'foreign-personal-design-system-blocked';
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: result } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId: workspaceFixture.projectId,
+              message: 'draft without reading another member private brand',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('foreign-personal-design-system-blocked');
+          expect(body).not.toContain('foreign-personal-design-system-leaked');
+        },
+      );
+    } finally {
+      await fsp.rm(designSystemDir, { recursive: true, force: true });
+    }
+  });
+
+  it('composes the project creator Personal design system', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for Workspace design-system prompt tests');
+    }
+    const workspaceFixture =
+      await createPersonalWorkspaceBoundProjectFixture('Own Personal DS prompt fixture');
+    const workspaceId = workspaceFixture.headers['x-od-workspace-id'];
+    const workspaceMemberId = workspaceFixture.headers['x-od-workspace-member-id'];
+    const dirId = `own-personal-prompt-${randomUUID()}`;
+    const designSystemId = `user:${dirId}`;
+    const personalMarker = `OWN_PERSONAL_DS_${randomUUID()}`;
+    const designSystemDir = resolve(process.env.OD_DATA_DIR, 'design-systems', dirId);
+    await fsp.mkdir(designSystemDir, { recursive: true });
+    await fsp.writeFile(
+      resolve(designSystemDir, 'DESIGN.md'),
+      `# Own Personal design system\n\n${personalMarker}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(designSystemDir, 'metadata.json'),
+      `${JSON.stringify({
+        title: 'Own Personal design system',
+        status: 'published',
+        workspaceId,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+
+    const sqlite = new Database(resolve(process.env.OD_DATA_DIR, 'app.sqlite'));
+    try {
+      ensureWorkspaceResource(
+        sqlite as never,
+        'design_system',
+        workspaceId,
+        designSystemId,
+        {
+          visibility: 'personal',
+          resourceState: 'active',
+          createdByWorkspaceMemberId: workspaceMemberId,
+          updatedByWorkspaceMemberId: workspaceMemberId,
+        },
+      );
+      sqlite.prepare('UPDATE projects SET design_system_id = ? WHERE id = ?')
+        .run(designSystemId, workspaceFixture.projectId);
+    } finally {
+      sqlite.close();
+    }
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { prompt += chunk; });
+process.stdin.on('end', () => {
+  const result = prompt.includes(${JSON.stringify(personalMarker)})
+    ? 'own-personal-design-system-visible'
+    : 'own-personal-design-system-missing';
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: result } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId: workspaceFixture.projectId,
+              message: 'draft with my Personal brand',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('own-personal-design-system-visible');
+          expect(body).not.toContain('own-personal-design-system-missing');
+        },
+      );
+    } finally {
+      await fsp.rm(designSystemDir, { recursive: true, force: true });
+    }
+  });
+
+  it('composes a Team design system without touching same-slug Personal or foreign projects', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for Workspace design-system prompt tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const workspaceId = `team-ws-${randomUUID()}`;
+    const workspaceMemberId = `team-member-${randomUUID()}`;
+    const personalBackingProjectId = `personal-ds-project-${randomUUID()}`;
+    const foreignProjectId = `foreign-project-${randomUUID()}`;
+    for (const [id, name] of [
+      [projectId, 'Team DS prompt fixture'],
+      [personalBackingProjectId, 'Personal DS backing project'],
+      [foreignProjectId, 'Foreign project'],
+    ]) {
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name }),
+      });
+      expect(createProjectResponse.ok).toBe(true);
+    }
+
+    const dirId = `team-prompt-${randomUUID()}`;
+    const designSystemId = `user:${dirId}`;
+    const teamMarker = `TEAM_DS_${randomUUID()}`;
+    const teamTokensMarker = `TEAM_TOKENS_${randomUUID()}`;
+    const globalMarker = `GLOBAL_DS_${randomUUID()}`;
+    const globalTokensMarker = `GLOBAL_TOKENS_${randomUUID()}`;
+    const foreignProjectMarker = `FOREIGN_PROJECT_DS_${randomUUID()}`;
+    const designSystemsRoot = resolve(process.env.OD_DATA_DIR, 'design-systems');
+    const designSystemDir = resolve(
+      teamResourceWorkspaceRoot(designSystemsRoot, workspaceId),
+      dirId,
+    );
+    const globalDesignSystemDir = resolve(designSystemsRoot, dirId);
+    await fsp.mkdir(designSystemDir, { recursive: true });
+    await fsp.mkdir(globalDesignSystemDir, { recursive: true });
+    await fsp.writeFile(
+      resolve(designSystemDir, 'DESIGN.md'),
+      `# Team design system\n\n${teamMarker}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(designSystemDir, 'tokens.css'),
+      `:root { --team-marker: ${teamTokensMarker}; }\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(designSystemDir, 'metadata.json'),
+      `${JSON.stringify({
+        title: 'Team design system',
+        status: 'published',
+        teamSynced: true,
+        workspaceId,
+        projectId: foreignProjectId,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(globalDesignSystemDir, 'DESIGN.md'),
+      `# Global design system\n\n${globalMarker}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(globalDesignSystemDir, 'tokens.css'),
+      `:root { --global-marker: ${globalTokensMarker}; }\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(globalDesignSystemDir, 'metadata.json'),
+      `${JSON.stringify({
+        title: 'Global design system',
+        status: 'published',
+        projectId: personalBackingProjectId,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+
+    const projectsRoot = resolve(process.env.OD_DATA_DIR, 'projects');
+    await Promise.all([
+      fsp.mkdir(resolve(projectsRoot, personalBackingProjectId), { recursive: true }),
+      fsp.mkdir(resolve(projectsRoot, foreignProjectId), { recursive: true }),
+    ]);
+    await fsp.writeFile(
+      resolve(projectsRoot, personalBackingProjectId, 'DESIGN.md'),
+      '# Personal backing project\n\nMust remain untouched by a Team run.\n',
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(projectsRoot, foreignProjectId, 'DESIGN.md'),
+      `# Foreign project\n\n${foreignProjectMarker}\n`,
+      'utf8',
+    );
+
+    const sqlite = new Database(resolve(process.env.OD_DATA_DIR, 'app.sqlite'));
+    let personalBackingProjectBefore: ReturnType<typeof getProject>;
+    let projectCountBefore = 0;
+    try {
+      ensureWorkspaceProject(sqlite as never, {
+        projectId,
+        workspaceId,
+        visibility: 'team',
+        createdByWorkspaceMemberId: workspaceMemberId,
+      });
+      ensureWorkspaceProject(sqlite as never, {
+        projectId: personalBackingProjectId,
+        workspaceId: `personal-ws-${randomUUID()}`,
+        visibility: 'personal',
+        createdByWorkspaceMemberId: `personal-member-${randomUUID()}`,
+      });
+      ensureWorkspaceProject(sqlite as never, {
+        projectId: foreignProjectId,
+        workspaceId: `foreign-ws-${randomUUID()}`,
+        visibility: 'personal',
+        createdByWorkspaceMemberId: `foreign-member-${randomUUID()}`,
+      });
+      ensureWorkspaceResource(
+        sqlite as never,
+        'design_system',
+        workspaceId,
+        workspaceTeamDesignSystemBindingResourceId(workspaceId, designSystemId),
+        {
+          visibility: 'team',
+          resourceState: 'active',
+          createdByWorkspaceMemberId: workspaceMemberId,
+          updatedByWorkspaceMemberId: workspaceMemberId,
+        },
+      );
+      sqlite.prepare('UPDATE projects SET design_system_id = ? WHERE id = ?')
+        .run(designSystemId, projectId);
+      personalBackingProjectBefore = getProject(
+        sqlite as never,
+        personalBackingProjectId,
+      );
+      projectCountBefore = (
+        sqlite.prepare('SELECT COUNT(*) AS count FROM projects').get() as { count: number }
+      ).count;
+    } finally {
+      sqlite.close();
+    }
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { prompt += chunk; });
+process.stdin.on('end', () => {
+  const result = prompt.includes(${JSON.stringify(teamMarker)})
+    && prompt.includes(${JSON.stringify(teamTokensMarker)})
+    && !prompt.includes(${JSON.stringify(globalMarker)})
+    && !prompt.includes(${JSON.stringify(globalTokensMarker)})
+    && !prompt.includes(${JSON.stringify(foreignProjectMarker)})
+    ? 'team-design-system-visible'
+    : 'team-design-system-missing';
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: result } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-od-workspace-id': workspaceId,
+              'x-od-workspace-member-id': workspaceMemberId,
+              'x-od-workspace-type': 'team',
+              'x-od-workspace-role': 'owner',
+            },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId,
+              message: 'draft with the Team brand',
+            }),
+          });
+          const body = await response.text();
+
+          const verificationDb = new Database(
+            resolve(process.env.OD_DATA_DIR as string, 'app.sqlite'),
+          );
+          try {
+            expect.soft(
+              getProject(verificationDb as never, personalBackingProjectId),
+            ).toEqual(personalBackingProjectBefore);
+            expect.soft(
+              (verificationDb.prepare('SELECT COUNT(*) AS count FROM projects').get() as {
+                count: number;
+              }).count,
+            ).toBe(projectCountBefore);
+          } finally {
+            verificationDb.close();
+          }
+
+          expect.soft(response.ok).toBe(true);
+          expect.soft(body).toContain('team-design-system-visible');
+          expect.soft(body).not.toContain('team-design-system-missing');
+        },
+      );
+    } finally {
+      await fsp.rm(designSystemDir, { recursive: true, force: true });
+      await fsp.rm(globalDesignSystemDir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps requested design systems separate from missing injected design systems', async () => {
     const missingDesignSystemId = `missing-ds-${randomUUID()}`;
     const projectId = `project-missing-ds-${randomUUID()}`;
@@ -3525,12 +4040,8 @@ async function waitForRunStatus(
 }
 
 describe('chat prompt helpers', () => {
-  it('appends the validated Codex override after the client system prompt and removes earlier duplicates', () => {
-    const override = renderCodexImagegenOverride('codex', {
-      kind: 'image',
-      imageModel: 'gpt-image-2',
-      imageAspect: '1:1',
-    });
+  it('appends a final prompt override after the client system prompt and removes earlier duplicates', () => {
+    const override = '## Final runtime policy\nUse the shared media dispatcher.';
     const clientMediaContract =
       '## Media generation contract\nclient contract wins unless a later override says otherwise';
 
@@ -3542,47 +4053,10 @@ describe('chat prompt helpers', () => {
     });
 
     const clientIdx = prompt.indexOf(clientMediaContract);
-    const overrideIdx = prompt.indexOf('## Codex built-in imagegen override');
+    const overrideIdx = prompt.indexOf('## Final runtime policy');
     expect(clientIdx).toBeGreaterThan(-1);
     expect(overrideIdx).toBeGreaterThan(clientIdx);
-    expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
-  });
-
-  it('omits the Codex final imagegen override when run media policy blocks execution', () => {
-    const metadata = {
-      kind: 'image',
-      imageModel: 'gpt-image-2',
-      imageAspect: '1:1',
-    };
-    const mediaExecution = {
-      mode: 'disabled',
-      allowedSurfaces: ['image'],
-    };
-    const generatedImagesDir = resolveCodexGeneratedImagesDir(
-      'codex',
-      metadata,
-      { CODEX_HOME: '/tmp/custom-codex-home' },
-      '/home/tester',
-      mediaExecution,
-    );
-    const otherwiseGrantedDir = resolve('/tmp/custom-codex-home/generated_images');
-    const override = resolveGrantedCodexImagegenOverride({
-      agentId: 'codex',
-      metadata,
-      codexGeneratedImagesDir: otherwiseGrantedDir,
-      extraAllowedDirs: [otherwiseGrantedDir],
-      mediaExecution,
-    });
-    const prompt = composeLiveInstructionPrompt({
-      daemonSystemPrompt: 'daemon media policy prompt',
-      runtimeToolPrompt: 'runtime tools',
-      clientSystemPrompt: 'client instructions',
-      finalPromptOverride: override,
-    });
-
-    expect(generatedImagesDir).toBeNull();
-    expect(override).toBeNull();
-    expect(prompt).not.toContain('## Codex built-in imagegen override');
+    expect(prompt.match(/## Final runtime policy/g)).toHaveLength(1);
   });
 
   it('defaults enabled research without an explicit query to the current message', () => {
@@ -3594,88 +4068,6 @@ describe('chat prompt helpers', () => {
     expect(prompt).toContain('Canonical query for this run:');
     expect(prompt).toContain('EV market 2025 trends');
     expect(prompt).toContain('the first tool action must be the research command');
-  });
-
-  it('resolves only the narrow Codex generated_images allowlist for known gpt-image image projects', () => {
-    expect(
-      resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: '/tmp/custom-codex-home' },
-        '/home/tester',
-      ),
-    ).toBe(resolve('/tmp/custom-codex-home/generated_images'));
-
-    expect(
-      resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2-preview' },
-        { CODEX_HOME: '/tmp/custom-codex-home' },
-        '/home/tester',
-      ),
-    ).toBeNull();
-
-    expect(
-      resolveCodexGeneratedImagesDir(
-        'claude',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: '/tmp/custom-codex-home' },
-        '/home/tester',
-      ),
-    ).toBeNull();
-  });
-
-  it('rejects a generated_images final-component symlink', () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-codex-generated-symlink-'));
-    try {
-      const codexHome = join(root, 'codex-home');
-      const symlinkTarget = join(root, 'actual-generated-images');
-      mkdirSync(codexHome, { recursive: true });
-      mkdirSync(symlinkTarget, { recursive: true });
-      symlinkDir(symlinkTarget, join(codexHome, 'generated_images'));
-
-      const generatedImagesDir = resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: codexHome },
-        '/home/tester',
-      );
-
-      expect(
-        validateCodexGeneratedImagesDir(generatedImagesDir, {
-          warn: () => undefined,
-        }),
-      ).toBeNull();
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it('rejects a generated_images dir whose canonical path is inside a protected root', () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-codex-generated-protected-'));
-    try {
-      const protectedRoot = join(root, 'skills');
-      const protectedGeneratedImages = join(protectedRoot, 'generated_images');
-      mkdirSync(protectedGeneratedImages, { recursive: true });
-      const codexHome = join(root, 'codex-home');
-      symlinkDir(protectedRoot, codexHome);
-
-      const generatedImagesDir = resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: codexHome },
-        '/home/tester',
-      );
-
-      expect(
-        validateCodexGeneratedImagesDir(generatedImagesDir, {
-          protectedDirs: [protectedRoot],
-          warn: () => undefined,
-        }),
-      ).toBeNull();
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
   });
 
   it('resolves design-system selection precedence for run prompt composition', () => {
@@ -3819,96 +4211,29 @@ describe('chat prompt helpers', () => {
     });
   });
 
-  it('grants Codex the canonical validated generated_images dir', () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-codex-generated-canonical-'));
-    try {
-      const actualCodexHome = join(root, 'actual-codex-home');
-      const symlinkCodexHome = join(root, 'codex-home-link');
-      mkdirSync(actualCodexHome, { recursive: true });
-      symlinkDir(actualCodexHome, symlinkCodexHome);
-
-      const generatedImagesDir = resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: symlinkCodexHome },
-        '/home/tester',
-      );
-      const validatedDir = validateCodexGeneratedImagesDir(
-        generatedImagesDir,
-        { warn: () => undefined },
-      );
-      const canonicalGeneratedImagesDir = join(
-        realpathSync.native(actualCodexHome),
-        'generated_images',
-      );
-      const extraAllowedDirs = resolveChatExtraAllowedDirs({
-        agentId: 'codex',
-        skillsDir: '/repo/skills',
-        designSystemsDir: '/repo/design-systems',
-        linkedDirs: ['/linked/reference'],
-        codexGeneratedImagesDir: validatedDir,
-        existsSync: () => true,
-      });
-      const codex = getAgentDef('codex');
-      if (!codex) throw new Error('Codex agent definition missing');
-      const args = codex.buildArgs('', [], extraAllowedDirs, {}, {
-        cwd: '/tmp/od-project',
-      });
-
-      expect(generatedImagesDir).not.toBe(canonicalGeneratedImagesDir);
-      expect(validatedDir).toBe(canonicalGeneratedImagesDir);
-      expect(extraAllowedDirs).toEqual([canonicalGeneratedImagesDir]);
-      expect(
-        args.filter(
-          (arg, index) =>
-            arg === '--add-dir' || args[index - 1] === '--add-dir',
-        ),
-      ).toEqual(['--add-dir', canonicalGeneratedImagesDir]);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it('limits Codex extra allowed dirs to the generated_images output dir', () => {
-    const generatedImagesDir = '/home/tester/.codex/generated_images';
+  it('does not grant media-specific extra directories to Codex', () => {
     const dirs = resolveChatExtraAllowedDirs({
       agentId: '  CoDeX  ',
       skillsDir: '/repo/skills',
       designSystemsDir: '/repo/design-systems',
       linkedDirs: ['/linked/reference'],
-      codexGeneratedImagesDir: generatedImagesDir,
       existsSync: () => true,
     });
 
-    expect(dirs).toEqual([generatedImagesDir]);
-
-    const codex = getAgentDef('codex');
-    if (!codex) throw new Error('Codex agent definition missing');
-    const args = codex.buildArgs('', [], dirs, {}, { cwd: '/tmp/od-project' });
-    expect(
-      args.filter(
-        (arg, index) =>
-          arg === '--add-dir' || args[index - 1] === '--add-dir',
-      ),
-    ).toEqual(['--add-dir', generatedImagesDir]);
-    expect(args).not.toContain('/repo/skills');
-    expect(args).not.toContain('/repo/design-systems');
-    expect(args).not.toContain('/linked/reference');
+    expect(dirs).toEqual([]);
   });
 
-  it('keeps resource and linked dirs for non-Codex agents without the Codex output dir', () => {
+  it('keeps resource and linked dirs for non-Codex agents', () => {
     const existingDirs = new Set([
       '/repo/skills',
       '/repo/design-systems',
       '/linked/reference',
-      '/home/tester/.codex/generated_images',
     ]);
     const dirs = resolveChatExtraAllowedDirs({
       agentId: 'claude',
       skillsDir: '/repo/skills',
       designSystemsDir: '/repo/design-systems',
       linkedDirs: ['/linked/reference'],
-      codexGeneratedImagesDir: '/home/tester/.codex/generated_images',
       existsSync: (dir: string) => existingDirs.has(dir),
     });
 
@@ -3919,79 +4244,4 @@ describe('chat prompt helpers', () => {
     ]);
   });
 
-  it('does not add resource dirs for Codex when imagegen is not whitelisted', () => {
-    const dirs = resolveChatExtraAllowedDirs({
-      agentId: 'codex',
-      skillsDir: '/repo/skills',
-      designSystemsDir: '/repo/design-systems',
-      linkedDirs: ['/linked/reference'],
-      codexGeneratedImagesDir: null,
-      existsSync: () => true,
-    });
-
-    expect(dirs).toEqual([]);
-  });
-
-  it('omits the Codex override when validation fails or the dir is not granted', () => {
-    const metadata = { kind: 'image', imageModel: 'gpt-image-2' };
-    const root = mkdtempSync(join(tmpdir(), 'od-codex-generated-prompt-'));
-    try {
-      const codexHome = join(root, 'codex-home');
-      const symlinkTarget = join(root, 'actual-generated-images');
-      mkdirSync(codexHome, { recursive: true });
-      mkdirSync(symlinkTarget, { recursive: true });
-      symlinkDir(symlinkTarget, join(codexHome, 'generated_images'));
-
-      const generatedImagesDir = resolveCodexGeneratedImagesDir(
-        'codex',
-        metadata,
-        { CODEX_HOME: codexHome },
-        '/home/tester',
-      );
-      const validatedDir = validateCodexGeneratedImagesDir(
-        generatedImagesDir,
-        { warn: () => undefined },
-      );
-      const extraAllowedDirs = resolveChatExtraAllowedDirs({
-        agentId: 'codex',
-        skillsDir: '/repo/skills',
-        designSystemsDir: '/repo/design-systems',
-        linkedDirs: ['/linked/reference'],
-        codexGeneratedImagesDir: validatedDir,
-        existsSync: () => true,
-      });
-      const validationFailedOverride = resolveGrantedCodexImagegenOverride({
-        agentId: 'codex',
-        metadata,
-        codexGeneratedImagesDir: validatedDir,
-        extraAllowedDirs,
-      });
-      const validationFailedPrompt = composeLiveInstructionPrompt({
-        daemonSystemPrompt: 'daemon prompt',
-        runtimeToolPrompt: 'runtime tools',
-        clientSystemPrompt: 'client media contract',
-        finalPromptOverride: validationFailedOverride,
-      });
-
-      expect(validatedDir).toBeNull();
-      expect(extraAllowedDirs).toEqual([]);
-      expect(validationFailedOverride).toBeNull();
-      expect(validationFailedPrompt).not.toContain(
-        '## Codex built-in imagegen override',
-      );
-
-      const validDir = join(root, 'safe-codex-home', 'generated_images');
-      mkdirSync(validDir, { recursive: true });
-      const notGrantedOverride = resolveGrantedCodexImagegenOverride({
-        agentId: 'codex',
-        metadata,
-        codexGeneratedImagesDir: validDir,
-        extraAllowedDirs: [],
-      });
-
-      expect(notGrantedOverride).toBeNull();
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
 });

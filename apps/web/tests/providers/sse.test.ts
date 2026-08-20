@@ -53,6 +53,7 @@ describe('streamViaDaemon', () => {
 
     await streamViaDaemon({
       agentId: 'mock',
+      userMessageId: '3',
       history: [
         { id: '1', role: 'user', content: 'pre-consent brief' },
         { id: '2', role: 'assistant', content: 'draft response' },
@@ -68,9 +69,10 @@ describe('streamViaDaemon', () => {
     expect(body.message).toContain('pre-consent brief');
     expect(body.message).toContain('post-consent revision');
     expect(body.currentPrompt).toBe('post-consent revision');
+    expect(body.userMessageId).toBe('3');
   });
 
-  it('sends BYOK profile references without a raw provider payload', async () => {
+  it('sends the selected Local BYOK provider only to the local run endpoint', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -84,7 +86,12 @@ describe('streamViaDaemon', () => {
 
     await streamViaDaemon({
       agentId: 'byok-opencode',
-      byokProfileId: 'byok-openrouter',
+      byokProvider: {
+        protocol: 'openai',
+        apiKey: 'local-test-key',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-5.4-mini',
+      },
       handlers,
       history: [{ id: '1', role: 'user', content: 'Create a site' }],
       signal: new AbortController().signal,
@@ -95,14 +102,20 @@ describe('streamViaDaemon', () => {
       RequestInit,
     ];
     const body = JSON.parse(String(createRunInit.body));
-    expect(body.byokProfileId).toBe('byok-openrouter');
-    expect(body).not.toHaveProperty('byokProvider');
+    expect(body).not.toHaveProperty('byokProfileId');
+    expect(body.byokProvider).toEqual({
+      protocol: 'openai',
+      apiKey: 'local-test-key',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.4-mini',
+    });
   });
 
   it('publishes an authoritative successful run with an artifact to the app gate', async () => {
     const handlers = createDaemonHandlers();
     const eventTarget = new EventTarget();
     const published: DaemonRunFinishedEventDetail[] = [];
+    const artifactPaths: string[][] = [];
     eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
       published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
     });
@@ -112,30 +125,69 @@ describe('streamViaDaemon', () => {
       if (url === '/api/runs') return jsonResponse({ runId: 'run-artifact-success' });
       if (url === '/api/runs/run-artifact-success/events') {
         return sseResponse(
-          'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":2}\n\n',
+          'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":2,"artifactPaths":["existing.png","renders/new.png"]}\n\n',
         );
       }
       throw new Error(`unexpected fetch ${url}`);
     }));
 
     await streamViaDaemon({
-      agentId: 'mock',
+      agentId: 'amr',
       history: [{ id: '1', role: 'user', content: 'make a design' }],
       systemPrompt: '',
       signal: new AbortController().signal,
       handlers,
       projectId: 'project-1',
       conversationId: 'conversation-1',
+      onArtifactPaths: (paths) => artifactPaths.push(paths),
     });
 
+    expect(handlers.onArtifactCount).toHaveBeenCalledWith(2);
     expect(published).toEqual([{
+      agentId: 'amr',
       runId: 'run-artifact-success',
       projectId: 'project-1',
       conversationId: 'conversation-1',
       result: 'success',
       artifactCount: 2,
     }]);
+    expect(artifactPaths).toEqual([['existing.png', 'renders/new.png']]);
   });
+
+  it.each(['kimi', 'codex'])(
+    'does not publish a local %s artifact run to the AMR upgrade gate',
+    async (agentId) => {
+      const handlers = createDaemonHandlers();
+      const eventTarget = new EventTarget();
+      const published: DaemonRunFinishedEventDetail[] = [];
+      eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
+        published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
+      });
+      vi.stubGlobal('window', eventTarget);
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/runs') return jsonResponse({ runId: `run-${agentId}` });
+        if (url === `/api/runs/run-${agentId}/events`) {
+          return sseResponse(
+            'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":1}\n\n',
+          );
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }));
+
+      await streamViaDaemon({
+        agentId,
+        history: [{ id: '1', role: 'user', content: 'make a design' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+      });
+
+      expect(published).toEqual([]);
+    },
+  );
 
   it.each([
     ['no artifact', '{"code":0,"status":"succeeded","artifactCount":0}'],
@@ -498,7 +550,7 @@ describe('streamViaDaemon', () => {
     ]);
 
     expect(transcript).toContain('## user');
-    expect(transcript).toContain('[Open Design truncated 1000 chars from this prior message');
+    expect(transcript).toContain('[OpenDesign truncated 1000 chars from this prior message');
     expect(transcript).not.toContain('x'.repeat(13_000));
     expect(transcript).toContain('small answer');
   });
@@ -1048,7 +1100,7 @@ describe('streamViaDaemon', () => {
           sseResponse(
             [
               'event: error',
-              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://open-design.ai/amr/wallet"}}}',
+              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://open-design.ai/amr/dashboard"}}}',
               '',
               '',
             ].join('\n'),
@@ -1071,7 +1123,7 @@ describe('streamViaDaemon', () => {
         details: {
           kind: 'amr_account',
           action: 'recharge',
-          actionUrl: 'https://open-design.ai/amr/wallet',
+          actionUrl: 'https://open-design.ai/amr/dashboard',
         },
       }),
     );
@@ -1126,7 +1178,7 @@ describe('streamViaDaemon', () => {
       }),
     );
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('Open Design link URL or model route');
+    expect(message).toContain('OpenDesign link URL or model route');
     expect(message).not.toContain('json-rpc id 4');
     expect(message).not.toContain('https://example.invalid');
     expect(handlers.onDone).not.toHaveBeenCalled();
@@ -1484,7 +1536,7 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).toHaveBeenCalledWith(expect.any(Error));
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('Open Design started, but the run did not complete');
+    expect(message).toContain('OpenDesign started, but the run did not complete');
     expect(message).not.toContain('sqlite-migration');
     expect(message).not.toContain('OPENCODE_SERVER_PASSWORD');
     expect(message).not.toContain('opencode server listening');
@@ -1791,6 +1843,103 @@ describe('streamViaDaemon', () => {
     expect(onRunStatus).toHaveBeenCalledWith('failed');
     expect(handlers.onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'daemon 503: down' }));
     expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('automatically retries a retryable workspace-authority outage before creating the run', async () => {
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const onRunStatus = vi.fn();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({
+          error: {
+            code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+            message: 'workspace membership authority is temporarily unavailable',
+            retryable: true,
+          },
+        }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        }))
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-after-recovery' }))
+        .mockResolvedValueOnce(sseResponse(
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'amr',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        clientRequestId: 'request-1',
+        onRunStatus,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const firstCreate = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+      const retriedCreate = fetchMock.mock.calls[1] as unknown as [RequestInfo | URL, RequestInit];
+      expect(firstCreate[0]).toBe('/api/runs');
+      expect(retriedCreate[0]).toBe('/api/runs');
+      expect(retriedCreate[1].body).toBe(firstCreate[1].body);
+      expect(JSON.parse(String(retriedCreate[1].body)).clientRequestId).toBe('request-1');
+      expect(onRunStatus).not.toHaveBeenCalledWith('failed');
+      expect(handlers.onError).not.toHaveBeenCalled();
+      expect(handlers.onDone).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('surfaces the structured authority error after automatic run-create retries are exhausted', async () => {
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const onRunStatus = vi.fn();
+      const outage = () => new Response(JSON.stringify({
+        error: {
+          code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+          message: 'workspace membership authority is temporarily unavailable',
+          retryable: true,
+        },
+      }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+      const fetchMock = vi.fn()
+        .mockImplementationOnce(async () => outage())
+        .mockImplementationOnce(async () => outage())
+        .mockImplementationOnce(async () => outage())
+        .mockImplementationOnce(async () => outage());
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'amr',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        clientRequestId: 'request-1',
+        onRunStatus,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(onRunStatus).toHaveBeenCalledWith('failed');
+      expect(handlers.onError).toHaveBeenCalledWith(expect.objectContaining({
+        message: 'workspace membership authority is temporarily unavailable',
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        retryable: true,
+        status: 503,
+      }));
+      expect(handlers.onDone).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('marks invalid create-run JSON as failed', async () => {
@@ -2243,6 +2392,7 @@ function createDaemonHandlers() {
   return {
     ...createStreamHandlers(),
     onAgentEvent: vi.fn(),
+    onArtifactCount: vi.fn(),
   };
 }
 

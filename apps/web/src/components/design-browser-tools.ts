@@ -2,6 +2,21 @@ import type { PreviewAnnotationStyle } from '../types';
 
 export type BrowserViewportId = 'desktop' | 'tablet' | 'mobile';
 
+export interface BrowserViewportPreset {
+  id: BrowserViewportId;
+  width: number | null;
+  height: number | null;
+}
+
+// Labels/titles are looked up from i18n at render time (see `viewportLabel`
+// / `viewportTitle` in DesignBrowserPanel.tsx) rather than baked in here —
+// this module has no i18n context of its own.
+export const BROWSER_VIEWPORT_PRESETS: BrowserViewportPreset[] = [
+  { id: 'desktop', width: null, height: null },
+  { id: 'tablet', width: 820, height: 1180 },
+  { id: 'mobile', width: 390, height: 844 },
+];
+
 export const BROWSER_PAGE_ARCHIVE_SCHEMA = 'open-design.browser-page-archive.v1';
 export const BROWSER_PAGE_ARCHIVE_INDEX_FILE = 'browser/latest-page-snapshot.json';
 
@@ -69,20 +84,6 @@ export interface BrowserMeasureTargetRequest {
   key: string;
   selector: string;
 }
-
-export interface BrowserViewportPreset {
-  id: BrowserViewportId;
-  label: string;
-  title: string;
-  width: number | null;
-  height: number | null;
-}
-
-export const BROWSER_VIEWPORT_PRESETS: BrowserViewportPreset[] = [
-  { id: 'desktop', label: 'Desktop', title: 'Use the full browser tab size', width: null, height: null },
-  { id: 'tablet', label: 'Tablet', title: 'Preview at 820px wide', width: 820, height: 1180 },
-  { id: 'mobile', label: 'Mobile', title: 'Preview at 390px wide', width: 390, height: 844 },
-];
 
 export function projectRelativePathFromBrowserUrl(
   url: string,

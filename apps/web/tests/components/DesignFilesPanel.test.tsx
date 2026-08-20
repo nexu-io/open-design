@@ -10,16 +10,19 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 
+import { CollabProvider } from "../../src/collab/collab-context";
 import {
   DesignFilesPanel,
   type DesignFilesNavState,
 } from "../../src/components/DesignFilesPanel";
+import { setHtmlSourceSnapshot } from "../../src/components/html-source-snapshot-cache";
 import type {
   ProjectFile,
   ProjectFileKind,
   ProjectFolder,
 } from "../../src/types";
 import { VISUAL_STABILITY_STORAGE_KEY } from "../../src/utils/visualStability";
+import { workspaceContextFixture } from "../helpers/workspace-context";
 
 function folder(path: string): ProjectFolder {
   return {
@@ -125,10 +128,16 @@ function renderPanel(
   return { ...result, onDeleteFiles, onOpenFile, onClearUploadError };
 }
 
-function sectionLabels(): string[] {
-  return Array.from(
-    document.querySelectorAll<HTMLElement>(".df-section-label"),
-  ).map((el) => el.textContent ?? "");
+// The panel shows one group at a time behind the category tab bar; a tab only
+// exists when its group has content at the current directory level.
+function tabLabels(): string[] {
+  return Array.from(document.querySelectorAll<HTMLElement>(".df-tab")).map(
+    (el) => el.textContent ?? "",
+  );
+}
+
+function clickTab(id: string) {
+  fireEvent.click(screen.getByTestId(`design-files-tab-${id}`));
 }
 
 describe("DesignFilesPanel sections", () => {
@@ -148,7 +157,7 @@ describe("DesignFilesPanel sections", () => {
     expect(document.querySelector(".df-page-btn")).toBeNull();
   });
 
-  it("renders a single-line toolbar with file actions and no up/refresh buttons", () => {
+  it("renders a single-line toolbar with no up/refresh buttons, and no new-document/upload actions once files exist", () => {
     renderPanel([file({ name: "page.html", kind: "html" })]);
 
     expect(document.querySelector(".df-topbar")).toBeTruthy();
@@ -156,102 +165,149 @@ describe("DesignFilesPanel sections", () => {
     expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
     expect(document.querySelector(".df-up-btn")).toBeNull();
     expect(document.querySelector(".df-refresh-control")).toBeNull();
-    expect(screen.getByTestId("design-files-upload-trigger")).toBeTruthy();
+    // New-document / upload moved into the empty state only; see below.
+    expect(screen.queryByTestId("design-files-upload-trigger")).toBeNull();
+    expect(screen.queryByTestId("design-files-empty-new-document")).toBeNull();
   });
 
   it("shows prioritized project starter actions in the empty state", () => {
     const onNewSketch = vi.fn();
     const onOpenBrowser = vi.fn();
+    const onCreateDesignSystem = vi.fn();
     const onPaste = vi.fn();
+    const onUpload = vi.fn();
 
     renderPanel([], {
       onNewSketch,
       onOpenBrowser,
+      onCreateDesignSystem,
       onPaste,
+      onUpload,
     });
 
     fireEvent.click(screen.getByTestId("design-files-empty-new-sketch"));
     fireEvent.click(screen.getByTestId("design-files-empty-open-browser"));
-    fireEvent.click(screen.getByTestId("design-files-empty-create-document"));
+    fireEvent.click(screen.getByTestId("design-files-empty-create-design-system"));
+    fireEvent.click(screen.getByTestId("design-files-empty-new-document"));
+    fireEvent.click(screen.getByTestId("design-files-upload-trigger"));
 
     expect(onNewSketch).toHaveBeenCalledTimes(1);
     expect(onOpenBrowser).toHaveBeenCalledTimes(1);
+    expect(onCreateDesignSystem).toHaveBeenCalledTimes(1);
     expect(onPaste).toHaveBeenCalledTimes(1);
-    expect(
-      screen.getByTestId("design-files-empty-create-document").textContent,
-    ).toContain("Create document");
-    expect(
-      screen.queryByRole("button", { name: "Create new design system" }),
-    ).toBeNull();
+    expect(onUpload).toHaveBeenCalledTimes(1);
   });
 
-  it("groups files into semantic sections by category", () => {
+  it("keeps empty-state actions visible but disables mutations for read-only shared viewers", () => {
+    const onNewSketch = vi.fn();
+    const onOpenBrowser = vi.fn();
+    const onCreateDesignSystem = vi.fn();
+    const onPaste = vi.fn();
+    const onUpload = vi.fn();
+
+    renderPanel([], {
+      viewerOnly: true,
+      onNewSketch,
+      onOpenBrowser,
+      onCreateDesignSystem,
+      onPaste,
+      onUpload,
+    });
+
+    const mutationButtons = [
+      screen.getByTestId("design-files-empty-new-sketch"),
+      screen.getByTestId("design-files-empty-new-document"),
+      screen.getByTestId("design-files-upload-trigger"),
+      screen.getByTestId("design-files-empty-create-design-system"),
+    ];
+    for (const button of mutationButtons) {
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute(
+        "title",
+        "Shared project is read-only: you can comment, but cannot edit or export.",
+      );
+      fireEvent.click(button);
+    }
+
+    expect(onNewSketch).not.toHaveBeenCalled();
+    expect(onCreateDesignSystem).not.toHaveBeenCalled();
+    expect(onPaste).not.toHaveBeenCalled();
+    expect(onUpload).not.toHaveBeenCalled();
+
+    const openBrowser = screen.getByTestId("design-files-empty-open-browser");
+    expect(openBrowser).not.toBeDisabled();
+    fireEvent.click(openBrowser);
+    expect(onOpenBrowser).toHaveBeenCalledTimes(1);
+  });
+
+  it("groups files into category tabs and shows one group at a time", () => {
     renderPanel([
       file({ name: "page.html", kind: "html", mime: "text/html" }),
       file({ name: "chart.png", kind: "image", mime: "image/png" }),
     ]);
 
-    const labels = sectionLabels();
+    const labels = tabLabels();
     expect(labels.some((text) => text.includes("Pages"))).toBe(true);
     expect(labels.some((text) => text.includes("Images"))).toBe(true);
+    // Pages is the default tab; other groups render after picking their tab.
     expect(screen.getByTestId("design-file-row-page.html")).toBeTruthy();
+    expect(screen.queryByTestId("design-file-row-chart.png")).toBeNull();
+    clickTab("cat:image");
     expect(screen.getByTestId("design-file-row-chart.png")).toBeTruthy();
+    expect(screen.queryByTestId("design-file-row-page.html")).toBeNull();
   });
 
-  it("splits stylesheets into their own section with a Stylesheet subtitle", () => {
+  it("splits stylesheets into their own tab with a Stylesheet subtitle", () => {
     renderPanel([
       file({ name: "styles.css", kind: "code", mime: "text/css" }),
       file({ name: "app.ts", kind: "code", mime: "text/typescript" }),
     ]);
 
-    const labels = sectionLabels();
+    const labels = tabLabels();
     expect(labels.some((text) => text.includes("Stylesheets"))).toBe(true);
     expect(labels.some((text) => text.includes("Scripts"))).toBe(true);
 
+    clickTab("cat:stylesheet");
     const cssRow = screen.getByTestId("design-file-row-styles.css");
     expect(cssRow.querySelector(".df-row-sub")?.textContent).toBe("Stylesheet");
+    clickTab("cat:code");
     const tsRow = screen.getByTestId("design-file-row-app.ts");
     expect(tsRow.querySelector(".df-row-sub")?.textContent).toBe("Script");
   });
 
   it('shows the file size beside the modified time while preserving the type subtitle', () => {
-    renderPanel([file({ name: 'chart.png', kind: 'image', size: 4096 })]);
+    // Images now render as bare masonry cards without a meta strip, so the
+    // list-row size/subtitle contract is asserted on a stylesheet file, which
+    // still renders as a compact row.
+    renderPanel([
+      file({ name: 'styles.css', kind: 'code', mime: 'text/css', size: 4096 }),
+    ]);
 
-    const row = screen.getByTestId('design-file-row-chart.png');
-    expect(row.querySelector('.df-row-sub')?.textContent).toBe('Image');
+    const row = screen.getByTestId('design-file-row-styles.css');
+    expect(row.querySelector('.df-row-sub')?.textContent).toBe('Stylesheet');
     expect(row.querySelector('.df-row-size')?.textContent).toBe('4.0 KB');
   });
 
-  it("shows the upload hint in the footer while idle", () => {
+  // #5517 removed the always-on footer drop-hint strip and its rotating
+  // useful-info tip; drag & drop still works via the df-drop-overlay, which
+  // the drag-and-drop suite above covers.
+  it("renders no footer info strip", () => {
     renderPanel([file({ name: "page.html", kind: "html" })]);
 
-    expect(document.querySelector(".df-drop-hint")).toBeTruthy();
-    expect(document.querySelector(".df-useful-info")).toBeNull();
-  });
-
-  it("types out the first useful-info tip in the footer while the agent runs", async () => {
-    localStorage.setItem(VISUAL_STABILITY_STORAGE_KEY, "1");
-    renderPanel([file({ name: "page.html", kind: "html" })], { running: true });
-
+    expect(document.querySelector(".df-footer-info")).toBeNull();
     expect(document.querySelector(".df-drop-hint")).toBeNull();
-    expect(document.querySelector(".df-useful-info-label")?.textContent).toBe(
-      "Useful info",
-    );
-    // The tip types in character by character, so wait for the first word.
-    await waitFor(() =>
-      expect(
-        document.querySelector(".df-useful-info-tip")?.textContent,
-      ).toContain("Double-click"),
-    );
   });
 });
 
 describe("DesignFilesPanel large list", () => {
   afterEach(() => cleanup());
 
-  it("renders all rows at once (no pagination)", () => {
+  it("renders every entry of the active tab at once (no pagination)", () => {
     const { container } = renderPanel(generateFiles(500));
-    expect(container.querySelectorAll(".df-file-row").length).toBe(500);
+    // 500 files cycle through 6 kinds; the default Pages tab holds the
+    // ⌈500/6⌉ = 84 html files, all rendered as page cards without pagination.
+    expect(container.querySelectorAll(".df-card-grid .df-card").length).toBe(84);
+    expect(document.querySelector(".df-pagination")).toBeNull();
   });
 
   it("renders 500 files within a reasonable time", () => {
@@ -269,16 +325,21 @@ describe("DesignFilesPanel selection", () => {
   it("shows the batch bar and passes every selected file to batch delete", () => {
     const files = generateFiles(3);
     const { container, onDeleteFiles } = renderPanel(files);
-    const rows = Array.from(container.querySelectorAll(".df-file-row"));
 
-    const firstName = rows[0]!
-      .getAttribute("data-testid")!
-      .replace(/^design-file-row-/, "");
-    const secondName = rows[1]!
-      .getAttribute("data-testid")!
-      .replace(/^design-file-row-/, "");
-    fireEvent.click(rows[0]!.querySelector(".df-row-check")!);
-    fireEvent.click(rows[1]!.querySelector(".df-row-check")!);
+    // Selection spans category tabs: pick one file on the default Pages tab
+    // and a second one behind the Images tab. Both categories render as cards
+    // with the floating check chip.
+    fireEvent.click(
+      screen
+        .getByTestId("design-file-row-file-1.html")
+        .querySelector(".df-card-check")!,
+    );
+    clickTab("cat:image");
+    fireEvent.click(
+      screen
+        .getByTestId("design-file-row-file-2.png")
+        .querySelector(".df-card-check")!,
+    );
 
     expect(
       container.querySelector('[data-testid="design-files-batch-bar"]'),
@@ -288,24 +349,110 @@ describe("DesignFilesPanel selection", () => {
       container.querySelector('[data-testid="design-files-batch-delete"]')!,
     );
     expect(onDeleteFiles).toHaveBeenCalledTimes(1);
-    expect(onDeleteFiles).toHaveBeenCalledWith([firstName, secondName]);
+    expect(onDeleteFiles).toHaveBeenCalledWith(["file-1.html", "file-2.png"]);
   });
 
-  it("does not preview or open files from row controls", () => {
+  it("sends the project-pinned Workspace identity on batch archive download", async () => {
+    const workspaceContext = workspaceContextFixture({
+      workspaceId: "workspace-a",
+      workspaceMemberId: "member-a",
+    });
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      new Response("zip", {
+        status: 200,
+        headers: {
+          "content-type": "application/zip",
+          "content-disposition": 'attachment; filename="project.zip"',
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:test"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const files = [file({ name: "page.html", kind: "html" })];
+    const { container } = render(
+      <CollabProvider
+        value={{
+          workspaceContext,
+          workspaceContextLoading: false,
+          enabled: true,
+          member: null,
+          present: [],
+          publishedVersion: null,
+          syncState: null,
+          viewerOnly: false,
+          writerAuthority: 'allowed',
+          isOwner: true,
+          isEffectiveOwner: true,
+          isSharedNonOwner: false,
+          ownerDisplayName: null,
+          ownerRole: null,
+          downloadPending: false,
+          reportChange: vi.fn(),
+          requestPublish: vi.fn(),
+          refreshPresence: vi.fn(),
+          checkStatusNow: vi.fn(),
+        }}
+      >
+        <DesignFilesPanel
+          projectId="test-project"
+          files={files}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={vi.fn()}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      </CollabProvider>,
+    );
+
+    fireEvent.click(
+      screen
+        .getByTestId("design-file-row-page.html")
+        .querySelector(".df-card-check")!,
+    );
+    fireEvent.click(
+      container.querySelector('[data-testid="design-files-batch-bar"] button')!,
+    );
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).endsWith("/archive/batch"),
+        ),
+      ).toBe(true);
+    });
+    const archiveCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/archive/batch"),
+    );
+    expect(archiveCall).toBeTruthy();
+    const [, init] = archiveCall!;
+    const headers = new Headers(init?.headers);
+    expect(headers.get("x-od-workspace-id")).toBe("workspace-a");
+    expect(headers.get("x-od-workspace-member-id")).toBe("member-a");
+  });
+
+  it("does not open files from card controls", () => {
     const files = generateFiles(1);
     const { container, onOpenFile } = renderPanel(files);
-    const row = container.querySelector(".df-file-row")!;
+    const card = container.querySelector(".df-card")!;
 
-    fireEvent.click(row.querySelector(".df-row-check")!);
-    expect(
-      container.querySelector('[data-testid="design-file-preview"]'),
-    ).toBeNull();
+    fireEvent.click(card.querySelector(".df-card-check")!);
     expect(onOpenFile).not.toHaveBeenCalled();
 
-    fireEvent.click(row.querySelector(".df-row-menu")!);
-    expect(
-      container.querySelector('[data-testid="design-file-preview"]'),
-    ).toBeNull();
+    fireEvent.click(card.querySelector(".df-row-menu")!);
     expect(onOpenFile).not.toHaveBeenCalled();
   });
 
@@ -337,9 +484,8 @@ describe("DesignFilesPanel selection", () => {
           "/tmp/open-design/projects/test-project/alpha.html",
         );
       });
-      expect(
-        container.querySelector('[data-testid="design-file-preview"]'),
-      ).toBeNull();
+      // The panel has no detail pane — copying a path never opens one.
+      expect(container.querySelector(".df-preview")).toBeNull();
     } finally {
       if (originalClipboard) {
         Object.defineProperty(navigator, "clipboard", originalClipboard);
@@ -349,39 +495,81 @@ describe("DesignFilesPanel selection", () => {
     }
   });
 
-  it("uses non-control row targets to preview and open", () => {
+  // #5517 contract: the card grid IS the preview surface, so one click on the
+  // thumb opens the page in a workspace tab. There is no detail pane and no
+  // double-click step.
+  it("opens the file from a single click on the card thumb", () => {
     const files = generateFiles(1);
     const { container, onOpenFile } = renderPanel(files);
-    const row = container.querySelector(".df-file-row")!;
+    const card = container.querySelector(".df-card")!;
 
-    fireEvent.click(row.querySelector(".df-row-icon")!);
-    expect(
-      container.querySelector('[data-testid="design-file-preview"]')
-        ?.textContent,
-    ).toContain("file-1.html");
-
-    fireEvent.doubleClick(row.querySelector(".df-row-name-btn")!);
+    fireEvent.click(card.querySelector(".df-card-thumb")!);
     expect(onOpenFile).toHaveBeenCalledWith("file-1.html");
-    onOpenFile.mockClear();
+    expect(container.querySelector(".df-preview")).toBeNull();
+  });
 
-    fireEvent.doubleClick(row.querySelector(".df-row-time")!);
+  it("opens the image from a single click on its masonry card", () => {
+    const { container, onOpenFile } = renderPanel([
+      file({ name: "shot.png", kind: "image", mime: "image/png" }),
+    ]);
+    clickTab("cat:image");
+
+    fireEvent.click(container.querySelector(".df-card--image .df-card-thumb")!);
+    expect(onOpenFile).toHaveBeenCalledWith("shot.png");
+    expect(container.querySelector(".df-preview")).toBeNull();
+  });
+
+  it("reserves a full thumbnail skeleton until masonry image bytes load", () => {
+    const { container } = renderPanel([
+      file({ name: "slow-shot.png", kind: "image", mime: "image/png" }),
+    ]);
+    clickTab("cat:image");
+
+    const thumb = container.querySelector<HTMLButtonElement>(
+      ".df-card--image .df-card-thumb",
+    );
+    const image = thumb?.querySelector<HTMLImageElement>("img");
+    expect(thumb?.dataset.imageStatus).toBe("loading");
+    expect(thumb?.querySelector(".df-image-skeleton")).toBeTruthy();
+
+    fireEvent.load(image!);
+    expect(thumb?.dataset.imageStatus).toBe("loaded");
+    expect(thumb?.querySelector(".df-image-skeleton")).toBeNull();
+  });
+
+  it("opens the file from a single click on a list row's name", () => {
+    const { container, onOpenFile } = renderPanel([
+      file({ name: "notes.txt", kind: "text", mime: "text/plain" }),
+    ]);
+
+    fireEvent.click(container.querySelector(".df-file-row .df-row-name-btn")!);
+    expect(onOpenFile).toHaveBeenCalledWith("notes.txt");
+    expect(container.querySelector(".df-preview")).toBeNull();
+  });
+
+  // The card's name button is the inline-rename entry point for editors, and
+  // stays a plain open target for read-only viewers (who have no rename path).
+  it("starts an inline rename from the card name for editors", () => {
+    const files = generateFiles(1);
+    const { container, onOpenFile } = renderPanel(files);
+
+    fireEvent.click(container.querySelector(".df-card-name-btn")!);
+    expect(container.querySelector(".df-rename-input")).toBeTruthy();
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it("opens instead of renaming from the card name for read-only viewers", () => {
+    const files = generateFiles(1);
+    const { container, onOpenFile } = renderPanel(files, { viewerOnly: true });
+
+    fireEvent.click(container.querySelector(".df-card-name-btn")!);
+    expect(container.querySelector(".df-rename-input")).toBeNull();
     expect(onOpenFile).toHaveBeenCalledWith("file-1.html");
   });
 });
 
-describe("DesignFilesPanel preview", () => {
+describe("DesignFilesPanel page thumbnails", () => {
   afterEach(() => cleanup());
-
-  it("shows the file extension in the preview stats", () => {
-    const { container } = renderPanel([
-      file({ name: "chart.png", kind: "image", size: 4096 }),
-    ]);
-    fireEvent.click(container.querySelector(".df-file-row .df-row-icon")!);
-
-    const stats =
-      container.querySelector(".df-preview-stats")?.textContent ?? "";
-    expect(stats).toContain("PNG");
-  });
 
   it("does not fetch or iframe large HTML files for the Design Files thumbnail", () => {
     const fetchMock = vi.fn();
@@ -395,10 +583,10 @@ describe("DesignFilesPanel preview", () => {
       }),
     ]);
 
-    fireEvent.click(container.querySelector(".df-file-row .df-row-name-btn")!);
-
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(container.querySelector(".df-preview-thumb iframe")).toBeNull();
+    // Over the inline cap the card thumb never URL-loads the iframe; it falls
+    // back to the glyph placeholder.
+    expect(container.querySelector(".df-card-thumb iframe")).toBeNull();
     expect(container.querySelector(".df-preview-placeholder")?.textContent).toContain("⟨⟩");
   });
 
@@ -421,11 +609,8 @@ describe("DesignFilesPanel preview", () => {
       }),
     ]);
 
-    fireEvent.click(container.querySelector(".df-file-row .df-row-name-btn")!);
-
-    expect(container.querySelector(".df-preview-thumb iframe")).toBeNull();
     await waitFor(() => {
-      const iframe = container.querySelector<HTMLIFrameElement>(".df-preview-thumb iframe");
+      const iframe = container.querySelector<HTMLIFrameElement>(".df-card-thumb iframe");
       expect(iframe).toBeTruthy();
       expect(iframe?.getAttribute("src")).toBeNull();
       expect(iframe?.getAttribute("srcdoc") ?? iframe?.srcdoc ?? "").toContain("Small");
@@ -436,52 +621,94 @@ describe("DesignFilesPanel preview", () => {
     );
   });
 
-  it("renders sketch files with the static sketch preview instead of a broken image", async () => {
+  it("reuses an exact-version HTML thumbnail source across panel remounts", async () => {
     const fetchMock = vi.fn(
       async () =>
-        new Response(
-          JSON.stringify({
-            version: 1,
-            items: [
-              {
-                kind: "rect",
-                x: 20,
-                y: 16,
-                w: 120,
-                h: 72,
-                color: "#1c1b1a",
-                size: 2,
-              },
-            ],
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json; charset=utf-8" },
-          },
-        ),
+        new Response("<!doctype html><html><body><main>Cached</main></body></html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
-
-    const sketchFile = file({
-      name: "board.sketch.json",
-      path: "board.sketch.json",
-      kind: "sketch",
-      mime: "application/json; charset=utf-8",
+    const cachedFile = file({
+      name: "cached.html",
+      kind: "html",
+      mime: "text/html",
+      size: 16 * 1024,
+      mtime: 1700000000000,
     });
-    const { container } = renderPanel([sketchFile]);
 
-    fireEvent.click(container.querySelector(".df-file-row .df-row-name-btn")!);
+    const first = renderPanel([cachedFile]);
+    await waitFor(() => {
+      expect(first.container.querySelector(".df-card-thumb iframe")).toBeTruthy();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    const second = renderPanel([cachedFile]);
+    await waitFor(() => {
+      expect(second.container.querySelector(".df-card-thumb iframe")).toBeTruthy();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    second.unmount();
+
+    const changed = renderPanel([{ ...cachedFile, mtime: cachedFile.mtime + 1 }]);
+    await waitFor(() => {
+      expect(changed.container.querySelector(".df-card-thumb iframe")).toBeTruthy();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("builds the current file thumbnail from the exact viewer source snapshot", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const currentFile = file({
+      name: "current.html",
+      kind: "html",
+      mime: "text/html",
+      size: 16 * 1024,
+      mtime: 1700000000000,
+    });
+    setHtmlSourceSnapshot({
+      authorizationScopeKey: "local",
+      projectId: "test-project",
+      fileName: currentFile.name,
+      refreshKey: `${currentFile.mtime}:${currentFile.size}:7`,
+      source: "<!doctype html><html><body><main>Already loaded</main></body></html>",
+    });
+
+    const { container } = renderPanel([currentFile], { filesRefreshKey: 7 });
 
     await waitFor(() => {
-      expect(
-        container.querySelector('[data-testid="sketch-preview-svg"]'),
-      ).toBeTruthy();
+      const iframe = container.querySelector<HTMLIFrameElement>(".df-card-thumb iframe");
+      expect(iframe?.getAttribute("srcdoc") ?? iframe?.srcdoc ?? "")
+        .toContain("Already loaded");
     });
-    expect(container.querySelector(".df-preview-thumb img")).toBeNull();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/projects/test-project/raw/board.sketch.json",
-      { cache: "no-store" },
-    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("mounts a cached HTML thumbnail with the desktop layout viewport on its first render", () => {
+    const cachedFile = file({
+      name: "deck.html",
+      kind: "html",
+      mime: "text/html",
+      size: 16 * 1024,
+      mtime: 1700000000001,
+    });
+    setHtmlSourceSnapshot({
+      authorizationScopeKey: "local",
+      projectId: "test-project",
+      fileName: cachedFile.name,
+      refreshKey: `${cachedFile.mtime}:${cachedFile.size}:8`,
+      source: "<!doctype html><html><body><main>Deck</main></body></html>",
+    });
+
+    const { container } = renderPanel([cachedFile], { filesRefreshKey: 8 });
+    const iframe = container.querySelector<HTMLIFrameElement>(".df-card-thumb iframe");
+
+    expect(iframe).toBeTruthy();
+    expect(iframe?.style.width).toBe("1200px");
+    expect(iframe?.style.height).toBe("675px");
   });
 });
 
@@ -502,19 +729,23 @@ describe("DesignFilesPanel directory navigation", () => {
     expect(dirRows[0]!.textContent).toContain("2");
   });
 
-  it("pins folders into a Folders section", () => {
+  it("pins folders behind a Folders tab", () => {
     renderPanel([
       file({ name: "assets/logo.png", kind: "image" }),
       file({ name: "top.html", kind: "html" }),
     ]);
 
-    expect(sectionLabels().some((text) => text.includes("Folders"))).toBe(true);
+    expect(tabLabels().some((text) => text.includes("Folders"))).toBe(true);
+    clickTab("folders");
+    expect(document.querySelectorAll(".df-dir-row").length).toBe(1);
   });
 
   it("clicking a folder row navigates into it and shows only basenames and nested dirs", () => {
+    // Text files keep the list-row shell (images are bare masonry cards with
+    // no visible name), so the basename contract is asserted on rows.
     renderPanel([
-      file({ name: "assets/logo.png", kind: "image" }),
-      file({ name: "assets/icons/star.svg", kind: "image" }),
+      file({ name: "assets/notes.txt", kind: "text", mime: "text/plain" }),
+      file({ name: "assets/icons/readme.txt", kind: "text", mime: "text/plain" }),
     ]);
 
     fireEvent.click(document.querySelector(".df-dir-row .df-row-name-btn")!);
@@ -524,15 +755,17 @@ describe("DesignFilesPanel directory navigation", () => {
       "assets",
     );
 
-    const fileRow = screen.getByTestId("design-file-row-assets/logo.png");
-    expect(fileRow.querySelector(".df-row-name")?.textContent).toBe("logo.png");
-    expect(fileRow.querySelector(".df-row-name")?.textContent).not.toContain(
-      "assets/",
-    );
-
+    // No pages at this level, so the Folders tab is the default view.
     const dirRows = document.querySelectorAll(".df-dir-row");
     expect(dirRows.length).toBe(1);
     expect(dirRows[0]!.textContent).toContain("icons");
+
+    clickTab("cat:text");
+    const fileRow = screen.getByTestId("design-file-row-assets/notes.txt");
+    expect(fileRow.querySelector(".df-row-name")?.textContent).toBe("notes.txt");
+    expect(fileRow.querySelector(".df-row-name")?.textContent).not.toContain(
+      "assets/",
+    );
   });
 
   it("always renders the root breadcrumb on the default-root view", () => {
@@ -565,6 +798,7 @@ describe("DesignFilesPanel directory navigation", () => {
       file({ name: "top.html", kind: "html" }),
     ]);
 
+    clickTab("folders");
     fireEvent.click(document.querySelector(".df-dir-row .df-row-name-btn")!);
     expect(document.querySelector(".df-breadcrumbs")).toBeTruthy();
 
@@ -573,7 +807,9 @@ describe("DesignFilesPanel directory navigation", () => {
     expect(
       document.querySelector(".df-breadcrumb-current")?.textContent,
     ).not.toBe("assets");
+    // Back at the root, the tab choice resets to the default Pages tab.
     expect(screen.getByTestId("design-file-row-top.html")).toBeTruthy();
+    clickTab("folders");
     expect(document.querySelectorAll(".df-dir-row").length).toBe(1);
   });
 
@@ -583,9 +819,12 @@ describe("DesignFilesPanel directory navigation", () => {
       file({ name: "top.html", kind: "html" }),
     ]);
 
-    expect(document.querySelectorAll(".df-dir-row").length).toBe(1);
-    expect(screen.getByTestId("design-file-row-assets/logo.png")).toBeTruthy();
     expect(screen.getByTestId("design-file-row-top.html")).toBeTruthy();
+    // The nested image is part of the root-level Images group.
+    clickTab("cat:image");
+    expect(screen.getByTestId("design-file-row-assets/logo.png")).toBeTruthy();
+    clickTab("folders");
+    expect(document.querySelectorAll(".df-dir-row").length).toBe(1);
   });
 
   it("preserves the current directory when remounted with navState from a previous render", () => {
@@ -620,6 +859,7 @@ describe("DesignFilesPanel directory navigation", () => {
 
     const { unmount } = render(makePanel());
 
+    fireEvent.click(screen.getByTestId("design-files-tab-folders"));
     fireEvent.click(document.querySelector(".df-dir-row .df-row-name-btn")!);
     expect(document.querySelector(".df-breadcrumb-current")?.textContent).toBe(
       "assets",
@@ -656,15 +896,20 @@ describe("DesignFilesPanel directory navigation", () => {
       file({ name: "top.html", kind: "html" }),
     ]);
 
-    const topRow = screen.getByTestId("design-file-row-top.html");
-    fireEvent.click(topRow.querySelector(".df-row-check")!);
-    expect(topRow.classList.contains("selected")).toBe(true);
+    const topCard = screen.getByTestId("design-file-row-top.html");
+    fireEvent.click(topCard.querySelector(".df-card-check")!);
+    expect(topCard.classList.contains("selected")).toBe(true);
 
+    clickTab("folders");
     fireEvent.click(document.querySelector(".df-dir-row .df-row-name-btn")!);
-    expect(document.querySelectorAll(".df-file-row.selected").length).toBe(0);
+    expect(
+      document.querySelectorAll(".df-file-row.selected, .df-card.selected").length,
+    ).toBe(0);
 
     fireEvent.click(document.querySelector(".df-breadcrumb-btn")!);
-    expect(document.querySelectorAll(".df-file-row.selected").length).toBe(0);
+    expect(
+      document.querySelectorAll(".df-file-row.selected, .df-card.selected").length,
+    ).toBe(0);
   });
 
   it("resets currentDir automatically when all files in the current subdirectory are removed", () => {
@@ -695,6 +940,7 @@ describe("DesignFilesPanel directory navigation", () => {
       ]),
     );
 
+    fireEvent.click(screen.getByTestId("design-files-tab-folders"));
     fireEvent.click(document.querySelector(".df-dir-row .df-row-name-btn")!);
     expect(document.querySelector(".df-breadcrumb-current")?.textContent).toBe(
       "assets",
@@ -725,6 +971,7 @@ describe("DesignFilesPanel current-directory sync", () => {
     expect(onCurrentDirChange).toHaveBeenLastCalledWith("");
     // Navigate into the folder — the parent must learn the new target dir, or
     // upload / paste / new-sketch would create at the project root (#3358 regression).
+    clickTab("folders");
     fireEvent.click(document.querySelector(".df-dir-row .df-row-name-btn")!);
     expect(onCurrentDirChange).toHaveBeenLastCalledWith("assets");
   });
@@ -739,6 +986,7 @@ describe("DesignFilesPanel persisted (empty) folders", () => {
     renderPanel([file({ name: "top.html", kind: "html" })], {
       folders: [folder("assets")],
     });
+    clickTab("folders");
     const dirRows = [...document.querySelectorAll(".df-dir-row")];
     expect(dirRows.some((r) => r.textContent?.includes("assets"))).toBe(true);
   });
@@ -756,5 +1004,115 @@ describe("DesignFilesPanel persisted (empty) folders", () => {
       ...document.querySelectorAll(".df-dir-row .df-row-name"),
     ].map((e) => e.textContent);
     expect(nestedDirs).toContain("icons");
+  });
+});
+
+// A non-owner member's local mirror trailing the published head
+// (`downloadPending`, see useProjectCollab) can still have a complete older
+// materialization. Keep that useful content visible while the project-level
+// sync badge communicates that a newer version is arriving. Only the
+// no-local-content case should replace the empty state with a loading surface.
+describe("DesignFilesPanel pending sync (downloadPending)", () => {
+  afterEach(() => cleanup());
+
+  it("keeps an existing non-html file visible and openable while a newer version downloads", () => {
+    const { onOpenFile } = renderPanel(
+      [file({ name: "notes.txt", kind: "text", mime: "text/plain" })],
+      { downloadPending: true },
+    );
+
+    const row = screen.getByTestId("design-file-row-notes.txt");
+    expect(row.className).not.toContain("df-row-pending");
+    expect(row.querySelector(".df-row-name")?.textContent).toBe("notes.txt");
+    expect(row.querySelector(".skeleton-block")).toBeNull();
+
+    fireEvent.click(row.querySelector(".df-row-name-btn")!);
+    expect(onOpenFile).toHaveBeenCalledWith("notes.txt");
+  });
+
+  it("keeps an existing HTML page card visible and openable while a newer version downloads", () => {
+    const { onOpenFile } = renderPanel(
+      [file({ name: "page.html", kind: "html", mime: "text/html" })],
+      { downloadPending: true },
+    );
+
+    const card = screen.getByTestId("design-file-row-page.html");
+    expect(card.className).not.toContain("df-card-pending");
+    expect(card.textContent).toContain("page.html");
+    const openButton = card.querySelector<HTMLButtonElement>(".df-card-thumb");
+    expect(openButton).toBeTruthy();
+    fireEvent.click(openButton!);
+    expect(onOpenFile).toHaveBeenCalledWith("page.html");
+  });
+
+  it("keeps an existing image card visible and openable while a newer version downloads", () => {
+    const { onOpenFile } = renderPanel(
+      [file({ name: "photo.png", kind: "image", mime: "image/png" })],
+      { downloadPending: true },
+    );
+
+    const card = screen.getByTestId("design-file-row-photo.png");
+    expect(card.className).not.toContain("df-card-pending");
+    expect(card.className).toContain("df-card--image");
+    const openButton = card.querySelector<HTMLButtonElement>(".df-card-thumb");
+    expect(openButton).toBeTruthy();
+    fireEvent.click(openButton!);
+    expect(onOpenFile).toHaveBeenCalledWith("photo.png");
+  });
+
+  it("still reports the correct per-category file counts in the tab bar while pending", () => {
+    renderPanel(
+      [
+        file({ name: "a.txt", kind: "text", mime: "text/plain" }),
+        file({ name: "b.txt", kind: "text", mime: "text/plain" }),
+      ],
+      { downloadPending: true },
+    );
+    expect(tabLabels().join(" ")).toContain("2");
+  });
+
+  it("uses the syncing empty state only when no local content is available", () => {
+    renderPanel([], { downloadPending: true, viewerOnly: true });
+
+    expect(screen.getByTestId("design-files-syncing")).toBeTruthy();
+    expect(screen.queryByTestId("design-files-empty")).toBeNull();
+  });
+
+  it("replaces the retained materialization directly when the pull completes", () => {
+    const commonProps = {
+      projectId: "test-project",
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      onOpenFile: vi.fn(),
+      onOpenLiveArtifact: vi.fn(),
+      onRenameFile: vi.fn(),
+      onDeleteFile: vi.fn(),
+      onDeleteFiles: vi.fn(),
+      onUpload: vi.fn(),
+      onUploadFiles: vi.fn(),
+      onPaste: vi.fn(),
+      onNewSketch: vi.fn(),
+      viewerOnly: true,
+    };
+    const { rerender } = render(
+      <DesignFilesPanel
+        {...commonProps}
+        files={[file({ name: "version-one.txt", kind: "text", mime: "text/plain" })]}
+        downloadPending
+      />,
+    );
+    expect(screen.getByText("version-one.txt")).toBeTruthy();
+    expect(document.querySelector(".skeleton-block")).toBeNull();
+
+    rerender(
+      <DesignFilesPanel
+        {...commonProps}
+        files={[file({ name: "version-two.txt", kind: "text", mime: "text/plain" })]}
+        downloadPending={false}
+      />,
+    );
+    expect(screen.queryByText("version-one.txt")).toBeNull();
+    expect(screen.getByText("version-two.txt")).toBeTruthy();
+    expect(document.querySelector(".skeleton-block")).toBeNull();
   });
 });
