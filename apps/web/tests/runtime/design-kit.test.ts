@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseDesignMd } from '../../src/runtime/design-md-parse';
-import { parsedToKit } from '../../src/runtime/design-kit';
+import { brandToKit, mergeBrandKitWithDesignMd, parsedToKit } from '../../src/runtime/design-kit';
 
 describe('parsedToKit package static assets', () => {
   it('falls back to declared components and omits missing artifacts when packaged system files are absent', () => {
@@ -72,5 +72,54 @@ describe('parsedToKit package static assets', () => {
         url: '/api/design-systems/bento/static?path=system%2Fartifacts%2Flanding.html',
       },
     ]);
+  });
+});
+
+describe('package brand kit overlays DESIGN.md', () => {
+  const BRAND_JSON = JSON.stringify({
+    name: 'Stale Package Name',
+    tagline: 'stale tagline',
+    logo: { primary: 'logos/mark.svg', alternates: [] },
+    colors: [{ role: 'accent', name: 'Old Accent', hex: '#000000', usage: '' }],
+  });
+
+  const DESIGN_MD = [
+    '# Renamed System',
+    '',
+    '## Color Palette',
+    '',
+    '| Role | Name | Hex | Usage |',
+    '| --- | --- | --- | --- |',
+    '| accent | New Accent | #ff0000 | buttons |',
+    '',
+  ].join('\n');
+
+  it('keeps DESIGN.md name and colors while taking the logo from brand.json', () => {
+    // brand.json is the durable ASSET source for an extracted brand; DESIGN.md
+    // is what renames and edits write to, so it must win on text.
+    const packageKit = brandToKit(JSON.parse(BRAND_JSON) as Parameters<typeof brandToKit>[0], {
+      designSystemId: 'user:acme',
+      editable: false,
+      assetUrl: (rel) => `/api/design-systems/user%3Aacme/static?path=${rel}`,
+    });
+    expect(packageKit.logoSrc).toBe('/api/design-systems/user%3Aacme/static?path=logos/mark.svg');
+
+    const merged = mergeBrandKitWithDesignMd(packageKit, DESIGN_MD, {
+      designSystemId: 'user:acme',
+      editable: false,
+    });
+
+    expect(merged.name).toBe('Renamed System');
+    expect(merged.colors.map((c) => c.hex)).toContain('#ff0000');
+    expect(merged.logoSrc).toBe('/api/design-systems/user%3Aacme/static?path=logos/mark.svg');
+  });
+
+  it('resolves brand assets through the design-system package, not a project route', () => {
+    const kit = brandToKit(JSON.parse(BRAND_JSON) as Parameters<typeof brandToKit>[0], {
+      designSystemId: 'user:acme',
+      editable: false,
+      assetUrl: (rel) => `/pkg/${rel}`,
+    });
+    expect(kit.logoSrc).toBe('/pkg/logos/mark.svg');
   });
 });

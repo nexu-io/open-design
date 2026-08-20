@@ -1585,6 +1585,7 @@ function DesignSystemDetail({
   }
   const { kit } = useDesignKit({
     designSystemId: system.id,
+    category: system.category,
     title: system.title,
     projectId,
     body: detail?.body,

@@ -3489,6 +3489,11 @@ function hoistLeadingFrontmatter(body: string): string {
   const heading = displaced[1] ?? '';
   const frontmatter = displaced[2] ?? '';
   if (!heading || !frontmatter) return body;
+  // `# Title` + two horizontal rules is also ordinary Markdown, so the shape
+  // alone proves nothing. Only move a block the frontmatter parser reads as a
+  // non-empty mapping; a section fenced by `---` rules parses to {} and is left
+  // exactly where the author put it.
+  if (Object.keys(parseFrontmatter(frontmatter).data).length === 0) return body;
   const rest = body.slice(displaced[0].length).replace(/^(?:\r?\n)+/, '');
   return `${frontmatter}\n${heading.trimEnd()}\n\n${rest}`;
 }

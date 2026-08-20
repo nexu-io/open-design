@@ -113,6 +113,41 @@ describe('design-system header rewrite keeps frontmatter parseable', () => {
   });
 });
 
+  it('leaves ordinary horizontal rules under a heading exactly where the author put them', async () => {
+    // `# Title` followed by two `---` rules is also plain Markdown. Only a block
+    // that parses as real frontmatter may be hoisted; a fenced section must
+    // survive a metadata write byte-for-byte.
+    const root = tmpRoot();
+    const authored = [
+      '# Acme',
+      '',
+      '---',
+      'Introduction',
+      '---',
+      '',
+      'Details',
+      '',
+    ].join('\n');
+    const created = await createUserDesignSystem(root, {
+      title: 'Acme',
+      category: 'Brands',
+      surface: 'web',
+      body: authored,
+      artifactMode: 'agent-managed',
+    });
+    const dirId = created.id.replace(/^user:/, '');
+    const designPath = path.join(root, dirId, 'DESIGN.md');
+    const before = fs.readFileSync(designPath, 'utf8');
+
+    await updateUserDesignSystem(root, created.id, { status: 'published' });
+
+    const after = fs.readFileSync(designPath, 'utf8');
+    // The only permitted difference is the header metadata this write adds.
+    expect(after.replace(/^> (?:Category|Surface): .*$\n?/gm, '')).toBe(before);
+    expect(after.indexOf('# Acme')).toBeLessThan(after.indexOf('---'));
+    expect(after).toContain('---\nIntroduction\n---');
+  });
+
 describe('brand package serves its own kit assets', () => {
   it('allows brand.json and harvested logo/imagery files through static reads', async () => {
     // The scaffold project an extraction runs in is disposable; the package copy

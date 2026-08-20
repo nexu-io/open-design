@@ -609,6 +609,9 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
 
 export interface DesignKitSource {
   designSystemId: string;
+  /** Catalog category. `Brands` marks a package produced by brand extraction —
+   *  the only kind that ships its own `brand.json` kit alongside DESIGN.md. */
+  category?: string | null;
   title: string;
   projectId?: string;
   /** DESIGN.md content, when the caller already has it (registry body). */
@@ -709,6 +712,7 @@ function mergeLegacyBrandLogo(
 export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; loading: boolean } {
   const {
     designSystemId,
+    category,
     title,
     projectId,
     body,
@@ -743,10 +747,13 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     // A brand-extracted design system keeps its own copy of the kit
     // (`brand.json` + `logos/` + `imagery/`) inside the package. That copy is
     // the durable one: the scaffold project the extraction ran in is disposable
-    // and may be deleted, at which point the project fetch below returns
-    // nothing. Read the package as a fallback so the logo/imagery keep
-    // rendering instead of collapsing to "No logo yet".
-    const packageAssetUrl = designSystemId
+    // and may be deleted, at which point the project read below returns nothing.
+    // Read the package then, so the logo/imagery keep rendering instead of
+    // collapsing to an empty logo module. Only packages that actually ship a
+    // `brand.json` are asked for one — every other design system keeps its
+    // original single-hop, DESIGN.md-only resolution.
+    const isBrandPackage = (category ?? '').trim().toLowerCase() === 'brands';
+    const packageAssetUrl = designSystemId && isBrandPackage
       ? (rel: string): string => designSystemStaticUrl(designSystemId, rel, workspaceContext)
       : null;
     const fetchPackageBrand = async (): Promise<string | null> => {
@@ -758,10 +765,15 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         return null;
       }
     };
-    const kitFromPackageBrand = (raw: string | null): DesignKit | null => {
+    /**
+     * Package brand.json is the ASSET source, never the source of truth for
+     * text: DESIGN.md is what edits and renames write to, so it overlays the
+     * package kit exactly the way it overlays the project-backed one.
+     */
+    const kitFromPackageBrand = (raw: string | null, designMd: string): DesignKit | null => {
       const parsed = tryParseBrand(raw);
       if (!parsed || !packageAssetUrl) return null;
-      return brandToKit(parsed, {
+      const packageKit = brandToKit(parsed, {
         designSystemId,
         editable,
         host,
@@ -770,16 +782,34 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         assetUrl: packageAssetUrl,
         ...(projectId ? { projectId } : {}),
       });
+      return mergeBrandKitWithDesignMd(packageKit, designMd, {
+        designSystemId,
+        projectId,
+        editable,
+        title,
+        host,
+        swatches,
+        packageInfo,
+        showcaseHtml,
+        workspaceContext,
+      });
     };
 
     if (!projectId) {
-      setLoading(true);
-      void (async () => {
-        const packageKit = kitFromPackageBrand(await fetchPackageBrand());
-        if (cancelled) return;
-        setKit(packageKit ?? fromDesignMd(body));
+      // Paint from DESIGN.md immediately — the package read below only ever
+      // adds assets, so it must not delay or replace the first render.
+      setKit(fromDesignMd(body));
+      if (!packageAssetUrl) {
         setLoading(false);
+        return () => {
+          cancelled = true;
+        };
+      }
+      void (async () => {
+        const merged = kitFromPackageBrand(await fetchPackageBrand(), body ?? '');
+        if (!cancelled && merged) setKit(merged);
       })();
+      setLoading(false);
       return () => {
         cancelled = true;
       };
@@ -829,25 +859,14 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
       } else {
         // No usable brand.json in the project (deleted, or never had one) — try
         // the package's own copy before falling back to DESIGN.md prose.
-        const packageKit = kitFromPackageBrand(await fetchPackageBrand());
+        const packageKit = kitFromPackageBrand(await fetchPackageBrand(), rawDesignMd ?? '');
         if (cancelled) return;
         setKit(packageKit
-          ? mergeBrandKitWithDesignMd(packageKit, rawDesignMd ?? '', {
-              designSystemId,
-              projectId,
-              editable,
-              title,
-              host,
-              swatches,
-              packageInfo,
-              showcaseHtml,
-              workspaceContext,
-            })
-          : mergeLegacyBrandLogo(
-              fromDesignMd(rawDesignMd ?? ''),
-              tryParseLegacyBrandLogo(rawBrand),
-              { projectId, reloadKey, workspaceContext },
-            ));
+          ?? mergeLegacyBrandLogo(
+            fromDesignMd(rawDesignMd ?? ''),
+            tryParseLegacyBrandLogo(rawBrand),
+            { projectId, reloadKey, workspaceContext },
+          ));
       }
       setLoading(false);
     })();
@@ -857,6 +876,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     };
   }, [
     designSystemId,
+    category,
     title,
     projectId,
     body,
