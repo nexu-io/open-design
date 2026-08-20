@@ -62,7 +62,7 @@ test('Go banner keeps its sticky height in flow without double-offsetting the mo
 });
 
 test('Go banner classifies signed-out and unpaid visitors during the fixed window', () => {
-  assert.match(banner, /2026-08-20T20:00:00\+08:00/);
+  assert.match(banner, /2026-08-20T17:00:00\+08:00/);
   assert.match(banner, /2026-09-03T20:00:00\+08:00/);
   assert.match(banner, /\/api\/auth\/get-session/);
   assert.match(banner, /if \(!session\?\.user\) \{\s*show\(\)/);

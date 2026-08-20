@@ -38,27 +38,27 @@ const DEMO_ASSET_BASE = '/pricing-e-final/assets';
 const popularModels: ModelItem[] = [
   { name: 'DeepSeek V4 Flash', icon: '/agents/deepseek.svg' },
   { name: 'GLM-5.2', icon: `${DEMO_ASSET_BASE}/zai-logo-official-Byn-xbrp.png`, iconClass: 'model-logo-zhipu' },
-  { name: 'Kimi K2.7 Code', icon: '/agents/moonshot.svg', iconClass: 'model-logo-kimi' },
+  { name: 'Kimi K2.7 Code', icon: '/model-icons/kimi.svg', iconClass: 'model-logo-kimi' },
   { name: 'DeepSeek V4 Pro', icon: '/agents/deepseek.svg' },
-  { name: 'MiniMax M2.7', icon: '/agents/minimax.svg' },
-  { name: 'Kimi K2.6', icon: '/agents/moonshot.svg', iconClass: 'model-logo-kimi' },
+  { name: 'MiniMax M2.7', icon: '/model-icons/minimax.svg' },
+  { name: 'Kimi K2.6', icon: '/model-icons/kimi.svg', iconClass: 'model-logo-kimi' },
   { name: 'MiMo V2.5 Pro', icon: `${DEMO_ASSET_BASE}/mimo-logo-user-CWOWEwG5.png`, iconClass: 'model-logo-mimo' },
   { name: 'GLM-5.1', icon: `${DEMO_ASSET_BASE}/zai-logo-official-Byn-xbrp.png`, iconClass: 'model-logo-zhipu' },
 ];
 
 const flagshipModels: ModelItem[] = [
-  { name: 'Claude Fable 5', icon: '/agents/anthropic.svg' },
-  { name: 'Kimi-K3', icon: '/agents/moonshot.svg', iconClass: 'model-logo-kimi' },
+  { name: 'Claude Fable 5', icon: '/model-icons/claude.svg' },
+  { name: 'Kimi-K3', icon: '/model-icons/kimi.svg', iconClass: 'model-logo-kimi' },
   { name: 'GPT-5.6-Sol', icon: '/agents/openai.svg' },
-  { name: 'Claude Opus 5', icon: '/agents/anthropic.svg' },
+  { name: 'Claude Opus 5', icon: '/model-icons/claude.svg' },
   { name: 'GPT-5.5-Pro', icon: '/agents/openai.svg' },
-  { name: 'Claude Opus 4.7', icon: '/agents/anthropic.svg' },
-  { name: 'Claude Opus 4.8', icon: '/agents/anthropic.svg' },
-  { name: 'Claude Sonnet 5', icon: '/agents/anthropic.svg' },
-  { name: 'Claude Opus 4.6', icon: '/agents/anthropic.svg' },
-  { name: 'Claude Sonnet 4.6', icon: '/agents/anthropic.svg' },
+  { name: 'Claude Opus 4.7', icon: '/model-icons/claude.svg' },
+  { name: 'Claude Opus 4.8', icon: '/model-icons/claude.svg' },
+  { name: 'Claude Sonnet 5', icon: '/model-icons/claude.svg' },
+  { name: 'Claude Opus 4.6', icon: '/model-icons/claude.svg' },
+  { name: 'Claude Sonnet 4.6', icon: '/model-icons/claude.svg' },
   { name: 'GPT-5.5', icon: '/agents/openai.svg' },
-  { name: 'Grok-4.5', icon: '/agents/xai.svg' },
+  { name: 'Grok-4.5', icon: '/model-icons/grok.svg' },
 ];
 
 const plusFlagshipModels = flagshipModels.filter(
@@ -66,8 +66,8 @@ const plusFlagshipModels = flagshipModels.filter(
 );
 
 const imageModels: ModelItem[] = [
-  { name: 'Seedream 5 Lite / Pro', icon: '/model-icons/bytedance.svg' },
-  { name: 'Nano Banana 2', icon: '/agents/gemini.svg', iconClass: 'model-logo-nanobanana' },
+  { name: 'Seedream 5 Lite / Pro', icon: '/model-icons/jimeng.svg' },
+  { name: 'Nano Banana 2', icon: '/model-icons/nanobanana.svg', iconClass: 'model-logo-nanobanana' },
   { name: 'GPT Image 2', icon: '/agents/openai.svg' },
 ];
 
@@ -155,6 +155,15 @@ const tierBenefits: Record<TierId, string[]> = {
   max: paidTierBenefits('max'),
 };
 
+const compactSavings = (amountUsd: number, interval: 'monthly' | 'yearly') => {
+  const amount = locale === 'en'
+    ? formatUsd(amountUsd).replace('$', '')
+    : formatUsd(amountUsd);
+  return locale === 'en' && interval === 'monthly' ? `${amount}/mo` : amount;
+};
+const compactBillingTotal = (amountUsd: number) =>
+  locale === 'en' ? formatUsd(amountUsd).replace('$', '') : formatUsd(amountUsd);
+
 function individualView(tier: PlanTierConfig) {
   const yearlyEquivalent = Math.round(tier.yearly.priceUsd / 12);
   const yearlySave = tier.monthly.priceUsd * 12 - tier.yearly.priceUsd;
@@ -166,7 +175,10 @@ function individualView(tier: PlanTierConfig) {
       amount: formatUsd(tier.monthly.introPriceUsd).replace('$', ''),
       strike: formatUsd(tier.monthly.priceUsd),
       discount: introDiscount,
-      saving: formatUsd(tier.monthly.priceUsd - tier.monthly.introPriceUsd),
+      saving: compactSavings(
+        tier.monthly.priceUsd - tier.monthly.introPriceUsd,
+        'monthly',
+      ),
       billed: fillTemplate(L.monthlyRenewal, {
         amountUsd: formatUsd(tier.monthly.priceUsd),
       }),
@@ -175,9 +187,9 @@ function individualView(tier: PlanTierConfig) {
       amount: formatUsd(yearlyEquivalent).replace('$', ''),
       strike: formatUsd(tier.monthly.priceUsd),
       discount: tier.yearly.discountPct,
-      saving: formatUsd(yearlySave),
+      saving: compactSavings(yearlySave, 'yearly'),
       billed: fillTemplate(L.yearlySubline, {
-        totalUsd: formatUsd(tier.yearly.priceUsd),
+        totalUsd: compactBillingTotal(tier.yearly.priceUsd),
         savingsUsd: formatUsd(yearlySave),
       }),
     },
@@ -197,7 +209,10 @@ const goView = {
     amount: formatUsd(GO_PLAN.monthly.introPriceUsd).replace('$', ''),
     strike: formatUsd(GO_PLAN.monthly.priceUsd),
     discount: goMonthlyDiscount,
-    saving: formatUsd(GO_PLAN.monthly.priceUsd - GO_PLAN.monthly.introPriceUsd),
+    saving: compactSavings(
+      GO_PLAN.monthly.priceUsd - GO_PLAN.monthly.introPriceUsd,
+      'monthly',
+    ),
     billed: fillTemplate(L.monthlyRenewal, {
       amountUsd: formatUsd(GO_PLAN.monthly.priceUsd),
     }),
@@ -206,9 +221,9 @@ const goView = {
     amount: formatUsd(goYearlyEquivalent).replace('$', ''),
     strike: formatUsd(GO_PLAN.monthly.priceUsd),
     discount: goYearlyDiscount,
-    saving: formatUsd(goYearlySave),
+    saving: compactSavings(goYearlySave, 'yearly'),
     billed: fillTemplate(L.yearlySubline, {
-      totalUsd: formatUsd(GO_PLAN.yearly.priceUsd),
+      totalUsd: compactBillingTotal(GO_PLAN.yearly.priceUsd),
       savingsUsd: formatUsd(goYearlySave),
     }),
   },
@@ -241,11 +256,11 @@ const usageRows = [
 
 const comparisonPopular = [
   'DeepSeek V4 Flash',
-  'Kimi K2.7 Code',
   'DeepSeek V4 Pro',
+  'GLM-5.2',
+  'Kimi K2.7 Code',
   'MiniMax M2.7',
   'MiMo V2.5 Pro',
-  'GLM-5.2',
   'Kimi K2.6',
   'GLM-5.1',
 ].map((name) => popularModels.find((model) => model.name === name)!);
@@ -368,8 +383,7 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
             </div>
 
             <a class="pricing-card-cta" href={cloudSubscribeUrl(tier, 'yearly')} data-pricing-cta data-tier={tier}>
-              <span data-when="monthly">{tierCopy[tier].ctaLabel} · {L.monthly}</span>
-              <span data-when="yearly">{tierCopy[tier].ctaLabel} · {L.yearly}</span>
+              <span>{tierCopy[tier].ctaLabel}</span>
             </a>
 
             <div class="plan-feature-details">
@@ -385,7 +399,7 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
                         <li class="model-with-status">
                           <span class:list={['model-logo', model.iconClass]}><img src={model.icon} alt="" loading="lazy" /></span>
                           <span>{model.name}</span>
-                          <em class={popularStatus.kind}>{popularStatus.text}</em>
+                          {popularStatus.kind === 'unlimited' && <em class={popularStatus.kind}>{popularStatus.text}</em>}
                         </li>
                       );
                     })}
@@ -397,7 +411,7 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
 
                 <section class:list={['plan-model-module', { 'unavailable-model-module': tier === 'go', 'recommended-model-module': tier === 'pro' || tier === 'max' }]} data-model-module>
                   <header>
-                    <h4>{tier === 'go' ? P.flagshipModels : `${fillTemplate(P.modelCount, { count: `${flagship.length}+` })} · ${P.flagshipModels}`}</h4>
+                    <h4>{tier === 'go' ? P.flagshipModels : fillTemplate(P.flagshipModelCount, { count: String(flagship.length) })}</h4>
                     {tier === 'go' && <span>{P.noAccess}</span>}
                   </header>
                   <ul>
@@ -480,7 +494,6 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     </div>
     <div class="individual-usage-note">
       <p>{P.usageAllowanceNote}</p>
-      <p>{P.usagePeakNote}</p>
       <p>{P.usageEstimatesNote}</p>
     </div>
   </section>
@@ -529,7 +542,11 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
                   <td class="model-name-cell"><span class:list={['model-logo', model.iconClass]}><img src={model.icon} alt="" loading="lazy" /></span><span>{model.name}</span></td>
                   {(['go', 'plus', 'pro', 'max'] as TierId[]).map((tier) => {
                     const status = accessStatus(category, model.name, tier);
-                    return <td><span class={`model-access-status ${status.kind}`}><i class:list={['status-icon', { infinity: status.kind === 'unlimited', check: status.kind === 'more-ample' }]}>{status.kind === 'unlimited' ? '∞' : ''}</i>{status.text}</span></td>;
+                    return status.kind === 'more-ample' ? (
+                      <td><span class={`model-access-status ${status.kind}`} aria-label={status.text}><i class="status-icon check"></i></span></td>
+                    ) : (
+                      <td><span class={`model-access-status ${status.kind}`}><i class:list={['status-icon', { infinity: status.kind === 'unlimited' }]}>{status.kind === 'unlimited' ? '∞' : ''}</i>{status.text}</span></td>
+                    );
                   })}
                 </tr>
               )),
@@ -630,7 +647,7 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     padding: 0 12px;
     overflow: hidden;
     color: #173111;
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 650;
     line-height: 1;
     letter-spacing: 0.055em;
@@ -640,12 +657,19 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
   }
 
   .new-plan-ribbon span {
+    position: relative;
+    z-index: 1;
     color: #173111;
+    background: linear-gradient(110deg, #173111 0% 39%, #397f2b 47%, #d8ff70 52%, #397f2b 57%, #173111 65% 100%) 100% 0 / 300% 100%;
+    -webkit-text-fill-color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: pricing-ribbon-text-shimmer 4.2s linear infinite;
   }
 
   .plan-top {
     display: block;
-    min-height: 58px;
+    min-height: 78px;
   }
 
   .plan-title-row {
@@ -708,12 +732,14 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
 
   .plan-top p {
     max-width: none;
+    min-height: 32px;
     margin: 8px 0 0;
     color: #60645c;
     font-size: 12px;
     font-weight: 400;
     line-height: 1.35;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .plan-max .plan-top p { color: #aeb5aa; }
@@ -758,10 +784,11 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
   .plan-max .price del { color: #8f978b; }
 
   .compact-price-detail {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
     gap: 7px;
-    min-height: 34px;
+    min-height: 46px;
     color: #555a52;
   }
 
@@ -774,11 +801,14 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
   }
 
   .compact-price-detail > small {
-    margin-left: auto;
+    min-width: 0;
+    margin-left: 0;
     color: #51554d;
     font-size: 12px;
     font-weight: 400;
-    white-space: nowrap;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .plan-max .compact-price-detail > span.price-savings-note { color: #83d96c; }
@@ -1531,8 +1561,11 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     white-space: nowrap;
   }
 
-  .model-access-status.unlimited,
-  .model-access-status.more-ample { gap: 8px; }
+  .model-access-status.unlimited { gap: 8px; }
+  .model-access-status.more-ample {
+    width: 23px;
+    height: 23px;
+  }
   .model-access-status.resolution { font-weight: 500; }
 
   .status-icon {
@@ -1636,6 +1669,10 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     from { opacity: 0.4; transform: scaleX(0); }
     to { opacity: 1; transform: scaleX(1); }
   }
+  @keyframes pricing-ribbon-text-shimmer {
+    from { background-position: 100% 0; }
+    to { background-position: -100% 0; }
+  }
 
   @media (max-width: 1080px) {
     .four-tier-grid {
@@ -1668,6 +1705,12 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     .individual-usage-meter i {
       animation: none;
       transform: none;
+    }
+    .new-plan-ribbon span {
+      color: #173111;
+      -webkit-text-fill-color: #173111;
+      background: none;
+      animation: none;
     }
     .pricing-card-cta { transition: none; }
   }

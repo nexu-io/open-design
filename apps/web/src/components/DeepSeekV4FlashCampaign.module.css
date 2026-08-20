@@ -135,7 +135,7 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding: 54px 42px 28px;
+  padding: 64px 42px 28px 28px;
 }
 
 .goWelcomeCopy h2 {
@@ -251,7 +251,7 @@
   width: 14px;
   height: 14px;
   object-fit: contain;
-  filter: invert(1) brightness(2);
+  filter: brightness(0) invert(1);
 }
 
 .goWelcomeBenefitZhipu img {

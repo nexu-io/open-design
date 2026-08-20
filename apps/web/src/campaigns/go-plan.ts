@@ -3,7 +3,7 @@ import type { DeepSeekV4FlashCampaignAudience } from './deepseek-v4-flash';
 export const GO_PLAN_CAMPAIGN = {
   id: 'go-plan-launch-2026',
   window: {
-    startAt: '2026-08-20T20:00:00+08:00',
+    startAt: '2026-08-20T17:00:00+08:00',
     endAtExclusive: '2026-09-03T20:00:00+08:00',
   },
 } as const;
@@ -24,7 +24,7 @@ export function goPlanCampaignNextBoundary(now: number): number | null {
   return null;
 }
 
-/** Resolve subscription state without coupling the permanent Go entry to a campaign window. */
+/** Resolve subscription state independently from the campaign's launch window. */
 export function resolveSubscriptionAudience(input: {
   plan: string | null | undefined;
   loggedIn: boolean | null | undefined;

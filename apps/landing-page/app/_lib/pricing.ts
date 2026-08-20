@@ -117,6 +117,25 @@ export function cloudSubscribeUrl(
 }
 
 /**
+ * Exact Team checkout handoff. Landing owns the comparison controls; Vela owns
+ * authentication, live catalog validation, workspace permissions, and Stripe.
+ * Carry the visitor's complete selection so Vela can prefill its existing
+ * confirmation dialog instead of asking for the same choices a second time.
+ */
+export function cloudTeamSubscribeUrl(
+  tier: TeamPlanTier,
+  interval: BillingInterval,
+  seats: number,
+): string {
+  if (!Number.isSafeInteger(seats) || seats < 1) {
+    throw new RangeError('Team checkout seats must be a positive integer');
+  }
+  const url = new URL(cloudSubscribeUrl(tier, interval));
+  url.searchParams.set('seats', String(seats));
+  return url.toString();
+}
+
+/**
  * Preserve an explicitly supplied workspace scope without inventing one from
  * local state. The browser enhancement calls this same URL contract when the
  * public pricing page itself was opened with `?workspaceId=...`.

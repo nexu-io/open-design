@@ -90,7 +90,8 @@ function teamView(tier: TeamPlanTierConfig, interval: 'monthly' | 'yearly') {
     amount: usd(introSeatMonth),
     strike: usd(regularSeatMonth),
     discountPct,
-    intervalTotal: usd(intervalTotal),
+    monthlyTeamTotal: usd(intervalTotal / months).replace(/^\$/, ''),
+    intervalTotal: usd(intervalTotal).replace(/^\$/, ''),
   };
 }
 
@@ -270,9 +271,10 @@ const jsonLd = [
       <div class="pr-team-grid">
         <section class="pr-team-card" aria-labelledby="pr-team-title">
           <svg class="pr-team-decoration" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09Z" />
-            <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.66 12.66 0 0 1 22 2c0 2.72-.78 7.5-6.05 11A22.35 22.35 0 0 1 12 15Z" />
-            <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+            <circle cx="9" cy="8" r="3" />
+            <path d="M3.5 19c.35-3.45 2.1-5.2 5.5-5.2s5.15 1.75 5.5 5.2" />
+            <circle cx="17.25" cy="9.25" r="2.25" />
+            <path d="M15.3 14.7c3.2-.75 5.05.68 5.2 3.8" />
           </svg>
           <h2 id="pr-team-title" class="pr-team-card-title">{teamContent.teamTitle}</h2>
           <p class="pr-team-card-tagline">{teamContent.teamTagline}</p>
@@ -285,11 +287,18 @@ const jsonLd = [
               {fillTemplate(L.yearlyDiscountTag, { pct: String(initialTeamView.discountPct) })}
             </span>
           </div>
-          <p class="pr-team-yearly-summary" data-team-summary>
-            {fillTemplate(teamContent.yearlyTotal, {
-              amount: initialTeamView.intervalTotal,
-            })}
-          </p>
+          <div class="pr-team-price-summary" aria-live="polite">
+            <p data-team-monthly-summary>
+              {fillTemplate(teamContent.monthlyTotal, {
+                amount: initialTeamView.monthlyTeamTotal,
+              })}
+            </p>
+            <strong data-team-yearly-summary>
+              {fillTemplate(teamContent.yearlyTotal, {
+                amount: initialTeamView.intervalTotal,
+              })}
+            </strong>
+          </div>
 
           <div class="pr-team-controls">
             <div class="pr-team-field">
@@ -355,15 +364,28 @@ const jsonLd = [
             {fillTemplate(teamContent.minSeatsNote, { count: String(initialTeamTier.minSeats) })}
           </p>
 
+          <div class="pr-team-model-offer" data-pricing-campaign-surface hidden>
+            <span class="pr-team-model-offer-copy">
+              <strong>{deepSeekCampaign.teamOfferTitle}</strong>
+              <small>{deepSeekCampaign.teamOfferModels}</small>
+            </span>
+            <span
+              class="pr-team-offer-countdown"
+              data-team-campaign-countdown
+              aria-label={deepSeekCampaign.windowLabel}
+            >
+              <b data-team-countdown-days data-day-unit={deepSeekCampaign.dayUnit}>
+                0{deepSeekCampaign.dayUnit}
+              </b>
+              <b data-team-countdown-hours>00</b>
+              <i aria-hidden="true">:</i>
+              <b data-team-countdown-minutes>00</b>
+              <i aria-hidden="true">:</i>
+              <b data-team-countdown-seconds>00</b>
+            </span>
+          </div>
+
           <ul class="pr-team-feature-list">
-            {deepSeekCampaign.modelBenefits.map((benefit) => (
-              <li class="pr-campaign-model-benefit" data-pricing-campaign-surface hidden>
-                <div>
-                  <strong>{benefit}</strong>
-                  <small>{deepSeekCampaign.teamBenefitNote}</small>
-                </div>
-              </li>
-            ))}
             {teamContent.teamFeatures.map((feature) => <li>{feature}</li>)}
           </ul>
 
@@ -372,14 +394,18 @@ const jsonLd = [
             href={CLOUD_CONSOLE_URL}
             data-pricing-cta
             data-tier="team"
+            data-team-checkout-total
           >
-            {teamContent.checkout}
+            {fillTemplate(teamContent.checkout, { amount: initialTeamView.intervalTotal })}
           </a>
         </section>
 
         <section class="pr-team-card pr-enterprise-card" aria-labelledby="pr-enterprise-title">
           <svg class="pr-team-decoration" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.69 2.8a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.33 1.84.56 2.8.69A2 2 0 0 1 22 16.92Z" />
+            <path d="M5 21V6.5L12 3v18" />
+            <path d="M12 8h7v13" />
+            <path d="M3 21h18" />
+            <path d="M8 8.5h1M8 12h1M8 15.5h1M15 11h1M15 14h1" />
           </svg>
           <h2 id="pr-enterprise-title" class="pr-team-card-title">{teamContent.enterpriseTitle}</h2>
           <p class="pr-team-card-tagline">{teamContent.enterpriseTagline}</p>
@@ -438,13 +464,34 @@ const jsonLd = [
       const campaignSurfaces = root.querySelectorAll('[data-pricing-campaign-surface]');
       const campaignStartAt = Date.parse(root.getAttribute('data-campaign-start-at') || '');
       const campaignEndAt = Date.parse(root.getAttribute('data-campaign-end-at') || '');
+      const teamCampaignCountdown = root.querySelector('[data-team-campaign-countdown]');
+      const teamCountdownDays = root.querySelector('[data-team-countdown-days]');
+      const teamCountdownHours = root.querySelector('[data-team-countdown-hours]');
+      const teamCountdownMinutes = root.querySelector('[data-team-countdown-minutes]');
+      const teamCountdownSeconds = root.querySelector('[data-team-countdown-seconds]');
       let campaignEligible = false;
       let campaignVisible = false;
+      const updateTeamCampaignCountdown = (now) => {
+        if (!teamCampaignCountdown) return;
+        const remaining = Math.max(0, campaignEndAt - now);
+        const totalSeconds = Math.floor(remaining / 1000);
+        const days = Math.floor(totalSeconds / 86400);
+        const hours = Math.floor((totalSeconds % 86400) / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        if (teamCountdownDays) {
+          teamCountdownDays.textContent = `${days}${teamCountdownDays.getAttribute('data-day-unit') || ''}`;
+        }
+        if (teamCountdownHours) teamCountdownHours.textContent = String(hours).padStart(2, '0');
+        if (teamCountdownMinutes) teamCountdownMinutes.textContent = String(minutes).padStart(2, '0');
+        if (teamCountdownSeconds) teamCountdownSeconds.textContent = String(seconds).padStart(2, '0');
+      };
       const updateCampaignVisibility = () => {
         const now = Date.now();
         campaignEligible = now >= campaignStartAt && now < campaignEndAt;
         campaignVisible = campaignEligible;
         campaignSurfaces.forEach((surface) => { surface.hidden = !campaignVisible; });
+        updateTeamCampaignCountdown(now);
         return campaignVisible;
       };
       updateCampaignVisibility();
@@ -519,7 +566,28 @@ const jsonLd = [
             continue;
           }
           if (tier === 'team') {
-            cta.setAttribute('href', scopedBillingPlanUrl());
+            const selectedTier = teamTiers.find(
+              (candidate) =>
+                candidate.tier ===
+                root.querySelector('[data-team-tier]')?.getAttribute('data-value'),
+            );
+            const selectedSeats = Number(
+              root.querySelector('[data-team-seats]')?.textContent || '',
+            );
+            if (!selectedTier || !Number.isSafeInteger(selectedSeats)) {
+              cta.setAttribute('href', scopedBillingPlanUrl());
+              continue;
+            }
+            const target = new URL(scopedBillingPlanUrl());
+            target.searchParams.set('billing', 'plan');
+            target.searchParams.set('plan', selectedTier.tier);
+            target.searchParams.set('interval', 'yearly');
+            target.searchParams.set(
+              'seats',
+              String(Math.max(selectedTier.minSeats, selectedSeats)),
+            );
+            target.searchParams.set('checkout', 'auto');
+            cta.setAttribute('href', target.toString());
             continue;
           }
           const target = new URL(scopedBillingPlanUrl());
@@ -555,6 +623,8 @@ const jsonLd = [
       };
       const activateAudience = (audience, shouldTrackClick = true) => {
         root.setAttribute('data-audience', audience);
+        const billingToggle = root.querySelector('.pr-toggle');
+        if (billingToggle) billingToggle.hidden = audience === 'team';
         for (const button of root.querySelectorAll('[data-audience-btn]')) {
           const active = button.getAttribute('data-audience-btn') === audience;
           button.classList.toggle('is-active', active);
@@ -705,18 +775,18 @@ const jsonLd = [
         if (teamSeatsOutput) teamSeatsOutput.textContent = String(teamSeats);
         if (teamSeatsDec) teamSeatsDec.disabled = teamSeats <= tier.minSeats;
 
-        const interval = root.getAttribute('data-interval') === 'monthly' ? 'monthly' : 'yearly';
+        const interval = 'yearly';
         const selected = tier[interval];
         const months = interval === 'yearly' ? 12 : 1;
         const introSeatMonth = selected.introPriceUsd / months;
         const listSeatMonth = tier.monthly.priceUsd;
         const discountPct = Math.round((1 - introSeatMonth / listSeatMonth) * 100);
         const intervalTotal = selected.introPriceUsd * teamSeats;
+        const monthlyTeamTotal = intervalTotal / months;
         const amount = usd(introSeatMonth);
         const strike = usd(listSeatMonth);
-        const total = usd(intervalTotal);
-        const introTotalTemplate =
-          interval === 'yearly' ? teamCopy.yearlyTotal : teamCopy.monthlyTotal;
+        const monthlyTotal = usd(monthlyTeamTotal).replace(/^\$/, '');
+        const total = usd(intervalTotal).replace(/^\$/, '');
 
         set('[data-audience-panel="team"]', '[data-team-amount]', amount);
         set('[data-audience-panel="team"]', '[data-team-strike]', strike);
@@ -730,14 +800,25 @@ const jsonLd = [
         );
         set(
           '[data-audience-panel="team"]',
-          '[data-team-summary]',
-          fillTeam(introTotalTemplate, { amount: total }),
+          '[data-team-monthly-summary]',
+          fillTeam(teamCopy.monthlyTotal, { amount: monthlyTotal }),
+        );
+        set(
+          '[data-audience-panel="team"]',
+          '[data-team-yearly-summary]',
+          fillTeam(teamCopy.yearlyTotal, { amount: total }),
+        );
+        set(
+          '[data-audience-panel="team"]',
+          '[data-team-checkout-total]',
+          fillTeam(teamCopy.checkout, { amount: total }),
         );
         set(
           '[data-audience-panel="team"]',
           '[data-team-min]',
           fillTeam(teamCopy.minSeatsNote, { count: String(tier.minSeats) }),
         );
+        syncCtas();
       };
 
       teamTierTrigger?.addEventListener('click', () => {
@@ -972,7 +1053,7 @@ const jsonLd = [
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: end;
-    width: min(1280px, 100%);
+    width: min(1200px, 100%);
     min-height: 42px;
     margin-top: 65px;
   }
@@ -981,9 +1062,11 @@ const jsonLd = [
     justify-self: end;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding-bottom: 11px;
+    gap: 0;
+    min-height: 42px;
+    margin-right: 24px;
   }
+  .pr-toggle[hidden] { display: none !important; }
   .pr-audience-toggle {
     grid-column: 2;
     position: relative;
@@ -991,33 +1074,36 @@ const jsonLd = [
     justify-content: center;
     align-items: center;
     gap: 10px;
+    width: 420px;
   }
   .pr-toggle-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    min-height: 36px;
     border: 0;
     background: transparent;
     cursor: pointer;
-    font: inherit;
-    font-size: 0.9rem;
-    color: var(--ink-soft, #555);
-    padding: 4px 2px;
+    font-family: Albert Sans, Arial, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    color: #858980;
+    padding: 0 2px;
     transition: color 200ms cubic-bezier(0.23, 1, 0.32, 1);
   }
-  .pr-toggle-btn.is-active { color: var(--ink); font-weight: 700; }
-  .pr-toggle-separator { color: var(--ink-soft, #aaa); }
+  .pr-toggle-btn.is-active { color: #151712; }
+  .pr-toggle-separator { margin: 0 9px; color: #c0c3bb; font-size: 14px; }
   .pr-audience-btn {
     position: relative;
     min-width: 60px;
     min-height: 38px;
     padding: 0 16px;
     border: 0;
-    border-radius: 8px;
+    border-radius: 9px;
     background: transparent;
-    color: var(--ink-soft, #777);
-    font: inherit;
-    font-size: 12px;
+    color: #74786f;
+    font-family: Albert Sans, Arial, sans-serif;
+    font-size: 14px;
     font-weight: 600;
     line-height: 1;
     white-space: nowrap;
@@ -1025,9 +1111,8 @@ const jsonLd = [
     transition: color 200ms cubic-bezier(0.23, 1, 0.32, 1), background-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
   }
   .pr-audience-btn.is-active {
-    color: var(--ink);
-    font-weight: 650;
-    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    color: #11120f;
+    background: #e8e9e3;
   }
   .pr-toggle-save {
     margin-left: 7px;
@@ -1043,7 +1128,8 @@ const jsonLd = [
     .pr-controls-row { grid-template-columns: 1fr; gap: 14px; }
     .pr-audience-toggle,
     .pr-toggle { grid-column: 1; justify-self: center; }
-    .pr-toggle { padding-bottom: 0; }
+    .pr-audience-toggle { width: 100%; }
+    .pr-toggle { margin-right: 0; }
   }
 
   /* ---- Interval-conditional visibility ---- */
@@ -1053,14 +1139,17 @@ const jsonLd = [
   /* ---- Shared hosted multimodal benefit ---- */
   .pr-multimodal {
     position: relative;
+    left: 50%;
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(420px, 1fr);
     gap: 36px;
     align-items: center;
-    max-width: 1280px;
+    width: min(1160px, calc(100vw - 48px));
+    max-width: none;
     margin: 28px auto 0;
     padding: 30px 34px;
     overflow: hidden;
+    transform: translateX(-50%);
     border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
     border-radius: 18px;
     background:
@@ -1188,13 +1277,14 @@ const jsonLd = [
 
   /* ---- Team / Enterprise plans ---- */
   .pr-team-panel {
-    max-width: 900px;
-    margin: 40px auto 0;
+    width: min(1200px, 100%);
+    max-width: none;
+    margin: 23px auto 0;
   }
   .pr-team-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 12px;
     align-items: stretch;
   }
   .pr-team-card {
@@ -1202,91 +1292,127 @@ const jsonLd = [
     display: flex;
     flex-direction: column;
     min-width: 0;
-    padding: 28px;
+    min-height: 590px;
+    padding: 24px 20px 22px;
+    border: 0;
+    border-radius: 12px;
+    background: #fff;
     overflow: hidden;
-    border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
-    border-radius: 18px;
-    background: var(--surface, rgba(255, 255, 255, 0.62));
+    animation: pr-team-card-enter 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .pr-team-card:nth-child(2) { animation-delay: 0.09s; }
+  @keyframes pr-team-card-enter {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   .pr-team-decoration {
     position: absolute;
     top: 20px;
-    right: 24px;
-    width: 58px;
-    height: 58px;
-    color: color-mix(in srgb, var(--brand, #2bd200) 20%, transparent);
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    color: #55c94a;
+    opacity: .2;
     fill: none;
     stroke: currentColor;
-    stroke-width: 1.4;
+    stroke-width: 1.25;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
   .pr-team-card-title {
     position: relative;
-    margin: 0;
-    font-size: 1.2rem;
+    margin: 0 0 8px;
+    padding-right: 76px;
+    color: #242622;
+    font-size: 20px;
     font-weight: 700;
-    color: var(--ink);
+    line-height: 1.1;
+    letter-spacing: -.025em;
   }
   .pr-team-card-tagline {
     position: relative;
-    margin: 5px 0 0;
-    color: var(--ink-soft, #777);
-    font-size: 0.86rem;
+    min-height: 42px;
+    margin: 0;
+    padding-right: 76px;
+    color: var(--pricing-muted, #676c64);
+    font-size: 12px;
+    line-height: 1.45;
   }
   .pr-team-price-row {
     display: flex;
+    min-height: 72px;
     align-items: baseline;
+    align-content: center;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 28px;
+    gap: 6px 8px;
+    margin: 5px 0 0;
+    color: #2c2e2a;
   }
   .pr-team-amount {
-    font-family: var(--serif, Georgia, serif);
-    font-size: 2.2rem;
+    font-family: Albert Sans, Arial, sans-serif;
+    font-size: 50px;
+    line-height: 1;
+    letter-spacing: -.045em;
+  }
+  .pr-team-strike { color: #858981; font-size: 16px; text-decoration-thickness: 1.5px; }
+  .pr-team-per { color: #73776f; font-size: 12px; }
+  .pr-team-discount {
+    padding: 4px 7px;
+    border-radius: 999px;
+    background: #dff3d9;
+    color: #208a19;
+    font-size: 10px;
+    font-weight: 700;
     line-height: 1;
   }
-  .pr-team-strike { color: var(--ink-soft, #aaa); }
-  .pr-team-per { color: var(--ink-soft, #777); font-size: 0.85rem; }
-  .pr-team-discount {
-    padding: 0.16rem 0.5rem;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--brand, #2bd200) 18%, transparent);
-    color: var(--olive, #218c00);
-    font-size: 0.72rem;
-    font-weight: 700;
-  }
-  .pr-team-yearly-summary,
+  .pr-team-price-summary,
   .pr-team-min-seats {
-    margin: 8px 0 0;
-    color: var(--ink-soft, #777);
-    font-size: 0.78rem;
+    color: var(--pricing-muted, #676c64);
+    font-weight: 400;
+    line-height: 1.35;
+  }
+  .pr-team-price-summary {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 38px;
+    margin: 2px 0 0;
+    padding-bottom: 10px;
+    font-size: 12px;
+  }
+  .pr-team-price-summary p,
+  .pr-team-price-summary strong {
+    margin: 0;
+    color: inherit;
+    font: inherit;
   }
   .pr-team-controls {
     display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-    gap: 12px;
-    margin-top: 24px;
+    grid-template-columns: minmax(0, 1.35fr) minmax(150px, .9fr);
+    gap: 10px;
+    margin-top: 18px;
   }
   .pr-team-field {
     display: flex;
     min-width: 0;
     flex-direction: column;
     gap: 8px;
-    color: var(--ink-soft, #666);
-    font-size: 0.8rem;
-    font-weight: 600;
+    color: #454842;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.3;
   }
   .pr-team-select-trigger,
   .pr-team-stepper {
     box-sizing: border-box;
     width: 100%;
-    min-height: 42px;
-    border: 1px solid var(--border, rgba(0, 0, 0, 0.14));
+    height: 44px;
+    border: 0;
     border-radius: 8px;
-    background: transparent;
-    color: var(--ink);
-    font: inherit;
+    background: #f3f4f0;
+    color: #2e302c;
+    font: 400 13px/1 Albert Sans, Arial, sans-serif;
   }
   .pr-team-select {
     position: relative;
@@ -1351,31 +1477,88 @@ const jsonLd = [
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    padding: 4px 6px;
+    padding: 0 6px;
   }
   .pr-team-stepper button {
     border: 0;
     background: transparent;
     color: var(--ink);
     cursor: pointer;
-    font-size: 1.2rem;
+    width: 30px;
+    height: 30px;
+    font-size: 20px;
   }
   .pr-team-stepper button:disabled { cursor: not-allowed; opacity: 0.35; }
-  .pr-team-stepper output { min-width: 2ch; text-align: center; color: var(--ink); }
+  .pr-team-stepper output { min-width: 2ch; text-align: center; color: #2e302c; font-size: 13px; font-weight: 400; }
+  .pr-team-min-seats { margin: 9px 0 0; font-size: 9px; }
+  .pr-team-model-offer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 68px;
+    margin-top: 18px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: #eef5e9;
+  }
+  .pr-team-model-offer-copy {
+    display: block;
+    min-width: 0;
+  }
+  .pr-team-model-offer-copy strong {
+    display: block;
+    color: #292b27;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  .pr-team-model-offer-copy small {
+    display: block;
+    margin-top: 3px;
+    color: #565a53;
+    font-size: 9px;
+    font-weight: 400;
+    line-height: 1.35;
+  }
+  .pr-team-offer-countdown {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 5px;
+  }
+  .pr-team-offer-countdown b {
+    display: grid;
+    min-width: 34px;
+    height: 38px;
+    place-items: center;
+    padding: 0 7px;
+    border-radius: 8px;
+    background: #dcf2d4;
+    color: #188c10;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .pr-team-offer-countdown i {
+    color: #188c10;
+    font-size: 12px;
+    font-style: normal;
+  }
   .pr-team-feature-list {
     list-style: none;
-    margin: 20px 0 0;
+    margin: 18px 0 22px;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: 14px;
   }
   .pr-team-feature-list li {
     position: relative;
-    padding-left: 22px;
-    font-size: 0.86rem;
+    padding-left: 23px;
+    font-size: 12px;
     line-height: 1.45;
-    color: var(--ink, #2a2a2a);
+    color: #30322e;
   }
   .pr-team-feature-list li::before {
     content: '✓';
@@ -1383,7 +1566,9 @@ const jsonLd = [
     left: 0;
     top: 0;
     font-weight: 700;
-    color: var(--olive, #218c00);
+    color: #188c10;
+    font-size: 14px;
+    line-height: 1.2;
   }
   /* The campaign row extends 8px outside the list. Match that offset with a
      more specific rule so its checkmark stays on the exact same x-axis as
@@ -1395,21 +1580,38 @@ const jsonLd = [
     transform: translateY(-50%);
   }
   .pr-team-checkout {
-    width: 100%;
+    width: calc(100% - 2px);
+    min-height: 42px;
     margin-top: auto;
-    padding-top: 11px;
-    padding-bottom: 11px;
+    padding: 0;
+    border-radius: 8px;
+    background: #10110f;
+    color: #fff;
     justify-content: center;
     text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif;
+    line-height: normal;
   }
-  .pr-team-feature-list + .pr-team-checkout { margin-top: 28px; }
-  @media (max-width: 820px) {
+  .pr-team-feature-list + .pr-team-checkout { margin-top: auto; }
+  .pr-enterprise-card .pr-team-feature-list { gap: 17px; margin-top: 22px; }
+  @media (max-width: 980px) {
+    .pr-team-panel { max-width: 760px; }
     .pr-team-grid { grid-template-columns: 1fr; }
+    .pr-team-card { min-height: 0; }
   }
   @media (max-width: 520px) {
     .pr-team-card { padding: 22px; }
     .pr-team-controls { grid-template-columns: 1fr; }
+    .pr-team-model-offer { align-items: flex-start; flex-direction: column; }
     .pr-audience-btn { min-width: 0; flex: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pr-team-card {
+      animation: none;
+      transform: none;
+    }
   }
 
   /* ---- FAQ ---- */

@@ -74,6 +74,10 @@ import {
 import { canUpgradeFromPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
 import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
+import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
+import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
+import { resolveSubscriptionAudience } from '../campaigns/go-plan';
+import { useGoPlanCampaignVisibility } from '../campaigns/use-go-plan-campaign';
 import type { EntryHomeView } from '../router';
 import type {
   AccountMenuClickProps,
@@ -92,6 +96,7 @@ import {
   stableAnalyticsErrorCode,
   workspaceAnalyticsDimensions,
 } from '../analytics/workspace';
+import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
@@ -1078,6 +1083,10 @@ export function WorkspaceTopRightAccountCluster({
   updaterSlot,
   workspaceContextOverride,
   workspaceContextLoading,
+  amrLoggedIn = null,
+  amrAccountPlan = null,
+  metricsConsent = false,
+  installationId,
 }: {
   onOpenSettings?: (section?: EntrySettingsSection) => void;
   onSignedOut?: () => void | Promise<void>;
@@ -1085,29 +1094,69 @@ export function WorkspaceTopRightAccountCluster({
   updaterSlot?: ReactNode;
   workspaceContextOverride?: WorkspaceCollabContext | null;
   workspaceContextLoading?: boolean;
+  amrLoggedIn?: boolean | null;
+  amrAccountPlan?: string | null;
+  metricsConsent?: boolean;
+  installationId?: string | null;
 }) {
   const ambient = useWorkspaceContext();
   const hasExplicitWorkspaceContext = workspaceContextOverride !== undefined;
   const context = hasExplicitWorkspaceContext
     ? workspaceContextOverride
     : ambient.context;
+  const contextLoading = hasExplicitWorkspaceContext
+    ? workspaceContextLoading === true
+    : ambient.loading;
   const billingResponse = useWorkspaceBillingResponse({
     context,
-    loading: hasExplicitWorkspaceContext
-      ? workspaceContextLoading === true
-      : ambient.loading,
+    loading: contextLoading,
   });
   // Plan and money are both workspace-scoped questions, so both go through a
   // context-partitioned projection — `response.summary` on its own is an
   // ACCOUNT read (`workspaceId: null` by contract). Same rule as EntryShell.
   const billing = workspaceBillingSummaryForContext(billingResponse, context);
   const balanceUsd = workspaceBillingBalanceUsd(billingResponse, context);
+  const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
+  const goPlanCampaignVisibility = useGoPlanCampaignVisibility();
+  const campaignPlan = resolvePlanLabelTier({
+    billing,
+    context,
+    accountPlan:
+      contextLoading || context?.workspaceType === 'team'
+        ? null
+        : amrAccountPlan,
+  });
+  const deepSeekCampaignAudience = resolveDeepSeekV4FlashCampaignAudience({
+    plan: campaignPlan,
+    loggedIn: amrLoggedIn,
+    now: deepSeekCampaignVisibility.now,
+  });
+  const subscriptionAudience = resolveSubscriptionAudience({
+    plan: campaignPlan,
+    loggedIn: amrLoggedIn,
+  });
+  const campaignKind =
+    subscriptionAudience === 'unpaid'
+      ? goPlanCampaignVisibility.visible
+        ? 'go'
+        : null
+      : deepSeekCampaignAudience === 'paid'
+        ? 'deepseek'
+        : null;
   return (
     <EntryTopRightCluster
       page="project"
       context={context}
       billing={billing}
       balanceUsd={balanceUsd}
+      leadingSlot={campaignKind ? (
+        <WorkbenchCampaignBadge
+          kind={campaignKind}
+          page="project"
+          metricsConsent={metricsConsent}
+          installationId={installationId}
+        />
+      ) : null}
       updaterSlot={updaterSlot}
       onOpenSettings={onOpenSettings}
       onSignedOut={onSignedOut}

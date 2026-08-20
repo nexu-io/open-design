@@ -66,6 +66,20 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   await configureVisualPage(page, { projects: [] });
   await mockSignedInVelaAccount(page, { plan: 'free' });
   await gotoVisualHome(page);
+  // Functional specs seed campaign dismissals globally so marketing surfaces
+  // cannot interrupt unrelated flows. This visual contract deliberately opts
+  // back into the Go modal after establishing the page's same-origin storage.
+  await page.evaluate(() => {
+    window.localStorage.removeItem('open-design:campaign-seen:go-plan-launch-2026');
+  });
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-community').evaluate((element: HTMLButtonElement) => {
+    element.click();
+  });
+  await expect(page.getByTestId('entry-view-home')).toHaveAttribute('data-active', 'false');
+  await page.getByTestId('entry-nav-home').evaluate((element: HTMLButtonElement) => {
+    element.click();
+  });
 
   const dialog = page.getByTestId('deepseek-v4-flash-campaign-dialog');
   const close = page.getByRole('button', { name: 'Close dialog' });

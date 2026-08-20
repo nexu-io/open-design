@@ -5421,6 +5421,14 @@ function AppInner() {
                 ? projectRouteWorkspaceContext.loading
                 : undefined
             }
+            amrLoggedIn={amrLoginStatus?.loggedIn ?? null}
+            amrAccountPlan={
+              amrLoginStatus?.account?.plan?.trim()
+              || amrLoginStatus?.user?.plan?.trim()
+              || null
+            }
+            metricsConsent={config.telemetry?.metrics === true}
+            installationId={config.installationId}
           />
         ) : null}
         {route.kind === 'project'

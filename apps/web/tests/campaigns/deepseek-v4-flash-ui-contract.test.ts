@@ -6,6 +6,18 @@ const entryShellSource = readFileSync(
   resolve(process.cwd(), 'src/components/EntryShell.tsx'),
   'utf8',
 );
+const entryNavRailSource = readFileSync(
+  resolve(process.cwd(), 'src/components/EntryNavRail.tsx'),
+  'utf8',
+);
+const appSource = readFileSync(
+  resolve(process.cwd(), 'src/App.tsx'),
+  'utf8',
+);
+const workbenchCampaignBadgeSource = readFileSync(
+  resolve(process.cwd(), 'src/components/WorkbenchCampaignBadge.tsx'),
+  'utf8',
+);
 const entryLayoutStyles = readFileSync(
   resolve(process.cwd(), 'src/styles/home/entry-layout.css'),
   'utf8',
@@ -59,6 +71,9 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     expect(campaignModalStyles).not.toContain(
       '.goWelcomeBenefitModel.goWelcomeBenefitZhipu img',
     );
+    expect(campaignModalStyles).toMatch(
+      /\.goWelcomeBenefitModel img\s*\{[\s\S]*?filter: brightness\(0\) invert\(1\);[\s\S]*?\}/,
+    );
   });
 
   it('collapses the Go modal before its fixed tracks overflow and scrolls short viewports', () => {
@@ -78,22 +93,39 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
   });
 
   it('reuses the top-right campaign slot for Go and DeepSeek audiences', () => {
-    expect(entryShellSource).toContain('deepseek-campaign-pricing-badge');
-    expect(entryShellSource).toContain("topRightCampaignKind === 'go'");
-    expect(entryShellSource).toContain('goPlanCopy.workbenchBadge');
-    expect(entryShellSource).toContain("t('campaign.deepseekV4Flash.workbenchBadge')");
-    expect(entryShellSource).toContain("t('campaign.deepseekV4Flash.workbenchBadgeAria')");
+    expect(entryShellSource).toContain('<WorkbenchCampaignBadge');
+    expect(workbenchCampaignBadgeSource).toContain('deepseek-campaign-pricing-badge');
+    expect(workbenchCampaignBadgeSource).toContain("kind === 'go'");
+    expect(workbenchCampaignBadgeSource).toContain('goPlanCopy.workbenchBadge');
+    expect(workbenchCampaignBadgeSource).toContain("t('campaign.deepseekV4Flash.workbenchBadge')");
+    expect(workbenchCampaignBadgeSource).toContain("t('campaign.deepseekV4Flash.workbenchBadgeAria')");
     expect(entryShellSource).toContain("subscriptionAudience === 'unpaid'");
+    expect(entryShellSource).toContain('goPlanCampaignVisibility.visible');
+  });
+
+  it('keeps the top-right campaign entry visible across entry tabs and project detail', () => {
+    expect(entryShellSource).toMatch(
+      /topRightSlot=\{\s*topRightCampaignKind \? \(/,
+    );
+    expect(entryShellSource).not.toMatch(
+      /topRightSlot=\{\s*view === 'home'/,
+    );
+    expect(entryNavRailSource).toMatch(
+      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{campaignKind \? \([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?page="project"/,
+    );
+    expect(appSource).toMatch(
+      /<WorkspaceTopRightAccountCluster[\s\S]*?amrLoggedIn=\{amrLoginStatus\?\.loggedIn \?\? null\}[\s\S]*?metricsConsent=\{config\.telemetry\?\.metrics === true\}/,
+    );
   });
 
   it('sends both Go and paid DeepSeek badges to public Pricing', () => {
     expect(entryShellSource).not.toContain('amrPlansUrlForWorkspace');
-    expect(entryShellSource).toContain('GO_PLAN_PRICING_URL');
-    expect(entryShellSource).toContain("'deepseek_workbench_badge'");
-    expect(entryShellSource).toContain("'noopener,noreferrer'");
+    expect(workbenchCampaignBadgeSource).toContain('GO_PLAN_PRICING_URL');
+    expect(workbenchCampaignBadgeSource).toContain("'deepseek_workbench_badge'");
+    expect(workbenchCampaignBadgeSource).toContain("'noopener,noreferrer'");
     // The public URL is locale-neutral; no language is pinned into a link
     // shown to every locale.
-    expect(entryShellSource).not.toContain('open-design.ai/zh/pricing');
+    expect(workbenchCampaignBadgeSource).not.toContain('open-design.ai/zh/pricing');
   });
 
   it('reuses the existing DeepSeek badge treatment without Go-only chrome', () => {
@@ -108,7 +140,7 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     expect(entryLayoutStyles).toContain('.entry-deepseek-campaign-badge::before');
     expect(entryLayoutStyles).toContain('background: var(--brand-text)');
     expect(entryLayoutStyles).toContain('.entry-deepseek-campaign-badge svg');
-    expect(entryShellSource).toContain('className="entry-deepseek-campaign-badge"');
+    expect(workbenchCampaignBadgeSource).toContain('className="entry-deepseek-campaign-badge"');
     expect(entryLayoutStyles).not.toContain('.entry-go-campaign-new');
     expect(entryLayoutStyles).not.toContain('.entry-go-campaign-badge');
     expect(badgeRule).not.toContain('color: var(--green)');
@@ -180,9 +212,10 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
   });
 
   it('keeps existing DeepSeek analytics while the Go pass stays UI-only', () => {
-    expect(entryShellSource).toContain('trackDeepSeekCampaignBadgeSurfaceView');
-    expect(entryShellSource).toContain('trackDeepSeekCampaignBadgeClick');
-    expect(entryShellSource).toContain("window.open(GO_PLAN_PRICING_URL, '_blank', 'noopener,noreferrer')");
+    expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeSurfaceView');
+    expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeClick');
+    expect(workbenchCampaignBadgeSource).toContain("window.open(GO_PLAN_PRICING_URL, '_blank', 'noopener,noreferrer')");
+    expect(workbenchCampaignBadgeSource).toContain("page !== 'home'");
     expect(modelSwitcherSource).toContain('trackDeepSeekCampaignModelBenefitSurfaceView');
     expect(modelSwitcherSource).toContain('trackExecutionSettingsPopoverClick');
   });

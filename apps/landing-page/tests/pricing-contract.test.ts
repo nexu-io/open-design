@@ -8,6 +8,7 @@ import {
   PLANS_JSON_URL,
   PRICING_SNAPSHOT,
   cloudSubscribeUrl,
+  cloudTeamSubscribeUrl,
   formatUsd,
   scopedBillingPlanUrl,
   teamIntroTotalUsd,
@@ -35,6 +36,10 @@ const PRICING_INDIVIDUAL_PATH = new URL(
   "../app/_components/pricing-individual-plans.astro",
   import.meta.url,
 );
+const PRICING_CONTENT_PATH = new URL(
+  "../app/_lib/pricing-content.ts",
+  import.meta.url,
+);
 const GO_PLAN_MIMO_LOGO_PATH = new URL(
   "../public/pricing-e-final/assets/mimo-logo-user-CWOWEwG5.png",
   import.meta.url,
@@ -44,14 +49,14 @@ const GO_PLAN_ZHIPU_LOGO_PATH = new URL(
   import.meta.url,
 );
 const FIRST_PARTY_MODEL_ICON_PATHS = [
-  "../public/agents/anthropic.svg",
   "../public/agents/deepseek.svg",
-  "../public/agents/gemini.svg",
-  "../public/agents/minimax.svg",
-  "../public/agents/moonshot.svg",
   "../public/agents/openai.svg",
-  "../public/agents/xai.svg",
-  "../public/model-icons/bytedance.svg",
+  "../public/model-icons/claude.svg",
+  "../public/model-icons/grok.svg",
+  "../public/model-icons/jimeng.svg",
+  "../public/model-icons/kimi.svg",
+  "../public/model-icons/minimax.svg",
+  "../public/model-icons/nanobanana.svg",
 ].map((path) => new URL(path, import.meta.url));
 const CAMPAIGN_PATH = new URL(
   "../app/_lib/pricing-campaign-content.ts",
@@ -159,6 +164,101 @@ describe("pricing contract", () => {
     assert.doesNotMatch(plans, /--usage-label/);
   });
 
+  it("matches the demo's individual taglines and compact billing copy", async () => {
+    const content = getPricingContent("en");
+    const individualPlans = await readFile(PRICING_INDIVIDUAL_PATH, "utf8");
+
+    assert.deepEqual(
+      [
+        content.go.tagline,
+        content.plans.plus.tagline,
+        content.plans.pro.tagline,
+        content.plans.max.tagline,
+      ],
+      [
+        "Light needs · Easy delivery",
+        "Everyday design · Continuous delivery",
+        "Complex projects · Efficient production",
+        "High-volume creation · Consistent output",
+      ],
+    );
+    assert.equal(content.labels.monthlyRenewal, "First-month price");
+    assert.equal(content.labels.yearlySubline, "Billed {totalUsd}/year");
+    assert.deepEqual(
+      [
+        content.go.ctaLabel,
+        content.plans.plus.ctaLabel,
+        content.plans.pro.ctaLabel,
+        content.plans.max.ctaLabel,
+      ],
+      ["Subscribe", "Subscribe", "Subscribe", "Subscribe"],
+    );
+    assert.match(
+      individualPlans,
+      /<span>\{tierCopy\[tier\]\.ctaLabel\}<\/span>/,
+    );
+    assert.doesNotMatch(individualPlans, /ctaLabel\} · \{L\.(?:monthly|yearly)\}/);
+    assert.match(
+      individualPlans,
+      /const compactSavings = \(amountUsd: number, interval: 'monthly' \| 'yearly'\)/,
+    );
+    assert.match(
+      individualPlans,
+      /locale === 'en' && interval === 'monthly' \? `\$\{amount\}\/mo` : amount/,
+    );
+    assert.match(
+      individualPlans,
+      /const compactBillingTotal = \(amountUsd: number\) =>\s*locale === 'en'/,
+    );
+  });
+
+  it("keeps recommendation ribbons legible, animated, and motion-safe", async () => {
+    const individualPlans = await readFile(PRICING_INDIVIDUAL_PATH, "utf8");
+
+    assert.match(
+      individualPlans,
+      /\.new-plan-ribbon\s*\{[^}]*font-size:\s*11px;/s,
+    );
+    assert.match(
+      individualPlans,
+      /\.new-plan-ribbon span\s*\{[^}]*background:\s*linear-gradient\(110deg,[^}]*animation:\s*pricing-ribbon-text-shimmer 4\.2s linear infinite;/s,
+    );
+    assert.match(
+      individualPlans,
+      /\.new-plan-ribbon span\s*\{[^}]*-webkit-text-fill-color:\s*transparent;[^}]*background-clip:\s*text;/s,
+    );
+    assert.doesNotMatch(individualPlans, /\.new-plan-ribbon::after/);
+    assert.match(
+      individualPlans,
+      /@keyframes pricing-ribbon-text-shimmer\s*\{[^}]*background-position:\s*100% 0;[^}]*\}[^}]*background-position:\s*-100% 0;/s,
+    );
+    assert.match(
+      individualPlans,
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.new-plan-ribbon span\s*\{[^}]*-webkit-text-fill-color:\s*#173111;[^}]*animation:\s*none;/,
+    );
+  });
+
+  it("lets localized plan and billing copy wrap inside each pricing card", async () => {
+    const individualPlans = await readFile(PRICING_INDIVIDUAL_PATH, "utf8");
+
+    assert.match(
+      individualPlans,
+      /\.plan-top\s*\{[^}]*min-height:\s*78px;/s,
+    );
+    assert.match(
+      individualPlans,
+      /\.plan-top p\s*\{[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s,
+    );
+    assert.match(
+      individualPlans,
+      /\.compact-price-detail\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);[^}]*min-height:\s*46px;/s,
+    );
+    assert.match(
+      individualPlans,
+      /\.compact-price-detail > small\s*\{[^}]*min-width:\s*0;[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s,
+    );
+  });
+
   it("serves the model comparison icons from first-party assets", async () => {
     const [individualPlans, ...icons] = await Promise.all([
       readFile(PRICING_INDIVIDUAL_PATH, "utf8"),
@@ -168,16 +268,26 @@ describe("pricing contract", () => {
     for (const icon of icons) assert.ok(icon.byteLength > 0);
     assert.doesNotMatch(individualPlans, /unpkg\.com|@latest/);
     for (const asset of [
-      "/agents/anthropic.svg",
       "/agents/deepseek.svg",
+      "/agents/openai.svg",
+      "/model-icons/claude.svg",
+      "/model-icons/grok.svg",
+      "/model-icons/jimeng.svg",
+      "/model-icons/kimi.svg",
+      "/model-icons/minimax.svg",
+      "/model-icons/nanobanana.svg",
+    ]) {
+      assert.ok(individualPlans.includes(asset), asset);
+    }
+    for (const superseded of [
+      "/agents/anthropic.svg",
       "/agents/gemini.svg",
       "/agents/minimax.svg",
       "/agents/moonshot.svg",
-      "/agents/openai.svg",
       "/agents/xai.svg",
       "/model-icons/bytedance.svg",
     ]) {
-      assert.ok(individualPlans.includes(asset), asset);
+      assert.equal(individualPlans.includes(superseded), false, superseded);
     }
   });
 
@@ -260,12 +370,58 @@ describe("pricing contract", () => {
     );
     assert.match(
       individualPlans,
+      /\{popularStatus\.kind === 'unlimited' && <em class=\{popularStatus\.kind\}>\{popularStatus\.text\}<\/em>\}/,
+    );
+    assert.doesNotMatch(
+      individualPlans,
+      /^\s*<em class=\{popularStatus\.kind\}>\{popularStatus\.text\}<\/em>$/m,
+    );
+    assert.match(
+      individualPlans,
       /return popularAccessStatus\(modelName, tier\);/,
     );
     assert.doesNotMatch(
       individualPlans,
       /<em class="unlimited-status">\{isZh \? '\u65e0\u9650\u91cf' : 'Unlimited'\}<\/em>/,
     );
+  });
+
+  it("leads the comparison with Go unlimited models and keeps ample access check-only", async () => {
+    const individualPlans = await readFile(PRICING_INDIVIDUAL_PATH, "utf8");
+    const comparisonBlock = individualPlans.match(
+      /const comparisonPopular = \[([\s\S]*?)\]\.map/,
+    )?.[1];
+
+    assert.ok(comparisonBlock);
+    assert.deepEqual(
+      Array.from(comparisonBlock.matchAll(/'([^']+)'/g), (match) => match[1]).slice(0, 3),
+      ["DeepSeek V4 Flash", "DeepSeek V4 Pro", "GLM-5.2"],
+    );
+    assert.match(
+      individualPlans,
+      /status\.kind === 'more-ample'\s*\?\s*\(\s*<td><span class=\{`model-access-status \$\{status\.kind\}`\} aria-label=\{status\.text\}><i class="status-icon check"><\/i><\/span><\/td>/s,
+    );
+  });
+
+  it("renders paid flagship headings as one localized phrase", async () => {
+    const individualPlans = await readFile(PRICING_INDIVIDUAL_PATH, "utf8");
+
+    for (const locale of PRICING_LOCALES) {
+      assert.match(
+        getPricingContent(locale).personal.flagshipModelCount,
+        /\{count\}/,
+        `${locale} must localize the complete flagship count heading`,
+      );
+    }
+    assert.equal(
+      getPricingContent("en").personal.flagshipModelCount,
+      "{count}+ flagship models",
+    );
+    assert.match(
+      individualPlans,
+      /tier === 'go' \? P\.flagshipModels : fillTemplate\(P\.flagshipModelCount, \{ count: String\(flagship\.length\) \}\)/,
+    );
+    assert.doesNotMatch(individualPlans, /\} · \$\{P\.flagshipModels\}/);
   });
 
   it("derives live Personal benefit totals from the catalog", async () => {
@@ -295,6 +451,15 @@ describe("pricing contract", () => {
       individualPlans,
       /data-benefits-expanded='false'\] \.plan-benefit-list li:nth-child\(n \+ 4\)/,
     );
+  });
+
+  it("omits the DeepSeek peak-pricing estimate note from Personal usage", async () => {
+    const individualPlans = await readFile(PRICING_INDIVIDUAL_PATH, "utf8");
+    const pricingContent = await readFile(PRICING_CONTENT_PATH, "utf8");
+
+    assert.doesNotMatch(individualPlans, /usagePeakNote/);
+    assert.doesNotMatch(pricingContent, /usagePeakNote/);
+    assert.doesNotMatch(pricingContent, /DeepSeek V4 Flash \/ Pro estimates use off-peak pricing/);
   });
 
   it("keeps the DeepSeek plan benefits without a Pricing campaign banner", async () => {
@@ -389,20 +554,36 @@ describe("pricing contract", () => {
     );
   });
 
-  it("aligns the highlighted campaign checkmark with the Team benefit list", async () => {
-    const page = await readFile(PRICING_PAGE_PATH, "utf8");
+  it("renders one combined Team campaign offer with a live countdown", async () => {
+    const [page, campaign] = await Promise.all([
+      readFile(PRICING_PAGE_PATH, "utf8"),
+      readFile(CAMPAIGN_PATH, "utf8"),
+    ]);
+    const teamPanel = page.slice(
+      page.indexOf('id="pr-team-panel"'),
+      page.indexOf('<p class="pr-foot"'),
+    );
 
-    assert.match(
-      page,
-      /\.pr-campaign-model-benefit > div\s*\{[\s\S]*display:\s*grid;[\s\S]*gap:\s*2px;/,
-      "the campaign date note must render on its own line below the model benefit",
+    assert.match(campaign, /teamOfferTitle: 'Unlimited model access'/);
+    assert.match(campaign, /teamOfferModels: 'DeepSeek V4 Flash and V4 Pro'/);
+    assert.equal(
+      teamPanel.match(/data-pricing-campaign-surface/g)?.length,
+      1,
+      "Team must expose one combined activity surface",
     );
-    assert.match(page, /\.pr-campaign-model-benefit::before\s*\{\s*left:\s*8px;\s*\}/);
-    assert.match(
-      page,
-      /\.pr-team-feature-list li\.pr-campaign-model-benefit::before\s*\{[\s\S]*left:\s*8px;[\s\S]*top:\s*18px;[\s\S]*transform:\s*translateY\(-50%\);/,
-      "the team campaign checkmark must override the later base list rule",
-    );
+    assert.doesNotMatch(teamPanel, /modelBenefits\.map/);
+    assert.match(teamPanel, /class="pr-team-model-offer"/);
+    assert.match(teamPanel, /data-team-campaign-countdown/);
+    assert.match(teamPanel, /data-team-countdown-days/);
+    assert.match(teamPanel, /data-team-countdown-hours/);
+    assert.match(teamPanel, /data-team-countdown-minutes/);
+    assert.match(teamPanel, /data-team-countdown-seconds/);
+    assert.match(page, /Math\.max\(0, campaignEndAt - now\)/);
+    const offerRule = page.match(/\.pr-team-model-offer\s*\{([^}]*)\}/)?.[1];
+    assert.ok(offerRule);
+    assert.match(offerRule, /background:\s*#eef5e9;/);
+    assert.match(offerRule, /border-radius:\s*8px;/);
+    assert.match(offerRule, /padding:\s*12px 14px;/);
   });
 
   it("keeps the multimodal coming-soon note above the video label", async () => {
@@ -444,6 +625,11 @@ describe("pricing contract", () => {
       1,
       "the retained Cloud capability section must render exactly once",
     );
+    assert.match(
+      page,
+      /\.pr-multimodal\s*\{[\s\S]*?left:\s*50%;[\s\S]*?width:\s*min\(1160px, calc\(100vw - 48px\)\);[\s\S]*?max-width:\s*none;[\s\S]*?transform:\s*translateX\(-50%\);/,
+      "the Cloud capability card must share the comparison table width",
+    );
   });
 
   it("points the public pricing URL at the landing-page JSON contract", () => {
@@ -458,6 +644,14 @@ describe("pricing contract", () => {
     assert.equal(
       cloudSubscribeUrl("pro", "yearly"),
       "https://open-design.ai/cloud/dashboard?billing=plan&plan=pro&interval=yearly&checkout=auto",
+    );
+    assert.equal(
+      cloudTeamSubscribeUrl("team_pro", "yearly", 4),
+      "https://open-design.ai/cloud/dashboard?billing=plan&plan=team_pro&interval=yearly&checkout=auto&seats=4",
+    );
+    assert.throws(
+      () => cloudTeamSubscribeUrl("team_pro", "yearly", 0),
+      /positive integer/,
     );
     assert.equal(
       scopedBillingPlanUrl("workspace-a"),
@@ -593,55 +787,35 @@ describe("pricing contract", () => {
     );
   });
 
-  it("renders all 16 introductory Team totals for interval, tier, and seat changes", () => {
-    const expected = {
-      team_basic: {
-        monthly: { 3: "First month only $12", 4: "First month only $16" },
-        yearly: { 3: "First year only $126", 4: "First year only $168" },
-      },
-      team_plus: {
-        monthly: { 3: "First month only $60", 4: "First month only $80" },
-        yearly: { 3: "First year only $630", 4: "First year only $840" },
-      },
-      team_pro: {
-        monthly: {
-          3: "First month only $220.50",
-          4: "First month only $294",
-        },
-        yearly: {
-          3: "First year only $2,268",
-          4: "First year only $3,024",
-        },
-      },
-      team_max: {
-        monthly: { 3: "First month only $369", 4: "First month only $492" },
-        yearly: {
-          3: "First year only $3,622.83",
-          4: "First year only $4,830.44",
-        },
-      },
-    } as const;
+  it("renders the Team monthly total, first-year total, and priced checkout from the annual offer", async () => {
+    const page = await readFile(PRICING_PAGE_PATH, "utf8");
     const english = TEAM_PRICING_CONTENT_BY_LOCALE.en;
 
     for (const tier of PRICING_SNAPSHOT.teamTiers) {
-      for (const interval of ["monthly", "yearly"] as const) {
-        for (const seats of [3, 4] as const) {
-          const template =
-            interval === "monthly"
-              ? english.monthlyTotal
-              : english.yearlyTotal;
-          const rendered = template.replace(
-            "{amount}",
-            formatUsd(teamIntroTotalUsd(tier, interval, seats)),
-          );
-          assert.equal(
-            rendered,
-            expected[tier.tier][interval][seats],
-            `${tier.tier} ${interval} ${seats} seats`,
-          );
-        }
+      for (const seats of [3, 4] as const) {
+        const annualTotal = teamIntroTotalUsd(tier, "yearly", seats);
+        const monthlyTotal = annualTotal / 12;
+        const amount = (value: number) => formatUsd(value).replace(/^\$/, "");
+
+        assert.equal(
+          english.monthlyTotal.replace("{amount}", amount(monthlyTotal)),
+          `${amount(monthlyTotal)} / month for your team`,
+        );
+        assert.equal(
+          english.yearlyTotal.replace("{amount}", amount(annualTotal)),
+          `${amount(annualTotal)} billed for the first year`,
+        );
+        assert.equal(
+          english.checkout.replace("{amount}", amount(annualTotal)),
+          `Upgrade team · ${amount(annualTotal)}/year`,
+        );
       }
     }
+
+    assert.match(page, /data-team-monthly-summary/);
+    assert.match(page, /data-team-yearly-summary/);
+    assert.match(page, /data-team-checkout-total/);
+    assert.match(page, /const interval = 'yearly';/);
   });
 
   it("removes the obsolete Team-coming-soon banner", async () => {
@@ -665,10 +839,32 @@ describe("pricing contract", () => {
     // generic global section padding must be cancelled on the component root.
     assert.match(individualPlans, /\.demo-individual-pricing\s*\{[^}]*padding:\s*0 !important;/s);
 
-    // Creator/Team and billing interval share one compact row above the cards.
+    // Creator/Team and billing interval share one compact row above the
+    // Individual cards. The billing group is right-aligned and disappears
+    // entirely when the Team tab is active, matching the approved demo.
     assert.match(page, /class="pr-audience-toggle"[^>]*role="tablist"/);
     assert.match(page, /\.pr-controls-row\s*\{[^}]*grid-template-columns:\s*1fr auto 1fr;/s);
-    assert.match(page, /\.pr-audience-btn\.is-active\s*\{[^}]*background:/s);
+    assert.match(page, /\.pr-toggle\s*\{[^}]*grid-column:\s*3;[^}]*justify-self:\s*end;/s);
+    assert.match(
+      page,
+      /\.pr-toggle-btn\s*\{[^}]*min-height:\s*36px;[^}]*font-size:\s*13px;[^}]*font-weight:\s*600;[^}]*line-height:\s*1;/s,
+    );
+    assert.match(
+      page,
+      /\.pr-audience-btn\s*\{[^}]*border-radius:\s*9px;[^}]*font-size:\s*14px;[^}]*font-weight:\s*600;/s,
+    );
+    assert.match(
+      page,
+      /\.pr-audience-btn\.is-active\s*\{[^}]*background:\s*#e8e9e3;/s,
+    );
+    assert.match(
+      page,
+      /const billingToggle = root\.querySelector\('\.pr-toggle'\);[\s\S]*?billingToggle\.hidden = audience === 'team';/,
+    );
+    assert.match(
+      page,
+      /\.pr-toggle\[hidden\]\s*\{\s*display:\s*none !important;\s*\}/,
+    );
 
     // The visible Team tier control must never open the OS-native select popup.
     assert.doesNotMatch(page, /<select[^>]*data-team-tier/);
@@ -679,6 +875,53 @@ describe("pricing contract", () => {
     // QA explicitly removed the redundant grey total strip.
     assert.doesNotMatch(page, /class="pr-team-total"/);
     assert.doesNotMatch(page, /data-team-total/);
+  });
+
+  it("matches the approved Team card geometry and decoration artwork", async () => {
+    const page = await readFile(PRICING_PAGE_PATH, "utf8");
+
+    assert.match(
+      page,
+      /\.pr-team-panel\s*\{[^}]*width:\s*min\(1200px,\s*100%\);[^}]*max-width:\s*none;/s,
+    );
+    assert.match(page, /\.pr-team-grid\s*\{[^}]*gap:\s*12px;/s);
+    assert.match(
+      page,
+      /\.pr-team-card\s*\{[^}]*min-height:\s*590px;[^}]*padding:\s*24px 20px 22px;[^}]*border:\s*0;[^}]*border-radius:\s*12px;[^}]*background:\s*#fff;/s,
+    );
+    assert.match(
+      page,
+      /\.pr-team-decoration\s*\{[^}]*top:\s*20px;[^}]*right:\s*20px;[^}]*width:\s*60px;[^}]*height:\s*60px;[^}]*color:\s*#55c94a;[^}]*opacity:\s*\.2;/s,
+    );
+    assert.match(
+      page,
+      /<circle cx="9" cy="8" r="3"\s*\/>[\s\S]*?<path d="M3\.5 19c\.35-3\.45 2\.1-5\.2 5\.5-5\.2s5\.15 1\.75 5\.5 5\.2"\s*\/>/,
+    );
+    assert.match(
+      page,
+      /<path d="M5 21V6\.5L12 3v18"\s*\/>[\s\S]*?<path d="M12 8h7v13"\s*\/>[\s\S]*?<path d="M3 21h18"\s*\/>/,
+    );
+  });
+
+  it("reveals the Team cards with the demo's staggered entrance motion", async () => {
+    const page = await readFile(PRICING_PAGE_PATH, "utf8");
+
+    assert.match(
+      page,
+      /\.pr-team-card\s*\{[^}]*animation:\s*pr-team-card-enter 0\.65s cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\) both;/s,
+    );
+    assert.match(
+      page,
+      /\.pr-team-card:nth-child\(2\)\s*\{\s*animation-delay:\s*0\.09s;\s*\}/,
+    );
+    assert.match(
+      page,
+      /@keyframes pr-team-card-enter\s*\{\s*from\s*\{\s*opacity:\s*0;\s*transform:\s*translateY\(12px\);\s*\}\s*to\s*\{\s*opacity:\s*1;\s*transform:\s*translateY\(0\);\s*\}\s*\}/,
+    );
+    assert.match(
+      page,
+      /@media \(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.pr-team-card\s*\{[^}]*animation:\s*none;[^}]*transform:\s*none;/,
+    );
   });
 
   it("localizes the flagship Pricing structure for every active locale", () => {
@@ -699,6 +942,7 @@ describe("pricing contract", () => {
       );
       assert.match(copy.monthlyTotal, /\{amount\}/);
       assert.match(copy.yearlyTotal, /\{amount\}/);
+      assert.match(copy.checkout, /\{amount\}/);
       assert.doesNotMatch(copy.monthlyTotal, /\{count\}|\{savings\}/);
       assert.doesNotMatch(copy.yearlyTotal, /\{count\}|\{savings\}/);
       assert.equal("yearlySummary" in copy, false);
@@ -706,23 +950,23 @@ describe("pricing contract", () => {
 
     assert.equal(
       TEAM_PRICING_CONTENT_BY_LOCALE.zh.monthlyTotal,
-      "首月仅需 {amount}",
+      "团队合计 {amount} / 月",
     );
     assert.equal(
       TEAM_PRICING_CONTENT_BY_LOCALE.zh.yearlyTotal,
-      "首年仅需 {amount}",
+      "首年应付 {amount}",
     );
     assert.equal(
       TEAM_PRICING_CONTENT_BY_LOCALE.en.monthlyTotal,
-      "First month only {amount}",
+      "{amount} / month for your team",
     );
     assert.equal(
       TEAM_PRICING_CONTENT_BY_LOCALE.en.yearlyTotal,
-      "First year only {amount}",
+      "{amount} billed for the first year",
     );
   });
 
-  it("updates the Team intro-period total for period, tier, and seat controls", async () => {
+  it("updates the annual Team quote for tier and seat controls", async () => {
     const page = await readFile(PRICING_PAGE_PATH, "utf8");
     const updateStart = page.indexOf("const updateTeamPlan = () =>");
     const updateEnd = page.indexOf(
@@ -735,17 +979,19 @@ describe("pricing contract", () => {
 
     assert.match(
       page,
-      /fillTemplate\(teamContent\.yearlyTotal,\s*\{\s*amount:\s*initialTeamView\.intervalTotal,\s*\}\)/s,
+      /fillTemplate\(teamContent\.monthlyTotal,\s*\{\s*amount:\s*initialTeamView\.monthlyTeamTotal,\s*\}\)/s,
     );
     assert.match(
       updateTeamPlan,
-      /interval === 'yearly'\s*\?\s*teamCopy\.yearlyTotal\s*:\s*teamCopy\.monthlyTotal/,
+      /const interval = 'yearly';/,
     );
     assert.match(
       updateTeamPlan,
       /const intervalTotal = selected\.introPriceUsd \* teamSeats/,
     );
-    assert.match(page, /const activateInterval = \(interval, via\) => \{[\s\S]*?updateTeamPlan\(\)/);
+    assert.match(updateTeamPlan, /fillTeam\(teamCopy\.monthlyTotal, \{ amount: monthlyTotal \}\)/);
+    assert.match(updateTeamPlan, /fillTeam\(teamCopy\.yearlyTotal, \{ amount: total \}\)/);
+    assert.match(updateTeamPlan, /fillTeam\(teamCopy\.checkout, \{ amount: total \}\)/);
     assert.match(page, /const selectTeamTier = \(option\) => \{[\s\S]*?updateTeamPlan\(\)/);
     assert.match(
       page,
@@ -758,6 +1004,21 @@ describe("pricing contract", () => {
     assert.doesNotMatch(updateTeamPlan, /teamCopy\.yearlySummary/);
     assert.doesNotMatch(updateTeamPlan, /labels\.monthlyRenewal/);
     assert.doesNotMatch(updateTeamPlan, /savings|regularTotal/);
+    assert.match(updateTeamPlan, /syncCtas\(\)/);
+  });
+
+  it("hands the exact Team selection to Vela checkout", async () => {
+    const page = await readFile(PRICING_PAGE_PATH, "utf8");
+    const syncStart = page.indexOf("const syncCtas = () =>");
+    const syncEnd = page.indexOf("syncCtas();", syncStart);
+    assert.notEqual(syncStart, -1);
+    assert.notEqual(syncEnd, -1);
+    const syncCtas = page.slice(syncStart, syncEnd);
+
+    assert.match(syncCtas, /target\.searchParams\.set\('plan', selectedTier\.tier\)/);
+    assert.match(syncCtas, /target\.searchParams\.set\('interval', 'yearly'\)/);
+    assert.match(syncCtas, /'seats',[\s\S]*String\(Math\.max\(selectedTier\.minSeats, selectedSeats\)\)/);
+    assert.match(syncCtas, /target\.searchParams\.set\('checkout', 'auto'\)/);
   });
 
   it("removes the superseded Team total and annual-savings copy", async () => {
