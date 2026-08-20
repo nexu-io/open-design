@@ -2,11 +2,11 @@
 
 <h1 align="center">OpenDesign: جایگزین متن‌باز Claude Design</h1>
 
-> ⚡ **[OpenDesign Cloud — سرویس رسمی مدل.](https://open-design.ai/zh/pricing/)** یک‌بار شارژ کنید تا از هر دو مدل agent و تصویر داخل OpenDesign استفاده کنید: GPT، Claude و DeepSeek برای agentها؛ GPT Image 2.0، Seedream 5.0 Pro و Nano Banana 2.0 برای تصاویر.
->
-> 🚀 **[DeepSeek V4 Flash و V4 Pro اکنون در دسترس هستند.](https://open-design.ai/zh/pricing/)** هوش سطح بالا را در پروتوتایپ‌ها، دک‌ها، سیستم‌های طراحی و وظایف روزمره agent به کار بگیرید. اعضای OpenDesign می‌توانند هر دو مدل را برای دو هفته بدون محدودیت، مستقیماً در برنامه استفاده کنند.
->
-> 🧩 **[DeepSeek Harness اکنون پشتیبانی می‌شود.](https://open-design.ai/zh/agents/deepseek-harness-design/)** harness رسمی `dsh` agent از DeepSeek را به OpenDesign به‌عنوان یک runtime بومی متصل کنید، با تفکر ساختاریافته، فراخوانی ابزار، کشف مدل، لغو و ادامه جلسه. فایل‌های تولید شده در گردش کار OpenDesign برای پیش‌نمایش زنده و تحویل باقی می‌مانند.
+<blockquote dir="rtl">
+<p dir="rtl" align="right">⚡ <b><a href="https://open-design.ai/zh/pricing/">‏OpenDesign Cloud — سرویس رسمی مدل.</a></b> یک‌بار شارژ کنید تا از هر دو مدل agent و تصویر داخل OpenDesign استفاده کنید: ‏GPT، Claude و DeepSeek برای agentها؛ GPT Image 2.0، Seedream 5.0 Pro و Nano Banana 2.0 برای تصاویر.</p>
+<p dir="rtl" align="right">🚀 <b><a href="https://open-design.ai/zh/pricing/">‏DeepSeek V4 Flash و V4 Pro اکنون در دسترس هستند.</a></b> هوش سطح بالا را در پروتوتایپ‌ها، دک‌ها، سیستم‌های طراحی و وظایف روزمره agent به کار بگیرید. اعضای OpenDesign می‌توانند هر دو مدل را برای دو هفته بدون محدودیت، مستقیماً در برنامه استفاده کنند.</p>
+<p dir="rtl" align="right">🧩 <b><a href="https://open-design.ai/zh/agents/deepseek-harness-design/">‏DeepSeek Harness اکنون پشتیبانی می‌شود.</a></b> ‏harness رسمی <code>dsh</code> agent از DeepSeek را به OpenDesign به‌عنوان یک runtime بومی متصل کنید، با تفکر ساختاریافته، فراخوانی ابزار، کشف مدل، لغو و ادامه جلسه. فایل‌های تولید شده در گردش کار OpenDesign برای پیش‌نمایش زنده و تحویل باقی می‌مانند.</p>
+</blockquote>
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner — the headline &quot;The open-source Claude Design alternative&quot; over a classical scene of columns and robed figures on a digital-code backdrop, with stat cards for design systems, plugins, coding agents, and media providers" width="100%" />
@@ -112,7 +112,9 @@ OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthro
 
 ## سازگاری پلتفرم
 
-> OpenDesign به دو روش به agentهای کدنویسی جریان اصلی متصل می‌شود: **مهارت‌ها، CLI و MCP** برای agentهایی که OD را مصرف می‌کنند، به‌علاوه **آداپترهای runtime بومی** برای agentهایی که OD مستقیماً راه‌اندازی می‌کند. DeepSeek Harness یک runtime بومی درجه یک از طریق CLI رسمی `dsh` است، با streaming ساختاریافته، کشف مدل، لغو و ادامه جلسه.
+<blockquote dir="rtl">
+<p dir="rtl" align="right">‏OpenDesign به دو روش به agentهای کدنویسی جریان اصلی متصل می‌شود: <b>مهارت‌ها، CLI و MCP</b> برای agentهایی که OD را مصرف می‌کنند، به‌علاوه <b>آداپترهای runtime بومی</b> برای agentهایی که OD مستقیماً راه‌اندازی می‌کند. DeepSeek Harness یک runtime بومی درجه یک از طریق CLI رسمی <code>dsh</code> است، با streaming ساختاریافته، کشف مدل، لغو و ادامه جلسه.</p>
+</blockquote>
 
 | agent / پلتفرم کدنویسی &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | وضعیت &nbsp;&nbsp; | تنظیم سریع &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
