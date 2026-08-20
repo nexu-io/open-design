@@ -37,6 +37,12 @@ describe('byok-opencode runtime config', () => {
     }
   });
 
+  it('does not add the removed opencode2 run --dir flag', () => {
+    expect(
+      byokOpenCodeAgentDef.buildArgs('', [], [], {}, { cwd: '/tmp/opencode-project' }),
+    ).toEqual(['run', '--format', 'json']);
+  });
+
   it('prefixes raw BYOK models with the run-scoped OpenCode provider id', () => {
     expect(opencodeByokModelId('gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');
     expect(opencodeByokModelId('open-design-byok/gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');

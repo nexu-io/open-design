@@ -514,11 +514,11 @@ test('resolveAgentExecutable supports configured binary overrides for non-Codex 
   }
 });
 
-test('resolveAgentExecutable prefers opencode-cli before desktop opencode fallback', () => {
+test('resolveAgentExecutable prefers opencode2 before legacy opencode fallbacks', () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-opencode-cli-'));
   try {
     return withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], () => {
-      const cli = join(dir, 'opencode-cli');
+      const cli = join(dir, 'opencode2');
       const desktop = join(dir, 'opencode');
       writeFileSync(cli, '#!/bin/sh\nexit 0\n');
       writeFileSync(desktop, '#!/bin/sh\nexit 0\n');

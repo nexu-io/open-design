@@ -2080,7 +2080,7 @@ function extractOpenCodeTextFromRawStdout(stdout: string): string {
 }
 
 const OPENCODE_OUTDATED_CLI_DETAIL =
-  'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+  'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it to the latest `opencode2` release, then retry the OpenCode connection test.';
 const OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH = 240;
 
 function openCodeOutdatedCliDetail(output: string): string | null {
@@ -2578,12 +2578,12 @@ async function testAgentConnectionInternal(
             : {}),
         },
       );
-      // Connection tests should validate the adapter's core CLI path, not
-      // fail on unrelated user-installed OpenCode plugins. `opencode run
-      // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment.
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
-        args.push('--pure');
+      // Connection tests should validate the adapter's current non-interactive
+      // CLI path without stopping on approval prompts. OpenCode 2 no longer
+      // accepts the legacy `--pure` flag, but still supports `--auto` to
+      // auto-approve permissions that are not explicitly denied.
+      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--auto')) {
+        args.push('--auto');
       }
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
         args.push('--title', 'Connection test');

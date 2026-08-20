@@ -225,7 +225,7 @@ export function resolveAmrOpenCodeExecutable(
       if (bundled) return bundled;
     }
   }
-  return resolveOnPath('opencode-cli') ?? resolveOnPath('opencode');
+  return resolveOnPath('opencode2') ?? resolveOnPath('opencode-cli') ?? resolveOnPath('opencode');
 }
 
 // `tools/pack/tests/resources.test.ts` ships the AMR OpenCode companion as a

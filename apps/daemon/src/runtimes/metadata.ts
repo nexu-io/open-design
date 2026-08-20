@@ -24,8 +24,8 @@ const AGENT_INSTALL_LINKS: Record<
     docsUrl: 'https://docs.devin.ai',
   },
   opencode: {
-    installUrl: 'https://opencode.ai/docs',
-    docsUrl: 'https://github.com/sst/opencode',
+    installUrl: 'https://opencode.ai/v2/docs/',
+    docsUrl: 'https://opencode.ai/v2/docs/',
   },
   hermes: {
     installUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/agent-adapters.md',
