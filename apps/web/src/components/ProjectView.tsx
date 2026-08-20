@@ -2523,6 +2523,20 @@ export function ProjectView({
   } | null>(null);
   // Monotonic auto-open owner token; bumped once per send.
   const autoOpenSettleGenerationRef = useRef(0);
+  // Sends that are past the queue/busy gates but have not yet reached the
+  // generation bump that hands them auto-open ownership. Only one preflight on
+  // the send path awaits in that gap — the AMR balance gate, which can await a
+  // wallet read, a plan lookup and a low-balance decision — and during it the
+  // previous turn's settle watch still matches the current generation. A file
+  // list settling in that window would move focus to the OLD turn's artifact
+  // while the user is already waiting on the NEW send.
+  //
+  // A reservation rather than an early generation bump, because a gated send is
+  // not guaranteed to become a turn: a hard or unavailable gate, a declined
+  // low-balance prompt, or a conversation switch parks it in the queue and
+  // starts nothing. Bumping there would permanently disown a watch that no new
+  // turn ever replaced; releasing the reservation lets that watch resume.
+  const autoOpenSendIntentsRef = useRef(0);
   // Artifact context for the header actions (settings gear, handoff) that live
   // in this workspace's header alongside FileViewer's present/share/download.
   // Mirrors the artifact_id / artifact_kind that FileViewer attaches, derived
@@ -3908,6 +3922,12 @@ export function ProjectView({
   const evaluateAutoOpenSettle = useCallback(() => {
     const pending = pendingAutoOpenSettleRef.current;
     if (!pending) return;
+    // A send is past the queue/busy gates and parked in its AMR preflight. It
+    // has not bumped the generation yet, so this watch still looks current —
+    // but the turn that armed it is no longer who the next focus move belongs
+    // to. Hold rather than retire: the gate can still block that send, and the
+    // abandon path below re-runs this evaluation when it does.
+    if (autoOpenSendIntentsRef.current > 0) return;
     // A watch armed by a superseded turn must never drive focus, even if it
     // somehow survived the ownership check at the arming site.
     if (pending.generation !== autoOpenSettleGenerationRef.current) {
@@ -6801,6 +6821,17 @@ export function ProjectView({
           return meta?.acceptQueuedHomeHandoff === true;
         }
         amrGateInFlightConversationsRef.current.add(gateConversationId);
+        // Auto-open ownership is contested from here on. This send has cleared
+        // every gate that can turn it away without awaiting, so the awaits
+        // below are the only place a previous turn's settle watch can still
+        // look like the owner while a newer send is already under way.
+        autoOpenSendIntentsRef.current += 1;
+        let autoOpenSendIntentHeld = true;
+        const releaseAutoOpenSendIntent = () => {
+          if (!autoOpenSendIntentHeld) return;
+          autoOpenSendIntentHeld = false;
+          autoOpenSendIntentsRef.current -= 1;
+        };
         try {
           // A persisted project Workspace is the spawn billing address even
           // when the local membership/scope read is temporarily unavailable.
@@ -6865,13 +6896,27 @@ export function ProjectView({
           const acceptedQueuedHomeHandoff = (queued: boolean): boolean => {
             return queued && meta?.acceptQueuedHomeHandoff === true;
           };
+          // Every exit from this gate that does NOT become a turn funnels
+          // through here: blocked, unavailable, declined, or raced by a
+          // conversation switch. Nothing superseded the previous turn, so its
+          // settle watch is still the rightful owner — drop the reservation and
+          // give it back the evaluation it held off. Re-running here rather
+          // than leaving it to the next file list matters because the list that
+          // carried the deliverable may be the one that already landed inside
+          // this window, and the watch would otherwise wait for one that never
+          // comes.
+          const abandonGatedSend = (queued: boolean): boolean => {
+            releaseAutoOpenSendIntent();
+            evaluateAutoOpenSettle();
+            return acceptedQueuedHomeHandoff(queued);
+          };
           // The await may have raced a conversation switch; re-run the entry
           // guard before touching any state so this stale closure can't write
           // the old conversation's messages into the now-visible view. The
           // composer has already cleared, so keep the full payload queued for
           // the original conversation instead of dropping it.
           if (messagesConversationIdRef.current !== activeConversationId) {
-            return acceptedQueuedHomeHandoff(queueGateSend());
+            return abandonGatedSend(queueGateSend());
           }
           if (gate.kind === 'hard') {
             const recoveryActionInstanceId = `blocked:${taskAnalytics.taskExecutionId}`;
@@ -6895,10 +6940,10 @@ export function ProjectView({
               snapshot: gate.snapshot,
               conversationId: gateConversationId,
             });
-            return acceptedQueuedHomeHandoff(parkBlockedSend());
+            return abandonGatedSend(parkBlockedSend());
           }
           if (gate.kind === 'unavailable') {
-            return acceptedQueuedHomeHandoff(parkBlockedSend());
+            return abandonGatedSend(parkBlockedSend());
           }
           if (gate.kind === 'soft') {
             // Low balance: pause THIS send while the reminder dialog waits
@@ -6906,7 +6951,7 @@ export function ProjectView({
             // a continuation, not a re-submit.
             const plan = await resolveAmrPlan(gate.snapshot);
             if (messagesConversationIdRef.current !== activeConversationId) {
-              return acceptedQueuedHomeHandoff(queueGateSend());
+              return abandonGatedSend(queueGateSend());
             }
             if (isPaidAmrPlan(plan)) {
               const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
@@ -6916,12 +6961,16 @@ export function ProjectView({
               // Same conversation-switch guard for the dialog-open window; the
               // payload is parked (not sent) so nothing is lost either way.
               if (decision !== 'proceed' || messagesConversationIdRef.current !== activeConversationId) {
-                return acceptedQueuedHomeHandoff(parkBlockedSend());
+                return abandonGatedSend(parkBlockedSend());
               }
             }
           }
           amrGatePausedQueueConversationsRef.current.delete(gateConversationId);
         } finally {
+          // The abort paths already released; this covers the fall-through (the
+          // generation bump that takes ownership is a few synchronous lines
+          // below, so nothing can evaluate in between) and any throw.
+          releaseAutoOpenSendIntent();
           amrGateInFlightConversationsRef.current.delete(gateConversationId);
         }
       }
@@ -8494,6 +8543,7 @@ export function ProjectView({
       projectRunHasBillableAmrPrincipal,
       projectMutationReadOnly,
       projectWorkspaceScopeState.scope,
+      evaluateAutoOpenSettle,
     ],
   );
 

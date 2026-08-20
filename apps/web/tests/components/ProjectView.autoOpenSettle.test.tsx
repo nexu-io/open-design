@@ -40,6 +40,7 @@ const upsertPreviewComment = vi.fn();
 const saveTabs = vi.fn();
 const cacheTabsLocally = vi.fn();
 const writeProjectTextFile = vi.fn();
+const checkAmrBalanceGate = vi.fn();
 
 const chatPaneSpy = vi.fn();
 const fileWorkspaceSpy = vi.fn();
@@ -82,6 +83,16 @@ vi.mock('../../src/providers/registry', () => ({
   upsertPreviewComment: (...args: unknown[]) => upsertPreviewComment(...args),
   writeProjectTextFile: (...args: unknown[]) => writeProjectTextFile(...args),
 }));
+
+vi.mock('../../src/runtime/amr-balance-gate', async () => {
+  const actual = await vi.importActual<typeof import('../../src/runtime/amr-balance-gate')>(
+    '../../src/runtime/amr-balance-gate',
+  );
+  return {
+    ...actual,
+    checkAmrBalanceGate: (...args: unknown[]) => checkAmrBalanceGate(...args),
+  };
+});
 
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
@@ -159,15 +170,21 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function renderProjectView(projectId: string) {
+// `agentId` is a parameter because the AMR balance gate — the one preflight on
+// the send path that awaits before a turn takes ownership of auto-open — only
+// runs for the `amr` agent.
+function renderProjectView(projectId: string, agentId = 'agent-1') {
   return render(
     <ProjectView
       project={{ id: projectId, name: 'Project', skillId: null, designSystemId: null } as never}
       routeFileName={null}
       config={
-        { mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never
+        { mode: 'daemon', agentId, notifications: undefined, agentModels: {} } as never
       }
-      agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+      agents={[
+        { id: 'agent-1', name: 'OpenCode', models: [] } as never,
+        { id: 'amr', name: 'OpenDesign Cloud', models: [] } as never,
+      ]}
       skills={[]}
       designTemplates={[]}
       designSystems={[]}
@@ -251,6 +268,7 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     saveTabs.mockResolvedValue(undefined);
     patchConversation.mockResolvedValue(undefined);
     patchProject.mockResolvedValue(undefined);
+    checkAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
   });
 
   afterEach(() => {
@@ -278,11 +296,13 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     // here survives the older held read resolving afterwards, and the finalizer
     // then arms against a list its own read never saw.
     duringHold?: ProjectFile[];
+    agentId?: string;
   }) {
     const heldRead = deferred<ProjectFile[]>();
     let holdNextRead = false;
     let turnDone = false;
     let heldReadRequested = false;
+    let settledFiles = options.settled;
 
     loadTabs.mockResolvedValue(options.tabs);
     fetchProjectFiles.mockImplementation(async () => {
@@ -291,7 +311,7 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
         heldReadRequested = true;
         return heldRead.promise;
       }
-      if (turnDone) return options.settled;
+      if (turnDone) return settledFiles;
       return heldReadRequested && options.duringHold ? options.duringHold : options.preTurn;
     });
 
@@ -301,7 +321,7 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
       return new Promise<void>(() => {});
     });
 
-    renderProjectView(options.projectId);
+    renderProjectView(options.projectId, options.agentId);
 
     const sendProps = await waitForSend();
     await act(async () => {
@@ -324,6 +344,11 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
           heldRead.resolve(options.postRun);
           await Promise.resolve();
         });
+      },
+      // The deliverable can land arbitrarily late; this is how a test says
+      // "the chokidar-driven list now carries it" without re-driving the turn.
+      landDeliverable: (files: ProjectFile[]) => {
+        settledFiles = files;
       },
     };
   }
@@ -1072,5 +1097,113 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     // 'internal' is the assertion: the real workspace is what turns the pair
     // into "do not move focus".
     expect(bySource.get('turn-a.html')).toBe('internal');
+  });
+
+  // Drives an AMR turn to its armed settle watch, then leaves the NEXT send
+  // parked inside `checkAmrBalanceGate`. The two tests below differ only in
+  // whether that second send exists, so the control proves the watch really
+  // does open the deliverable on this path and the regression is not just
+  // reading an inert setup.
+  async function armedAmrWatch(projectId: string) {
+    const turn = await runTurnHoldingCompletionRead({
+      projectId,
+      agentId: 'amr',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      // The turn ends with nothing previewable in hand, so the turn-end pass
+      // opens nothing and the settle watch is the only thing that can move
+      // focus once the deliverable lands.
+      postRun: [NOTES, OTHER, RUN_LOG],
+      settled: [NOTES, OTHER, RUN_LOG],
+    });
+    await turn.releaseCompletionRead();
+    await landSettledFileList();
+    expect(checkAmrBalanceGate).toHaveBeenCalledTimes(1);
+    return turn;
+  }
+
+  it('opens the settled artifact for an AMR turn when no newer send is in flight', async () => {
+    const turn = await armedAmrWatch('project-amr-gate-control');
+
+    turn.landDeliverable([NOTES, OTHER, RUN_LOG, INDEX]);
+    await landSettledFileList();
+    await landSettledFileList();
+
+    await waitFor(() =>
+      expect(openRequestKeys().map((key) => key.name)).toContain('index.html'),
+    );
+  });
+
+  it('does not let a settled watch open while the next send waits on its AMR gate', async () => {
+    // Reviewer #6842 (nettee, 2026-08-20): the new-turn ownership fence is the
+    // generation bump, and that lives far below the AMR preflight — the send
+    // path's only await before a turn takes ownership. Between passing the
+    // queue/busy gates and `checkAmrBalanceGate` resolving, nothing has bumped
+    // the generation, so the previous turn's watch still matches it and a
+    // settled file list drives the OLD turn's artifact into focus while the
+    // user is already waiting on the NEW send.
+    const turn = await armedAmrWatch('project-amr-gate-fence');
+
+    // Turn B enters the send path and parks on its balance gate. Not awaited:
+    // the whole point is that the send has not returned yet.
+    const gate = deferred<{ kind: 'allow' }>();
+    checkAmrBalanceGate.mockReturnValueOnce(gate.promise);
+    const sendPropsB = await waitForSend();
+    let sendB: Promise<void>;
+    await act(async () => {
+      sendB = sendPropsB.onSend!('turn B', [], []);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(checkAmrBalanceGate).toHaveBeenCalledTimes(2));
+    const openedBeforeDeliverable = openRequestKeys().length;
+
+    // Turn A's deliverable settles while turn B is still inside the gate.
+    turn.landDeliverable([NOTES, OTHER, RUN_LOG, INDEX]);
+    await landSettledFileList();
+    await landSettledFileList();
+
+    expect(openRequestKeys().slice(openedBeforeDeliverable)).toEqual([]);
+
+    // The parked send must still be a real send, or "nothing opened" would
+    // only mean the gate rejected turn B and no ownership was ever contested.
+    await act(async () => {
+      gate.resolve({ kind: 'allow' });
+      await sendB!;
+    });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+  });
+
+  it('lets the held watch open again when the next send never clears its AMR gate', async () => {
+    // The other half of the fence. A gated send is not a turn until the gate
+    // lets it through, so a send the gate turns away must hand auto-open back
+    // instead of leaving the previous turn's watch disowned forever — and it
+    // must hand back the evaluation it held off, because the list that carried
+    // the deliverable can be the one that landed inside the window.
+    const turn = await armedAmrWatch('project-amr-gate-release');
+
+    const gate = deferred<{ kind: 'unavailable' }>();
+    checkAmrBalanceGate.mockReturnValueOnce(gate.promise);
+    const sendPropsB = await waitForSend();
+    let sendB: Promise<void>;
+    await act(async () => {
+      sendB = sendPropsB.onSend!('turn B', [], []);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(checkAmrBalanceGate).toHaveBeenCalledTimes(2));
+
+    turn.landDeliverable([NOTES, OTHER, RUN_LOG, INDEX]);
+    await landSettledFileList();
+    expect(openRequestKeys().map((key) => key.name)).not.toContain('index.html');
+
+    // The gate turns turn B away: it parks in the queue and starts no run.
+    await act(async () => {
+      gate.resolve({ kind: 'unavailable' });
+      await sendB!;
+    });
+
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(openRequestKeys().map((key) => key.name)).toContain('index.html'),
+    );
   });
 });
