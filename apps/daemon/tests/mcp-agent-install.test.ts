@@ -28,7 +28,7 @@ describe('agent slug guard', () => {
   it('accepts every documented slug and rejects others', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
-    expect(AGENT_SLUGS).toHaveLength(16);
+    expect(AGENT_SLUGS).toHaveLength(17);
     expect(isAgentSlug('kiro')).toBe(true);
     expect(isAgentSlug('reasonix')).toBe(true);
     expect(isAgentSlug('raven')).toBe(true);
@@ -111,6 +111,19 @@ describe('JSON-config agents', () => {
     const plan = planAgentInstall('kiro', SPEC, ctx());
     if (plan.kind !== 'json') throw new Error('expected json');
     expect(plan.configPath).toBe('/home/u/.kiro/settings/mcp.json');
+    expect(plan.keyPath).toEqual(['mcpServers']);
+    expect(plan.serverKey).toBe('open-design');
+    expect(plan.entry).toEqual({
+      command: SPEC.command,
+      args: SPEC.args,
+      env: SPEC.env,
+    });
+  });
+
+  it('kimchi merges a stdio entry into the harness MCP settings file', () => {
+    const plan = planAgentInstall('kimchi', SPEC, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    expect(plan.configPath).toBe('/home/u/.config/kimchi/harness/mcp.json');
     expect(plan.keyPath).toEqual(['mcpServers']);
     expect(plan.serverKey).toBe('open-design');
     expect(plan.entry).toEqual({
