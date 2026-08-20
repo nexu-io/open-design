@@ -2082,6 +2082,8 @@ export const ru: Dict = {
   'inlineSwitcher.missingApiKey': 'API-ключ не задан — откройте Настройки.',
   'inlineSwitcher.openFullSettings': 'Открыть настройки выполнения',
   'inlineSwitcher.customSuffix': '(пользовательская)',
+  'inlineSwitcher.unlimitedBadge': 'Без лимитов',
+  'inlineSwitcher.unlimitedTooltip': 'Ваш тариф включает безлимитное использование этой модели — такие вызовы не расходуют баланс.',
   'project.backToProjects': 'Назад к проектам',
   'project.brandReadyTitle': 'Дизайн-система {name} готова',
   'project.brandReadyTitleGeneric': 'Ваша дизайн-система готова',

@@ -2082,6 +2082,8 @@ export const tr: Dict = {
   'inlineSwitcher.missingApiKey': 'API anahtarı yok — Ayarlardan ekleyin.',
   'inlineSwitcher.openFullSettings': 'Yürütme ayarlarını aç',
   'inlineSwitcher.customSuffix': '(özel)',
+  'inlineSwitcher.unlimitedBadge': 'Sınırsız',
+  'inlineSwitcher.unlimitedTooltip': 'Planınız bu modelin sınırsız kullanımını içerir; bu çağrılar bakiyenizi tüketmez.',
   'project.backToProjects': 'Projelere dön',
   'project.brandReadyTitle': '{name} tasarım sistemi hazır',
   'project.brandReadyTitleGeneric': 'Tasarım sisteminiz hazır',

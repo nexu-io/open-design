@@ -2816,6 +2816,8 @@ export interface Dict {
   'inlineSwitcher.missingApiKey': string;
   'inlineSwitcher.openFullSettings': string;
   'inlineSwitcher.customSuffix': string;
+  'inlineSwitcher.unlimitedBadge': string;
+  'inlineSwitcher.unlimitedTooltip': string;
 
   // Project view / chat pane / composer
   'project.backToProjects': string;

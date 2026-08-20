@@ -2082,6 +2082,8 @@ export const hu: Dict = {
   'inlineSwitcher.missingApiKey': 'Hiányzó API-kulcs — add hozzá a Beállításokban.',
   'inlineSwitcher.openFullSettings': 'Végrehajtási beállítások megnyitása',
   'inlineSwitcher.customSuffix': '(egyedi)',
+  'inlineSwitcher.unlimitedBadge': 'Korlátlan',
+  'inlineSwitcher.unlimitedTooltip': 'A csomagod tartalmazza ennek a modellnek a korlátlan használatát – ezek a hívások nem fogyasztják az egyenleget.',
   'project.backToProjects': 'Vissza a projektekhez',
   'project.brandReadyTitle': 'A(z) {name} dizájnrendszer kész',
   'project.brandReadyTitleGeneric': 'A dizájnrendszered kész',

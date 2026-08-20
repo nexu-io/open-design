@@ -74,11 +74,15 @@ const imageModels: ModelItem[] = [
 const unlimitedByTier: Record<TierId, Set<string>> = {
   go: new Set(['DeepSeek V4 Flash', 'DeepSeek V4 Pro', 'GLM-5.2']),
   plus: new Set(['DeepSeek V4 Flash', 'DeepSeek V4 Pro', 'GLM-5.2', 'Kimi K2.7 Code']),
+  // Pro's fifth slot is GLM-5.2, not MiniMax M2.7: every tier from Go up
+  // carries GLM-5.2, and MiniMax M2.7 stays metered until Max. The two were
+  // swapped here, so the page promised Pro subscribers unlimited MiniMax while
+  // marking the GLM-5.2 they do get as metered.
   pro: new Set([
     'DeepSeek V4 Flash',
     'DeepSeek V4 Pro',
+    'GLM-5.2',
     'Kimi K2.7 Code',
-    'MiniMax M2.7',
     'MiMo V2.5 Pro',
   ]),
   max: new Set(popularModels.map((model) => model.name)),

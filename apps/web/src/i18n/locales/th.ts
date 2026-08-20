@@ -2082,6 +2082,8 @@ export const th: Dict = {
   'inlineSwitcher.missingApiKey': 'ยังไม่ได้ตั้งค่า API key — เปิดการตั้งค่าเพื่อเพิ่ม',
   'inlineSwitcher.openFullSettings': 'เปิดการตั้งค่าการดำเนินการ',
   'inlineSwitcher.customSuffix': '(กำหนดเอง)',
+  'inlineSwitcher.unlimitedBadge': 'ไม่จำกัด',
+  'inlineSwitcher.unlimitedTooltip': 'แพ็กเกจของคุณรวมการใช้งานโมเดลนี้แบบไม่จำกัด การเรียกใช้จะไม่หักยอดคงเหลือ',
   'project.backToProjects': 'กลับไปยังโปรเจกต์',
   'project.brandReadyTitle': 'ระบบดีไซน์ {name} พร้อมแล้ว',
   'project.brandReadyTitleGeneric': 'ระบบดีไซน์ของคุณพร้อมแล้ว',

@@ -2082,6 +2082,8 @@ export const fa: Dict = {
   'inlineSwitcher.missingApiKey': 'کلید API تنظیم نشده — تنظیمات را باز کنید.',
   'inlineSwitcher.openFullSettings': 'باز کردن تنظیمات اجرا',
   'inlineSwitcher.customSuffix': '(سفارشی)',
+  'inlineSwitcher.unlimitedBadge': 'نامحدود',
+  'inlineSwitcher.unlimitedTooltip': 'طرح شما شامل استفاده نامحدود از این مدل است؛ این درخواست‌ها موجودی شما را مصرف نمی‌کنند.',
   'project.backToProjects': 'بازگشت به پروژه‌ها',
   'project.brandReadyTitle': 'سیستم طراحی {name} آماده است',
   'project.brandReadyTitleGeneric': 'سیستم طراحی شما آماده است',

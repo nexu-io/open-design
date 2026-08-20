@@ -2178,6 +2178,8 @@ export const zhCN: Dict = {
   "inlineSwitcher.missingApiKey": "尚未填写 API Key — 在“设置”中添加。",
   "inlineSwitcher.openFullSettings": "打开执行设置",
   "inlineSwitcher.customSuffix": "（自定义）",
+  "inlineSwitcher.unlimitedBadge": "无限使用",
+  "inlineSwitcher.unlimitedTooltip": "当前套餐包含该模型的无限使用，调用不消耗余额。",
   "project.backToProjects": "返回项目列表",
   "project.brandReadyTitle": "{name} 设计体系已就绪",
   "project.brandReadyTitleGeneric": "你的设计体系已就绪",

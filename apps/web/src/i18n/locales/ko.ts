@@ -2082,6 +2082,8 @@ export const ko: Dict = {
   'inlineSwitcher.missingApiKey': 'API 키 미설정 — 설정에서 추가하세요.',
   'inlineSwitcher.openFullSettings': '실행 설정 열기',
   'inlineSwitcher.customSuffix': '(직접 입력)',
+  'inlineSwitcher.unlimitedBadge': '무제한',
+  'inlineSwitcher.unlimitedTooltip': '현재 요금제에는 이 모델의 무제한 사용이 포함되어 있어 호출 시 잔액이 차감되지 않습니다.',
   'project.backToProjects': '프로젝트 목록으로 돌아가기',
   'project.brandReadyTitle': '{name} 디자인 시스템이 준비되었습니다',
   'project.brandReadyTitleGeneric': '디자인 시스템이 준비되었습니다',

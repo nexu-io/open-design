@@ -2082,6 +2082,8 @@ export const ja: Dict = {
   'inlineSwitcher.missingApiKey': 'API キー未設定 — 設定から追加してください。',
   'inlineSwitcher.openFullSettings': '実行設定を開く',
   'inlineSwitcher.customSuffix': '（カスタム）',
+  'inlineSwitcher.unlimitedBadge': '無制限',
+  'inlineSwitcher.unlimitedTooltip': '現在のプランにはこのモデルの無制限利用が含まれます。呼び出しで残高は消費されません。',
   'project.backToProjects': 'プロジェクトに戻る',
   'project.brandReadyTitle': '{name} のデザインシステムが準備できました',
   'project.brandReadyTitleGeneric': 'デザインシステムが準備できました',
