@@ -1212,6 +1212,23 @@ a.nav-mega-col-head.is-active {
 .nav-social-item:focus-within .nav-social-link { color: var(--ink); transform: translateY(-1px); }
 .nav-social-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
 .nav-social-icon-feishu { display: block; width: 22px; height: auto; }
+/* Language switcher as a plain icon in the same cluster. */
+.nav-social .nav-locale-switch { display: inline-flex; align-items: center; }
+.nav-social .nav-locale-trigger {
+  padding: 0;
+  border: 0;
+  color: var(--ink-mute, #8c8c8c);
+  list-style: none;
+}
+.nav-social .nav-locale-trigger::-webkit-details-marker { display: none; }
+.nav-social .nav-locale-trigger .locale-trigger-icon { color: inherit; }
+.nav-social .nav-locale-trigger .locale-trigger-icon::before { font-size: 19px; }
+.nav-social .nav-locale-trigger:hover,
+.nav-social .nav-locale-switch[open] > .nav-locale-trigger,
+.nav-social .nav-locale-trigger:hover .locale-trigger-icon,
+.nav-social .nav-locale-switch[open] > .nav-locale-trigger .locale-trigger-icon { color: var(--ink); }
+.nav-social .locale-menu { top: calc(100% + 14px); right: 0; }
+
 /* "Credits inside" nudge: a small pulsing coral dot on the community icon. */
 .nav-social-badge {
   position: absolute;

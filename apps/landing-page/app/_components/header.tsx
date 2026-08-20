@@ -151,10 +151,7 @@ export interface HeaderProps {
   github?: {
     starsLabel: string;
   };
-  /**
-   * Accepted for call-site compatibility but no longer rendered: the language
-   * switcher lives in the footer (site-footer.astro / page.tsx footer).
-   */
+  /** Icon-only language switcher in the action cluster (footer has the twin). */
   localeSwitcher?: {
     label: string;
     prefix: string;
@@ -177,6 +174,7 @@ export interface HeaderProps {
 export function Header({
   active = 'home',
   github,
+  localeSwitcher,
   locale = DEFAULT_LOCALE,
   copy,
   brandHref = '#top',
@@ -587,6 +585,34 @@ export function Header({
                 <path d='M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z' />
               </svg>
             </a>
+            {localeSwitcher ? (
+              <details className='locale-switch nav-locale-switch' data-locale-switch>
+                <summary
+                  className='locale-trigger locale-trigger-iconic nav-social-link nav-locale-trigger'
+                  aria-label={localeSwitcher.label}
+                  title={localeSwitcher.label}
+                >
+                  <span className='locale-trigger-icon' aria-hidden='true' />
+                </summary>
+                <div className='locale-menu' role='menu'>
+                  {localeSwitcher.options.map((entry) => (
+                    <a
+                      className={`locale-menu-item${entry.code === locale ? ' is-active' : ''}`}
+                      role='menuitem'
+                      data-locale-link
+                      data-locale-code={entry.code}
+                      href={entry.href}
+                      lang={entry.htmlLang}
+                      aria-current={entry.code === locale ? 'true' : undefined}
+                      key={entry.code}
+                    >
+                      <span className='locale-menu-code'>{entry.code.toUpperCase()}</span>
+                      <span className='locale-menu-label'>{entry.label}</span>
+                    </a>
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </div>
           {/* GitHub star chip — quiet pill so Download stays the only
               strong CTA in the bar. [data-github-stars] is refreshed by the

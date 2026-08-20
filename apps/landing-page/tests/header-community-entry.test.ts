@@ -16,7 +16,7 @@ const counts = { skills: 100, systems: 10, templates: 20, craft: 5 };
 const render = (locale: 'zh' | 'zh-tw' | 'en') =>
   renderToStaticMarkup(createElement(Header, { counts, github: { starsLabel: '83K+' }, locale }));
 
-test('header action cluster carries icon-only community + X links, no text pill, no language switcher', () => {
+test('header action cluster carries icon-only community + X links, no text pill', () => {
   const zh = render('zh');
   assert.match(zh, /class="nav-social-link"[^>]*href="https:\/\/od\.kokiai\.net\/community\/website"[^>]*aria-label="加入飞书群"/);
   assert.match(zh, /class="nav-community-qr-card"/);
@@ -24,7 +24,6 @@ test('header action cluster carries icon-only community + X links, no text pill,
   assert.match(zh, /群内每周发放 Credits/);
   assert.match(zh, /src="\/community\/feishu-group-qr\.png"/);
   assert.match(zh, /aria-label="X"/);
-  assert.doesNotMatch(zh, /locale-switch/);
 
   const zhTw = render('zh-tw');
   assert.match(zhTw, /aria-label="加入飛書群"/);

@@ -519,7 +519,17 @@ export default function Page({
         <div className='site-chrome' data-chrome-headroom>
         {/* ====== NAV ====== */}
         {/* Headroom slide handled by `.site-chrome` wrapper above. */}
-        <Header counts={counts} github={github} locale={locale} />
+        <Header
+          counts={counts}
+          github={github}
+          locale={locale}
+          localeSwitcher={{
+            label: commonCopy.topbar.languageSwitcherLabel,
+            prefix: commonCopy.topbar.languageSwitcherPrefix ?? 'Lang',
+            shortLabel: localeDef.shortLabel,
+            options: localeOptions,
+          }}
+        />
         </div>{/* /site-chrome */}
 
         {/* ====== HERO ====== */}
