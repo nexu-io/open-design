@@ -75,7 +75,7 @@ export const MCP_SERVER_INSTRUCTIONS = [
   '',
   'To make OpenDesign generate or refine a design, commission a run; do not run skills yourself.',
   'For a new artifact, call collect_brief first unless the user explicitly asks to skip questions. Let the user complete the rendered card, then use confirm_brief. Never expose briefDraftId, nonce, or other internal correlation values.',
-  'Use list_skills / list_plugins to discover available capabilities. For OpenDesign Cloud, verify login status first and sign in if needed.',
+  'Use list_skills / list_plugins to discover available capabilities. For OpenDesign Cloud, check login status first; if signed out, start sign-in, show the activation URL/code, and poll until loggedIn:true before continuing.',
   'Use list_agents before passing start_run.agent; never guess an agent id.',
   'Create a project first when a fresh project is needed.',
   'Call start_run with a canonical UUID or ULID requestId. Reuse the exact same requestId after a timeout or lost response; do not start another run while the original is still in flight.',

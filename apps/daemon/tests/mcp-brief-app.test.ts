@@ -883,5 +883,6 @@ describe('local OpenDesign MCP brief app', () => {
     expect(MCP_SERVER_INSTRUCTIONS).toContain('requestId');
     expect(MCP_SERVER_INSTRUCTIONS).toContain('get_run');
     expect(MCP_SERVER_INSTRUCTIONS).toContain('resume:true');
+    expect(MCP_SERVER_INSTRUCTIONS).toContain('loggedIn:true');
   });
 });
