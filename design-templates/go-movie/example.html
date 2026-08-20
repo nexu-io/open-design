@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GO MOVIE｜影迷互助情报站</title>
+<style>
+  :root {
+    /* GO MOVIE production tokens — extracted from app.wxss / home / merch / custom-tab-bar */
+    --gm-bg: #f5f0e6;              /* page background */
+    --gm-card: #fffdf8;            /* card background */
+    --gm-card-solid: #ffffff;
+    --gm-text: #25211c;            /* primary text */
+    --gm-text-soft: #202936;       /* hot-card title */
+    --gm-muted: rgba(37, 33, 28, 0.5);
+    --gm-muted2: rgba(37, 33, 28, 0.42);
+    --gm-faint: rgba(37, 33, 28, 0.36);
+    --gm-primary: #8f2f2f;         /* brand / active red */
+    --gm-gold: #a88652;            /* kicker / accent gold */
+    --gm-gold-bright: #c9a84c;
+    --gm-border: rgba(168, 134, 82, 0.22);
+    --gm-border-ink: rgba(37, 33, 28, 0.08);
+    --gm-dark: #25211c;            /* hero / page-head */
+    --gm-dark-text: #fffaf0;
+    --gm-good: #347748;
+    --font: "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #e6e2d9;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    font: 14px/1.5 var(--font);
+    color: var(--gm-text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .is-hidden { display: none !important; }
+
+  /* ---------- device (low-key viewport, not a Dribbble mockup) ---------- */
+  .device {
+    width: 390px; height: 844px;
+    background: var(--gm-bg);
+    border-radius: 24px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 18px 48px rgba(40, 32, 20, 0.12);
+    overflow: hidden;
+    position: relative;
+  }
+  .screen { width: 100%; height: 100%; display: flex; flex-direction: column; }
+
+  /* ---------- status bar ---------- */
+  .statusbar {
+    flex: none;
+    height: 38px;
+    padding: 0 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 14px; font-weight: 650; color: #fffaf0;
+    background: var(--gm-dark);
+    letter-spacing: 0.01em;
+  }
+  .statusbar .right { display: flex; align-items: center; gap: 5px; }
+  .statusbar svg { display: block; }
+
+  /* ---------- scroll region ---------- */
+  .scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+  .app-view { display: none; padding-bottom: 24px; }
+  .app-view.active { display: block; }
+
+  /* ---------- dark page head (home hero + sub-page heads share this) ---------- */
+  .hero {
+    position: relative; overflow: hidden;
+    padding: 18px 15px 20px;
+    min-height: 200px;
+    background: var(--gm-dark);
+    color: var(--gm-dark-text);
+  }
+  .hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+  .hero-mask { position: absolute; inset: 0; z-index: 1; background: linear-gradient(90deg, rgba(20, 16, 12, 0.86) 0%, rgba(20, 16, 12, 0.66) 48%, rgba(20, 16, 12, 0.26) 100%); }
+  .hero-top { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .hero-brand {
+    font-size: 10px; letter-spacing: 2px; color: var(--gm-gold);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .hero-save {
+    flex: none; position: relative;
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 6px 12px; border: 1px solid rgba(168, 134, 82, 0.38);
+    border-radius: 999px; background: rgba(255, 253, 248, 0.06);
+    color: var(--gm-dark-text); font-size: 12px; cursor: pointer; font-family: var(--font);
+  }
+  .hero-save .badge {
+    min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+    background: var(--gm-primary); color: #fffaf0; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+  }
+  .hero-inner { position: relative; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-top: 20px; }
+  .hero-left { flex: 1; min-width: 0; }
+  .hero-badge {
+    display: inline-block; padding: 2px 8px; border: 1px solid rgba(168, 134, 82, 0.38);
+    border-radius: 999px; color: rgba(255, 250, 240, 0.72); font-size: 8px; letter-spacing: 1px;
+  }
+  .hero-title {
+    margin: 10px 0 0; font-size: 27px; font-weight: 700; line-height: 1.08; letter-spacing: 1px;
+  }
+  .hero-subtitle { margin-top: 9px; color: var(--gm-gold); font-size: 12.5px; }
+  .hero-rule { display: flex; align-items: center; gap: 6px; margin-top: 13px; }
+  .hero-rule-line { width: 28px; height: 1px; background: var(--gm-gold); flex: none; }
+  .hero-rule-copy { color: rgba(255, 250, 240, 0.36); font-size: 8px; letter-spacing: 1px; }
+  .hero-right { flex: none; text-align: right; padding-top: 4px; }
+  .hero-date { color: rgba(255, 250, 240, 0.52); font-size: 9px; letter-spacing: 1px; white-space: nowrap; }
+
+  /* ---------- sub-page dark head ---------- */
+  .page-head {
+    padding: 16px 15px 18px; background: var(--gm-dark); color: var(--gm-dark-text);
+  }
+  .page-kicker { color: var(--gm-gold); font-size: 8.5px; letter-spacing: 3px; }
+  .page-title { margin-top: 7px; font-size: 21.5px; font-weight: 700; line-height: 1.34; }
+  .page-subtitle { margin-top: 8px; color: rgba(255, 250, 240, 0.52); font-size: 11px; line-height: 1.6; }
+
+  /* ---------- search ---------- */
+  .search-wrap { position: relative; z-index: 2; margin: -11px 15px 0; }
+  .search-box {
+    display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 11px;
+    border: 1px solid var(--gm-border-ink); border-radius: 7px;
+    background: var(--gm-card); box-shadow: 0 5px 11px rgba(168, 134, 82, 0.22);
+  }
+  .search-icon { color: var(--gm-primary); font-size: 20px; line-height: 1; }
+  .search-box input { flex: 1; height: 42px; border: none; outline: none; background: none; color: var(--gm-text); font-size: 12px; font-family: var(--font); }
+  .search-box input::placeholder { color: var(--gm-faint); }
+  .search-clear { color: var(--gm-muted2); font-size: 18px; line-height: 1; cursor: pointer; }
+
+  /* ---------- scope / topic pills ---------- */
+  .scope-switch { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 15px 0; }
+  .pill {
+    flex: 0 0 calc((100% - 12px) / 3); min-width: 0;
+    padding: 7px 4px; box-sizing: border-box;
+    border: 1px solid rgba(143, 47, 47, 0.15); border-radius: 999px;
+    background: rgba(255, 253, 248, 0.82); color: rgba(37, 33, 28, 0.58);
+    font: 500 10.5px/1.35 var(--font); text-align: center; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pill.active { border-color: rgba(143, 47, 47, 0.48); background: var(--gm-primary); color: #fffaf0; box-shadow: 0 4px 8px rgba(143, 47, 47, 0.16); }
+
+  /* ---------- section scaffolding ---------- */
+  .section { padding: 21px 15px 0; }
+  .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .section-title { margin: 0; font-size: 17px; font-weight: 700; color: var(--gm-text); }
+  .section-note { color: var(--gm-muted2); font-size: 10px; }
+
+  /* ---------- quick access ---------- */
+  .quick-grid { display: flex; flex-wrap: wrap; margin: -3px; }
+  .quick-card {
+    width: calc(33.333% - 6px); min-height: 81px; margin: 3px;
+    padding: 14px 7px; box-sizing: border-box;
+    border: 1px solid var(--gm-border); border-radius: 7px;
+    background: var(--gm-card); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; font-family: var(--font);
+  }
+  .quick-card:active { transform: translateY(1px); }
+  .quick-icon { color: var(--gm-primary); display: flex; align-items: center; justify-content: center; }
+  .quick-icon svg { width: 22px; height: 22px; display: block; }
+  .quick-label { margin-top: 11px; color: var(--gm-text); font-size: 12.5px; font-weight: 700; }
+
+  .fav-meta { flex: none; color: var(--gm-muted2); font-size: 11px; white-space: nowrap; }
+
+  /* ---------- masonry feed (today's hot + practical guides) ---------- */
+  .masonry { column-count: 2; column-gap: 10px; }
+  .masonry > * { break-inside: avoid; margin: 0 0 10px; }
+
+  .mc { border: 1px solid var(--gm-border); border-radius: 7px; background: var(--gm-card); overflow: hidden; }
+  .mc-img { display: block; width: 100%; background: var(--gm-bg); }
+  .mc-body { padding: 10px 12px 12px; }
+  .mc-title { font-size: 13px; font-weight: 700; line-height: 1.38; color: var(--gm-text-soft); word-break: break-word; }
+  .mc-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 7px; }
+  .mc-cat { flex: 1; min-width: 0; color: var(--gm-primary); font-size: 10.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mc-src { margin-top: 5px; color: var(--gm-muted2); font-size: 10px; }
+  .mc-summary { margin-top: 5px; color: rgba(37, 33, 28, 0.58); font-size: 11.5px; line-height: 1.5; }
+  .mc-quote { background: var(--poster-bg, #fff8f0); padding: 16px 14px 14px; }
+  .mc-quote-close { padding-bottom: 8px; }
+  .quote-mark { font-size: 54px; line-height: 0.72; color: rgba(37, 33, 28, 0.14); font-weight: 400; }
+  .quote-open { display: block; margin: 0 0 8px -7px; }
+  .quote-close { display: block; text-align: right; margin: 16px -5px 0 0; }
+  .quote-text { display: block; font-size: 15px; font-weight: 700; line-height: 1.42; color: var(--gm-text); word-break: break-word; }
+
+  /* ---------- favorite (★/☆, GO MOVIE uses stars not bookmarks) ---------- */
+  .fav {
+    flex: none; display: inline-flex; align-items: center; gap: 3px;
+    background: none; border: none; cursor: pointer; padding: 0;
+    color: var(--gm-muted2); font: 400 12px var(--font); line-height: 1;
+  }
+  .fav-star { font-size: 13px; }
+  .fav.saved { color: var(--gm-primary); }
+  .fav.saved .fav-star { color: var(--gm-primary); }
+  .fav-count { font-size: 10px; }
+
+  /* availability pill (merch masonry) */
+  .limit { flex: none; padding: 2px 6px; border: 1px solid rgba(59, 130, 88, 0.16); border-radius: 999px; background: rgba(59, 130, 88, 0.1); color: var(--gm-good); font-size: 8.5px; }
+  .limit.limited { border-color: rgba(143, 47, 47, 0.18); background: rgba(143, 47, 47, 0.1); color: var(--gm-primary); }
+
+  /* ---------- guide cards use the masonry .mc text-card language ---------- */
+
+  /* ---------- film card (wide cinematic, GO MOVIE film-info style) ---------- */
+  .film-list { display: flex; flex-direction: column; gap: 10px; }
+  .film-card {
+    position: relative; overflow: hidden; min-height: 170px;
+    border: 1px solid var(--gm-border); border-radius: 7px;
+    background: var(--gm-card); box-shadow: 0 3px 8px rgba(37, 33, 28, 0.045);
+  }
+  .card-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: translateX(18%); }
+  .card-overlay { position: absolute; inset: 0; z-index: 1; background: linear-gradient(90deg, rgba(255,253,248,1) 0%, rgba(255,253,248,1) 25%, rgba(255,253,248,0.97) 30%, rgba(255,253,248,0.92) 35%, rgba(255,253,248,0.84) 40%, rgba(255,253,248,0.73) 45%, rgba(255,253,248,0.60) 50%, rgba(255,253,248,0.47) 55%, rgba(255,253,248,0.34) 60%, rgba(255,253,248,0.23) 65%, rgba(255,253,248,0.14) 70%, rgba(255,253,248,0.07) 75%, rgba(255,253,248,0.02) 80%, rgba(255,253,248,0) 85%); }
+  .card-body { position: relative; z-index: 2; display: flex; align-items: flex-start; min-height: 170px; }
+  .card-info { flex: 1; min-width: 0; padding: 14px 12px; }
+  .card-title { font-size: 15px; font-weight: 700; line-height: 1.4; color: var(--gm-text); }
+  .card-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 7px; }
+  .card-tag { padding: 2px 8px; border: 1px solid rgba(168, 134, 82, 0.28); border-radius: 999px; background: rgba(168, 134, 82, 0.08); color: #765d39; font-size: 9px; white-space: nowrap; }
+  .card-tag.tag--low { color: var(--gm-primary); border-color: rgba(143, 47, 47, 0.3); background: rgba(143, 47, 47, 0.08); }
+  .card-tag.tag--sold { color: rgba(37, 33, 28, 0.5); }
+  .card-tag.tag--ok { color: var(--gm-good); border-color: rgba(59, 130, 88, 0.3); background: rgba(59, 130, 88, 0.08); }
+  .card-meta { margin-top: 4px; color: rgba(37, 33, 28, 0.52); font-size: 10.5px; line-height: 1.5; }
+  .card-line { display: flex; align-items: center; margin-top: 5px; font-size: 11px; color: rgba(37, 33, 28, 0.68); line-height: 1.5; }
+  .card-label { flex: none; width: 48px; color: rgba(37, 33, 28, 0.42); font-size: 10px; }
+  .card-value { min-width: 0; flex: 1; overflow-wrap: break-word; word-break: break-all; }
+  .rating-row { align-items: center; }
+  .rating-content { display: flex; align-items: center; min-width: 0; white-space: nowrap; }
+  .rating-score { color: var(--gm-primary); font-weight: 600; font-size: 14px; line-height: 1; }
+  .rating-count { color: rgba(37, 33, 28, 0.52); font-size: 11px; line-height: 1; }
+  .card-fav { position: absolute; top: 8px; right: 10px; z-index: 3; padding: 4px 6px; color: rgba(37, 33, 28, 0.32); font-size: 14px; line-height: 1; background: none; border: none; cursor: pointer; }
+  .card-fav .fav-star { font-size: 14px; }
+  .card-fav.saved { color: var(--gm-primary); }
+
+  /* ---------- cinema cards ---------- */
+  .cinema-list { display: flex; flex-direction: column; gap: 10px; }
+  .cinema-card { border: 1px solid var(--gm-border); border-radius: 7px; background: var(--gm-card); box-shadow: 0 3px 8px rgba(37, 33, 28, 0.045); padding: 12px 14px; }
+  .cinema-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .cinema-card h3 { margin: 0; font-size: 15.5px; font-weight: 700; }
+  .cinema-addr { font-size: 11px; color: var(--gm-muted2); margin-top: 3px; }
+  .cinema-tips { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--gm-border-ink); }
+  .cinema-tips li { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--gm-border-ink); font-size: 12px; line-height: 1.45; }
+  .cinema-tips li:last-child { border-bottom: none; }
+  .cinema-tips span { flex: none; width: 34px; font-size: 9px; letter-spacing: 1px; font-weight: 700; color: var(--gm-gold); padding-top: 1px; }
+  .cinema-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--gm-text); font-style: italic; }
+
+  /* ---------- filters (category tabs, GO MOVIE style) ---------- */
+  .cat-tabs { display: flex; gap: 0; border-bottom: 1px solid rgba(37, 33, 28, 0.1); background: var(--gm-card); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .cat-tabs::-webkit-scrollbar { display: none; }
+  .cat-tab {
+    position: relative; padding: 11px 10px; color: rgba(37, 33, 28, 0.5);
+    font-size: 11.5px; cursor: pointer; white-space: nowrap; border: none; background: none; font-family: var(--font);
+  }
+  .cat-tab.active { color: var(--gm-primary); font-weight: 700; }
+  .cat-tab.active::after { position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; background: var(--gm-primary); content: ''; }
+
+  /* ---------- saved view (2-col masonry, reuses .masonry + .mc) ---------- */
+  .saved-count { padding: 12px 15px 0; color: var(--gm-muted2); font-size: 10.5px; }
+  .saved-masonry { padding: 14px 15px 0; column-count: 2; column-gap: 10px; }
+  .saved-masonry > .mc { margin: 0 0 10px; }
+  .saved-empty { margin: 16px 15px; padding: 22px 16px; border: 1px solid var(--gm-border); border-radius: 7px; text-align: center; color: var(--gm-muted2); font-size: 12px; line-height: 1.7; }
+  /* compact saved card footer shares .mc-body but shows a type tag */
+  .mc-type { color: var(--gm-primary); font-size: 10px; font-weight: 600; }
+
+  /* ---------- profile view ---------- */
+  .profile-card { border: 1px solid var(--gm-border); border-radius: 7px; background: var(--gm-card); padding: 14px; margin: 0 15px; }
+  .profile-name { font-size: 17px; font-weight: 700; }
+  .profile-role { font-size: 11px; color: var(--gm-muted2); margin-top: 2px; }
+  .profile-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .profile-meta .m { border: 1px solid var(--gm-border-ink); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+  .profile-meta .m .k { font-size: 8.5px; letter-spacing: 1px; color: var(--gm-gold); font-weight: 700; }
+  .profile-meta .m .v { font-size: 11.5px; color: var(--gm-text); margin-top: 3px; line-height: 1.4; }
+  .profile-preferences { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+  .profile-preferences .chip { font-size: 10.5px; color: var(--gm-muted2); border: 1px solid rgba(168, 134, 82, 0.28); background: rgba(168, 134, 82, 0.08); padding: 3px 8px; border-radius: 999px; }
+  .settings { margin: 14px 15px 0; border: 1px solid var(--gm-border); border-radius: 7px; background: var(--gm-card); overflow: hidden; }
+  .settings .row {
+    display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 12px 16px;
+    border: none; border-bottom: 1px solid var(--gm-border-ink);
+    background: none; width: 100%; text-align: left; font-family: var(--font); cursor: pointer;
+  }
+  .settings .row:last-child { border-bottom: none; }
+  .settings .row:active { background: #f7f2e8; }
+  .settings .row .txt { flex: 1; min-width: 0; }
+  .settings .row .lab { font-size: 13.5px; font-weight: 600; color: var(--gm-text); }
+  .settings .row .hint { font-size: 10.5px; color: var(--gm-muted2); margin-top: 1px; }
+  .settings .row .arrow { color: rgba(143, 47, 47, 0.78); font-size: 20px; flex: none; }
+  .switch { width: 44px; height: 26px; border-radius: 999px; background: var(--gm-border-ink); position: relative; border: none; cursor: pointer; padding: 0; flex: none; }
+  .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: left .15s; }
+  .switch.on { background: var(--gm-primary); }
+  .switch.on::after { left: 21px; }
+
+  /* ---------- footer ---------- */
+  .home-footer { padding: 25px 0 6px; color: rgba(37, 33, 28, 0.4); font-size: 9px; line-height: 1.8; text-align: center; }
+  .footer-rule { width: 24px; height: 1px; margin: 0 auto 9px; background: var(--gm-primary); }
+
+  /* ---------- tab bar ---------- */
+  .tabbar {
+    flex: none; display: flex; height: 58px; align-items: center;
+    border-top: 1px solid rgba(93, 74, 50, 0.1);
+    background: rgba(255, 253, 248, 0.98);
+    box-shadow: 0 -3px 9px rgba(70, 48, 28, 0.08);
+  }
+  .tab {
+    flex: 1; min-width: 0; height: 58px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px;
+    border: none; background: none; cursor: pointer; padding: 0;
+    color: #7b746a; font: 400 10px/1 var(--font);
+  }
+  .tab svg { width: 21px; height: 21px; }
+  .tab .star-ico { font-size: 21px; line-height: 1; }
+  .tab.active { color: var(--gm-primary); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="device" data-od-id="frame">
+    <div class="screen">
+
+      <!-- status bar -->
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="right">
+          <svg width="17" height="12" viewBox="0 0 17 12" fill="none"><path d="M1 11.5h2M5 9.5h2M9 7h2M13 4.5h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><path d="M1.5 4a10 10 0 0 1 13 0M3.8 7a6.5 6.5 0 0 1 8.4 0M6.1 9.8a3.2 3.2 0 0 1 3.8 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="1" fill="currentColor"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="1" y="1" width="20" height="10" rx="2.5" stroke="currentColor" stroke-width="1.2"/><rect x="2.2" y="2.2" width="14" height="7.6" rx="1.4" fill="currentColor"/><path d="M22.5 4v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </span>
+      </div>
+
+      <div class="scroll" id="scroll">
+
+        <!-- ============ HOME ============ -->
+        <section class="app-view active" data-view="home" data-od-id="view-home">
+
+          <!-- hero (GO MOVIE dark hero) -->
+          <section class="hero" data-od-id="hero">
+            <img class="hero-bg" src="assets/festival-hero.webp" alt="港湾国际电影周主视觉" />
+            <div class="hero-mask"></div>
+            <div class="hero-top">
+              <span class="hero-brand">GO MOVIE｜影迷互助情报站</span>
+              <button class="hero-save" id="saveBtn" aria-label="我的收藏"><span class="fav-star">☆</span>收藏<span class="badge" id="saveCount">4</span></button>
+            </div>
+            <div class="hero-inner">
+              <div class="hero-left">
+                <span class="hero-badge">港湾国际电影周 · 进行中</span>
+                <h1 class="hero-title">港湾国际电影周</h1>
+                <div class="hero-subtitle">Harbor International Film Week</div>
+                <div class="hero-rule"><span class="hero-rule-line"></span><span class="hero-rule-copy">影迷互动 · 物料周边 · 影院指北 · 吃喝住娱 · 选片参考</span></div>
+              </div>
+              <div class="hero-right">
+                <div class="hero-date">2026.09.12</div>
+                <div class="hero-date">– 09.21</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- search -->
+          <div class="search-wrap">
+            <div class="search-box">
+              <span class="search-icon">⌕</span>
+              <input type="search" placeholder="搜索影片、物料、影院、攻略…" aria-label="搜索" />
+              <span class="search-clear">×</span>
+            </div>
+          </div>
+
+          <!-- scope / topic pills -->
+          <div class="scope-switch" role="tablist" aria-label="切换影展" data-od-id="topics">
+            <button class="pill active" role="tab" aria-selected="true">港湾国际电影周</button>
+            <button class="pill" role="tab" aria-selected="false">法国电影展</button>
+            <button class="pill" role="tab" aria-selected="false">加拿大电影展</button>
+            <button class="pill" role="tab" aria-selected="false">经典修复单元</button>
+            <button class="pill" role="tab" aria-selected="false">本月影展</button>
+          </div>
+
+          <!-- quick access (3 entries, GO MOVIE non-SIFF scope) -->
+          <section class="section" data-od-id="quick">
+            <div class="section-heading"><div class="section-title">快速查阅</div></div>
+            <div class="quick-grid">
+              <button class="quick-card" data-scroll-to="home-merch" aria-label="物料周边"><span class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="M4 7l8 4 8-4"/><path d="M12 11v10"/></svg></span><span class="quick-label">物料周边</span></button>
+              <button class="quick-card" data-view-target="cinemas" aria-label="影院指北"><span class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20l4-4 4 4"/></svg></span><span class="quick-label">影院指北</span></button>
+              <button class="quick-card" data-scroll-to="home-guides" aria-label="吃喝住娱"><span class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/><path d="M17 11h2.5a2 2 0 0 1 0 4H17"/></svg></span><span class="quick-label">吃喝住娱</span></button>
+            </div>
+          </section>
+
+          <!-- today's hot (two-column masonry, image + text cards) -->
+          <section class="section" data-od-id="hot">
+            <div class="section-heading"><div class="section-title">今日热门</div><button class="pill" style="flex:none;width:auto;padding:5px 12px;">订阅物料更新</button></div>
+            <div class="masonry">
+              <article class="mc">
+                <div class="mc-quote" style="--poster-bg:#f3e6dc;"><span class="quote-mark quote-open" aria-hidden="true">“</span><span class="quote-text">提前 25 分钟到场，18:00 后安检慢</span></div>
+                <div class="mc-body">
+                  <div class="mc-meta"><span class="mc-cat">影院提醒</span><span class="fav-meta">☆ 21</span></div>
+                  <div class="mc-src">影迷投稿 · 2 小时前</div>
+                </div>
+              </article>
+              <article class="mc">
+                <img class="mc-img" src="assets/merch-salt-line-tote.webp" alt="《盐线》票根" />
+                <div class="mc-body">
+                  <div class="mc-title">《盐线》散场票根，限量 40 张</div>
+                  <div class="mc-meta"><span class="mc-cat">物料周边</span><span class="fav-meta">☆ 46</span></div>
+                  <div class="mc-src">港湾票根群</div>
+                </div>
+              </article>
+              <article class="mc">
+                <div class="mc-quote" style="--poster-bg:#e2e6eb;"><span class="quote-mark quote-open" aria-hidden="true">“</span><span class="quote-text">今晚《水房》放映故障，周六免费重映</span></div>
+                <div class="mc-body">
+                  <div class="mc-meta"><span class="mc-cat">避坑</span><span class="fav-meta">☆ 15</span></div>
+                  <div class="mc-src">北码头 2 号厅</div>
+                </div>
+              </article>
+              <article class="mc">
+                <img class="mc-img" src="assets/film-night-ferry.webp" alt="《夜航》海报" />
+                <div class="mc-body">
+                  <div class="mc-title">《夜航》4K 修复版两个场次售罄</div>
+                  <div class="mc-meta"><span class="mc-cat">影片推荐</span><span class="fav-meta">☆ 58</span></div>
+                  <div class="mc-src">经典修复单元</div>
+                </div>
+              </article>
+              <article class="mc">
+                <img class="mc-img" src="assets/film-winter-grain-wide.webp" alt="《冬麦》" />
+                <div class="mc-body">
+                  <div class="mc-title">别错过《冬麦》，本周声音设计最好的一场</div>
+                  <div class="mc-meta"><span class="mc-cat">影迷推荐</span><span class="fav-meta">☆ 32</span></div>
+                  <div class="mc-src">影迷社群</div>
+                </div>
+              </article>
+              <article class="mc">
+                <div class="mc-quote mc-quote-close" style="--poster-bg:#efe9d8;"><span class="quote-text">《铜时》导演映后谈改至周六 14:00</span><span class="quote-mark quote-close" aria-hidden="true">”</span></div>
+                <div class="mc-body">
+                  <div class="mc-meta"><span class="mc-cat">活动更新</span><span class="fav-meta">☆ 9</span></div>
+                  <div class="mc-src">主办方</div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- merch (two-column masonry, same image-card language as hot feed) -->
+          <section class="section" data-od-id="merch" id="home-merch">
+            <div class="section-heading"><div class="section-title">物料周边</div><div class="section-note">3 条信息</div></div>
+            <div class="masonry">
+              <article class="mc" data-save-key="merch-tote" data-save-type="merch">
+                <img class="mc-img" src="assets/merch-salt-line-tote.webp" alt="《盐线》帆布袋" style="aspect-ratio:4/3;" />
+                <div class="mc-body">
+                  <h3 class="mc-title">《盐线》帆布袋 · 散场后领取</h3>
+                  <div class="mc-meta"><span class="mc-cat">物料周边 · 自制票根</span><span class="limit">可领取</span><button class="fav saved" data-save="merch-tote" aria-pressed="true" aria-label="收藏"><span class="fav-star">★</span><span class="fav-count">24</span></button></div>
+                  <div class="mc-src">港湾票根群</div>
+                </div>
+              </article>
+              <article class="mc" data-save-key="merch-one-sheet" data-save-type="merch">
+                <img class="mc-img" src="assets/merch-night-ferry-poster.webp" alt="《夜航》重映海报" style="aspect-ratio:4/3;" />
+                <div class="mc-body">
+                  <h3 class="mc-title">《夜航》4K 重映单页海报</h3>
+                  <div class="mc-meta"><span class="mc-cat">物料周边 · 海报</span><span class="limit">可领取</span><button class="fav" data-save="merch-one-sheet" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span><span class="fav-count">18</span></button></div>
+                  <div class="mc-src">经典修复单元</div>
+                </div>
+              </article>
+              <article class="mc" data-save-key="merch-pins" data-save-type="merch">
+                <img class="mc-img" src="assets/merch-copper-hours-pins.webp" alt="《铜时》珐琅徽章" style="aspect-ratio:4/3;" />
+                <div class="mc-body">
+                  <h3 class="mc-title">《铜时》珐琅徽章三枚</h3>
+                  <div class="mc-meta"><span class="mc-cat">物料周边 · 特典</span><span class="limit limited">余量不多</span><button class="fav" data-save="merch-pins" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span><span class="fav-count">11</span></button></div>
+                  <div class="mc-src">北码头 2 号厅</div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- practical guides (masonry text cards, same language as Today's Hot) -->
+          <section class="section" data-od-id="guides" id="home-guides">
+            <div class="section-heading"><div class="section-title">实用攻略</div></div>
+            <div class="masonry">
+              <article class="mc" data-save-key="guide-rush" data-save-type="guide">
+                <div class="mc-quote" style="--poster-bg:#f3eee2;"><span class="quote-mark quote-open" aria-hidden="true">“</span><span class="quote-text">港湾影院 → 北码头<br>22 分钟</span></div>
+                <div class="mc-body">
+                  <div class="mc-meta"><span class="mc-cat">赶场</span><button class="fav saved" data-save="guide-rush" aria-pressed="true" aria-label="收藏"><span class="fav-star">★</span></button></div>
+                  <div class="mc-summary">步行 22 分钟或公交 8 分钟，场次间隔别少于 40 分钟。</div>
+                </div>
+              </article>
+              <article class="mc" data-save-key="guide-eat" data-save-type="guide">
+                <div class="mc-quote mc-quote-close" style="--poster-bg:#eef0e4;"><span class="quote-text">码头美食广场<br>15 分钟套餐 ¥28</span><span class="quote-mark quote-close" aria-hidden="true">”</span></div>
+                <div class="mc-body">
+                  <div class="mc-meta"><span class="mc-cat">吃喝</span><button class="fav" data-save="guide-eat" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
+                  <div class="mc-summary">比影院门口的队伍短，赶场前先去吃。</div>
+                </div>
+              </article>
+              <article class="mc" data-save-key="guide-queues" data-save-type="guide">
+                <div class="mc-quote" style="--poster-bg:#f1ece0;"><span class="quote-mark quote-open" aria-hidden="true">“</span><span class="quote-text">通票提前 10 分钟进场</span></div>
+                <div class="mc-body">
+                  <div class="mc-meta"><span class="mc-cat">排队</span><button class="fav" data-save="guide-queues" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
+                  <div class="mc-summary">无固定座位的场次，提前 20 分钟到更稳妥。</div>
+                </div>
+              </article>
+              <article class="mc" data-save-key="guide-etiquette" data-save-type="guide">
+                <div class="mc-quote mc-quote-close" style="--poster-bg:#ececf0;"><span class="quote-text">等到片尾字幕走完</span><span class="quote-mark quote-close" aria-hidden="true">”</span></div>
+                <div class="mc-body">
+                  <div class="mc-meta"><span class="mc-cat">观影礼仪</span><button class="fav" data-save="guide-etiquette" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
+                  <div class="mc-summary">本周有两部影片在字幕后有彩蛋。</div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <div class="home-footer"><div class="footer-rule"></div>港湾国际电影周 · 演示数据<br/>GO MOVIE｜影迷互助情报站 · 内容仅供参考</div>
+        </section>
+
+        <!-- ============ FILMS ============ -->
+        <section class="app-view" data-view="films" data-od-id="view-films">
+          <div class="page-head">
+            <div class="page-kicker">FESTIVAL PROGRAMME</div>
+            <h1 class="page-title">影片</h1>
+            <div class="page-subtitle">港湾国际电影周 · 选片参考与场次信息</div>
+          </div>
+
+          <div class="cat-tabs" role="tablist" aria-label="筛选影片">
+            <button class="cat-tab active" role="tab" aria-selected="true" data-filter="all">全部</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-filter="today">今天</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-filter="tomorrow">明天</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-filter="restored">修复</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-filter="sold">售罄</button>
+          </div>
+
+          <section class="section">
+            <div class="film-list">
+              <article class="film-card" data-save-key="film-salt-line" data-save-type="film" data-day="tomorrow" data-status="low" data-tag="french">
+                <img class="card-backdrop" src="assets/film-salt-line-wide.webp" alt="" />
+                <div class="card-overlay"></div>
+                <div class="card-body">
+                  <div class="card-info">
+                    <div class="card-title">《盐线》</div>
+                    <div class="card-tags"><span class="card-tag">高分</span><span class="card-tag">影迷推荐佳片</span><span class="card-tag tag--low">余票紧张</span></div>
+                    <div class="card-meta">The Salt Line · 2019 / 法国 / 104 分钟</div>
+                    <div class="card-line"><span class="card-label">导演</span><span class="card-value">Luc Moreau</span></div>
+                    <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">9.1</span><span class="rating-count"> / 2864人</span></span></div>
+                  </div>
+                  <button class="card-fav saved" data-save="film-salt-line" aria-pressed="true" aria-label="收藏"><span class="fav-star">★</span></button>
+                </div>
+              </article>
+
+              <article class="film-card" data-save-key="film-winter-grain" data-save-type="film" data-day="tomorrow" data-status="ok" data-tag="canadian">
+                <img class="card-backdrop" src="assets/film-winter-grain-wide.webp" alt="" />
+                <div class="card-overlay"></div>
+                <div class="card-body">
+                  <div class="card-info">
+                    <div class="card-title">《冬麦》</div>
+                    <div class="card-tags"><span class="card-tag">高分</span><span class="card-tag">声音</span><span class="card-tag tag--ok">在售</span></div>
+                    <div class="card-meta">Winter Grain · 2023 / 加拿大 / 118 分钟</div>
+                    <div class="card-line"><span class="card-label">导演</span><span class="card-value">Émile Toussaint</span></div>
+                    <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">9.3</span><span class="rating-count"> / 1542人</span></span></div>
+                  </div>
+                  <button class="card-fav saved" data-save="film-winter-grain" aria-pressed="true" aria-label="收藏"><span class="fav-star">★</span></button>
+                </div>
+              </article>
+
+              <article class="film-card" data-save-key="film-night-ferry" data-save-type="film" data-day="today" data-status="sold" data-tag="restored">
+                <img class="card-backdrop" src="assets/film-night-ferry-wide.webp" alt="" />
+                <div class="card-overlay"></div>
+                <div class="card-body">
+                  <div class="card-info">
+                    <div class="card-title">《夜航》</div>
+                    <div class="card-tags"><span class="card-tag">修复</span><span class="card-tag">经典</span><span class="card-tag tag--sold">已售罄</span></div>
+                    <div class="card-meta">Night Ferry · 1987 / 日本 / 96 分钟</div>
+                    <div class="card-line"><span class="card-label">导演</span><span class="card-value">Kenji Aoyama</span></div>
+                    <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">8.9</span><span class="rating-count"> / 3210人</span></span></div>
+                  </div>
+                  <button class="card-fav" data-save="film-night-ferry" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button>
+                </div>
+              </article>
+
+              <article class="film-card" data-save-key="film-copper-hours" data-save-type="film" data-day="tomorrow" data-status="ok" data-tag="">
+                <img class="card-backdrop" src="assets/film-copper-hours-wide.webp" alt="" />
+                <div class="card-overlay"></div>
+                <div class="card-body">
+                  <div class="card-info">
+                    <div class="card-title">《铜时》</div>
+                    <div class="card-tags"><span class="card-tag">剧情</span><span class="card-tag">劳工</span><span class="card-tag tag--ok">在售</span></div>
+                    <div class="card-meta">Copper Hours · 2022 / 智利 / 131 分钟</div>
+                    <div class="card-line"><span class="card-label">导演</span><span class="card-value">Inés Araya</span></div>
+                    <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">9.0</span><span class="rating-count"> / 987人</span></span></div>
+                  </div>
+                  <button class="card-fav" data-save="film-copper-hours" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button>
+                </div>
+              </article>
+
+              <article class="film-card" data-save-key="film-room-of-water" data-save-type="film" data-day="today" data-status="ok" data-tag="">
+                <img class="card-backdrop" src="assets/film-room-of-water-wide.webp" alt="" />
+                <div class="card-overlay"></div>
+                <div class="card-body">
+                  <div class="card-info">
+                    <div class="card-title">《水房》</div>
+                    <div class="card-tags"><span class="card-tag">剧情</span><span class="card-tag">室内</span><span class="card-tag tag--ok">在售</span></div>
+                    <div class="card-meta">A Room of Water · 2021 / 丹麦 / 89 分钟</div>
+                    <div class="card-line"><span class="card-label">导演</span><span class="card-value">Mikkel Brandt</span></div>
+                    <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">8.7</span><span class="rating-count"> / 1120人</span></span></div>
+                  </div>
+                  <button class="card-fav" data-save="film-room-of-water" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button>
+                </div>
+              </article>
+
+              <article class="film-card" data-save-key="film-last-projectionist" data-save-type="film" data-day="later" data-status="low" data-tag="">
+                <img class="card-backdrop" src="assets/film-last-projectionist-wide.webp" alt="" />
+                <div class="card-overlay"></div>
+                <div class="card-body">
+                  <div class="card-info">
+                    <div class="card-title">《最后的放映员》</div>
+                    <div class="card-tags"><span class="card-tag">纪录</span><span class="card-tag">35mm</span><span class="card-tag tag--low">余票紧张</span></div>
+                    <div class="card-meta">The Last Projectionist · 2020 / 爱尔兰 / 101 分钟</div>
+                    <div class="card-line"><span class="card-label">导演</span><span class="card-value">Niamh O'Rourke</span></div>
+                    <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">9.2</span><span class="rating-count"> / 765人</span></span></div>
+                  </div>
+                  <button class="card-fav" data-save="film-last-projectionist" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button>
+                </div>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============ CINEMAS ============ -->
+        <section class="app-view" data-view="cinemas" data-od-id="view-cinemas">
+          <div class="page-head">
+            <div class="page-kicker">CINEMA GUIDE</div>
+            <h1 class="page-title">影院指北</h1>
+            <div class="page-subtitle">交通、检票、座位，只有老影迷才知道的细节</div>
+          </div>
+
+          <section class="section">
+            <div class="cinema-list">
+              <article class="cinema-card" data-save-key="cinema-old-dock" data-save-type="cinema">
+                <div class="cinema-top"><h3>港湾影院</h3><button class="fav" data-save="cinema-old-dock" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
+                <div class="cinema-addr">港湾区码头路 12 号</div>
+                <ul class="cinema-tips">
+                  <li><span>影厅</span>3 个 · 1 号厅杜比全景声</li>
+                  <li><span>交通</span>地铁 4 号线 → 港湾门 · 步行 6 分钟</li>
+                  <li><span>检票</span>提前 25 分钟 · 18:00 后安检慢</li>
+                  <li><span>座位</span>3 号厅 1–4 座有柱子</li>
+                  <li><span>散场</span>走码头路侧门，别走大厅</li>
+                </ul>
+                <p class="cinema-note">「全区最好的画质；阳台酒吧 17:00 开门。」</p>
+              </article>
+
+              <article class="cinema-card" data-save-key="cinema-north-pier" data-save-type="cinema">
+                <div class="cinema-top"><h3>北码头 2 号厅</h3><button class="fav" data-save="cinema-north-pier" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
+                <div class="cinema-addr">北码头 88 号 · 仓库区</div>
+                <ul class="cinema-tips">
+                  <li><span>影厅</span>1 个 · 修复的装饰艺术厅</li>
+                  <li><span>交通</span>公交 18 / 44 路 → 北码头</li>
+                  <li><span>检票</span>好座位需提前 30 分钟排队</li>
+                  <li><span>座位</span>无固定座</li>
+                </ul>
+                <p class="cinema-note">「后排偏冷，带件外套。」</p>
+              </article>
+
+              <article class="cinema-card" data-save-key="cinema-harbour-arts" data-save-type="cinema">
+                <div class="cinema-top"><h3>港湾艺术中心</h3><button class="fav" data-save="cinema-harbour-arts" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
+                <div class="cinema-addr">港湾步道 3 号</div>
+                <ul class="cinema-tips">
+                  <li><span>影厅</span>2 个 · 主厅 480 座</li>
+                  <li><span>交通</span>有轨电车 2 线 → 步道 · 步行 3 分钟</li>
+                  <li><span>检票</span>提前 40 分钟开门 · 楼座无固定座</li>
+                  <li><span>座位</span>楼座 1–2 排太低 · 坐 3 排以后</li>
+                  <li><span>散场</span>后门直达电车站</li>
+                </ul>
+                <p class="cinema-note">「大热首映都在这；咖啡厅映后问答还开着。」</p>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============ SAVED ============ -->
+        <section class="app-view" data-view="saved" data-od-id="view-saved">
+          <div class="page-head">
+            <div class="page-kicker">MY FAVORITES</div>
+            <h1 class="page-title">我的收藏</h1>
+            <div class="page-subtitle">把赶场前最常看的内容放在这里</div>
+          </div>
+
+          <div class="saved-count" id="savedCountText">已收藏 4 条内容</div>
+          <div class="saved-empty is-hidden" id="savedEmpty">还没有收藏内容——看到有用的攻略、影院或物料，先收藏起来。</div>
+
+          <div class="saved-masonry masonry" id="savedMasonry" aria-label="收藏列表"></div>
+        </section>
+
+        <!-- ============ PROFILE ============ -->
+        <section class="app-view" data-view="profile" data-od-id="view-profile">
+          <div class="page-head">
+            <div class="page-kicker">GO MOVIE</div>
+            <h1 class="page-title">更多</h1>
+            <div class="page-subtitle">影展 TIPS、迷影现场与 GO MOVIE 内容入口</div>
+          </div>
+
+          <div style="height:14px;"></div>
+          <div class="profile-card">
+            <div class="profile-name">影迷常客</div>
+            <div class="profile-role">港湾区 · 全程通票</div>
+            <div class="profile-meta">
+              <div class="m"><div class="k">已收藏</div><div class="v" id="profileSavedCount">4 条内容</div></div>
+              <div class="m"><div class="k">影展</div><div class="v">港湾国际电影周</div></div>
+              <div class="m"><div class="k">常去影院</div><div class="v">港湾影院 · 北码头 2 号厅</div></div>
+              <div class="m"><div class="k">观影偏好</div><div class="v">修复经典 · 慢电影</div></div>
+            </div>
+            <div class="profile-preferences">
+              <span class="chip">法国电影</span>
+              <span class="chip">修复经典</span>
+              <span class="chip">35mm</span>
+              <span class="chip">杜比全景声</span>
+              <span class="chip">字幕场</span>
+            </div>
+          </div>
+
+          <div class="settings" aria-label="设置">
+            <button class="row" type="button"><span class="txt"><span class="lab">影展偏好</span><span class="hint">专题、语言、场次时间</span></span><span class="arrow">›</span></button>
+            <div class="row"><span class="txt"><span class="lab">通知</span><span class="hint">售罄提醒与排片变动</span></span><button class="switch on" role="switch" aria-checked="true" aria-label="切换通知"></button></div>
+            <button class="row" type="button"><span class="txt"><span class="lab">无障碍</span><span class="hint">字幕、口述影像</span></span><span class="arrow">›</span></button>
+            <button class="row" type="button"><span class="txt"><span class="lab">关于 GO MOVIE</span><span class="hint">影迷互助情报站</span></span><span class="arrow">›</span></button>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- tab bar -->
+      <nav class="tabbar" aria-label="主导航" data-od-id="tabbar">
+        <button class="tab active" aria-current="page" data-view-target="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4.5" width="16" height="15" rx="3"/><path d="M7.5 9h9M7.5 13h9M7.5 17h5"/></svg><span>首页</span></button>
+        <button class="tab" data-view-target="films"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M7.5 5v14M12 5v14M16.5 5v14"/></svg><span>影片</span></button>
+        <button class="tab" data-view-target="cinemas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="7" width="17" height="10" rx="1.5"/><path d="M16 7v10" stroke-dasharray="2.2 2.4"/></svg><span>影院</span></button>
+        <button class="tab" data-view-target="saved" id="savedTab"><span class="star-ico">☆</span><span>收藏</span></button>
+        <button class="tab" data-view-target="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg><span>我的</span></button>
+      </nav>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var scroll = document.getElementById('scroll');
+      var views = document.querySelectorAll('.app-view');
+      var tabs = document.querySelectorAll('.tab');
+
+      /* ===== view switching ===== */
+      function activateView(name) {
+        views.forEach(function (v) {
+          v.classList.toggle('active', v.getAttribute('data-view') === name);
+        });
+        tabs.forEach(function (t) {
+          var on = t.getAttribute('data-view-target') === name;
+          t.classList.toggle('active', on);
+          if (on) { t.setAttribute('aria-current', 'page'); }
+          else { t.removeAttribute('aria-current'); }
+          var star = t.querySelector('.star-ico');
+          if (star) star.textContent = on ? '★' : '☆';
+        });
+        scroll.scrollTop = 0;
+      }
+
+      tabs.forEach(function (t) {
+        t.addEventListener('click', function () { activateView(t.getAttribute('data-view-target')); });
+      });
+
+      document.getElementById('saveBtn').addEventListener('click', function () { activateView('saved'); });
+
+      document.querySelectorAll('[data-view-target]').forEach(function (el) {
+        if (el.classList.contains('tab')) return;
+        el.addEventListener('click', function (e) {
+          if (el.tagName === 'A') e.preventDefault();
+          activateView(el.getAttribute('data-view-target'));
+        });
+      });
+
+      document.querySelectorAll('[data-scroll-to]').forEach(function (el) {
+        el.addEventListener('click', function () {
+          activateView('home');
+          var target = document.getElementById(el.getAttribute('data-scroll-to'));
+          if (!target) return;
+          var top = target.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop;
+          var smooth = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+          scroll.scrollTo({ top: top - 8, behavior: smooth });
+        });
+      });
+
+      /* ===== scope pills (home) ===== */
+      var scopePills = document.querySelectorAll('[data-view="home"] .scope-switch .pill');
+      scopePills.forEach(function (p) {
+        p.addEventListener('click', function () {
+          scopePills.forEach(function (x) { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
+          p.classList.add('active');
+          p.setAttribute('aria-selected', 'true');
+        });
+      });
+
+      /* ===== film filters (films view) ===== */
+      var filterTabs = document.querySelectorAll('[data-view="films"] .cat-tab');
+      var filmCards = document.querySelectorAll('[data-view="films"] .film-card');
+      filterTabs.forEach(function (p) {
+        p.addEventListener('click', function () {
+          filterTabs.forEach(function (x) { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
+          p.classList.add('active');
+          p.setAttribute('aria-selected', 'true');
+          var key = p.getAttribute('data-filter');
+          filmCards.forEach(function (c) {
+            var show =
+              key === 'all' ||
+              (key === 'today' && c.getAttribute('data-day') === 'today') ||
+              (key === 'tomorrow' && c.getAttribute('data-day') === 'tomorrow') ||
+              (key === 'restored' && c.getAttribute('data-tag') === 'restored') ||
+              (key === 'sold' && c.getAttribute('data-status') === 'sold');
+            c.classList.toggle('is-hidden', !show);
+          });
+        });
+      });
+
+      /* ===== favorite / save — full sync (★/☆) with compact Saved masonry ===== */
+      var SAVED = {};
+      document.querySelectorAll('[data-save-key]').forEach(function (card) {
+        var key = card.getAttribute('data-save-key');
+        if (!SAVED[key]) SAVED[key] = { type: card.getAttribute('data-save-type'), saved: false, buttons: [], canonical: null };
+        if (!SAVED[key].canonical) SAVED[key].canonical = card;
+      });
+
+      document.querySelectorAll('[data-save]').forEach(function (btn) {
+        var key = btn.getAttribute('data-save');
+        if (SAVED[key]) SAVED[key].buttons.push(btn);
+      });
+
+      Object.keys(SAVED).forEach(function (key) {
+        var entry = SAVED[key];
+        var canonicalBtn = entry.canonical.querySelector('[data-save]');
+        entry.saved = canonicalBtn && canonicalBtn.classList.contains('saved');
+      });
+
+      var savedMasonry = document.getElementById('savedMasonry');
+      var emptyState = document.getElementById('savedEmpty');
+      var saveCountEl = document.getElementById('saveCount');
+      var savedCountText = document.getElementById('savedCountText');
+      var profileCountEl = document.getElementById('profileSavedCount');
+
+      /* extract a compact card from the canonical card, by type */
+      function txt(node, sel) { var n = node && node.querySelector(sel); return n ? n.textContent.trim() : ''; }
+      function attr(node, sel, a) { var n = node && node.querySelector(sel); return n ? n.getAttribute(a) : ''; }
+
+      function createSavedCard(key, entry) {
+        var c = entry.canonical;
+        var art = document.createElement('article');
+        art.className = 'mc';
+        art.setAttribute('data-saved-clone', key);
+
+        if (entry.type === 'film') {
+          var img = attr(c, '.card-backdrop', 'src');
+          var title = txt(c, '.card-title');
+          var tags = Array.from(c.querySelectorAll('.card-tag')).map(function(t){return t.textContent;}).slice(0,2).join(' · ') || '影片推荐';
+          var score = txt(c, '.rating-score');
+          var meta = txt(c, '.card-meta');
+          art.innerHTML =
+            '<img class="mc-img" src="' + img + '" alt="' + title + '" style="aspect-ratio:3/2;" />' +
+            '<div class="mc-body">' +
+              '<h3 class="mc-title">' + title + '</h3>' +
+              '<div class="mc-meta"><span class="mc-cat mc-type">影片推荐</span>' + (score ? '<span class="fav-meta">影迷评分 ' + score + '</span>' : '') + '</div>' +
+              '<div class="mc-src">' + meta + '</div>' +
+            '</div>';
+        } else if (entry.type === 'merch') {
+          var mimg = attr(c, '.mc-img', 'src');
+          var mtitle = txt(c, '.mc-title');
+          var mcat = txt(c, '.mc-cat') || '物料周边';
+          var msrc = txt(c, '.mc-src');
+          var malt = attr(c, '.mc-img', 'alt');
+          art.innerHTML =
+            '<img class="mc-img" src="' + mimg + '" alt="' + malt + '" style="aspect-ratio:4/3;" />' +
+            '<div class="mc-body">' +
+              '<h3 class="mc-title">' + mtitle + '</h3>' +
+              '<div class="mc-meta"><span class="mc-cat">' + mcat + '</span></div>' +
+              '<div class="mc-src">' + msrc + '</div>' +
+            '</div>';
+        } else if (entry.type === 'cinema') {
+          var cname = txt(c, 'h3');
+          var caddr = txt(c, '.cinema-addr');
+          var tips = Array.from(c.querySelectorAll('.cinema-tips li')).map(function(li){
+            var lbl = li.querySelector('span') ? li.querySelector('span').textContent : '';
+            var val = li.textContent.replace(lbl, '').trim();
+            return lbl ? lbl + '：' + val : li.textContent;
+          });
+          var transportTip = tips.filter(function(t){return t.indexOf('交通')===0 || t.indexOf('检票')===0;}).slice(0,2).join(' · ');
+          var note = txt(c, '.cinema-note');
+          art.innerHTML =
+            '<div class="mc-body" style="min-height:90px;">' +
+              '<h3 class="mc-title">' + cname + '</h3>' +
+              '<div class="mc-meta"><span class="mc-cat mc-type">影院指北</span></div>' +
+              '<div class="mc-summary">' + caddr + (transportTip ? '<br>' + transportTip : '') + '</div>' +
+              (note ? '<div class="mc-src">' + note + '</div>' : '') +
+            '</div>';
+        } else if (entry.type === 'guide') {
+          // guide: reuse the same text-card component (clone the mc-quote + mc-body)
+          var qm = c.querySelector('.mc-quote');
+          if (qm) {
+            art.innerHTML = qm.outerHTML + c.querySelector('.mc-body').outerHTML;
+            // replace the fav button inside the clone so it stays in sync
+            var cloneBtn = art.querySelector('[data-save]');
+            if (cloneBtn) cloneBtn.outerHTML = '<span class="fav-meta">★</span>';
+          }
+        }
+        return art;
+      }
+
+      function renderSavedItems() {
+        savedMasonry.innerHTML = '';
+        Object.keys(SAVED).forEach(function (key) {
+          var entry = SAVED[key];
+          if (!entry.saved) return;
+          var card = createSavedCard(key, entry);
+          savedMasonry.appendChild(card);
+        });
+        renderCount();
+      }
+
+      function renderCount() {
+        var n = Object.keys(SAVED).filter(function (k) { return SAVED[k].saved; }).length;
+        saveCountEl.textContent = n;
+        savedCountText.textContent = '已收藏 ' + n + ' 条内容';
+        if (profileCountEl) profileCountEl.textContent = n + ' 条内容';
+        emptyState.classList.toggle('is-hidden', n > 0);
+        savedMasonry.style.display = n > 0 ? '' : 'none';
+      }
+
+      function setSaved(key, on) {
+        var entry = SAVED[key];
+        if (!entry) return;
+        entry.saved = on;
+        entry.buttons.forEach(function (b) {
+          b.classList.toggle('saved', on);
+          b.setAttribute('aria-pressed', String(on));
+          var star = b.querySelector('.fav-star');
+          if (star) star.textContent = on ? '★' : '☆';
+        });
+        renderSavedItems();
+      }
+
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-save]');
+        if (!btn) return;
+        var key = btn.getAttribute('data-save');
+        if (!SAVED[key]) return;
+        setSaved(key, !SAVED[key].saved);
+      });
+
+      renderSavedItems();
+
+      /* ===== notifications switch (profile) ===== */
+      var notifSwitch = document.querySelector('.switch');
+      if (notifSwitch) {
+        notifSwitch.addEventListener('click', function () {
+          var on = notifSwitch.classList.toggle('on');
+          notifSwitch.setAttribute('aria-checked', String(on));
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
