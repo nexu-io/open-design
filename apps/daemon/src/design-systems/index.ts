@@ -1033,6 +1033,17 @@ const DESIGN_SYSTEM_STATIC_SYSTEM_FILES = new Set([
   'system/artifacts/form.html',
 ]);
 
+/**
+ * Package-owned brand artifacts. A brand-extracted package (`od brand extract`)
+ * stores its kit next to DESIGN.md — `brand.json` plus the harvested `logos/`
+ * and `imagery/` files — and that package is the DURABLE copy: the scaffold
+ * project the extraction ran in is disposable and users delete it. Serving them
+ * lets a design-system view render its own logo/imagery without depending on
+ * that project still existing (the "No logo yet" panel on an extracted brand).
+ */
+const DESIGN_SYSTEM_BRAND_KIT_FILE = 'brand.json';
+const DESIGN_SYSTEM_BRAND_ASSET_DIRS = ['logos', 'imagery'];
+
 async function isAllowedDesignSystemStaticFile(
   brandRoot: string,
   manifest: DesignSystemProjectManifest | null,
@@ -1040,6 +1051,7 @@ async function isAllowedDesignSystemStaticFile(
 ): Promise<boolean> {
   if (!isSafeManifestPath(relativePath)) return false;
   if (DESIGN_SYSTEM_STATIC_SYSTEM_FILES.has(relativePath)) return true;
+  if (relativePath === DESIGN_SYSTEM_BRAND_KIT_FILE) return true;
 
   const allowed = new Set<string>();
   const add = (filePath: string | undefined): void => {
@@ -1059,6 +1071,12 @@ async function isAllowedDesignSystemStaticFile(
 
   if (manifest?.assetsDir === 'assets') {
     await addFilesUnderDeclaredDir(brandRoot, 'assets', allowed);
+  }
+
+  for (const dir of DESIGN_SYSTEM_BRAND_ASSET_DIRS) {
+    if (relativePath.startsWith(`${dir}/`)) {
+      await addFilesUnderDeclaredDir(brandRoot, dir, allowed);
+    }
   }
 
   return allowed.has(relativePath);
@@ -3444,12 +3462,53 @@ function firstHeading(raw: string): string | null {
   return /^#\s+(.+?)\s*$/m.exec(raw)?.[1]?.trim() ?? null;
 }
 
+/** Leading `---\n…\n---` block, when the document opens with YAML frontmatter. */
+const LEADING_FRONTMATTER = /^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
+
+/**
+ * Insert `heading` at the top of `body` — but never above leading frontmatter.
+ * YAML frontmatter only parses at byte 0, so a heading pushed above it turns the
+ * whole block into prose.
+ */
+function insertHeadingBelowFrontmatter(body: string, heading: string): string {
+  const frontmatter = LEADING_FRONTMATTER.exec(body)?.[0];
+  if (!frontmatter) return `${heading}\n\n${body}`;
+  const rest = body.slice(frontmatter.length).replace(/^(?:\r?\n)+/, '');
+  return `${frontmatter}\n${heading}\n\n${rest}`;
+}
+
+/**
+ * Repair a document whose frontmatter was pushed below a heading. Packages
+ * written before the guard above exist in the wild with `# Title` on line 1 and
+ * the `---` block under it — inert YAML that renders as identity prose. Only
+ * that exact shape is touched; anything else is returned untouched.
+ */
+function hoistLeadingFrontmatter(body: string): string {
+  const displaced = /^(#[ \t]+[^\n]*\r?\n(?:\r?\n)*)(---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$))/.exec(body);
+  if (!displaced) return body;
+  const heading = displaced[1] ?? '';
+  const frontmatter = displaced[2] ?? '';
+  if (!heading || !frontmatter) return body;
+  const rest = body.slice(displaced[0].length).replace(/^(?:\r?\n)+/, '');
+  return `${frontmatter}\n${heading.trimEnd()}\n\n${rest}`;
+}
+
 function withDesignSystemHeader(
-  body: string,
+  rawBody: string,
   input: { title: string; category: string; surface: DesignSystemSurface },
 ): string {
-  let next = body.replace(/^#\s+.*$/m, `# ${input.title}`);
-  if (next === body && !/^#\s+/.test(next)) next = `# ${input.title}\n\n${next}`;
+  const body = hoistLeadingFrontmatter(rawBody);
+  // An existing H1 IS the title line, so rewrite it in place. Decide that with a
+  // multiline test, not by comparing the string before/after the replace: when
+  // the new title already equals the current H1 the replace is a no-op, and the
+  // old `next === body` check misread that as "this body has no heading" and
+  // added a second one. That second H1 landed above the frontmatter (the `^#`
+  // guard was not multiline, so it only ever looked at byte 0), which stopped
+  // the frontmatter from parsing at all — the raw `--- name: … ---` block users
+  // saw rendered as identity prose after publishing an extracted brand.
+  let next = /^#[ \t]+/m.test(body)
+    ? body.replace(/^#[ \t]+.*$/m, `# ${input.title}`)
+    : insertHeadingBelowFrontmatter(body, `# ${input.title}`);
   next = upsertBlockquoteMeta(next, 'Category', input.category);
   next = upsertBlockquoteMeta(next, 'Surface', input.surface);
   return next.endsWith('\n') ? next : `${next}\n`;
@@ -3459,7 +3518,9 @@ function upsertBlockquoteMeta(body: string, key: string, value: string): string 
   const re = new RegExp(`^>\\s*${key}:\\s*.*$`, 'im');
   if (re.test(body)) return body.replace(re, `> ${key}: ${value}`);
   const h1 = /^#\s+.*$/m.exec(body);
-  if (!h1) return `> ${key}: ${value}\n\n${body}`;
+  // Same frontmatter rule as insertHeadingBelowFrontmatter: never prepend above
+  // a leading `---` block, or the frontmatter stops parsing.
+  if (!h1) return insertHeadingBelowFrontmatter(body, `> ${key}: ${value}`);
   const insertAt = h1.index + h1[0].length;
   return `${body.slice(0, insertAt)}\n> ${key}: ${value}${body.slice(insertAt)}`;
 }

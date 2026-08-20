@@ -353,6 +353,13 @@ interface BrandKitOptions {
   /** The system/ artifacts only exist once a brand is finalized; gate the kit
    *  iframe + asset tiles so an in-flight brand does not point at 404s. */
   ready?: boolean;
+  /**
+   * Resolve a brand-relative asset path (`logos/mark.svg`) to a URL. Defaults to
+   * the scaffold project's raw-file route; the design-system package passes its
+   * own static route so an extracted brand keeps its logo/imagery after that
+   * disposable project is gone.
+   */
+  assetUrl?: (relativePath: string) => string | null;
 }
 
 /** Build a kit from a finalized Brand (brand.json). Assets resolve against the
@@ -361,10 +368,12 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
   const { projectId } = opts;
   const ready = opts.ready !== false;
   const showSystem = ready && Boolean(projectId);
-  const asset = (rel: string): string | null =>
-    projectId
+  const asset = (rel: string): string | null => {
+    if (opts.assetUrl) return opts.assetUrl(rel);
+    return projectId
       ? withCacheBust(projectRawUrl(projectId, rel, opts.workspaceContext), opts.reloadKey)
       : null;
+  };
   const host = opts.host || hostnameOf(brand.sourceUrl || '');
   const imagery: KitImagery | undefined = brand.imagery
     ? {
@@ -731,9 +740,46 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         workspaceContext,
       });
 
+    // A brand-extracted design system keeps its own copy of the kit
+    // (`brand.json` + `logos/` + `imagery/`) inside the package. That copy is
+    // the durable one: the scaffold project the extraction ran in is disposable
+    // and may be deleted, at which point the project fetch below returns
+    // nothing. Read the package as a fallback so the logo/imagery keep
+    // rendering instead of collapsing to "No logo yet".
+    const packageAssetUrl = designSystemId
+      ? (rel: string): string => designSystemStaticUrl(designSystemId, rel, workspaceContext)
+      : null;
+    const fetchPackageBrand = async (): Promise<string | null> => {
+      if (!packageAssetUrl) return null;
+      try {
+        const res = await fetch(packageAssetUrl('brand.json'), { cache: 'no-store' });
+        return res.ok ? await res.text() : null;
+      } catch {
+        return null;
+      }
+    };
+    const kitFromPackageBrand = (raw: string | null): DesignKit | null => {
+      const parsed = tryParseBrand(raw);
+      if (!parsed || !packageAssetUrl) return null;
+      return brandToKit(parsed, {
+        designSystemId,
+        editable,
+        host,
+        showcaseHtml,
+        workspaceContext,
+        assetUrl: packageAssetUrl,
+        ...(projectId ? { projectId } : {}),
+      });
+    };
+
     if (!projectId) {
-      setKit(fromDesignMd(body));
-      setLoading(false);
+      setLoading(true);
+      void (async () => {
+        const packageKit = kitFromPackageBrand(await fetchPackageBrand());
+        if (cancelled) return;
+        setKit(packageKit ?? fromDesignMd(body));
+        setLoading(false);
+      })();
       return () => {
         cancelled = true;
       };
@@ -781,11 +827,27 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
           workspaceContext,
         }));
       } else {
-        setKit(mergeLegacyBrandLogo(
-          fromDesignMd(rawDesignMd ?? ''),
-          tryParseLegacyBrandLogo(rawBrand),
-          { projectId, reloadKey, workspaceContext },
-        ));
+        // No usable brand.json in the project (deleted, or never had one) — try
+        // the package's own copy before falling back to DESIGN.md prose.
+        const packageKit = kitFromPackageBrand(await fetchPackageBrand());
+        if (cancelled) return;
+        setKit(packageKit
+          ? mergeBrandKitWithDesignMd(packageKit, rawDesignMd ?? '', {
+              designSystemId,
+              projectId,
+              editable,
+              title,
+              host,
+              swatches,
+              packageInfo,
+              showcaseHtml,
+              workspaceContext,
+            })
+          : mergeLegacyBrandLogo(
+              fromDesignMd(rawDesignMd ?? ''),
+              tryParseLegacyBrandLogo(rawBrand),
+              { projectId, reloadKey, workspaceContext },
+            ));
       }
       setLoading(false);
     })();

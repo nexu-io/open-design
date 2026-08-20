@@ -637,6 +637,39 @@ export function extractInlineHeaderSvg(html: string): string | null {
     : svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
 }
 
+/** Longest brand token in a hostname: "www.stripe.com" -> "stripe". */
+function hostBrandToken(rawUrl: string): string {
+  try {
+    const host = new URL(rawUrl).hostname.replace(/^www\./i, "");
+    return (host.split(".")[0] ?? "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Best-effort brand name out of a page title. Titles are usually
+ * "<Brand> <sep> <tagline>", so keep the leading segment when it reads like a
+ * name (short, and matching the hostname when the host gives us a hint).
+ * Anything ambiguous returns the title unchanged — a wrong split is worse than
+ * a long name.
+ */
+export function brandNameFromTitle(rawTitle: string, sourceUrl: string): string {
+  const title = (rawTitle ?? "").trim();
+  if (!title) return "";
+  const parts = title.split(/\s+[|\u2013\u2014\u00b7\u2022:-]\s+/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return title;
+  const lead = parts[0] ?? title;
+  const token = hostBrandToken(sourceUrl);
+  // The hostname agrees with the leading segment: that segment IS the brand.
+  if (token && lead.toLowerCase().replace(/[^a-z0-9]/g, "").includes(token)) return lead;
+  // No hostname signal: only trust a short lead followed by a longer tail,
+  // which is the shape of "Brand | some longer promise".
+  const tail = parts.slice(1).join(" ");
+  if (lead.length <= 24 && tail.length > lead.length) return lead;
+  return title;
+}
+
 function extractNavLinks(html: string, baseUrl: string): Array<{ label: string; url: string }> {
   const out: Array<{ label: string; url: string }> = [];
   const scope = /<nav[\s\S]{0,12000}?<\/nav>/i.exec(html)?.[0] ?? html.slice(0, 30000);
@@ -952,7 +985,15 @@ async function harvestFromHtml(
   const description = blocked
     ? ""
     : metaContent(html, "description") || metaContent(html, "og:description");
-  const siteName = blocked ? "" : metaContent(html, "og:site_name") || metaContent(html, "og:title");
+  // `og:site_name` is the real brand name; `og:title`/<title> are marketing
+  // lines ("Stripe | Financial Infrastructure to Grow Your Revenue"). Falling
+  // straight through to the title made THAT the brand/design-system name, so
+  // trim the tagline off the leading segment when we have to use one.
+  const siteName = blocked
+    ? ""
+    : metaContent(html, "og:site_name")
+      || metaContent(html, "application-name")
+      || brandNameFromTitle(metaContent(html, "og:title") || title, baseUrl);
   const headings = blocked
     ? []
     : [
