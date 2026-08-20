@@ -21,27 +21,7 @@ import type { SolutionPageKey } from '../solution-pages-i18n/types';
 
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_DISCUSSIONS = `${REPO}/discussions`;
-const DISCORD = 'https://discord.gg/mHAjSMV6gz';
-const FEISHU = 'https://od.kokiai.net/community/website';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
-
-const FEISHU_GROUP_QR = '/community/feishu-group-qr.png';
-
-type CommunityEntryCopy = {
-  /** Plain-text label in the header — no framing, no benefit list. */
-  cta: string;
-  /** Hover-card caption under the Feishu group QR (zh / zh-tw only). */
-  qrHint?: string;
-};
-
-// Simplified / Traditional Chinese visitors get the Feishu group (with a
-// hover QR card); every other locale gets Discord. Kept deliberately terse:
-// the entry is a single word beside the nav, not a campaign pill.
-function getCommunityEntryCopy(locale: LandingLocaleCode): CommunityEntryCopy {
-  if (locale === 'zh') return { cta: '飞书群', qrHint: '扫码加入 OpenDesign 飞书群' };
-  if (locale === 'zh-tw') return { cta: '飛書群', qrHint: '掃碼加入 OpenDesign 飛書群' };
-  return { cta: 'Discord' };
-}
 
 // OpenDesign Cloud endpoints for the header account module.
 // Production defaults; overridable at build time via PUBLIC_* env so a
@@ -201,8 +181,6 @@ export function Header({
   const href = (path: string) => localizedHref(path, locale);
   const homeBrandHref = brandHref === '/' ? href('/') : brandHref;
   const productMenuCopy = getHeaderProductMenuCopy(locale);
-  const usesFeishuCommunity = locale === 'zh' || locale === 'zh-tw';
-  const communityCopy = getCommunityEntryCopy(locale);
 
   return (
     <header className='nav' data-od-id='nav'>
@@ -537,54 +515,9 @@ export function Header({
               </ul>
             </li>
 
-            {/* Compact navigation keeps the community action inside the
-                hamburger panel so long localized labels cannot crowd the
-                fixed header row. The desktop counterpart stays in nav-side. */}
-            <li className='nav-community-mobile-entry'>
-              <a
-                className='nav-community-mobile-cta'
-                href={usesFeishuCommunity ? FEISHU : DISCORD}
-                {...ext}
-                data-community-cta
-                data-community-platform={usesFeishuCommunity ? 'feishu' : 'discord'}
-              >
-                {communityCopy.cta}
-              </a>
-            </li>
-
           </ul>
         </nav>
         <div className='nav-side'>
-          <div
-            className='nav-community-entry'
-            data-community-platform={usesFeishuCommunity ? 'feishu' : 'discord'}
-          >
-            <a
-              className='nav-community-cta'
-              href={usesFeishuCommunity ? FEISHU : DISCORD}
-              {...ext}
-              data-community-cta
-              data-community-platform={usesFeishuCommunity ? 'feishu' : 'discord'}
-            >
-              {communityCopy.cta}
-            </a>
-            {usesFeishuCommunity ? (
-              /* Hover / focus reveals the Feishu group QR so a desktop visitor
-                 can scan straight from the header without leaving the page. */
-              <div className='nav-community-qr-card' role='tooltip'>
-                <img
-                  className='nav-community-qr-img'
-                  src={FEISHU_GROUP_QR}
-                  alt={communityCopy.qrHint}
-                  width={168}
-                  height={168}
-                  loading='lazy'
-                  decoding='async'
-                />
-                <span className='nav-community-qr-hint'>{communityCopy.qrHint}</span>
-              </div>
-            ) : null}
-          </div>
           {/* GitHub star chip — quiet pill so Download stays the only
               strong CTA in the bar. [data-github-stars] is refreshed by the
               header enhancers (homepage inline script / header-enhancer). */}

@@ -1188,91 +1188,6 @@ a.nav-mega-col-head.is-active {
   top: calc(100% + var(--nav-flyout-gap, 12px));
   right: 0;
 }
-.nav-community-entry {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-.nav-community-mobile-entry {
-  display: none;
-}
-/* Plain text entry — reads like the other nav words, no pill / border. */
-.nav-community-cta {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 2px;
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  text-decoration: none;
-  white-space: nowrap;
-  flex-shrink: 0;
-  border-bottom: 1px solid transparent;
-  transition: color 160ms ease, border-color 160ms ease;
-}
-.nav-community-cta:hover,
-.nav-community-entry:focus-within .nav-community-cta {
-  color: var(--coral);
-  border-bottom-color: var(--coral);
-}
-.nav-community-cta:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 3px;
-}
-/* Feishu group QR — hidden until the entry is hovered / focused. A hover
-   bridge (::before) covers the gap so the cursor can travel down to the card. */
-.nav-community-qr-card {
-  position: absolute;
-  z-index: 60;
-  top: calc(100% + 10px);
-  left: 50%;
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  width: 196px;
-  padding: 14px 14px 12px;
-  border: 1px solid rgba(26, 26, 26, 0.11);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow:
-    0 8px 24px rgba(17, 17, 26, 0.08),
-    0 2px 5px rgba(17, 17, 26, 0.04);
-  color: var(--ink-soft);
-  font-family: var(--sans);
-  font-size: 11.5px;
-  font-weight: 500;
-  line-height: 1.35;
-  text-align: center;
-  opacity: 0;
-  visibility: hidden;
-  transform: translate(-50%, -4px);
-  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
-  pointer-events: none;
-}
-.nav-community-qr-card::before {
-  content: '';
-  position: absolute;
-  top: -12px;
-  left: 0;
-  right: 0;
-  height: 12px;
-}
-.nav-community-entry:hover .nav-community-qr-card,
-.nav-community-entry:focus-within .nav-community-qr-card {
-  opacity: 1;
-  visibility: visible;
-  transform: translate(-50%, 0);
-  pointer-events: auto;
-}
-.nav-community-qr-img {
-  display: block;
-  width: 168px;
-  height: 168px;
-  border-radius: 8px;
-}
 .nav-cta {
   display: inline-flex;
   align-items: center;
@@ -1892,12 +1807,99 @@ a.nav-mega-col-head.is-active {
   .hero-download-attention::after { animation: none; }
 }
 .hero-actions {
+  /* Sits above the video frame below so the community QR hover-card is not
+     clipped by the next sibling's stacking context (data-reveal transforms). */
+  position: relative;
+  z-index: 40;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 14px;
   margin-top: 42px; /* skill --spacing-42 (was 90px) */
   margin-bottom: 0;
+}
+/* Community entry beside the hero download CTA — outlined pill, same 64px
+   height as .hm-dl. zh / zh-tw hover / focus reveals the Feishu group QR. */
+.hero-community {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.hero-community-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 64px;
+  padding: 0 26px;
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1), border-color 0.18s, background 0.18s, box-shadow 0.25s;
+}
+.hero-community-cta:hover,
+.hero-community:focus-within .hero-community-cta {
+  transform: translateY(-3px);
+  border-color: rgba(26, 26, 26, 0.38);
+  background: #fff;
+  box-shadow: 0 16px 30px -16px #26262666;
+}
+.hero-community-cta:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.hero-community-icon { width: 20px; height: 20px; flex: 0 0 20px; color: #3370ff; }
+.hero-community-icon path:first-child {
+  fill: color-mix(in srgb, currentColor 10%, transparent);
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.hero-community-icon path:last-child { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.hero-community-icon-discord { color: #5865f2; }
+.hero-community-icon-discord path { fill: currentColor; stroke: none; }
+.hero-community-qr-card {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 12px);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 200px;
+  padding: 14px 14px 12px;
+  border: 1px solid rgba(26, 26, 26, 0.11);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(17, 17, 26, 0.1), 0 2px 5px rgba(17, 17, 26, 0.04);
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
+  pointer-events: none;
+}
+.hero-community-qr-card::before { content: ''; position: absolute; top: -14px; left: 0; right: 0; height: 14px; }
+.hero-community:hover .hero-community-qr-card,
+.hero-community:focus-within .hero-community-qr-card {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.hero-community-qr-img { display: block; width: 168px; height: 168px; border-radius: 8px; }
+@media (max-width: 640px) {
+  .hero-actions { flex-wrap: wrap; }
+  .hero-community-cta { height: 52px; padding: 0 20px; font-size: 14px; }
 }
 .hero-download-attention {
   position: relative;
@@ -5862,31 +5864,6 @@ footer .container {
   /* The persistent community entry moves out of the fixed bar and into the
      drawer. This keeps brand, hamburger, locale, and the remaining actions
      within one compact row even with long Russian/Ukrainian labels. */
-  .nav-side .nav-community-entry {
-    display: none;
-  }
-  .nav-links .nav-community-mobile-entry {
-    display: grid;
-    gap: 10px;
-    padding: 14px 0 18px;
-  }
-  .nav-links .nav-community-mobile-cta {
-    display: inline-flex;
-    align-items: center;
-    width: fit-content;
-    max-width: 100%;
-    padding: 6px 0;
-    color: var(--ink);
-    font-size: 15px;
-    font-weight: 600;
-    line-height: 1.3;
-    text-decoration: none;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  .nav-links .nav-community-mobile-cta:hover {
-    color: var(--coral);
-  }
   .nav-links a .num {
     position: static;
     margin-left: 6px;
