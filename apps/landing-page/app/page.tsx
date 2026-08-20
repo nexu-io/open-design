@@ -431,10 +431,18 @@ export default function Page({
   const usesFeishuCommunity = locale === 'zh' || locale === 'zh-tw';
   const communityCopy =
     locale === 'zh'
-      ? { cta: '加入飞书群', qrHint: '扫码加入 OpenDesign 飞书群' }
+      ? { cta: '加入飞书群', qrHint: '扫码加入 OpenDesign 飞书群', perk: '领 Credits' }
       : locale === 'zh-tw'
-        ? { cta: '加入飛書群', qrHint: '掃碼加入 OpenDesign 飛書群' }
-        : { cta: 'Join Discord', qrHint: '' };
+        ? { cta: '加入飛書群', qrHint: '掃碼加入 OpenDesign 飛書群', perk: '領 Credits' }
+        : { cta: 'Join Discord', qrHint: '', perk: 'Credits' };
+  // Core-trait chips between the headline and the CTAs. zh / zh-tw / en are
+  // hand-written; every other locale falls back to English.
+  const heroTags =
+    locale === 'zh'
+      ? ['开源 · Apache-2.0', 'BYOK 自带模型', '本地运行', '多人设计协作', '品牌设计系统', '21 款 Coding Agent']
+      : locale === 'zh-tw'
+        ? ['開源 · Apache-2.0', 'BYOK 自帶模型', '本地執行', '多人設計協作', '品牌設計系統', '21 款 Coding Agent']
+        : ['Open source · Apache-2.0', 'BYOK', 'Runs locally', 'Team collaboration', 'Brand design systems', '21 coding agents'];
   const heroVideoPoster = `https://i.ytimg.com/vi/${HERO_VIDEO_ID}/maxresdefault.jpg`;
 
   /**
@@ -572,6 +580,13 @@ export default function Page({
                   })}
                 </span>
               </h1>
+              <ul className='hero-tags' data-reveal aria-label='Core traits'>
+                {heroTags.map((tag) => (
+                  <li className='hero-tag' key={tag}>
+                    {tag}
+                  </li>
+                ))}
+              </ul>
               <div className='hero-actions' data-reveal>
                 {/* Platform-aware download: `enhanceDownloadCta` in the inline
                     script of pages/index.astro rewrites href to the matching
@@ -610,16 +625,21 @@ export default function Page({
                     data-community-platform={usesFeishuCommunity ? 'feishu' : 'discord'}
                   >
                     {usesFeishuCommunity ? (
-                      <svg className='hero-community-icon' viewBox='0 0 20 20' aria-hidden='true'>
-                        <path d='M4 4.75h12v8.5H9l-3.8 2.5v-2.5H4z' />
-                        <path d='M7 8h6M7 10.5h4' />
-                      </svg>
+                      <img
+                        className='hero-community-icon hero-community-icon-feishu'
+                        src='/launch-week/feishu-mark.png'
+                        alt=''
+                        width={24}
+                        height={19}
+                        decoding='async'
+                      />
                     ) : (
                       <svg className='hero-community-icon hero-community-icon-discord' viewBox='0 0 24 24' aria-hidden='true'>
                         <path d='M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.6 12.6 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127c-.598.349-1.22.645-1.873.891a.076.076 0 0 0-.04.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-5.177-.838-9.674-3.549-13.66a.06.06 0 0 0-.031-.028zM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z' />
                       </svg>
                     )}
                     {communityCopy.cta}
+                    <span className='hero-community-perk'>{communityCopy.perk}</span>
                   </a>
                   {usesFeishuCommunity ? (
                     <div className='hero-community-qr-card' role='tooltip'>

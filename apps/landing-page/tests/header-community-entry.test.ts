@@ -20,6 +20,8 @@ test('header action cluster carries icon-only community + X links, no text pill,
   const zh = render('zh');
   assert.match(zh, /class="nav-social-link"[^>]*href="https:\/\/od\.kokiai\.net\/community\/website"[^>]*aria-label="加入飞书群"/);
   assert.match(zh, /class="nav-community-qr-card"/);
+  assert.match(zh, /src="\/launch-week\/feishu-mark\.png"/);
+  assert.match(zh, /群内每周发放 Credits/);
   assert.match(zh, /src="\/community\/feishu-group-qr\.png"/);
   assert.match(zh, /aria-label="X"/);
   assert.doesNotMatch(zh, /locale-switch/);
@@ -29,7 +31,10 @@ test('header action cluster carries icon-only community + X links, no text pill,
 
   const en = render('en');
   assert.match(en, /class="nav-social-link"[^>]*href="https:\/\/discord\.gg\/[^"]+"[^>]*aria-label="Join Discord"/);
-  assert.doesNotMatch(en, /nav-community-qr-card/);
+  // Non-Chinese locales get the perk card without the Feishu QR image.
+  assert.match(en, /nav-community-qr-card/);
+  assert.doesNotMatch(en, /nav-community-qr-img/);
+  assert.match(en, /Weekly credit drops inside/);
 
   assert.doesNotMatch(headerSource, /benefits/);
   assert.match(stylesSource, /\.nav-community-entry:hover \.nav-community-qr-card/);

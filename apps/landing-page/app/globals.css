@@ -1211,14 +1211,43 @@ a.nav-mega-col-head.is-active {
 .nav-social-link:hover,
 .nav-social-item:focus-within .nav-social-link { color: var(--ink); transform: translateY(-1px); }
 .nav-social-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
-.nav-social-icon-feishu { color: #3370ff; }
-.nav-social-icon-feishu path:first-child {
-  fill: color-mix(in srgb, currentColor 10%, transparent);
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
+.nav-social-icon-feishu { display: block; width: 22px; height: auto; }
+/* "Credits inside" nudge: a small pulsing coral dot on the community icon. */
+.nav-social-badge {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--coral);
+  box-shadow: 0 0 0 2px #fff;
+  animation: nav-social-badge-pulse 2.2s ease-in-out infinite;
 }
-.nav-social-icon-feishu path:last-child { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.nav-social-item .nav-social-link { position: relative; }
+@keyframes nav-social-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px #fff, 0 0 0 0 color-mix(in srgb, var(--coral) 55%, transparent); }
+  60% { box-shadow: 0 0 0 2px #fff, 0 0 0 6px transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .nav-social-badge { animation: none; } }
+.nav-community-perk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--coral) 22%, #fff);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.nav-community-perk-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--coral);
+}
 /* Feishu group QR — hover / focus card under the icon. */
 .nav-community-qr-card {
   position: absolute;
@@ -1927,7 +1956,54 @@ a.nav-mega-col-head.is-active {
   stroke-linejoin: round;
 }
 .hero-community-icon path:last-child { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-.hero-community-icon-discord { color: #5865f2; }
+.hero-community-icon-feishu { width: 24px; height: auto; flex-basis: 24px; }
+.hero-community-perk {
+  margin-left: 2px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: #0d2601;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+/* Core-trait chips between the headline and the CTA row. */
+.hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px;
+  border: 1px solid rgba(26, 26, 26, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.hero-tag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--coral);
+}
+.hero-tags + .hero-actions { margin-top: 22px; }
+
 .hero-community-icon-discord path { fill: currentColor; stroke: none; }
 .hero-community-qr-card {
   position: absolute;
