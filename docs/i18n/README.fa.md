@@ -1,10 +1,10 @@
 <h1 align="center">OpenDesign: جایگزین متن‌باز Claude Design</h1>
 
-> ⚡ **[OpenDesign Cloud — سرویس رسمی مدل.](https://open-design.ai/zh/pricing/)** یک‌بار شارژ کنید تا از هر دو مدل agent و تصویر داخل OpenDesign استفاده کنید: GPT، Claude و DeepSeek برای agent‌ها؛ GPT Image 2.0، Seedream 5.0 Pro و Nano Banana 2.0 برای تصاویر.
+> ⚡ **[OpenDesign Cloud — سرویس رسمی مدل.](https://open-design.ai/zh/pricing/)** یک‌بار شارژ کنید تا از هر دو مدل agent و تصویر داخل OpenDesign استفاده کنید: GPT، Claude و DeepSeek برای agentها؛ GPT Image 2.0، Seedream 5.0 Pro و Nano Banana 2.0 برای تصاویر.
 >
 > 🚀 **[DeepSeek V4 Flash و V4 Pro اکنون در دسترس هستند.](https://open-design.ai/zh/pricing/)** هوش سطح بالا را در پروتوتایپ‌ها، دک‌ها، سیستم‌های طراحی و وظایف روزمره agent به کار بگیرید. اعضای OpenDesign می‌توانند هر دو مدل را برای دو هفته بدون محدودیت، مستقیماً در برنامه استفاده کنند.
 >
-> 🧩 **[DeepSeek Harness اکنون پشتیبانی می‌شود.](https://open-design.ai/zh/agents/deepseek-harness-design/)** `dsh` agent harness رسمی DeepSeek را به عنوان یک runtime بومی به OpenDesign متصل کنید، با تفکر ساختاریافته، فراخوانی ابزار، کشف مدل، لغو و ادامه جلسه. فایل‌های تولید شده در گردش کار OpenDesign برای پیش‌نمایش زنده و تحویل باقی می‌مانند.
+> 🧩 **[DeepSeek Harness اکنون پشتیبانی می‌شود.](https://open-design.ai/zh/agents/deepseek-harness-design/)** harness رسمی `dsh` agent از DeepSeek را به OpenDesign به‌عنوان یک runtime بومی متصل کنید، با تفکر ساختاریافته، فراخوانی ابزار، کشف مدل، لغو و ادامه جلسه. فایل‌های تولید شده در گردش کار OpenDesign برای پیش‌نمایش زنده و تحویل باقی می‌مانند.
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner — the headline &quot;The open-source Claude Design alternative&quot; over a classical scene of columns and robed figures on a digital-code backdrop, with stat cards for design systems, plugins, coding agents, and media providers" width="100%" />
@@ -32,18 +32,18 @@
 
 ## OpenDesign چیست
 
-🎨 **جایگزین متن‌باز Claude Design.** &nbsp;🖥️ **برنامه دسکتاپ بومی local-first برای macOS و Windows.** &nbsp;⚡ **مهارت‌های قابل ترکیب، سیستم‌های طراحی `DESIGN.md` در سطح برند و افزونه‌های آماده استفاده.** &nbsp;🖼️ تولید **پروتوتایپ‌های وب · دسکتاپ · موبایل**، **داشبوردها / artifact های زنده**، **دک‌ها**، **تصاویر**، **ویدیو**، به‌علاوه گرافیک‌های موشن **HyperFrames**. 🔒 پیش‌نمایش iframe محافظت‌شده · خروجی HTML / PDF / PPTX / MP4. &nbsp;🤖 **روی DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity و 26 فایل اجرایی CLI محلی مجزا اجرا می‌شود**، یا هر endpoint سازگار با OpenAI از طریق BYOK.
+🎨 **جایگزین متن‌باز Claude Design.** &nbsp;🖥️ **برنامه دسکتاپ بومی local-first برای macOS و Windows.** &nbsp;⚡ **مهارت‌های قابل ترکیب، سیستم‌های طراحی `DESIGN.md` در سطح برند و افزونه‌های آماده استفاده.** &nbsp;🖼️ تولید **پروتوتایپ‌های وب · دسکتاپ · موبایل**، **داشبوردها / artifactهای زنده**، **دک‌ها**، **تصاویر**، **ویدیو**، به‌علاوه گرافیک‌های موشن **HyperFrames**. 🔒 پیش‌نمایش iframe با sandbox · خروجی HTML / PDF / PPTX / MP4. &nbsp;🤖 **روی DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity و 26 فایل اجرایی CLI محلی مجزا اجرا می‌شود**، یا هر endpoint سازگار با OpenAI از طریق BYOK.
 
-OpenDesign چیزی است که وقتی حلقه **بومی-agent** که Anthropic با Claude Design ارائه داد — کشف خلاصه، قفل کردن جهت، جریان artifact، نقد، تحویل — دیگر بسته نباشد و تبدیل به **یک فایل‌سیستم از مهارت‌های کاربردی، الگوهای طراحی رندرینگ، سیستم‌های طراحی و افزونه‌ها** شود که agent های کدنویسی روی لپ‌تاپ شما می‌توانند بخوانند، بنویسند و ریمیکس کنند، به دست می‌آید. CLI شما به موتور طراحی تبدیل می‌شود، لپ‌تاپ شما به استودیو تبدیل می‌شود و `DESIGN.md` تیم شما به قرارداد برند تبدیل می‌شود.
+OpenDesign چیزی است که وقتی حلقه **بومی agent** که Anthropic با Claude Design ارائه داد — کشف خلاصه، قفل کردن جهت، جریان artifact، نقد، تحویل — دیگر بسته نباشد و تبدیل به **یک فایل‌سیستم از مهارت‌های کاربردی، الگوهای طراحی رندرینگ، سیستم‌های طراحی و افزونه‌ها** شود که agentهای کدنویسی روی لپ‌تاپ شما می‌توانند بخوانند، بنویسند و ریمیکس کنند، به دست می‌آید. CLI شما به موتور طراحی تبدیل می‌شود، لپ‌تاپ شما به استودیو تبدیل می‌شود و `DESIGN.md` تیم شما به قرارداد برند تبدیل می‌شود.
 
-همچنین **جایگزین Figma برای عصر agent** است — به جای فشار دادن پیکسل‌ها روی یک بوم، artifact های تک‌صفحه‌ای را با CSS واقعی، فونت‌های واقعی، کامپوننت‌های واقعی تحویل می‌دهد که مستقیماً به HTML / PDF / PPTX / MP4 خروجی می‌گیرند — قبلاً توسط سیستم طراحی شما شکل‌گرفته، قبلاً درون agent ای که هر روز استفاده می‌کنید قابل اجرا.
+همچنین **جایگزین Figma برای عصر agent** است — به جای فشار دادن پیکسل‌ها روی یک بوم، artifactهای تک‌صفحه‌ای را با CSS واقعی، فونت‌های واقعی، کامپوننت‌های واقعی تحویل می‌دهد که مستقیماً به HTML / PDF / PPTX / MP4 خروجی می‌گیرند — قبلاً توسط سیستم طراحی شما شکل‌گرفته، قبلاً درون agentای که هر روز استفاده می‌کنید قابل اجرا.
 
 
 ---
 
 ## تور محصول
 
-نگاهی سریع به گردش کار اصلی OpenDesign. از **صفحه اصلی** با یک خلاصه شروع کنید، مهارت‌های قابل استفاده مجدد را در **افزونه‌ها** کاوش کنید، و مراجع برند را به یک **سیستم طراحی** تبدیل کنید. سپس وارد **استودیو** یک پروژه شوید تا پروتوتایپ‌ها، دک‌ها، برنامه‌های موبایل، تصاویر، اسناد و HyperFrame ها را در یک مکان ایجاد و بهبود دهید.
+نگاهی سریع به گردش کار اصلی OpenDesign. از **صفحه اصلی** با یک خلاصه شروع کنید، مهارت‌های قابل استفاده مجدد را در **افزونه‌ها** کاوش کنید، و مراجع برند را به یک **سیستم طراحی** تبدیل کنید. سپس وارد **استودیو** یک پروژه شوید تا پروتوتایپ‌ها، دک‌ها، برنامه‌های موبایل، تصاویر، اسناد و HyperFrameها را در یک مکان ایجاد و بهبود دهید.
 
 ### صفحات اصلی
 
@@ -110,7 +110,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی-agent** که Anthro
 
 ## سازگاری پلتفرم
 
-> OpenDesign به دو روش به agent های کدنویسی جریان اصلی متصل می‌شود: **مهارت‌ها، CLI و MCP** برای agent هایی که OD را مصرف می‌کنند، به‌علاوه **آداپترهای runtime بومی** برای agent هایی که OD مستقیماً راه‌اندازی می‌کند. DeepSeek Harness یک runtime بومی درجه یک از طریق CLI رسمی `dsh` است، با streaming ساختاریافته، کشف مدل، لغو و ادامه جلسه.
+> OpenDesign به دو روش به agentهای کدنویسی جریان اصلی متصل می‌شود: **مهارت‌ها، CLI و MCP** برای agentهایی که OD را مصرف می‌کنند، به‌علاوه **آداپترهای runtime بومی** برای agentهایی که OD مستقیماً راه‌اندازی می‌کند. DeepSeek Harness یک runtime بومی درجه یک از طریق CLI رسمی `dsh` است، با streaming ساختاریافته، کشف مدل، لغو و ادامه جلسه.
 
 | agent / پلتفرم کدنویسی &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | وضعیت &nbsp;&nbsp; | تنظیم سریع &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -154,7 +154,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی-agent** که Anthro
 
 ### 1 · پروتوتایپ‌ها — وب · دسکتاپ · موبایل
 
-سطح خروجی پیش‌فرض. artifact های HTML تک‌صفحه‌ای که `DESIGN.md` شما را می‌خوانند و در یک iframe ایمن رندر می‌شوند.
+سطح خروجی پیش‌فرض. artifactهای HTML تک‌صفحه‌ای که `DESIGN.md` شما را می‌خوانند و در یک iframe ایمن رندر می‌شوند.
 
 <table>
 <tr>
@@ -169,9 +169,9 @@ OpenDesign چیزی است که وقتی حلقه **بومی-agent** که Anthro
 </tr>
 </table>
 
-### 2 · artifact ها و داشبوردهای زنده
+### 2 · artifactها و داشبوردهای زنده
 
-داشبوردهای زنده، اتاق‌های تصمیم، دیوارهای KPI — artifact های تک‌صفحه‌ای که داده را از طریق یک پنل تنظیمات دریافت می‌کنند و در محل قابل ویرایش باقی می‌مانند.
+داشبوردهای زنده، اتاق‌های تصمیم، دیوارهای KPI — artifactهای تک‌صفحه‌ای که داده را از طریق یک پنل تنظیمات دریافت می‌کنند و در محل قابل ویرایش باقی می‌مانند.
 
 <table>
 <tr>
@@ -227,7 +227,7 @@ OpenDesign چیزی است که وقتی حلقه **بومی-agent** که Anthro
 
 **93 پرامپت آماده تکرار** در [`prompt-templates/`](prompt-templates/) قرار دارند — تامبنیل‌های پیش‌نمایش، متن کامل پرامپت، مدل هدف، نسبت تصویر و انتساب منبع. یک کلیک یک خلاصه را در نویسنده رها می‌کند.
 
-### 5 · ویدیو و HyperFrame ها — گرافیک‌های موشن بومی agent
+### 5 · ویدیو و HyperFrames — گرافیک‌های موشن بومی agent
 
 **[HyperFrames][hyperframes]** فریم‌ورک ویدیوی متن‌باز و بومی agent HeyGen است که به عنوان یک شهروند درجه یک در OpenDesign ادغام شده است. agent HTML + CSS + GSAP می‌نویسد، و HyperFrames آن را به یک MP4 قطعی از طریق headless Chrome + FFmpeg رندر می‌کند. آن را با **Seedance 2.0** برای t2v / i2v سینمایی، **Veo 3 / Sora 2 / Kling 2** برای انواع مدل مسیریابی شده و **Suno v5 / Lyria 2** برای لایه صوتی جفت کنید.
 
@@ -254,12 +254,12 @@ OpenDesign چیزی است که وقتی حلقه **بومی-agent** که Anthro
 
 ## چرا OpenDesign
 
-> **در آوریل 2026، Anthropic از Claude Design رونمایی کرد — اولین باری که یک LLM از نوشتن متن دست کشید و شروع به تحویل مستقیم artifact های طراحی کرد.** وایرال شد. اما متن‌بسته، فقط پولی، فقط ابری باقی ماند، قفل شده به مدل Anthropic، مهارت‌های Anthropic، سطح Anthropic. بدون checkout، بدون self-host، بدون دپلوی Vercel، بدون جایگزینی با agent خودتان.
+> **در آوریل 2026، Anthropic از Claude Design رونمایی کرد — اولین باری که یک LLM از نوشتن متن دست کشید و شروع به تحویل مستقیم artifactهای طراحی کرد.** وایرال شد. اما متن‌بسته، فقط پولی، فقط ابری باقی ماند، قفل شده به مدل Anthropic، مهارت‌های Anthropic، سطح Anthropic. بدون checkout، بدون self-host، بدون دپلوی Vercel، بدون تعویض با agent خودتان.
 
 OpenDesign (OD) جایگزین متن‌باز است. همان حلقه، همان مدل ذهنی artifact-first، بدون هیچ قفلی:
 
 - 🤖 **بومی-agent، مستقل از مدل.** ما agent ارسال نمی‌کنیم. `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` که قبلاً روی `PATH` شما هستند، موتور طراحی هستند. با یک کلیک تعویض کنید.
-- 🧠 **به‌طور پیش‌فرض در سطح برند.** هر رندر `DESIGN.md` بسته فعال را به عنوان قرارداد اصلی برند می‌خواند. 151 بسته سیستم طراحی با repo ارسال می‌شوند؛ بسته‌های قدیمی ممکن است فقط `DESIGN.md` داشته باشند، در حالی که بسته‌های جدیدتر می‌توانند `manifest.json`، `tokens.css`، کامپوننت‌ها، دارایی‌ها و منشأ را اضافه کنند. یک پوشه بیاندازید، انتخابگر آن را پیدا می‌کند.
+- 🧠 **به‌طور پیش‌فرض در سطح برند.** هر رندر `DESIGN.md` بسته فعال را به‌عنوان قرارداد اصلی برند می‌خواند. 151 بسته سیستم طراحی با repo ارسال می‌شوند؛ بسته‌های قدیمی ممکن است فقط `DESIGN.md` داشته باشند، در حالی که بسته‌های جدیدتر می‌توانند `manifest.json`، `tokens.css`، کامپوننت‌ها، دارایی‌ها و منشأ را اضافه کنند. یک پوشه بیاندازید، انتخابگر آن را پیدا می‌کند.
 - 🖥️ **ابتدا محلی، BYOK در هر لایه.** برنامه‌های دسکتاپ بومی برای macOS (Apple Silicon + Intel) و Windows (x64). Linux AppImage در مسیر انتشار اختیاری. آنالیتیکس محصول و بازپخش جلسه تحت رضایت محافظت می‌شوند؛ تله‌متری پاک‌شده ایمنی و قابلیت اطمینان همیشه روشن است. قبل از توصیف مسیرهای داده daemon، مشارکت‌کنندگان و اپراتورها باید `AGENTS.md` → **قرارداد دایرکتوری داده Daemon** را بخوانند. این README نباید آن را دوباره بیان کند.
 - 🌍 **قابل ترکیب در چهار سطح.** **افزونه‌ها** گردش‌های کاری قابل اجرا را حمل می‌کنند · **مهارت‌های** کاربردی رفتار agent را حمل می‌کنند · **الگوهای طراحی** نقشه‌های رندرینگ را حمل می‌کنند · **سیستم‌های طراحی** برند را حمل می‌کنند. هر چهار از دایرکتوری‌های قابل حمل و نسخه‌بندی استفاده می‌کنند که هر کسی می‌تواند نویسنده و منتشر کند.
 - 🔁 **تازه‌سازی یک کدبیس موجود.** یک repo `git` + `DESIGN.md` را به agent بدهید و کامپوننت‌های واقعی شما را به مشخصات برند بازسازی می‌کند. افزونه‌های اختصاصی گردش‌های کاری Figma / Pencil را به کد React / Next.js / Vue منتقل می‌کنند.
@@ -372,8 +372,8 @@ Node `~24`، pnpm `10.33.x`. کاربران WSL2، [`docs/wsl-setup.md`](docs/ws
 1. **یک PM یک خلاصه ارسال می‌کند.** انتخابگر افزونه صفحه فرود · دک ارائه · داشبورد · پست اجتماعی · مشخصات PM · کارت امتیازی OKR را ارائه می‌دهد…
 2. **یک طراح (یا agent) جهت را قفل می‌کند.** برند ندارید؟ از 5 جهت منتخب انتخاب کنید. برند دارید؟ یک اسکرین‌شات / URL بیاندازید → agent به GitHub متصل می‌شود، Figma را وارد می‌کند و یک `DESIGN.md` قابل استفاده مجدد کدگذاری می‌کند.
 3. **agent اولین محصول را ایجاد می‌کند.** افزونه + مهارت کاربردی یا الگوی طراحی + `DESIGN.md` متصل هستند. اجراهای CLI پشتیبانی شده توسط فایل‌سیستم فایل‌های پروژه اصلی را می‌نویسند و پیش‌نمایش آنها را دنبال می‌کند؛ اجراهای BYOK/plain-API بدون ابزارهای فایل یک بلوک کامل `<artifact>` برمی‌گردانند.
-4. **تحویل به مهندسی.** artifact HTML/CSS واقعی است — آن را در Cursor، Codex یا Claude Code بیاندازید تا به عنوان کد به ساخت ادامه دهید. یا PPTX / PDF / MP4 را مستقیماً به بازاریابی خروجی بگیرید.
-5. **OpenDesign با استفاده از آن هوشمندتر می‌شود.** اسکرین‌شات‌ها، فونت‌ها، پالت‌ها و artifact های تأیید شده شما به عنوان پیش‌فرض برای جلسه بعدی جمع می‌شوند. کار مجدد کمتر، انحراف کمتر.
+4. **تحویل به مهندسی.** artifact HTML/CSS واقعی است — آن را در Cursor، Codex یا Claude Code بیاندازید تا به‌عنوان کد به ساخت ادامه دهید. یا PPTX / PDF / MP4 را مستقیماً به بازاریابی خروجی بگیرید.
+5. **OpenDesign با استفاده از آن هوشمندتر می‌شود.** اسکرین‌شات‌ها، فونت‌ها، پالت‌ها و artifactهای تأیید شده شما به‌عنوان پیش‌فرض برای جلسه بعدی جمع می‌شوند. کار مجدد کمتر، انحراف کمتر.
 
 ---
 
@@ -395,75 +395,75 @@ od skills list --json
 
 **چرا MCP؟** خروجی گرفتن و پیوست مجدد یک zip در هر تکرار جریان را می‌شکند. MCP منبع طراحی را مستقیماً در معرض دید قرار می‌دهد — agent همیشه فایل زنده را می‌بیند.
 
-**For an agent starting from scratch,** the installer places `~/.config/<agent>/open-design.json` (or the platform equivalent) plus a copy-paste MCP snippet. Cursor gets a one-click deeplink; Claude Code gets a `claude mcp add-json` one-liner; every other agent gets JSON in the schema its config expects. On macOS desktop installs, prefer that Settings snippet over typing bare `od mcp install <agent>` in Terminal, because `/usr/bin/od` may win on PATH. Full per-agent flow → **Settings → MCP server** in the desktop app, or [`docs/agent-adapters.md`](docs/agent-adapters.md).
+**برای یک agent که از صفر شروع می‌کند،** نصب‌کننده `~/.config/<agent>/open-design.json` (یا معادل پلتفرم) به‌علاوه یک قطعه MCP کپی-پیست قرار می‌دهد. Cursor یک deeplink یک‌کلیکی دریافت می‌کند؛ Claude Code یک one-liner `claude mcp add-json` دریافت می‌کند؛ هر agent دیگری JSON را در اسکیمایی که config آن انتظار دارد دریافت می‌کند. در نصب‌های دسکتاپ macOS، آن قطعه تنظیمات را به جای تایپ `od mcp install <agent>` خالی در Terminal ترجیح دهید، زیرا `/usr/bin/od` ممکن است در PATH برنده شود. جریان کامل هر agent → **تنظیمات → سرور MCP** در برنامه دسکتاپ، یا [`docs/agent-adapters.md`](docs/agent-adapters.md).
 
-**Security model.** Read-only by default, the daemon binds to `127.0.0.1`, and SSRF is blocked at the proxy edge. LAN exposure requires an explicit `OD_BIND_HOST` plus `OD_ALLOWED_ORIGINS`. Connector credentials and live-artifact preview routes stay loopback-only regardless.
+**مدل امنیتی.** به‌طور پیش‌فرض فقط خواندنی، daemon به `127.0.0.1` متصل می‌شود و SSRF در لبه پروکسی مسدود می‌شود. قرارگیری در معرض LAN نیاز به یک `OD_BIND_HOST` صریح به‌علاوه `OD_ALLOWED_ORIGINS` دارد. اعتبارنامه‌های کانکتور و مسیرهای پیش‌نمایش artifact زنده بدون توجه به آن فقط loopback باقی می‌مانند.
 
-**Internally-hosted model endpoints.** To prevent SSRF, the daemon blocks provider base URLs that resolve to private/internal address ranges (RFC1918, link-local, CGNAT, and cloud-metadata IPs) by default, surfacing `Internal IPs blocked`. If you run an internally-hosted gateway (e.g. LiteLLM or Ollama on a VPN-only `10.x`/`192.168.x` address), opt that host out with `OD_ALLOWED_INTERNAL_HOSTS=<host1>,<host2>,...` — a comma- or whitespace-separated list of bare hostnames or IPs (`10.0.0.5`, `litellm.internal.corp`; a `host:port` or full URL is accepted and reduced to its hostname; IPv6 must be bracketed, e.g. `[fd00::1]`). The allowlist is strict opt-in (empty by default), exact-host (no subdomain/substring matching), and applies **only** to provider endpoints you configure (connection test, model discovery, BYOK chat). It deliberately does **not** relax the guard on download URLs returned inside upstream responses, which stay blocked. A malformed entry — or CIDR notation, which is not supported — is dropped with a warning rather than silently trusted, so a typo never quietly widens (or fails to widen) the guard. Allowlisting a hostname trusts whatever it resolves to (like `OD_ALLOWED_ORIGINS`); allowlist the resolved IP instead if you want the DNS-resolved address re-checked.
+**endpointهای مدل میزبانی‌شده داخلی.** برای جلوگیری از SSRF، daemon به‌طور پیش‌فرض URLهای پایه ارائه‌دهنده که به محدوده‌های آدرس خصوصی/داخلی (RFC1918، link-local، CGNAT و IPهای cloud-metadata) حل می‌شوند را مسدود می‌کند، و `Internal IPs blocked` را نمایش می‌دهد. اگر یک دروازه میزبانی‌شده داخلی اجرا می‌کنید (مثلاً LiteLLM یا Ollama روی یک آدرس فقط VPN `10.x`/`192.168.x`)، آن میزبان را با `OD_ALLOWED_INTERNAL_HOSTS=<host1>,<host2>,...` خارج کنید — یک لیست جدا شده با کاما یا فضای خالی از hostnameهای خالی یا IPها (`10.0.0.5`، `litellm.internal.corp`؛ یک `host:port` یا URL کامل پذیرفته شده و به hostname خود کاهش می‌یابد؛ IPv6 باید بین براکت باشد، مثلاً `[fd00::1]`). allowlist ورود صریح سختگیرانه است (به‌طور پیش‌فرض خالی)، دقیقاً میزبان (بدون تطبیق subdomain/substring)، و **فقط** برای endpointهای ارائه‌دهنده‌ای که پیکربندی می‌کنید اعمال می‌شود (تست اتصال، کشف مدل، چت BYOK). عمداً محافظ را روی URLهای دانلودی که در پاسخ‌های upstream برگردانده می‌شوند شل **نمی‌کند**، که مسدود باقی می‌مانند. یک ورودی ناقص — یا نشانه‌گذاری CIDR که پشتیبانی نمی‌شود — با یک هشدار رها می‌شود به‌جای اینکه بی‌صدا مورد اعتماد قرار گیرد، بنابراین یک غلط‌تایپی هرگز به آرامی محافظ را گسترش نمی‌دهد (یا نمی‌تواند گسترش دهد). allowlist کردن یک hostname به هر چیزی که به آن حل می‌شود اعتماد می‌کند (مانند `OD_ALLOWED_ORIGINS`)؛ به‌جای آن IP حل شده را allowlist کنید اگر می‌خواهید آدرس حل شده DNS دوباره بررسی شود.
 
 ---
 
 ## مهارت‌ها و الگوهای طراحی
 
-**بیش از 100 مهارت کاربردی در [`skills/`](skills/) ارسال می‌شوند**. هر یک از قرارداد [`SKILL.md`][skill] Agent Skills پیروی می‌کند و رفتار، مراجع یا ابزارهای قابل استفاده مجدد agent را ارائه می‌دهد. Starter های قابل رندر به صورت جداگانه در [`design-templates/`](design-templates/) قرار دارند؛ آنها نیز ممکن است از `SKILL.md` استفاده کنند، اما کاتالوگ design-template را به جای رجیستری functional-skill پر می‌کنند.
+**بیش از 100 مهارت کاربردی در [`skills/`](skills/) ارسال می‌شوند**. هر یک از قرارداد [`SKILL.md`][skill] Agent Skills پیروی می‌کند و رفتار، مراجع یا ابزارهای قابل استفاده مجدد agent را ارائه می‌دهد. starterهای قابل رندر به‌صورت جداگانه در [`design-templates/`](design-templates/) قرار دارند؛ آنها نیز ممکن است از `SKILL.md` استفاده کنند، اما کاتالوگ الگوی طراحی را به‌جای رجیستری مهارت کاربردی پر می‌کنند.
 
-دو **حالت** کاتالوگ design-template را لنگر می‌زنند: `prototype` (artifact های تک‌صفحه‌ای وب/موبایل/دسکتاپ) و `deck` (ارائه‌های swipe افقی). الگوهای دیگر سطوح `image`، `video`، `audio` و utility را پوشش می‌دهند. فیلد **`scenario`** الگوها را بر اساس مخاطب گروه‌بندی می‌کند: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
+دو **حالت** کاتالوگ الگوی طراحی را لنگر می‌زنند: `prototype` (artifactهای تک‌صفحه‌ای وب/موبایل/دسکتاپ) و `deck` (ارائه‌های swipe افقی). الگوهای دیگر سطوح `image`، `video`، `audio` و utility را پوشش می‌دهند. فیلد **`scenario`** الگوها را بر اساس مخاطب گروه‌بندی می‌کند: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
-| Design template | Mode | Scenario | What it produces |
+| الگوی طراحی | حالت | سناریو | چه چیزی تولید می‌کند |
 |---|---|---|---|
-| [`web-prototype`](design-templates/web-prototype/) | prototype | design | Default landing page / hero |
-| [`saas-landing`](design-templates/saas-landing/) | prototype | marketing | Hero / features / pricing / CTA |
-| [`dashboard`](design-templates/dashboard/) | prototype | operation | Admin / analytics (with sidebar) |
-| [`mobile-app`](design-templates/mobile-app/) | prototype | design | iPhone 15 Pro / Pixel framed app |
-| [`mobile-onboarding`](design-templates/mobile-onboarding/) | prototype | design | Splash · value-prop · sign-in flow |
-| [`social-carousel`](design-templates/social-carousel/) | prototype | marketing | 3-card 1080×1080 carousel |
-| [`email-marketing`](design-templates/email-marketing/) | prototype | marketing | Table-fallback-safe brand email |
-| [`magazine-poster`](design-templates/magazine-poster/) | prototype | marketing | Single-page magazine layout |
-| [`motion-frames`](design-templates/motion-frames/) | prototype | marketing | Looping CSS motion hero |
-| [`sprite-animation`](design-templates/sprite-animation/) | prototype | marketing | 8-bit pixel animated explainer |
-| [`pm-spec`](design-templates/pm-spec/) | prototype | product | PM spec doc (with TOC + decision log) |
-| [`team-okrs`](design-templates/team-okrs/) | prototype | product | OKR scorecard |
-| [`eng-runbook`](design-templates/eng-runbook/) | prototype | engineering | Incident runbook |
-| [`finance-report`](design-templates/finance-report/) | prototype | finance | Exec finance summary |
-| [`hr-onboarding`](design-templates/hr-onboarding/) | prototype | hr | Role onboarding plan |
-| [`guizang-ppt`](design-templates/guizang-ppt/) | deck | marketing | Magazine-style web PPT (deck default) |
-| [`html-ppt-*`](design-templates/) | deck | marketing | 15 deck templates × 36 themes (master template in [`design-templates/html-ppt/`](design-templates/html-ppt/)) |
-| [`hyperframes`](design-templates/hyperframes/) | video | marketing | HTML → MP4 motion graphics (HeyGen OSS framework) |
-| [`critique`](design-templates/critique/) | utility | design | Five-dimensional self-critique scoresheet |
-| [`tweaks`](design-templates/tweaks/) | utility | design | AI-emitted tweaks-panel manifest |
+| [`web-prototype`](design-templates/web-prototype/) | prototype | design | صفحه فرود / hero پیش‌فرض |
+| [`saas-landing`](design-templates/saas-landing/) | prototype | marketing | Hero / ویژگی‌ها / قیمت‌گذاری / CTA |
+| [`dashboard`](design-templates/dashboard/) | prototype | operation | مدیریت / تحلیل (با sidebar) |
+| [`mobile-app`](design-templates/mobile-app/) | prototype | design | برنامه فریم شده iPhone 15 Pro / Pixel |
+| [`mobile-onboarding`](design-templates/mobile-onboarding/) | prototype | design | جریان Splash · value-prop · sign-in |
+| [`social-carousel`](design-templates/social-carousel/) | prototype | marketing | چرخ فلک 3 کارتی 1080×1080 |
+| [`email-marketing`](design-templates/email-marketing/) | prototype | marketing | ایمیل برند با فالبک جدول ایمن |
+| [`magazine-poster`](design-templates/magazine-poster/) | prototype | marketing | چینش مجله تک‌صفحه‌ای |
+| [`motion-frames`](design-templates/motion-frames/) | prototype | marketing | hero موشن CSS حلقه‌ای |
+| [`sprite-animation`](design-templates/sprite-animation/) | prototype | marketing | توضیح‌دهنده انیمیشن پیکسلی 8 بیتی |
+| [`pm-spec`](design-templates/pm-spec/) | prototype | product | سند مشخصات PM (با TOC + log تصمیم) |
+| [`team-okrs`](design-templates/team-okrs/) | prototype | product | کارت امتیازی OKR |
+| [`eng-runbook`](design-templates/eng-runbook/) | prototype | engineering | runbook حادثه |
+| [`finance-report`](design-templates/finance-report/) | prototype | finance | خلاصه مالی اجرایی |
+| [`hr-onboarding`](design-templates/hr-onboarding/) | prototype | hr | برنامه ورود به نقش |
+| [`guizang-ppt`](design-templates/guizang-ppt/) | deck | marketing | PPT وب به سبک مجله (پیش‌فرض دک) |
+| [`html-ppt-*`](design-templates/) | deck | marketing | 15 الگوی دک × 36 تم (الگوی اصلی در [`design-templates/html-ppt/`](design-templates/html-ppt/)) |
+| [`hyperframes`](design-templates/hyperframes/) | video | marketing | گرافیک‌موشن HTML → MP4 (فریم‌ورک OSS HeyGen) |
+| [`critique`](design-templates/critique/) | utility | design | برگه امتیاز خودنقدی پنج بعدی |
+| [`tweaks`](design-templates/tweaks/) | utility | design | manifest پنل تنظیمات منتشر شده توسط AI |
 
-Full protocol and directory split → [`docs/skills-protocol.md`](docs/skills-protocol.md). Registry endpoints: `GET /api/skills` for functional skills and `GET /api/design-templates` for rendering templates.
+پروتکل کامل و تقسیم دایرکتوری → [`docs/skills-protocol.md`](docs/skills-protocol.md). endpointهای رجیستری: `GET /api/skills` برای مهارت‌های کاربردی و `GET /api/design-templates` برای الگوهای رندرینگ.
 
 ---
 
-## Design Systems
+## سیستم‌های طراحی
 
-**151 brand-grade design-system packages centered on `DESIGN.md`** ship with the repo. Legacy packages may contain only that Markdown contract; newer packages can also carry `manifest.json`, compiled `tokens.css`, component fixtures, assets, and provenance evidence. The catalog mixes upstream-derived systems with project-owned additions; [`design-systems/README.md`](design-systems/README.md) records the package shape and provenance. Switch a system → the next render uses the new tokens.
+**151 بسته سیستم طراحی در سطح برند متمرکز بر `DESIGN.md`** با مخزن ارسال می‌شوند. بسته‌های قدیمی ممکن است فقط حاوی آن قرارداد Markdown باشند؛ بسته‌های جدیدتر همچنین می‌توانند `manifest.json`، `tokens.css` کامپایل شده، fixtureهای کامپوننت، داراییها و شواهد منشأ را حمل کنند. کاتالوگ سیستم‌های مشتق شده upstream را با افزودنی‌های متعلق به پروژه مخلوط می‌کند؛ [`design-systems/README.md`](design-systems/README.md) شکل بسته و منشأ را ثبت می‌کند. تعویض یک سیستم → رندر بعدی از توکن‌های جدید استفاده می‌کند.
 
 <details>
-<summary><b>Full catalog (click to expand)</b></summary>
+<summary><b>کاتالوگ کامل (کلیک کنید تا باز شود)</b></summary>
 
 **AI & LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**Developer Tools** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**ابزارهای توسعه‌دهنده** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
 
-**Productivity** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**بهره‌وری** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **Fintech** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
-**E-commerce** — `shopify` · `airbnb` · `uber` · `nike` · `starbucks` · `pinterest`
+**تجارت الکترونیک** — `shopify` · `airbnb` · `uber` · `nike` · `starbucks` · `pinterest`
 
-**Media** — `spotify` · `playstation` · `wired` · `theverge` · `meta`
+**رسانه** — `spotify` · `playstation` · `wired` · `theverge` · `meta`
 
-**Automotive** — `tesla` · `bmw` · `ferrari` · `lamborghini` · `bugatti` · `renault`
+**خودرو** — `tesla` · `bmw` · `ferrari` · `lamborghini` · `bugatti` · `renault`
 
-**Other** — `apple` · `ibm` · `nvidia` · `vodafone` · `resend` · `spacex`
+**سایر** — `apple` · `ibm` · `nvidia` · `vodafone` · `resend` · `spacex`
 
 **Starters** — `default` (Neutral Modern) · `warm-editorial`
 
 </details>
 
-Re-import the library via [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). Add your own brand → drop a `DESIGN.md` into `design-systems/<brand>/`. Full guide → [`design-systems/README.md`](design-systems/README.md).
+وارد کردن مجدد کتابخانه از طریق [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). اضافه کردن برند خودتان → یک `DESIGN.md` در `design-systems/<brand>/` بیاندازید. راهنمای کامل → [`design-systems/README.md`](design-systems/README.md).
 
 [acd2]: https://github.com/VoltAgent/awesome-design-md
 
@@ -471,7 +471,7 @@ Re-import the library via [`scripts/sync-design-systems.ts`](scripts/sync-design
 
 ## افزونه‌ها
 
-**277 افزونه رسمی به علاوه 183 مثال مرجع قابل ترکیب مجدد** در [`plugins/_official/`](plugins/_official/) قرار دارند. هر ورودی یک دایرکتوری افزونه قابل حمل است که توسط `open-design.json` به علاوه payload مورد نیاز نوع آن لنگر شده است: به عنوان مثال `SKILL.md` برای گردش‌های کاری agent، `template.json` برای الگوهای رسانه‌ای، یا `DESIGN.md` برای ورودی‌های سیستم طراحی. مستقیماً به یک دسته بپرید:
+**277 افزونه رسمی به‌علاوه 183 مثال مرجع قابل ترکیب مجدد** در [`plugins/_official/`](plugins/_official/) قرار دارند. هر ورودی یک دایرکتوری افزونه قابل حمل است که توسط `open-design.json` به‌علاوه payload مورد نیاز نوع آن لنگر شده است: به عنوان مثال `SKILL.md` برای گردش‌های کاری agent، `template.json` برای الگوهای رسانه‌ای، یا `DESIGN.md` برای ورودی‌های سیستم طراحی. مستقیماً به یک دسته بپرید:
 
 | دسته | تعداد | محتویات |
 |---|---|---|
