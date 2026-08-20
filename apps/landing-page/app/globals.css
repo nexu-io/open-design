@@ -617,7 +617,7 @@ body::before {
      edge stays pinned while the right pulls in — reads as a left-to-right
      collapse. */
   margin-inline: auto;
-  padding: 22px 0;
+  padding: 14px 0;
   background: transparent;
   border-bottom: 1px solid transparent;
   transition:
@@ -648,34 +648,33 @@ body::before {
  * vertical padding for the condensed feel.
  */
 .site-chrome.is-condensed .nav {
-  /* Detaches from the edges into a centered floating capsule: a gap from
-     the top, side margins, and fully rounded ends. 1280px (not 1080px) so
-     the longest translated nav rows (ja/ru/uk) still hold a single line —
-     the row must never wrap into a second line over the hero. */
-  margin: 14px auto 0;
-  width: min(1280px, calc(100% - 32px));
-  padding: 9px 0;
-  border-radius: 999px;
-  border: 1px solid rgba(21, 20, 15, 0.08);
-  background: hsl(0 0% 100% / 0.42);
-  -webkit-backdrop-filter: blur(12px) saturate(1.4);
-  backdrop-filter: blur(12px) saturate(1.4);
-  backdrop-filter: url(#nav-liquid-glass) blur(7px) saturate(1.4);
-  box-shadow:
-    inset 0 0 2px 1px rgba(255, 255, 255, 0.55),
-    inset 0 0 10px 4px rgba(255, 255, 255, 0.22),
-    0 6px 24px rgba(17, 17, 26, 0.06),
-    0 12px 40px rgba(17, 17, 26, 0.05);
+  /* Full-bleed, flush to the top, transparent ground: a soft backdrop blur
+     keeps the links legible over content, with a hairline bottom rule
+     instead of a floating capsule. */
+  margin: 0 auto;
+  width: 100%;
+  padding: 10px 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(21, 20, 15, 0.08);
+  background: hsl(0 0% 100% / 0.55);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow: none;
 }
 /* The inner gutter eases in lockstep with the capsule width. */
 .nav > .container {
+  /* Edge-to-edge bar: brand flush left, actions flush right, with a fixed
+     side gutter instead of the centred 1280px content column. */
+  max-width: none;
+  padding: 0 32px;
   transition: padding 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 /* Tighten the inner container padding inside the capsule (the full 64px
    container gutter would over-inset the brand / links / actions). */
 .site-chrome.is-condensed .nav > .container {
   max-width: none;
-  padding: 0 28px;
+  padding: 0 32px;
 }
 .nav-inner {
   display: flex;
@@ -1188,6 +1187,74 @@ a.nav-mega-col-head.is-active {
   top: calc(100% + var(--nav-flyout-gap, 12px));
   right: 0;
 }
+/* Icon-only social cluster (community + X) in the action area. */
+.nav-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.nav-social-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.nav-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--ink-mute, #8c8c8c);
+  transition: color 160ms ease, transform 160ms ease;
+}
+.nav-social-link:hover,
+.nav-social-item:focus-within .nav-social-link { color: var(--ink); transform: translateY(-1px); }
+.nav-social-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
+.nav-social-icon-feishu { color: #3370ff; }
+.nav-social-icon-feishu path:first-child {
+  fill: color-mix(in srgb, currentColor 10%, transparent);
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.nav-social-icon-feishu path:last-child { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+/* Feishu group QR — hover / focus card under the icon. */
+.nav-community-qr-card {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 12px);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 200px;
+  padding: 14px 14px 12px;
+  border: 1px solid rgba(26, 26, 26, 0.11);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(17, 17, 26, 0.1), 0 2px 5px rgba(17, 17, 26, 0.04);
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
+  pointer-events: none;
+}
+.nav-community-qr-card::before { content: ''; position: absolute; top: -14px; left: 0; right: 0; height: 14px; }
+.nav-community-entry:hover .nav-community-qr-card,
+.nav-community-entry:focus-within .nav-community-qr-card {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.nav-community-qr-img { display: block; width: 168px; height: 168px; border-radius: 8px; }
 .nav-cta {
   display: inline-flex;
   align-items: center;
@@ -1817,89 +1884,6 @@ a.nav-mega-col-head.is-active {
   gap: 14px;
   margin-top: 42px; /* skill --spacing-42 (was 90px) */
   margin-bottom: 0;
-}
-/* Community entry beside the hero download CTA — outlined pill, same 64px
-   height as .hm-dl. zh / zh-tw hover / focus reveals the Feishu group QR. */
-.hero-community {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-.hero-community-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  height: 64px;
-  padding: 0 26px;
-  border: 1px solid rgba(26, 26, 26, 0.18);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 16px;
-  font-weight: 650;
-  text-decoration: none;
-  white-space: nowrap;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1), border-color 0.18s, background 0.18s, box-shadow 0.25s;
-}
-.hero-community-cta:hover,
-.hero-community:focus-within .hero-community-cta {
-  transform: translateY(-3px);
-  border-color: rgba(26, 26, 26, 0.38);
-  background: #fff;
-  box-shadow: 0 16px 30px -16px #26262666;
-}
-.hero-community-cta:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-.hero-community-icon { width: 20px; height: 20px; flex: 0 0 20px; color: #3370ff; }
-.hero-community-icon path:first-child {
-  fill: color-mix(in srgb, currentColor 10%, transparent);
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-}
-.hero-community-icon path:last-child { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-.hero-community-icon-discord { color: #5865f2; }
-.hero-community-icon-discord path { fill: currentColor; stroke: none; }
-.hero-community-qr-card {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 12px);
-  left: 50%;
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  width: 200px;
-  padding: 14px 14px 12px;
-  border: 1px solid rgba(26, 26, 26, 0.11);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgba(17, 17, 26, 0.1), 0 2px 5px rgba(17, 17, 26, 0.04);
-  color: var(--ink-soft);
-  font-family: var(--sans);
-  font-size: 11.5px;
-  font-weight: 500;
-  line-height: 1.35;
-  text-align: center;
-  opacity: 0;
-  visibility: hidden;
-  transform: translate(-50%, -4px);
-  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
-  pointer-events: none;
-}
-.hero-community-qr-card::before { content: ''; position: absolute; top: -14px; left: 0; right: 0; height: 14px; }
-.hero-community:hover .hero-community-qr-card,
-.hero-community:focus-within .hero-community-qr-card {
-  opacity: 1;
-  visibility: visible;
-  transform: translate(-50%, 0);
-  pointer-events: auto;
-}
-.hero-community-qr-img { display: block; width: 168px; height: 168px; border-radius: 8px; }
-@media (max-width: 640px) {
-  .hero-actions { flex-wrap: wrap; }
-  .hero-community-cta { height: 52px; padding: 0 20px; font-size: 14px; }
 }
 .hero-download-attention {
   position: relative;
