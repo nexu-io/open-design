@@ -45,6 +45,7 @@ import type { SceneSpec, SolvedScene } from "./solve/types.js";
 import { validateShaderSpec } from "./shade/validate.js";
 import { packageUsdz } from "./usd/usdz.js";
 import { emitJavaModel } from "./mc/emit.js";
+import { importJavaModel } from "./mc/import-java.js";
 import { assembleShaderJob } from "./shade/emit.js";
 import { flipbookGrid, type CompiledShaderJob, type ShaderBinding } from "./shade/types.js";
 
@@ -140,6 +141,17 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       }
     }
   }
+  // An imported Minecraft model implies the minecraft target: it IS a voxel
+  // asset, so the voxel rules should judge it and the model should round-trip
+  // back out. An explicit scene3d.json still wins (it can tune grid / dialect /
+  // bounds), so this only fills the common case of a bare model dropped in.
+  if (
+    source.kind === "mc_model" &&
+    contract.target === undefined &&
+    contract.conventions?.minecraft === undefined
+  ) {
+    contract = { ...contract, target: "minecraft" };
+  }
   const normalized = normalizeContract(contract);
 
   /* ---- declarative spec (scene.json) ------------------------------ */
@@ -152,7 +164,91 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   let solved: SolvedScene | undefined;
   let specScript: string | undefined;
   let specLines: Record<string, number> = {};
-  if (source.kind === "spec") {
+  /* ---- Minecraft model import (.bbmodel / Java model.json) --------- */
+  /* Convert the model to a scene.json spec IN MEMORY, then run the normal
+     spec path: it is validated, solved, built, LINTED (the voxel rules judge
+     the import) and can be re-emitted. A copy of the derived spec is written
+     to .scene3d/imported.scene.json so the modeller can promote it to scene.json
+     and iterate — the migration story — without this compile mutating the
+     source directory. */
+  if (source.kind === "mc_model" && source.files.length > 0) {
+    const modelRel = source.files[0]!;
+    const modelAbs = path.join(request.projectDir, modelRel);
+    try {
+      const parsed = JSON.parse(fs.readFileSync(modelAbs, "utf8"));
+      const imported = importJavaModel(parsed, {
+        name: path.basename(modelRel).replace(/\.(bbmodel|json)$/i, ""),
+        resolveTexture: (ref) => {
+          const dir = path.dirname(modelAbs);
+          for (const cand of [
+            path.join(dir, `${ref}.png`),
+            path.join(dir, "textures", `${ref}.png`),
+            path.join(dir, "textures", "block", `${ref}.png`),
+          ]) {
+            try {
+              if (fs.existsSync(cand) && fs.statSync(cand).isFile()) return fs.readFileSync(cand);
+            } catch {
+              /* keep trying the next candidate */
+            }
+          }
+          return undefined;
+        },
+      });
+      for (const w of imported.warnings) {
+        issues.push({ code: ISSUE_CODES.IMPORT_DEGRADED, severity: "warning", message: `import: ${w}`, file: modelRel });
+      }
+      for (const sk of imported.skipped) {
+        issues.push({
+          code: ISSUE_CODES.IMPORT_DEGRADED,
+          severity: "warning",
+          message: `import skipped ${sk.element}: ${sk.reason}`,
+          hint: "scene.json reasons in axis-aligned boxes; a rotated element cannot be represented yet",
+          file: modelRel,
+        });
+      }
+      if (imported.spec) {
+        const rawText = JSON.stringify(imported.spec, null, 2);
+        const result = validateSceneSpec(imported.spec);
+        if (result.spec) {
+          spec = result.spec;
+          specLines = specDeclarationLines(rawText);
+          // An imported model IS a spec source from here on: it has a derived
+          // spec and (below) a generated build script exactly like scene.json.
+          // Downstream build/export logic keys on "spec"; the scene.json reader
+          // is guarded so it does not also fire for this already-built spec.
+          source.kind = "spec";
+          const genDir = path.join(request.projectDir, ".scene3d");
+          fs.mkdirSync(genDir, { recursive: true });
+          fs.writeFileSync(path.join(genDir, "imported.scene.json"), rawText + "\n", "utf8");
+          issues.push({
+            code: ISSUE_CODES.MODEL_IMPORTED,
+            severity: "info",
+            message: `imported ${modelRel}: ${imported.spec.parts.length} element(s) → a scene.json spec at .scene3d/imported.scene.json — copy it up to edit and iterate`,
+            file: modelRel,
+          });
+        } else {
+          for (const message of result.errors) {
+            issues.push({ code: ISSUE_CODES.SPEC_INVALID, severity: "error", message: `imported spec invalid: ${message}`, file: modelRel });
+          }
+        }
+      } else {
+        issues.push({
+          code: ISSUE_CODES.SPEC_INVALID,
+          severity: "error",
+          message: `could not import ${modelRel}: ${imported.warnings.join("; ") || "no importable elements"}`,
+          file: modelRel,
+        });
+      }
+    } catch (err) {
+      issues.push({
+        code: ISSUE_CODES.SPEC_INVALID,
+        severity: "error",
+        message: `${modelRel} is not valid JSON: ${(err as Error).message}`,
+        file: modelRel,
+      });
+    }
+  }
+  if (source.kind === "spec" && spec === undefined) {
     if (fs.existsSync(path.join(request.projectDir, "build.py"))) {
       issues.push({
         code: ISSUE_CODES.AMBIGUOUS_SOURCES,
@@ -189,6 +285,12 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         });
       }
     }
+  }
+
+  /* Solving and emitting a spec is source-agnostic: it runs for a scene.json
+     spec AND for an imported Minecraft model (whose spec was set above),
+     which is why it lives outside the scene.json reader block. */
+  {
     let missingAssets = false;
     if (spec) {
       // File-backed parts pull real assets into the build: they must exist

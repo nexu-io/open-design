@@ -120,6 +120,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
 
   /* info */
   'S3D-I-501': 'Stage skipped',
+  'S3D-I-502': 'Minecraft model imported',
 
   /* lint: 2D sheets */
   'S3D-E-601': 'Sheet file missing',

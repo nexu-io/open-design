@@ -39,6 +39,18 @@ export function discoverSources(projectDir: string): SceneSource {
   if (blend.length > 0) {
     return { kind: "blend", files: blend };
   }
+  // A Minecraft model dropped in to import and refine: a Blockbench
+  // `.bbmodel`, or a Java block-model `.json` (any `.json` that is not our
+  // own scene.json / scene3d.json and carries an `elements` array). Converted
+  // to a scene.json spec and run through the normal pipeline.
+  const bbmodel = files([".bbmodel"]);
+  const modelJson = files([".json"])
+    .filter((f) => f !== "scene.json" && f !== "scene3d.json")
+    .filter((f) => isJavaModelFile(path.join(projectDir, f)));
+  const mcModel = [...bbmodel, ...modelJson];
+  if (mcModel.length > 0) {
+    return { kind: "mc_model", files: [mcModel[0]!] };
+  }
   // Real assets dropped straight into a scene directory: a GLB from the
   // internet, an OBJ export from another tool. All of them import into one
   // Blender scene and face the same census, lint, proof, and export as an
@@ -48,6 +60,25 @@ export function discoverSources(projectDir: string): SceneSource {
     return { kind: "mesh", files: mesh };
   }
   return { kind: "usda", files: [] };
+}
+
+/**
+ * Whether a `.json` file is a Minecraft Java block model rather than some
+ * other JSON — it parses to an object with an `elements` array. Cheap and
+ * defensive: a parse error or a non-model shape is simply "not a model", never
+ * a throw, so an unrelated `.json` in a scene dir cannot break discovery.
+ */
+function isJavaModelFile(absPath: string): boolean {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(absPath, "utf8"));
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      Array.isArray((parsed as { elements?: unknown }).elements)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Absolute path of every source file that exists on disk. */

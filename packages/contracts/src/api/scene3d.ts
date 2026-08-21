@@ -22,8 +22,10 @@ export type Scene3dStageStatus = 'ran' | 'cached' | 'skipped';
 
 export type Scene3dSeverity = 'error' | 'warning' | 'info';
 
-/** How the scene is authored. One entry point per project. */
-export type Scene3dSourceKind = 'usda' | 'bpy' | 'blend' | 'spec' | 'mesh';
+/** How the scene is authored. One entry point per project. `mc_model` is a
+ *  dropped-in Minecraft model (Java `model.json` / Blockbench `.bbmodel`)
+ *  converted to a spec on import. */
+export type Scene3dSourceKind = 'usda' | 'bpy' | 'blend' | 'spec' | 'mesh' | 'mc_model';
 
 /**
  * What a compile produced, as a category rather than a file list.

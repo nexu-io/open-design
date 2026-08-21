@@ -279,6 +279,8 @@ export const ISSUE_CODES = {
 
   /* info */
   STAGE_SKIPPED: "S3D-I-501",
+  /* A Minecraft model was imported and converted to a scene.json spec. */
+  MODEL_IMPORTED: "S3D-I-502",
 } as const;
 
 export type IssueCode = (typeof ISSUE_CODES)[keyof typeof ISSUE_CODES];

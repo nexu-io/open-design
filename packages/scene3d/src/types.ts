@@ -21,7 +21,7 @@ export interface StageReport {
   durationMs: number;
 }
 
-export type SourceKind = "usda" | "bpy" | "blend" | "spec" | "mesh";
+export type SourceKind = "usda" | "bpy" | "blend" | "spec" | "mesh" | "mc_model";
 
 export interface SceneSource {
   kind: SourceKind;

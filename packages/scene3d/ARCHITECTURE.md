@@ -170,9 +170,30 @@ the reasoning); USD stays the master and the block model is a lowering of it.
   (`scene3d-assets.ts`, path-detected). Showcase fixture:
   `tests/fixtures/minecraft/golem` — a blocky biped, pixel-aligned, junctions
   overlapped 1px (how a modeller avoids in-game z-fighting), compiling clean and
-  lowering to a standing model. Follow-ups (not yet built): Bedrock export +
-  its rotation rules, `.bbmodel`/model-JSON import → spec, per-face atlas UVs,
-  rotated-element export.
+  lowering to a standing model.
+- **Import (`src/mc/import-java.ts`, the round trip closed).** A dropped-in
+  Java `model.json` or Blockbench `.bbmodel` is the `mc_model` source kind
+  (`discoverSources`: a `.bbmodel`, or any `.json` that is not scene/scene3d and
+  carries an `elements` array). The pipeline converts it to a scene.json spec
+  IN MEMORY — each cuboid element → a box part anchored by an `at` relation, the
+  frame map the exact inverse of the exporter's (`(X,Y,Z)_px → (X, −Z, Y)/16`) —
+  then runs the normal path, so the import is VALIDATED, built, LINTED (the
+  voxel rules judge it) and re-emitted. A copy of the derived spec is written to
+  `.scene3d/imported.scene.json` (the migration artifact: promote it to
+  scene.json and iterate) without the compile mutating the source dir. An
+  imported model implies the minecraft target unless a scene3d.json says
+  otherwise; a converted model sets `source.kind = "spec"` so the
+  source-agnostic solve/emit and build gates treat it uniformly (the solve/emit
+  block lives OUTSIDE the scene.json reader for exactly this reason). Faithful,
+  not lossy-silent: a ROTATED element has no axis-aligned scene.json form and is
+  SKIPPED with a reason (W-207), never imported at the wrong orientation.
+  Textures resolve to a flat base colour (a sibling PNG averaged in linear
+  space, or an embedded `.bbmodel` data URI; unresolved → a neutral
+  placeholder). `import(export(golem))` reproduces the elements exactly — the
+  exporter's strongest regression (`voxel-pipeline.test.ts`). Follow-ups (not
+  yet built): Bedrock export + its rotation rules, per-face atlas UVs,
+  rotated-element round-trip (needs static rotation in the scene.json language,
+  which the solver's AABB invariant does not yet carry).
 
 ## The material layer (viewer tweaks channel)
 

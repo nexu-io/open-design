@@ -79,6 +79,37 @@ describe.skipIf(!hasBlender)("voxel pipeline (real Blender)", () => {
     expect(result.ok).toBe(true);
   }, 400_000);
 
+  it("round-trips a model through import: export → import → export reproduces the geometry", async () => {
+    // The strongest exporter regression: lower the golem to model.json, then
+    // point a fresh compile at THAT model (mc_model source → scene.json spec →
+    // build → re-export). If the import and export coordinate maps are exact
+    // inverses, the re-emitted elements match the originals byte-for-byte.
+    const srcDir = workDir("minecraft/golem");
+    const a = await compile({ projectDir: srcDir, stages: ["parse", "build", "lint", "export"], timeoutMs: LONG, noCache: true });
+    const A = JSON.parse(fs.readFileSync(path.join(srcDir, a.exportedAssets.find((x) => x.endsWith("minecraft/model.json"))!), "utf8"));
+
+    const dst = path.join(__dirname, ".work", `vox-roundtrip-${++seq}`);
+    rmForSetup(dst);
+    fs.mkdirSync(path.join(dst, "textures"), { recursive: true });
+    fs.copyFileSync(path.join(srcDir, "out/minecraft/model.json"), path.join(dst, "model.json"));
+    for (const f of fs.readdirSync(path.join(srcDir, "out/minecraft/textures"))) {
+      fs.copyFileSync(path.join(srcDir, "out/minecraft/textures", f), path.join(dst, "textures", f));
+    }
+
+    const b = await compile({ projectDir: dst, stages: ["parse", "build", "lint", "export"], timeoutMs: LONG, noCache: true });
+    // The import was recognised (a minecraft model implies the target) and it
+    // built, linted clean, and re-exported.
+    expect(b.issues.some((i) => i.code === "S3D-I-502")).toBe(true);
+    expect(b.stages.find((s) => s.id === "build")!.status).toBe("ran");
+    expect(b.issues.filter((i) => /S3D-W-97\d/.test(i.code))).toEqual([]);
+    expect(fs.existsSync(path.join(dst, ".scene3d", "imported.scene.json"))).toBe(true);
+
+    const B = JSON.parse(fs.readFileSync(path.join(dst, "out/minecraft/model.json"), "utf8"));
+    const boxes = (m: { elements: Array<{ from: number[]; to: number[] }> }) =>
+      m.elements.map((e) => JSON.stringify([e.from, e.to])).sort();
+    expect(boxes(B)).toEqual(boxes(A));
+  }, 400_000);
+
   it("does NOT measure voxel facts without the minecraft target", async () => {
     // The same geometry under a neutral contract carries no voxel block — the
     // census is byte-identical to what every non-Minecraft scene has always got.
