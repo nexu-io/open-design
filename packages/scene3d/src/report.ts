@@ -1,5 +1,6 @@
 import { CompileResult, Issue, Severity } from "./types.js";
 import { formatImpact } from "./read/impact.js";
+import { assessVerdict, type Verdict } from "./verdict.js";
 
 /**
  * Render a compile result as the `<scene3d-report>` block that gets spliced
@@ -80,6 +81,12 @@ export function renderAgentReport(result: CompileResult): string {
     );
   }
 
+  // Synthesis header: the ranked "fix first" summary an agent reads before the
+  // full list. Pure curation over the same issues — most-actionable first,
+  // ranked by measured overrun then reach — so the model spends its next turn
+  // on what matters, not the first code it happens to see.
+  appendVerdict(lines, assessVerdict(result));
+
   appendSection(lines, "errors", result.issues, "error");
   appendSection(lines, "warnings", result.issues, "warning");
   if (infos > 0) appendSection(lines, "info", result.issues, "info");
@@ -131,6 +138,40 @@ function appendDelta(lines: string[], result: CompileResult): void {
   for (const line of formatImpact(impact, { maxLines: 20 }).split("\n")) {
     lines.push(`  ${line}`);
   }
+}
+
+/**
+ * The synthesis block: a graded verdict, the top few findings ranked by how
+ * badly they bust budget (then by reach), and honest headroom facts. It never
+ * invents a score — the grade is a one-sentence function of severities, and
+ * the ranking is measured. It sits ABOVE the full per-severity list, which is
+ * left exactly as it was.
+ */
+function appendVerdict(lines: string[], verdict: Verdict): void {
+  if (verdict.actions.length === 0 && verdict.grade === "pass") return;
+  lines.push("");
+  const dims = verdict.dimensions.map((d) => d.dimension).join(", ");
+  lines.push(`summary: ${verdict.grade}${dims ? ` — ${dims}` : ""}`);
+
+  const top = verdict.actions.slice(0, 3);
+  if (top.length > 0) {
+    lines.push("fix first:");
+    top.forEach((a, i) => {
+      const target = a.target ? ` [${a.target}]` : "";
+      const where = a.origin ? ` (${a.origin})` : "";
+      const more = a.count > 1 ? ` ×${a.count}` : "";
+      const over = a.overrun !== undefined ? ` — ${Number((a.overrun * 100).toFixed(0))}% over` : "";
+      lines.push(`  ${i + 1}. ${a.code}${target}${where}${more}${over} ${a.message}`);
+    });
+  }
+
+  const h = verdict.headroom;
+  const facts: string[] = [];
+  if (h.totalTriangles !== undefined) facts.push(`${h.totalTriangles.toLocaleString()} tris`);
+  if (h.totalTextureBytes !== undefined) {
+    facts.push(`${Number((h.totalTextureBytes / (1024 * 1024)).toFixed(1))} MiB textures`);
+  }
+  if (facts.length > 0) lines.push(`headroom: ${facts.join(" · ")}`);
 }
 
 function appendSection(

@@ -152,13 +152,16 @@ function sortIssues(issues: Issue[]): Issue[] {
 }
 
 function mkIssue(d: Descriptor, cx: JudgeCtx, fact: number, bound: number): Issue {
+  // A measured overrun (how far past the budget, as a fraction) lets the
+  // verdict rank "fix this first" by real magnitude, not just frequency.
+  const overrun = bound > 0 ? Number((fact / bound - 1).toFixed(3)) : undefined;
   return {
     code: d.code,
     severity: d.severity,
     message: d.message(cx, fact, bound),
     hint: d.hint(cx, fact, bound),
     target: cx.part.partId,
-    detail: d.detail(cx, fact, bound),
+    detail: { ...d.detail(cx, fact, bound), ...(overrun !== undefined ? { overrun } : {}) },
   };
 }
 
