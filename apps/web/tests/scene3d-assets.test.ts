@@ -71,6 +71,23 @@ describe('groupDeliverables', () => {
     expect(groups.map((g) => g.format)).toEqual(['other']);
   });
 
+  it('groups the Minecraft model and its textures together, ahead of everything', () => {
+    // The block model and its PNGs live under out/minecraft/; they present as
+    // one "Minecraft model" export rather than the model landing in "other"
+    // and the textures scattering into the proof-frame image list.
+    const groups = groupDeliverables([
+      ref('scenes/s/out/proof/000.png'),
+      ref('scenes/s/out/scene.glb'),
+      ref('scenes/s/out/minecraft/model.json'),
+      ref('scenes/s/out/minecraft/textures/mtl_body.png'),
+    ]);
+    expect(groups[0]!.format).toBe('minecraft');
+    expect(groups[0]!.items.map((i) => i.fileName).sort()).toEqual(['model.json', 'mtl_body.png']);
+    // The proof PNG stays in the image group; only the minecraft/ ones moved.
+    const image = groups.find((g) => g.format === 'image');
+    expect(image!.items.map((i) => i.fileName)).toEqual(['000.png']);
+  });
+
   it('returns nothing for a compile that exported nothing', () => {
     expect(groupDeliverables([])).toEqual([]);
   });

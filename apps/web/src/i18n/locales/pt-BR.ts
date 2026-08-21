@@ -5292,6 +5292,7 @@ export const ptBR: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Modelo do Minecraft',
   'scene3d.formatImage': 'Quadros de prova',
   'scene3d.formatOther': 'Outros arquivos',
   'scene3d.kindScene': 'Cena',

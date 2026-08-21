@@ -126,6 +126,54 @@ kernels, same stdlib, same diagnostics.
   the repair. Upstream importer bugs the compiler absorbs are shimmed
   narrowly and commented (Blender 5.0 FBX-with-lights crash).
 
+## Voxel / Minecraft target (`target: "minecraft"`)
+
+The compiler is a tool a Minecraft modder / voxel artist can wield: author a
+`scene.json`, lint it against the vanilla model format's real constraints, and
+emit the JSON the game loads — iterating reliably instead of guessing. It is an
+opt-in dialect of the existing machinery, never a style: every rule is a format
+or consistency fact, silent without the target, so non-voxel scenes are
+byte-identical. Adopted from a fable-5 architecture consult (`KILN.md` records
+the reasoning); USD stays the master and the block model is a lowering of it.
+
+- **Measure (census, `runner.py voxel_facts`, cheap O(verts), gated on the
+  target).** Per mesh: `voxel.isBox` (a single rectangular cuboid — a Java
+  `element` is representable iff true), a recovered single-axis `rotationAxis`/
+  `rotationDeg` for an oriented box (multi-axis boxes surface as `isBox` with a
+  null axis), and `gridDeviation` (worst vertex distance from the authoring
+  grid). Validated against axis-aligned / 22.5° / 30° / 45° / multi-axis /
+  off-grid cubes.
+- **Judge (`src/lint/voxel.ts`, a validated-style module, warnings only — the
+  linter warns while you iterate, the exporter hard-refuses).** W-970 off-grid
+  (the #1 real MC-model bug: clean in Blender, shimmers in-game), W-971 not a
+  single cuboid, W-972 illegal rotation (Java allows one axis at {−45, −22.5, 0,
+  22.5, 45}°; names the nearest legal angle; dialect-scoped — Bedrock permits
+  free angles), W-973 outside the −1..2-block element space. Relative texel
+  consistency is left to the existing UV density rules (W-444/445), not
+  duplicated.
+- **Contract.** `EngineTarget += "minecraft"`; a `minecraft` conventions block
+  (`dialect` / `grid.{size,tolerance}` / `pxPerBlock` / `elementBounds`) and its
+  normalized form. `TARGET_PROFILES.minecraft` is Y-up like Blockbench. Grid in
+  metres (1 block = 1 m, so px·m⁻¹ IS px-per-block); legal angles are a format
+  constant, not a knob.
+- **Emit the block model (`src/mc/java-model.ts` + `emit.ts`, pipeline-side,
+  lowered from the census — the usdz pattern).** Every axis-aligned cuboid →
+  one Java `element` in pixels; the Blender→Minecraft frame map is a single −90°
+  rotation about X, `(x, y, z) → (x, z, −y)`, then ×16. Faces carry a texture
+  ref + full-tile UV; one texture per material (a flat colour is synthesised as
+  a 16×16 sRGB PNG via `encodePng`, a bound image is copied); a default display
+  block so the model shows in hand/GUI immediately. v1 is faithful, not
+  exhaustive: it emits what it can represent EXACTLY and REPORTS the rest
+  (spheres, rotated imports) rather than shipping wrong geometry — the same
+  parts the linter already flagged. Deliverables land under `out/minecraft/`
+  and group as one "Minecraft model" export in the host menu
+  (`scene3d-assets.ts`, path-detected). Showcase fixture:
+  `tests/fixtures/minecraft/golem` — a blocky biped, pixel-aligned, junctions
+  overlapped 1px (how a modeller avoids in-game z-fighting), compiling clean and
+  lowering to a standing model. Follow-ups (not yet built): Bedrock export +
+  its rotation rules, `.bbmodel`/model-JSON import → spec, per-face atlas UVs,
+  rotated-element export.
+
 ## The material layer (viewer tweaks channel)
 
 The kit page's part card expands into a material panel: the material chip

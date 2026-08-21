@@ -5292,6 +5292,7 @@ export const th: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'โมเดล Minecraft',
   'scene3d.formatImage': 'เฟรมตรวจสอบ',
   'scene3d.formatOther': 'ไฟล์อื่น ๆ',
   'scene3d.kindScene': 'ฉาก',

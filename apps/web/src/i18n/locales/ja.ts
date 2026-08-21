@@ -5292,6 +5292,7 @@ export const ja: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Minecraft モデル',
   'scene3d.formatImage': '校正フレーム',
   'scene3d.formatOther': 'その他のファイル',
   'scene3d.kindScene': 'シーン',

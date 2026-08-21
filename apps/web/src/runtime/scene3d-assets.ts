@@ -19,7 +19,7 @@ import type { ArtifactManifest } from '../artifacts/types';
 import type { Dict } from '../i18n/types';
 
 /** Export-menu groupings. One entry per thing a user would ask for. */
-export type Scene3dDeliverableFormat = 'glb' | 'usd' | 'obj' | 'image' | 'other';
+export type Scene3dDeliverableFormat = 'glb' | 'usd' | 'obj' | 'minecraft' | 'image' | 'other';
 
 export interface Scene3dDeliverable {
   ref: Scene3dArtifactRef;
@@ -67,16 +67,29 @@ const FORMAT_BY_EXTENSION: Record<string, Scene3dDeliverableFormat> = {
   exr: 'image',
 };
 
-/** Menu order: the containers you hand to an engine, then the pictures. */
-const FORMAT_ORDER: Scene3dDeliverableFormat[] = ['glb', 'usd', 'obj', 'image', 'other'];
+/** Menu order: the game-ready model first when there is one, then the
+ *  containers you hand to an engine, then the pictures. The minecraft group is
+ *  empty (and skipped) for every non-Minecraft compile. */
+const FORMAT_ORDER: Scene3dDeliverableFormat[] = ['minecraft', 'glb', 'usd', 'obj', 'image', 'other'];
 
 const FORMAT_LABEL_KEY: Record<Scene3dDeliverableFormat, keyof Dict> = {
   glb: 'scene3d.formatGlb',
   usd: 'scene3d.formatUsd',
   obj: 'scene3d.formatObj',
+  minecraft: 'scene3d.formatMinecraft',
   image: 'scene3d.formatImage',
   other: 'scene3d.formatOther',
 };
+
+/**
+ * The Minecraft block-model deliverable and its textures live under an
+ * `out/minecraft/` directory. Grouped by that path rather than by extension,
+ * so the `model.json` and its `.png` textures present as one export (and the
+ * textures never scatter into the generic image list).
+ */
+function isMinecraftDeliverable(path: string): boolean {
+  return /(^|\/)minecraft\//.test(path);
+}
 
 export function extensionOf(pathOrName: string): string {
   const name = pathOrName.split('/').pop() ?? pathOrName;
@@ -100,7 +113,7 @@ export function groupDeliverables(
   for (const ref of refs) {
     const ext = extensionOf(ref.path);
     if (COMPANION_EXTENSIONS.has(ext)) continue;
-    const format = FORMAT_BY_EXTENSION[ext] ?? 'other';
+    const format = isMinecraftDeliverable(ref.path) ? 'minecraft' : (FORMAT_BY_EXTENSION[ext] ?? 'other');
     const items = byFormat.get(format) ?? [];
     items.push({ ref, format, ext, fileName: fileNameOf(ref.path) });
     byFormat.set(format, items);

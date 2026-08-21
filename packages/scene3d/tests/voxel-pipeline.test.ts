@@ -45,6 +45,40 @@ describe.skipIf(!hasBlender)("voxel pipeline (real Blender)", () => {
     }
   }, 400_000);
 
+  it("lowers the golem to a valid, standing Java block model", async () => {
+    const dir = workDir("minecraft/golem");
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint", "export"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
+    // The deliverable was emitted and registered.
+    const modelRel = result.exportedAssets.find((a) => a.endsWith("minecraft/model.json"));
+    expect(modelRel).toBeTruthy();
+    const model = JSON.parse(fs.readFileSync(path.join(dir, modelRel!), "utf8"));
+
+    // Every box became an element, every face textured, from ≤ to everywhere.
+    expect(model.elements).toHaveLength(4);
+    for (const el of model.elements) {
+      expect(Object.keys(el.faces).sort()).toEqual(["down", "east", "north", "south", "up", "west"]);
+      for (let i = 0; i < 3; i++) expect(el.from[i]).toBeLessThanOrEqual(el.to[i]);
+    }
+    // It stands: some element reaches the ground (MC y 0) and another sits at
+    // the top — the Z-up scene lowered to a Y-up model, not lying on its side.
+    const ys = model.elements.flatMap((e: { from: number[]; to: number[] }) => [e.from[1], e.to[1]]);
+    expect(Math.min(...ys)).toBe(0);
+    expect(Math.max(...ys)).toBeGreaterThan(16);
+
+    // The textures were written next to the model, one PNG per material.
+    const texDir = path.join(dir, "out", "minecraft", "textures");
+    const pngs = fs.readdirSync(texDir).filter((f) => f.endsWith(".png"));
+    expect(pngs.sort()).toEqual(["mtl_body.png", "mtl_face.png"]);
+    // No voxel warnings on the clean showcase, and the compile succeeded.
+    expect(result.issues.filter((i) => /S3D-W-97\d/.test(i.code))).toEqual([]);
+    expect(result.ok).toBe(true);
+  }, 400_000);
+
   it("does NOT measure voxel facts without the minecraft target", async () => {
     // The same geometry under a neutral contract carries no voxel block — the
     // census is byte-identical to what every non-Minecraft scene has always got.

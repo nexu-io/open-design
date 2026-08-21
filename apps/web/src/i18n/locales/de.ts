@@ -5292,6 +5292,7 @@ export const de: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Minecraft-Modell',
   'scene3d.formatImage': 'Proof-Frames',
   'scene3d.formatOther': 'Weitere Dateien',
   'scene3d.kindScene': 'Szene',

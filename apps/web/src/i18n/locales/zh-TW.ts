@@ -5748,6 +5748,7 @@ export const zhTW: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Minecraft 模型',
   'scene3d.formatImage': '校樣影格',
   'scene3d.formatOther': '其他檔案',
   'scene3d.kindScene': '場景',

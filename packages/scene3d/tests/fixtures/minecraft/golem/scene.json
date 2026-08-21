@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "name": "grid-golem",
-  "//": "A blocky biped, every box even-pixel-wide and centred on the 1/16 grid so it compiles voxel-clean. The showcase control: a Minecraft-target scene whose own model trips none of its own voxel rules.",
+  "//": "A blocky biped for the minecraft target. Authored Z-up (scene.json's frame is Blender-native Z-up): height is Z, legs rest on z=0 so `grounded` holds. Junctions OVERLAP by one pixel (1/16) rather than sharing a face plane — exactly how a Minecraft modeller avoids in-game z-fighting between elements; every coordinate still lands on the 1/16 grid. The showcase control: compiles clean AND lowers to a clean, standing Java block model.",
   "materials": {
     "mtl_body": { "baseColor": [0.55, 0.5, 0.45], "roughness": 0.9 },
     "mtl_face": { "baseColor": [0.3, 0.6, 0.35], "roughness": 0.85 }
   },
   "parts": [
-    { "id": "prp_torso", "size": [0.5, 0.75, 0.25],   "shape": "box", "material": "mtl_body" },
+    { "id": "prp_torso", "size": [0.5, 0.25, 0.75],   "shape": "box", "material": "mtl_body" },
     { "id": "prp_head",  "size": [0.375, 0.375, 0.375],"shape": "box", "material": "mtl_face" },
-    { "id": "prp_leg_l", "size": [0.125, 0.375, 0.125],"shape": "box", "material": "mtl_body" },
-    { "id": "prp_leg_r", "size": [0.125, 0.375, 0.125],"shape": "box", "material": "mtl_body" }
+    { "id": "prp_leg_l", "size": [0.125, 0.125, 0.375],"shape": "box", "material": "mtl_body" },
+    { "id": "prp_leg_r", "size": [0.125, 0.125, 0.375],"shape": "box", "material": "mtl_body" }
   ],
   "relations": [
-    { "type": "at", "part": "prp_torso", "center": [0, 0.75, 0] },
-    { "type": "at", "part": "prp_head",  "center": [0, 1.3125, 0] },
-    { "type": "at", "part": "prp_leg_l", "center": [-0.125, 0.1875, 0] },
-    { "type": "at", "part": "prp_leg_r", "center": [0.125, 0.1875, 0] }
+    { "type": "at", "part": "prp_leg_l", "center": [-0.125, 0, 0.1875] },
+    { "type": "at", "part": "prp_leg_r", "center": [0.125, 0, 0.1875] },
+    { "type": "at", "part": "prp_torso", "center": [0, 0, 0.6875] },
+    { "type": "at", "part": "prp_head",  "center": [0, 0, 1.1875] }
   ],
   "claims": { "parts": 4, "grounded": true }
 }

@@ -5292,6 +5292,7 @@ export const ko: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Minecraft 모델',
   'scene3d.formatImage': '검증 프레임',
   'scene3d.formatOther': '기타 파일',
   'scene3d.kindScene': '장면',

@@ -5292,6 +5292,7 @@ export const uk: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Модель Minecraft',
   'scene3d.formatImage': 'Контрольні кадри',
   'scene3d.formatOther': 'Інші файли',
   'scene3d.kindScene': 'Сцена',

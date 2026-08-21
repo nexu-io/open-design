@@ -5287,6 +5287,7 @@ export const fa: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'مدل Minecraft',
   'scene3d.formatImage': 'فریم‌های بازبینی',
   'scene3d.formatOther': 'فایل‌های دیگر',
   'scene3d.kindScene': 'صحنه',

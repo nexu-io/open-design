@@ -5292,6 +5292,7 @@ export const ar: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'نموذج Minecraft',
   'scene3d.formatImage': 'إطارات التحقق',
   'scene3d.formatOther': 'ملفات أخرى',
   'scene3d.kindScene': 'مشهد',

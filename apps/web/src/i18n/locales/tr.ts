@@ -5292,6 +5292,7 @@ export const tr: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Minecraft modeli',
   'scene3d.formatImage': 'Kontrol kareleri',
   'scene3d.formatOther': 'Diğer dosyalar',
   'scene3d.kindScene': 'Sahne',

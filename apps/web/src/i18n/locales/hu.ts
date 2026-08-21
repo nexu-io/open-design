@@ -5292,6 +5292,7 @@ export const hu: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Minecraft modell',
   'scene3d.formatImage': 'Ellenőrző képkockák',
   'scene3d.formatOther': 'Egyéb fájlok',
   'scene3d.kindScene': 'Jelenet',

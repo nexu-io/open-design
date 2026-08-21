@@ -5292,6 +5292,7 @@ export const id: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Model Minecraft',
   'scene3d.formatImage': 'Bingkai bukti',
   'scene3d.formatOther': 'Berkas lain',
   'scene3d.kindScene': 'Adegan',

@@ -70,6 +70,7 @@ export interface Dict {
   'scene3d.formatGlb': string;
   'scene3d.formatUsd': string;
   'scene3d.formatObj': string;
+  'scene3d.formatMinecraft': string;
   'scene3d.formatImage': string;
   'scene3d.formatOther': string;
   'scene3d.kindScene': string;

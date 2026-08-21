@@ -44,6 +44,7 @@ import { emitBlenderScript } from "./solve/emit-bpy.js";
 import type { SceneSpec, SolvedScene } from "./solve/types.js";
 import { validateShaderSpec } from "./shade/validate.js";
 import { packageUsdz } from "./usd/usdz.js";
+import { emitJavaModel } from "./mc/emit.js";
 import { assembleShaderJob } from "./shade/emit.js";
 import { flipbookGrid, type CompiledShaderJob, type ShaderBinding } from "./shade/types.js";
 
@@ -791,6 +792,37 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
               hint: "this Blender build may not ship that exporter; remove the format from scene3d.json or install it",
               detail: { format: miss.format },
             });
+          }
+          /* Minecraft block-model deliverable: emit the JSON the game loads,
+             lowered from the census on this side of the process boundary (the
+             usdz pattern). Only a `minecraft` contract asks for it. Emitted
+             before the export cache is written so it rides cache hits like the
+             other deliverables. */
+          if (normalized.minecraft.enabled && census) {
+            try {
+              const mc = emitJavaModel(census, normalized, request.projectDir, OUT_DIR);
+              for (const d of mc.deliverables) {
+                if (!rel.includes(d)) {
+                  rel.push(d);
+                  exportedAssets.push(d);
+                }
+              }
+              if (mc.elements === 0) {
+                issues.push({
+                  code: ISSUE_CODES.VOXEL_NOT_CUBOID,
+                  severity: "warning",
+                  message: "the Minecraft block model is empty — no part could be expressed as a Java element",
+                  hint: "author from box shapes; spheres, cylinders and rotated imports cannot be block-model elements",
+                });
+              }
+            } catch (err: any) {
+              issues.push({
+                code: ISSUE_CODES.EXPORT_FORMAT_UNAVAILABLE,
+                severity: "warning",
+                message: `could not emit the Minecraft block model: ${String(err?.message ?? err)}`,
+                detail: { format: "minecraft" },
+              });
+            }
           }
           if (!request.noCache && rel.length > 0) {
             writeCache(request.projectDir, "export", exportHash, {

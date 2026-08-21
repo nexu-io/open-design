@@ -5292,6 +5292,7 @@ export const esES: Dict = {
   'scene3d.formatGlb': 'glTF / GLB',
   'scene3d.formatUsd': 'OpenUSD',
   'scene3d.formatObj': 'OBJ',
+  'scene3d.formatMinecraft': 'Modelo de Minecraft',
   'scene3d.formatImage': 'Fotogramas de prueba',
   'scene3d.formatOther': 'Otros archivos',
   'scene3d.kindScene': 'Escena',
