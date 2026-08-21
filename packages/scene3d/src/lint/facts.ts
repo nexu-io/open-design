@@ -32,6 +32,8 @@ export interface DerivedFacts {
   totalTextureBytes: number;
   /** Worst triangle aspect ratio measured for each part's mesh. */
   aspectRatioByPart: Map<string, number>;
+  /** Mean texel density (px/m) of each textured part's mesh. */
+  texelDensityByPart: Map<string, number>;
 }
 
 /** RGBA8 decoded size of one texture. */
@@ -118,10 +120,13 @@ export function deriveFacts(
   let totalTextureBytes = 0;
   for (const texName of sceneTextures) totalTextureBytes += bytesByTexture.get(texName) ?? 0;
 
-  // ---- sliver / aspect ratio (indexed straight from the census) ----
+  // ---- sliver / aspect ratio + texel density (indexed from the census) ----
   const aspectRatioByPart = new Map<string, number>();
+  const texelDensityByPart = new Map<string, number>();
   for (const m of census.meshes) {
     if (typeof m.worstAspectRatio === "number") aspectRatioByPart.set(m.object, m.worstAspectRatio);
+    const mean = m.uv?.texelDensity?.mean;
+    if (typeof mean === "number") texelDensityByPart.set(m.object, mean);
   }
 
   return {
@@ -134,5 +139,6 @@ export function deriveFacts(
     textureBytesByPart,
     totalTextureBytes,
     aspectRatioByPart,
+    texelDensityByPart,
   };
 }

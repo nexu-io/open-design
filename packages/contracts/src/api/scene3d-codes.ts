@@ -170,6 +170,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-953': 'Part over its role texture budget',
   'S3D-W-954': 'Part scale incoherent with the scene',
   'S3D-W-955': 'Sliver triangles for the role',
+  'S3D-W-956': 'Under-textured for the role',
 };
 
 /** The human phrase for a code, or null for a code this build predates. */

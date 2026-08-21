@@ -141,6 +141,34 @@ describe("lintIntent — sliver triangles by role (W-955)", () => {
   });
 });
 
+describe("lintIntent — under-textured for role (W-956)", () => {
+  const textured = (object: string, mean: number) =>
+    mesh(object, { uv: { texelDensity: { min: mean, max: mean, mean } } as CensusMesh["uv"] });
+
+  it("flags a hero textured below its role's texel floor", () => {
+    // hero texelDensity.min = 512; render it at 200 px/m.
+    const s = scene(part("prp_hero", { role: "hero" }));
+    expect(run(census([textured("prp_hero", 200)]), s).some((i) => i.code === ISSUE_CODES.UNDER_ROLE_TEXEL)).toBe(true);
+  });
+
+  it("does NOT double-report when the scene texel target already covers it", () => {
+    const contract = normalizeContract({
+      schemaVersion: 1,
+      conventions: { uv: { texelDensity: { target: 512 } } },
+    });
+    const s = scene(part("prp_hero", { role: "hero" }));
+    // Scene target 512 >= role min 512 → uv.ts owns it, the role check suppresses.
+    expect(
+      run(census([textured("prp_hero", 200)]), s, contract).some((i) => i.code === ISSUE_CODES.UNDER_ROLE_TEXEL),
+    ).toBe(false);
+  });
+
+  it("does NOT flag an untextured hero (no texel density measured)", () => {
+    const s = scene(part("prp_hero", { role: "hero" }));
+    expect(run(census([mesh("prp_hero")]), s).some((i) => i.code === ISSUE_CODES.UNDER_ROLE_TEXEL)).toBe(false);
+  });
+});
+
 describe("lintIntent — size coherence is opt-in (W-954)", () => {
   it("stays silent without a sizeRatio bound, even for an outlier", () => {
     const s = scene(part("prp_big", { role: "prop" }), part("prp_small", { role: "prop" }));

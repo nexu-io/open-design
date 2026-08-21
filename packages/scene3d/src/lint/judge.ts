@@ -195,6 +195,28 @@ const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
     hint: () => "remesh or re-topologise the slivers — they shade and (on a rig) skin poorly",
     detail: (cx, f, b) => ({ worstAspectRatio: f, budget: b }),
   },
+
+  // A textured part rendered below the texel density its role expects — a hero
+  // at background resolution reads soft up close. Gated to fire ONLY when the
+  // role floor is STRICTER than any scene-wide texel target (uv.ts owns that
+  // one), so the two never double-report the same shortfall.
+  {
+    code: ISSUE_CODES.UNDER_ROLE_TEXEL,
+    severity: "warning",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.texelDensityByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => {
+      const min = cx.part.budget.texelDensity?.min;
+      if (min === undefined) return undefined;
+      const sceneTarget = cx.contract.uv.texelDensityTarget ?? 0;
+      return min > sceneTarget ? min : undefined; // else uv.ts already covers it
+    },
+    fails: (f, b) => f < b,
+    message: (cx, f, b) =>
+      `'${cx.part.familyId}' (role ${cx.part.role}) is textured at ${Math.round(f)} px/m, under the ${b} px/m its role expects`,
+    hint: () => "raise this part's texel density (bigger maps or tighter UVs), or relax the role",
+    detail: (cx, f, b) => ({ texelDensity: f, budget: b }),
+  },
 ];
 
 /* ---- subject: a material (the PBR-combo heatmap, one line) ---------------- */
