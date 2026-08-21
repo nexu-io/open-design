@@ -173,6 +173,12 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-954': 'Part scale incoherent with the scene',
   'S3D-W-955': 'Sliver triangles for the role',
   'S3D-W-956': 'Under-textured for the role',
+
+  /* voxel / minecraft */
+  'S3D-W-970': 'Vertices off the voxel grid',
+  'S3D-W-971': 'Not a single cuboid element',
+  'S3D-W-972': 'Rotation not allowed in this format',
+  'S3D-W-973': 'Outside the model element bounds',
 };
 
 /** The human phrase for a code, or null for a code this build predates. */

@@ -490,6 +490,9 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             outDir: path.join(request.projectDir, ".scene3d", "work"),
             ...(tweaks ? { tweaks } : {}),
             ...(normalized.print.measureThickness ? { measureThickness: true } : {}),
+            ...(normalized.minecraft.enabled
+              ? { measureVoxel: true, voxelGrid: normalized.minecraft.gridSize }
+              : {}),
             ...shaderPayload,
           };
           const result = await runRunner(probe, job, timeoutMs, request.env);

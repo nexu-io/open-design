@@ -241,6 +241,17 @@ export const ISSUE_CODES = {
   SLIVER_TRIANGLES: "S3D-W-955",
   UNDER_ROLE_TEXEL: "S3D-W-956",
 
+  /* lint: voxel / Minecraft (970-979) — format-correctness for the vanilla
+     model formats, on only under `target:"minecraft"` (or a `minecraft`
+     conventions block). Measured in Blender (census `voxel` facts), judged in
+     the contract, mapped here. All advisory: the linter WARNS while a modeller
+     iterates; the block-model exporter is what hard-refuses an unrepresentable
+     model. These are format and consistency facts, never a style. */
+  VOXEL_OFF_GRID: "S3D-W-970",
+  VOXEL_NOT_CUBOID: "S3D-W-971",
+  VOXEL_ILLEGAL_ROTATION: "S3D-W-972",
+  VOXEL_OUT_OF_BOUNDS: "S3D-W-973",
+
   /* lint: external conformance oracles (500-519) — verdicts adopted from the
      industry-standard validators run against the EXPORTED deliverable, not
      from our own parser. The compiler measures nothing here; it maps the

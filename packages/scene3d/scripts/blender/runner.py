@@ -1055,7 +1055,7 @@ def action_has_curves(action):
     return False
 
 
-def census(scene, measure_thickness=False):
+def census(scene, measure_thickness=False, measure_voxel=False, voxel_grid=0.0):
     import bpy
     import bmesh
     import mathutils
@@ -1201,6 +1201,9 @@ def census(scene, measure_thickness=False):
         # a deliberately asymmetric part simply reads high, which is a fact,
         # not a verdict — no lint judges it unless a contract someday does.
         symmetry = symmetry_facts(bm)
+        # Voxel/Minecraft facts, world space, before the bmesh is freed. Only a
+        # `minecraft` contract asks for them, so a non-voxel census is unchanged.
+        voxel = voxel_facts(bm, voxel_grid) if measure_voxel else None
         bm.free()
         # Triangle count as an engine would see it after triangulation —
         # the number a per-mesh budget is actually expressed in.
@@ -1226,6 +1229,7 @@ def census(scene, measure_thickness=False):
             "worstAspectRatio": R6(worst_aspect) if worst_aspect > 0 else None,
             "overhangAreaFraction": R6(overhang_area / world_area) if world_area > 1e-9 else None,
             **({} if min_thickness is None else {"minWallThickness": R6(min_thickness)}),
+            **({} if voxel is None else {"voxel": voxel}),
             # Triangles per m^2 of actual surface — the density-allocation
             # number. A 500-tri crate and a 500-tri thimble spend the same
             # budget very differently; this is the fact that says so.
@@ -1826,6 +1830,105 @@ class provenance(object):
 OVERHANG_COS = 0.70710678
 # Thickness ray-casting is O(faces) BVH queries; capped like every heavy pass.
 THICKNESS_FACE_CAP = 40000
+
+
+def voxel_facts(bm, grid):
+    """Voxel/Minecraft geometry facts, WORLD space (bm already transformed).
+
+    Cheap O(verts) arithmetic — measured only when a `minecraft` contract asks
+    for it. Recovers whether the mesh is a single rectangular cuboid (a Java
+    block-model `element` is representable iff so), its single-axis rotation if
+    the box is oriented, and the worst vertex deviation from the authoring grid.
+    Every value is a FACT; the contract does the judging.
+
+    Boxness is deliberately strict: exactly 8 vertices, 6 quad faces, three
+    mutually-orthogonal edges from a corner that closes onto an opposite vertex.
+    A subdivided or bevelled "box" is not one an `element` can carry, and this
+    says so honestly rather than approximating."""
+    import math
+    import mathutils
+
+    bm.verts.ensure_lookup_table()
+    coords = [v.co.copy() for v in bm.verts]
+    n = len(coords)
+    nf = len(bm.faces)
+
+    # Grid deviation: the farthest any vertex sits from its nearest grid node.
+    grid_dev = 0.0
+    if grid and grid > 0:
+        for co in coords:
+            for comp in co:
+                grid_dev = max(grid_dev, abs(comp - round(comp / grid) * grid))
+
+    is_box = False
+    axis_aligned = False
+    rot_axis = None
+    rot_deg = None
+
+    if n == 8 and nf == 6 and all(len(f.verts) == 4 for f in bm.faces):
+        v0 = bm.verts[0]
+        nbrs = [e.other_vert(v0) for e in v0.link_edges]
+        if len(nbrs) == 3:
+            edges = [(nb.co - v0.co) for nb in nbrs]
+            lens = [e.length for e in edges]
+            if all(l > 1e-6 for l in lens):
+                u = [e / l for e, l in zip(edges, lens)]
+                orth = (abs(u[0].dot(u[1])) < 2e-3
+                        and abs(u[0].dot(u[2])) < 2e-3
+                        and abs(u[1].dot(u[2])) < 2e-3)
+                # The three edges must also close the box onto an existing corner.
+                corner = v0.co + edges[0] + edges[1] + edges[2]
+                closes = any((c - corner).length < 1e-5 for c in coords)
+                if orth and closes:
+                    is_box = True
+                    bases = (mathutils.Vector((1.0, 0.0, 0.0)),
+                             mathutils.Vector((0.0, 1.0, 0.0)),
+                             mathutils.Vector((0.0, 0.0, 1.0)))
+
+                    def axis_of(vec):
+                        for ax, base in enumerate(bases):
+                            if abs(abs(vec.dot(base)) - 1.0) < 2e-3:
+                                return ax
+                        return None
+
+                    axes = [axis_of(ui) for ui in u]
+                    if all(a is not None for a in axes) and len(set(axes)) == 3:
+                        axis_aligned = True
+                    else:
+                        # A single-axis-rotated box keeps ONE edge parallel to a
+                        # world axis (the spin axis); recover another edge's angle
+                        # in the perpendicular plane, folded into (-45, 45] because
+                        # a box repeats every 90 degrees. If no edge is world-
+                        # parallel the box is multi-axis rotated (rot_axis stays
+                        # None while is_box is True) — a state the Java rule reads
+                        # as "not representable".
+                        ra = None
+                        ra_i = None
+                        for i, ui in enumerate(u):
+                            a = axis_of(ui)
+                            if a is not None:
+                                ra, ra_i = a, i
+                                break
+                        if ra is not None:
+                            other = next(j for j in range(3) if j != ra_i)
+                            vec = u[other]
+                            if ra == 0:
+                                ang = math.degrees(math.atan2(vec.z, vec.y))
+                            elif ra == 1:
+                                ang = math.degrees(math.atan2(vec.x, vec.z))
+                            else:
+                                ang = math.degrees(math.atan2(vec.y, vec.x))
+                            ang = ((ang + 45.0) % 90.0) - 45.0
+                            rot_axis = "xyz"[ra]
+                            rot_deg = round(ang, 3)
+
+    return {
+        "isBox": is_box,
+        "axisAligned": axis_aligned,
+        "rotationAxis": rot_axis,
+        "rotationDeg": rot_deg,
+        "gridDeviation": round(grid_dev, 7),
+    }
 
 
 def dfm_facts(bm, world_area, measure_thickness):
@@ -2845,7 +2948,12 @@ def main(argv):
         reset_scene()
         if mode == "build":
             load_scene(job)
-            emit({"ok": True, "data": census(bpy.context.scene, bool(job.get("measureThickness")))})
+            emit({"ok": True, "data": census(
+                bpy.context.scene,
+                bool(job.get("measureThickness")),
+                bool(job.get("measureVoxel")),
+                float(job.get("voxelGrid") or 0.0),
+            )})
         elif mode == "proof":
             load_scene(job)
             proof(job)

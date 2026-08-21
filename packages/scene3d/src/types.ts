@@ -38,7 +38,7 @@ export interface SceneSource {
  * house opinions". A preset only sets DEFAULTS: any explicit convention in the
  * same file overrides it, and omitting `target` keeps the neutral defaults.
  */
-export type EngineTarget = "unity" | "unreal" | "godot" | "web" | "3d_print";
+export type EngineTarget = "unity" | "unreal" | "godot" | "web" | "3d_print" | "minecraft";
 
 export interface Scene3dContract {
   schemaVersion: 1;
@@ -128,6 +128,34 @@ export interface Scene3dContract {
       minThicknessMm?: number;
       /** Fraction of surface allowed to be a support-needing overhang. */
       maxOverhangAreaFraction?: number;
+    };
+    /**
+     * Voxel / Minecraft discipline. Set (by `target:"minecraft"` or an
+     * explicit block) it turns on the voxel census facts and their judgments;
+     * absent, the compiler measures and judges nothing voxel-specific, so
+     * every non-Minecraft scene is byte-identical. These are format and
+     * consistency facts, never a style: they help a modeller emit a model the
+     * game will load and iterate on it reliably — they never opine on what to
+     * build. A block model is authored in metres where 1 block = 1 m, so the
+     * existing px·m⁻¹ texel density IS px-per-block.
+     */
+    minecraft?: {
+      /** `java` (vanilla block/item models: cuboid-only, one restricted
+       *  rotation) or `bedrock` (free-angle cubes). Default `java`. */
+      dialect?: "java" | "bedrock";
+      /** The authoring grid vertices should land on. `size` in metres (default
+       *  1/16 — one pixel); `tolerance` is the forgiven off-grid drift (m). A
+       *  32-px "HD" author sets size 1/32 — the grid is data, not a house rule. */
+      grid?: { size?: number; tolerance?: number };
+      /** Declared texture resolution in pixels-per-block. When set, faces off
+       *  this density are flagged; when omitted, only a relative
+       *  face-consistency check fires — the linter never asserts 16 is correct,
+       *  only that a model is internally consistent. */
+      pxPerBlock?: number | null;
+      /** Legal element extent in blocks (vanilla Java is −1..2 = −16..32 px).
+       *  A model outside this the game refuses to load; the bound is contract
+       *  data so a format change is a number edit, not a code change. */
+      elementBounds?: { minBlocks?: number; maxBlocks?: number };
     };
     /**
      * UV discipline. Everything is measured by the census; these knobs are
@@ -409,6 +437,27 @@ export interface CensusMesh {
   /** Thinnest wall (m), by inward ray-cast; absent when not measured (a
    *  non-print compile) or when the mesh has no opposing walls. */
   minWallThickness?: number;
+  /**
+   * Voxel/Minecraft facts — measured only when the contract asks for it
+   * (`target: "minecraft"` or a `minecraft` conventions block); absent on
+   * every other compile, so a non-voxel census is byte-identical. All of
+   * these are cheap O(verts) arithmetic, judged in the contract, never here.
+   */
+  voxel?: {
+    /** A single rectangular cuboid (8 corners, 6 axis-parallel quad faces in
+     *  its own frame): a Java block-model `element` is representable iff true. */
+    isBox: boolean;
+    /** The box sits axis-aligned in world space (no rotation to recover). */
+    axisAligned: boolean;
+    /** Recovered single-axis rotation for an oriented box, or null. Java block
+     *  models permit exactly one rotation axis at a restricted angle; this is
+     *  what the dialect rule judges. */
+    rotationAxis: "x" | "y" | "z" | null;
+    rotationDeg: number | null;
+    /** Largest distance (m) any vertex sits from the nearest point of the
+     *  contract's voxel grid — the off-grid shimmer measured, not judged. */
+    gridDeviation: number;
+  };
   /** Vertex pairs within merge distance (1e-6 m) — split seams in disguise. */
   doubleVertices?: number;
   /**

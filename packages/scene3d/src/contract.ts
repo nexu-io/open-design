@@ -34,6 +34,14 @@ export const TARGET_PROFILES: Record<EngineTarget, Partial<Conventions>> = {
     // these per printer/material.
     print: { minThicknessMm: 0.8, maxOverhangAreaFraction: 0.15 },
   },
+  // Minecraft / voxel authoring. Y-up like Blockbench and the vanilla model
+  // format; the `minecraft: {}` marker turns on the voxel census + judgments
+  // (their thresholds come from normalizeContract's defaults). Everything else
+  // stays neutral so an authored voxel scene still keeps naming/UV discipline.
+  minecraft: {
+    units: { upAxis: "Y" },
+    minecraft: {},
+  },
 };
 
 /** Defaults applied when `scene3d.json` omits sections. */
@@ -176,6 +184,18 @@ export interface NormalizedContract {
     maxOverhangAreaFraction: number | null;
     measureThickness: boolean;
   };
+  /** Voxel/Minecraft discipline. `enabled` gates every voxel census fact and
+   *  judgment; off, they are inert and the census is byte-identical. Grid in
+   *  metres (1 block = 1 m), bounds in blocks. */
+  minecraft: {
+    enabled: boolean;
+    dialect: "java" | "bedrock";
+    gridSize: number;
+    gridTolerance: number;
+    pxPerBlock: number | null;
+    elementMinBlocks: number;
+    elementMaxBlocks: number;
+  };
 }
 
 export function normalizeContract(contract?: Scene3dContract): NormalizedContract {
@@ -196,6 +216,10 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
   const tex = { ...pp.textures, ...c.conventions?.textures };
   const geo = { ...pp.geometry, ...c.conventions?.geometry };
   const pr = { ...pp.print, ...c.conventions?.print };
+  const mc = { ...pp.minecraft, ...c.conventions?.minecraft };
+  // Voxel discipline is on when the target selects it OR the author wrote a
+  // `minecraft` block explicitly — same opt-in shape as print.
+  const mcEnabled = c.target === "minecraft" || c.conventions?.minecraft !== undefined;
   const proof = { ...DEFAULT_CONTRACT.proof, ...(c.proof ?? {}) };
   const minThicknessMm = finiteOrNull(pr.minThicknessMm);
   const maxOverhangAreaFraction = finiteOrNull(pr.maxOverhangAreaFraction);
@@ -307,6 +331,28 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       // Only pay for the ray-cast when a thickness gate will read it.
       measureThickness: minThicknessMm !== null,
     },
+    minecraft: {
+      enabled: mcEnabled,
+      dialect: (mc as { dialect?: unknown }).dialect === "bedrock" ? "bedrock" : "java",
+      // One pixel of a 16-px block, in metres. A non-positive override is a
+      // dead grid, so it falls back rather than dividing by zero downstream.
+      gridSize: (() => {
+        const g = numOr((mc.grid as { size?: unknown } | undefined)?.size, 1 / 16);
+        return g > 0 ? g : 1 / 16;
+      })(),
+      // A sixteenth of a pixel: forgives float drift from the USD round-trip,
+      // catches a genuine half-pixel (off-grid) vertex.
+      gridTolerance: (() => {
+        const t = numOr((mc.grid as { tolerance?: unknown } | undefined)?.tolerance, 1 / 256);
+        return t >= 0 ? t : 1 / 256;
+      })(),
+      pxPerBlock: (() => {
+        const v = finiteOrNull((mc as { pxPerBlock?: unknown }).pxPerBlock);
+        return v !== null && v > 0 ? v : null;
+      })(),
+      elementMinBlocks: numOr((mc.elementBounds as { minBlocks?: unknown } | undefined)?.minBlocks, -1),
+      elementMaxBlocks: numOr((mc.elementBounds as { maxBlocks?: unknown } | undefined)?.maxBlocks, 2),
+    },
     proof: proof as NonNullable<Scene3dContract["proof"]>,
     proofThresholds: {
       // Defensive `?? default` also guards a wrong-typed programmatic value,
@@ -408,9 +454,9 @@ export function validateContract(value: unknown): string[] {
   if (c.schemaVersion !== 1) problems.push("schemaVersion must be 1");
   if (
     c.target !== undefined &&
-    !["unity", "unreal", "godot", "web", "3d_print"].includes(c.target as string)
+    !["unity", "unreal", "godot", "web", "3d_print", "minecraft"].includes(c.target as string)
   ) {
-    problems.push("target must be one of 'unity', 'unreal', 'godot', 'web', '3d_print'");
+    problems.push("target must be one of 'unity', 'unreal', 'godot', 'web', '3d_print', 'minecraft'");
   }
   const units = (c.conventions as Record<string, unknown> | undefined)?.units as
     | Record<string, unknown>

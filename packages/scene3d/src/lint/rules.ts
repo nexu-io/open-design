@@ -9,6 +9,7 @@ import { lintIntegrity } from "./integrity.js";
 import { lintProof } from "./proof.js";
 import { lintExportedStage } from "./stage.js";
 import { lintWorld } from "./world.js";
+import { lintVoxel } from "./voxel.js";
 import { lintSheets, type SheetLintInput } from "./sheet.js";
 import { lintClaims } from "./claims.js";
 import { lintIntent } from "./judge.js";
@@ -47,6 +48,7 @@ export function runLint(input: LintInput): Issue[] {
   lintUnits(ctx, issues);
   lintIntegrity(ctx, issues);
   lintWorld(input.contract, input.census, issues);
+  lintVoxel(input.contract, input.census, issues);
   if (input.sheets) lintSheets(input.sheets, issues);
   if (input.claims) {
     lintClaims(input.claims, input.census, issues, {
