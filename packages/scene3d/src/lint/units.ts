@@ -8,10 +8,24 @@ import { LintContext } from "./naming.js";
  * internally 1:1 meters, so a mismatch between the contract and the stage
  * header means the scene will land wrong in a shared USD stage.
  */
+/**
+ * metersPerUnit is a ratio the USD importer round-trips through float32, so a
+ * `0.01` contract meets a `0.009999999776...` stage. A strict `!==` reported
+ * that float noise as a units mismatch. Relative epsilon with an absolute
+ * floor: far tighter than any real unit change (1 vs 0.01 vs 0.0254), far
+ * looser than float32 drift.
+ */
+function unitsClose(a: number, b: number): boolean {
+  return Math.abs(a - b) <= 1e-9 + 1e-6 * Math.abs(b);
+}
+
 export function lintUnits(ctx: LintContext, issues: Issue[]): void {
   const stage = ctx.primTree?.stage;
   if (stage) {
-    if (stage.metersPerUnit !== undefined && stage.metersPerUnit !== ctx.contract.metersPerUnit) {
+    if (
+      stage.metersPerUnit !== undefined &&
+      !unitsClose(stage.metersPerUnit, ctx.contract.metersPerUnit)
+    ) {
       issues.push({
         code: ISSUE_CODES.UNITS_MISMATCH,
         severity: "error",

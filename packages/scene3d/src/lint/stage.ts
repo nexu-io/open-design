@@ -35,16 +35,40 @@ export interface StageLintInput {
 }
 
 /** Names an exporter invents when the author never named the data block. */
-const DEFAULT_PRIM_NAME = /^(Cube|Sphere|Cylinder|Cone|Torus|Plane|Grid|Circle|Icosphere|Suzanne|Mesh|Empty|Object|Text)([._]\d+)?$/;
+const DEFAULT_PRIM_NAME = /^(Cube|Sphere|Cylinder|Cone|Torus|Plane|Grid|Circle|Icosphere|Suzanne|Mesh|Empty|Object|Text|Armature|Lattice|Speaker)([._]\d+)?$/;
+
+const KIND_VALUE = /^(component|assembly|group|subcomponent)$/;
+
+function unquote(value: string | undefined): string {
+  return (value ?? "").replace(/^"|"$/g, "");
+}
+
+/** metersPerUnit is a float32-round-tripped ratio; strict compare reported the
+ *  drift as a mismatch. Same relative-with-floor epsilon as lintUnits. */
+function unitsClose(a: number, b: number): boolean {
+  return Math.abs(a - b) <= 1e-9 + 1e-6 * Math.abs(b);
+}
 
 export function lintExportedStage(input: StageLintInput, issues: Issue[]): void {
   const { usda, contract } = input;
   const file = input.file;
   const at = (extra: Partial<Issue>): Partial<Issue> => (file ? { file, ...extra } : extra);
 
+  // Read every stage fact from the PARSE TREE when the stage parses: the
+  // parser masks string content, so a decoy `upAxis = "Z"` or `kind = "..."`
+  // sitting inside a doc/customData string cannot satisfy or defeat a check
+  // (ST-1). Raw-text regex is kept only as a fallback for a stage that does
+  // not parse — which is already the oracle's and other rules' business.
+  let tree: ReturnType<typeof parseUsda> | null = null;
+  try {
+    tree = parseUsda(usda, file ?? "<usda>");
+  } catch {
+    tree = null;
+  }
+
   /* ---- stage metadata --------------------------------------------- */
 
-  const defaultPrim = /\bdefaultPrim\s*=\s*"([^"]+)"/.exec(usda)?.[1];
+  const defaultPrim = tree ? tree.stage.defaultPrim : /\bdefaultPrim\s*=\s*"([^"]+)"/.exec(usda)?.[1];
   if (!defaultPrim) {
     issues.push({
       code: ISSUE_CODES.STAGE_NO_DEFAULT_PRIM,
@@ -55,7 +79,7 @@ export function lintExportedStage(input: StageLintInput, issues: Issue[]): void 
     });
   }
 
-  const upAxis = /\bupAxis\s*=\s*"([^"]+)"/.exec(usda)?.[1];
+  const upAxis = tree ? tree.stage.upAxis : /\bupAxis\s*=\s*"([^"]+)"/.exec(usda)?.[1];
   if (upAxis && upAxis !== contract.upAxis) {
     issues.push({
       code: ISSUE_CODES.STAGE_UPAXIS_MISMATCH,
@@ -67,13 +91,18 @@ export function lintExportedStage(input: StageLintInput, issues: Issue[]): void 
     });
   }
 
-  const metersPerUnit = /\bmetersPerUnit\s*=\s*([0-9.eE+-]+)/.exec(usda)?.[1];
-  if (metersPerUnit !== undefined && Number(metersPerUnit) !== contract.metersPerUnit) {
+  const metersPerUnit = tree
+    ? tree.stage.metersPerUnit
+    : ((): number | undefined => {
+        const raw = /\bmetersPerUnit\s*=\s*([0-9.eE+-]+)/.exec(usda)?.[1];
+        return raw === undefined ? undefined : Number(raw);
+      })();
+  if (metersPerUnit !== undefined && !unitsClose(metersPerUnit, contract.metersPerUnit)) {
     issues.push({
       code: ISSUE_CODES.STAGE_UNITS_MISMATCH,
       severity: "error",
       message: `exported stage is ${metersPerUnit} metres per unit, the contract asks for ${contract.metersPerUnit}`,
-      detail: { actual: Number(metersPerUnit), expected: contract.metersPerUnit },
+      detail: { actual: metersPerUnit, expected: contract.metersPerUnit },
       ...at({}),
     });
   }
@@ -83,7 +112,10 @@ export function lintExportedStage(input: StageLintInput, issues: Issue[]): void 
   // `kind` is what makes a stage an addressable *model* rather than loose
   // geometry: without it the asset cannot be referenced as a component and
   // will not appear correctly in an asset browser.
-  if (!/\bkind\s*=\s*"(component|assembly|group|subcomponent)"/.test(usda)) {
+  const hasKind = tree
+    ? tree.prims.some((p) => KIND_VALUE.test(unquote(p.metadata.get("kind"))))
+    : /\bkind\s*=\s*"(component|assembly|group|subcomponent)"/.test(usda);
+  if (!hasKind) {
     issues.push({
       code: ISSUE_CODES.STAGE_NO_KIND,
       severity: "error",
@@ -93,7 +125,10 @@ export function lintExportedStage(input: StageLintInput, issues: Issue[]): void 
     });
   }
 
-  if (!/\bassetInfo\s*=\s*\{/.test(usda)) {
+  const hasAssetInfo = tree
+    ? Boolean(tree.stage.hasAssetInfo) || tree.prims.some((p) => p.metadata.has("assetInfo"))
+    : /\bassetInfo\s*=\s*\{/.test(usda);
+  if (!hasAssetInfo) {
     issues.push({
       code: ISSUE_CODES.STAGE_NO_ASSET_INFO,
       severity: "warning",
@@ -105,12 +140,20 @@ export function lintExportedStage(input: StageLintInput, issues: Issue[]): void 
 
   /* ---- prim naming ------------------------------------------------ */
 
+  // Typed prims as (typeName, name), from the tree or the raw regex fallback.
+  const typedPrims: Array<{ typeName: string; name: string }> = tree
+    ? tree.prims.filter((p) => p.typeName !== null).map((p) => ({ typeName: p.typeName!, name: p.name }))
+    : (() => {
+        const out: Array<{ typeName: string; name: string }> = [];
+        const re = /\bdef\s+(\w+)\s+"([^"]+)"/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(usda)) !== null) out.push({ typeName: m[1]!, name: m[2]! });
+        return out;
+      })();
+
   const known = new Set(input.objectNames ?? []);
   const seen = new Set<string>();
-  const primPattern = /\bdef\s+(\w+)\s+"([^"]+)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = primPattern.exec(usda)) !== null) {
-    const [, typeName, name] = match as unknown as [string, string, string];
+  for (const { typeName, name } of typedPrims) {
     if (seen.has(name)) continue;
     seen.add(name);
     if (DEFAULT_PRIM_NAME.test(name)) {
@@ -140,8 +183,16 @@ export function lintExportedStage(input: StageLintInput, issues: Issue[]): void 
 
   /* ---- boundables ------------------------------------------------- */
 
-  const meshCount = (usda.match(/\bdef\s+Mesh\s+"/g) ?? []).length;
-  const extentCount = (usda.match(/\bfloat3\[\]\s+extent\s*=/g) ?? []).length;
+  let meshCount: number;
+  let extentCount: number;
+  if (tree) {
+    const meshes = tree.prims.filter((p) => p.typeName === "Mesh");
+    meshCount = meshes.length;
+    extentCount = meshes.filter((p) => p.attributes.has("extent")).length;
+  } else {
+    meshCount = (usda.match(/\bdef\s+Mesh\s+"/g) ?? []).length;
+    extentCount = (usda.match(/\bfloat3\[\]\s+extent\s*=/g) ?? []).length;
+  }
   if (meshCount > 0 && extentCount < meshCount) {
     issues.push({
       code: ISSUE_CODES.STAGE_MISSING_EXTENT,
@@ -154,16 +205,7 @@ export function lintExportedStage(input: StageLintInput, issues: Issue[]): void 
   }
 
   /* ---- model hierarchy + rig purpose ------------------------------- */
-  /*
-   * Read from the parse tree, not by regex over the text.
-   *
-   * These two rules judge relationships between prims — which prim is
-   * beneath which, and what type its children are — and a regex cannot see
-   * structure. The rules above predate the parser exposing prim metadata
-   * and still match on raw text; they work, but this is the shape the file
-   * should be growing toward.
-   */
-  lintModelHierarchy(input, issues, at);
+  lintModelHierarchy(tree, issues, at);
 }
 
 /**
@@ -181,23 +223,17 @@ export function lintExportedStage(input: StageLintInput, issues: Issue[]): void 
  *   holding several independent parts says the arrangement is atomic.
  */
 function lintModelHierarchy(
-  input: StageLintInput,
+  tree: ReturnType<typeof parseUsda> | null,
   issues: Issue[],
   at: (extra: Partial<Issue>) => Partial<Issue>,
 ): void {
-  let tree;
-  try {
-    tree = parseUsda(input.usda, input.file ?? "<usda>");
-  } catch {
-    // Unparseable stages are already the other rules' business.
-    return;
-  }
+  // Unparseable stages are already the other rules' and the oracle's business.
+  if (!tree) return;
   const rootName = tree.stage.defaultPrim;
   const root = rootName ? tree.root.children.find((p) => p.name === rootName) : undefined;
   if (!root) return;
 
-  const unquoted = (value: string | undefined): string =>
-    (value ?? "").replace(/^"|"$/g, "");
+  const unquoted = unquote;
 
   const isRigType = (typeName: string | null): boolean =>
     typeName === "Camera" || typeName === "Speaker" || (typeName !== null && /Light$/.test(typeName));

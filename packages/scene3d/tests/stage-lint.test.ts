@@ -84,6 +84,44 @@ describe("lintExportedStage", () => {
     }
   });
 
+  it("also catches Armature/Lattice/Speaker exporter defaults (ST-2)", () => {
+    for (const [type, name] of [["Skeleton", "Armature"], ["Mesh", "Lattice"], ["Mesh", "Speaker"]]) {
+      const shipped = GOOD.replace('def Mesh "prp_crate_body"', `def ${type} "${name}"`);
+      expect(codes(shipped)).toContain("S3D-E-404");
+    }
+  });
+
+  it("does not let a decoy inside a doc string satisfy or defeat a check (ST-1)", () => {
+    // The real upAxis is Y and agrees with the contract. A `doc` string that
+    // merely CONTAINS `upAxis = "Z"` must not be read as an authored value and
+    // trip the mismatch. The parser masks string content; raw-text regex did
+    // not.
+    const withDecoy = GOOD.replace(
+      'def Xform "root" (',
+      'def Xform "root" (\n    doc = "note: upAxis = \\"Z\\" and kind = \\"assembly\\" per legacy"',
+    );
+    expect(codes(withDecoy, ["prp_crate_body"])).not.toContain("S3D-E-402");
+  });
+
+  it("does not read a defaultPrim out of a doc-string decoy (ST-1)", () => {
+    // Strip the real defaultPrim but leave a decoy in a doc string. The check
+    // must still fire (no REAL defaultPrim), proving it did not read the decoy.
+    const stripped = GOOD.replace('    defaultPrim = "root"\n', "").replace(
+      'def Xform "root" (',
+      'def Xform "root" (\n    doc = "was defaultPrim = \\"root\\" once"',
+    );
+    // No real defaultPrim -> the root won't resolve, but the missing-defaultPrim
+    // rule must fire rather than be silenced by the decoy.
+    expect(codes(stripped, ["prp_crate_body"])).toContain("S3D-E-405");
+  });
+
+  it("forgives float32 unit drift in the exported stage (PR-3)", () => {
+    // The USD importer round-trips metersPerUnit through float32, so a `1`
+    // contract can meet `0.999999...`. That is not a units mismatch.
+    const drifted = GOOD.replace("metersPerUnit = 1", "metersPerUnit = 0.9999999776482582");
+    expect(codes(drifted, ["prp_crate_body"])).not.toContain("S3D-E-403");
+  });
+
   it("warns when a mesh prim matches no object name", () => {
     const shipped = GOOD.replace('def Mesh "prp_crate_body"', 'def Mesh "prp_something_else"');
     expect(codes(shipped, ["prp_crate_body"])).toContain("S3D-W-403");

@@ -644,6 +644,9 @@ export interface UsdaPrimTree {
     subLayers: string[];
     startTimeCode?: number;
     endTimeCode?: number;
+    /** Whether the stage header carries an `assetInfo` dictionary — captured
+     *  so the stage linter judges its presence from the parse, not raw text. */
+    hasAssetInfo?: boolean;
   };
 }
 

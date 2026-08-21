@@ -22,6 +22,10 @@ export interface StageMetadata {
   subLayers: string[];
   startTimeCode?: number;
   endTimeCode?: number;
+  /** Whether the stage header carries an `assetInfo` dictionary. Captured so
+   *  the stage linter can judge its presence from the parse (string-safe)
+   *  rather than a raw-text regex a decoy in a doc string could satisfy. */
+  hasAssetInfo?: boolean;
 }
 
 interface Token {
@@ -429,6 +433,7 @@ parts.push(t.value);
           else if (st.name === "subLayers") tree.stage.subLayers.push(...collectRefs(st.value));
           else if (st.name === "startTimeCode") tree.stage.startTimeCode = Number(st.value);
           else if (st.name === "endTimeCode") tree.stage.endTimeCode = Number(st.value);
+          else if (st.name === "assetInfo") tree.stage.hasAssetInfo = true;
         }
         continue;
       }
