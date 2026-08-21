@@ -76,6 +76,19 @@ export interface Scene3dContract {
       roughnessRange?: [number, number];
       /** Inclusive IOR range (warn outside). */
       iorRange?: [number, number];
+      /** The dark-metal realism heatmap: a dark base colour driven fully
+       *  metallic and mirror-smooth is a black mirror, not a surface. Judged
+       *  on scalar channels only. Set `enabled:false` to opt out entirely. */
+      realism?: {
+        enabled?: boolean;
+        /** Rec709 luminance of the linear base colour, at or below which it is
+         *  "dark" (0..1). */
+        darkLuminanceMax?: number;
+        /** Metallic at or above which the surface is "a metal". */
+        metalMin?: number;
+        /** Roughness at or below which the surface is "a mirror". */
+        roughMax?: number;
+      };
     };
     animation?: {
       fps?: number;

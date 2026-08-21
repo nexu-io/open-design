@@ -76,6 +76,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-347': 'Texture oversized',
   'S3D-W-348': 'Duplicate materials',
   'S3D-W-349': 'Faces without material',
+  'S3D-W-350': 'Unrealistic dark metal',
 
   /* lint: units */
   'S3D-E-361': 'Scene units mismatch',

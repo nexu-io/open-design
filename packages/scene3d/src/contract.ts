@@ -123,6 +123,8 @@ export interface NormalizedContract {
   metallicValues: number[];
   roughnessRange: [number, number];
   iorRange: [number, number];
+  /** Dark-metal realism heatmap thresholds (see conventions.pbr.realism). */
+  pbrRealism: { enabled: boolean; darkLuminanceMax: number; metalMin: number; roughMax: number };
   fps: number;
   maxFrames: number;
   grounding: { enabled: boolean; tolerance: number; exempt: string[] };
@@ -200,6 +202,12 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
     metallicValues: asArray<number>(p.metallicValues, [0, 1]),
     roughnessRange: asArray<number>(p.roughnessRange, [0, 1]) as [number, number],
     iorRange: asArray<number>(p.iorRange, [1, 2.5]) as [number, number],
+    pbrRealism: {
+      enabled: p.realism?.enabled ?? true,
+      darkLuminanceMax: numOr(p.realism?.darkLuminanceMax, 0.02),
+      metalMin: numOr(p.realism?.metalMin, 0.9),
+      roughMax: numOr(p.realism?.roughMax, 0.1),
+    },
     fps: numOr(a.fps, 24),
     maxFrames: numOr(a.maxFrames, 10_000),
     grounding: {

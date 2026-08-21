@@ -167,6 +167,62 @@ describe("lintIntent — repeat clones do not flood, and overrides compose", () 
   });
 });
 
+describe("lintIntent — material realism (W-350 dark metal), no role needed", () => {
+  const material = (name: string, p: Partial<Census["materials"][number]["principled"]>) => ({
+    name,
+    usedByObjectCount: 1,
+    principled: {
+      present: true,
+      metallic: 0,
+      roughness: 0.5,
+      ior: 1.45,
+      baseColor: [0.8, 0.8, 0.8] as [number, number, number],
+      hasTexture: false,
+      untouchedDefault: false,
+      ...p,
+    },
+  });
+  const matScene = (...mats: Census["materials"]) =>
+    ({ ...census([mesh("prp_a")]), materials: mats });
+  const runMat = (mats: Census["materials"], contract = normalizeContract()) => {
+    const issues: Issue[] = [];
+    // No solved scene: material realism still runs on any census.
+    lintIntent(matScene(...mats), contract, undefined, issues);
+    return issues.map((i) => i.code);
+  };
+
+  it("flags a near-black, fully-metallic, mirror-smooth material", () => {
+    expect(
+      runMat([material("mtl_void", { baseColor: [0.01, 0.01, 0.01], metallic: 1, roughness: 0.05 })]),
+    ).toContain(ISSUE_CODES.UNREALISTIC_DARK_METAL);
+  });
+
+  it("does NOT flag a bright metal (gold)", () => {
+    expect(
+      runMat([material("mtl_gold", { baseColor: [1, 0.76, 0.33], metallic: 1, roughness: 0.1 })]),
+    ).not.toContain(ISSUE_CODES.UNREALISTIC_DARK_METAL);
+  });
+
+  it("does NOT flag when the channel is texture-driven (metallic null)", () => {
+    expect(
+      runMat([material("mtl_mapped", { baseColor: [0.01, 0.01, 0.01], metallic: null, roughness: 0.05 })]),
+    ).not.toContain(ISSUE_CODES.UNREALISTIC_DARK_METAL);
+  });
+
+  it("does NOT flag a dark rough dielectric (not a metal, not a mirror)", () => {
+    expect(
+      runMat([material("mtl_coal", { baseColor: [0.01, 0.01, 0.01], metallic: 0, roughness: 0.9 })]),
+    ).not.toContain(ISSUE_CODES.UNREALISTIC_DARK_METAL);
+  });
+
+  it("respects conventions.pbr.realism.enabled:false", () => {
+    const off = normalizeContract({ schemaVersion: 1, conventions: { pbr: { realism: { enabled: false } } } });
+    expect(
+      runMat([material("mtl_void", { baseColor: [0.01, 0.01, 0.01], metallic: 1, roughness: 0.05 })], off),
+    ).not.toContain(ISSUE_CODES.UNREALISTIC_DARK_METAL);
+  });
+});
+
 describe("resolveBudgets — clone inherits family + role", () => {
   it("resolves a clone's family to its base and shares its role", () => {
     const s = scene(part("prp_rock", { role: "background" }), part("prp_rock_2", { role: "background", from: "prp_rock" }));

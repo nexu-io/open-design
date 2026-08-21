@@ -112,6 +112,12 @@ export const ISSUE_CODES = {
   TEXTURE_TOO_LARGE: "S3D-W-347",
   DUPLICATE_MATERIALS: "S3D-W-348",
   FACES_WITHOUT_MATERIAL: "S3D-W-349",
+  /* The PBR-combo heatmap's one-line equivalent: a dark base colour driven
+     fully metallic and mirror-smooth reads as a black mirror, not a surface —
+     the combination is unphysical even though each value alone is legal.
+     Thresholds live in conventions.pbr; the check judges scalars only, so a
+     texture-driven channel (metallic == null) never trips it. */
+  UNREALISTIC_DARK_METAL: "S3D-W-350",
 
   /* lint: units */
   UNITS_MISMATCH: "S3D-E-361",
