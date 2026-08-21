@@ -91,6 +91,30 @@ describe("lintExportedStage", () => {
     }
   });
 
+  it("stays silent on a default name under the inspection posture (forbidDefaultNames: false)", () => {
+    // A third-party import (the Fox/CesiumMan contract posture) is not the
+    // authority on the names its source chose: Blender's glTF importer writes
+    // a rig's armature as the SkelRoot `Armature`, and the USD exporter ships
+    // that. Under `forbidDefaultNames: false` the object-name rule (naming.ts)
+    // is silent; the exported-stage rule must match, or a clean rigged import
+    // fails with a spurious hard E-404. Authored scenes keep the default (true)
+    // and still catch a lazy `Cube_008`.
+    const inspection = normalizeContract({
+      schemaVersion: 1,
+      conventions: { units: { metersPerUnit: 1, upAxis: "Y" }, naming: { forbidDefaultNames: false } },
+    });
+    const rig = GOOD.replace(
+      'def Mesh "prp_crate_body"',
+      'def SkelRoot "Armature"\n    {\n        def Skeleton "skel" {}\n    }\n\n    def Mesh "prp_crate_body"',
+    );
+    const issues: Issue[] = [];
+    lintExportedStage({ usda: rig, contract: inspection, objectNames: ["Armature", "prp_crate_body"] }, issues);
+    expect(issues.map((i) => i.code)).not.toContain("S3D-E-404");
+    // The default posture still catches the very same prim — the switch is the
+    // only difference, so the check is not simply disabled.
+    expect(codes(rig, ["Armature", "prp_crate_body"])).toContain("S3D-E-404");
+  });
+
   it("does not let a decoy inside a doc string satisfy or defeat a check (ST-1)", () => {
     // The real upAxis is Y and agrees with the contract. A `doc` string that
     // merely CONTAINS `upAxis = "Z"` must not be read as an authored value and

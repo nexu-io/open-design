@@ -157,14 +157,21 @@ export function lintExportedStage(input: StageLintInput, issues: Issue[]): void 
     if (seen.has(name)) continue;
     seen.add(name);
     if (DEFAULT_PRIM_NAME.test(name)) {
-      issues.push({
-        code: ISSUE_CODES.STAGE_PRIM_DEFAULT_NAME,
-        severity: "error",
-        message: `exported ${typeName} prim '${name}' is an exporter default name`,
-        hint: "name the mesh data block, not just the object — the data name is what ships in the USD",
-        target: name,
-        ...at({}),
-      });
+      // Honour the same posture switch the object-name rule uses
+      // (naming.ts): under the inspection contract (`forbidDefaultNames:
+      // false`) a third-party import is not punished for names the source
+      // chose — a rigged glTF whose armature the exporter writes as the
+      // SkelRoot 'Armature' is a legitimate default, not an authoring miss.
+      if (contract.forbidDefaultNames) {
+        issues.push({
+          code: ISSUE_CODES.STAGE_PRIM_DEFAULT_NAME,
+          severity: "error",
+          message: `exported ${typeName} prim '${name}' is an exporter default name`,
+          hint: "name the mesh data block, not just the object — the data name is what ships in the USD",
+          target: name,
+          ...at({}),
+        });
+      }
       continue;
     }
     // A prim whose name matches no Blender object is usually the data block
