@@ -64,6 +64,28 @@ describe("validateSceneSpec", () => {
     expect(errors.length).toBeGreaterThanOrEqual(3);
   });
 
+  it("rejects a sub-micron size as a unit slip, with a JSON path (S-11)", () => {
+    // 1e-9 "metres" that meant millimetres would build a degenerate mesh and
+    // surface only as a late DEGENERATE_SCALE / ZERO_AREA cascade. Catch it at
+    // validation, before any geometry exists.
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_speck", size: [1e-9, 1, 1] }],
+      relations: [{ type: "at", part: "prp_speck", center: [0, 0, 0.5] }],
+    });
+    expect(spec).toBeUndefined();
+    expect(errors.some((e) => e.includes("parts[0].size[0]") && /unit slip/.test(e))).toBe(true);
+  });
+
+  it("still accepts a small-but-real detail part (S-11)", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_rivet", size: [0.002, 0.002, 0.002] }],
+      relations: [{ type: "at", part: "prp_rivet", center: [0, 0, 0.5] }],
+    });
+    expect(errors).toEqual([]);
+  });
+
   it("rejects a part referencing an undeclared material", () => {
     const { errors } = validateSceneSpec({
       schemaVersion: 1,

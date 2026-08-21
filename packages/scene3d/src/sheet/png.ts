@@ -46,6 +46,13 @@ export function decodePng(buffer: Uint8Array): DecodedImage {
   let transparency: Uint8Array | null = null;
   const idat: Uint8Array[] = [];
 
+  // A PNG must end with IEND. A file cut short — a partial download, a
+  // truncated write — otherwise decoded to a garbage image: the chunk loop
+  // simply broke out on the short chunk and inflate happened to succeed on the
+  // IDAT collected so far, so measureSheet returned a confident-but-wrong
+  // verdict instead of SHEET_UNREADABLE. Track truncation and IEND explicitly.
+  let sawIend = false;
+  let truncated = false;
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   while (offset + 8 <= buffer.length) {
     const length = view.getUint32(offset);
@@ -53,7 +60,10 @@ export function decodePng(buffer: Uint8Array): DecodedImage {
       buffer[offset + 4]!, buffer[offset + 5]!, buffer[offset + 6]!, buffer[offset + 7]!,
     );
     const start = offset + 8;
-    if (start + length > buffer.length) break;
+    if (start + length > buffer.length) {
+      truncated = true;
+      break;
+    }
 
     if (type === "IHDR") {
       width = view.getUint32(start);
@@ -68,11 +78,15 @@ export function decodePng(buffer: Uint8Array): DecodedImage {
     } else if (type === "IDAT") {
       idat.push(buffer.subarray(start, start + length));
     } else if (type === "IEND") {
+      sawIend = true;
       break;
     }
     offset = start + length + 4; // skip the CRC
   }
 
+  if (truncated || !sawIend) {
+    throw new PngDecodeError("PNG is truncated — no IEND chunk");
+  }
   if (width <= 0 || height <= 0) throw new PngDecodeError("PNG has no valid IHDR");
   if (interlace !== 0) throw new PngDecodeError("interlaced PNG is not supported");
   if (idat.length === 0) throw new PngDecodeError("PNG has no image data");

@@ -178,7 +178,7 @@ function validatePart(
   if (typeof part.id !== "string" || !/^[A-Za-z][A-Za-z0-9_]{2,63}$/.test(part.id)) {
     errors.push(`${at}.id must match [A-Za-z][A-Za-z0-9_]{2,63}`);
   }
-  const size = validateVec3(`${at}.size`, part.size, errors, { positive: true });
+  const size = validateVec3(`${at}.size`, part.size, errors, { positive: true, min: 1e-5 });
   let shape: PartShape = "box";
   if (part.shape !== undefined) {
     if (SHAPES.includes(part.shape as PartShape)) shape = part.shape as PartShape;
@@ -602,7 +602,7 @@ function validateVec3(
   at: string,
   value: unknown,
   errors: string[],
-  options: { positive?: boolean } = {},
+  options: { positive?: boolean; min?: number } = {},
 ): Vec3 | undefined {
   if (!Array.isArray(value) || value.length !== 3) {
     errors.push(`${at} must be [x, y, z]`);
@@ -616,6 +616,16 @@ function validateVec3(
     }
     if (options.positive && v <= 0) {
       errors.push(`${at}[${i}] must be a positive number`);
+      return undefined;
+    }
+    // A floor below any real-world part catches a unit slip (a 1e-9 or 1e-12
+    // "metre" that meant millimetres, or a stray exponent) at validation time,
+    // with a JSON path, instead of as a degenerate-geometry cascade after the
+    // build. Well below a fine detail part (0.01mm), well above the slips.
+    if (options.min !== undefined && v > 0 && v < options.min) {
+      errors.push(
+        `${at}[${i}] is ${v}m, below the ${options.min}m minimum — this is almost certainly a unit slip (metres vs millimetres?)`,
+      );
       return undefined;
     }
   }
