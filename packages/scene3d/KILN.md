@@ -57,6 +57,41 @@ instead of re-reading a 1000-line ADD.
 5. **Live link** (watch → GLB → WebSocket → WebXR) as the kit viewer's
    future hot-reload path.
 
+## Voxel / Minecraft target — fable-5 consult (built Phase 1+2)
+
+A read-only fable-5 architecture consult shaped the `target: "minecraft"`
+work; the load-bearing decisions, so later phases honour them:
+
+- **The exporter is the load-bearing piece, not the linter.** A voxel linter
+  over a format you still leave for Blockbench to produce is "annotation, not
+  replacement." The iteration loop the user wants (author → compiles to exactly
+  what the game loads → tweak) *is* the exporter. Everything else is tasteful
+  additions in the 3d_print mould.
+- **Lower pipeline-side, not in the runner.** There is no Blender exporter for
+  MC JSON; cuboid recovery is pure math. The usdz precedent (post-process the
+  master, deterministic, testable without Blender) is exact. Resisting the "put
+  it in runner.py" gravity keeps it small and unit-pinnable.
+- **Every rule is a format/consistency fact, never a style.** All voxel lint is
+  target-gated, advisory, and phrased as "the game will reject/shimmer," never
+  "too many cuboids" or "not blocky enough." The linter warns; the exporter
+  hard-refuses. Don't blur that (no `error` severity in the judge; no style
+  lints; grid size / bounds are contract data, legal angles a format constant).
+- **Scope traps to avoid (explicitly OUT):** no texture painting / animation
+  timeline / gizmo editor (Blockbench-parity creep, contradicts "AI makes, they
+  refine"); no baked-in MC version knowledge in code paths (emit the stable
+  model core, leave pack-format numbers to config); no resource-pack/datapack
+  assembly in core (emit model + textures; a thin packager is a separate
+  concern — the moment scene3d knows namespaces it is a build system).
+- **Sequencing (v1 done = target + facts + rules + Java axis-aligned export).
+  Follow-ups in value order:** Bedrock dialect (free-angle cubes, its own
+  rotation rules), `.bbmodel`/model-JSON import → spec (migration + the best
+  exporter regression suite: import → lint → re-emit byte-comparably), per-face
+  atlas UVs, rotated-element export (needs the un-rotated extent + element
+  rotation the census does not yet recover). Domain facts corrected in-consult:
+  Java rotations are the fixed set {−45,−22.5,0,22.5,45}° on ONE axis (not free
+  22.5° steps); Bedrock cubes are free-angle; cuboid-only is the contract for
+  both dialects (Bedrock poly_mesh an explicit opt-out later).
+
 ## Traps Kiln documents that apply here directly
 
 - `bpy` shape-key/modifier interactions are a minefield (modifiers cannot
