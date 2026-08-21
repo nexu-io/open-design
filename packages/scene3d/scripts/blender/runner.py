@@ -2194,7 +2194,14 @@ def coplanar_overlap(a, b):
         na = (fa[1] - fa[0]).cross(fa[2] - fa[0]).normalized()
         for fb in tb:
             nb = (fb[1] - fb[0]).cross(fb[2] - fb[0]).normalized()
-            if abs(na.dot(nb)) < 0.999:
+            # SAME-facing only (dot ~= +1), not merely parallel. Two coincident
+            # faces pointing OPPOSITE ways (a cube resting flush on another,
+            # any block stacked on a block) do not flicker under backface
+            # culling — which every target here uses, Minecraft included — so
+            # flagging them is a false positive that punishes normal blocky
+            # stacking. A real z-fight is two faces at one plane facing the
+            # same way (duplicates, overlapping coplanar plates): both draw.
+            if na.dot(nb) < 0.999:
                 continue
             if abs(na.dot(fa[0] - fb[0])) > 1e-4:
                 continue

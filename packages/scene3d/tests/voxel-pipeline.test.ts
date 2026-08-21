@@ -135,6 +135,50 @@ describe.skipIf(!hasBlender)("voxel pipeline (real Blender)", () => {
     expect(boxes(B)).toEqual(boxes(A));
   }, 400_000);
 
+  it("does not flag flush-stacked cubes as z-fighting, but does flag coplanar plates", async () => {
+    // Blocky modelling stacks cubes flush constantly; the touching faces point
+    // OPPOSITE ways and do not flicker under backface culling (every target,
+    // Minecraft included), so E-324 must stay silent. Two coplanar SAME-facing
+    // plates genuinely z-fight and must still fire — the check is direction-
+    // aware, not merely coplanar. (Root fix in runner.py coplanar_overlap.)
+    type Box = { id: string; size: number[]; center: number[] };
+    const zfires = async (name: string, boxes: Box[]): Promise<boolean> => {
+      const dir = path.join(__dirname, ".work", `zf-${name}-${++seq}`);
+      rmForSetup(dir);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "scene3d.json"), JSON.stringify({ schemaVersion: 1, target: "minecraft" }), "utf8");
+      fs.writeFileSync(
+        path.join(dir, "scene.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          name,
+          materials: { mtl_x: { baseColor: [0.6, 0.5, 0.4], roughness: 0.9 } },
+          parts: boxes.map((b) => ({ id: b.id, size: b.size, shape: "box", material: "mtl_x" })),
+          relations: boxes.map((b) => ({ type: "at", part: b.id, center: b.center })),
+        }),
+        "utf8",
+      );
+      const res = await compile({ projectDir: dir, stages: ["parse", "build", "lint"], timeoutMs: LONG, noCache: true });
+      return res.issues.some((i) => i.code === "S3D-E-324");
+    };
+
+    // Flush stack: prp_lo top (z=0.5, +z) meets prp_hi bottom (z=0.5, −z) — silent.
+    expect(
+      await zfires("stack", [
+        { id: "prp_lo", size: [0.5, 0.5, 0.5], center: [0, 0, 0.25] },
+        { id: "prp_hi", size: [0.5, 0.5, 0.5], center: [0, 0, 0.75] },
+      ]),
+    ).toBe(false);
+
+    // Two thin plates sharing the z=0.05 plane, both top faces +z: a real fight.
+    expect(
+      await zfires("plate", [
+        { id: "prp_p1", size: [0.5, 0.5, 0.1], center: [0, 0, 0.05] },
+        { id: "prp_p2", size: [0.5, 0.5, 0.1], center: [0.1, 0, 0.05] },
+      ]),
+    ).toBe(true);
+  }, 400_000);
+
   it("does NOT measure voxel facts without the minecraft target", async () => {
     // The same geometry under a neutral contract carries no voxel block — the
     // census is byte-identical to what every non-Minecraft scene has always got.
