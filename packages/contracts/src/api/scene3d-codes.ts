@@ -162,6 +162,12 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-E-901': 'Master stage lost content',
   'S3D-W-901': 'Master parity unchecked',
   'S3D-W-902': 'Joint/morph order drifted in lowering',
+
+  /* intent budgets */
+  'S3D-W-951': 'Part over its role triangle share',
+  'S3D-W-952': 'Hero less detailed than background',
+  'S3D-W-953': 'Part over its role texture budget',
+  'S3D-W-954': 'Part scale incoherent with the scene',
 };
 
 /** The human phrase for a code, or null for a code this build predates. */

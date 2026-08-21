@@ -1,4 +1,4 @@
-import { EngineTarget, Scene3dContract } from "./types.js";
+import { Budget, EngineTarget, Scene3dContract } from "./types.js";
 
 type Conventions = NonNullable<Scene3dContract["conventions"]>;
 
@@ -155,6 +155,10 @@ export interface NormalizedContract {
   /** LOD triangle-keep ratios (0,1); empty = no LOD variants. */
   lodRatios: number[];
   budgets: { maxTrianglesPerMesh?: number; maxTrianglesTotal?: number };
+  /** Project overrides for role-driven intent budgets, keyed by role name and
+   *  by part id — layered over the built-in ROLE_PROFILES (see lint/budgets). */
+  roleBudgets: Record<string, Budget>;
+  partBudgets: Record<string, Budget>;
   proof: NonNullable<Scene3dContract["proof"]>;
   /** Proof-quality lint thresholds, resolved from `proof` with defaults. */
   proofThresholds: { emptyLuminance: number; sparseCoverage: number; blownRatio: number };
@@ -269,6 +273,11 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
         ? { maxTrianglesTotal: numOrUndef(b.maxTrianglesTotal)! }
         : {}),
     },
+    // Intent-budget overrides pass through as plain objects (a non-object is
+    // ignored, not crashed — same defensiveness as every other field). The
+    // per-bound numbers inside are validated where they are consumed.
+    roleBudgets: asBudgetMap((b as { roles?: unknown }).roles),
+    partBudgets: asBudgetMap((b as { parts?: unknown }).parts),
     proof: proof as NonNullable<Scene3dContract["proof"]>,
     proofThresholds: {
       // Defensive `?? default` also guards a wrong-typed programmatic value,
@@ -310,6 +319,17 @@ function numOrUndef(value: unknown): number | undefined {
  *  downstream .filter/.includes/.some (found by fuzzing). */
 function asArray<T>(value: unknown, fallback: T[]): T[] {
   return Array.isArray(value) ? (value as T[]) : fallback;
+}
+
+/** A plain map of budget objects, or {} — each entry kept only if it is itself
+ *  a plain object, so a malformed override degrades to ungated, never a crash. */
+function asBudgetMap(value: unknown): Record<string, Budget> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const out: Record<string, Budget> = {};
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) out[key] = v as Budget;
+  }
+  return out;
 }
 
 /**

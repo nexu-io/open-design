@@ -883,6 +883,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       ...(exportedUsda ? { exportedUsda } : {}),
       ...(sheets ? { sheets } : {}),
       ...(spec?.claims ? { claims: spec.claims } : {}),
+      ...(solved ? { solved } : {}),
     });
     // A claim is adjudicated at the rest pose; a bobbing part leaves that
     // pose every cycle. Unchecked-never-passed applies across TIME too.

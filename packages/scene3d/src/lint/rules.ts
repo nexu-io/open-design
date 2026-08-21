@@ -11,7 +11,8 @@ import { lintExportedStage } from "./stage.js";
 import { lintWorld } from "./world.js";
 import { lintSheets, type SheetLintInput } from "./sheet.js";
 import { lintClaims } from "./claims.js";
-import type { ClaimsSpec } from "../solve/types.js";
+import { lintIntent } from "./judge.js";
+import type { ClaimsSpec, SolvedScene } from "../solve/types.js";
 
 export interface LintInput {
   contract: NormalizedContract;
@@ -25,6 +26,9 @@ export interface LintInput {
   sheets?: Omit<SheetLintInput, "specs"> & { specs: SheetLintInput["specs"] };
   /** The scene spec's claims block, adjudicated against the census. */
   claims?: ClaimsSpec;
+  /** The solved scene, when authored from scene.json — carries each part's
+   *  `role`, the intent the budget judge resolves to a standard. */
+  solved?: SolvedScene;
 }
 
 /**
@@ -51,6 +55,7 @@ export function runLint(input: LintInput): Issue[] {
     });
   }
   lintProof(input.proofFrames, issues, input.contract.proofThresholds);
+  lintIntent(input.census, input.contract, input.solved, issues);
   if (input.exportedUsda) {
     lintExportedStage(
       {

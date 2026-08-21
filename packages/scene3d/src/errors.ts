@@ -216,6 +216,17 @@ export const ISSUE_CODES = {
      morph asset is never silently reordered. */
   MASTER_ORDER_DRIFT: "S3D-W-902",
 
+  /* lint: intent budgets (950-969) — judgment gated on a part's authored
+     `role`. Every threshold is data (budgets.ts / the contract), every check
+     is a descriptor evaluated by one engine; these are always advisory
+     warnings, never compile-blocking. RELATIVE judgments a per-part threshold
+     cannot make: a family's share of the scene, a rank inversion, a scale
+     outlier. */
+  OVER_ROLE_TRI_SHARE: "S3D-W-951",
+  ROLE_RANK_INVERSION: "S3D-W-952",
+  PART_TEXTURE_BUDGET: "S3D-W-953",
+  SIZE_INCOHERENT: "S3D-W-954",
+
   /* lint: external conformance oracles (500-519) — verdicts adopted from the
      industry-standard validators run against the EXPORTED deliverable, not
      from our own parser. The compiler measures nothing here; it maps the

@@ -99,6 +99,11 @@ export interface Scene3dContract {
     budgets?: {
       maxTrianglesPerMesh?: number;
       maxTrianglesTotal?: number;
+      /** Redefine what a role means for this project — overrides the built-in
+       *  ROLE_PROFILES, keyed by role name (`{ hero: { triShare: {...} } }`). */
+      roles?: Record<string, Budget>;
+      /** Override a single part's budget by its id, winning over its role. */
+      parts?: Record<string, Budget>;
     };
     /**
      * UV discipline. Everything is measured by the census; these knobs are
@@ -299,6 +304,25 @@ export interface IssueSummary {
   errors: number;
   warnings: number;
   infos: number;
+}
+
+/* ------------------------------------------------------------------ */
+/**
+ * A per-part / per-role BUDGET: a set of optional bounds on measured facts,
+ * the data half of the intent-judgment layer (see src/lint/budgets.ts). Absent
+ * bound = ungated = the judge stays silent for that part.
+ */
+export interface Budget {
+  /** Fraction of the SCENE's triangles a prototype family may own (0..1). */
+  triShare?: { softMax?: number };
+  /** Decoded texture VRAM (bytes) a part's bound maps may total. */
+  textureBytes?: { softMax?: number };
+  /** Part max-dimension as a ratio of the scene median — coherence bounds. */
+  sizeRatio?: { min?: number; max?: number };
+  /** Texel-density (px/m) window for the role. */
+  texelDensity?: { min?: number; max?: number };
+  /** Ordinal detail tier, so ranks can be compared between parts. */
+  rank?: 1 | 2 | 3;
 }
 
 /* ------------------------------------------------------------------ */
