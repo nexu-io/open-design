@@ -149,8 +149,13 @@ export function lintPbr(ctx: LintContext, issues: Issue[]): void {
     for (const mat of census.materials) {
       if (mat.usedByObjectCount === 0 || !mat.principled.present) continue;
       const p = mat.principled;
+      // Emission and alpha are part of the look: two materials identical in
+      // metallic/roughness/ior/baseColor/textures but where one glows or is
+      // transparent are NOT duplicates, and merging them (the hint's advice)
+      // would visibly change the scene. They were absent from the fingerprint.
       const fingerprint = JSON.stringify([
         p.metallic, p.roughness, p.ior, p.baseColor,
+        p.emission ?? null, p.emissionStrength ?? null, p.alpha ?? null,
         [...(mat.textureNames ?? [])].sort(),
       ]);
       const group = byFingerprint.get(fingerprint) ?? [];

@@ -181,6 +181,60 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(codes.has(ISSUE_CODES.MATERIAL_UNUSED)).toBe(true);
   });
 
+  it("does not call two materials duplicate when only emission differs (PR-1)", () => {
+    const base = {
+      present: true as const,
+      metallic: 0,
+      roughness: 0.5,
+      ior: 1.45,
+      baseColor: [0.8, 0.8, 0.8] as [number, number, number],
+      hasTexture: false,
+      untouchedDefault: false,
+    };
+    const issues = runLint({
+      contract: contract(),
+      census: census({
+        materials: [
+          {
+            name: "mtl_lamp_on",
+            usedByObjectCount: 1,
+            principled: { ...base, emission: [1, 0.8, 0.2], emissionStrength: 5 },
+          },
+          {
+            name: "mtl_lamp_off",
+            usedByObjectCount: 1,
+            principled: { ...base, emission: [0, 0, 0], emissionStrength: 0 },
+          },
+        ],
+      }),
+    });
+    // A glowing lamp and a dark one are not the same material; merging them
+    // (the dedup hint's advice) would put the scene's light out.
+    expect(issues.some((i) => i.code === ISSUE_CODES.DUPLICATE_MATERIALS)).toBe(false);
+  });
+
+  it("still flags genuinely-identical materials as duplicates", () => {
+    const same = {
+      present: true as const,
+      metallic: 0,
+      roughness: 0.5,
+      ior: 1.45,
+      baseColor: [0.8, 0.8, 0.8] as [number, number, number],
+      hasTexture: false,
+      untouchedDefault: false,
+    };
+    const issues = runLint({
+      contract: contract(),
+      census: census({
+        materials: [
+          { name: "mtl_a", usedByObjectCount: 1, principled: { ...same } },
+          { name: "mtl_b", usedByObjectCount: 1, principled: { ...same } },
+        ],
+      }),
+    });
+    expect(issues.some((i) => i.code === ISSUE_CODES.DUPLICATE_MATERIALS)).toBe(true);
+  });
+
   it("flags textured objects without UVs and materials without binding", () => {
     const issues = runLint({
       contract: contract(),

@@ -30,11 +30,56 @@ const SUPPRESSED = new Set<string>([
   "MESH_PRIMITIVE_GENERATED_TANGENT_SPACE",
 ]);
 
-interface ValidatorMessage {
+// Actionable fixes for recurring validator codes. The validator names the
+// defect precisely but never says what to DO; every other lint module in this
+// package carries a hint, so the oracle's findings should too. Extend as real
+// exports surface codes worth a one-line remedy.
+const HINTS: Record<string, string> = {
+  // Blender links the skinned mesh to its armature by modifier but keeps it a
+  // sibling, so the glTF node is skinned yet not the armature's child.
+  NODE_SKINNED_MESH_NON_ROOT:
+    "parent the skinned mesh under its armature (or make it a scene-root node) so an ancestor transform cannot double-move it",
+};
+
+export interface ValidatorMessage {
   code: string;
   message: string;
   severity: number; // 0 error, 1 warning, 2 info, 3 hint
   pointer?: string;
+}
+
+/**
+ * Map the validator's messages onto stable S3D issues — pure, so the
+ * suppression, severity, and hint wiring is testable without running WASM.
+ * severity 2 (info) / 3 (hint) are dropped: the report leads with what must
+ * change, and neither is an error or a warning.
+ */
+export function messagesToIssues(messages: ValidatorMessage[], rel: string): Issue[] {
+  const issues: Issue[] = [];
+  for (const m of messages) {
+    if (SUPPRESSED.has(m.code)) continue;
+    const hint = HINTS[m.code] ? { hint: HINTS[m.code]! } : {};
+    if (m.severity === 0) {
+      issues.push({
+        code: ISSUE_CODES.GLTF_INVALID,
+        severity: "error",
+        message: `${m.code}: ${m.message}`,
+        file: rel,
+        ...hint,
+        detail: { validator: m.code, ...(m.pointer ? { pointer: m.pointer } : {}) },
+      });
+    } else if (m.severity === 1) {
+      issues.push({
+        code: ISSUE_CODES.GLTF_WARNING,
+        severity: "warning",
+        message: `${m.code}: ${m.message}`,
+        file: rel,
+        ...hint,
+        detail: { validator: m.code, ...(m.pointer ? { pointer: m.pointer } : {}) },
+      });
+    }
+  }
+  return issues;
 }
 
 /** Validate one exported `.glb` and return the oracle's verdict as issues. */
@@ -66,28 +111,5 @@ export async function validateGltf(projectDir: string, rel: string): Promise<Iss
     ];
   }
 
-  const issues: Issue[] = [];
-  for (const m of messages) {
-    if (SUPPRESSED.has(m.code)) continue;
-    if (m.severity === 0) {
-      issues.push({
-        code: ISSUE_CODES.GLTF_INVALID,
-        severity: "error",
-        message: `${m.code}: ${m.message}`,
-        file: rel,
-        detail: { validator: m.code, ...(m.pointer ? { pointer: m.pointer } : {}) },
-      });
-    } else if (m.severity === 1) {
-      issues.push({
-        code: ISSUE_CODES.GLTF_WARNING,
-        severity: "warning",
-        message: `${m.code}: ${m.message}`,
-        file: rel,
-        detail: { validator: m.code, ...(m.pointer ? { pointer: m.pointer } : {}) },
-      });
-    }
-    // severity 2 (info) / 3 (hint) are not compile-worthy — the report leads
-    // with what must change, and a hint is neither an error nor a warning.
-  }
-  return issues;
+  return messagesToIssues(messages, rel);
 }
