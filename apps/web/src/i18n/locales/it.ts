@@ -735,6 +735,7 @@ export const it: Dict = {
   'entry.discordAria': 'Unisciti al Discord di OpenDesign',
   'entry.discordAriaWithOnline': 'Unisciti al Discord di OpenDesign - {online}',
   'entry.discordOnlineLabel': '{count} online',
+  'entry.feishuAria': 'Unisciti al gruppo Feishu di OpenDesign',
   'entry.mailAria': 'Invia un\'email a OpenDesign',
   'entry.accountSettings': 'Impostazioni',
   'chat.collapsePane': 'Comprimi il pannello della conversazione',

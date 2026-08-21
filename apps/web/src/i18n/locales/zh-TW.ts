@@ -742,6 +742,7 @@ export const zhTW: Dict = {
   "entry.discordAria": "加入 OpenDesign Discord",
   "entry.discordAriaWithOnline": "加入 OpenDesign Discord - {online}",
   "entry.discordOnlineLabel": "{count} 在線",
+  "entry.feishuAria": "加入 OpenDesign 飛書群",
   "entry.mailAria": "寄信給 OpenDesign",
   "entry.accountSettings": "設定",
   "chat.collapsePane": "收起對話欄",

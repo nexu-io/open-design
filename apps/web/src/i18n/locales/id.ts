@@ -735,6 +735,7 @@ export const id: Dict = {
   'entry.discordAria': 'Gabung Discord OpenDesign',
   'entry.discordAriaWithOnline': 'Gabung Discord OpenDesign - {online}',
   'entry.discordOnlineLabel': '{count} online',
+  'entry.feishuAria': 'Gabung grup Feishu OpenDesign',
   'entry.mailAria': 'Kirim email ke OpenDesign',
   'entry.accountSettings': 'Pengaturan',
   'chat.collapsePane': 'Ciutkan panel percakapan',

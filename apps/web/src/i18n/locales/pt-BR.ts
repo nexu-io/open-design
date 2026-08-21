@@ -735,6 +735,7 @@ export const ptBR: Dict = {
   'entry.discordAria': 'Entre no Discord do OpenDesign',
   'entry.discordAriaWithOnline': 'Entre no Discord do OpenDesign - {online}',
   'entry.discordOnlineLabel': '{count} online',
+  'entry.feishuAria': 'Entre no grupo do Feishu do OpenDesign',
   'entry.mailAria': 'Enviar e-mail para o OpenDesign',
   'entry.accountSettings': 'Configurações',
   'chat.collapsePane': 'Recolher o painel de conversa',

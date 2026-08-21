@@ -735,6 +735,7 @@ export const ja: Dict = {
   'entry.discordAria': 'OpenDesign の Discord に参加',
   'entry.discordAriaWithOnline': 'OpenDesign の Discord に参加 - {online}',
   'entry.discordOnlineLabel': '{count} 人がオンライン',
+  'entry.feishuAria': 'OpenDesign の Feishu グループに参加',
   'entry.mailAria': 'OpenDesign にメールする',
   'entry.accountSettings': '設定',
   'chat.collapsePane': '会話パネルを折りたたむ',

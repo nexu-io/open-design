@@ -735,6 +735,7 @@ export const fr: Dict = {
   'entry.discordAria': 'Rejoindre le Discord d’OpenDesign',
   'entry.discordAriaWithOnline': 'Rejoindre le Discord d’OpenDesign - {online}',
   'entry.discordOnlineLabel': '{count} en ligne',
+  'entry.feishuAria': 'Rejoindre le groupe Feishu d’OpenDesign',
   'entry.mailAria': 'Envoyer un e-mail à OpenDesign',
   'entry.accountSettings': 'Paramètres',
   'chat.collapsePane': 'Réduire le panneau de conversation',

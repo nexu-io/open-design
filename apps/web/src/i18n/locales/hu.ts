@@ -735,6 +735,7 @@ export const hu: Dict = {
   'entry.discordAria': 'Csatlakozás az OpenDesign Discordhoz',
   'entry.discordAriaWithOnline': 'Csatlakozás az OpenDesign Discordhoz - {online}',
   'entry.discordOnlineLabel': '{count} online',
+  'entry.feishuAria': 'Csatlakozás az OpenDesign Feishu-csoportjához',
   'entry.mailAria': 'E-mail küldése az OpenDesignnak',
   'entry.accountSettings': 'Beállítások',
   'chat.collapsePane': 'Beszélgetéspanel összecsukása',
