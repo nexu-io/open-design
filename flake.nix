@@ -162,12 +162,7 @@
           pnpm_10
         ];
         shellHook = ''
-          if [ -d "$PWD/tools/pack/node_modules/.bin" ]; then
-            export PATH="$PWD/tools/pack/node_modules/.bin:$PATH"
-          fi
-          if [ -d "$PWD/node_modules/.bin" ]; then
-            export PATH="$PWD/node_modules/.bin:$PATH"
-          fi
+          export PATH="$PWD/tools/pack/node_modules/.bin:$PWD/node_modules/.bin:$PATH"
 
           echo "🎨 OpenDesign dev shell loaded!"
           echo ""
