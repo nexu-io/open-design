@@ -211,10 +211,20 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     expect(modelSwitcherSource).toContain('const campaignNeedsUpgrade = false;');
   });
 
-  it('keeps existing DeepSeek analytics while the Go pass stays UI-only', () => {
+  it('keeps existing DeepSeek analytics and attributes both Go campaign entries', () => {
     expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeSurfaceView');
     expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeClick');
-    expect(workbenchCampaignBadgeSource).toContain("window.open(GO_PLAN_PRICING_URL, '_blank', 'noopener,noreferrer')");
+    expect(workbenchCampaignBadgeSource).toContain('trackGoPlanBadgeSurfaceView');
+    expect(workbenchCampaignBadgeSource).toContain('trackGoPlanBadgeClick');
+    expect(workbenchCampaignBadgeSource).toContain("'go_workbench_badge'");
+    expect(workbenchCampaignBadgeSource).toContain("campaignId: 'go_plan_launch'");
+    expect(workbenchCampaignBadgeSource).toContain("action: 'open_purchase_panel'");
+    expect(workbenchCampaignBadgeSource).toContain('has_new_badge: true');
+    expect(workbenchCampaignBadgeSource).toContain(
+      'attributedAmrUrl(GO_PLAN_PRICING_URL, attribution, deviceId)',
+    );
+    expect(campaignModalSource).toContain("'go_unpaid_modal'");
+    expect(campaignModalSource).toContain('attributedAmrUrl(');
     expect(workbenchCampaignBadgeSource).toContain("page !== 'home'");
     expect(modelSwitcherSource).toContain('trackDeepSeekCampaignModelBenefitSurfaceView');
     expect(modelSwitcherSource).toContain('trackExecutionSettingsPopoverClick');

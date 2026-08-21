@@ -3318,6 +3318,8 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
       ['deepseek_unpaid_modal', 'home'],
       ['deepseek_workbench_badge', 'home'],
       ['deepseek_model_switcher_upgrade', 'chat_panel'],
+      ['go_unpaid_modal', 'home'],
+      ['go_workbench_badge', 'home'],
       ['avatar_amr_upgrade', 'chat_panel'],
       ['avatar_amr_agent_card', 'chat_panel'],
       ['artifact_success_upgrade', 'artifact'],
@@ -3362,6 +3364,21 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
       campaignId: 'deepseek_v4_pro',
       conversionSource: 'deepseek_workbench_badge',
     });
+  });
+
+  it('accepts Go campaign attribution from both workbench entry points', () => {
+    for (const source of ['go_unpaid_modal', 'go_workbench_badge']) {
+      const parsed = parseAmrEntryAnalyticsPayload({
+        ...payloadFor(source, 'home'),
+        campaignId: 'go_plan_launch',
+        conversionSource: source,
+      });
+      expect(parsed).toMatchObject({
+        sourceDetail: source,
+        campaignId: 'go_plan_launch',
+        conversionSource: source,
+      });
+    }
   });
 
   it('rejects unknown campaign dimensions rather than silently dropping them', () => {

@@ -171,10 +171,83 @@ describe('unpaid Go path opens public Pricing', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^View Go plan/ }));
 
+    expect(trackSpy).toHaveBeenCalledWith(
+      'surface_view',
+      expect.objectContaining({
+        page_name: 'home',
+        area: 'go_upsell_modal',
+        element: 'modal',
+        campaign_id: 'go_plan_launch',
+        audience: 'unpaid',
+        locale: 'en',
+      }),
+      undefined,
+    );
+    expect(trackSpy).toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        area: 'go_upsell_modal',
+        element: 'primary_cta',
+        action: 'open_pricing',
+      }),
+      undefined,
+    );
+    expect(trackSpy).toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        area: 'amr_entry',
+        source_detail: 'go_unpaid_modal',
+        campaign_id: 'go_plan_launch',
+        conversion_source: 'go_unpaid_modal',
+      }),
+      undefined,
+    );
     expect(open).toHaveBeenCalledTimes(1);
     const url = new URL(String(open.mock.calls[0]?.[0]));
     expect(url.origin + url.pathname).toBe('https://open-design.ai/pricing/');
-    expect(url.search).toBe('');
+    expect(url.searchParams.get('od_origin')).toBe('open_design');
+    expect(url.searchParams.get('od_entry_source')).toBe('go_unpaid_modal');
+    expect(url.searchParams.get('od_campaign_id')).toBe('go_plan_launch');
+    expect(url.searchParams.get('od_conversion_source')).toBe('go_unpaid_modal');
+    expect(url.searchParams.get('od_entry_id')).toMatch(/^od-amr-/);
+  });
+
+  it('tracks an explicit close without creating a Pricing attribution', () => {
+    render(<DeepSeekV4FlashCampaign audience="unpaid" active />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        area: 'go_upsell_modal',
+        element: 'close',
+        method: 'close_button',
+        campaign_id: 'go_plan_launch',
+      }),
+      undefined,
+    );
+    expect(trackSpy).not.toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({ area: 'amr_entry' }),
+      undefined,
+    );
+  });
+
+  it('distinguishes Escape dismissal from the close button', () => {
+    render(<DeepSeekV4FlashCampaign audience="unpaid" active />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        area: 'go_upsell_modal',
+        element: 'close',
+        method: 'esc',
+      }),
+      undefined,
+    );
   });
 
   it('keeps the same target without metrics consent', () => {

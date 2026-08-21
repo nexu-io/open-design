@@ -21,6 +21,8 @@ import type {
   DeepSeekCampaignModalSurfaceViewProps,
   DeepSeekCampaignBadgeSurfaceViewProps,
   DeepSeekCampaignModelBenefitSurfaceViewProps,
+  GoPlanModalSurfaceViewProps,
+  GoPlanBadgeSurfaceViewProps,
   // ui_click
   HomeNavClickProps,
   HelpPopoverClickProps,
@@ -80,6 +82,8 @@ import type {
   PreviewRunStatusSurfaceViewProps,
   DeepSeekCampaignModalClickProps,
   DeepSeekCampaignBadgeClickProps,
+  GoPlanModalClickProps,
+  GoPlanBadgeClickProps,
   RunFailedToastSurfaceViewProps,
   RunRecoveryActionSurfaceViewProps,
   RunStartBlockedSurfaceViewProps,
@@ -461,6 +465,34 @@ export function trackDeepSeekCampaignModalClick(
 export function trackDeepSeekCampaignBadgeClick(
   track: Track,
   props: DeepSeekCampaignBadgeClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackGoPlanModalSurfaceView(
+  track: Track,
+  props: GoPlanModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackGoPlanBadgeSurfaceView(
+  track: Track,
+  props: GoPlanBadgeSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackGoPlanModalClick(
+  track: Track,
+  props: GoPlanModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackGoPlanBadgeClick(
+  track: Track,
+  props: GoPlanBadgeClickProps,
 ): void {
   send(track, 'ui_click', props);
 }

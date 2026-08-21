@@ -15,7 +15,7 @@ type DialogLayout = 'default' | 'sectioned';
 
 export interface DialogProps {
   children: ReactNode;
-  onClose?: () => void;
+  onClose?: (reason: 'backdrop' | 'esc') => void;
   className?: string;
   backdropClassName?: string;
   includeChromeClassName?: boolean;
@@ -62,7 +62,7 @@ export function Dialog({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      onClose?.();
+      onClose?.('esc');
     }
 
     document.addEventListener('keydown', handleKeyDown);
@@ -93,7 +93,7 @@ export function Dialog({
         includeChromeClassName ? 'modal-backdrop' : undefined,
         backdropClassName,
       )}
-      onClick={closeOnBackdrop ? onClose : undefined}
+      onClick={closeOnBackdrop ? () => onClose?.('backdrop') : undefined}
       role="presentation"
     >
       {as === 'form' ? (

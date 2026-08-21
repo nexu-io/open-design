@@ -37,7 +37,7 @@ describe('Dialog', () => {
 
     fireEvent.click(container.querySelector('.modal-backdrop') as HTMLElement);
 
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledWith('backdrop');
   });
 
   it('closes on Escape when enabled', () => {
@@ -50,7 +50,7 @@ describe('Dialog', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledWith('esc');
   });
 
   it('lets custom panels opt out of the shared modal chrome class', () => {

@@ -12,7 +12,15 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackDeepSeekCampaignModalClick,
   trackDeepSeekCampaignModalSurfaceView,
+  trackGoPlanModalClick,
+  trackGoPlanModalSurfaceView,
 } from '../analytics/events';
+import {
+  amrHandoffDeviceId,
+  attributedAmrUrl,
+  recordAmrEntry,
+} from '../analytics/amr-attribution';
+import { getResolvedDeviceId } from '../analytics/client';
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
 import styles from './DeepSeekV4FlashCampaign.module.css';
@@ -131,6 +139,15 @@ export function DeepSeekV4FlashCampaign({
         campaign_id: 'deepseek_v4_pro',
         user_state: 'paid',
       });
+    } else {
+      trackGoPlanModalSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'go_upsell_modal',
+        element: 'modal',
+        campaign_id: 'go_plan_launch',
+        audience: 'unpaid',
+        locale,
+      });
     }
     const panel = document.getElementById(dialogId);
     if (!panel) return;
@@ -144,7 +161,7 @@ export function DeepSeekV4FlashCampaign({
       document.body.style.overflow = previousBodyOverflow;
       if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
-  }, [analytics.track, audience, dialogId, modalOpen, paid]);
+  }, [analytics.track, audience, dialogId, locale, modalOpen, paid]);
 
   useEffect(() => {
     if (!modalOpen || !paid) return;
@@ -182,10 +199,24 @@ export function DeepSeekV4FlashCampaign({
       user_state: 'paid',
     });
   };
-  const closeModal = () => {
-    trackModalClick('close');
+  const closeModalWithMethod = (method: 'close_button' | 'backdrop' | 'esc') => {
+    if (paid) {
+      trackModalClick('close');
+    } else {
+      trackGoPlanModalClick(analytics.track, {
+        page_name: 'home',
+        area: 'go_upsell_modal',
+        element: 'close',
+        action: 'dismiss',
+        method,
+        campaign_id: 'go_plan_launch',
+        audience: 'unpaid',
+        locale,
+      });
+    }
     dismissModal();
   };
+  const closeModal = () => closeModalWithMethod('close_button');
   const postponeModal = () => {
     trackModalClick('later');
     dismissModal();
@@ -200,8 +231,32 @@ export function DeepSeekV4FlashCampaign({
       window.setTimeout(highlightModelSwitcher, 0);
       return;
     }
+    trackGoPlanModalClick(analytics.track, {
+      page_name: 'home',
+      area: 'go_upsell_modal',
+      element: 'primary_cta',
+      action: 'open_pricing',
+      campaign_id: 'go_plan_launch',
+      audience: 'unpaid',
+      locale,
+    });
+    const attribution = recordAmrEntry(
+      analytics.track,
+      'go_unpaid_modal',
+      new Date(),
+      {
+        metricsConsent,
+        campaignId: 'go_plan_launch',
+        conversionSource: 'go_unpaid_modal',
+      },
+    );
+    const deviceId = amrHandoffDeviceId({
+      metricsConsent,
+      resolvedDeviceId: getResolvedDeviceId(),
+      installationId,
+    });
     window.open(
-      GO_PLAN_PRICING_URL,
+      attributedAmrUrl(GO_PLAN_PRICING_URL, attribution, deviceId),
       '_blank',
       'noopener,noreferrer',
     );
@@ -217,7 +272,7 @@ export function DeepSeekV4FlashCampaign({
         id={dialogId}
         ariaLabelledBy={titleId}
         ariaDescribedBy={descriptionId}
-        onClose={closeModal}
+        onClose={closeModalWithMethod}
         closeOnEscape
         className={styles.goWelcomeModal}
         backdropClassName={styles.goWelcomeBackdrop}
@@ -302,7 +357,7 @@ export function DeepSeekV4FlashCampaign({
       id={dialogId}
       ariaLabelledBy={titleId}
       ariaDescribedBy={descriptionId}
-      onClose={closeModal}
+      onClose={closeModalWithMethod}
       closeOnEscape
       className={styles.panel}
       backdropClassName={styles.backdrop}

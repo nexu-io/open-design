@@ -55,6 +55,8 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'deepseek_unpaid_modal',
   'deepseek_workbench_badge',
   'deepseek_model_switcher_upgrade',
+  'go_unpaid_modal',
+  'go_workbench_badge',
   'avatar_amr_upgrade',
   'avatar_amr_agent_card',
   'artifact_success_upgrade',
@@ -92,6 +94,7 @@ const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
 const AMR_ENTRY_CAMPAIGN_IDS: ReadonlySet<TrackingCampaignId> = new Set([
   'deepseek_v4_flash',
   'deepseek_v4_pro',
+  'go_plan_launch',
 ]);
 
 const AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES: ReadonlySet<TrackingCampaignConversionSource> =
@@ -99,6 +102,8 @@ const AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES: ReadonlySet<TrackingCampaignConvers
     'deepseek_unpaid_modal',
     'deepseek_workbench_badge',
     'deepseek_model_switcher_upgrade',
+    'go_unpaid_modal',
+    'go_workbench_badge',
     'landing_home_banner',
     'landing_pricing_personal_plan',
     'landing_pricing_team_plan',
@@ -136,6 +141,8 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   deepseek_unpaid_modal: 'home',
   deepseek_workbench_badge: 'home',
   deepseek_model_switcher_upgrade: 'chat_panel',
+  go_unpaid_modal: 'home',
+  go_workbench_badge: 'home',
   avatar_amr_upgrade: 'chat_panel',
   avatar_amr_agent_card: 'chat_panel',
   artifact_success_upgrade: 'artifact',

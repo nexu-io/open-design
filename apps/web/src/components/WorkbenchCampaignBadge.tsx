@@ -2,6 +2,8 @@ import { useCallback, useEffect } from 'react';
 import {
   trackDeepSeekCampaignBadgeClick,
   trackDeepSeekCampaignBadgeSurfaceView,
+  trackGoPlanBadgeClick,
+  trackGoPlanBadgeSurfaceView,
 } from '../analytics/events';
 import {
   amrHandoffDeviceId,
@@ -36,7 +38,19 @@ export function WorkbenchCampaignBadge({
     // The current campaign analytics contract scopes badge impressions to
     // Home. Project-detail visibility is intentionally UI-only until that
     // contract gains a project page variant.
-    if (kind !== 'deepseek' || page !== 'home') return;
+    if (page !== 'home') return;
+    if (kind === 'go') {
+      trackGoPlanBadgeSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'go_badge',
+        element: 'badge',
+        campaign_id: 'go_plan_launch',
+        audience: 'unpaid',
+        locale,
+        has_new_badge: true,
+      });
+      return;
+    }
     trackDeepSeekCampaignBadgeSurfaceView(analytics.track, {
       page_name: 'home',
       area: 'campaign_badge',
@@ -44,11 +58,44 @@ export function WorkbenchCampaignBadge({
       campaign_id: 'deepseek_v4_pro',
       user_state: 'paid',
     });
-  }, [analytics.track, kind, page]);
+  }, [analytics.track, kind, locale, page]);
 
   const openCampaignPricing = useCallback(() => {
     if (kind === 'go') {
-      window.open(GO_PLAN_PRICING_URL, '_blank', 'noopener,noreferrer');
+      if (page !== 'home') {
+        window.open(GO_PLAN_PRICING_URL, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      trackGoPlanBadgeClick(analytics.track, {
+        page_name: 'home',
+        area: 'go_badge',
+        element: 'badge',
+        action: 'open_purchase_panel',
+        campaign_id: 'go_plan_launch',
+        audience: 'unpaid',
+        locale,
+        has_new_badge: true,
+      });
+      const attribution = recordAmrEntry(
+        analytics.track,
+        'go_workbench_badge',
+        new Date(),
+        {
+          metricsConsent,
+          campaignId: 'go_plan_launch',
+          conversionSource: 'go_workbench_badge',
+        },
+      );
+      const deviceId = amrHandoffDeviceId({
+        metricsConsent,
+        resolvedDeviceId: getResolvedDeviceId(),
+        installationId,
+      });
+      window.open(
+        attributedAmrUrl(GO_PLAN_PRICING_URL, attribution, deviceId),
+        '_blank',
+        'noopener,noreferrer',
+      );
       return;
     }
     if (page === 'home') {
@@ -80,7 +127,7 @@ export function WorkbenchCampaignBadge({
       '_blank',
       'noopener,noreferrer',
     );
-  }, [analytics.track, installationId, kind, metricsConsent, page]);
+  }, [analytics.track, installationId, kind, locale, metricsConsent, page]);
 
   return (
     <button

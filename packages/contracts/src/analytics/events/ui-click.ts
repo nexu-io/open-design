@@ -977,6 +977,37 @@ export interface DeepSeekCampaignBadgeClickProps {
   user_state: TrackingCampaignUserState;
 }
 
+interface GoPlanModalClickBaseProps {
+  page_name: 'home';
+  area: 'go_upsell_modal';
+  campaign_id: 'go_plan_launch';
+  audience: 'unpaid';
+  locale: string;
+}
+
+export type GoPlanModalClickProps = GoPlanModalClickBaseProps & (
+  | {
+      element: 'primary_cta';
+      action: 'open_pricing';
+    }
+  | {
+      element: 'close';
+      action: 'dismiss';
+      method: 'close_button' | 'backdrop' | 'esc';
+    }
+);
+
+export interface GoPlanBadgeClickProps {
+  page_name: 'home';
+  area: 'go_badge';
+  element: 'badge';
+  action: 'open_purchase_panel';
+  campaign_id: 'go_plan_launch';
+  audience: 'unpaid';
+  locale: string;
+  has_new_badge: boolean;
+}
+
 // Terminal outcome of one AMR (vela) sign-in attempt, fired exactly once
 // per attempt when the login poll loop settles. This is the main-app-side
 // completion signal that pairs with the amr_entry click: dashboards count
@@ -1688,6 +1719,8 @@ export type UiClickProps =
   | AmrEntryClickProps
   | DeepSeekCampaignModalClickProps
   | DeepSeekCampaignBadgeClickProps
+  | GoPlanModalClickProps
+  | GoPlanBadgeClickProps
   | ChatPanelResourcesPopoverClickProps
   | ChatPanelMessageQueueClickProps
   | FileManagerClickProps

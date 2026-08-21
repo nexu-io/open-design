@@ -61,6 +61,25 @@ export interface DeepSeekCampaignModelBenefitSurfaceViewProps {
   model_id: string;
 }
 
+export interface GoPlanModalSurfaceViewProps {
+  page_name: 'home';
+  area: 'go_upsell_modal';
+  element: 'modal';
+  campaign_id: 'go_plan_launch';
+  audience: 'unpaid';
+  locale: string;
+}
+
+export interface GoPlanBadgeSurfaceViewProps {
+  page_name: 'home';
+  area: 'go_badge';
+  element: 'badge';
+  campaign_id: 'go_plan_launch';
+  audience: 'unpaid';
+  locale: string;
+  has_new_badge: boolean;
+}
+
 // Impression of the plugin detail modal opened from the home Community
 // gallery. Fires once per open so the gallery → detail funnel has a
 // denominator (card clicks) and a numerator (modal exposures).
@@ -274,6 +293,8 @@ export type SurfaceViewProps =
   | DeepSeekCampaignModalSurfaceViewProps
   | DeepSeekCampaignBadgeSurfaceViewProps
   | DeepSeekCampaignModelBenefitSurfaceViewProps
+  | GoPlanModalSurfaceViewProps
+  | GoPlanBadgeSurfaceViewProps
   | HomeRecommendationSurfaceViewProps
   | StudioOnboardingHintSurfaceViewProps
   | HelpPopoverSurfaceViewProps

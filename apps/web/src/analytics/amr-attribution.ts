@@ -83,6 +83,8 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   deepseek_unpaid_modal: 'home',
   deepseek_workbench_badge: 'home',
   deepseek_model_switcher_upgrade: 'chat_panel',
+  go_unpaid_modal: 'home',
+  go_workbench_badge: 'home',
   avatar_amr_upgrade: 'chat_panel',
   avatar_amr_agent_card: 'chat_panel',
   artifact_success_upgrade: 'artifact',
