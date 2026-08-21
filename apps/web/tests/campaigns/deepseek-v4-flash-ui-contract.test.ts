@@ -120,11 +120,11 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
 
   it('sends both Go and paid DeepSeek badges to public Pricing', () => {
     expect(entryShellSource).not.toContain('amrPlansUrlForWorkspace');
-    expect(workbenchCampaignBadgeSource).toContain('GO_PLAN_PRICING_URL');
+    expect(workbenchCampaignBadgeSource).toContain('goPlanPricingUrl(locale)');
     expect(workbenchCampaignBadgeSource).toContain("'deepseek_workbench_badge'");
     expect(workbenchCampaignBadgeSource).toContain("'noopener,noreferrer'");
-    // The public URL is locale-neutral; no language is pinned into a link
-    // shown to every locale.
+    // The destination comes from the active app locale rather than pinning one
+    // language into a link shown to every locale.
     expect(workbenchCampaignBadgeSource).not.toContain('open-design.ai/zh/pricing');
   });
 
@@ -214,7 +214,7 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
   it('keeps existing DeepSeek analytics while the Go pass stays UI-only', () => {
     expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeSurfaceView');
     expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeClick');
-    expect(workbenchCampaignBadgeSource).toContain("window.open(GO_PLAN_PRICING_URL, '_blank', 'noopener,noreferrer')");
+    expect(workbenchCampaignBadgeSource).toContain("window.open(pricingUrl, '_blank', 'noopener,noreferrer')");
     expect(workbenchCampaignBadgeSource).toContain("page !== 'home'");
     expect(modelSwitcherSource).toContain('trackDeepSeekCampaignModelBenefitSurfaceView');
     expect(modelSwitcherSource).toContain('trackExecutionSettingsPopoverClick');

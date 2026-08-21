@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GO_PLAN_CAMPAIGN,
   GO_PLAN_PRICING_URL,
+  goPlanPricingUrl,
   goPlanCampaignNextBoundary,
   isGoPlanCampaignWindowOpen,
   resolveSubscriptionAudience,
@@ -23,6 +24,27 @@ describe('Go plan touchpoints', () => {
     expect(goPlanCampaignNextBoundary(start)).toBe(end);
     expect(goPlanCampaignNextBoundary(end)).toBeNull();
     expect(GO_PLAN_PRICING_URL).toBe('https://open-design.ai/pricing/');
+  });
+
+  it('hands Pricing the source locale without targeting retired Landing routes', () => {
+    expect(goPlanPricingUrl('en')).toBe(
+      'https://open-design.ai/pricing/?od_locale=en',
+    );
+    expect(goPlanPricingUrl('zh-CN')).toBe(
+      'https://open-design.ai/zh/pricing/?od_locale=zh',
+    );
+    expect(goPlanPricingUrl('zh-TW')).toBe(
+      'https://open-design.ai/zh/pricing/?od_locale=zh',
+    );
+    expect(goPlanPricingUrl('pt-BR')).toBe(
+      'https://open-design.ai/pt-br/pricing/?od_locale=pt-br',
+    );
+    expect(goPlanPricingUrl('es-ES')).toBe(
+      'https://open-design.ai/es/pricing/?od_locale=es',
+    );
+    expect(goPlanPricingUrl('id')).toBe(
+      'https://open-design.ai/pricing/?od_locale=en',
+    );
   });
 
   it('resolves paid and unpaid state independently of the campaign window', () => {

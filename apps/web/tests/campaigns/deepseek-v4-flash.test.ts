@@ -153,7 +153,7 @@ describe('DeepSeek V4 Flash campaign', () => {
 
   it('reuses the modal shell for Go without showing the paid secondary action', () => {
     expect(campaignDialogSource).toContain('styles.goWelcomePrimary');
-    expect(campaignDialogSource).toContain('GO_PLAN_PRICING_URL');
+    expect(campaignDialogSource).toContain('goPlanPricingUrl');
     expect(campaignDialogSource).not.toContain("'go_plan_modal'");
     expect(campaignDialogSource.indexOf('styles.goWelcomePrimary')).toBeLessThan(
       campaignDialogSource.indexOf('styles.laterAction'),

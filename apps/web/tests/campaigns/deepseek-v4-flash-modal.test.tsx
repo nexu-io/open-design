@@ -174,7 +174,7 @@ describe('unpaid Go path opens public Pricing', () => {
     expect(open).toHaveBeenCalledTimes(1);
     const url = new URL(String(open.mock.calls[0]?.[0]));
     expect(url.origin + url.pathname).toBe('https://open-design.ai/pricing/');
-    expect(url.search).toBe('');
+    expect(url.searchParams.get('od_locale')).toBe('en');
   });
 
   it('keeps the same target without metrics consent', () => {

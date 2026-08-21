@@ -134,6 +134,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <LocaleSwitcherScript />
     <meta name="theme-color" content="#efe7d2" />
     <title>{title}</title>
     <meta name="description" content={metaDescription} />
@@ -185,7 +186,6 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     </div>
 
     <HeaderEnhancer />
-    <LocaleSwitcherScript />
     <PreciseLazyload />
     {/* Hover-autoplay + idle hold/pan loop for any TemplateCard preview clips on
         the page. Self-initialising and a no-op when the page has no cards, so it

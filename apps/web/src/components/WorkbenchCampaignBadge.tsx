@@ -10,7 +10,7 @@ import {
 } from '../analytics/amr-attribution';
 import { getResolvedDeviceId } from '../analytics/client';
 import { useAnalytics } from '../analytics/provider';
-import { GO_PLAN_PRICING_URL } from '../campaigns/go-plan';
+import { goPlanPricingUrl } from '../campaigns/go-plan';
 import { getGoPlanCampaignCopy } from '../campaigns/go-plan-content';
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
@@ -47,8 +47,9 @@ export function WorkbenchCampaignBadge({
   }, [analytics.track, kind, page]);
 
   const openCampaignPricing = useCallback(() => {
+    const pricingUrl = goPlanPricingUrl(locale);
     if (kind === 'go') {
-      window.open(GO_PLAN_PRICING_URL, '_blank', 'noopener,noreferrer');
+      window.open(pricingUrl, '_blank', 'noopener,noreferrer');
       return;
     }
     if (page === 'home') {
@@ -76,11 +77,11 @@ export function WorkbenchCampaignBadge({
       installationId,
     });
     window.open(
-      attributedAmrUrl(GO_PLAN_PRICING_URL, attribution, deviceId),
+      attributedAmrUrl(pricingUrl, attribution, deviceId),
       '_blank',
       'noopener,noreferrer',
     );
-  }, [analytics.track, installationId, kind, metricsConsent, page]);
+  }, [analytics.track, installationId, kind, locale, metricsConsent, page]);
 
   return (
     <button

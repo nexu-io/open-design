@@ -7,7 +7,7 @@ import {
   type DeepSeekV4FlashCampaignAudience,
 } from '../campaigns/deepseek-v4-flash';
 import { getGoPlanCampaignCopy } from '../campaigns/go-plan-content';
-import { GO_PLAN_CAMPAIGN, GO_PLAN_PRICING_URL } from '../campaigns/go-plan';
+import { GO_PLAN_CAMPAIGN, goPlanPricingUrl } from '../campaigns/go-plan';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDeepSeekCampaignModalClick,
@@ -201,7 +201,7 @@ export function DeepSeekV4FlashCampaign({
       return;
     }
     window.open(
-      GO_PLAN_PRICING_URL,
+      goPlanPricingUrl(locale),
       '_blank',
       'noopener,noreferrer',
     );
