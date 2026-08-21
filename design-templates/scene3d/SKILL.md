@@ -346,6 +346,41 @@ gate is configured from this file.
 
 Every section is optional; omitted sections fall back to the defaults.
 
+### Delivery targets
+
+`"target": "<name>"` at the top of `scene3d.json` applies a preset bundle of
+conventions for a delivery target; anything you write in `conventions` still
+wins. Targets: `unity`, `unreal`, `godot`, `web`, `3d_print`, `minecraft`.
+
+**Minecraft / voxel** (`"target": "minecraft"`) makes scene3d a blocky-model
+toolchain: author a `scene.json`, lint it against the vanilla model format, and
+the compile emits the JSON the game loads.
+
+- **Author on the pixel grid.** One block = one metre = 16 px, so every size
+  and `at` position should be a multiple of `1/16` m (0.0625). Build from `box`
+  shapes. Height is the **Z** axis (scene.json is Blender Z-up), so a standing
+  model stacks up Z and rests its lowest part on `z = 0`.
+- **The voxel rules** (all warnings, silent off-target): `W-970` off-grid
+  vertex (shimmers in-game), `W-971` not a single cuboid, `W-972` illegal
+  rotation, `W-973` outside the −1..2-block element space. Flush-stacked cubes
+  are fine (they do not z-fight under culling) — overlapping is optional.
+- **Dialect.** `conventions.minecraft.dialect` is `"java"` (default → emits
+  `out/minecraft/model.json` + per-material textures) or `"bedrock"` (→
+  `geometry.json` + one atlas texture). `grid.size`, `pxPerBlock`, and
+  `elementBounds` are tunable in the same `minecraft` block for HD packs or
+  non-vanilla formats.
+- **Import to refine.** Drop a Java `model.json` or a Blockbench `.bbmodel`
+  into the scene dir *instead of* a `scene.json`. The compile converts it to a
+  scene.json spec (written to `.scene3d/imported.scene.json` — promote it to
+  `scene.json` and iterate), lints it, and re-emits it. Rotated elements have
+  no axis-aligned scene.json form and are reported (`W-207`), never imported
+  wrong.
+
+```json
+{ "schemaVersion": 1, "target": "minecraft",
+  "conventions": { "minecraft": { "dialect": "java", "pxPerBlock": 16 } } }
+```
+
 ## 4. Compile
 
 ```bash
@@ -471,6 +506,10 @@ Fix the **codes**, not the prose. Each code has exactly one remedy.
 | `S3D-W-801` | declared shader referenced by no material | bind it or delete it |
 | `S3D-E-701` | a `claims` entry failed against the measured build | fix the scene or fix the claim — the message carries the measured truth |
 | `S3D-W-701` | a claim could not be adjudicated | unchecked is not passed; make the build measurable |
+| `S3D-W-970` | a vertex is off the voxel grid (`target:"minecraft"`) | snap sizes/positions to multiples of 1/16 m — it shimmers in-game otherwise |
+| `S3D-W-971` | a part is not a single cuboid | build from `box` shapes; a sphere/cylinder cannot be a Minecraft element |
+| `S3D-W-972` | rotation not allowed in this format | Java allows one axis at {−45,−22.5,0,22.5,45}°; use `dialect:"bedrock"` for free angles |
+| `S3D-W-973` | a part is outside the −1..2-block element space | keep every element within the bounds, or split the model |
 
 ## 2D sheets
 
