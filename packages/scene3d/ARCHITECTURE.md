@@ -198,16 +198,20 @@ the reasoning); USD stays the master and the block model is a lowering of it.
   would; only the container and texture model differ. A Bedrock geometry
   references ONE texture, so materials pack into a vertical 16×(16·N) atlas and
   every cube gets modern per-face UVs (format 1.16) into its material's row —
-  no box-UV-net guesswork. One root bone, `format_version 1.16.0`. v1 scope
-  matches Java: axis-aligned cubes emitted exactly, rotated boxes SKIPPED with a
-  reason. (Bedrock permits free per-cube rotation and the census recovers the
-  angle, but the rotation/pivot mapping cannot be verified in-engine from here,
-  so it is a deliberate follow-up, not an unvalidated guess shipped as correct.)
-  Follow-ups (not yet built): rotated-cube export (Bedrock) and rotated-element
-  round-trip (needs static rotation in the scene.json language, which the
-  solver's AABB invariant does not yet carry), per-face atlas UVs for Java,
-  Bedrock bones/animation. Shared exporter helpers (frame map, texture
-  synthesis, atlas tiles) live in `src/mc/common.ts`.
+  no box-UV-net guesswork. One root bone, `format_version 1.16.0`. Unlike Java,
+  Bedrock emits single-axis-ROTATED cubes: the census recovers the box's own
+  extent (`voxel.localSize`, by un-rotating the corners about the centroid) and
+  centre, so a 22.5°-rotated cube exports as its true size with a `rotation` +
+  `pivot`, not its bloated world AABB. The rotation mapping is exact, not a
+  guess — the frame map (x,y,z)→(x,z,−y) is a proper rotation, so conjugation
+  gives Blender X→MC X (+θ), Z→MC Y (+θ), Y→MC Z (−θ), pinned by a round-trip on
+  a real rotated cube; only Bedrock's per-axis sign convention is unconfirmed
+  without an in-engine renderer. Multi-axis rotations (no single recovered axis)
+  are still skipped with a reason. Follow-ups (not yet built): rotated-element
+  scene.json→spec round-trip (needs static rotation in the language, which the
+  solver's AABB invariant does not yet carry), multi-axis Bedrock rotation,
+  per-face atlas UVs for Java, Bedrock bones/animation. Shared exporter helpers
+  (frame map, texture synthesis, atlas tiles) live in `src/mc/common.ts`.
 
 ## The material layer (viewer tweaks channel)
 
