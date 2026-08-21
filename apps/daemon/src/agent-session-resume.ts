@@ -372,6 +372,37 @@ export function isOpencodeResumeFailure(text: string): boolean {
 }
 
 /**
+ * Kilo's ACP resume handshake always assigns request id 2 to `session/load`.
+ * Its current missing-session response is intentionally generic
+ * (`-32603 OpenCode service failure`), so the request id—not mutable prose—is
+ * the stable signal. The caller only invokes this classifier after proving the
+ * run attempted resume, which keeps a create-turn `session/new` error out.
+ */
+export function isKiloAcpLoadFailure(stdout: string): boolean {
+  if (!stdout) return false;
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    try {
+      const message = JSON.parse(trimmed) as {
+        id?: unknown;
+        error?: unknown;
+      };
+      if (
+        message.id === 2
+        && message.error !== null
+        && typeof message.error === 'object'
+      ) {
+        return true;
+      }
+    } catch {
+      // Ignore stderr/progress text and incomplete protocol frames.
+    }
+  }
+  return false;
+}
+
+/**
  * Per-agent dispatch for "the session/thread I asked to resume is gone".
  * Generalizes resume-fallback classification so every native-resume adapter
  * routes through one decision point in server.ts. Unknown agents return false
@@ -393,6 +424,7 @@ export function isAgentResumeFailure(
   }
   if (agentId === 'codex') return isCodexResumeFailure(stderr);
   if (agentId === 'opencode') return isOpencodeResumeFailure(stderr);
+  if (agentId === 'kilo') return isKiloAcpLoadFailure(stdout);
   if (agentId === 'amr') {
     return (
       isAmrResumeFailure(stdout) ||

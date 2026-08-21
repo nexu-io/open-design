@@ -5,6 +5,7 @@
  * acp/models.ts; depends only on Node path.
  */
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Loose descriptor for a single MCP server entry as supplied by a caller.
@@ -86,6 +87,47 @@ export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 
     }),
   };
 }
+
+/**
+ * Builds the params for ACP `session/load`. The current ACP SDK requires the
+ * same cwd and MCP descriptors as `session/new`; forwarding only the session id
+ * leaves strict agents such as Kilo with an invalid-params error.
+ */
+export function buildAcpSessionLoadParams(
+  sessionId: string,
+  cwd: string,
+  options: AcpSessionOptions = {},
+) {
+  return {
+    sessionId,
+    ...buildAcpSessionNewParams(cwd, options),
+  };
+}
+
+export interface AcpPromptBlockOptions {
+  imagePathFormat?: 'path' | 'file-url';
+}
+
+function imageMimeType(resourcePath: string): string | undefined {
+  switch (path.extname(resourcePath).toLowerCase()) {
+    case '.png':
+      return 'image/png';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.avif':
+      return 'image/avif';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Assembles the `prompt` array for a `session/prompt` ACP call. Always
  * includes a leading `{ type: 'text', text: prompt }` block, followed by
@@ -95,13 +137,27 @@ export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 
  *
  * @param prompt - The text prompt to send as the first block.
  * @param resourcePaths - Optional file/image attachment paths to append.
+ * @param options - Selects whether local attachment paths remain legacy raw
+ * paths or become standard file URLs. Strict ACP agents such as Kilo treat a
+ * bare path as text, so `file-url` is required for those runtimes.
  * @returns An array of prompt blocks ready for inclusion in `session/prompt` params.
  */
-export function buildPromptBlocks(prompt: string, resourcePaths: string[]): Array<Record<string, string>> {
+export function buildPromptBlocks(
+  prompt: string,
+  resourcePaths: string[],
+  { imagePathFormat = 'path' }: AcpPromptBlockOptions = {},
+): Array<Record<string, string>> {
   const blocks: Array<Record<string, string>> = [{ type: 'text', text: prompt }];
   for (const resourcePath of resourcePaths) {
     if (typeof resourcePath !== 'string' || resourcePath.trim().length === 0) continue;
-    blocks.push({ type: 'resource_link', uri: resourcePath });
+    const mimeType = imagePathFormat === 'file-url' ? imageMimeType(resourcePath) : undefined;
+    blocks.push({
+      type: 'resource_link',
+      uri: imagePathFormat === 'file-url'
+        ? pathToFileURL(path.resolve(resourcePath)).href
+        : resourcePath,
+      ...(mimeType ? { mimeType } : {}),
+    });
   }
   return blocks;
 }

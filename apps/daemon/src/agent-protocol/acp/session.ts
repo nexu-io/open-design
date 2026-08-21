@@ -58,7 +58,12 @@ import {
   currentModelFromSessionResult,
   modelSelectionErrorIsRecoverable,
 } from './models.js';
-import { buildAcpSessionNewParams, buildPromptBlocks, type AcpMcpServerInput } from './session-params.js';
+import {
+  buildAcpSessionLoadParams,
+  buildAcpSessionNewParams,
+  buildPromptBlocks,
+  type AcpMcpServerInput,
+} from './session-params.js';
 import { withholdStdioMcpServersForBuild } from './stdio-mcp.js';
 import { createVelaChildEvidenceConsumer } from '../../runtimes/vela-child-evidence.js';
 
@@ -98,6 +103,7 @@ export interface AttachAcpSessionOptions {
   imagePaths?: string[];
   /** Frozen non-image/image resources delivered as ACP resource_link blocks. */
   resourcePaths?: string[];
+  imagePathFormat?: 'path' | 'file-url';
   mcpServers?: AcpMcpServerInput[];
   // Passed through to buildAcpSessionNewParams — see AcpSessionOptions.
   envFormat?: 'array' | 'map';
@@ -123,6 +129,10 @@ export interface AttachAcpSessionOptions {
   // `session/new`. The agent verifies the session and, if it is gone, returns a
   // structured `resume_failed` error the caller maps to its reseed path.
   resumeSessionId?: string | null;
+  // The standard ACP session id is durable for agents such as Kilo. Bridges
+  // such as AMR expose a process-local session id and a separate
+  // `openCodeSessionId`, so this fallback must be explicitly enabled.
+  captureSessionIdAsDurable?: boolean;
   // Subsegment timing markers for spawn->first-token attribution (#3408 §4).
   // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
   // (the CLI is up and speaking the protocol); `onSessionInit` fires once when
@@ -172,6 +182,7 @@ export function attachAcpSession({
   model,
   imagePaths = [],
   resourcePaths = [],
+  imagePathFormat = 'path',
   mcpServers,
   envFormat = 'array',
   stdioMcpRemovedInVersion,
@@ -183,6 +194,7 @@ export function attachAcpSession({
   modelUnavailableErrorCode,
   completePromptOnTurnEnd = false,
   resumeSessionId,
+  captureSessionIdAsDurable = false,
   onCliReady,
   onSessionInit,
   onPromptComplete,
@@ -658,7 +670,7 @@ export function attachAcpSession({
       'session/prompt',
       {
         sessionId,
-        prompt: buildPromptBlocks(prompt, [...resourcePaths, ...imagePaths]),
+        prompt: buildPromptBlocks(prompt, [...resourcePaths, ...imagePaths], { imagePathFormat }),
       },
       'session/prompt',
     );
@@ -1060,44 +1072,46 @@ export function attachAcpSession({
         });
       }
       expectedId = nextId;
+      // The build that just answered `initialize` is the one about to parse
+      // `session/new` or `session/load`, so the version it reports for itself
+      // is the authority on which MCP transports this payload may carry.
+      // Preferred over any earlier `--version` probe, which can be stale by
+      // the time a run starts (upgrade between probe and run, PATH shim,
+      // detection refresh). Resume must send the same cwd + MCP descriptors
+      // as create — strict agents such as Kilo reject `session/load` without
+      // `mcpServers` even when the list is empty.
+      const agentInfo = (result as { agentInfo?: { version?: unknown } }).agentInfo;
+      const reportedVersion =
+        typeof agentInfo?.version === 'string' ? agentInfo.version : null;
+      const sessionMcp = mcpServers
+        ? withholdStdioMcpServersForBuild(mcpServers, {
+            reportedVersion,
+            removedInVersion: stdioMcpRemovedInVersion,
+          })
+        : null;
+      if (sessionMcp && sessionMcp.withheldNames.length > 0) {
+        // Daemon-log only: the transcript is user-facing and localized, and a
+        // withheld MCP server is an operator-diagnostic detail, not something
+        // the user can act on mid-turn.
+        console.warn(
+          `[acp] agent build ${reportedVersion ?? 'unknown'} does not accept stdio MCP servers; withheld ${sessionMcp.withheldNames.join(', ')}`,
+        );
+      }
+      const sessionOptions = sessionMcp
+        ? { mcpServers: sessionMcp.servers, envFormat }
+        : { envFormat };
       if (resumeSessionId) {
-        // Resume the prior upstream session instead of creating a fresh one.
         writeRpc(
           nextId,
           'session/load',
-          { sessionId: resumeSessionId, cwd: effectiveCwd },
+          buildAcpSessionLoadParams(resumeSessionId, effectiveCwd, sessionOptions),
           'session/load',
         );
       } else {
-        // The build that just answered `initialize` is the one about to parse
-        // `session/new`, so the version it reports for itself is the authority
-        // on which MCP transports this payload may carry. Preferred over any
-        // earlier `--version` probe, which can be stale by the time a run
-        // starts (upgrade between probe and run, PATH shim, detection refresh).
-        const agentInfo = (result as { agentInfo?: { version?: unknown } }).agentInfo;
-        const reportedVersion =
-          typeof agentInfo?.version === 'string' ? agentInfo.version : null;
-        const sessionMcp = mcpServers
-          ? withholdStdioMcpServersForBuild(mcpServers, {
-              reportedVersion,
-              removedInVersion: stdioMcpRemovedInVersion,
-            })
-          : null;
-        if (sessionMcp && sessionMcp.withheldNames.length > 0) {
-          // Daemon-log only: the transcript is user-facing and localized, and a
-          // withheld MCP server is an operator-diagnostic detail, not something
-          // the user can act on mid-turn.
-          console.warn(
-            `[acp] agent build ${reportedVersion ?? 'unknown'} does not accept stdio MCP servers; withheld ${sessionMcp.withheldNames.join(', ')}`,
-          );
-        }
         writeRpc(
           nextId,
           'session/new',
-          buildAcpSessionNewParams(
-            effectiveCwd,
-            sessionMcp ? { mcpServers: sessionMcp.servers, envFormat } : { envFormat },
-          ),
+          buildAcpSessionNewParams(effectiveCwd, sessionOptions),
           'session/new',
         );
       }
@@ -1105,10 +1119,20 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 2) {
-      sessionId = typeof result.sessionId === 'string' ? result.sessionId : null;
+      // ACP session/load responses do not repeat the already-known session id.
+      // Preserve the requested id on resume while still requiring session/new
+      // to mint and return one on a create turn.
+      sessionId =
+        typeof result.sessionId === 'string'
+          ? result.sessionId
+          : resumeSessionId || null;
       // The durable handle for resuming this session on the next turn.
       durableSessionId =
-        typeof result.openCodeSessionId === 'string' ? result.openCodeSessionId : null;
+        typeof result.openCodeSessionId === 'string'
+          ? result.openCodeSessionId
+          : captureSessionIdAsDurable
+            ? sessionId
+            : null;
       // session/new acknowledged with a session id = handshake done (#3408 §4).
       if (sessionId) onSessionInit?.();
       const modelConfig = findModelConfigOption(result.configOptions);

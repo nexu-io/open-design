@@ -10,6 +10,7 @@ import {
   getRememberedLiveModels,
   rememberLiveModels,
 } from '../../src/runtimes/models.js';
+import { installMetaForAgent } from '../../src/runtimes/metadata.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
 // ---- Cursor Agent --trust capability (issue #4461) -------------------------
@@ -936,11 +937,29 @@ test('aider args carry the non-TTY suppression flags, deliver the prompt via --m
   ]);
 });
 
-test('kilo args use acp subcommand for json-rpc streaming', () => {
+test('Kilo Code CLI declares its complete ACP integration contract', () => {
   const args = kilo.buildArgs('', [], [], {});
 
   assert.deepEqual(args, ['acp']);
+  assert.equal(kilo.name, 'Kilo');
+  assert.equal(kilo.bin, 'kilo');
+  assert.deepEqual(kilo.fallbackBins, ['kilocode']);
   assert.equal(kilo.streamFormat, 'acp-json-rpc');
+  assert.equal(kilo.resumesSessionViaAcpLoad, true);
+  assert.equal(kilo.acpSessionIdIsDurable, true);
+  assert.equal(kilo.supportsCustomModel, false);
+  assert.equal(kilo.supportsImagePaths, true);
+  assert.equal(kilo.acpImagePathFormat, 'file-url');
+  assert.equal(kilo.mcpDiscovery, 'mature-acp');
+  assert.equal(kilo.externalMcpInjection, 'acp-merge');
+  assert.equal(kilo.acpMcpEnvFormat, 'array');
+});
+
+test('Kilo Code CLI install metadata points to the current official docs', () => {
+  assert.deepEqual(installMetaForAgent('kilo'), {
+    installUrl: 'https://kilo.ai/docs/code-with-ai/platforms/cli#install',
+    docsUrl: 'https://kilo.ai/docs/code-with-ai/platforms/cli-reference',
+  });
 });
 
 test('kimi args use ACP so composed prompts do not travel through argv', () => {

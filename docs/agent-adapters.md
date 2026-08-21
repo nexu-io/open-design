@@ -315,7 +315,47 @@ the active-run staging implementation is in
 - Permission: `--yolo` avoids headless approval prompts in the web UI. This follows the adapter catalog's existing non-interactive permission posture for CLIs such as Devin, Copilot, Qoder, and DeepSeek: the daemon runs agent CLIs without a TTY, so it must not rely on an interactive tool-approval prompt to make progress.
 - **Gotcha:** Detection only proves `traecli --version` and model discovery can run in the current environment. Trae CLI owns login, account scope, and model entitlement; the daemon does not run login flows or edit Trae CLI configuration.
 
-### 5.10 Pi
+### 5.10 Kilo Code CLI
+
+- Install Kilo 7.0.30 or newer with `npm install -g @kilocode/cli`; 7.0.30 is
+  the earliest release independently listed in the official ACP registry. The package
+  supports macOS, Linux, and Windows on x64 and arm64 and installs both `kilo`
+  and `kilocode` command aliases. OpenDesign prefers `kilo` and detects
+  `kilocode` as a compatible fallback. On older x64 CPUs without AVX support,
+  use Kilo's platform-specific `-baseline` release archive instead of the
+  default binary.
+- Invocation is `kilo acp`, using Kilo's native ACP v1 JSON-RPC server. This
+  was validated against Kilo `7.4.23` and its tagged upstream implementation at
+  `Kilo-Org/kilocode@40fa10e50a75c4887978d892520d1246515413bf`.
+  OpenDesign auto-approves ordinary ACP permission requests so a headless run
+  does not stall on Kilo's interactive approval UI; Kilo still enforces its
+  own explicit deny rules and protected skill/sandbox escalation policy.
+  Kilo completes the turn with the `session/prompt` response, so the adapter
+  deliberately does not opt into Kiro's `turn_end` compatibility behavior.
+- Models come from the ACP `session/new` `model` config option, which exposes
+  the providers available to that Kilo installation. An explicit Settings
+  selection is sent with `session/set_config_option`; **Default** leaves Kilo's
+  own `kilo.json[c]` configuration authoritative. Free-form custom model ids
+  are hidden because Kilo rejects ids outside the live ACP catalog.
+- Follow-up turns persist Kilo's backing session id and resume it with
+  `session/load`. Load requests resend the cwd and per-run MCP descriptors, as
+  required by Kilo's ACP schema, and preserve the requested id because a
+  successful load response does not repeat it. A stale load handle is cleared
+  and transparently reseeded with the full OpenDesign transcript.
+- Image attachments are forwarded as ACP `resource_link` blocks using
+  absolute `file://` URLs. Bare filesystem paths are not equivalent in Kilo:
+  its ACP content adapter intentionally treats them as text.
+- Both the OpenDesign live-artifacts MCP server and user-configured external
+  MCP servers are merged into `session/new` and `session/load`; Kilo's own
+  global/project MCP configuration remains untouched.
+- Kilo supports Kilo Gateway login, provider credentials, and environment-
+  referenced keys through its own config. OpenDesign deliberately declares no
+  proactive auth probe: `kilo auth list` only describes stored provider
+  credentials and cannot prove whether a Gateway account, inherited API key,
+  or another valid provider path can serve the selected model. Run-time auth,
+  quota, and upstream failures use the shared failure classifier.
+
+### 5.11 Pi
 
 - Invocation: `pi --mode rpc [--model <id>] [--thinking <level>] [--append-system-prompt <dir> …]`, with the composed prompt delivered over stdin via JSON-RPC. The daemon sends a `prompt` command (optionally with `images` for multimodal input) and pi streams back typed events until `agent_end`. Pi's RPC process stays alive after `agent_end` (designed for multi-prompt sessions); the daemon closes stdin and SIGTERMs after a grace period since `/api/chat` is single-shot.
 - Streaming: `pi-rpc` JSON-RPC over stdio. Events include `agent_start`, `turn_start/end`, `message_update` (text deltas, thinking deltas, tool calls), `tool_execution_start/end`, `compaction_start`, `auto_retry_start/end`, and `extension_error`. `apps/daemon/src/agent-protocol/pi-rpc/session.ts` maps them into the shared UI event stream. Errors from `extension_error` and exhausted `auto_retry_end` go through the daemon's normal stream-error and empty-output handling.
@@ -333,7 +373,7 @@ the active-run staging implementation is in
 - Extension UI: auto-resolved. pi's RPC protocol can request user dialogs (`select`, `confirm`, `input`, `editor`) and fire-and-forget notifications (`setStatus`, `setWidget`, `notify`, `setTitle`, `set_editor_text`). Dialog methods are auto-approved (confirm → true, select → first option) and fire-and-forget methods are silently consumed because the web UI has no surface for them.
 - **Gotcha:** pi's RPC `prompt` response is asynchronous — `success: true` only means the prompt was accepted, not that the agent finished. Agent failures after acceptance surface through the normal event stream (`extension_error`, `auto_retry_end` with `success: false`) and the empty-output guard.
 
-### 5.11 DeepSeek TUI
+### 5.12 DeepSeek TUI
 
 - Invocation is `deepseek exec --auto [--model <id>] "<prompt>"` through the
   dispatcher. `codewhale` is an argv-compatible fallback binary after the
@@ -351,7 +391,7 @@ the active-run staging implementation is in
   shared failure classifier emits DeepSeek-specific guidance for those two
   configuration paths instead of returning the raw non-actionable error.
 
-### 5.12 DeepSeek Harness
+### 5.13 DeepSeek Harness
 
 - OpenDesign launches the user's official `dsh` installation; it does not
   bundle Harness or Node. Install the tested DSH release first and use
@@ -414,7 +454,7 @@ the active-run staging implementation is in
   may expose its own reasoning-effort choices; OD validates and forwards only
   one of the choices advertised for that selected model.
 
-### 5.13 Plain stream artifact handoff
+### 5.14 Plain stream artifact handoff
 
 Adapters with `streamFormat: 'plain'` do not expose structured file-write tool calls to the daemon. Their stdout is still a valid artifact handoff when the model emits Anthropic-style source blocks:
 

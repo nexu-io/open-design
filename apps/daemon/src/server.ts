@@ -14500,6 +14500,7 @@ export async function startServer({
         model: safeModel,
         imagePaths: def.supportsImagePaths ? acpPromptImagePaths : [],
         resourcePaths: odNextTaskInputSnapshot?.attachmentPaths ?? [],
+        imagePathFormat: def.acpImagePathFormat ?? 'path',
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         // Lets the session withhold stdio MCP servers from agent builds that
@@ -14514,6 +14515,7 @@ export async function startServer({
         ...(def.resumesSessionViaAcpLoad === true && agentResumePromptPolicy.resumeSessionId
           ? { resumeSessionId: agentResumePromptPolicy.resumeSessionId }
           : {}),
+        captureSessionIdAsDurable: def.acpSessionIdIsDurable === true,
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
         onPromptComplete: () => clearFirstOutputWatchdog(),

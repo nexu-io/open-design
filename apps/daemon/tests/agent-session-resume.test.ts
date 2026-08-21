@@ -20,6 +20,7 @@ import {
   isAmrResumeFailure,
   isClaudeResumeFailure,
   isCodexResumeFailure,
+  isKiloAcpLoadFailure,
   isOpencodeResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
@@ -604,6 +605,30 @@ describe('isOpencodeResumeFailure', () => {
   });
 });
 
+describe('isKiloAcpLoadFailure', () => {
+  it('matches an ACP error response for the session/load request id', () => {
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"Internal error: OpenCode service failure","data":{"service":"session"}}}',
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores prompt errors, notifications, and malformed output', () => {
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","id":3,"error":{"code":-32603,"message":"provider unavailable"}}',
+      ),
+    ).toBe(false);
+    expect(
+      isKiloAcpLoadFailure(
+        '{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk"}}}',
+      ),
+    ).toBe(false);
+    expect(isKiloAcpLoadFailure('not json')).toBe(false);
+  });
+});
+
 describe('isAmrResumeFailure', () => {
   it('matches vela\'s structured resume_failed ACP error on stdout', () => {
     expect(
@@ -673,6 +698,13 @@ describe('isAgentResumeFailure dispatch', () => {
     expect(
       isAgentResumeFailure('opencode', 'no rollout found for thread id abc'),
     ).toBe(false);
+  });
+
+  it('routes Kilo to the structured ACP session/load detector on stdout', () => {
+    const loadError =
+      '{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"Internal error: OpenCode service failure"}}';
+    expect(isAgentResumeFailure('kilo', '', loadError)).toBe(true);
+    expect(isAgentResumeFailure('kilo', loadError, '')).toBe(false);
   });
 
   it('does NOT treat a generic phrase in successful assistant stdout as a resume miss (#4629 nettee)', () => {
