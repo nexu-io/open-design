@@ -208,7 +208,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       }
       if (imported.spec) {
         const rawText = JSON.stringify(imported.spec, null, 2);
-        const result = validateSceneSpec(imported.spec);
+        const result = validateSceneSpec(imported.spec, { bake: { min: normalized.shade.bakeMin, max: normalized.shade.bakeMax } });
         if (result.spec) {
           spec = result.spec;
           specLines = specDeclarationLines(rawText);
@@ -262,7 +262,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       try {
         rawText = fs.readFileSync(path.join(request.projectDir, "scene.json"), "utf8");
         const parsed = JSON.parse(rawText);
-        const result = validateSceneSpec(parsed);
+        const result = validateSceneSpec(parsed, { bake: { min: normalized.shade.bakeMin, max: normalized.shade.bakeMax } });
         if (result.spec) {
           spec = result.spec;
           specLines = specDeclarationLines(rawText);
@@ -314,7 +314,10 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       }
     }
     if (spec) {
-      solved = solveScene(spec);
+      // A voxel scene's grid is a solver CONSTRAINT: emergent positions
+      // (repeat instances, scatter samples) snap onto it so they never flood
+      // the linter with off-grid vertices. Authored coordinates are untouched.
+      solved = solveScene(spec, normalized.minecraft.enabled ? { grid: normalized.minecraft.gridSize } : {});
       for (const diagnostic of solved.diagnostics) {
         const adjusted = diagnostic.code === "SOLVE-EPSILON-FLOOR";
         issues.push({
@@ -365,7 +368,10 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       }
       const kernelText = fs.readFileSync(kernelAbs, "utf8");
       const shaderErrors: string[] = [];
-      const validated = validateShaderSpec(name, shaderSpec, kernelText, shaderErrors);
+      const validated = validateShaderSpec(name, shaderSpec, kernelText, shaderErrors, {
+        min: normalized.shade.bakeMin,
+        max: normalized.shade.bakeMax,
+      });
       if (!validated) {
         for (const message of shaderErrors) {
           issues.push({

@@ -31,10 +31,20 @@ import { Rng } from "./rng.js";
  * answer, and silent wrong answers in geometry cost a whole compile round
  * trip to notice.
  */
-export function solveScene(spec: SceneSpec): SolvedScene {
+export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): SolvedScene {
   const diagnostics: SolveDiagnostic[] = [];
   const parts = new Map<string, PartSpec>();
   for (const part of spec.parts) parts.set(part.id, part);
+
+  // The doctrine (fable-5): AUTHORED numbers belong to the author — an off-grid
+  // size the author typed is theirs, and lint (W-970) tells them. But EMERGENT
+  // numbers the solver invents — a repeat instance's position, a scatter
+  // sample — must satisfy the declared constraints. When the contract declares
+  // a grid, that turns the solver's continuous domain into a lattice for the
+  // coordinates it generates, so a voxel scene's repeats/scatter land on-grid
+  // by construction instead of flooding the linter after the fact.
+  const grid = opts.grid && opts.grid > 0 ? opts.grid : 0;
+  const snap = grid > 0 ? (v: number) => Math.round(v / grid) * grid : (v: number) => v;
 
   // Working state: centre per axis, plus which axes are pinned down so far.
   const center = new Map<string, [number | null, number | null, number | null]>();
@@ -225,6 +235,7 @@ export function solveScene(spec: SceneSpec): SolvedScene {
           contact(relation.embed, relation.part, "embed"),
           occupied,
           diagnostics,
+          snap,
         );
         if (placements === null) return true; // failed loudly; base stays unplaced
         scatterOccupancy.set(relation.on, [...occupied, ...placements]);
@@ -276,6 +287,27 @@ export function solveScene(spec: SceneSpec): SolvedScene {
     if (!progressed) break;
   }
 
+  // Post-fixpoint span defaulting (fable-5 Mechanism 3): `span from A to B` IS
+  // the segment between the endpoints, and a segment has a transverse position —
+  // the endpoint midpoint. Run AFTER the fixpoint settles, so any explicit
+  // relation has already pinned its axis and wins by construction (not by a
+  // priority flag): a still-null transverse axis of a spanned part takes the
+  // midpoint of its two endpoints on that axis. This is what lets an avatar
+  // limb be one `span shoulder→hand`, not span + two aligns.
+  for (const relation of spec.relations) {
+    if (relation.type !== "span") continue;
+    const c = center.get(relation.part);
+    const fromC = center.get(relation.from);
+    const toC = center.get(relation.to);
+    if (!c || !fromC || !toC) continue;
+    for (const axis of AXES) {
+      if (axis === relation.axis) continue;
+      const ai = AXES.indexOf(axis);
+      if (c[ai] !== null || fromC[ai] === null || toC[ai] === null) continue;
+      c[ai] = (fromC[ai]! + toC[ai]!) / 2;
+    }
+  }
+
   for (const index of pending) {
     const relation = spec.relations[index]!;
     diagnostics.push({
@@ -311,7 +343,7 @@ export function solveScene(spec: SceneSpec): SolvedScene {
     });
   }
 
-  expandRepeats(solved, repeats, new Set(parts.keys()), diagnostics);
+  expandRepeats(solved, repeats, new Set(parts.keys()), diagnostics, snap);
 
   // Scatter instances 2..N. The base already solved through the fixpoint;
   // clones inherit everything but centre and (jittered) size, and record
@@ -367,6 +399,8 @@ function expandRepeats(
   repeats: Array<Extract<Relation, { type: "repeat" }>>,
   declaredIds: Set<string>,
   diagnostics: SolveDiagnostic[],
+  /** Grid quantizer for solver-invented positions (identity off-grid). */
+  snap: (v: number) => number,
 ): void {
   const byId = new Map(solved.map((part) => [part.id, part]));
   const counters = new Map<string, number>();
@@ -433,7 +467,11 @@ function expandRepeats(
           continue;
         }
         const center = [...instance.center] as Vec3;
-        center[axisIndex] = center[axisIndex]! + pitch * step;
+        // Snap the emergent position onto the grid (identity off-grid). Each
+        // instance lands on-grid by construction; an off-grid authored pitch
+        // is the author's, and its consequence (uneven snapped spacing) is
+        // theirs, but the game-breaking off-grid vertex never ships.
+        center[axisIndex] = snap(center[axisIndex]! + pitch * step);
         // Two repeats on the SAME axis can land an instance exactly on a
         // sibling — total coincidence, worse than any coplanar face, and
         // invisible to the face check (adversarial review). Refuse it.
@@ -498,6 +536,8 @@ function sampleScatter(
   embed: number,
   obstacles: Array<{ center: Vec3; size: Vec3 }>,
   diagnostics: SolveDiagnostic[],
+  /** Grid quantizer for solver-invented positions (identity off-grid). */
+  snap: (v: number) => number,
 ): Array<{ center: Vec3; size: Vec3 }> | null {
   if (relation.count > MAX_REPEAT_COUNT) {
     diagnostics.push({
@@ -530,11 +570,18 @@ function sampleScatter(
       });
       return null;
     }
-    const z = support.z.max - embed + size[2] / 2;
+    // The resting height snaps to the grid too, so a voxel sits flush on a
+    // grid-aligned support instead of the sub-grid contact embed leaving it
+    // off-grid (flush is fine — the z-fighting check is direction-aware).
+    const z = snap(support.z.max - embed + size[2] / 2);
     let found = false;
     for (let attempt = 0; attempt < ATTEMPTS && !found; attempt++) {
-      const x = rng.uniform(loX, hiX);
-      const y = rng.uniform(loY, hiY);
+      // Snap the sampled position onto the grid. A snap can push a candidate
+      // outside the support margin; reject it and let another attempt land in
+      // range, so every placed instance is BOTH on-grid and on-support.
+      const x = snap(rng.uniform(loX, hiX));
+      const y = snap(rng.uniform(loY, hiY));
+      if (x < loX || x > hiX || y < loY || y > hiY) continue;
       const clearOf = (other: { center: Vec3; size: Vec3 }) => {
         const ox = other.size[0] / 2;
         const oy = other.size[1] / 2;

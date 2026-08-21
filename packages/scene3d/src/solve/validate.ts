@@ -27,7 +27,13 @@ import type { ShaderSpec } from "../shade/types.js";
  * stopping at the first, so one compile round-trip reports the whole
  * distance to a valid spec.
  */
-export function validateSceneSpec(raw: unknown): { spec?: SceneSpec; errors: string[] } {
+export function validateSceneSpec(
+  raw: unknown,
+  /** Contract-derived shader bake bounds (pixel-art scenes lower the floor to
+   *  pxPerBlock). Omitted = the PBR default [64, 4096], so non-voxel callers and
+   *  the language's own tests are unaffected. */
+  opts: { bake?: { min: number; max: number } } = {},
+): { spec?: SceneSpec; errors: string[] } {
   const errors: string[] = [];
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     return { errors: ["scene.json must be a JSON object"] };
@@ -51,7 +57,7 @@ export function validateSceneSpec(raw: unknown): { spec?: SceneSpec; errors: str
       errors.push("shaders must be an object of name -> shader");
     } else {
       for (const [name, value] of Object.entries(doc.shaders as Record<string, unknown>)) {
-        const result = validateShaderSpec(name, value, undefined, errors);
+        const result = validateShaderSpec(name, value, undefined, errors, opts.bake);
         if (result) shaders[name] = result.spec;
       }
     }

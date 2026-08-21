@@ -95,7 +95,15 @@ export function resolveBudgets(
     const base = p.from ? byId.get(p.from) : undefined;
     const familyId = base?.id ?? p.id;
     const role = p.role ?? base?.role;
-    const profile = role ? ROLE_PROFILES[role] : undefined;
+    let profile = role ? ROLE_PROFILES[role] : undefined;
+    // The role texel FLOOR (px/m: hero 512, prop 256…) is PBR-discipline data.
+    // Under pixel-art discipline the density authority is pxPerBlock, so the
+    // library's floor does not apply — drop it here and the judge's
+    // "no bound ⇒ silent" makes W-956 inert. An explicit override still layers.
+    if (profile && contract.texelDiscipline === "pixelArt" && profile.texelDensity) {
+      const { texelDensity: _drop, ...rest } = profile;
+      profile = rest;
+    }
     const budget = mergeBudgets(
       profile,
       role ? roleOverrides[role] : undefined,

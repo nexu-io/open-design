@@ -24,6 +24,10 @@ export function validateShaderSpec(
   raw: unknown,
   kernelText: string | undefined,
   errors: string[],
+  /** Power-of-two bake resolution bounds, from the contract. The lower bound is
+   *  data (64 for pbr; the declared pxPerBlock under pixel-art), so a legitimate
+   *  16-px voxel bake is not rejected by a kernel-side constant. */
+  bake: { min: number; max: number } = { min: 64, max: 4096 },
 ):
   | {
       spec: ShaderSpec;
@@ -58,13 +62,13 @@ export function validateShaderSpec(
     if (
       typeof doc.size === "number" &&
       Number.isInteger(doc.size) &&
-      doc.size >= 64 &&
-      doc.size <= 4096 &&
+      doc.size >= bake.min &&
+      doc.size <= bake.max &&
       (doc.size & (doc.size - 1)) === 0
     ) {
       size = doc.size;
     } else {
-      errors.push(`${at}.size must be a power of two in [64, 4096]`);
+      errors.push(`${at}.size must be a power of two in [${bake.min}, ${bake.max}]`);
     }
   }
 

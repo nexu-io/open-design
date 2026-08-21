@@ -40,7 +40,14 @@ export const TARGET_PROFILES: Record<EngineTarget, Partial<Conventions>> = {
   // stays neutral so an authored voxel scene still keeps naming/UV discipline.
   minecraft: {
     units: { upAxis: "Y" },
-    minecraft: {},
+    // Block models are built from single-sided quads — open by construction —
+    // so the format's own idiom relaxes the closed-mesh gate. An author who
+    // explicitly demands closed meshes still overrides this (preset < explicit).
+    geometry: { allowOpenMeshes: true },
+    // Vanilla resolution is 16 px per block face — the format's defining
+    // texel density (like the 1/16 grid), so a bare `target:"minecraft"` is
+    // pixel-art by default; HD packs override with `pxPerBlock: 32/64`.
+    minecraft: { pxPerBlock: 16 },
   },
 };
 
@@ -149,6 +156,20 @@ export interface NormalizedContract {
     texelDensityTarget: number | null;
     texelDensityMaxRatio: number;
   };
+  /**
+   * Which density model the scene is judged under, resolved once here so no
+   * downstream module needs an `if (minecraft)`. `"pbr"` = px/m against a
+   * hero/prop/background floor library; `"pixelArt"` = px-per-block (the
+   * texel target came from `minecraft.pxPerBlock`, where 1 block = 1 m makes
+   * px/block ≡ px/m numerically). The role texel floors (budgets.ts) apply
+   * only under `"pbr"`; the spread rule (uv.ts W-444) stays armed under both
+   * and becomes the mixel detector under `"pixelArt"`.
+   */
+  texelDiscipline: "pbr" | "pixelArt";
+  /** Shader bake resolution bounds (power-of-two, inclusive). The lower bound
+   *  is data, not a kernel constant: 64 for pbr, or the author's declared
+   *  `pxPerBlock` (pow2-floored) under pixel-art so a 16-px bake is legal. */
+  shade: { bakeMin: number; bakeMax: number };
   textures: {
     requirePowerOfTwo: boolean;
     maxSize: number;
@@ -220,6 +241,37 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
   // Voxel discipline is on when the target selects it OR the author wrote a
   // `minecraft` block explicitly — same opt-in shape as print.
   const mcEnabled = c.target === "minecraft" || c.conventions?.minecraft !== undefined;
+  // Minecraft-derived values, resolved once so the uv/shade/discipline blocks
+  // below can read them (a block's texture resolution is the density authority
+  // for a voxel scene).
+  const mcDialect = (mc as { dialect?: unknown }).dialect === "bedrock" ? "bedrock" : "java";
+  const mcGridSize = (() => {
+    const gs = numOr((mc.grid as { size?: unknown } | undefined)?.size, 1 / 16);
+    return gs > 0 ? gs : 1 / 16;
+  })();
+  const mcGridTolerance = (() => {
+    const t = numOr((mc.grid as { tolerance?: unknown } | undefined)?.tolerance, 1 / 256);
+    return t >= 0 ? t : 1 / 256;
+  })();
+  const mcPxPerBlock = (() => {
+    const v = finiteOrNull((mc as { pxPerBlock?: unknown }).pxPerBlock);
+    return v !== null && v > 0 ? v : null;
+  })();
+  const mcElementMin = numOr((mc.elementBounds as { minBlocks?: unknown } | undefined)?.minBlocks, -1);
+  const mcElementMax = numOr((mc.elementBounds as { maxBlocks?: unknown } | undefined)?.maxBlocks, 2);
+  // The density authority resolves ONCE (fable-5 Mechanism 1): an explicit
+  // px/m target wins; else a voxel scene with a declared pxPerBlock adopts it
+  // (px/block ≡ px/m since 1 block = 1 m); else none. `pixelArt` discipline is
+  // exactly "the target came from pxPerBlock", which turns off the PBR role
+  // floors and re-aims the spread rule as a mixel detector.
+  const explicitTexelTarget = finiteOrNull(uv.texelDensity?.target);
+  const effectiveTexelTarget =
+    explicitTexelTarget ?? (mcEnabled && mcPxPerBlock !== null ? mcPxPerBlock : null);
+  const texelDiscipline: "pbr" | "pixelArt" =
+    explicitTexelTarget === null && mcEnabled && mcPxPerBlock !== null ? "pixelArt" : "pbr";
+  // Bake floor is data: 64 for pbr; the declared pxPerBlock (pow2-floored) under
+  // pixel-art, so a 16-px pixel-art bake is legal without a downstream special-case.
+  const bakeMin = texelDiscipline === "pixelArt" && mcPxPerBlock !== null ? pow2Floor(mcPxPerBlock) : 64;
   const proof = { ...DEFAULT_CONTRACT.proof, ...(c.proof ?? {}) };
   const minThicknessMm = finiteOrNull(pr.minThicknessMm);
   const maxOverhangAreaFraction = finiteOrNull(pr.maxOverhangAreaFraction);
@@ -267,9 +319,11 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       // via a programmatic contract must not flow through as a bad threshold.
       maxStretch:
         typeof uv.maxStretch === "number" && uv.maxStretch > 0 ? uv.maxStretch : null,
-      texelDensityTarget: finiteOrNull(uv.texelDensity?.target),
+      texelDensityTarget: effectiveTexelTarget,
       texelDensityMaxRatio: numOr(uv.texelDensity?.maxRatio, 4),
     },
+    texelDiscipline,
+    shade: { bakeMin, bakeMax: 4096 },
     textures: {
       requirePowerOfTwo: tex.requirePowerOfTwo ?? true,
       maxSize: numOr(tex.maxSize, 4096),
@@ -333,25 +387,12 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
     },
     minecraft: {
       enabled: mcEnabled,
-      dialect: (mc as { dialect?: unknown }).dialect === "bedrock" ? "bedrock" : "java",
-      // One pixel of a 16-px block, in metres. A non-positive override is a
-      // dead grid, so it falls back rather than dividing by zero downstream.
-      gridSize: (() => {
-        const g = numOr((mc.grid as { size?: unknown } | undefined)?.size, 1 / 16);
-        return g > 0 ? g : 1 / 16;
-      })(),
-      // A sixteenth of a pixel: forgives float drift from the USD round-trip,
-      // catches a genuine half-pixel (off-grid) vertex.
-      gridTolerance: (() => {
-        const t = numOr((mc.grid as { tolerance?: unknown } | undefined)?.tolerance, 1 / 256);
-        return t >= 0 ? t : 1 / 256;
-      })(),
-      pxPerBlock: (() => {
-        const v = finiteOrNull((mc as { pxPerBlock?: unknown }).pxPerBlock);
-        return v !== null && v > 0 ? v : null;
-      })(),
-      elementMinBlocks: numOr((mc.elementBounds as { minBlocks?: unknown } | undefined)?.minBlocks, -1),
-      elementMaxBlocks: numOr((mc.elementBounds as { maxBlocks?: unknown } | undefined)?.maxBlocks, 2),
+      dialect: mcDialect,
+      gridSize: mcGridSize,
+      gridTolerance: mcGridTolerance,
+      pxPerBlock: mcPxPerBlock,
+      elementMinBlocks: mcElementMin,
+      elementMaxBlocks: mcElementMax,
     },
     proof: proof as NonNullable<Scene3dContract["proof"]>,
     proofThresholds: {
@@ -362,6 +403,13 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       blownRatio: pos(proof.blownRatio, 0.6),
     },
   };
+}
+
+/** The largest power of two ≤ n (≥ 1). Used to floor a declared pixel-art
+ *  bake resolution to a legal power-of-two without inventing a constant. */
+function pow2Floor(n: number): number {
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return 2 ** Math.floor(Math.log2(n));
 }
 
 /** A finite positive number, or the fallback — defensive against a bad
