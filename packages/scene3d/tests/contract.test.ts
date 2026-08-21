@@ -55,6 +55,65 @@ describe("contract validation", () => {
     );
     expect(validateContract({ schemaVersion: 1, target: "unreal" })).toEqual([]);
   });
+
+  it("validates triangle budgets numerically (C-2)", () => {
+    // A string budget sailed through validation and then evaluated `tris >
+    // "big"` -> NaN -> false downstream, silently disabling the budget rule.
+    expect(
+      validateContract({ schemaVersion: 1, conventions: { budgets: { maxTrianglesPerMesh: "big" } } }),
+    ).toContain("conventions.budgets.maxTrianglesPerMesh must be a positive integer");
+    expect(
+      validateContract({ schemaVersion: 1, conventions: { budgets: { maxTrianglesTotal: -5 } } }),
+    ).toContain("conventions.budgets.maxTrianglesTotal must be a positive integer");
+    expect(
+      validateContract({
+        schemaVersion: 1,
+        conventions: { budgets: { maxTrianglesPerMesh: 20000, maxTrianglesTotal: 200000 } },
+      }),
+    ).toEqual([]);
+  });
+
+  it("validates grounding fields numerically (C-2)", () => {
+    // `grounding.tolerance: "bad"` disabled grounding silently (`lowest < -"bad"`
+    // -> NaN -> false).
+    expect(
+      validateContract({ schemaVersion: 1, conventions: { grounding: { tolerance: "bad" } } }),
+    ).toContain("conventions.grounding.tolerance must be a non-negative number");
+    expect(
+      validateContract({ schemaVersion: 1, conventions: { grounding: { enabled: "yes" } } }),
+    ).toContain("conventions.grounding.enabled must be a boolean");
+    expect(
+      validateContract({
+        schemaVersion: 1,
+        conventions: { grounding: { enabled: true, tolerance: 0.01, exempt: ["mount_"] } },
+      }),
+    ).toEqual([]);
+  });
+
+  it("bounds proof render size and turntable steps (C-2)", () => {
+    // proof.resolution: 100000 would OOM the runner; turntableSteps: 99999
+    // would render 99k frames. Both must be rejected up front.
+    expect(validateContract({ schemaVersion: 1, proof: { resolution: 100000 } })).toContain(
+      "proof.resolution must be an integer in [64, 8192]",
+    );
+    expect(validateContract({ schemaVersion: 1, proof: { turntableSteps: 99999 } })).toContain(
+      "proof.turntableSteps must be an integer in [1, 360]",
+    );
+    expect(
+      validateContract({ schemaVersion: 1, proof: { resolution: 1024, turntableSteps: 8 } }),
+    ).toEqual([]);
+  });
+
+  it("compiles a unicode-aware objectPattern with the u flag (C-3)", () => {
+    // `\p{L}` is the standard way to allow international prim names; without the
+    // `u` flag it degraded to the literal class [p{L}] and rejected "Café".
+    const n = normalizeContract({
+      schemaVersion: 1,
+      conventions: { naming: { objectPattern: "^[\\p{L}][\\p{L}0-9_]{2,63}$" } },
+    });
+    expect(n.objectPattern.test("Café")).toBe(true);
+    expect(n.objectPattern.test("日本語モデル")).toBe(true);
+  });
 });
 
 describe("target profiles", () => {

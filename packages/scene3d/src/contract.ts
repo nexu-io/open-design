@@ -100,6 +100,16 @@ export const BLENDER_DEFAULT_NAMES = new Set([
   "Scene",
   "Object",
   "Text",
+  // Mesh/data primitive defaults Blender also auto-names; the stage linter's
+  // DEFAULT_PRIM_NAME already covers the mesh ones, and these keep the census
+  // naming rule in step for the object-level check.
+  "Icosphere",
+  "Grid",
+  "Circle",
+  "Suzanne",
+  "Armature",
+  "Lattice",
+  "Speaker",
 ]);
 
 export interface NormalizedContract {
@@ -250,10 +260,22 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
 }
 
 function safePattern(pattern: string | undefined, fallback: string): RegExp {
+  const src = pattern ?? fallback;
+  // Prefer Unicode mode so a `\p{L}`-style pattern — the standard way to allow
+  // international prim names — compiles as a Unicode property escape instead of
+  // silently degrading to the literal class `[p{L}]` and rejecting the very
+  // names it was written to permit. Fall back to legacy mode for the rare
+  // pattern valid only without `u`, then to the ASCII default, so no working
+  // pattern regresses.
   try {
-    return new RegExp(pattern ?? fallback);
+    return new RegExp(src, "u");
   } catch {
-    return new RegExp(fallback);
+    /* fall through */
+  }
+  try {
+    return new RegExp(src);
+  } catch {
+    return new RegExp(fallback, "u");
   }
 }
 
@@ -344,6 +366,61 @@ export function validateContract(value: unknown): string[] {
       if (geometry[key] !== undefined && typeof geometry[key] !== "boolean") {
         problems.push(`conventions.geometry.${key} must be a boolean`);
       }
+    }
+  }
+  // Budget/grounding/proof numerics were unchecked, so a string budget
+  // (`"big"`) reached `tris > "big"` -> NaN -> false and silently disabled the
+  // rule, and `proof.resolution: 100000` / `turntableSteps: 99999` would have
+  // driven an OOM render or 99k frames. Validate them up front so a malformed
+  // contract is rejected (S3D-E-104) rather than half-honoured.
+  const budgets = conventions?.budgets as Record<string, unknown> | undefined;
+  if (budgets) {
+    for (const key of ["maxTrianglesPerMesh", "maxTrianglesTotal"] as const) {
+      const v = budgets[key];
+      if (v !== undefined && (typeof v !== "number" || !Number.isInteger(v) || v < 1)) {
+        problems.push(`conventions.budgets.${key} must be a positive integer`);
+      }
+    }
+  }
+  const grounding = conventions?.grounding as Record<string, unknown> | undefined;
+  if (grounding) {
+    if (grounding.enabled !== undefined && typeof grounding.enabled !== "boolean") {
+      problems.push("conventions.grounding.enabled must be a boolean");
+    }
+    if (
+      grounding.tolerance !== undefined &&
+      (typeof grounding.tolerance !== "number" || !Number.isFinite(grounding.tolerance) || grounding.tolerance < 0)
+    ) {
+      problems.push("conventions.grounding.tolerance must be a non-negative number");
+    }
+    if (
+      grounding.exempt !== undefined &&
+      (!Array.isArray(grounding.exempt) || !grounding.exempt.every((e) => typeof e === "string"))
+    ) {
+      problems.push("conventions.grounding.exempt must be an array of strings");
+    }
+  }
+  const proof = c.proof as Record<string, unknown> | undefined;
+  if (proof) {
+    if (
+      proof.resolution !== undefined &&
+      (typeof proof.resolution !== "number" || !Number.isInteger(proof.resolution) || proof.resolution < 64 || proof.resolution > 8192)
+    ) {
+      problems.push("proof.resolution must be an integer in [64, 8192]");
+    }
+    if (
+      proof.turntableSteps !== undefined &&
+      (typeof proof.turntableSteps !== "number" || !Number.isInteger(proof.turntableSteps) || proof.turntableSteps < 1 || proof.turntableSteps > 360)
+    ) {
+      problems.push("proof.turntableSteps must be an integer in [1, 360]");
+    }
+    for (const key of ["turntable", "respectSceneCamera"] as const) {
+      if (proof[key] !== undefined && typeof proof[key] !== "boolean") {
+        problems.push(`proof.${key} must be a boolean`);
+      }
+    }
+    if (proof.engine !== undefined && proof.engine !== "BLENDER_EEVEE" && proof.engine !== "CYCLES") {
+      problems.push("proof.engine must be 'BLENDER_EEVEE' or 'CYCLES'");
     }
   }
   return problems;

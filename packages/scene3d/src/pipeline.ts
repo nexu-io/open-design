@@ -97,28 +97,46 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   const source = discoverSources(request.projectDir);
   let contract: Scene3dContract = request.contract ?? DEFAULT_CONTRACT;
   let contractIssues: string[] = [];
-  const contractFile = path.join(request.projectDir, "scene3d.json");
-  if (fs.existsSync(contractFile) && !request.contract) {
-    try {
-      const raw = JSON.parse(fs.readFileSync(contractFile, "utf8"));
-      contractIssues = validateContract(raw);
-      if (contractIssues.length > 0) {
-        issues.push({
-          code: ISSUE_CODES.INVALID_CONTRACT,
-          severity: "error",
-          message: `scene3d.json is invalid: ${contractIssues.join("; ")}`,
-          file: "scene3d.json",
-        });
-      } else {
-        contract = raw as Scene3dContract;
-      }
-    } catch (err) {
+  if (request.contract) {
+    // A programmatically-supplied contract (od CLI --contract, daemon route,
+    // an embedded agent) skips the file-load path but must NOT skip validation:
+    // an unchecked string budget or absurd proof.resolution would otherwise
+    // silently disable a rule or drive a 100k-px render. Reject it exactly like
+    // a bad file and fall back to the default rather than normalise garbage.
+    contractIssues = validateContract(request.contract);
+    if (contractIssues.length > 0) {
       issues.push({
         code: ISSUE_CODES.INVALID_CONTRACT,
         severity: "error",
-        message: `scene3d.json is not valid JSON: ${(err as Error).message}`,
-        file: "scene3d.json",
+        message: `contract is invalid: ${contractIssues.join("; ")}`,
+        file: "(request.contract)",
       });
+      contract = DEFAULT_CONTRACT;
+    }
+  } else {
+    const contractFile = path.join(request.projectDir, "scene3d.json");
+    if (fs.existsSync(contractFile)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(contractFile, "utf8"));
+        contractIssues = validateContract(raw);
+        if (contractIssues.length > 0) {
+          issues.push({
+            code: ISSUE_CODES.INVALID_CONTRACT,
+            severity: "error",
+            message: `scene3d.json is invalid: ${contractIssues.join("; ")}`,
+            file: "scene3d.json",
+          });
+        } else {
+          contract = raw as Scene3dContract;
+        }
+      } catch (err) {
+        issues.push({
+          code: ISSUE_CODES.INVALID_CONTRACT,
+          severity: "error",
+          message: `scene3d.json is not valid JSON: ${(err as Error).message}`,
+          file: "scene3d.json",
+        });
+      }
     }
   }
   const normalized = normalizeContract(contract);

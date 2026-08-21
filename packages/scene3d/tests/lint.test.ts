@@ -241,6 +241,30 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(codes.has(ISSUE_CODES.DEGENERATE_SCALE)).toBe(true);
   });
 
+  it("flags newly-covered Blender default object names (N-1)", () => {
+    for (const name of ["Armature", "Icosphere", "Lattice", "Speaker", "Suzanne"]) {
+      const issues = runLint({
+        contract: contract(),
+        census: census({
+          objects: [
+            {
+              name,
+              type: "MESH",
+              parent: null,
+              location: [0, 0, 0],
+              rotation: [0, 0, 0],
+              scale: [1, 1, 1],
+              dimensions: [1, 1, 1],
+              visible: true,
+              hasMeshData: true,
+            },
+          ],
+        }),
+      });
+      expect(issues.some((i) => i.code === ISSUE_CODES.NAME_DEFAULT && i.target === name)).toBe(true);
+    }
+  });
+
   it("flags non-uniform scale", () => {
     const issues = runLint({
       contract: contract(),
