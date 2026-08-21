@@ -509,7 +509,10 @@ Fix the **codes**, not the prose. Each code has exactly one remedy.
 | `S3D-W-970` | a vertex is off the voxel grid (`target:"minecraft"`) | snap sizes/positions to multiples of 1/16 m — it shimmers in-game otherwise |
 | `S3D-W-971` | a part is not a single cuboid | build from `box` shapes; a sphere/cylinder cannot be a Minecraft element |
 | `S3D-W-972` | rotation not allowed in this format | Java allows one axis at {−45,−22.5,0,22.5,45}°; use `dialect:"bedrock"` for free angles |
-| `S3D-W-973` | a part is outside the −1..2-block element space | keep every element within the bounds, or split the model |
+| `S3D-W-973` | an element-scale part is positioned outside the −1..2-block space | move it into the element space |
+| `S3D-I-970` | a part is larger than the whole element space | info — it is multi-block structure/terrain, not one element; split it only if it must ship as one block model |
+| `S3D-I-952` | a part is a size outlier in the scene | info — verify it is not a unit/scale slip (metres vs centimetres) |
+| `S3D-I-951` | a part's triangle density is an outlier | info — a possible LOD / re-topology candidate |
 
 ## 2D sheets
 
