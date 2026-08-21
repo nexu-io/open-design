@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessVerdict, dimensionOf } from "../src/verdict.js";
+import { assessVerdict, dimensionOf, summariseKit } from "../src/verdict.js";
 import { CompileResult, Issue } from "../src/types.js";
 
 function result(issues: Issue[], extra: Partial<CompileResult> = {}): CompileResult {
@@ -79,6 +79,46 @@ describe("assessVerdict", () => {
     );
     // geometry (has an error → fail) before intent (warning → attention)
     expect(v.dimensions.map((d) => d.dimension)).toEqual(["geometry", "intent"]);
+  });
+});
+
+describe("summariseKit (catalog roll-up)", () => {
+  it("grades the kit as its weakest scene", () => {
+    expect(summariseKit([{ errors: 0, warnings: 0, issueCodes: [] }]).grade).toBe("pass");
+    expect(
+      summariseKit([
+        { errors: 0, warnings: 0, issueCodes: [] },
+        { errors: 0, warnings: 2, issueCodes: ["S3D-W-441"] },
+      ]).grade,
+    ).toBe("attention");
+    expect(
+      summariseKit([
+        { errors: 0, warnings: 0, issueCodes: [] },
+        { errors: 1, warnings: 0, issueCodes: ["S3D-E-321"] },
+      ]).grade,
+    ).toBe("fail");
+  });
+
+  it("surfaces only codes that recur across scenes, most-widespread first", () => {
+    const kit = summariseKit([
+      { errors: 1, warnings: 1, issueCodes: ["S3D-E-321", "S3D-W-441"] },
+      { errors: 1, warnings: 0, issueCodes: ["S3D-E-321"] },
+      { errors: 1, warnings: 1, issueCodes: ["S3D-E-321", "S3D-W-441"] },
+      { errors: 0, warnings: 1, issueCodes: ["S3D-W-328"] }, // only once → not systemic
+    ]);
+    expect(kit.systemic).toEqual([
+      { code: "S3D-E-321", scenes: 3 },
+      { code: "S3D-W-441", scenes: 2 },
+    ]);
+  });
+
+  it("counts each code once per scene, not per occurrence", () => {
+    // A scene can list a code once in issueCodes; systemic is about SPREAD.
+    const kit = summariseKit([
+      { errors: 2, warnings: 0, issueCodes: ["S3D-E-321"] },
+      { errors: 3, warnings: 0, issueCodes: ["S3D-E-321"] },
+    ]);
+    expect(kit.systemic).toEqual([{ code: "S3D-E-321", scenes: 2 }]);
   });
 });
 

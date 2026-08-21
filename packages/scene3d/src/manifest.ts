@@ -11,6 +11,7 @@ import {
   SceneSource,
 } from "./types.js";
 import { renderKitHtml, type KitEntry } from "./viewer/kit.js";
+import { summariseKit } from "./verdict.js";
 
 /**
  * Emit the scene manifest — the RecordAsset-equivalent for a compiled
@@ -657,6 +658,7 @@ export function writeProjectKit(
       triangles: manifest.metrics?.totalTriangles ?? null,
       errors: manifest.issues.errors,
       warnings: manifest.issues.warnings,
+      issueCodes: manifest.issueCodes,
       deliverables: manifest.exportedAssets.map(sceneRel),
     });
     entries.push({
@@ -707,6 +709,8 @@ interface KitSceneRecord {
   triangles: number | null;
   errors: number;
   warnings: number;
+  /** The scene's issue codes — the roll-up needs them to find systemic ones. */
+  issueCodes: string[];
   deliverables: string[];
 }
 
@@ -737,6 +741,11 @@ function writeKitSidecar(file: string, input: { title: string; scenes: KitSceneR
     }),
     { parts: 0, triangles: 0, errors: 0, warnings: 0 },
   );
+
+  // Catalog-level roll-up: the kit's grade (its weakest scene) and the codes
+  // that recur across scenes — a systemic problem a pipeline TD fixes once, not
+  // per asset. Rides the sidecar (small), never the per-scene payload.
+  const rollup = summariseKit(kept);
 
   const sidecar = {
     version: 1,
@@ -769,6 +778,11 @@ function writeKitSidecar(file: string, input: { title: string; scenes: KitSceneR
       triangles: totals.triangles,
       errors: totals.errors,
       warnings: totals.warnings,
+      // The at-a-glance catalog verdict: grade + the systemic codes worth
+      // fixing once. Truncated with the scenes it summarises, so it describes
+      // exactly what the panel shows.
+      grade: rollup.grade,
+      systemic: rollup.systemic.slice(0, 12),
       generator: "scene3d",
     },
   };

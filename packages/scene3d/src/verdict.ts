@@ -145,6 +145,41 @@ export function assessVerdict(result: CompileResult): Verdict {
 
 const SEVERITY_GRADE: Record<Grade, number> = { fail: 0, attention: 1, pass: 2 };
 
+/** A catalog-level verdict: the whole kit at a glance. */
+export interface KitVerdict {
+  /** The worst scene's grade — a kit is only as ready as its weakest asset. */
+  grade: Grade;
+  /** Codes firing in MORE THAN ONE scene — a systemic/process problem to fix
+   *  once, not per-asset ("3 of 12 scenes have E-321"). Most-widespread first. */
+  systemic: Array<{ code: string; scenes: number }>;
+}
+
+/**
+ * Roll a kit's per-scene records up to one verdict. Pure synthesis — the
+ * catalog's grade is its weakest scene, and a code that recurs across scenes is
+ * a systemic issue the pipeline TD fixes at the source, not asset by asset.
+ */
+export function summariseKit(
+  scenes: Array<{ errors: number; warnings: number; issueCodes: string[] }>,
+): KitVerdict {
+  const grade: Grade = scenes.some((s) => s.errors > 0)
+    ? "fail"
+    : scenes.some((s) => s.warnings > 0)
+      ? "attention"
+      : "pass";
+  const sceneCountByCode = new Map<string, number>();
+  for (const s of scenes) {
+    for (const code of new Set(s.issueCodes)) {
+      sceneCountByCode.set(code, (sceneCountByCode.get(code) ?? 0) + 1);
+    }
+  }
+  const systemic = [...sceneCountByCode.entries()]
+    .filter(([, n]) => n >= 2)
+    .map(([code, count]) => ({ code, scenes: count }))
+    .sort((a, b) => b.scenes - a.scenes || a.code.localeCompare(b.code));
+  return { grade, systemic };
+}
+
 function totalTextureBytes(result: CompileResult): number | undefined {
   const textures = result.census?.textures;
   if (!textures || textures.length === 0) return undefined;
