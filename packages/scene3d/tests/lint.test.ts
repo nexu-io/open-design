@@ -295,6 +295,45 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(codes.has(ISSUE_CODES.DEGENERATE_SCALE)).toBe(true);
   });
 
+  it("checks hierarchy depth from the census parent chain for build.py/spec scenes (N-2)", () => {
+    // No primTree (a scene.json/build.py scene). A chain deeper than maxDepth
+    // (8) must still be caught — via census parents, not by dragging the
+    // export's structure into naming.
+    const chain = Array.from({ length: 11 }, (_, i) => ({
+      name: `prp_link_${i}`,
+      type: "MESH",
+      parent: i === 0 ? null : `prp_link_${i - 1}`,
+      location: [0, 0, 0] as [number, number, number],
+      rotation: [0, 0, 0] as [number, number, number],
+      scale: [1, 1, 1] as [number, number, number],
+      dimensions: [1, 1, 1] as [number, number, number],
+      visible: true,
+      hasMeshData: true,
+    }));
+    const issues = runLint({ contract: contract(), census: census({ objects: chain }) });
+    const depthHits = issues.filter((i) => i.code === ISSUE_CODES.DEPTH_LIMIT);
+    expect(depthHits.length).toBeGreaterThan(0);
+    // The deepest link is at depth 11 > 8.
+    expect(depthHits.some((i) => i.target === "prp_link_10")).toBe(true);
+  });
+
+  it("does not flag a shallow census hierarchy (N-2)", () => {
+    const flat = [
+      { name: "prp_a", type: "MESH", parent: null },
+      { name: "prp_b", type: "MESH", parent: "prp_a" },
+    ].map((o) => ({
+      ...o,
+      location: [0, 0, 0] as [number, number, number],
+      rotation: [0, 0, 0] as [number, number, number],
+      scale: [1, 1, 1] as [number, number, number],
+      dimensions: [1, 1, 1] as [number, number, number],
+      visible: true,
+      hasMeshData: true,
+    }));
+    const issues = runLint({ contract: contract(), census: census({ objects: flat }) });
+    expect(issues.some((i) => i.code === ISSUE_CODES.DEPTH_LIMIT)).toBe(false);
+  });
+
   it("flags newly-covered Blender default object names (N-1)", () => {
     for (const name of ["Armature", "Icosphere", "Lattice", "Speaker", "Suzanne"]) {
       const issues = runLint({

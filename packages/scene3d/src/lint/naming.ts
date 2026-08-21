@@ -93,6 +93,34 @@ export function lintNaming(ctx: LintContext, issues: Issue[]): void {
         });
       }
     }
+  } else if (ctx.census) {
+    // No authored prim tree (a build.py / scene.json spec scene): the depth
+    // rule used to silently never run for exactly those scenes. Walk the
+    // census's object PARENT CHAIN instead. Deriving a prim tree from the
+    // EXPORT would instead drag Blender's own structure — the `_materials`
+    // scope, the per-object Xform wrappers — into the naming and collection
+    // pattern rules and manufacture false positives; the export's naming is
+    // already lintExportedStage's job.
+    const parentOf = new Map(ctx.census.objects.map((o) => [o.name, o.parent]));
+    for (const obj of ctx.census.objects) {
+      let depth = 1;
+      let cursor = obj.parent;
+      const seen = new Set<string>([obj.name]);
+      while (cursor && !seen.has(cursor)) {
+        seen.add(cursor);
+        depth++;
+        cursor = parentOf.get(cursor) ?? null;
+      }
+      if (depth > contract.maxDepth) {
+        issues.push({
+          code: ISSUE_CODES.DEPTH_LIMIT,
+          severity: "error",
+          message: `'${obj.name}' exceeds max hierarchy depth ${contract.maxDepth}`,
+          target: obj.name,
+          detail: { depth },
+        });
+      }
+    }
   }
 }
 
