@@ -279,9 +279,13 @@ export function hashFiles(files: string[]): string {
   for (const file of [...files].sort()) {
     try {
       const content = fs.readFileSync(file);
-      hash.update(file).update(content);
+      // Domain-separate present-vs-missing so a real file whose bytes happen to
+      // equal the old `"__missing__"` sentinel can't hash identically to that
+      // path being absent. The separators differ, so no content can bridge the
+      // two branches.
+      hash.update(file).update("\0present\0").update(content);
     } catch {
-      hash.update(file).update("__missing__");
+      hash.update(file).update("\0missing\0");
     }
   }
   return hash.digest("hex").slice(0, 24);

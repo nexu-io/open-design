@@ -259,6 +259,25 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
   };
 }
 
+/**
+ * A JSON-safe projection of a normalized contract, for the build cache key.
+ *
+ * The normalized contract carries two `RegExp` fields, and `JSON.stringify`
+ * turns a RegExp into `{}` — so hashing the normalized object directly would
+ * collapse every pattern to the same value and hand back a cached lint from a
+ * DIFFERENT naming rule (a false cache hit, worse than the false miss this
+ * whole change removes). Patterns are serialised to `source/flags` so a
+ * pattern change still busts the cache while two contracts that normalise
+ * identically share a key.
+ */
+export function contractCacheKey(n: NormalizedContract): unknown {
+  return {
+    ...n,
+    objectPattern: `${n.objectPattern.source}/${n.objectPattern.flags}`,
+    collectionPattern: `${n.collectionPattern.source}/${n.collectionPattern.flags}`,
+  };
+}
+
 function safePattern(pattern: string | undefined, fallback: string): RegExp {
   const src = pattern ?? fallback;
   // Prefer Unicode mode so a `\p{L}`-style pattern — the standard way to allow

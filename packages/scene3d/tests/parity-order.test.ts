@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderDrifts } from "../src/pipeline.js";
+import { orderDrifts, fingerprintLosses, isCompilerProofFrame } from "../src/pipeline.js";
 
 /**
  * W-902 (MASTER_ORDER_DRIFT): the set of joints/morphs survives lowering but
@@ -38,5 +38,60 @@ describe("orderDrifts", () => {
     const build = { morphs: { face: ["smile", "blink"] } };
     const master = { morphs: {} };
     expect(orderDrifts(build, master)).toEqual([]);
+  });
+});
+
+/**
+ * E-901 (MASTER_LOSS): what the build had that the lowered master does not.
+ * orderDrifts deliberately punts a shrunk/vanished set to "an E-901 loss" —
+ * these pin that the loss is ACTUALLY emitted, which it was not for partial
+ * action loss or for morphs at all. (E-1)
+ */
+describe("fingerprintLosses", () => {
+  it("is silent when nothing was lost", () => {
+    const fp = {
+      meshes: { a: 10, b: 10 },
+      materials: ["m"],
+      armatures: { rig: 3 },
+      actions: ["walk", "idle"],
+      morphs: { face: ["smile", "blink"] },
+    };
+    expect(fingerprintLosses(fp, fp)).toEqual([]);
+  });
+
+  it("flags PARTIAL animation-clip loss, not just a total wipe", () => {
+    const build = { actions: ["walk", "idle", "run"] };
+    const master = { actions: ["walk"] };
+    expect(fingerprintLosses(build, master)).toContain("2 of 3 animation clip(s)");
+  });
+
+  it("flags a single dropped morph target", () => {
+    const build = { morphs: { face: ["smile", "blink", "frown"] } };
+    const master = { morphs: { face: ["smile", "blink"] } };
+    expect(fingerprintLosses(build, master)).toContain("1 of 3 morph target(s)");
+  });
+
+  it("flags a whole mesh's morphs vanishing", () => {
+    const build = { morphs: { face: ["smile", "blink"], hand: ["fist"] } };
+    const master = { morphs: { hand: ["fist"] } };
+    expect(fingerprintLosses(build, master)).toContain("2 of 3 morph target(s)");
+  });
+});
+
+/**
+ * L-6: the proof-frame prune must delete ONLY the compiler's own output shape
+ * (`proof-<24 hex>-<frame>.png`) so a user's hand-dropped file in the visible
+ * out/proof dir is never silently removed.
+ */
+describe("isCompilerProofFrame", () => {
+  it("matches the compiler's exact 24-hex frame names", () => {
+    expect(isCompilerProofFrame("proof-0123456789abcdef01234567-000.png")).toBe(true);
+    expect(isCompilerProofFrame("proof-0123456789abcdef01234567-359.png")).toBe(true);
+  });
+
+  it("spares a user file that merely resembles a proof frame", () => {
+    expect(isCompilerProofFrame("proof-deadbeef-999.png")).toBe(false); // 8 hex, not 24
+    expect(isCompilerProofFrame("my-render-001.png")).toBe(false);
+    expect(isCompilerProofFrame("proof-0123456789abcdef01234567.png")).toBe(false); // no frame
   });
 });

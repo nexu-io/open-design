@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { validateContract, normalizeContract, DEFAULT_CONTRACT } from "../src/contract.js";
+import {
+  validateContract,
+  normalizeContract,
+  DEFAULT_CONTRACT,
+  contractCacheKey,
+} from "../src/contract.js";
+import { hashJson } from "../src/build/blender.js";
 
 describe("contract validation", () => {
   it("accepts the default contract", () => {
@@ -168,5 +174,36 @@ describe("contract normalization", () => {
       conventions: { naming: { objectPattern: "[" } },
     });
     expect(n.objectPattern.test("anything")).toBe(true);
+  });
+
+  describe("build-cache key (L-5)", () => {
+    it("gives an explicit default the same key as omitting it", () => {
+      // An explicit `upAxis:"Y"` normalises identically to omitting it, so the
+      // cache must not force a full rebuild just because the author spelled the
+      // default out. (Hashing the raw contract did exactly that.)
+      const explicit = hashJson(
+        contractCacheKey(normalizeContract({ schemaVersion: 1, conventions: { units: { upAxis: "Y" } } })),
+      );
+      const omitted = hashJson(contractCacheKey(normalizeContract({ schemaVersion: 1 })));
+      expect(explicit).toBe(omitted);
+    });
+
+    it("still busts the cache when the naming pattern changes", () => {
+      // Guards the RegExp-serialisation trap: JSON.stringify turns a RegExp
+      // into `{}`, so hashing the normalized object naively would give two
+      // DIFFERENT patterns the SAME key — a false cache hit serving a stale
+      // lint from another rule.
+      const a = hashJson(
+        contractCacheKey(
+          normalizeContract({ schemaVersion: 1, conventions: { naming: { objectPattern: "^a.+$" } } }),
+        ),
+      );
+      const b = hashJson(
+        contractCacheKey(
+          normalizeContract({ schemaVersion: 1, conventions: { naming: { objectPattern: "^b.+$" } } }),
+        ),
+      );
+      expect(a).not.toBe(b);
+    });
   });
 });

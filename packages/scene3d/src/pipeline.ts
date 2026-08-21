@@ -14,7 +14,7 @@ import {
   PartTweak,
 } from "./types.js";
 import { ISSUE_CODES, summarize } from "./errors.js";
-import { DEFAULT_CONTRACT, normalizeContract, validateContract } from "./contract.js";
+import { DEFAULT_CONTRACT, normalizeContract, validateContract, contractCacheKey } from "./contract.js";
 import { discoverSources, existingSourceFiles } from "./parse/sources.js";
 import { parseUsda, UsdaParseError } from "./parse/usda.js";
 import { authorStageModel } from "./usd/stage-model.js";
@@ -438,7 +438,14 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
 
   const buildInputHash = hashJson({
     kind: source.kind,
-    contract: contract,
+    // Hash the NORMALIZED contract, not the raw one: two contracts that
+    // normalise identically (an explicit `upAxis:"Y"` vs the omitted default,
+    // or a numeric vs string-typed field that sanitises to the same value)
+    // must share a cache key. Hashing raw text forced a full rebuild on every
+    // daemon restart for any project that spelled out a default value.
+    // contractCacheKey serialises the RegExp fields so a pattern change still
+    // busts the cache (JSON.stringify would otherwise drop them to `{}`).
+    contract: contractCacheKey(normalized),
     sources: hashFiles(sourceFiles),
     tweaks: tweaks ?? null,
     blender: probe?.version ?? null,
@@ -1172,6 +1179,18 @@ function previousManifestBakedTweaks(
   }
 }
 
+/**
+ * True ONLY for a proof frame this compiler itself wrote:
+ * `proof-<24 hex>-<frame>.png`, where the 24 hex is exactly what hashJson
+ * emits (`.slice(0,24)`). The prune pattern's hex group was unbounded, so any
+ * file of the loose shape `proof-<anything>-<n>` — a user's hand-dropped
+ * snapshot in this user-visible product dir — got silently deleted on the next
+ * compile. \d{3,} stays tolerant of a legacy 4-digit suffix.
+ */
+export function isCompilerProofFrame(name: string): boolean {
+  return /^proof-[0-9a-f]{24}-\d{3,}\.png$/.test(name);
+}
+
 function pruneStaleProofFrames(projectDir: string, keep: string[]): void {
   const dir = path.join(projectDir, OUT_DIR, "proof");
   const survivors = new Set(keep);
@@ -1183,10 +1202,7 @@ function pruneStaleProofFrames(projectDir: string, keep: string[]): void {
   }
   for (const entry of entries) {
     if (survivors.has(entry)) continue;
-    // \d{3,}: a contract past 999 turntable steps writes 4-digit frame
-    // suffixes, and a prune pattern that cannot see them lets orphans pile
-    // up forever.
-    if (!/^proof-[0-9a-f]+-\d{3,}\.png$/.test(entry)) continue;
+    if (!isCompilerProofFrame(entry)) continue;
     try {
       fs.rmSync(path.join(dir, entry), { force: true });
     } catch {
@@ -1325,7 +1341,7 @@ export function orderDrifts(build: Fingerprint, master: Fingerprint): string[] {
  * legally suffix or sanitise), counts as totals with tolerance for the
  * triangulation differences an interchange round-trip introduces.
  */
-function fingerprintLosses(build: Fingerprint, master: Fingerprint): string[] {
+export function fingerprintLosses(build: Fingerprint, master: Fingerprint): string[] {
   const losses: string[] = [];
   const buildMeshes = Object.keys(build.meshes ?? {});
   const masterMeshes = Object.keys(master.meshes ?? {});
@@ -1349,8 +1365,26 @@ function fingerprintLosses(build: Fingerprint, master: Fingerprint): string[] {
   if (buildArms > 0 && masterArms === buildArms && masterBones < buildBones) {
     losses.push(`${buildBones - masterBones} of ${buildBones} bone(s)`);
   }
-  if ((build.actions ?? []).length > 0 && (master.actions ?? []).length === 0) {
-    losses.push(`all ${build.actions!.length} animation clip(s)`);
+  // PARTIAL action loss is loss too: master=[walk] when build=[walk,idle]
+  // dropped the idle clip. The old `masterActions === 0` guard only caught a
+  // total wipe, so losing all-but-one clip was silent. Count-based, like the
+  // mesh/material/bone checks above.
+  const buildActions = build.actions ?? [];
+  const masterActions = master.actions ?? [];
+  if (masterActions.length < buildActions.length) {
+    losses.push(`${buildActions.length - masterActions.length} of ${buildActions.length} animation clip(s)`);
+  }
+  // Morph targets (shape keys) were compared for ORDER drift but never for
+  // LOSS — orderDrifts explicitly skips a vanished entry with the comment
+  // "that is an E-901 loss", yet no code emitted that loss. Dropping every
+  // shape key of a character's face was silent. Count across all meshes so
+  // both a single dropped morph and a whole mesh's morphs vanishing register.
+  const morphTotal = (m?: Record<string, string[]>) =>
+    Object.values(m ?? {}).reduce((s, names) => s + names.length, 0);
+  const buildMorphs = morphTotal(build.morphs);
+  const masterMorphs = morphTotal(master.morphs);
+  if (masterMorphs < buildMorphs) {
+    losses.push(`${buildMorphs - masterMorphs} of ${buildMorphs} morph target(s)`);
   }
   return losses;
 }

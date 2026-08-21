@@ -235,8 +235,29 @@ export function writeManifest(projectDir: string, manifest: Scene3dManifest): st
   const dir = path.join(projectDir, "out");
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "manifest.json");
-  fs.writeFileSync(file, JSON.stringify(manifest, null, 2));
+  fs.writeFileSync(file, JSON.stringify(stableGeneratedAt(file, manifest), null, 2));
   return "out/manifest.json";
+}
+
+/**
+ * Keep `generatedAt` stable across a recompile that changed nothing else, so
+ * `out/manifest.json` is byte-identical when its content is — the determinism
+ * discipline the rest of the pipeline holds. It still advances the instant any
+ * other field changes, which preserves its "last changed" meaning for the kit
+ * sidecar's createdAt/updatedAt. Without this, `new Date()` alone made the
+ * manifest the one artifact that could never reproduce byte-for-byte.
+ */
+function stableGeneratedAt(file: string, manifest: Scene3dManifest): Scene3dManifest {
+  const withoutStamp = (m: Scene3dManifest) => JSON.stringify({ ...m, generatedAt: "" });
+  try {
+    const prev = JSON.parse(fs.readFileSync(file, "utf8")) as Scene3dManifest;
+    if (prev?.generatedAt && withoutStamp(prev) === withoutStamp(manifest)) {
+      return { ...manifest, generatedAt: prev.generatedAt };
+    }
+  } catch {
+    /* no previous manifest, or unreadable — stamp fresh */
+  }
+  return manifest;
 }
 
 /**
