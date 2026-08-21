@@ -162,15 +162,27 @@
           pnpm_10
         ];
         shellHook = ''
+          if [ -d "$PWD/tools/pack/node_modules/.bin" ]; then
+            export PATH="$PWD/tools/pack/node_modules/.bin:$PATH"
+          fi
+          if [ -d "$PWD/node_modules/.bin" ]; then
+            export PATH="$PWD/node_modules/.bin:$PATH"
+          fi
+
           echo "🎨 OpenDesign dev shell loaded!"
           echo ""
           echo "Language runtimes:"
           echo "  - 🐢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
           echo "  - 📦 pnpm:    $(pnpm --version 2>/dev/null || echo 'not found')"
+          echo "  - ☁️ vela:    $(vela --version 2>/dev/null || echo 'not found')"
           echo ""
           echo "Quick start:"
           echo "  - 🚀 pnpm install"
           echo "  - 🚀 pnpm tools-dev    # local lifecycle entry point"
+          if [ ! -x "$PWD/tools/pack/node_modules/.bin/vela" ]; then
+            echo ""
+            echo "Vela note: run 'pnpm install' in this repo to expose the pinned @powerformer/vela-cli binary in tools/pack/node_modules/.bin."
+          fi
           echo ""
         '';
       };
