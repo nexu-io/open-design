@@ -111,6 +111,42 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(codes.has(ISSUE_CODES.NAN_TRANSFORM)).toBe(true);
   });
 
+  it("relaxes the inspection-posture gates for a file:-imported mesh, not the real defects", () => {
+    // The SAME open/doubled/wound mesh — but marked as a `file:` import via the
+    // solved scene — no longer errors on non-manifold/doubles/winding (imported
+    // provenance = inspect, don't judge), while ngons and zero-area (genuine
+    // defects, not inspection-relaxable) still fire.
+    const meshRow = {
+      object: "prp_helm",
+      verts: 200,
+      faces: 300,
+      ngons: 2,
+      nonManifoldEdges: 124,
+      zeroAreaFaces: 1,
+      nan: false,
+      uvLayers: [],
+      doubleVertices: 43,
+      inconsistentWindingEdges: 1,
+    };
+    const strict = runLint({ contract: contract(), census: census({ meshes: [meshRow] }) });
+    const strictCodes = new Set(strict.map((i) => i.code));
+    expect(strictCodes.has(ISSUE_CODES.NON_MANIFOLD)).toBe(true);
+    expect(strictCodes.has(ISSUE_CODES.DOUBLE_VERTICES)).toBe(true);
+    expect(strictCodes.has(ISSUE_CODES.INCONSISTENT_WINDING)).toBe(true);
+
+    const imported = runLint({
+      contract: contract(),
+      census: census({ meshes: [meshRow] }),
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
+    });
+    const importedCodes = new Set(imported.map((i) => i.code));
+    expect(importedCodes.has(ISSUE_CODES.NON_MANIFOLD)).toBe(false); // relaxed
+    expect(importedCodes.has(ISSUE_CODES.DOUBLE_VERTICES)).toBe(false); // relaxed
+    expect(importedCodes.has(ISSUE_CODES.INCONSISTENT_WINDING)).toBe(false); // relaxed
+    expect(importedCodes.has(ISSUE_CODES.NGONS)).toBe(true); // a real defect, still fires
+    expect(importedCodes.has(ISSUE_CODES.ZERO_AREA_FACES)).toBe(true); // real defect, still fires
+  });
+
   it("reports z-fighting pairs and empty meshes", () => {
     const issues = runLint({
       contract: contract(),

@@ -39,7 +39,12 @@ export interface LintInput {
  */
 export function runLint(input: LintInput): Issue[] {
   const issues: Issue[] = [];
-  const ctx = input;
+  // A `file:`-backed part is imported third-party geometry; its object name
+  // carries "imported" provenance so the topology/UV modules relax for it.
+  const imported = new Set(
+    (input.solved?.parts ?? []).filter((p) => p.file !== undefined).map((p) => p.id),
+  );
+  const ctx = { ...input, imported };
   lintNaming(ctx, issues);
   lintTopology(ctx, issues);
   if (input.census) lintEmptyMeshes(input.census, issues);

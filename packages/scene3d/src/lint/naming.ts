@@ -6,6 +6,16 @@ export interface LintContext {
   contract: NormalizedContract;
   census?: Census;
   primTree?: UsdaPrimTree;
+  /**
+   * Object names that came from a `file:` import — third-party geometry the
+   * author did not author vertex-by-vertex. Its provenance is "imported", so
+   * the topology/UV gates that punish open meshes, doubles, odd winding, or a
+   * missing unwrap relax for it (a downloaded GLB is inspected, not judged) —
+   * the same posture the `mesh` source kind gets scene-wide, made per-part. A
+   * `watertight` claim still enforces closure on a specific part; and an author
+   * who imports nothing has an empty set, so nothing changes.
+   */
+  imported?: Set<string>;
 }
 
 /**
