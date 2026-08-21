@@ -183,6 +183,11 @@ if (/[A-Za-z_]/.test(ch)) {
 
 const SPECIFIERS = new Set(["def", "over", "class", "scope"]);
 
+/** Recursion ceiling for nested prims — a controlled parse error past this,
+ *  rather than a stack overflow that crashes the parse (and the daemon). Far
+ *  above any real hierarchy; the DEPTH_LIMIT lint rule flags single digits. */
+const MAX_PRIM_NESTING = 1024;
+
 export function parseUsda(source: string, file = "<usda>"): UsdaPrimTree {
   const tokens = new Lexer(source, file).tokens();
   const tree: UsdaPrimTree = {
@@ -446,7 +451,16 @@ parts.push(t.value);
     }
   };
 
-  const parsePrim = (parent: UsdaPrim, parentPath: string, parentLine: number): void => {
+  const parsePrim = (parent: UsdaPrim, parentPath: string, parentLine: number, depth: number): void => {
+    // Bound the recursion so a pathological or malicious file — thousands of
+    // nested `def`s — fails as a controlled parse error instead of a stack
+    // overflow. An overflow is uncatchable enough to crash the worker (and the
+    // daemon runs parseUsda on every compile), and a crash blinds the whole
+    // lint stage. The floor is far above any real scene: the DEPTH_LIMIT lint
+    // rule flags a hierarchy past single digits, so nothing legitimate is near.
+    if (depth > MAX_PRIM_NESTING) {
+      throw new UsdaParseError(`prim nesting deeper than ${MAX_PRIM_NESTING}`, parentLine, file);
+    }
     const specTok = tokens[i];
     if (!specTok || specTok.kind === "eof") return;
     if (specTok.kind === "punct" && specTok.value === "}") return;
@@ -553,12 +567,28 @@ const prim: UsdaPrim = {
           return;
         }
         if (t.kind === "ident" && SPECIFIERS.has(t.value)) {
-          parsePrim(prim, path, t.line);
+          parsePrim(prim, path, t.line, depth + 1);
           continue;
         }
         if (skipVariantSet()) continue;
+        const before = i;
         const st = readStatement();
-        if (!st) continue;
+        if (!st) {
+          // readStatement can return null WITHOUT consuming a token — a stray
+          // `)` inside a prim body is the case fuzzing found. `continue`-ing
+          // then spins on the same token forever, wedging the parse (and the
+          // daemon, which parses on every compile). If nothing advanced, the
+          // body holds a token that cannot begin a statement: fail as a
+          // controlled parse error instead of hanging.
+          if (i === before) {
+            throw new UsdaParseError(
+              `unexpected '${tokens[i]?.value ?? "?"}' in prim body '${path}'`,
+              tokens[i]?.line ?? parentLine,
+              file,
+            );
+          }
+          continue;
+        }
         if (st.name === "references" || st.name === "reference") {
           prim.references.push(...collectRefs(st.value));
         } else if (st.name === "payload") {
@@ -574,7 +604,7 @@ const prim: UsdaPrim = {
     const t = tokens[i];
     if (!t || t.kind === "eof") break;
     if (t.kind === "ident" && SPECIFIERS.has(t.value)) {
-      parsePrim(tree.root, "", t.line);
+      parsePrim(tree.root, "", t.line, 0);
       continue;
     }
     // Tolerate stray top-level content (e.g. version comment leftovers).

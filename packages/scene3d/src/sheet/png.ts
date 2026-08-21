@@ -95,17 +95,27 @@ export function decodePng(buffer: Uint8Array): DecodedImage {
   if (channels === undefined) throw new PngDecodeError(`unsupported colour type ${colorType}`);
   if (![1, 2, 4, 8, 16].includes(depth)) throw new PngDecodeError(`unsupported bit depth ${depth}`);
 
-  const raw = zlib.inflateSync(Buffer.concat(idat.map((chunk) => Buffer.from(chunk))));
-  const bitsPerPixel = channels * depth;
-  const bytesPerPixel = Math.max(1, bitsPerPixel >> 3);
-  const bytesPerRow = Math.ceil((bitsPerPixel * width) / 8);
+  // A corrupt IDAT makes zlib throw its own `Z_DATA_ERROR` ("incorrect data
+  // check"), and a malformed size can throw out of unfilter/toRgba. Wrap them
+  // so decodePng's contract holds — it throws PngDecodeError or succeeds, never
+  // a leaked internal error — which keeps SHEET_UNREADABLE the single outcome
+  // for any unreadable sheet (found by fuzzing).
+  try {
+    const raw = zlib.inflateSync(Buffer.concat(idat.map((chunk) => Buffer.from(chunk))));
+    const bitsPerPixel = channels * depth;
+    const bytesPerPixel = Math.max(1, bitsPerPixel >> 3);
+    const bytesPerRow = Math.ceil((bitsPerPixel * width) / 8);
 
-  const unfiltered = unfilter(raw, height, bytesPerRow, bytesPerPixel);
-  return {
-    width,
-    height,
-    data: toRgba(unfiltered, width, height, bytesPerRow, depth, colorType, palette, transparency),
-  };
+    const unfiltered = unfilter(raw, height, bytesPerRow, bytesPerPixel);
+    return {
+      width,
+      height,
+      data: toRgba(unfiltered, width, height, bytesPerRow, depth, colorType, palette, transparency),
+    };
+  } catch (err) {
+    if (err instanceof PngDecodeError) throw err;
+    throw new PngDecodeError(`PNG image data could not be decoded: ${(err as Error).message}`);
+  }
 }
 
 const CHANNELS: Record<number, number | undefined> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };

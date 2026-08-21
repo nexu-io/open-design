@@ -185,41 +185,43 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       DEFAULT_CONTRACT.conventions!.naming!.collectionPattern!,
     ),
     forbidDefaultNames: n.forbidDefaultNames ?? true,
-    partPrefixes: n.partPrefixes ?? [],
-    maxDepth: h.maxDepth ?? 8,
-    metersPerUnit: u.metersPerUnit ?? 1,
-    upAxis: u.upAxis ?? "Y",
-    metallicValues: p.metallicValues ?? [0, 1],
-    roughnessRange: p.roughnessRange ?? [0, 1],
-    iorRange: p.iorRange ?? [1, 2.5],
-    fps: a.fps ?? 24,
-    maxFrames: a.maxFrames ?? 10_000,
+    partPrefixes: asArray<string>(n.partPrefixes, []),
+    // Every numeric field is coerced to a finite value: `?? default` guards
+    // only null/undefined, so a NaN/Infinity/string reaching here via a
+    // programmatic contract (which C-1 validates, but normalize must not crash
+    // or emit NaN for) would otherwise flow through as a dead threshold.
+    maxDepth: numOr(h.maxDepth, 8),
+    metersPerUnit: numOr(u.metersPerUnit, 1),
+    upAxis: u.upAxis === "Z" ? "Z" : "Y",
+    metallicValues: asArray<number>(p.metallicValues, [0, 1]),
+    roughnessRange: asArray<number>(p.roughnessRange, [0, 1]) as [number, number],
+    iorRange: asArray<number>(p.iorRange, [1, 2.5]) as [number, number],
+    fps: numOr(a.fps, 24),
+    maxFrames: numOr(a.maxFrames, 10_000),
     grounding: {
       // Off by default: grounding is meaningful for props and wrong for a
       // scene composed in world space, so it is opted into per project.
       enabled: g.enabled ?? false,
-      tolerance: g.tolerance ?? 0.005,
-      exempt: g.exempt ?? [],
+      tolerance: numOr(g.tolerance, 0.005),
+      exempt: asArray<string>(g.exempt, []),
     },
     uv: {
       require: uv.require ?? "textured",
-      maxOverlapFraction: uv.maxOverlapFraction ?? 0.05,
+      maxOverlapFraction: numOr(uv.maxOverlapFraction, 0.05),
       allowFlipped: uv.allowFlipped ?? false,
       // Tiling is legitimate, so out-of-bounds is unbounded unless the
       // project says otherwise (trim sheets / atlases set this near 0).
-      maxOutOfBoundsFraction: uv.maxOutOfBoundsFraction ?? 1,
-      // Defensive like `lodRatios` below: `?? null` guards only `undefined`,
-      // so a wrong-typed value reaching here via a programmatic `request.
-      // contract` (which skips validateContract) would flow through as a bad
-      // threshold. Sanitise to a positive number or the "off" null.
+      maxOutOfBoundsFraction: numOr(uv.maxOutOfBoundsFraction, 1),
+      // Positive number or the "off" null — a wrong-typed value reaching here
+      // via a programmatic contract must not flow through as a bad threshold.
       maxStretch:
         typeof uv.maxStretch === "number" && uv.maxStretch > 0 ? uv.maxStretch : null,
-      texelDensityTarget: uv.texelDensity?.target ?? null,
-      texelDensityMaxRatio: uv.texelDensity?.maxRatio ?? 4,
+      texelDensityTarget: finiteOrNull(uv.texelDensity?.target),
+      texelDensityMaxRatio: numOr(uv.texelDensity?.maxRatio, 4),
     },
     textures: {
       requirePowerOfTwo: tex.requirePowerOfTwo ?? true,
-      maxSize: tex.maxSize ?? 4096,
+      maxSize: numOr(tex.maxSize, 4096),
       flagDuplicateMaterials: tex.flagDuplicateMaterials ?? true,
       requireFaceAssignment: tex.requireFaceAssignment ?? true,
     },
@@ -231,7 +233,7 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       allowNegativeScale: geo.allowNegativeScale ?? false,
       requireAppliedScale: geo.requireAppliedScale ?? true,
     },
-    sheets: c.sheets ?? [],
+    sheets: asArray(c.sheets, []) as NonNullable<Scene3dContract["sheets"]>,
     // USD is the interchange stage, GLB the web-viewer mesh; both ship by
     // default so neither the author nor the agent ever has to think about
     // containers. Projects with a different delivery policy override here.
@@ -246,16 +248,26 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
      * STL and PLY stay opt-in: they carry no materials, so shipping them by
      * default would put two lossy files in every download menu.
      */
-    exportFormats:
-      c.export?.formats && c.export.formats.length > 0
-        ? c.export.formats
-        : ["usda", "usdz", "glb", "obj", "fbx"],
+    exportFormats: (() => {
+      const fmts = asArray<"usda" | "usdz" | "glb" | "obj" | "fbx" | "stl" | "ply">(
+        c.export?.formats,
+        [],
+      );
+      return fmts.length > 0 ? fmts : ["usda", "usdz", "glb", "obj", "fbx"];
+    })(),
     // Only ratios that actually reduce; a LOD at ≥1 or ≤0 is meaningless and
-    // is dropped rather than shipped as a same-size or empty "LOD".
-    lodRatios: (c.export?.lod ?? []).filter((r) => typeof r === "number" && r > 0 && r < 1),
+    // is dropped rather than shipped as a same-size or empty "LOD". asArray
+    // guards a non-array `lod` (a string), which used to crash the .filter.
+    lodRatios: asArray<unknown>(c.export?.lod, []).filter(
+      (r): r is number => typeof r === "number" && r > 0 && r < 1,
+    ),
     budgets: {
-      ...(b.maxTrianglesPerMesh !== undefined ? { maxTrianglesPerMesh: b.maxTrianglesPerMesh } : {}),
-      ...(b.maxTrianglesTotal !== undefined ? { maxTrianglesTotal: b.maxTrianglesTotal } : {}),
+      ...(numOrUndef(b.maxTrianglesPerMesh) !== undefined
+        ? { maxTrianglesPerMesh: numOrUndef(b.maxTrianglesPerMesh)! }
+        : {}),
+      ...(numOrUndef(b.maxTrianglesTotal) !== undefined
+        ? { maxTrianglesTotal: numOrUndef(b.maxTrianglesTotal)! }
+        : {}),
     },
     proof: proof as NonNullable<Scene3dContract["proof"]>,
     proofThresholds: {
@@ -272,6 +284,32 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
  *  programmatic value that skipped validateContract. */
 function pos(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/** A finite number, or the fallback. A NaN/Infinity/string budget must never
+ *  reach a threshold — `?? default` only guards null/undefined, so `NaN ?? 8`
+ *  is still NaN and silently disables the rule (found by fuzzing). */
+function numOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** A finite number or null — for optional thresholds whose "off" state is
+ *  null. A NaN would otherwise read as an authored value. */
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** A finite number or undefined — for optional budgets that are simply absent
+ *  when not a real number, so a NaN/string never becomes a live budget. */
+function numOrUndef(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/** The value if it is an array, else the fallback — defensive so a wrong-typed
+ *  programmatic field (a string where an array was expected) cannot crash a
+ *  downstream .filter/.includes/.some (found by fuzzing). */
+function asArray<T>(value: unknown, fallback: T[]): T[] {
+  return Array.isArray(value) ? (value as T[]) : fallback;
 }
 
 /**
