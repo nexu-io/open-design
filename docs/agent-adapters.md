@@ -523,7 +523,10 @@ external-directory flags can widen a CLI's reach.
   and Linux hosts. Windows, WSL, or an explicit
   `OD_CODEX_SANDBOX=danger-full-access` operator override uses
   `danger-full-access` because the workspace-write path cannot support the
-  required shell execution there.
+  required shell execution there. Operators can set
+  `OD_CODEX_NETWORK_ACCESS=false` to keep `workspace-write` while disabling
+  outbound network access for sandboxed commands; unset and unknown values
+  preserve the network-enabled default.
 
 Provider/org policy and any sandbox internal to the CLI still apply, but users
 must treat these runs as trusted agent execution with the authority shown by

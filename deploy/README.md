@@ -175,6 +175,16 @@ without the workspace-write sandbox, which is useful when the container host
 blocks unprivileged user namespaces, but it gives the Codex process broader
 filesystem access inside the container.
 
+To keep the `workspace-write` sandbox while preventing commands inside it from
+making outbound network requests, set:
+
+```bash
+OD_CODEX_NETWORK_ACCESS=false docker compose up -d --no-build
+```
+
+Only the exact value `false` disables network access. Unset and unknown values
+preserve the current network-enabled default.
+
 ## Manual image publish override
 
 ```bash

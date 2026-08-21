@@ -191,6 +191,12 @@ export function codexNeedsDangerFullAccessSandbox(
   return Boolean(env.WSL_DISTRO_NAME?.trim());
 }
 
+export function codexWorkspaceWriteNetworkAccess(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.OD_CODEX_NETWORK_ACCESS?.trim() !== 'false';
+}
+
 export const codexAgentDef = {
     id: 'codex',
     name: 'Codex CLI',
@@ -255,6 +261,7 @@ export const codexAgentDef = {
       // and Linux (Landlock+seccomp) keep workspace-write because their
       // sandbox enforcement permits shell while restricting writes.
       const needsDangerFullAccess = codexNeedsDangerFullAccessSandbox();
+      const workspaceWriteNetworkAccess = codexWorkspaceWriteNetworkAccess();
       // Capture-style resume: when the daemon has a stored Codex thread id for
       // this conversation it asks the CLI to continue that session with
       // `exec resume <thread_id>` instead of `exec` (a fresh session). Codex
@@ -281,13 +288,13 @@ export const codexAgentDef = {
               '-c',
               'sandbox_mode="workspace-write"',
               '-c',
-              'sandbox_workspace_write.network_access=true',
+              `sandbox_workspace_write.network_access=${workspaceWriteNetworkAccess}`,
             ]
           : [
               '--sandbox',
               'workspace-write',
               '-c',
-              'sandbox_workspace_write.network_access=true',
+              `sandbox_workspace_write.network_access=${workspaceWriteNetworkAccess}`,
             ];
       const args = resumeSessionId
         ? ['exec', 'resume', '--json', '--skip-git-repo-check', ...sandboxArgs]
