@@ -4605,7 +4605,7 @@ describe('FileViewer SVG artifacts', () => {
     });
   });
 
-  it('allows downloads in React component preview iframes', async () => {
+  it('allows interactive controls and downloads in React component preview iframes', async () => {
     const file = baseFile({
       name: 'Card.jsx',
       path: 'Card.jsx',
@@ -4631,7 +4631,9 @@ describe('FileViewer SVG artifacts', () => {
     render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     const frame = await screen.findByTestId('react-component-preview-frame');
-    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
+    expect(frame.getAttribute('sandbox')).toBe(
+      'allow-scripts allow-forms allow-popups allow-modals allow-downloads',
+    );
   });
 
   it('disables React component sharing controls for viewer-only shared projects', async () => {
@@ -4734,7 +4736,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(onOpenFileReplacing).toHaveBeenCalledWith('backups.html', 'icons.jsx');
   });
 
-  it('keeps decks on the srcDoc path so the deck postMessage bridge can run', () => {
+  it('keeps decks on the srcDoc path with interactive sandbox permissions', () => {
     const file = baseFile({
       name: 'deck.html',
       path: 'deck.html',
@@ -4762,7 +4764,17 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="false"');
     expect(markup).not.toContain('data-od-lazy-srcdoc-transport');
-    expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
+    const parsedMarkup = new DOMParser().parseFromString(markup, 'text/html');
+    const srcDocFrame = parsedMarkup.querySelector<HTMLIFrameElement>(
+      'iframe[data-od-render-mode="srcdoc"]',
+    );
+    const urlLoadFrame = parsedMarkup.querySelector<HTMLIFrameElement>(
+      'iframe[data-od-render-mode="url-load"]',
+    );
+    expect(srcDocFrame?.getAttribute('sandbox')).toBe(
+      'allow-scripts allow-forms allow-popups allow-modals allow-downloads',
+    );
+    expect(urlLoadFrame?.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
   });
 
   it('falls back to srcDoc when the HTML body looks deck-shaped even without an isDeck hint', () => {
