@@ -62,6 +62,30 @@ describe.skipIf(!hasBlender)("FINDINGS2 mechanisms (real Blender)", () => {
     expect(codes(r, /W-445|W-956/)).toEqual([]);
   }, 400_000);
 
+  /* ---- whole toolchain: all six stages for a Minecraft scene -------- */
+
+  it("integration: the golem compiles through ALL six stages with the MC model shipped", async () => {
+    const src = path.join(__dirname, "fixtures", "minecraft", "golem");
+    const dir = path.join(__dirname, ".work", `f2-golem-${++seq}`);
+    rmForSetup(dir);
+    fs.cpSync(src, dir, { recursive: true });
+    const r = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true }); // every stage
+    expect(r.stages.map((s) => `${s.id}:${s.status}`)).toEqual([
+      "parse:ran", "build:ran", "proof:ran", "export:ran", "lint:ran", "manifest:ran",
+    ]);
+    expect(r.ok).toBe(true);
+    expect(r.proofImages.length).toBeGreaterThan(0); // the turntable rendered
+    // The block model + its textures ship alongside the GLB/USD family.
+    expect(r.exportedAssets).toContain("out/minecraft/model.json");
+    expect(r.exportedAssets.some((a) => a.endsWith(".glb"))).toBe(true);
+    // The host artifacts exist: the frame player, the kit page, the manifest.
+    for (const f of ["out/index.html", "out/kit.html", "out/manifest.json"]) {
+      expect(fs.existsSync(path.join(dir, f)), f).toBe(true);
+    }
+    // A clean showcase: no defects (info hints tolerated).
+    expect(r.issues.filter((i) => i.severity !== "info")).toEqual([]);
+  }, 400_000);
+
   /* ---- Mechanism 3: grid is a solver constraint; span defaults ------ */
 
   it("M3: an off-grid repeat pitch snaps every instance onto the grid", async () => {
