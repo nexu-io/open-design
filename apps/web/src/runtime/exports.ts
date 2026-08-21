@@ -1086,7 +1086,13 @@ export function planDeckImageCapture(opts: {
 export type ProjectImageExportResult =
   | { ok: true; snapshot: PreviewSnapshot }
   | { ok: false; unavailable: true }
-  | { ok: false; error: string };
+  // `code` / `status` carry the daemon's own classification through to the
+  // caller. Dropping them (as this used to) forced `exportErrorCode` to
+  // re-derive a code by regex-matching the message, and anything it could not
+  // match fell through to `err.name` — the literal string "Error", which is
+  // what 48% of image-export failures reported in analytics. See
+  // `apps/web/src/analytics/export-error-code.ts`.
+  | { ok: false; error: string; code?: string; status?: number };
 
 export async function exportProjectImageDataUrl(opts: {
   projectId: string;
@@ -1127,13 +1133,15 @@ export async function exportProjectImageDataUrl(opts: {
     // 501 = this runtime has no off-screen renderer → caller may fall back.
     if (resp.status === 501) return { ok: false, unavailable: true };
     let message = `image export failed (${resp.status})`;
+    let code: string | undefined;
     try {
       const err = await resp.json();
       if (err?.error?.message) message = String(err.error.message);
+      if (typeof err?.error?.code === 'string' && err.error.code) code = err.error.code;
     } catch {
       // non-JSON body; keep the status-based message
     }
-    return { ok: false, error: message };
+    return { ok: false, error: message, status: resp.status, ...(code ? { code } : {}) };
   }
   // A 200 with an unreadable/corrupt payload is a real export failure, NOT
   // "renderer unavailable" — surface it instead of silently downgrading to the

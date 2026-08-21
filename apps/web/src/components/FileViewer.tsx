@@ -14639,6 +14639,7 @@ function HtmlViewer({
     options?: { wholeDeck?: boolean; context?: HtmlVersionExportContext | null },
   ) => {
     const exportContext = options?.context ?? null;
+    captureFailureStageRef.current = null;
     const imageDeckSignal = deckExportSignalForContext(exportContext);
     // The host compositor grabs on-screen pixels, so any transient hover chrome
     // over the preview leaks into the capture. The screenshot control's own
@@ -14690,11 +14691,23 @@ function HtmlViewer({
         // A semantic failure (e.g. "page is too tall — export as PDF") must surface,
         // NOT silently downgrade to a partial visible-viewport screenshot. Only when
         // the off-screen renderer is genuinely unavailable do we fall through.
-        if ('error' in rendered) throw new Error(rendered.error);
+        if ('error' in rendered) {
+          // Attach the daemon's own code/status to the error so
+          // `exportErrorCode` can report it verbatim instead of falling back
+          // to message-regex guessing (and ultimately to the useless
+          // `err.name === 'Error'`).
+          throw Object.assign(new Error(rendered.error), {
+            ...(rendered.code ? { code: rendered.code } : {}),
+            ...(rendered.status ? { status: rendered.status } : {}),
+          });
+        }
       }
     }
 
-    if (exportContext?.versionId) return null;
+    if (exportContext?.versionId) {
+      captureFailureStageRef.current = 'VERSIONED_NO_RENDERER';
+      return null;
+    }
 
     // Fallback: desktop compositor screenshot of the visible preview region.
     // Returns real rendered pixels and is never tainted, unlike the in-iframe
@@ -14706,7 +14719,10 @@ function HtmlViewer({
 
     if (!useUrlLoadPreview) {
       const activeIframe = srcDocPreviewIframeRef.current ?? iframeRef.current;
-      if (!activeIframe) return null;
+      if (!activeIframe) {
+        captureFailureStageRef.current = 'NO_SRCDOC_IFRAME';
+        return null;
+      }
       await waitForIframeLoadOrTimeout(activeIframe, 250);
       await waitForAnimationFrame();
       return requestPreviewSnapshotWithRetry(activeIframe);
@@ -14723,7 +14739,10 @@ function HtmlViewer({
     const srcDocIframe = srcDocPreviewIframeRef.current;
     if (!srcDocIframe) {
       const activeIframe = iframeRef.current;
-      if (!activeIframe) return null;
+      if (!activeIframe) {
+        captureFailureStageRef.current = 'NO_URL_IFRAME';
+        return null;
+      }
       return requestPreviewSnapshotWithRetry(activeIframe);
     }
 
@@ -14846,6 +14865,14 @@ function HtmlViewer({
 
   // Component-scoped so both the save flow and the modal Cancel button can
   // emit the one terminal result for an image export session.
+  // Which step of the capture fallback chain gave up. `captureExportImageSnapshot`
+  // can return null from five different places — no active iframe, a version-scoped
+  // export with no off-screen render, or any of the bridge snapshot attempts — and
+  // they all used to report the same flat `CAPTURE_FAILED` (90 events / 37 users in
+  // 14 days), which says a capture failed but never which stage. Recording the stage
+  // makes the bucket actionable.
+  const captureFailureStageRef = useRef<string | null>(null);
+
   const fireImageExportResult = (
     result: 'success' | 'failed' | 'cancelled',
     errorCode?: string,
@@ -14909,7 +14936,12 @@ function HtmlViewer({
         const snap = await captureExportImageSnapshot({ wholeDeck: true, context });
         if (!snap) {
           setExportToast({ message: t('fileViewer.exportImageFailed'), tone: 'error' });
-          fireImageExportResult('failed', 'CAPTURE_FAILED');
+          fireImageExportResult(
+            'failed',
+            // The bridge attempts return null without a stage of their own; they
+            // are the "we tried and got nothing back" case.
+            `CAPTURE_FAILED_${captureFailureStageRef.current ?? 'BRIDGE_EMPTY'}`,
+          );
           return;
         }
         dataUrl = snap.dataUrl;
