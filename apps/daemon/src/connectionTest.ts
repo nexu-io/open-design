@@ -98,6 +98,7 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import { resolveOpenCodeConnectionApprovalFlag } from './runtimes/opencode-permissions.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2572,18 +2573,23 @@ async function testAgentConnectionInternal(
         },
         {
           cwd: tempDir,
+          launchPath: executableResolution.launchPath,
           ...(promptFile ? { promptFilePath: promptFile.path } : {}),
           ...(antigravityLogFilePath
             ? { agentLogFilePath: antigravityLogFilePath }
             : {}),
         },
       );
-      // Connection tests should validate the adapter's current non-interactive
-      // CLI path without stopping on approval prompts. OpenCode 2 no longer
-      // accepts the legacy `--pure` flag, but still supports `--auto` to
-      // auto-approve permissions that are not explicitly denied.
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--auto')) {
-        args.push('--auto');
+      // Preserve plugin-isolated smoke tests on legacy OpenCode while using the
+      // current non-interactive approval path on opencode2.
+      if (input.agentId === 'opencode') {
+        const approvalFlag = resolveOpenCodeConnectionApprovalFlag(
+          input.agentId,
+          executableResolution.launchPath,
+        );
+        if (approvalFlag && !args.includes(approvalFlag)) {
+          args.push(approvalFlag);
+        }
       }
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
         args.push('--title', 'Connection test');

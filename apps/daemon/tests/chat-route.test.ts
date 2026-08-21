@@ -48,17 +48,22 @@ async function withFakeAgent<T>(
   const dir = await fsp.mkdtemp(join(tmpdir(), 'od-chat-route-bin-'));
   const oldPath = process.env.PATH;
   try {
+    const binNames = binName === 'opencode' ? ['opencode2', 'opencode'] : [binName];
     if (process.platform === 'win32') {
       const runner = join(dir, `${binName}-test-runner.cjs`);
       await fsp.writeFile(runner, script);
-      await fsp.writeFile(
-        join(dir, `${binName}.cmd`),
-        `@echo off\r\nnode "${runner}" %*\r\n`,
-      );
+      for (const name of binNames) {
+        await fsp.writeFile(
+          join(dir, `${name}.cmd`),
+          `@echo off\r\nnode "${runner}" %*\r\n`,
+        );
+      }
     } else {
-      const bin = join(dir, binName);
-      await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
-      await fsp.chmod(bin, 0o755);
+      for (const name of binNames) {
+        const bin = join(dir, name);
+        await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
+        await fsp.chmod(bin, 0o755);
+      }
     }
     process.env.PATH = `${dir}${delimiter}${oldPath ?? ''}`;
     return await run();
