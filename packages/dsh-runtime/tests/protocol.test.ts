@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
-import { describe, test } from 'vitest';
+import { describe, test, vi } from 'vitest';
 import { identityFrame, modelsFrame, parseHostCommand } from '../src/protocol.js';
 import { internals } from '../src/index.js';
 
@@ -415,7 +415,17 @@ describe('@open-design/dsh-runtime protocol', () => {
       prompt: 'hi',
       mcp_servers: [],
     })}\n`);
-    await serving;
+    const stderrWrites: string[] = [];
+    const stderrSpy = vi.spyOn(process.stderr, 'write');
+    stderrSpy.mockImplementation((chunk) => {
+      stderrWrites.push(String(chunk));
+      return true;
+    });
+    try {
+      await serving;
+    } finally {
+      stderrSpy.mockRestore();
+    }
 
     assert.equal(disposeCalls, 1);
     assert.deepEqual(exitCodes, [0]);
@@ -425,6 +435,9 @@ describe('@open-design/dsh-runtime protocol', () => {
     // fatal. (Status is 'failed' here only because this mock never delivers a
     // turn/end event; the bug under test is the duplicate frame, not status.)
     assert.equal(frames.filter((frame) => frame.type === 'result').length, 1);
+    // Cleanup failures stay non-rejecting but must remain observable: the
+    // failed event disposer is reported on stderr, never silently swallowed.
+    assert.equal(stderrWrites.some((line) => /disposer failed/.test(line)), true);
   });
 
   test('reports cancelled, not failed, when selection derivation throws during an active cancel', async () => {

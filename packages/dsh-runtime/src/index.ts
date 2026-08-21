@@ -427,14 +427,21 @@ async function execute(
     // contract and turning a completed run into a fatal protocol error.
     try {
       disposeEvent();
-    } catch {
-      // Cleanup errors are non-rejecting by design (see above).
+    } catch (error: unknown) {
+      // Cleanup errors are non-rejecting by design (see above), but keep
+      // them observable: a failed event disposer can leave the session-event
+      // listener installed, so silent swallowing would hide teardown bugs.
+      process.stderr.write(
+        `open-design-runtime: session event disposer failed (${error instanceof Error ? error.message : String(error)})\n`,
+      );
     }
     await handle?.dispose().catch(() => undefined);
     try {
       onHandle(undefined);
-    } catch {
-      // Same as disposeEvent: never reject after a terminal frame.
+    } catch (error: unknown) {
+      process.stderr.write(
+        `open-design-runtime: handle callback failed during cleanup (${error instanceof Error ? error.message : String(error)})\n`,
+      );
     }
   }
 }

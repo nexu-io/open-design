@@ -469,6 +469,67 @@ describe('DeepSeek Harness profile session controller', () => {
     assert.equal(controller.getTerminalStatus(), 'cancelled');
   });
 
+  test('treats a pre-session cancelled result after abort as a user cancellation, not fatal', () => {
+    // Regression: when the user cancels before a session is established and
+    // the runtime's model-selection derivation then throws, the runtime
+    // emits a pre-session `cancelled` result. The daemon must accept that as
+    // a legitimate cancellation completion — previously the !sessionId guard
+    // only accepted `failed`, so `cancelled` fell through to requireSession()
+    // and marked the run fatal with DSH_PROFILE_PROTOCOL_ERROR.
+    const child = new FakeDshChild();
+    const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
+    const controller = attachDshProfileSession({
+      child: child as never,
+      requestId: 'run-pre-session-cancel',
+      prompt: 'start',
+      cwd: '/project',
+      send: (event, payload) => events.push({ event, payload: payload as Record<string, unknown> }),
+    });
+
+    child.emitFrame(readyFrame);
+    controller.abort();
+    child.emitFrame({
+      v: 1,
+      type: 'result',
+      request_id: 'run-pre-session-cancel',
+      status: 'cancelled',
+      session_id: 'od-pending-run',
+      resume_rejected: false,
+    });
+
+    assert.equal(controller.hasFatalError(), false);
+    assert.equal(controller.getTerminalStatus(), 'cancelled');
+    assert.equal(events.some(({ event }) => event === 'error'), false);
+  });
+
+  test('rejects an unsolicited pre-session cancelled result as a protocol error', () => {
+    // The mirror case: a pre-session `cancelled` result WITHOUT an abort is
+    // still a protocol error — the runtime must not cancel on its own.
+    const child = new FakeDshChild();
+    const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
+    const controller = attachDshProfileSession({
+      child: child as never,
+      requestId: 'run-unsolicited-cancel',
+      prompt: 'start',
+      cwd: '/project',
+      send: (event, payload) => events.push({ event, payload: payload as Record<string, unknown> }),
+    });
+
+    child.emitFrame(readyFrame);
+    child.emitFrame({
+      v: 1,
+      type: 'result',
+      request_id: 'run-unsolicited-cancel',
+      status: 'cancelled',
+      session_id: 'od-pending-run',
+      resume_rejected: false,
+    });
+
+    assert.equal(controller.hasFatalError(), true);
+    assert.equal(events.at(-1)?.event, 'error');
+    assert.match(String(events.at(-1)?.payload.message), /cancelled a run before establishing a session/);
+  });
+
   test('EOF without a terminal result is a fatal failure', () => {
     const child = new FakeDshChild();
     const events: Array<{ event: string; payload: Record<string, unknown> }> = [];

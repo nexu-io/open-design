@@ -212,6 +212,19 @@ export function attachDshProfileSession({
           fail(frame.error?.message ?? 'DeepSeek Harness profile could not start a session.', frame.error?.code);
           return;
         }
+        // Pre-session cancellation: the runtime may emit `cancelled` before
+        // any session frame (e.g. the user cancels while model-selection
+        // derivation is still running). That is a legitimate completion path
+        // — but only when OpenDesign actually requested the cancel; an
+        // unsolicited pre-session `cancelled` is still a protocol error.
+        if (!sessionId && frame.status === 'cancelled') {
+          if (!aborted) {
+            fail('DeepSeek Harness profile cancelled a run before establishing a session.');
+            return;
+          }
+          finish('cancelled');
+          return;
+        }
         if (!requireSession()) return;
         if (frame.session_id !== sessionId) {
           fail('DeepSeek Harness profile terminal result changed the session id.', 'DSH_PROFILE_SESSION_MISMATCH');
