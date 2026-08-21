@@ -38,6 +38,18 @@ const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.file-versions', '.live-artifacts']);
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
+// Imported folders can contain hundreds of thousands of files. Browsers often
+// request the full inventory more than once while mounting/reconciling a
+// project, so retain a completed snapshot briefly instead of repeating a full
+// recursive walk after the previous request has already finished. Incremental
+// polling (`since`) deliberately bypasses this cache.
+const IMPORTED_PROJECT_FILE_LIST_CACHE_MS = 5_000;
+const MAX_IMPORTED_PROJECT_FILE_LISTS = 32;
+const importedProjectFileLists = new Map<string, { expiresAt: number; files: any[] }>();
+const importedProjectFileListWalks = new Map<
+  string,
+  { active: number; generation: number }
+>();
 export const RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS = 1000;
 export const projectFileRenameTestHooks = {
   beforeCommit: null as null | ((paths: { source: string; target: string }) => Promise<void> | void),
@@ -137,18 +149,69 @@ export async function ensureProject(projectsRoot, projectId, metadata?) {
 export async function listFiles(projectsRoot, projectId, opts = {}) {
   const metadata = opts?.metadata;
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const since = Number(opts.since);
+  const canUseCompletedListCache = usesExternalProjectRoot(metadata)
+    && !(Number.isFinite(since) && since > 0);
+  const cacheKey = path.resolve(dir);
+  if (canUseCompletedListCache) {
+    const cached = importedProjectFileLists.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.files.slice();
+    importedProjectFileLists.delete(cacheKey);
+  }
+  let walkState: { active: number; generation: number } | undefined;
+  let walkGeneration = 0;
+  if (canUseCompletedListCache) {
+    walkState = importedProjectFileListWalks.get(cacheKey) ?? { active: 0, generation: 0 };
+    walkState.active += 1;
+    walkGeneration = walkState.generation;
+    importedProjectFileListWalks.set(cacheKey, walkState);
+  }
   const out = [];
   // Skip generated dependency/build trees for all project roots. Standard OD
   // projects can contain framework installs too; surfacing package HTML like
   // node_modules/tslib/*.html as artifacts produces blank previews.
-  await collectFiles(dir, '', out, isIgnoredProjectDirName, dir);
-  // Newest first — matches the visual order users expect after generating.
-  out.sort((a, b) => b.mtime - a.mtime);
-  const since = Number(opts.since);
+  try {
+    await collectFiles(dir, '', out, isIgnoredProjectDirName, dir);
+    // Newest first — matches the visual order users expect after generating.
+    out.sort((a, b) => b.mtime - a.mtime);
+    if (walkState && walkState.generation === walkGeneration) {
+      cacheImportedProjectFileList(cacheKey, out);
+    }
+  } finally {
+    if (walkState) {
+      walkState.active -= 1;
+      if (walkState.active === 0 && importedProjectFileListWalks.get(cacheKey) === walkState) {
+        importedProjectFileListWalks.delete(cacheKey);
+      }
+    }
+  }
   if (Number.isFinite(since) && since > 0) {
     return out.filter((f) => Number(f.mtime) > since);
   }
   return out;
+}
+
+export function invalidateImportedProjectFileList(dir) {
+  const cacheKey = path.resolve(dir);
+  importedProjectFileLists.delete(cacheKey);
+  const walkState = importedProjectFileListWalks.get(cacheKey);
+  if (walkState) walkState.generation += 1;
+}
+
+function cacheImportedProjectFileList(cacheKey, files) {
+  const now = Date.now();
+  for (const [key, cached] of importedProjectFileLists) {
+    if (cached.expiresAt <= now) importedProjectFileLists.delete(key);
+  }
+  while (importedProjectFileLists.size >= MAX_IMPORTED_PROJECT_FILE_LISTS) {
+    const oldestKey = importedProjectFileLists.keys().next().value;
+    if (!oldestKey) break;
+    importedProjectFileLists.delete(oldestKey);
+  }
+  importedProjectFileLists.set(cacheKey, {
+    expiresAt: now + IMPORTED_PROJECT_FILE_LIST_CACHE_MS,
+    files,
+  });
 }
 
 export async function listProjectFolders(projectsRoot, projectId, opts = {}) {
@@ -198,6 +261,7 @@ export async function createProjectFolder(projectsRoot, projectId, name, metadat
     err.code = 'ENOTDIR';
     throw err;
   }
+  invalidateImportedProjectFileList(dir);
   return {
     name: safeName,
     path: safeName,
@@ -243,6 +307,7 @@ export async function deleteProjectFolder(projectsRoot, projectId, name, metadat
     throw err;
   }
   await rm(target, { recursive: true, force: true });
+  invalidateImportedProjectFileList(dir);
 }
 
 // Best-effort entry-file detector — looks for index.html at the root,
@@ -877,6 +942,7 @@ export async function writeProjectFile(
     artifactManifest: persistedManifest,
   };
   if (stubGuardWarning) result.stubGuardWarning = stubGuardWarning;
+  invalidateImportedProjectFileList(dir);
   return result;
 }
 
@@ -940,6 +1006,7 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
   );
   if (!validated.ok || !validated.value) return null;
   await writeFile(manifestTarget, JSON.stringify(validated.value, null, 2));
+  invalidateImportedProjectFileList(dir);
   return validated.value;
 }
 
@@ -969,6 +1036,7 @@ export async function deleteProjectFile(projectsRoot, projectId, name, metadata?
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   await unlink(file);
+  invalidateImportedProjectFileList(dir);
 }
 
 export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
@@ -1034,6 +1102,7 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   await renameFilePath(source, targetPath, { noOverwrite: true });
   await commitArtifactManifestRename(manifestRename, newName);
   await updateArtifactManifestRefsForRename(dir, oldName, newName);
+  invalidateImportedProjectFileList(dir);
 
   const st = await stat(targetPath);
   const manifest = await readManifestForPath(dir, newName);
