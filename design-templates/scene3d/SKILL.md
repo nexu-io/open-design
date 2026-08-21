@@ -350,11 +350,23 @@ Every section is optional; omitted sections fall back to the defaults.
 
 `"target": "<name>"` at the top of `scene3d.json` applies a preset bundle of
 conventions for a delivery target; anything you write in `conventions` still
-wins. Targets: `unity`, `unreal`, `godot`, `web`, `3d_print`, `minecraft`.
+wins. Targets: `unity`, `unreal`, `godot`, `web`, `3d_print`, `voxel`,
+`minecraft`.
 
-**Minecraft / voxel** (`"target": "minecraft"`) makes scene3d a blocky-model
-toolchain: author a `scene.json`, lint it against the vanilla model format, and
-the compile emits the JSON the game loads.
+**Voxel** (`"target": "voxel"`) is generic, engine-AGNOSTIC blocky-art
+discipline — the MagicaVoxel / Goxel / Qubicle → Unity/Godot/Unreal workflow.
+It turns on grid alignment (W-970), grid-snapping of `repeat`/`scatter`, and the
+pixel-art texel-density authority, and ships the normal GLB/OBJ/USD deliverables
+any engine imports. It imposes NO Minecraft format rule — no cuboid-only, no
+element bounds, no rotation restriction — so a voxel sphere or a 3-metre dome is
+fine. Tune the grid with `conventions.voxel.grid.size` and the resolution with
+`conventions.voxel.pxPerBlock`.
+
+**Minecraft** (`"target": "minecraft"`) IS voxel PLUS the vanilla model format:
+it implies everything above and adds the format rules (cuboid elements W-971,
+legal rotation W-972, element bounds W-973, the structure class) and emits the
+JSON the game loads. Use it only when the destination is Minecraft; for any
+other engine use `voxel`.
 
 - **Author on the pixel grid.** One block = one metre = 16 px, so every size
   and `at` position should be a multiple of `1/16` m (0.0625). Build from `box`

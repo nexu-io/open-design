@@ -317,7 +317,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       // A voxel scene's grid is a solver CONSTRAINT: emergent positions
       // (repeat instances, scatter samples) snap onto it so they never flood
       // the linter with off-grid vertices. Authored coordinates are untouched.
-      solved = solveScene(spec, normalized.minecraft.enabled ? { grid: normalized.minecraft.gridSize } : {});
+      solved = solveScene(spec, normalized.voxel.enabled ? { grid: normalized.voxel.gridSize } : {});
       for (const diagnostic of solved.diagnostics) {
         const adjusted = diagnostic.code === "SOLVE-EPSILON-FLOOR";
         issues.push({
@@ -599,8 +599,8 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             outDir: path.join(request.projectDir, ".scene3d", "work"),
             ...(tweaks ? { tweaks } : {}),
             ...(normalized.print.measureThickness ? { measureThickness: true } : {}),
-            ...(normalized.minecraft.enabled
-              ? { measureVoxel: true, voxelGrid: normalized.minecraft.gridSize }
+            ...(normalized.voxel.enabled
+              ? { measureVoxel: true, voxelGrid: normalized.voxel.gridSize }
               : {}),
             ...shaderPayload,
           };

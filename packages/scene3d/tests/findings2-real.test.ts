@@ -37,6 +37,41 @@ describe.skipIf(!hasBlender)("FINDINGS2 mechanisms (real Blender)", () => {
   const codes = (r: Awaited<ReturnType<typeof compile>>, re: RegExp) =>
     r.issues.filter((i) => re.test(i.code));
 
+  /* ---- generic voxel target (engine-agnostic, not Minecraft) ------- */
+
+  it("VOXEL: target:voxel gets grid discipline + engine deliverables, NOT Minecraft rules", async () => {
+    // A MagicaVoxel-style workflow bound for Unity/Godot: blocky, grid-aligned,
+    // exported as GLB/OBJ — no Java element rules, no model.json.
+    const dir = mkProject({
+      "scene3d.json": JSON.stringify({ schemaVersion: 1, target: "voxel" }),
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "voxel-prop",
+        materials: { mtl_v: { baseColor: [0.5, 0.6, 0.4], roughness: 0.9 } },
+        parts: [
+          // A big non-cuboid piece that Minecraft would reject — fine for a
+          // generic voxel export to a mesh engine.
+          { id: "prp_dome", size: [3, 3, 1.5], shape: "sphere", material: "mtl_v" },
+          // An off-grid box: the generic grid rule still catches the shimmer.
+          { id: "prp_nub", size: [0.1, 0.1, 0.1], shape: "box", material: "mtl_v" },
+        ],
+        relations: [
+          { type: "at", part: "prp_dome", center: [0, 0, 0.75] },
+          { type: "at", part: "prp_nub", center: [2, 0.05, 0] },
+        ],
+      }),
+    });
+    const r = await run(dir, ["parse", "build", "lint", "export"]);
+    // Grid discipline fires (engine-agnostic)…
+    expect(codes(r, /W-970/).map((i) => i.target)).toContain("prp_nub");
+    // …but NONE of the Minecraft FORMAT rules do.
+    expect(codes(r, /W-971|W-972|W-973|I-970/)).toEqual([]);
+    // It ships the normal engine deliverables and NO Minecraft model.
+    expect(r.exportedAssets.some((a) => a.endsWith(".glb"))).toBe(true);
+    expect(r.exportedAssets.some((a) => a.includes("minecraft/"))).toBe(false);
+    expect(r.ok).toBe(true);
+  }, 400_000);
+
   /* ---- Mechanism 1: density authority + pixel-art shader bake ------- */
 
   it("M1: a 16-px pixel-art shader bakes clean under target minecraft", async () => {

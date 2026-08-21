@@ -36,12 +36,42 @@ function census(meshes: CensusMesh[], bounds: Record<string, [number, number, nu
 const AXIS_BOX: VoxelFacts = { isBox: true, axisAligned: true, rotationAxis: null, rotationDeg: null, gridDeviation: 0 };
 const mc = (extra: Record<string, unknown> = {}) =>
   normalizeContract({ schemaVersion: 1, target: "minecraft", conventions: { minecraft: extra } } as never);
+/** A generic voxel contract (engine-agnostic) — NO Minecraft format rules. */
+const vox = (extra: Record<string, unknown> = {}) =>
+  normalizeContract({ schemaVersion: 1, target: "voxel", conventions: { voxel: extra } } as never);
 
 function run(c: ReturnType<typeof mc>, cen: Census): string[] {
   const issues: Issue[] = [];
   lintVoxel(c, cen, issues);
   return issues.map((i) => i.code);
 }
+
+describe("lintVoxel — generic voxel vs Minecraft format (decoupling)", () => {
+  it("a target:voxel scene gets grid discipline (W-970) but NOT the Java format rules", () => {
+    // Off-grid + non-cuboid + out-of-bounds, under the GENERIC voxel target.
+    const orb = mesh("prp_orb", { ...AXIS_BOX, isBox: false, gridDeviation: 0.03 }, 1106, 1152);
+    const codes = run(vox(), census([orb], { prp_orb: [-2.5, 0, -0.5, 2.5, 1, 0.5] }));
+    // Grid discipline is engine-agnostic → it fires.
+    expect(codes).toContain("S3D-W-970");
+    // The Minecraft FORMAT rules do not apply to a plain voxel scene.
+    expect(codes).not.toContain("S3D-W-971"); // cuboid is a Java element rule
+    expect(codes).not.toContain("S3D-W-973"); // element bounds are Minecraft's
+    expect(codes).not.toContain("S3D-I-970"); // the structure class is Minecraft's
+  });
+
+  it("the SAME geometry under target:minecraft does get the format rules", () => {
+    const orb = mesh("prp_orb", { ...AXIS_BOX, isBox: false, gridDeviation: 0.03 }, 1106, 1152);
+    const codes = run(mc(), census([orb]));
+    expect(codes).toContain("S3D-W-970");
+    expect(codes).toContain("S3D-W-971"); // now the Java element rule applies
+  });
+
+  it("is silent entirely without a voxel or minecraft target", () => {
+    const plain = normalizeContract({ schemaVersion: 1 });
+    const orb = mesh("prp_orb", { ...AXIS_BOX, isBox: false, gridDeviation: 0.03 });
+    expect(run(plain, census([orb]))).toEqual([]);
+  });
+});
 
 describe("lintVoxel", () => {
   it("is silent on a clean grid-aligned cuboid", () => {

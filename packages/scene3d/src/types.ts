@@ -38,7 +38,7 @@ export interface SceneSource {
  * house opinions". A preset only sets DEFAULTS: any explicit convention in the
  * same file overrides it, and omitting `target` keeps the neutral defaults.
  */
-export type EngineTarget = "unity" | "unreal" | "godot" | "web" | "3d_print" | "minecraft";
+export type EngineTarget = "unity" | "unreal" | "godot" | "web" | "3d_print" | "voxel" | "minecraft";
 
 export interface Scene3dContract {
   schemaVersion: 1;
@@ -147,23 +147,40 @@ export interface Scene3dContract {
      * build. A block model is authored in metres where 1 block = 1 m, so the
      * existing px·m⁻¹ texel density IS px-per-block.
      */
+    /**
+     * Generic voxel / blocky-art discipline — engine-AGNOSTIC, for the whole
+     * voxel ecosystem (MagicaVoxel, Goxel, Qubicle → Unity/Godot/Unreal via
+     * OBJ/glTF), not just Minecraft. Set by `target:"voxel"` (or an explicit
+     * block, or implied by `target:"minecraft"`). It turns on grid alignment,
+     * grid-snapping of emergent placement, and the pixel-art texel density
+     * authority — none of which are Minecraft-specific. Minecraft's own FORMAT
+     * rules (cuboid elements, legal rotations, element bounds, model export)
+     * live in the `minecraft` block and layer ON TOP of this.
+     */
+    voxel?: {
+      /** The authoring grid vertices should land on. `size` in metres (default
+       *  1/16 — one pixel at a 16-unit resolution); `tolerance` is the forgiven
+       *  off-grid drift (m). A 32-unit author sets size 1/32 — the grid is data,
+       *  not a house rule. */
+      grid?: { size?: number; tolerance?: number };
+      /** Declared texture resolution in pixels per grid-unit (per block, for
+       *  Minecraft). When set, the density authority becomes pixel-art; omitted,
+       *  only a relative consistency check fires — never asserts a fixed number. */
+      pxPerBlock?: number | null;
+    };
     minecraft?: {
       /** `java` (vanilla block/item models: cuboid-only, one restricted
-       *  rotation) or `bedrock` (free-angle cubes). Default `java`. */
+       *  rotation) or `bedrock` (free-angle cubes, poly_mesh). Default `java`. */
       dialect?: "java" | "bedrock";
-      /** The authoring grid vertices should land on. `size` in metres (default
-       *  1/16 — one pixel); `tolerance` is the forgiven off-grid drift (m). A
-       *  32-px "HD" author sets size 1/32 — the grid is data, not a house rule. */
-      grid?: { size?: number; tolerance?: number };
-      /** Declared texture resolution in pixels-per-block. When set, faces off
-       *  this density are flagged; when omitted, only a relative
-       *  face-consistency check fires — the linter never asserts 16 is correct,
-       *  only that a model is internally consistent. */
-      pxPerBlock?: number | null;
       /** Legal element extent in blocks (vanilla Java is −1..2 = −16..32 px).
        *  A model outside this the game refuses to load; the bound is contract
        *  data so a format change is a number edit, not a code change. */
       elementBounds?: { minBlocks?: number; maxBlocks?: number };
+      /** @deprecated Use `conventions.voxel.grid`; accepted here for a bare
+       *  Minecraft contract and folded into the voxel layer. */
+      grid?: { size?: number; tolerance?: number };
+      /** @deprecated Use `conventions.voxel.pxPerBlock`; folded into voxel. */
+      pxPerBlock?: number | null;
     };
     /**
      * UV discipline. Everything is measured by the census; these knobs are

@@ -34,20 +34,24 @@ export const TARGET_PROFILES: Record<EngineTarget, Partial<Conventions>> = {
     // these per printer/material.
     print: { minThicknessMm: 0.8, maxOverhangAreaFraction: 0.15 },
   },
-  // Minecraft / voxel authoring. Y-up like Blockbench and the vanilla model
-  // format; the `minecraft: {}` marker turns on the voxel census + judgments
-  // (their thresholds come from normalizeContract's defaults). Everything else
-  // stays neutral so an authored voxel scene still keeps naming/UV discipline.
+  // Generic voxel / blocky art for ANY engine (MagicaVoxel/Goxel/Qubicle →
+  // Unity/Godot/Unreal via GLB/OBJ). Grid + pixel-density discipline with NO
+  // Minecraft format rules; ships the normal GLB/USD/OBJ deliverables.
+  voxel: {
+    voxel: {},
+  },
   minecraft: {
     units: { upAxis: "Y" },
     // Block models are built from single-sided quads — open by construction —
     // so the format's own idiom relaxes the closed-mesh gate. An author who
     // explicitly demands closed meshes still overrides this (preset < explicit).
     geometry: { allowOpenMeshes: true },
-    // Vanilla resolution is 16 px per block face — the format's defining
-    // texel density (like the 1/16 grid), so a bare `target:"minecraft"` is
-    // pixel-art by default; HD packs override with `pxPerBlock: 32/64`.
-    minecraft: { pxPerBlock: 16 },
+    // Minecraft IS voxel + a format: it implies the generic voxel discipline,
+    // and vanilla resolution is 16 px per block face (the format's defining
+    // texel density), so a bare `target:"minecraft"` is pixel-art by default;
+    // HD packs override with `voxel.pxPerBlock: 32/64`.
+    voxel: { pxPerBlock: 16 },
+    minecraft: {},
   },
 };
 
@@ -160,7 +164,7 @@ export interface NormalizedContract {
    * Which density model the scene is judged under, resolved once here so no
    * downstream module needs an `if (minecraft)`. `"pbr"` = px/m against a
    * hero/prop/background floor library; `"pixelArt"` = px-per-block (the
-   * texel target came from `minecraft.pxPerBlock`, where 1 block = 1 m makes
+   * texel target came from `voxel.pxPerBlock`, where 1 block = 1 m makes
    * px/block ≡ px/m numerically). The role texel floors (budgets.ts) apply
    * only under `"pbr"`; the spread rule (uv.ts W-444) stays armed under both
    * and becomes the mixel detector under `"pixelArt"`.
@@ -207,15 +211,22 @@ export interface NormalizedContract {
   };
   /** Robust z cutoff for the size / tri-density outlier facts (default 3.5). */
   outlierZ: number;
-  /** Voxel/Minecraft discipline. `enabled` gates every voxel census fact and
-   *  judgment; off, they are inert and the census is byte-identical. Grid in
-   *  metres (1 block = 1 m), bounds in blocks. */
-  minecraft: {
+  /** Generic voxel discipline (engine-agnostic). `enabled` gates the voxel
+   *  census facts, the solver grid-snap, off-grid lint (W-970) and the pixel-art
+   *  texel authority; off, they are inert and the census is byte-identical.
+   *  Grid in metres. Implied by the minecraft target. */
+  voxel: {
     enabled: boolean;
-    dialect: "java" | "bedrock";
     gridSize: number;
     gridTolerance: number;
     pxPerBlock: number | null;
+  };
+  /** Minecraft FORMAT discipline — layers on top of `voxel`. `enabled` gates the
+   *  cuboid/rotation/element-bounds rules (W-971/972/973), the structure class,
+   *  and the model.json/geometry.json export. Bounds in blocks. */
+  minecraft: {
+    enabled: boolean;
+    dialect: "java" | "bedrock";
     elementMinBlocks: number;
     elementMaxBlocks: number;
   };
@@ -239,26 +250,31 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
   const tex = { ...pp.textures, ...c.conventions?.textures };
   const geo = { ...pp.geometry, ...c.conventions?.geometry };
   const pr = { ...pp.print, ...c.conventions?.print };
+  const vx = { ...pp.voxel, ...c.conventions?.voxel };
   const mc = { ...pp.minecraft, ...c.conventions?.minecraft };
-  // Voxel discipline is on when the target selects it OR the author wrote a
-  // `minecraft` block explicitly — same opt-in shape as print.
+  // Minecraft is a SPECIALISATION of voxel: the minecraft target/block implies
+  // the generic voxel discipline, but a plain `voxel` target (MagicaVoxel →
+  // Unity, etc.) gets grid + pixel-density WITHOUT any Minecraft format rule.
   const mcEnabled = c.target === "minecraft" || c.conventions?.minecraft !== undefined;
-  // Minecraft-derived values, resolved once so the uv/shade/discipline blocks
-  // below can read them (a block's texture resolution is the density authority
-  // for a voxel scene).
-  const mcDialect = (mc as { dialect?: unknown }).dialect === "bedrock" ? "bedrock" : "java";
-  const mcGridSize = (() => {
-    const gs = numOr((mc.grid as { size?: unknown } | undefined)?.size, 1 / 16);
+  const voxelEnabled = mcEnabled || c.target === "voxel" || c.conventions?.voxel !== undefined;
+  // Grid / pixel-density are VOXEL data. They read from `conventions.voxel`,
+  // falling back to `conventions.minecraft` (deprecated shorthand) so a bare
+  // minecraft contract still works, then to defaults.
+  const gridSrc = (vx.grid ?? (mc as { grid?: unknown }).grid) as { size?: unknown; tolerance?: unknown } | undefined;
+  const pxSrc = (vx as { pxPerBlock?: unknown }).pxPerBlock ?? (mc as { pxPerBlock?: unknown }).pxPerBlock;
+  const voxelGridSize = (() => {
+    const gs = numOr(gridSrc?.size, 1 / 16);
     return gs > 0 ? gs : 1 / 16;
   })();
-  const mcGridTolerance = (() => {
-    const t = numOr((mc.grid as { tolerance?: unknown } | undefined)?.tolerance, 1 / 256);
+  const voxelGridTolerance = (() => {
+    const t = numOr(gridSrc?.tolerance, 1 / 256);
     return t >= 0 ? t : 1 / 256;
   })();
-  const mcPxPerBlock = (() => {
-    const v = finiteOrNull((mc as { pxPerBlock?: unknown }).pxPerBlock);
+  const voxelPxPerBlock = (() => {
+    const v = finiteOrNull(pxSrc);
     return v !== null && v > 0 ? v : null;
   })();
+  const mcDialect = (mc as { dialect?: unknown }).dialect === "bedrock" ? "bedrock" : "java";
   const mcElementMin = numOr((mc.elementBounds as { minBlocks?: unknown } | undefined)?.minBlocks, -1);
   const mcElementMax = numOr((mc.elementBounds as { maxBlocks?: unknown } | undefined)?.maxBlocks, 2);
   // The density authority resolves ONCE (fable-5 Mechanism 1): an explicit
@@ -268,12 +284,12 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
   // floors and re-aims the spread rule as a mixel detector.
   const explicitTexelTarget = finiteOrNull(uv.texelDensity?.target);
   const effectiveTexelTarget =
-    explicitTexelTarget ?? (mcEnabled && mcPxPerBlock !== null ? mcPxPerBlock : null);
+    explicitTexelTarget ?? (voxelEnabled && voxelPxPerBlock !== null ? voxelPxPerBlock : null);
   const texelDiscipline: "pbr" | "pixelArt" =
-    explicitTexelTarget === null && mcEnabled && mcPxPerBlock !== null ? "pixelArt" : "pbr";
+    explicitTexelTarget === null && voxelEnabled && voxelPxPerBlock !== null ? "pixelArt" : "pbr";
   // Bake floor is data: 64 for pbr; the declared pxPerBlock (pow2-floored) under
   // pixel-art, so a 16-px pixel-art bake is legal without a downstream special-case.
-  const bakeMin = texelDiscipline === "pixelArt" && mcPxPerBlock !== null ? pow2Floor(mcPxPerBlock) : 64;
+  const bakeMin = texelDiscipline === "pixelArt" && voxelPxPerBlock !== null ? pow2Floor(voxelPxPerBlock) : 64;
   const proof = { ...DEFAULT_CONTRACT.proof, ...(c.proof ?? {}) };
   const minThicknessMm = finiteOrNull(pr.minThicknessMm);
   const maxOverhangAreaFraction = finiteOrNull(pr.maxOverhangAreaFraction);
@@ -393,12 +409,15 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       // Only pay for the ray-cast when a thickness gate will read it.
       measureThickness: minThicknessMm !== null,
     },
+    voxel: {
+      enabled: voxelEnabled,
+      gridSize: voxelGridSize,
+      gridTolerance: voxelGridTolerance,
+      pxPerBlock: voxelPxPerBlock,
+    },
     minecraft: {
       enabled: mcEnabled,
       dialect: mcDialect,
-      gridSize: mcGridSize,
-      gridTolerance: mcGridTolerance,
-      pxPerBlock: mcPxPerBlock,
       elementMinBlocks: mcElementMin,
       elementMaxBlocks: mcElementMax,
     },
@@ -510,9 +529,9 @@ export function validateContract(value: unknown): string[] {
   if (c.schemaVersion !== 1) problems.push("schemaVersion must be 1");
   if (
     c.target !== undefined &&
-    !["unity", "unreal", "godot", "web", "3d_print", "minecraft"].includes(c.target as string)
+    !["unity", "unreal", "godot", "web", "3d_print", "voxel", "minecraft"].includes(c.target as string)
   ) {
-    problems.push("target must be one of 'unity', 'unreal', 'godot', 'web', '3d_print', 'minecraft'");
+    problems.push("target must be one of 'unity', 'unreal', 'godot', 'web', '3d_print', 'voxel', 'minecraft'");
   }
   const units = (c.conventions as Record<string, unknown> | undefined)?.units as
     | Record<string, unknown>

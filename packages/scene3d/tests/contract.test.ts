@@ -57,10 +57,11 @@ describe("contract validation", () => {
 
   it("rejects an unknown target profile", () => {
     expect(validateContract({ schemaVersion: 1, target: "playstation" })).toContain(
-      "target must be one of 'unity', 'unreal', 'godot', 'web', '3d_print', 'minecraft'",
+      "target must be one of 'unity', 'unreal', 'godot', 'web', '3d_print', 'voxel', 'minecraft'",
     );
     expect(validateContract({ schemaVersion: 1, target: "unreal" })).toEqual([]);
-    // The Minecraft/voxel target is a first-class delivery preset.
+    // Generic voxel and Minecraft are both first-class delivery presets.
+    expect(validateContract({ schemaVersion: 1, target: "voxel" })).toEqual([]);
     expect(validateContract({ schemaVersion: 1, target: "minecraft" })).toEqual([]);
   });
 

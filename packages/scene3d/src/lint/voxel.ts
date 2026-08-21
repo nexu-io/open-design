@@ -49,10 +49,14 @@ export function lintVoxel(
    *  where each mesh is its own family. */
   solved?: SolvedScene,
 ): void {
+  const vx = contract.voxel;
   const mc = contract.minecraft;
-  if (!mc.enabled || !census) return;
+  // Off-grid (W-970) is a GENERIC voxel concern (any engine). The cuboid /
+  // rotation / element-bounds / structure rules below are Minecraft FORMAT
+  // rules and fire only when the minecraft layer is on.
+  if (!vx.enabled || !census) return;
 
-  const grid = mc.gridSize > 0 ? mc.gridSize : 1 / 16;
+  const grid = vx.gridSize > 0 ? vx.gridSize : 1 / 16;
   const worldByName = new Map(census.objects.map((o) => [o.name, o]));
   const elementExtent = mc.elementMaxBlocks - mc.elementMinBlocks;
 
@@ -73,26 +77,31 @@ export function lintVoxel(
   for (const [fid, members] of families) {
     const n = members.length;
 
-    /* ---- off-grid vertices (W-970): worst across the family ------- */
+    /* ---- off-grid vertices (W-970): GENERIC voxel, worst across family - */
     let worstDev: { dev: number; object: string } | null = null;
     let offGridCount = 0;
     for (const m of members) {
       const dev = m.voxel!.gridDeviation;
-      if (dev > mc.gridTolerance) offGridCount++;
+      if (dev > vx.gridTolerance) offGridCount++;
       if (!worstDev || dev > worstDev.dev) worstDev = { dev, object: m.object };
     }
-    if (worstDev && worstDev.dev > mc.gridTolerance) {
+    if (worstDev && worstDev.dev > vx.gridTolerance) {
       const px = worstDev.dev / grid;
       const across = n > 1 ? ` (worst of ${offGridCount}/${n} instances)` : "";
       issues.push({
         code: ISSUE_CODES.VOXEL_OFF_GRID,
         severity: "warning",
-        message: `'${fid}' has a vertex ${fmtPx(px)} off the ${fmtGrid(grid)} grid (${fmtMm(worstDev.dev)})${across} — it will shimmer in-game`,
-        hint: `snap vertices to the ${fmtGrid(grid)} grid, or widen conventions.minecraft.grid.tolerance if this drift is intended`,
+        message: `'${fid}' has a vertex ${fmtPx(px)} off the ${fmtGrid(grid)} grid (${fmtMm(worstDev.dev)})${across} — it will shimmer in-engine`,
+        hint: `snap vertices to the ${fmtGrid(grid)} grid, or widen conventions.voxel.grid.tolerance if this drift is intended`,
         target: fid,
-        detail: { gridDeviation: worstDev.dev, tolerance: mc.gridTolerance, offGridPx: round(px, 3), instanceCount: n, offGridCount },
+        detail: { gridDeviation: worstDev.dev, tolerance: vx.gridTolerance, offGridPx: round(px, 3), instanceCount: n, offGridCount },
       });
     }
+
+    // The remaining rules are Minecraft FORMAT concerns (element cuboid /
+    // rotation / bounds). A generic voxel scene (target:"voxel") stops here —
+    // it gets grid discipline, not Minecraft's element model.
+    if (!mc.enabled) continue;
 
     /* ---- structure vs element (I-970) ----------------------------- */
     // A mesh larger than the entire element space cannot be an element by
