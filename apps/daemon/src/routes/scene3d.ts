@@ -10,7 +10,7 @@ import type {
   Scene3dProofOptions,
   Scene3dStageId,
 } from '@open-design/contracts';
-import { buildScene3dAssetUrl } from '@open-design/contracts';
+import { buildScene3dAssetUrl, scene3dIssueTitle } from '@open-design/contracts';
 import { compile, renderAgentReport, probeBlender, writeProjectKit } from '@open-design/scene3d';
 import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
@@ -141,6 +141,7 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
           projectRootFor(PROJECTS_DIR, project),
           project.name || 'Asset kit',
           `/api/projects/${project.id}`,
+          scene3dIssueTitle,
         );
       } catch (err) {
         console.warn('[scene3d] project kit refresh failed', err);

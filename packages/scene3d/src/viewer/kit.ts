@@ -95,6 +95,13 @@ export interface KitPage {
   title: string;
   entries: KitEntry[];
   /**
+   * Catalog roll-up: the kit's grade and the codes that recur across scenes.
+   * Rendered as a static banner in the rail head — the portfolio verdict for
+   * the whole set, distinct from the per-scene identity chip. Absent, or a
+   * clean `pass` with nothing systemic, renders nothing.
+   */
+  rollup?: { grade: string; systemic: Array<{ code: string; scenes: number; title?: string }> };
+  /**
    * API root for this project, e.g. `/api/projects/<id>`.
    *
    * Baked in by whichever writer knows the project, because the page cannot
@@ -248,6 +255,30 @@ export function renderKitHtml(page: KitPage): string {
     font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
   }
   .rail-head .count { margin-left: auto; font-variant-numeric: tabular-nums; }
+  /* Catalog roll-up: the portfolio verdict for the whole kit, distinct from the
+     per-scene identity chip. A clean pass renders nothing, so it never adds
+     chrome to a healthy set. */
+  .rollup {
+    padding: 7px 10px 8px; border-bottom: 1px solid var(--line);
+    font-size: 10px; color: var(--muted);
+  }
+  .rollup-grade {
+    font-weight: 600; letter-spacing: .09em; text-transform: uppercase; font-size: 9.5px;
+  }
+  .rollup-fail .rollup-grade { color: var(--bad); }
+  .rollup-attention .rollup-grade { color: #c8901e; }
+  .rollup-pass .rollup-grade { color: var(--ok); }
+  .rollup-label {
+    margin: 6px 0 3px; font-size: 9px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .rollup-list { list-style: none; margin: 0; padding: 0; }
+  .rollup-list li {
+    display: flex; justify-content: space-between; gap: 8px;
+    padding: 1px 0; font-variant-numeric: tabular-nums;
+  }
+  .rollup-code { color: var(--ink); }
+  .rollup-n { color: var(--muted); white-space: nowrap; }
   /* The fade tells you there is more below without stealing a scrollbar's
      worth of width from an already-narrow rail. */
   .rail-scroll { overflow-y: auto; padding: 5px 5px 6px; scrollbar-width: thin; }
@@ -1165,6 +1196,7 @@ export function renderKitHtml(page: KitPage): string {
     <span class="count" id="railCount"></span>
     <button class="rail-hide" id="railHide" title="Hide asset list" aria-label="Hide asset list"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg></button>
   </div>
+  ${page.rollup ? rollupBanner(page.rollup) : ""}
   <div class="rail-scroll" id="catalog"></div>
 </nav>
 
@@ -7521,4 +7553,39 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/**
+ * The catalog roll-up banner — the portfolio verdict for the whole kit. A
+ * clean `pass` with nothing systemic renders nothing, so a healthy kit stays
+ * uncluttered. Each systemic code shows its human title (when the caller could
+ * resolve one) and the count of scenes it recurs in.
+ */
+function rollupBanner(rollup: NonNullable<KitPage["rollup"]>): string {
+  const hasSystemic = rollup.systemic.length > 0;
+  if (rollup.grade === "pass" && !hasSystemic) return "";
+  const items = rollup.systemic
+    .map(
+      (s) =>
+        '<li><span class="rollup-code">' +
+        escapeHtml(s.title ?? s.code) +
+        '</span><span class="rollup-n">' +
+        s.scenes +
+        " scenes</span></li>",
+    )
+    .join("");
+  const systemic = hasSystemic
+    ? '<div class="rollup-label">systemic across the kit</div><ul class="rollup-list">' +
+      items +
+      "</ul>"
+    : "";
+  return (
+    '<div class="rollup rollup-' +
+    escapeHtml(rollup.grade) +
+    '"><span class="rollup-grade">' +
+    escapeHtml(rollup.grade) +
+    "</span>" +
+    systemic +
+    "</div>"
+  );
 }

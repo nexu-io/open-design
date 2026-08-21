@@ -617,6 +617,12 @@ export function writeProjectKit(
    * iframe's srcDoc, where the page cannot read its own URL.
    */
   apiBase?: string,
+  /**
+   * Resolve a code to its human title. scene3d is the lower layer and does not
+   * own the title catalog (contracts does), so a caller that has it — the
+   * daemon — passes `scene3dIssueTitle` here. Absent ⇒ the roll-up shows codes.
+   */
+  titleFor?: (code: string) => string | null,
 ): string | null {
   const entries: KitEntry[] = [];
   const scenes: KitSceneRecord[] = [];
@@ -683,10 +689,23 @@ export function writeProjectKit(
   // localeCompare: the ternary form returned 1 for EQUAL keys, an
   // inconsistent comparator that makes the order engine-defined.
   entries.sort((a, b) => (a.category + a.name).localeCompare(b.category + b.name));
+
+  // Catalog roll-up — the kit's grade and its systemic codes — built ONCE over
+  // the whole catalog and shared by the page banner and the sidecar, so the two
+  // never disagree. Titles are resolved here if the caller can.
+  const kv = summariseKit(scenes);
+  const rollup = {
+    grade: kv.grade,
+    systemic: kv.systemic.slice(0, 12).map((s) => {
+      const t = titleFor?.(s.code);
+      return { ...s, ...(t ? { title: t } : {}) };
+    }),
+  };
+
   const file = path.join(projectRoot, "kit.html");
   fs.writeFileSync(
     file,
-    renderKitHtml({ title, entries, ...(apiBase === undefined ? {} : { apiBase }) }),
+    renderKitHtml({ title, entries, rollup, ...(apiBase === undefined ? {} : { apiBase }) }),
     "utf8",
   );
   // The kit's record is self-contained on purpose.
@@ -696,8 +715,14 @@ export function writeProjectKit(
   // thing to recompile. So everything the host needs to render a kit —
   // its scenes, their counts, and every deliverable path — is written into
   // the sidecar here, and the panel reads it without a round trip.
-  writeKitSidecar(file, { title, scenes });
+  writeKitSidecar(file, { title, scenes, rollup });
   return "kit.html";
+}
+
+/** The catalog roll-up shape the sidecar and the page banner share. */
+interface KitRollup {
+  grade: string;
+  systemic: Array<{ code: string; scenes: number; title?: string }>;
 }
 
 /** One compiled scene, as the kit's sidecar records it. */
@@ -724,7 +749,10 @@ interface KitSceneRecord {
 const MAX_KIT_SCENES = 48;
 const MAX_KIT_DELIVERABLES = 192;
 
-function writeKitSidecar(file: string, input: { title: string; scenes: KitSceneRecord[] }): void {
+function writeKitSidecar(
+  file: string,
+  input: { title: string; scenes: KitSceneRecord[]; rollup: KitRollup },
+): void {
   const kept = input.scenes.slice(0, MAX_KIT_SCENES);
   const deliverables = kept.flatMap((scene) => scene.deliverables).slice(0, MAX_KIT_DELIVERABLES);
   const exports = [
@@ -741,11 +769,6 @@ function writeKitSidecar(file: string, input: { title: string; scenes: KitSceneR
     }),
     { parts: 0, triangles: 0, errors: 0, warnings: 0 },
   );
-
-  // Catalog-level roll-up: the kit's grade (its weakest scene) and the codes
-  // that recur across scenes — a systemic problem a pipeline TD fixes once, not
-  // per asset. Rides the sidecar (small), never the per-scene payload.
-  const rollup = summariseKit(kept);
 
   const sidecar = {
     version: 1,
@@ -779,10 +802,9 @@ function writeKitSidecar(file: string, input: { title: string; scenes: KitSceneR
       errors: totals.errors,
       warnings: totals.warnings,
       // The at-a-glance catalog verdict: grade + the systemic codes worth
-      // fixing once. Truncated with the scenes it summarises, so it describes
-      // exactly what the panel shows.
-      grade: rollup.grade,
-      systemic: rollup.systemic.slice(0, 12),
+      // fixing once, built over the whole catalog and shared with the page.
+      grade: input.rollup.grade,
+      systemic: input.rollup.systemic,
       generator: "scene3d",
     },
   };
