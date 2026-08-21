@@ -209,4 +209,52 @@ describe("USD model hierarchy authoring (usd/stage-model.ts)", () => {
     const garbage = "this is not usda at all {{{";
     expect(authorStageModel({ usda: garbage, assetName: "crate" }).usda).toBe(garbage);
   });
+
+  /**
+   * Blender's pxr text writer puts `{` on its own line, so its exports round-
+   * trip. But a USDA-*source* scene (the fork lints its own source as the
+   * shipped stage) commonly writes `def Xform "Root" {` with the brace on the
+   * def line. The kind splice inserted the `( ... )` metadata block BEFORE the
+   * def line in that case, producing a stage `parseUsda` (and usdchecker)
+   * reject — the exact opposite of the rewrite's purpose. (SM-1)
+   */
+  const SAME_LINE_COMPONENT = `#usda 1.0
+(
+    defaultPrim = "Root"
+)
+def Xform "Root" {
+    def Mesh "prp_box" {
+        float3[] extent = [(-0.5, -0.5, -0.5), (0.5, 0.5, 0.5)]
+    }
+}
+`;
+  const SAME_LINE_ASSEMBLY = `#usda 1.0
+(
+    defaultPrim = "Root"
+)
+def Xform "Root" {
+    def Mesh "prp_a" {
+    }
+    def Mesh "prp_b" {
+    }
+}
+`;
+
+  it("authors parseable USDA when the brace is on the def line (SM-1, component)", () => {
+    const { usda, authored } = authorStageModel({ usda: SAME_LINE_COMPONENT, assetName: "box" });
+    // Must still be readable by our own parser after the rewrite.
+    expect(() => parseUsda(usda, "out.usda")).not.toThrow();
+    expect(authored.rootKind).toBe("component");
+    expect(kinds(usda)).toMatchObject({ Root: "component", prp_box: "subcomponent" });
+    // Idempotent on its own output.
+    const twice = authorStageModel({ usda, assetName: "box" });
+    expect(() => parseUsda(twice.usda, "out2.usda")).not.toThrow();
+  });
+
+  it("authors parseable USDA when the brace is on the def line (SM-1, assembly)", () => {
+    const { usda, authored } = authorStageModel({ usda: SAME_LINE_ASSEMBLY, assetName: "pair" });
+    expect(() => parseUsda(usda, "out.usda")).not.toThrow();
+    expect(authored.rootKind).toBe("assembly");
+    expect(kinds(usda)).toMatchObject({ Root: "assembly", prp_a: "component", prp_b: "component" });
+  });
 });

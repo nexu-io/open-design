@@ -258,9 +258,34 @@ function setKind(lines: string[], prim: UsdaPrim, kind: string, out: Splice[]): 
     return true;
   }
 
+  // No metadata parens yet: the `( kind = ... )` block belongs BETWEEN the
+  // prim's name and its body brace.
+  if (bodyOpen > defLine) {
+    // Brace on a later line — the block goes on its own lines before it, which
+    // reads as `def Xform "Root"\n(\n  kind=...\n)\n{`. This is the form
+    // Blender's pxr text writer produces and it round-trips cleanly.
+    out.push({
+      at: bodyOpen,
+      text: [`${indent}(`, `${indent}    kind = "${kind}"`, `${indent})`],
+    });
+    return true;
+  }
+
+  // Brace on the def line itself (`def Xform "Root" {`, the shape a USDA-source
+  // scene commonly hand-writes). Splicing the block BEFORE this line would put
+  // it at stage scope, not prim scope — an unparseable stage, which is worse
+  // than not authoring at all. Split the line at the body brace and thread the
+  // parens between the name and the `{`. The brace column is found on
+  // string-masked text so a `{` inside the prim name's quotes cannot fool it.
+  const defText = lines[defLine] ?? "";
+  const braceCol = maskStrings(defText, { inString: false, triple: false }).indexOf("{");
+  if (braceCol < 0) return false;
+  const head = defText.slice(0, braceCol).replace(/\s+$/, "");
+  const tail = defText.slice(braceCol);
   out.push({
-    at: bodyOpen,
-    text: [`${indent}(`, `${indent}    kind = "${kind}"`, `${indent})`],
+    at: defLine,
+    replace: true,
+    text: [`${head} (`, `${indent}    kind = "${kind}"`, `${indent}) ${tail}`],
   });
   return true;
 }

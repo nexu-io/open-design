@@ -154,4 +154,70 @@ doc string with (an unmatched paren"""
     expect(names).toContain("root");
     expect(names).toContain("prp_body");
   });
+
+  it("tolerates variantSet blocks without crashing the whole parse (P-9)", () => {
+    // Production libraries and USDView-saved files carry variantSets. The
+    // parser used to throw `expected attribute name, got '<variantName>'`,
+    // and a throw here blinds the ENTIRE lint stage for that file — no
+    // naming/depth/kind checks, no manifest part tree. A variant selection is
+    // not an attribute the structure-only parser models, so it must be
+    // skipped, not fatal, and the surrounding prims must still be seen.
+    const src = `#usda 1.0
+(
+    defaultPrim = "Root"
+)
+def Xform "Root" {
+    variantSet "shadingVariant" = {
+        "plastic" {
+            over "prp_box" {
+                token surface = "plastic"
+            }
+        }
+        "metal" {
+        }
+    }
+    def Mesh "prp_box" {
+    }
+}
+`;
+    const tree = parseUsda(src, "variant.usda");
+    const names = tree.prims.map((p) => p.name);
+    expect(names).toContain("Root");
+    expect(names).toContain("prp_box");
+  });
+
+  it("preserves @-reference paths that contain spaces (P-10)", () => {
+    // Real downloads ship files with spaces in the name. The lexer captures
+    // the whole @...@ span correctly, but collectRefs' /@([^@\s]+)@/ stopped
+    // at the first space, silently dropping the sublayer/reference.
+    const src = `#usda 1.0
+(
+    subLayers = [
+        @./my asset.usda@
+    ]
+)
+`;
+    const tree = parseUsda(src, "spaced.usda");
+    expect(tree.stage.subLayers).toEqual(["./my asset.usda"]);
+  });
+
+  it("does not let a valueless declaration swallow the following statement (P-1)", () => {
+    // `token outputs:surface` is a valueless declaration (how UsdShade ends
+    // every Shader). The value-side scan was fixed, but the name-side
+    // qualifier-skip loop still crossed the newline, merging the next
+    // statement's tokens into this one — so `outputs:surface` vanished and
+    // `inputs:roughness` was misattributed.
+    const src = `#usda 1.0
+def Shader "S" {
+    token outputs:surface
+    float inputs:roughness = 0.5
+}
+`;
+    const tree = parseUsda(src, "shader.usda");
+    const s = tree.prims.find((p) => p.name === "S")!;
+    const attrs = [...s.attributes.keys()];
+    expect(attrs).toContain("outputs:surface");
+    expect(attrs).toContain("inputs:roughness");
+    expect(s.attributes.get("inputs:roughness")).toBe("0.5");
+  });
 });

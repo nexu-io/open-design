@@ -223,6 +223,42 @@ export function parseUsda(source: string, file = "<usda>"): UsdaPrimTree {
   };
 
   /**
+   * Skip a brace-balanced block whose contents this structure-only parser does
+   * not model. Strings and paths are already single tokens, so counting punct
+   * braces cannot be fooled by a `{` inside a doc string.
+   */
+  const skipBraceBlock = (line: number) => {
+    expectPunct("{", line);
+    let depth = 1;
+    while (i < tokens.length && depth > 0) {
+      const t = tokens[i++]!;
+      if (t.kind === "punct" && t.value === "{") depth++;
+      if (t.kind === "punct" && t.value === "}") depth--;
+    }
+    if (depth !== 0) throw new UsdaParseError("unterminated variantSet block", line, file);
+  };
+
+  /**
+   * A `variantSet "name" = { "v1" {...} "v2" {...} }` introduces alternate
+   * opinions, not the composed result. Descending into it would put the
+   * alternates' prims into the tree as if they coexisted; throwing on it (the
+   * old behaviour — the variant name is a string, not an attribute) blinded
+   * the WHOLE lint stage for any file that used one, which production and
+   * USDView-saved libraries routinely do. So it is recognised and skipped.
+   * Returns false when the current token does not open a variantSet.
+   */
+  const skipVariantSet = (): boolean => {
+    const t = tokens[i];
+    if (!t || t.kind !== "ident" || t.value !== "variantSet") return false;
+    const line = t.line;
+    i++; // variantSet
+    if (tokens[i]?.kind === "string") i++; // the variant set's name
+    if (tokens[i]?.kind === "punct" && tokens[i]?.value === "=") i++; // optional '='
+    if (tokens[i]?.kind === "punct" && tokens[i]?.value === "{") skipBraceBlock(line);
+    return true;
+  };
+
+  /**
    * Read one attribute's value.
    *
    * `startLine` terminates it. A USDA statement occupies one line unless a
@@ -304,14 +340,28 @@ parts.push(t.value);
     const line = t.line;
     i++;
     // Skip qualifiers (uniform/custom/varying/rel/type tokens incl. `float3[]`).
+    // GUARDED to the declaration's own line: a USDA statement's type qualifiers
+    // are always on one line, so an ident on the NEXT line is the start of the
+    // next statement, not a qualifier. Without the guard the loop crossed the
+    // newline after a valueless declaration (`token outputs:surface`) and
+    // swallowed the following statement's tokens — the output vanished and the
+    // next attribute was misattributed. Values may still span lines; that is
+    // readAttributeValue's job, not this loop's.
     let eq = tokens[i];
     for (;;) {
-      if (eq && eq.kind === "ident") {
+      if (eq && eq.kind === "ident" && eq.line === line) {
         i++;
         eq = tokens[i];
         continue;
       }
-      if (eq && eq.kind === "punct" && eq.value === "[" && tokens[i + 1]?.kind === "punct" && tokens[i + 1]?.value === "]") {
+      if (
+        eq &&
+        eq.kind === "punct" &&
+        eq.value === "[" &&
+        eq.line === line &&
+        tokens[i + 1]?.kind === "punct" &&
+        tokens[i + 1]?.value === "]"
+      ) {
         i += 2;
         eq = tokens[i];
         continue;
@@ -355,7 +405,11 @@ parts.push(t.value);
 
   const collectRefs = (value: string): string[] => {
     const refs: string[] = [];
-    for (const m of value.matchAll(/@([^@\s]+)@/g)) refs.push(m[1]!);
+    // `[^@\n]` not `[^@\s]`: real downloads ship asset paths with spaces
+    // (`@./my asset.usda@`), and stopping at the first space silently dropped
+    // the sublayer/reference. A newline cannot appear inside a single `@...@`
+    // span, so it remains the terminator that keeps two paths from merging.
+    for (const m of value.matchAll(/@([^@\n]+)@/g)) refs.push(m[1]!.trim());
     return refs;
   };
 
@@ -497,6 +551,7 @@ const prim: UsdaPrim = {
           parsePrim(prim, path, t.line);
           continue;
         }
+        if (skipVariantSet()) continue;
         const st = readStatement();
         if (!st) continue;
         if (st.name === "references" || st.name === "reference") {
