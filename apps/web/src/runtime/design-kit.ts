@@ -367,7 +367,14 @@ interface BrandKitOptions {
 export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
   const { projectId } = opts;
   const ready = opts.ready !== false;
-  const showSystem = ready && Boolean(projectId);
+  // `assetUrl` means the caller resolves assets somewhere other than the
+  // project raw route — today, the design-system package, which serves only
+  // `brand.json`, `logos/`, and `imagery/`. The system/ artifacts (kit iframe,
+  // the `system/artifacts/*.html` tiles) live in the scaffold project alone, so
+  // a redirected kit must not advertise them: the package route rejects those
+  // paths outright, and the project we fell back FROM no longer has them.
+  const assetsFromPackage = Boolean(opts.assetUrl);
+  const showSystem = ready && Boolean(projectId) && !assetsFromPackage;
   const asset = (rel: string): string | null => {
     if (opts.assetUrl) return opts.assetUrl(rel);
     return projectId

@@ -122,4 +122,19 @@ describe('package brand kit overlays DESIGN.md', () => {
     });
     expect(kit.logoSrc).toBe('/pkg/logos/mark.svg');
   });
+
+  it('does not advertise project-only system artifacts on a package-backed kit', () => {
+    // The package route serves brand.json/logos/imagery only, and the project we
+    // fell back FROM has no finalized system/ output — so the kit iframe and the
+    // `system/artifacts/*.html` tiles would both 404 if they were exposed here.
+    const kit = brandToKit(JSON.parse(BRAND_JSON) as Parameters<typeof brandToKit>[0], {
+      designSystemId: 'user:acme',
+      projectId: 'p1',
+      editable: true,
+      assetUrl: (rel) => `/pkg/${rel}`,
+    });
+    expect(kit.system).toBeUndefined();
+    expect(kit.assets).toBeUndefined();
+    expect(kit.logoSrc).toBe('/pkg/logos/mark.svg');
+  });
 });

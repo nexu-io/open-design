@@ -3478,6 +3478,42 @@ function insertHeadingBelowFrontmatter(body: string, heading: string): string {
 }
 
 /**
+ * Split off leading frontmatter so heading lookups only ever scan the document
+ * body. `# ` is a comment inside YAML, so a plain `/^#\s+/m` search can land on
+ * a frontmatter comment line instead of the real H1 — rewriting a comment while
+ * the title stays stale, or worse, splicing `> Category:` into the YAML.
+ */
+function splitLeadingFrontmatter(body: string): { frontmatter: string; rest: string } {
+  const frontmatter = LEADING_FRONTMATTER.exec(body)?.[0] ?? '';
+  return { frontmatter, rest: body.slice(frontmatter.length) };
+}
+
+/** First H1 in the document body, ignoring any leading frontmatter block. */
+function firstHeadingBelowFrontmatter(body: string): { index: number; length: number } | null {
+  const { frontmatter, rest } = splitLeadingFrontmatter(body);
+  const match = /^#[ \t]+.*$/m.exec(rest);
+  return match ? { index: frontmatter.length + match.index, length: match[0].length } : null;
+}
+
+/**
+ * Whether a `---` block is design-system frontmatter, as opposed to a Markdown
+ * section fenced by horizontal rules.
+ *
+ * Neither the surrounding shape nor "parses as a non-empty mapping" proves
+ * anything: ordinary prose becomes a valid YAML mapping the moment it contains
+ * a colon, so `---` / `Introduction: hello` / `---` would qualify on both
+ * counts while being authored content. Every package the repair below targets
+ * was written by `brandToDesignMd`, whose frontmatter always carries `name`
+ * plus `category`/`surface`. Require that signature; anything else stays put,
+ * even at the cost of leaving an exotic hand-written block unrepaired.
+ */
+function isDesignSystemFrontmatter(block: string): boolean {
+  const { data } = parseFrontmatter(block);
+  if (!stringField(data, 'name')) return false;
+  return stringField(data, 'category').length > 0 || frontmatterSurface(data) !== undefined;
+}
+
+/**
  * Repair a document whose frontmatter was pushed below a heading. Packages
  * written before the guard above exist in the wild with `# Title` on line 1 and
  * the `---` block under it — inert YAML that renders as identity prose. Only
@@ -3489,11 +3525,7 @@ function hoistLeadingFrontmatter(body: string): string {
   const heading = displaced[1] ?? '';
   const frontmatter = displaced[2] ?? '';
   if (!heading || !frontmatter) return body;
-  // `# Title` + two horizontal rules is also ordinary Markdown, so the shape
-  // alone proves nothing. Only move a block the frontmatter parser reads as a
-  // non-empty mapping; a section fenced by `---` rules parses to {} and is left
-  // exactly where the author put it.
-  if (Object.keys(parseFrontmatter(frontmatter).data).length === 0) return body;
+  if (!isDesignSystemFrontmatter(frontmatter)) return body;
   const rest = body.slice(displaced[0].length).replace(/^(?:\r?\n)+/, '');
   return `${frontmatter}\n${heading.trimEnd()}\n\n${rest}`;
 }
@@ -3511,8 +3543,9 @@ function withDesignSystemHeader(
   // guard was not multiline, so it only ever looked at byte 0), which stopped
   // the frontmatter from parsing at all — the raw `--- name: … ---` block users
   // saw rendered as identity prose after publishing an extracted brand.
-  let next = /^#[ \t]+/m.test(body)
-    ? body.replace(/^#[ \t]+.*$/m, `# ${input.title}`)
+  const h1 = firstHeadingBelowFrontmatter(body);
+  let next = h1
+    ? `${body.slice(0, h1.index)}# ${input.title}${body.slice(h1.index + h1.length)}`
     : insertHeadingBelowFrontmatter(body, `# ${input.title}`);
   next = upsertBlockquoteMeta(next, 'Category', input.category);
   next = upsertBlockquoteMeta(next, 'Surface', input.surface);
@@ -3522,11 +3555,11 @@ function withDesignSystemHeader(
 function upsertBlockquoteMeta(body: string, key: string, value: string): string {
   const re = new RegExp(`^>\\s*${key}:\\s*.*$`, 'im');
   if (re.test(body)) return body.replace(re, `> ${key}: ${value}`);
-  const h1 = /^#\s+.*$/m.exec(body);
+  const h1 = firstHeadingBelowFrontmatter(body);
   // Same frontmatter rule as insertHeadingBelowFrontmatter: never prepend above
   // a leading `---` block, or the frontmatter stops parsing.
   if (!h1) return insertHeadingBelowFrontmatter(body, `> ${key}: ${value}`);
-  const insertAt = h1.index + h1[0].length;
+  const insertAt = h1.index + h1.length;
   return `${body.slice(0, insertAt)}\n> ${key}: ${value}${body.slice(insertAt)}`;
 }
 
