@@ -90,6 +90,35 @@ describe("buildBedrockModel", () => {
     expect(reasons.get("prp_spin")).toContain("rotated");
   });
 
+  it("emits an oriented cube with rotation, pivot, and un-rotated size (not the world AABB)", () => {
+    // A 0.5×0.5×1 box centred at (0,0,0.5), rotated 22.5° about Blender Z.
+    // Frame map (x,y,z)→(x,z,−y): centre→pivot [0,8,0]; localSize [0.5,0.5,1]→
+    // size [8,16,8]; origin = pivot − size/2 = [−4,0,−4]; Blender-Z rotation →
+    // MC-Y rotation +22.5 (exact conjugation).
+    const rotated: Voxel = {
+      isBox: true, axisAligned: false, rotationAxis: "z", rotationDeg: 22.5, gridDeviation: 0,
+      center: [0, 0, 0.5], localSize: [0.5, 0.5, 1],
+    };
+    const c = census([mesh("prp_spun", "mtl_a", rotated)], [mat("mtl_a", [0.5, 0.5, 0.5])], { prp_spun: [-0.4, -0.4, 0, 0.4, 0.4, 1] });
+    const cube = buildBedrockModel(c, contract).model["minecraft:geometry"][0]!.bones[0]!.cubes[0]! as {
+      origin: number[]; size: number[]; pivot: number[]; rotation: number[];
+    };
+    expect(cube.size).toEqual([8, 16, 8]);
+    expect(cube.pivot).toEqual([0, 8, 0]);
+    expect(cube.origin).toEqual([-4, 0, -4]);
+    expect(cube.rotation).toEqual([0, 22.5, 0]);
+  });
+
+  it("maps each rotation axis by exact frame conjugation", () => {
+    const spun = (axis: "x" | "y" | "z"): Voxel => ({ isBox: true, axisAligned: false, rotationAxis: axis, rotationDeg: 30, gridDeviation: 0, center: [0, 0, 0], localSize: [1, 1, 1] });
+    const rot = (axis: "x" | "y" | "z") =>
+      (buildBedrockModel(census([mesh("p", "mtl_a", spun(axis))], [mat("mtl_a", [0.5, 0.5, 0.5])], { p: [-0.5, -0.5, -0.5, 0.5, 0.5, 0.5] }), contract)
+        .model["minecraft:geometry"][0]!.bones[0]!.cubes[0]! as { rotation: number[] }).rotation;
+    expect(rot("x")).toEqual([30, 0, 0]); // Blender X → MC X (+θ)
+    expect(rot("z")).toEqual([0, 30, 0]); // Blender Z → MC Y (+θ)
+    expect(rot("y")).toEqual([0, 0, -30]); // Blender Y → MC Z (−θ)
+  });
+
   it("is byte-deterministic", () => {
     const build = () =>
       JSON.stringify(buildBedrockModel(census([mesh("prp_a", "mtl_a")], [mat("mtl_a", [0.5, 0.5, 0.5])], { prp_a: [0, 0, 0, 1, 1, 1] }), contract).model);

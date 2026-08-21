@@ -424,6 +424,10 @@ export interface CensusMesh {
   zeroAreaFaces: number;
   nan: boolean;
   uvLayers: string[];
+  /** The mesh carries a colour (vertex-colour) attribute — a shading source, so
+   *  a material-less low-poly/voxel part is not "unshaded". Absent on an older
+   *  census; readers treat absence as "no colour attribute". */
+  hasColorAttribute?: boolean;
   /** Material names bound to this mesh's slots, sorted. */
   materials?: string[];
   /**
@@ -465,6 +469,13 @@ export interface CensusMesh {
     /** Largest distance (m) any vertex sits from the nearest point of the
      *  contract's voxel grid — the off-grid shimmer measured, not judged. */
     gridDeviation: number;
+    /** World-space centre of the box (its rotation pivot). Present for a box. */
+    center?: [number, number, number];
+    /** The box's OWN (un-rotated) extent, m — the world AABB for an axis-aligned
+     *  box, or the true box size recovered by un-rotating an oriented one. Lets
+     *  the Bedrock exporter emit a rotated cube: origin = centre − size/2,
+     *  rotation applied about the centre. Present for a box. */
+    localSize?: [number, number, number];
   };
   /** Vertex pairs within merge distance (1e-6 m) — split seams in disguise. */
   doubleVertices?: number;

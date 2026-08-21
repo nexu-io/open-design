@@ -1214,6 +1214,15 @@ def census(scene, measure_thickness=False, measure_voxel=False, voxel_grid=0.0):
             "ngons": ngons, "nonManifoldEdges": non_manifold, "zeroAreaFaces": zero_area,
             "nan": nan_verts or not all(math.isfinite(v) for row in o.matrix_world for v in row),
             "uvLayers": [l.name for l in o.data.uv_layers],
+            # A colour attribute (vertex colours) is a shading source in its own
+            # right — a low-poly / MagicaVoxel asset ships colour, not a material
+            # — so the "no material" rule must not punish it. Blender 3.2+ uses
+            # color_attributes; older meshes expose vertex_colors.
+            "hasColorAttribute": (
+                len(o.data.color_attributes) > 0
+                if hasattr(o.data, "color_attributes")
+                else len(getattr(o.data, "vertex_colors", [])) > 0
+            ),
             "materials": sorted({sl.material.name for sl in slots if sl.material}),
             "uv": uv_block,
             "looseVerts": loose_verts, "looseEdges": loose_edges,
@@ -1922,12 +1931,41 @@ def voxel_facts(bm, grid):
                             rot_axis = "xyz"[ra]
                             rot_deg = round(ang, 3)
 
+    # Centre + UN-ROTATED size of the box (world frame). For an oriented cube the
+    # world AABB is the rotated bounding box, not the element — so a rotated
+    # Bedrock cube needs the box's own extent (un-rotate the corners about the
+    # centre by -angle) plus the centre as its pivot. Axis-aligned boxes just get
+    # their world extent. Emitted only for a box; the exporter maps to MC space.
+    center_out = None
+    local_size = None
+    if is_box and coords:
+        cen = mathutils.Vector((
+            sum(c.x for c in coords) / len(coords),
+            sum(c.y for c in coords) / len(coords),
+            sum(c.z for c in coords) / len(coords),
+        ))
+        center_out = [round(cen.x, 6), round(cen.y, 6), round(cen.z, 6)]
+        if rot_axis is not None and rot_deg is not None:
+            axis_vec = {"x": mathutils.Vector((1, 0, 0)),
+                        "y": mathutils.Vector((0, 1, 0)),
+                        "z": mathutils.Vector((0, 0, 1))}[rot_axis]
+            unrot = mathutils.Matrix.Rotation(math.radians(-rot_deg), 4, axis_vec)
+            pts = [unrot @ (c - cen) for c in coords]
+        else:
+            pts = [c - cen for c in coords]
+        xs = [p.x for p in pts]
+        ys = [p.y for p in pts]
+        zs = [p.z for p in pts]
+        local_size = [round(max(xs) - min(xs), 6), round(max(ys) - min(ys), 6), round(max(zs) - min(zs), 6)]
+
     return {
         "isBox": is_box,
         "axisAligned": axis_aligned,
         "rotationAxis": rot_axis,
         "rotationDeg": rot_deg,
         "gridDeviation": round(grid_dev, 7),
+        **({} if center_out is None else {"center": center_out}),
+        **({} if local_size is None else {"localSize": local_size}),
     }
 
 

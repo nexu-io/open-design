@@ -302,6 +302,34 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(codes.has(ISSUE_CODES.OBJECT_WITHOUT_MATERIAL)).toBe(true);
   });
 
+  it("does not flag a material-less mesh that shades from a colour attribute (W-345)", () => {
+    // A low-poly / MagicaVoxel part carries vertex colours, not a material — a
+    // real shading source, so "no material assigned" is a false positive.
+    const meshRow = (hasColorAttribute: boolean) => ({
+      object: "prp_voxel",
+      verts: 8,
+      faces: 6,
+      ngons: 0,
+      nonManifoldEdges: 0,
+      zeroAreaFaces: 0,
+      nan: false,
+      uvLayers: [],
+      hasColorAttribute,
+    });
+    const withColour = runLint({
+      contract: contract(),
+      census: census({ meshes: [meshRow(true)], objectsWithoutMaterial: ["prp_voxel"] }),
+    });
+    expect(new Set(withColour.map((i) => i.code)).has(ISSUE_CODES.OBJECT_WITHOUT_MATERIAL)).toBe(false);
+
+    // The same mesh with no colour attribute IS unshaded — the rule still fires.
+    const bare = runLint({
+      contract: contract(),
+      census: census({ meshes: [meshRow(false)], objectsWithoutMaterial: ["prp_voxel"] }),
+    });
+    expect(new Set(bare.map((i) => i.code)).has(ISSUE_CODES.OBJECT_WITHOUT_MATERIAL)).toBe(true);
+  });
+
   it("flags missing camera, missing lights, off-camera objects and zero scale", () => {
     const issues = runLint({
       contract: contract(),

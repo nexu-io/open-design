@@ -96,11 +96,20 @@ export function lintPbr(ctx: LintContext, issues: Issue[]): void {
     }
   }
 
+  // The real premise is "a render-target part has no shading source", not "no
+  // material slot": a low-poly / MagicaVoxel part shades from a vertex-colour
+  // attribute. So a material-less mesh is only unshaded when it ALSO carries no
+  // colour attribute.
+  const coloured = new Set(
+    census.meshes.filter((m) => m.hasColorAttribute).map((m) => m.object),
+  );
   for (const name of census.objectsWithoutMaterial) {
+    if (coloured.has(name)) continue;
     issues.push({
       code: ISSUE_CODES.OBJECT_WITHOUT_MATERIAL,
       severity: "warning",
-      message: `object '${name}' has no material assigned`,
+      message: `object '${name}' has no material and no vertex-colour attribute — nothing shades it`,
+      hint: "assign a material, or add a colour attribute for a vertex-coloured low-poly look",
       target: name,
     });
   }

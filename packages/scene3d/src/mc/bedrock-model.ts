@@ -1,7 +1,7 @@
 import { Census } from "../types.js";
 import { NormalizedContract } from "../contract.js";
 import { encodePng } from "../sheet/png.js";
-import { PX, boxToMc, sanitizeKey, solidTile } from "./common.js";
+import { PX, boxToMc, px, sanitizeKey, solidTile } from "./common.js";
 
 /**
  * Lower a compiled scene to a **Minecraft Bedrock** `geometry.json`.
@@ -46,10 +46,51 @@ interface BedrockGeometryFile {
 interface BedrockCube {
   origin: [number, number, number];
   size: [number, number, number];
+  /** Free per-cube rotation (deg) about `pivot` — Bedrock's advantage over
+   *  Java. Present only for an oriented cube. */
+  rotation?: [number, number, number];
+  pivot?: [number, number, number];
   uv: Record<string, { uv: [number, number]; uv_size: [number, number] }>;
 }
 
 const FACES = ["north", "south", "east", "west", "up", "down"] as const;
+
+/**
+ * A Bedrock cube for an ORIENTED box, from its Blender-frame centre + un-rotated
+ * size + recovered single-axis rotation.
+ *
+ * The geometry is exact: origin = centre − size/2 (un-rotated), pivot = centre,
+ * both mapped by the frame map (x,y,z)→(x,z,−y). The rotation mapping is ALSO
+ * exact, not a guess: that frame map is a proper rotation, and conjugating a
+ * rotation by a rotation preserves the angle and maps the axis, giving
+ * Blender X → MC X (+θ), Blender Z → MC Y (+θ), Blender Y → MC Z (−θ). Applying
+ * the emitted rotation to the emitted box about the pivot reproduces the world
+ * geometry — the round-trip a unit test pins.
+ */
+function rotatedCube(
+  center: [number, number, number],
+  localSize: [number, number, number],
+  axis: "x" | "y" | "z",
+  deg: number,
+): { origin: [number, number, number]; size: [number, number, number]; pivot: [number, number, number]; rotation: [number, number, number] } {
+  // Work in METRES; px() does the metres→pixel (×16) conversion once. Rotation
+  // is DEGREES, not pixels — it never goes through px().
+  const cx = center[0];
+  const cy = center[2]; // MC y from Blender z
+  const cz = -center[1]; // MC z from −Blender y
+  const sx = localSize[0];
+  const sy = localSize[2];
+  const sz = localSize[1];
+  const deg4 = Number(deg.toFixed(4));
+  const rotation: [number, number, number] =
+    axis === "x" ? [deg4, 0, 0] : axis === "z" ? [0, deg4, 0] : [0, 0, -deg4];
+  return {
+    origin: [px(cx - sx / 2), px(cy - sy / 2), px(cz - sz / 2)],
+    size: [px(sx), px(sy), px(sz)],
+    pivot: [px(cx), px(cy), px(cz)],
+    rotation,
+  };
+}
 
 export function buildBedrockModel(census: Census, _contract: NormalizedContract): BedrockBuild {
   const worldByName = new Map(census.objects.map((o) => [o.name, o]));
@@ -78,24 +119,30 @@ export function buildBedrockModel(census: Census, _contract: NormalizedContract)
       skipped.push({ object: mesh.object, reason: v ? "not a single cuboid" : "no voxel facts" });
       continue;
     }
+    const row = rowFor(mesh.materials?.[0]);
+    const uv: BedrockCube["uv"] = {};
+    for (const face of FACES) {
+      uv[face] = { uv: [0, row * PX], uv_size: [PX, PX] };
+    }
+
+    // Oriented cube: Bedrock permits free per-cube rotation, so emit it rather
+    // than skip. Needs the box's OWN extent (census localSize) + centre, not the
+    // rotated world AABB. Multi-axis (no single recovered axis) is still skipped.
     if (!v.axisAligned) {
-      skipped.push({
-        object: mesh.object,
-        reason: v.rotationAxis ? `rotated ${v.rotationDeg}° about ${v.rotationAxis}` : "rotated about multiple axes",
-      });
+      if (v.rotationAxis === null || v.rotationDeg === null || !v.center || !v.localSize) {
+        skipped.push({ object: mesh.object, reason: "rotated about multiple axes" });
+        continue;
+      }
+      cubes.push({ ...rotatedCube(v.center, v.localSize, v.rotationAxis, v.rotationDeg), uv });
       continue;
     }
+
     const world = worldByName.get(mesh.object);
     if (!world?.worldMin || !world?.worldMax) {
       skipped.push({ object: mesh.object, reason: "no world bounds" });
       continue;
     }
     const [from, to] = boxToMc(world.worldMin, world.worldMax);
-    const row = rowFor(mesh.materials?.[0]);
-    const uv: BedrockCube["uv"] = {};
-    for (const face of FACES) {
-      uv[face] = { uv: [0, row * PX], uv_size: [PX, PX] };
-    }
     cubes.push({ origin: from, size: [to[0] - from[0], to[1] - from[1], to[2] - from[2]], uv });
   }
 
