@@ -4,14 +4,14 @@
 //
 // #5517 removed the entry topbar and parked the updater host in the rail
 // footer — bottom-left, detached from the identity it belongs to. A follow-up
-// moved it to a strip above the account row; product then placed it INLINE:
-// 升级提醒按钮跟在头像后边，不再单独占一行 — the rocket rides the floating
-// account row immediately AFTER the avatar chip.
+// moved it to a strip above the account row; product then placed it inline
+// inside the account capsule. OPEND-2154 separates it again: the rocket stays
+// immediately AFTER the credits/avatar capsule, but paints as its own control.
 //
 // These specs pin the DOM relationship rather than any pixel value: the rocket
-// lives in a slot that is the account trigger's immediately-following sibling,
-// inside the same account container. The row layout and the slot's
-// zero-width-when-empty behaviour are CSS facts (see
+// lives in a slot that is the account capsule's immediately-following sibling,
+// outside the capsule. The cluster layout and the slot's zero-width-when-empty
+// behaviour are CSS facts (see
 // `.entry-nav-rail__account-updater` in styles/home/entry-layout.css) and are
 // verified in a real browser, not here — jsdom applies no stylesheets.
 //
@@ -144,7 +144,7 @@ async function renderWithDownloadedUpdate(context: WorkspaceCollabContext | null
   return view;
 }
 
-describe('updater rocket placement after the account avatar', () => {
+describe('standalone updater rocket placement after the account capsule', () => {
   it('shows the shared Go campaign badge on an unpaid project detail route', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'));
@@ -165,7 +165,7 @@ describe('updater rocket placement after the account avatar', () => {
     );
   });
 
-  it('keeps the project-detail updater slot in the shared account row', () => {
+  it('keeps the project-detail updater slot outside the shared account capsule', () => {
     render(
       <I18nProvider initial="zh-CN">
         <WorkspaceTopRightAccountCluster
@@ -175,13 +175,14 @@ describe('updater rocket placement after the account avatar', () => {
       </I18nProvider>,
     );
 
-    const trigger = screen.getByTestId('entry-nav-account');
     const slot = screen.getByTestId('entry-nav-account-updater');
+    const pill = document.querySelector('.entry-top-right-account-pill');
     expect(screen.getByTestId('project-updater-slot-content')).toBeTruthy();
-    expect(trigger.nextElementSibling).toBe(slot);
+    expect(pill?.contains(slot)).toBe(false);
+    expect(pill?.nextElementSibling).toBe(slot);
   });
 
-  it('renders the rocket inline immediately after the avatar chip', async () => {
+  it('renders the rocket independently immediately after the account capsule', async () => {
     await renderWithDownloadedUpdate();
 
     const rocket = screen.getByTestId('entry-nav-updater');
@@ -192,11 +193,15 @@ describe('updater rocket placement after the account avatar', () => {
     expect(slot, 'rocket must live in the updater slot').not.toBeNull();
     expect(slot?.contains(trigger)).toBe(false);
 
-    // AFTER the avatar chip: same account container, and the slot is the
-    // trigger's immediately-following sibling — nothing may slip between them.
+    // AFTER the capsule: same top-right cluster, but outside the account
+    // container so the capsule material never wraps the update control.
     const account = trigger.closest('.entry-nav-rail__account');
-    expect(account?.contains(slot as Node)).toBe(true);
-    expect(trigger.nextElementSibling).toBe(slot);
+    const pill = trigger.closest('.entry-top-right-account-pill');
+    const cluster = trigger.closest('.entry-top-right-cluster');
+    expect(account?.contains(slot as Node)).toBe(false);
+    expect(pill?.contains(slot as Node)).toBe(false);
+    expect(cluster?.contains(slot as Node)).toBe(true);
+    expect(pill?.nextElementSibling).toBe(slot);
     expect(
       trigger.compareDocumentPosition(rocket) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -224,7 +229,7 @@ describe('updater rocket placement after the account avatar', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('leaves an empty slot after the avatar while no update is in flight', async () => {
+  it('leaves an empty standalone slot after the capsule while no update is in flight', async () => {
     restoreHost = installMockOpenDesignHost({
       host: { updater: { status: vi.fn(async () => idleStatus()) } },
     });

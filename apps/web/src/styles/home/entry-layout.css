@@ -5705,10 +5705,9 @@
   margin: auto 0 0;
   padding-top: var(--spacing-10);
 }
-/* Update-ready slot: rides the floating account row immediately AFTER the
-   avatar chip (per product: 升级提醒按钮跟在头像后边). Earlier homes — the
-   rail footer (#5517) and a strip on its own line above the identity row —
-   both detached the reminder from the avatar.
+/* Update-ready slot: an independent top-right cluster item immediately AFTER
+   the credits/avatar capsule. The rail footer remains the signed-out fallback
+   because that shell has no account capsule.
 
    This stays a global selector next to the rest of the account block rather
    than a CSS Module: its only child is `.entry-updater-menu`, itself a global
@@ -5716,10 +5715,9 @@
    it.
 
    `:empty` is load-bearing, not tidiness. The slot is mounted unconditionally
-   so the row's shape is stable, and the updater host renders nothing until an
-   installer is downloaded and unopened — so without this rule an idle account
-   row would reserve the slot's width plus the container's 6px `gap` next to
-   the avatar, shifting the whole cluster for a control that is not there.
+   so the cluster's shape is stable, and the updater host renders nothing until
+   an installer is downloaded and unopened — so without this rule an idle
+   cluster would reserve its gap for a control that is not there.
    `display: none` (not `width: 0`) is what drops it out of flex layout so the
    `gap` collapses with it. */
 .entry-nav-rail__account-updater {
@@ -6048,11 +6046,8 @@
   top: auto;
   bottom: calc(100% + 4px);
 }
-/* Floating account module (top-right cluster): compact pill trigger that
-   matches the campaign badge's height/material, and a downward,
-   right-aligned menu instead of the rail-bottom upward one. Lays out as a
-   ROW so the update rocket sits inline after the avatar chip instead of
-   stacking above it (the base class is a column for the rail-era layout). */
+/* Floating account module inside the credits/avatar capsule: compact trigger
+   with a downward, right-aligned menu instead of the rail-bottom upward one. */
 .entry-nav-rail__account--floating {
   order: 0;
   margin: 0;

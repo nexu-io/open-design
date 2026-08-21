@@ -238,12 +238,9 @@ interface Props {
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
    *
-   * It rides the floating account module's row IMMEDIATELY AFTER the avatar
-   * chip (`.entry-nav-rail__account-updater`), per product: 升级提醒按钮跟在
-   * 头像后边，不再单独占一行。 Earlier homes — the rail footer (#5517) and a
-   * strip above the identity row — both detached the reminder from the
-   * avatar. The footer stays as the fallback home for the signed-out shell,
-   * which has no account row at all.
+   * It is an independent control immediately after the floating credits/avatar
+   * capsule (`.entry-nav-rail__account-updater`). The footer stays as the
+   * fallback home for the signed-out shell, which has no account capsule.
    */
   updaterSlot?: ReactNode;
   /** Optional notice shown above the footer controls. */
@@ -786,7 +783,8 @@ export function EntryTopRightCluster({
               The capsule owns the pill material; the segments inside are
               chrome-free click targets. */}
           {context ? (
-            <div className="entry-top-right-account-pill">
+            <>
+              <div className="entry-top-right-account-pill">
           {(billing || balanceLabel) && showCreditsBalance ? (
             <button
               type="button"
@@ -836,19 +834,6 @@ export function EntryTopRightCluster({
                   ) : null}
                 </span>
               </button>
-              {/* Update-ready rocket, riding the same row immediately AFTER the
-                  avatar chip. It is mounted unconditionally so the row's shape
-                  is stable, and it holds no element children until the updater
-                  actually has something to show; `:empty { display: none }` is
-                  what keeps an idle slot from reserving width (plus the row's
-                  6px gap) next to the avatar.
-
-                  The rocket must never be a DESCENDANT of the trigger above:
-                  a button inside the account button would be invalid markup and
-                  would make every rocket click toggle the account menu too. */}
-              <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
-                {updaterSlot}
-              </div>
               {accountOpen ? (
                 <>
                   {/* No backdrop here (unlike the team menu): hover-open relies
@@ -1018,8 +1003,16 @@ export function EntryTopRightCluster({
                   }}
                 />
               ) : null}
-            </div>
-            </div>
+              </div>
+              </div>
+              {/* Update-ready rocket: an independent control immediately after
+                  the credits/avatar capsule. The slot stays mounted so
+                  `:empty { display: none }` can remove it from cluster layout
+                  until an installer has downloaded. */}
+              <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
+                {updaterSlot}
+              </div>
+            </>
           ) : null}
         </div>,
         document.body,
