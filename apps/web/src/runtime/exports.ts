@@ -24,6 +24,7 @@ import {
   workspaceProjectHeaders,
   workspaceResourceUrl,
 } from '../collab/workspace-identity';
+import { sourceHasLegacyDeckScreenSlides } from './deck-slide-structure';
 
 // Re-exported so app components can gate desktop-only export paths without
 // importing the host package directly.
@@ -156,7 +157,7 @@ export function buildDesignManifestContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Design artifact';
+  const title = opts.title || 'OpenDesign artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
@@ -247,7 +248,7 @@ export function buildDesignHandoffContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Design artifact';
+  const title = opts.title || 'OpenDesign artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const accentLikelyBrandLed =
@@ -270,7 +271,7 @@ This archive is the source of truth for turning the design into production code.
 - Build production UI from the exported design, not a loose reinterpretation.
 - Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
 - Replace static placeholders only when the target app has real data or functional equivalents.
-- Keep generated product UI free of Open Design chrome, preview labels, or design-process annotations.
+- Keep generated product UI free of OpenDesign chrome, preview labels, or design-process annotations.
 - Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
 
 ## Source map
@@ -301,7 +302,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
 - Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
 - Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
-- Do not keep prototype-only annotations, frame labels, or Open Design chrome in the production UI.
+- Do not keep prototype-only annotations, frame labels, or OpenDesign chrome in the production UI.
 
 ## CJX-ready UX contract
 - Use \`${DESIGN_MANIFEST_FILENAME}\` as the machine-readable map for screens, app modules, OS widgets, landing pages, tokens, interactions, and viewport checks.
@@ -1105,10 +1106,9 @@ export async function exportProjectAsPptx(opts: {
 // structure such as `data-title` or a `.deck` wrapper. Deliberately DO NOT treat
 // a plain `.slide` class as proof of a deck: ordinary pages often use that token
 // for carousels/testimonials and still need full-page/scroll-stitch capture.
-export function sourceLooksLikeExportableDeck(source: string | null | undefined): boolean {
-  if (!source) return false;
+function sourceLooksLikeStructuredDeck(source: string): boolean {
   return (
-    /<deck-stage[\s/>]|\bdata-screen-label\s*=|class\s*=\s*['"](?:[^'"]*\s)?(?:deck-slide|ppt-slide)(?:\s|['"])/i.test(
+    /<deck-stage[\s/>]|class\s*=\s*['"](?:[^'"]*\s)?(?:deck-slide|ppt-slide)(?:\s|['"])/i.test(
       source,
     ) ||
     /<[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])[^>]*\bdata-title\s*=|<[^>]*\bdata-title\s*=[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(
@@ -1118,6 +1118,23 @@ export function sourceLooksLikeExportableDeck(source: string | null | undefined)
       source,
     )
   );
+}
+
+export function sourceLooksLikeExportableDeck(source: string | null | undefined): boolean {
+  if (!source) return false;
+  return sourceLooksLikeStructuredDeck(source) || /\bdata-screen-label\s*=/i.test(source);
+}
+
+/**
+ * Viewer navigation needs stronger evidence than export. `data-screen-label`
+ * is shared with ordinary prototype annotations, so only explicit deck
+ * structure or a numbered sibling collection of legacy slide sections may
+ * turn the live preview into deck mode.
+ */
+export function sourceLooksLikeNavigableDeck(source: string | null | undefined): boolean {
+  if (!source) return false;
+  if (sourceLooksLikeStructuredDeck(source)) return true;
+  return sourceHasLegacyDeckScreenSlides(source);
 }
 
 // Decides how a current-slide / whole-deck / page image capture should run.
@@ -1164,7 +1181,13 @@ export function planDeckImageCapture(opts: {
 export type ProjectImageExportResult =
   | { ok: true; snapshot: PreviewSnapshot }
   | { ok: false; unavailable: true }
-  | { ok: false; error: string };
+  // `code` / `status` carry the daemon's own classification through to the
+  // caller. Dropping them (as this used to) forced `exportErrorCode` to
+  // re-derive a code by regex-matching the message, and anything it could not
+  // match fell through to `err.name` — the literal string "Error", which is
+  // what 48% of image-export failures reported in analytics. See
+  // `apps/web/src/analytics/export-error-code.ts`.
+  | { ok: false; error: string; code?: string; status?: number };
 
 export async function exportProjectImageDataUrl(opts: {
   projectId: string;
@@ -1205,13 +1228,15 @@ export async function exportProjectImageDataUrl(opts: {
     // 501 = this runtime has no off-screen renderer → caller may fall back.
     if (resp.status === 501) return { ok: false, unavailable: true };
     let message = `image export failed (${resp.status})`;
+    let code: string | undefined;
     try {
       const err = await resp.json();
       if (err?.error?.message) message = String(err.error.message);
+      if (typeof err?.error?.code === 'string' && err.error.code) code = err.error.code;
     } catch {
       // non-JSON body; keep the status-based message
     }
-    return { ok: false, error: message };
+    return { ok: false, error: message, status: resp.status, ...(code ? { code } : {}) };
   }
   // A 200 with an unreadable/corrupt payload is a real export failure, NOT
   // "renderer unavailable" — surface it instead of silently downgrading to the

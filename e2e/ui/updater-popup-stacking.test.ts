@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { applyStandardMocks } from '@/playwright/mock-factory';
+import { mockAmrPersonalWorkspace } from '@/playwright/amr';
 import { ensureRailOpen } from '@/playwright/rail';
 import { T } from '@/timeouts';
 
@@ -77,6 +78,53 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+for (const direction of ['ltr', 'rtl'] as const) {
+  test(`[P1] signed-in ${direction.toUpperCase()} update prompt opens below the standalone rocket within the viewport`, async ({
+    page,
+  }) => {
+    await mockAmrPersonalWorkspace(page);
+    await page.setViewportSize({ width: 700, height: 600 });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+    await expect(page.getByTestId('entry-nav-account')).toBeVisible();
+    await page.locator('html').evaluate((element, dir) => element.setAttribute('dir', dir), direction);
+
+    const updaterButton = page.getByTestId('entry-nav-updater');
+    await updaterButton.click();
+    const popup = page.getByTestId('updater-popup');
+    await expect(popup).toBeVisible();
+
+    const geometry = await page.evaluate(() => {
+      const rocket = document.querySelector('[data-testid="entry-nav-updater"]');
+      const prompt = document.querySelector('[data-testid="updater-popup"]');
+      if (rocket == null || prompt == null) return null;
+      const rocketRect = rocket.getBoundingClientRect();
+      const promptRect = prompt.getBoundingClientRect();
+      return {
+        rocketBottom: rocketRect.bottom,
+        rocketRight: rocketRect.right,
+        promptTop: promptRect.top,
+        promptLeft: promptRect.left,
+        promptRight: promptRect.right,
+        viewportWidth: window.innerWidth,
+      };
+    });
+
+    expect(geometry, 'standalone updater rocket and prompt must both be measurable').not.toBeNull();
+    expect(geometry!.promptTop, 'prompt must open below the standalone rocket').toBeGreaterThan(
+      geometry!.rocketBottom,
+    );
+    expect(
+      Math.abs(geometry!.promptRight - geometry!.rocketRight),
+      'prompt must stay right-aligned to the physically right-pinned rocket',
+    ).toBeLessThanOrEqual(1);
+    expect(geometry!.promptLeft, 'prompt must stay inside the viewport left edge').toBeGreaterThanOrEqual(0);
+    expect(geometry!.promptRight, 'prompt must stay inside the viewport right edge').toBeLessThanOrEqual(
+      geometry!.viewportWidth,
+    );
+  });
+}
+
 test('[P1] update ready prompt paints above the composer and its agent picker', async ({ page }) => {
   test.fail(
     true,
@@ -86,7 +134,7 @@ test('[P1] update ready prompt paints above the composer and its agent picker', 
   // desktop window puts it across the centered composer and model popover.
   await page.setViewportSize({ width: 700, height: 600 });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page.getByTestId('home-hero')).toBeVisible();
 
   // The updater host moved into the nav rail footer with the entry topbar's

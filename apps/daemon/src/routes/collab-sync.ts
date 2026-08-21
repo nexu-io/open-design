@@ -3,7 +3,10 @@ import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node
 import os from 'node:os';
 import path from 'node:path';
 import {
+  PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
   workspaceContextHasWorkspaceIdentity,
+  type PublicFileManualRevokeRequiredResponse,
+  type PublicProjectFilePublication,
   type ProjectContentTransferState,
   type ProjectMetadata,
   type ProjectSyncIntentEvent,
@@ -47,6 +50,11 @@ import {
   parseVelaResourceSnapshot,
   runVelaResourceCommand,
 } from '../collab/vela-cli-resource-adapter.js';
+import {
+  createInMemoryPublicFilePublicationStore,
+  type PublicFilePublicationScope,
+  type PublicFilePublicationStore,
+} from '../collab/public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
 import { readProjectManifest } from '../project-locations.js';
 import { redactSecrets } from '../redact.js';
@@ -87,6 +95,11 @@ export interface PulledProjectStore {
    * return only after a strict readback proves the mirror is mutation-gated.
    */
   materializeTeamMirror?: (
+    input: RegisterPulledProjectInput,
+    scope: TeamMirrorPullScope,
+  ) => { localRecordChanged: boolean };
+  /** Atomically create a stamped, creator-less Team-bound first-open row. */
+  materializeTeamPlaceholder?: (
     input: RegisterPulledProjectInput,
     scope: TeamMirrorPullScope,
   ) => { localRecordChanged: boolean };
@@ -203,6 +216,8 @@ export interface RegisterCollabSyncRoutesDeps {
   ) => Promise<{ displayName: string; role: 'owner' | 'admin' | 'member' } | null>;
   projectStore?: PulledProjectStore;
   resolveProjectDir?: (projectId: string) => string | Promise<string>;
+  /** Durable publication metadata used to restore public links after restart. */
+  publicFilePublicationStore?: PublicFilePublicationStore;
   resolvePullDir?: (projectId: string) => string;
   /** Read the durable local materialization cursor for this exact team mirror. */
   readMaterializedVersion?: (
@@ -367,13 +382,6 @@ const PULLED_PROJECT_PLACEHOLDER_NAME = '共享项目';
 const PUBLIC_FILE_RESOURCE_KIND = 'project';
 const PUBLIC_FILE_REF = 'published';
 
-interface PublicFilePublication {
-  url: string;
-  slug: string;
-  fileName: string;
-}
-
-const publicFilePublications = new Map<string, PublicFilePublication>();
 const MAX_ERROR_LOG_FIELD_LENGTH = 2_048;
 
 function redactedErrorLogText(value: unknown): string {
@@ -530,8 +538,17 @@ function publicFileResourceIdFor(
   return `project-file-${scoped}`;
 }
 
-function publicFilePublicationKey(projectId: string, filePath: string, principal: ResourceHubPrincipal): string {
-  return JSON.stringify([principal.teamId, principal.memberId, projectId, filePath]);
+function publicFilePublicationScope(
+  projectId: string,
+  filePath: string,
+  principal: ResourceHubPrincipal,
+): PublicFilePublicationScope {
+  return {
+    resourceTeamId: principal.teamId,
+    ownerMemberId: principal.memberId,
+    projectId,
+    filePath,
+  };
 }
 
 function encodePublicFileUrlPath(filePath: string): string {
@@ -553,7 +570,7 @@ function workspaceIdentityRequiredBody() {
   return {
     error: 'WORKSPACE_IDENTITY_REQUIRED',
     message:
-      'Publishing a public link needs a signed-in workspace. Sign in to Open Design Cloud, ' +
+      'Publishing a public link needs a signed-in workspace. Sign in to OpenDesign Cloud, ' +
       'or use Deploy to publish this file without one.',
   };
 }
@@ -686,6 +703,9 @@ export function registerCollabSyncRoutes(
     notifyProjectMetadataChanged,
   } = deps;
   const readManifest = deps.readManifest ?? readProjectManifest;
+  const publicFilePublicationStore =
+    deps.publicFilePublicationStore
+    ?? createInMemoryPublicFilePublicationStore();
   const ownerEnrichmentCache = new Map<
     string,
     {
@@ -1060,6 +1080,29 @@ export function registerCollabSyncRoutes(
     markSharedProjectPlaceholder?.(projectId, true);
   }
 
+  function ensureTeamBoundSharedProjectPlaceholder(
+    projectId: string,
+    scope: TeamMirrorPullScope,
+  ): boolean {
+    if (!projectStore?.materializeTeamPlaceholder) {
+      throw new Error('team placeholder materializer unavailable');
+    }
+    const existing = projectStore.get?.(projectId) ?? null;
+    if (projectStore.has(projectId) && !isUnmaterializedSharedPlaceholder(existing)) {
+      return false;
+    }
+    const now = Date.now();
+    projectStore.materializeTeamPlaceholder({
+      id: projectId,
+      name: PULLED_PROJECT_PLACEHOLDER_NAME,
+      skillId: null,
+      designSystemId: null,
+      createdAt: now,
+      updatedAt: now,
+    }, scope);
+    return true;
+  }
+
   /**
    * Invariant: opening a shared project whose only local record is an
    * unmaterialized placeholder starts that project's content pull on the very
@@ -1249,12 +1292,45 @@ export function registerCollabSyncRoutes(
       if (!snapshot) {
         return res.status(502).json({ error: 'PUBLIC_SNAPSHOT_UNAVAILABLE' });
       }
-      const publication = {
+      const publication: PublicProjectFilePublication = {
         url: publicSnapshotFileUrl(baseUrl, snapshot.slug, filePath),
         slug: snapshot.slug,
         fileName: filePath,
       };
-      publicFilePublications.set(publicFilePublicationKey(projectId, filePath, principal), publication);
+      try {
+        publicFilePublicationStore.set(
+          publicFilePublicationScope(projectId, filePath, principal),
+          publication,
+        );
+      } catch (persistenceError) {
+        try {
+          await runVelaResourceCommand([
+            'snapshot-redact',
+            resourceId,
+            snapshot.slug,
+            '--json',
+          ], principal.teamId);
+        } catch (redactionError) {
+          console.warn(
+            '[od] failed to persist public project file publication; snapshot compensation also failed:',
+            { persistenceError, redactionError },
+          );
+          const recoveryResponse = {
+            error: {
+              code: PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
+              message:
+                `The public link remains active at ${publication.url}. `
+                + 'Run od project revoke-public-link with this project, file path, and URL.',
+              data: {
+                projectId,
+                ...publication,
+              },
+            },
+          } satisfies PublicFileManualRevokeRequiredResponse;
+          return res.status(502).json(recoveryResponse);
+        }
+        throw persistenceError;
+      }
       return res.json(publication);
     } catch (error) {
       console.warn('[od] failed to publish public project file:', error);
@@ -1307,7 +1383,9 @@ export function registerCollabSyncRoutes(
         slug,
         '--json',
       ], principal.teamId);
-      publicFilePublications.delete(publicFilePublicationKey(projectId, filePath, principal));
+      publicFilePublicationStore.delete(
+        publicFilePublicationScope(projectId, filePath, principal),
+      );
       return res.json({ ok: true, slug, fileName: filePath });
     } catch (error) {
       console.warn('[od] failed to unpublish public project file:', error);
@@ -1348,7 +1426,9 @@ export function registerCollabSyncRoutes(
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
     }
     return res.json({
-      publication: publicFilePublications.get(publicFilePublicationKey(projectId, filePath, principal)) ?? null,
+      publication: publicFilePublicationStore.get(
+        publicFilePublicationScope(projectId, filePath, principal),
+      ),
     });
   });
 
@@ -2143,6 +2223,40 @@ export function registerCollabSyncRoutes(
       return res.status(502).json({ error: 'TEAM_PROJECT_PULL_REGISTER_UNAVAILABLE' });
     }
     res.json({ ok: true, version: outcome.version });
+  });
+
+  app.put('/api/projects/:id/collab/bootstrap', async (req, res) => {
+    const projectId = req.params.id;
+    // This endpoint materializes local authority state, so it deliberately uses
+    // the fresh mutation verifier and uncached owner lookup, never status's
+    // bounded read lease. PUT is idempotent and lets the sidecar safely replay
+    // one request on a reset reused socket.
+    const { verification, principal, scope } =
+      await pullAccessForRequest(projectId, req);
+    if (!verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    if (!principal || !scope) {
+      return res.status(404).json({ error: 'TEAM_PROJECT_NOT_FOUND' });
+    }
+    let awaitingFirstMaterialization: boolean;
+    try {
+      awaitingFirstMaterialization = ensureTeamBoundSharedProjectPlaceholder(
+        projectId,
+        scope,
+      );
+    } catch {
+      return res.status(503).json({ error: 'TEAM_PROJECT_BOOTSTRAP_UNAVAILABLE' });
+    }
+    if (awaitingFirstMaterialization) {
+      materializePlaceholderOnOpen(projectId, req, {
+        ownerMemberId: scope.ownerMemberId,
+        callerIsOwner: scope.ownerMemberId === scope.viewerMemberId,
+      });
+    }
+    return res
+      .status(awaitingFirstMaterialization ? 202 : 200)
+      .json({ ok: true, awaitingFirstMaterialization });
   });
 
   app.get('/api/projects/:id/collab/status', async (req, res) => {

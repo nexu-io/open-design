@@ -3,7 +3,7 @@
  * /agents/deepseek-harness-design/ — agent detail page (industrial long-form).
  *
  * Captures "deepseek harness", "deepseek harness design", "dsh agent",
- * and "deepseek harness setup" intent and drives to Open Design. When the
+ * and "deepseek harness setup" intent and drives to OpenDesign. When the
  * agent guide carries a `rich` payload this renders the deep how-to
  * layout (hero CTA + sectioned long-form + images); otherwise it falls
  * back to the compact layout. Linked from the `/agents/` hub.
@@ -29,7 +29,7 @@ const page = copy.agentGuides[SLUG] ?? getInfoPageCopy('en').agentGuides[SLUG]!;
 const rich = page.rich;
 const tutorial = deepseekHarnessTutorialCopy(page);
 
-// This is an Open Design acquisition page: the hero download is the primary
+// This is an OpenDesign acquisition page: the hero download is the primary
 // action in every locale, followed by the Discord and Feishu community rooms.
 // Match by stable href so translated labels are kept.
 const heroCtas = rich ? deepseekHarnessHeroCtas(rich.heroCtaActions) : [];
@@ -41,6 +41,9 @@ const DESIGN_SECTION_ORDER = [
   'why-design',
   'setup',
   'open-design',
+  'detect-harness',
+  'connect-profile',
+  'first-design-task',
   'design-workflow',
   'plugins',
   'pitfalls',
@@ -98,7 +101,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: homeUrl },
       { '@type': 'ListItem', position: 2, name: copy.agents.breadcrumb, item: agentsHubUrl },
       { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
     ],
@@ -123,6 +126,33 @@ const jsonLd = [
       url: `${pageUrl}#${item.id}`,
     })),
   }] : []),
+  // HowTo mirrors the real five-step walkthrough (install → download →
+  // detect → connect → first task) so "how to" queries and AI answers can
+  // cite the exact sequence; every step points at its section anchor and
+  // carries the section's lead paragraph as its instructional text
+  // (markdown links/code stripped — schema text is plain).
+  ...(rich ? [{
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name: tutorial.heading,
+    description: page.description,
+    step: ['setup', 'open-design', 'detect-harness', 'connect-profile', 'first-design-task']
+      .map((id, index) => {
+        const section = rich.sections.find((candidate) => candidate.id === id);
+        if (!section) return null;
+        const lead = section.blocks.find((block) => block.kind === 'p');
+        const plainText = (value: string) =>
+          value.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/`/g, '');
+        return {
+          '@type': 'HowToStep',
+          position: index + 1,
+          name: section.heading,
+          text: lead && lead.kind === 'p' ? plainText(lead.text) : section.heading,
+          url: `${pageUrl}#${id}`,
+        };
+      })
+      .filter((step) => step !== null),
+  }] : []),
   {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -137,7 +167,7 @@ const jsonLd = [
 
 <Layout title={tutorial.title} description={page.description} active="agent" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <a href={href('/agents/')}>{copy.agents.breadcrumb}</a>
     <span>/</span>
@@ -186,6 +216,10 @@ const jsonLd = [
 
         {orderedSections.map((section) => (
           <section class={`info-section agent-section--${section.id}`} id={section.id}>
+            {/* The former GUI section was folded away (2026-08 design-first
+                refocus); keep its anchor alive on the setup section so saved
+                and search-indexed /#gui deep links still land on content. */}
+            {section.id === 'setup' && <span id="gui" aria-hidden="true"></span>}
             <h2>{section.heading}</h2>
             {section.blocks.map((block) => {
               if (block.kind === 'p') return <p><Fragment set:html={renderInline(block.text)} /></p>;

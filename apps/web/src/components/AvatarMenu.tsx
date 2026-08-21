@@ -67,7 +67,7 @@ interface Props {
 }
 
 /**
- * Compact runtime control. Click opens a dropdown with the Open Design account
+ * Compact runtime control. Click opens a dropdown with the OpenDesign account
  * and the model picker for the active agent. Execution wiring that is not a
  * per-message choice (execution mode, which CLI agent, PATH rescan, BYOK
  * provider setup) lives in Settings → Execution; this popover keeps the

@@ -1,4 +1,4 @@
-// Pre-run balance gate for the Open Design Cloud agent. Two tiers:
+// Pre-run balance gate for the OpenDesign Cloud agent. Two tiers:
 //
 //   HARD  — the run cannot possibly succeed: the account is signed out, or the
 //           wallet balance is definitively <= $0. The send is blocked and the
@@ -7,8 +7,8 @@
 //           the low-balance warning line. The user is warned once per send and
 //           may proceed anyway, top up first, or opt out of future warnings.
 //
-// Account-scoped reads fail open when unavailable. An explicitly team-scoped
-// project fails closed when its exact workspace/member epoch cannot be proven:
+// Legacy account-scoped reads fail open when unavailable. Every explicitly
+// workspace-scoped run fails closed when its exact member epoch cannot be proven:
 // falling back to the account wallet would make the preflight disagree with
 // the final daemon spawn authority.
 
@@ -18,6 +18,8 @@ import type {
   WorkspaceBillingResponse,
 } from '@open-design/contracts';
 import { fetchAmrWalletSnapshot } from '../providers/daemon';
+import { resolveAmrPlan } from './amr-low-balance-plan';
+import { isUnlimitedAmrModelForPlan } from './amr-unlimited-models';
 
 /**
  * Hard-block line (USD): at or below this the wallet cannot fund any part of
@@ -163,7 +165,7 @@ export function setAmrLowBalanceWarnOptedOut(): void {
 }
 
 /**
- * Decide whether an Open Design Cloud run may start. Fast path first: the
+ * Decide whether an OpenDesign Cloud run may start. Fast path first: the
  * daemon-cached snapshot answers without an upstream roundtrip, so healthy
  * balances start with no added latency. Only a hard-block answer is confirmed
  * against the live wallet (refresh=1) — the cache may predate a recharge or
@@ -171,7 +173,7 @@ export function setAmrLowBalanceWarnOptedOut(): void {
  * soft tier trusts the cache (its cost is one dismissible reminder, and the
  * daemon cache is at most a few seconds old).
  */
-async function fetchTeamWorkspaceWalletSnapshot(
+async function fetchWorkspaceWalletSnapshot(
   scope: AmrBalanceGateScope,
   accountSnapshot: AmrWalletSnapshot | null,
 ): Promise<AmrWalletSnapshot | null> {
@@ -227,8 +229,9 @@ async function fetchTeamWorkspaceWalletSnapshot(
   };
 }
 
-async function checkTeamWorkspaceBalanceGate(
+async function checkWorkspaceBalanceGate(
   scope: AmrBalanceGateScope,
+  modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
   // The URL carries the selected workspace identity. The daemon authorizes
   // that exact directory membership and returns a v2 identity-stamped wallet.
@@ -237,7 +240,7 @@ async function checkTeamWorkspaceBalanceGate(
   // longer sits in front of the authoritative Workspace read.
   let [accountSnapshot, workspaceSnapshot] = await Promise.all([
     fetchAmrWalletSnapshot().catch(() => null),
-    fetchTeamWorkspaceWalletSnapshot(scope, null).catch(() => null),
+    fetchWorkspaceWalletSnapshot(scope, null).catch(() => null),
   ]);
   if (accountSnapshot?.status === 'signed_out') {
     const freshAccount = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
@@ -259,6 +262,10 @@ async function checkTeamWorkspaceBalanceGate(
   }
   const balance = amrWalletBalanceUsd(workspaceSnapshot);
   if (balance == null) return { kind: 'unavailable' };
+  if (balance <= AMR_LOW_BALANCE_WARN_USD && scope.workspaceType === 'personal') {
+    const plan = await resolveAmrPlan(workspaceSnapshot!);
+    if (isUnlimitedAmrModelForPlan(plan, modelId)) return { kind: 'allow' };
+  }
   if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {
     return {
       kind: 'hard',
@@ -274,10 +281,11 @@ async function checkTeamWorkspaceBalanceGate(
 
 export async function checkAmrBalanceGate(
   scope?: AmrBalanceGateScope,
+  modelId?: string | null,
 ): Promise<AmrBalanceGateResult> {
   try {
-    if (scope?.workspaceType === 'team') {
-      return await checkTeamWorkspaceBalanceGate(scope);
+    if (scope) {
+      return await checkWorkspaceBalanceGate(scope, modelId);
     }
     const cached = await fetchAmrWalletSnapshot().catch(() => null);
     const cachedBalance = amrWalletBalanceUsd(cached);
@@ -290,6 +298,8 @@ export async function checkAmrBalanceGate(
         return { kind: 'allow' };
       }
       // cached is non-null here: a definitive balance implies a snapshot.
+      const plan = await resolveAmrPlan(cached!);
+      if (isUnlimitedAmrModelForPlan(plan, modelId)) return { kind: 'allow' };
       return { kind: 'soft', snapshot: cached! };
     }
     // Hard-block candidate (signed out or empty): confirm against the live
@@ -309,6 +319,10 @@ export async function checkAmrBalanceGate(
     if (fresh.stale || fresh.error != null) return { kind: 'allow' };
     const freshBalance = amrWalletBalanceUsd(fresh);
     if (freshBalance == null) return { kind: 'allow' };
+    if (freshBalance <= AMR_LOW_BALANCE_WARN_USD) {
+      const plan = await resolveAmrPlan(fresh);
+      if (isUnlimitedAmrModelForPlan(plan, modelId)) return { kind: 'allow' };
+    }
     if (freshBalance <= AMR_HARD_BLOCK_BALANCE_USD) {
       return { kind: 'hard', reason: 'insufficient', snapshot: fresh };
     }
@@ -317,9 +331,9 @@ export async function checkAmrBalanceGate(
     }
     return { kind: 'allow' };
   } catch {
-    // Account checks retain the legacy fail-open behavior. Team projects must
-    // prove the exact member-scoped wallet before proceeding.
-    return scope?.workspaceType === 'team'
+    // Unscoped legacy checks retain fail-open behavior. Every explicit
+    // workspace, personal or team, must prove its exact member-scoped wallet.
+    return scope
       ? { kind: 'unavailable' }
       : { kind: 'allow' };
   }

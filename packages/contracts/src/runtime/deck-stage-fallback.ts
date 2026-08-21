@@ -5,9 +5,58 @@ const DECK_STAGE_FALLBACK_MARKER = 'data-od-deck-stage-fallback';
  * The selector family that identifies a deck's slide elements. Single source of
  * truth shared by the runtime `<deck-stage>` fallback (below) and any host-side
  * static slide extraction (e.g. the web app's shadow-root thumbnail parser), so
- * both agree on what counts as a slide. Ordered structured→generic.
+ * both agree on what counts as a slide.
  */
-export const DECK_SLIDE_SELECTOR = '.slide, [data-screen-label], .deck-slide, .ppt-slide';
+const DECK_SLIDE_MARKERS = [
+  '.slide',
+  '[data-screen-label]',
+  '.deck-slide',
+  '.ppt-slide',
+  '.slide-frame',
+] as const;
+const DECK_EXPLICIT_SLIDE_MARKERS = [
+  '.slide',
+  '.deck-slide',
+  '.ppt-slide',
+  '.slide-frame',
+] as const;
+const DECK_SLIDE_CONTAINERS = [
+  'deck-stage',
+  '.deck',
+  '.deck-stage',
+  '.deck-shell',
+  '#deck',
+] as const;
+
+export const DECK_SLIDE_SELECTOR = DECK_SLIDE_MARKERS.join(', ');
+export const DECK_EXPLICIT_SLIDE_SELECTOR = DECK_EXPLICIT_SLIDE_MARKERS.join(', ');
+export const DECK_SCREEN_SLIDE_SELECTOR = '[data-screen-label]';
+export const DECK_LEGACY_SCREEN_SLIDE_SELECTOR = 'section[data-screen-label]';
+export const DECK_LEGACY_SCREEN_LABEL_RE_SOURCE = '^\\s*(\\d{1,3})(?:\\s|[.)\\u00b7:_-]|$)';
+
+/**
+ * Bare `data-screen-label` is also used by prototype annotations. Legacy decks
+ * without an explicit stage are distinguishable because each page is a
+ * numbered section (`01 Cover`, `02 Agenda`, ...). Callers must additionally
+ * require at least two of these sections to share one direct parent.
+ */
+export function legacyDeckScreenNumber(label: string | null | undefined): number | null {
+  if (!label) return null;
+  const match = new RegExp(DECK_LEGACY_SCREEN_LABEL_RE_SOURCE, 'i').exec(label);
+  if (!match) return null;
+  const number = Number(match[1]);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+/**
+ * Prefer direct children of known deck containers before using generic marker
+ * fallbacks. `body` is deliberately not a container: `data-screen-label` is
+ * also the annotation identity used by ordinary prototypes, so one annotated
+ * body descendant is not sufficient evidence of a deck.
+ */
+export const DECK_STRUCTURED_SLIDE_SELECTOR = DECK_SLIDE_CONTAINERS
+  .flatMap((container) => DECK_SLIDE_MARKERS.map((marker) => `${container} > ${marker}`))
+  .join(', ');
 
 const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(function(){
   if (window.__odDeckStageFallbackInstalled) return;
@@ -105,6 +154,14 @@ const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(functio
       return numeric(this.getAttribute('height'), 1080);
     }
 
+    get index() {
+      return this._index;
+    }
+
+    get length() {
+      return this._slides.length;
+    }
+
     _syncSize() {
       this.style.setProperty('--od-deck-stage-width', this.designWidth + 'px');
       this.style.setProperty('--od-deck-stage-height', this.designHeight + 'px');
@@ -195,6 +252,22 @@ const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(functio
         this._index = slides.length - 1;
       }
       this._apply();
+    }
+
+    goTo(index) {
+      this.go('go', index);
+    }
+
+    next() {
+      this.go('next');
+    }
+
+    prev() {
+      this.go('prev');
+    }
+
+    reset() {
+      this.go('first');
     }
 
     _onMessage(ev) {

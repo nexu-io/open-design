@@ -220,6 +220,11 @@ export interface RunTimingProps {
   time_to_first_visible_output_ms?: number;
   time_to_first_artifact_ms?: number;
   generation_duration_ms?: number;
+  // Model-active window: first model event of any kind (tool call, thinking,
+  // text, artifact) to run end. Prefer this over `generation_duration_ms` when
+  // comparing agents -- the latter starts at the first text token, so a
+  // tool-first run reports only its closing message.
+  model_active_duration_ms?: number;
   finalize_duration_ms?: number;
   collection_status?: TrackingRunPhaseTimingStatus;
 }
@@ -382,7 +387,7 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   tokens: RunTokenProps;
   design_system?: RunDesignSystemProps;
   // External MCP/Plugin attribution. These fields are optional so existing UI
-  // and CLI Run producers keep their current contract; the Open Design Cloud
+  // and CLI Run producers keep their current contract; the OpenDesign Cloud
   // Plugin path validates and supplies the complete subset.
   entry_surface?: AnalyticsEntrySurface;
   host_product?: AnalyticsHostProduct;
@@ -456,6 +461,15 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   // the daemon captured a baseline snapshot for the run.
   artifacts_created?: number;
   artifacts_modified?: number;
+  // Distinct files of ANY type this run created or modified — markdown briefs,
+  // docx exports, JSON data, code, plus everything `artifact_count` covers.
+  // `artifact_count` deliberately counts only renderable outputs (HTML +
+  // image/video/audio), which made a run whose deliverable was `PROMPTS.md`
+  // or `report.docx` indistinguishable from a pure chat turn (sampled 2026-08:
+  // ~1/3 of "artifact_count = 0" successes had written such files). Primary
+  // source is the filesystem snapshot diff; when no baseline exists the
+  // tool-stream fallback reports it with the usual per-agent blind spots.
+  files_written_count?: number;
   // True when the run raised a `<question-form>` clarification. Such runs
   // are intent-clarification turns (the agent stops to ask the user a question)
   // and therefore inherently produce no artifact, so the dashboard can exclude
@@ -500,6 +514,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   time_to_first_token_ms?: number;
   time_to_first_visible_output_ms?: number;
   runtime_init_to_first_token_ms?: number;
+  // Runtime init measured to the first model event of any kind rather than to
+  // the first text token. On a tool-first run the first-token variant absorbs
+  // the whole tool loop and reads as slow startup.
+  runtime_init_to_first_model_response_ms?: number;
   spawn_to_first_token_ms?: number;
   time_to_first_artifact_ms?: number;
   // `spawn_to_first_token_ms` split into auditable subsegments so dashboards
@@ -511,6 +529,8 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   model_first_token_ms?: number;
   spawn_to_first_token_remainder_ms?: number;
   generation_duration_ms?: number;
+  // See `RunTimingProps.model_active_duration_ms`.
+  model_active_duration_ms?: number;
   tool_call_count?: number;
   tool_duration_ms?: number;
   artifact_write_duration_ms?: number;
@@ -524,6 +544,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   diagnostics?: RunDiagnosticsProps;
   langfuse_delivery?: RunLangfuseDeliveryProps;
   bottleneck_phase?: TrackingRunLifecyclePhase;
+  // Which phase-boundary definition produced `bottleneck_phase`. Absent on
+  // rows written before the definition was versioned. Rows from different
+  // versions are not comparable -- filter to one, do not average across.
+  phase_schema_version?: number;
   last_observed_phase?: TrackingRunLifecyclePhase;
   phase_timing_status?: TrackingRunPhaseTimingStatus;
   // E-lite root-cause discriminators. `last_observed_phase` tells us WHICH phase
@@ -571,6 +595,29 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   agent_cli_version?: string;
   runtime_companion_name?: string;
   runtime_companion_version?: string;
+  /** Current assistant-message event persistence path for rollout comparison. */
+  message_event_storage_mode?: 'events_json_snapshot' | 'append_only';
+  /** Persistable agent events observed before batching or compaction. */
+  message_event_input_count?: number;
+  message_event_delta_count?: number;
+  /** Approximate UTF-16 character volume accepted by the persistence path. */
+  message_event_input_char_count?: number;
+  /** Synchronous message persistence batches attempted during this run. */
+  message_event_flush_count?: number;
+  /** Events handed to storage after in-memory adjacent-delta compaction. */
+  message_event_batch_event_count?: number;
+  /** Final compacted event count observed after the last successful flush. */
+  message_event_persisted_count?: number;
+  message_event_flush_total_ms?: number;
+  message_event_flush_max_ms?: number;
+  message_event_pending_char_peak?: number;
+  /** Number and cost of terminal append-only batch folds. */
+  message_event_finalize_count?: number;
+  message_event_finalize_total_ms?: number;
+  message_event_finalize_max_ms?: number;
+  /** Compacted event count in the terminal message snapshot. */
+  message_event_final_event_count?: number;
+  message_event_persistence_error_count?: number;
   retry_original_failure_category?: TrackingRunFailureCategory;
   retry_original_failure_detail?: TrackingRunFailureDetail;
   retry_original_failure_stage?: TrackingRunFailureStage;

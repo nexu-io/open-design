@@ -56,7 +56,7 @@ const AUTHORING_PLUGIN = {
     od: {
       kind: 'scenario',
       taskKind: 'new-generation',
-      useCase: { query: 'Create an Open Design plugin for {{pluginGoal}}.' },
+      useCase: { query: 'Create an OpenDesign plugin for {{pluginGoal}}.' },
       inputs: [
         {
           name: 'pluginGoal',
@@ -277,14 +277,14 @@ const LIVE_ARTIFACT_PLUGIN = {
     ...DEFAULT_PLUGIN.manifest,
     name: 'example-live-artifact',
     title: 'Live Artifact',
-    description: 'Create refreshable, auditable Open Design artifacts.',
+    description: 'Create refreshable, auditable OpenDesign artifacts.',
     od: {
       kind: 'scenario',
       taskKind: 'new-generation',
       mode: 'prototype',
       scenario: 'live',
       useCase: {
-        query: 'Create refreshable, auditable Open Design artifacts backed by connector or local data.',
+        query: 'Create refreshable, auditable OpenDesign artifacts backed by connector or local data.',
       },
       context: {
         skills: [{ path: './SKILL.md' }],
@@ -319,9 +319,9 @@ const LIVE_ARTIFACT_IMAGE_TEMPLATE_PLUGIN = {
 };
 
 const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
-  artifactKind: 'Open Design plugin',
-  audience: 'Open Design plugin authors',
-  topic: 'packaging a reusable workflow as an Open Design plugin',
+  artifactKind: 'OpenDesign plugin',
+  audience: 'OpenDesign plugin authors',
+  topic: 'packaging a reusable workflow as an OpenDesign plugin',
 };
 
 const REFLY_DESIGN_SYSTEM = {
@@ -541,7 +541,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
   });
 
-  it('keeps Send locked until the fresh-home default deck binding is ready', async () => {
+  it('keeps Send locked until the fresh-home default prototype binding is ready', async () => {
     let resolvePlugins: (response: Response) => void = () => undefined;
     const pluginsResponse = new Promise<Response>((resolve) => {
       resolvePlugins = resolve;
@@ -567,7 +567,7 @@ describe('HomeView prompt handoff', () => {
     expect(submit.disabled).toBe(true);
 
     await act(async () => {
-      resolvePlugins(new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
+      resolvePlugins(new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }));
@@ -575,7 +575,7 @@ describe('HomeView prompt handoff', () => {
     });
 
     await waitFor(() => expect(submit.disabled).toBe(false));
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
   });
 
   it('keeps creation types actionable while an expired plugin cache refreshes after a project round trip', async () => {
@@ -972,9 +972,9 @@ describe('HomeView prompt handoff', () => {
     ));
     expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
       inputs: {
-        artifactKind: 'Open Design plugin',
-        audience: 'Open Design plugin authors',
-        topic: 'packaging a reusable workflow as an Open Design plugin',
+        artifactKind: 'OpenDesign plugin',
+        audience: 'OpenDesign plugin authors',
+        topic: 'packaging a reusable workflow as an OpenDesign plugin',
       },
     });
     await waitFor(() => {
@@ -989,15 +989,15 @@ describe('HomeView prompt handoff', () => {
       pluginId: 'od-new-generation',
       appliedPluginSnapshotId: 'snap-default',
       pluginInputs: {
-        artifactKind: 'Open Design plugin',
-        audience: 'Open Design plugin authors',
-        topic: 'packaging a reusable workflow as an Open Design plugin',
+        artifactKind: 'OpenDesign plugin',
+        audience: 'OpenDesign plugin authors',
+        topic: 'packaging a reusable workflow as an OpenDesign plugin',
       },
       projectKind: 'other',
     }));
   });
 
-  it('binds the Home rail UI Mockup chip locally and applies it on submit', async () => {
+  it('binds the Home rail Prototype chip locally and applies it on submit', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -1032,7 +1032,7 @@ describe('HomeView prompt handoff', () => {
     await pickHomeTemplate('prototype');
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply-local')
@@ -1095,6 +1095,76 @@ describe('HomeView prompt handoff', () => {
     ];
     expect(protoSubmittedInputs).not.toHaveProperty('fidelity');
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it.each([
+    {
+      subtype: 'mobile',
+      prompt: 'Design a mobile checkout flow.',
+      metadata: {
+        kind: 'prototype',
+        platform: 'auto',
+        platformTargets: ['mobile-ios', 'mobile-android'],
+      },
+    },
+    {
+      subtype: 'wireframe',
+      prompt: 'Sketch a low-fidelity account setup flow.',
+      metadata: { kind: 'prototype', fidelity: 'wireframe' },
+    },
+  ])('keeps $subtype as a nested Prototype scene while preserving its project metadata', async ({
+    subtype,
+    prompt,
+    metadata,
+  }) => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply-local')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    await pickHomeTemplate('prototype');
+    const subtypeChip = await screen.findByTestId(`home-hero-subtype-${subtype}`);
+    fireEvent.click(subtypeChip);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+      expect(subtypeChip.getAttribute('aria-selected')).toBe('true');
+      expect(JSON.parse(window.localStorage.getItem('open-design:home-composer:chip') ?? '{}'))
+        .toMatchObject({ chipId: 'prototype', prototypeSubtypeId: subtype });
+    });
+
+    await setPromptAndSettle(prompt);
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      projectKind: 'prototype',
+      projectMetadata: expect.objectContaining(metadata),
+    })));
   });
 
   it('keeps Document prompt entry submittable even when od-new-generation has required inputs', async () => {
@@ -1198,7 +1268,7 @@ describe('HomeView prompt handoff', () => {
     await pickHomeTemplate('prototype');
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
     // Round-4 skin: the unset trigger reads "Design system" (the field name)
     // instead of the "No design system" placeholder.
@@ -1340,7 +1410,7 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply-local')
     ))).toBe(false);
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     // The design-system picker is now the persistent control below the composer.
     expect(
       screen.getByTestId('home-hero-design-system-trigger').textContent,
@@ -1631,7 +1701,7 @@ describe('HomeView prompt handoff', () => {
     await pickHomeTemplate('prototype');
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply-local')

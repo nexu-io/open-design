@@ -1,4 +1,4 @@
-# Contribuindo com o Open Design
+# Contribuindo com o OpenDesign
 
 Obrigado por considerar contribuir. O OD é pequeno de propósito — a maior parte do valor mora em **arquivos** (skills, design systems, fragmentos de prompt) e não em código de framework. Isso significa que as contribuições com maior alavancagem geralmente são uma pasta, um arquivo Markdown ou um adapter do tamanho de um PR.
 

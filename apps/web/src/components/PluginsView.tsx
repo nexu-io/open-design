@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type SetStateAction,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog } from '@open-design/components';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
@@ -192,22 +193,22 @@ const PLUGIN_SHARE_DETAILS: Record<PluginShareAction, {
     eyebrow: 'GitHub repository',
     fallbackTitle: 'Publish Plugin to GitHub',
     fallbackDescription:
-      'Creates a public GitHub repository for this local Open Design plugin.',
+      'Creates a public GitHub repository for this local OpenDesign plugin.',
     confirmLabel: 'Start publishing',
     steps: [
-      'Create a new Open Design project for the publish workflow.',
+      'Create a new OpenDesign project for the publish workflow.',
       'Copy this plugin into that project as isolated source context.',
       'Run the official publish action plugin against the local daemon.',
     ],
   },
   'contribute-open-design': {
-    eyebrow: 'Open Design pull request',
-    fallbackTitle: 'Contribute Plugin to Open Design',
+    eyebrow: 'OpenDesign pull request',
+    fallbackTitle: 'Contribute Plugin to OpenDesign',
     fallbackDescription:
-      'Opens a pull request that adds this plugin to the Open Design community catalog.',
+      'Opens a pull request that adds this plugin to the OpenDesign community catalog.',
     confirmLabel: 'Start contribution',
     steps: [
-      'Create a new Open Design project for the contribution workflow.',
+      'Create a new OpenDesign project for the contribution workflow.',
       'Copy this plugin into that project as isolated source context.',
       'Run the official contribution action plugin against the local daemon.',
     ],
@@ -2035,7 +2036,7 @@ export function ExtensionsMarketplace({
         skill={selectedSkill}
         author={
           scope === 'official'
-            ? 'Open Design'
+            ? 'OpenDesign'
             : scope === 'team'
               ? 'Nexu Team'
               : t('chat.you')
@@ -3215,7 +3216,7 @@ function AvailablePluginDetailsModal({
     });
   }
 
-  return (
+  const modal = (
     <div
       className="plugin-details-modal-backdrop"
       role="dialog"
@@ -3288,7 +3289,7 @@ function AvailablePluginDetailsModal({
                 </h3>
               </div>
               <p className="plugin-details-modal__section-hint">
-                This official catalog entry is bundled with Open Design and is ready to use.
+                This official catalog entry is bundled with OpenDesign and is ready to use.
               </p>
             </section>
           ) : (
@@ -3519,6 +3520,9 @@ function AvailablePluginDetailsModal({
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return modal;
+  return createPortal(modal, document.body);
 }
 
 function SourcesPanel({

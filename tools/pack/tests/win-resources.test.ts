@@ -4,10 +4,10 @@ import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ToolPackCache } from "../src/cache.js";
-import type { ToolPackConfig } from "../src/config.js";
-import { prepareResourceTree } from "../src/win/resources.js";
-import type { WinPaths } from "../src/win/types.js";
+import { ToolPackCache } from "@/cache/index.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { prepareResourceTree } from "@/win/resources.js";
+import type { WinPaths } from "@/win/types.js";
 
 const RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS = 15_000;
 

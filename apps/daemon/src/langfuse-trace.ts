@@ -2,7 +2,7 @@
 //
 // This module is intentionally dependency-free (no `langfuse` SDK). It builds
 // Langfuse ingestion batches for completed runs and sends them either to the
-// official Open Design telemetry relay or, for local smoke tests, directly to
+// official OpenDesign telemetry relay or, for local smoke tests, directly to
 // Langfuse. Without OPEN_DESIGN_TELEMETRY_RELAY_URL or LANGFUSE_PUBLIC_KEY /
 // LANGFUSE_SECRET_KEY in the env, every entry point becomes a no-op so that
 // dev runs and forks of this open-source repo do not accidentally report.
@@ -31,6 +31,7 @@ import {
 import {
   canonicalizeToolAnalyticsName,
   type RunTelemetryTimestamps,
+  phaseAnchorFromMarks,
   type RunTimingAnalytics,
 } from './run-analytics-observability.js';
 import type { RunFailureClassification } from './run-failure-classification.js';
@@ -278,7 +279,7 @@ export interface RuntimeInfo {
   osRelease?: string;
   /** CPU architecture (`os.arch()`, e.g. 'arm64' | 'x64'). */
   arch?: string;
-  /** Open Design app version reported by the daemon. */
+  /** OpenDesign app version reported by the daemon. */
   appVersion?: string;
   /** Build channel (development / prerelease / beta / stable). */
   appChannel?: string;
@@ -347,7 +348,7 @@ export interface ReportRunOpts {
   fetchImpl?: typeof fetch;
   /** App-config AMR env used only when resolving the completed-run Vela sink. */
   configuredEnv?: Record<string, string>;
-  /** Keep object-authority registration anonymous and content-free. */
+  /** Emit only the content-free object-authority trace projection. */
   deliveryPurpose?: 'final' | 'object-registration';
 }
 
@@ -1021,6 +1022,17 @@ function buildSemanticPhaseDiagnostics(ctx: ReportContext): Record<string, unkno
   addMeasured('runtime-init-to-first-token', marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt, marks.firstTokenAt);
   addMeasured('agent-call', marks.modelCallStartAt, ctx.run.endedAt);
   addMeasured('stream-output', marks.firstTokenAt, marks.finalizeStartAt ?? ctx.run.endedAt);
+  // `stream-output` starts at the first text token, so a tool-first run shows
+  // only its closing message here. `model-active` is the same window anchored
+  // on the first model event of any kind. Kept as a diagnostics entry rather
+  // than a second span: this map rides along in existing metadata, while a new
+  // span would add an observation row per run.
+  //
+  // Boundaries mirror `model_active_duration_ms` in run-analytics-observability
+  // exactly -- earliest of the two marks, through run end -- because the whole
+  // point of this entry is to be compared against that number. Deliberately
+  // unlike its neighbours above, which end at `finalizeStartAt`.
+  addMeasured('model-active', phaseAnchorFromMarks(marks), ctx.run.endedAt);
   addMeasured('artifact-write', marks.firstArtifactWriteAt, marks.finalizeStartAt ?? ctx.run.endedAt);
   addMeasured('finalize', marks.finalizeStartAt, ctx.run.endedAt);
   return {
@@ -2109,12 +2121,12 @@ function asVelaSourceEvents(batch: unknown[]): VelaSourceEvent[] {
 }
 
 function stableVelaEventId(event: VelaSourceEvent): string {
-  const bodyId =
-    typeof event.body.id === 'string' && event.body.id.trim()
-      ? event.body.id.trim()
-      : JSON.stringify(event.body);
+  // Retries and deterministic rebuilds of the same event keep one id, while
+  // a later upsert of the same trace/observation with richer data gets a new
+  // ingestion id and cannot be mistaken for the earlier registration event.
+  const canonicalBody = JSON.stringify(event.body);
   return `od-${createHash('sha256')
-    .update(`${event.type}\n${bodyId}`, 'utf8')
+    .update(`${event.type}\n${canonicalBody}`, 'utf8')
     .digest('hex')}`;
 }
 
@@ -2443,6 +2455,13 @@ export async function reportRunCompleted(
   if (config.kind === 'vela') {
     const installationId = ctx.installationId?.trim() ?? '';
     if (!installationId) {
+      if (opts.deliveryPurpose === 'object-registration') {
+        return {
+          langfuse_expected: true,
+          langfuse_delivery_status: 'failed',
+          langfuse_drop_reason: 'missing_sink_config',
+        };
+      }
       const fallback = readTelemetrySinkConfig();
       if (!fallback) {
         return {
@@ -2455,7 +2474,9 @@ export async function reportRunCompleted(
         ? postRelayBatch(fallback, serialized, fetchImpl)
         : postLangfuseBatch(fallback, batch, fetchImpl);
     }
-    return postVelaBatch(config, batch, installationId, fetchImpl);
+    return postVelaBatch(config, batch, installationId, fetchImpl, {
+      allowAnonymousAuthFallback: opts.deliveryPurpose !== 'object-registration',
+    });
   }
   if (config.kind === 'relay') {
     return postRelayBatch(config, serialized, fetchImpl);

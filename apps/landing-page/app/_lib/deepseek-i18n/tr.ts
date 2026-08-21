@@ -10,8 +10,8 @@ export const tr: DeepseekCopyOverride = {
   collectionLede:
     'Tasarım işi için seçilmiş dsh eklentileri: ekran görüntülerini okuyan görü köprüleri, ajanın üzerine çizebileceği tuvaller ve üretken arayüzler, tasarım inceleme araçları ve hepsini önizleyen çalışma tezgâhları. DeepSeek Harness, Claude Code ve Codex ile aynı SKILL.md biçimini okur; tasarım skill kitaplığın olduğu gibi taşınır.',
   collectionStats: [
-    { value: '13', label: 'seçilmiş dsh eklentisi' },
-    { value: '13', label: 'kaynak repo' },
+    { value: '19', label: 'seçilmiş dsh eklentisi' },
+    { value: '19', label: 'kaynak repo' },
     { value: 'SKILL.md', label: 'Claude Code & Codex ile ortak' },
   ],
   collectionIntro:
@@ -22,17 +22,17 @@ export const tr: DeepseekCopyOverride = {
     'Döngüyü kapatın: gerçek sayfaları notlayın, hareket varlıkları derleyin, skill kitaplığınızı yanınızda taşıyın.',
     'Harness’in kendisini bir tasarım çalışma alanı yapın: sohbetin yanında önizleme panelleri, çalışma tezgâhları ve panolar.',
   ],
-  collectionCloserHeading: 'Kurulumu atlayın: DeepSeek Harness ile Open Design içinde tasarlayın',
+  collectionCloserHeading: 'Kurulumu atlayın: DeepSeek Harness ile OpenDesign içinde tasarlayın',
   filterAll: 'Tümü',
   collectionCloserBody:
-    'Open Design, DeepSeek Harness’in etrafında çalışan açık kaynaklı, agent-native tasarım çalışma alanıdır. Sistemlerinizi, skill’lerinizi ve şablonlarınızı tutarlı tutar; ajan da sahibi olduğunuz işi çıkarır.',
+    'OpenDesign, DeepSeek Harness’in etrafında çalışan açık kaynaklı, agent-native tasarım çalışma alanıdır. Sistemlerinizi, skill’lerinizi ve şablonlarınızı tutarlı tutar; ajan da sahibi olduğunuz işi çıkarır.',
 
   categoryVision: 'Görüş & Girdi',
   categoryCanvas: 'Canvas & Üretken Arayüz',
   categoryWorkflow: 'Tasarım İş Akışı',
   categoryWorkspace: 'Çalışma Alanı & Önizleme',
 
-  ctaDownload: 'Open Design’ı indir',
+  ctaDownload: 'OpenDesign’ı indir',
   ctaStarList: 'DeepSeek Harness’e yıldız ver',
   ctaGuide: 'DeepSeek Harness ile tasarım nasıl yapılır',
   ctaBrowseAll: 'Tüm eklentilere göz at',
@@ -71,9 +71,9 @@ export const tr: DeepseekCopyOverride = {
   detailMoreOnList: 'DeepSeek Harness deposunda dahası',
   detailRelated: 'Diğer DeepSeek Harness tasarım eklentileri',
   finalEyebrow: 'Sonraki adım',
-  detailCloserHeading: 'Kurulum derdi olmadan Open Design ile tasarlayın',
+  detailCloserHeading: 'Kurulum derdi olmadan OpenDesign ile tasarlayın',
   detailCloserBody:
-    'Bu eklentiyi kendiniz kurun ya da Open Design ile DeepSeek Harness’in etrafına baştan sona küratörlü bir tasarım katmanı geçirin. Kendi anahtarınızı getirin, çıktınızın sahibi olun.',
+    'Bu eklentiyi kendiniz kurun ya da OpenDesign ile DeepSeek Harness’in etrafına baştan sona küratörlü bir tasarım katmanı geçirin. Kendi anahtarınızı getirin, çıktınızın sahibi olun.',
 
   skills: {
     modlens: {
@@ -282,6 +282,102 @@ export const tr: DeepseekCopyOverride = {
         'Tek satırlık betikle kurun ya da npm paketini web profilinize ekleyin.',
         'Çalışma tezgâhını açın ve sekmeleri sağ kenar çubuğu ile alt panel arasında düzenleyin.',
         'Ajanın kurduğunu yerinde inceleyin: önizlemeler, diff’ler, terminal ve tarayıcı sekmeleri.',
+      ],
+    },
+    'dsh-vision-router': {
+      tagline:
+        'Yalnızca metin çalışan ajanlara ücretsiz, anahtarsız gözler: yerleşik bir görüş zinciri artı on bir piksel düzeyinde araç.',
+      whatIsIt:
+        'Orijinal pikselleri görüş modelinin tarafında, akıl yürütmeyi DeepSeek tarafında tutan bir görüş yönlendiricisi. “+ Auto Vision” işaretli bir model grubu seçin, bir görsel yapıştırın; ajan on bir piksel düzeyinde aracı — grounding, kırpma, piksel farkı, palet, OCR, SVG vektörizasyonu, arka plan ayıklama, HTML ekran görüntüleri — hesap ve anahtar gerektirmeyen ücretsiz, anonim bir görüş yedek zinciri üzerinden sürer.',
+      whyForDesign: [
+        'Arayüz restorasyonu için doğrulanabilir bir piksel döngüsü: referans → ekran görüntüsü → kırmızı ısı haritalı piksel farkı → düzeltme → uyuşmazlık yakınsayana kadar tekrar.',
+        'Grounding ve tespit, orijinal görüntünün piksel kutularını döndürür; README’si %2,54 nihai farka kadar doğrulanmış bir yeniden yapımı belgeler.',
+        'Palet çıkarma, ikonların SVG vektörizasyonu ve arka plan ayıklama, bir yeniden yapımın etrafındaki küçük tasarım işlerini karşılar.',
+      ],
+      howWithAgent: [
+        'Eklentiyi web profilinize ekleyin; composition patch’i her şeyi elle tek dosya düzenlemeden bağlar.',
+        'Görsel göndermeden önce model seçiciyi açın ve “+ Auto Vision” işaretli bir grup seçin.',
+        'Bir ekran görüntüsü yapıştırın ve ajanın vision_ground, vision_crop, vision_describe ve vision_pixel_diff’i zincirlemesine izin verin.',
+      ],
+    },
+    'dsh-diagram': {
+      tagline:
+        'Oturumdaki herhangi bir makaleyi tek kullanımlık bir görsel yerine düzenlenebilir bir Excalidraw canvas’ına dönüştürür.',
+      whatIsIt:
+        'Harness’in içinde bir Excalidraw canvas’ı: ajan, kompakt bir semantik spesifikasyondan akış şeması, mimari diyagram, zaman çizelgesi, hiyerarşi ya da karşılaştırma kurmak için diagram_create’i çağırır; bir Canvas sekmesi tam editörü açar, metni, düğümleri ve bağlantıları doğrudan oturumun içinde inceltirsiniz.',
+      whyForDesign: [
+        'Tek kullanımlık değil, düzenlenebilir: statik üretilmiş bir görseli kabul etmek yerine gerçek bir vektör canvas’ında çalışmaya devam edin.',
+        'Revizyon tabanlı compare-and-set otomatik kaydetme, bayat bir editörün daha yeni işin üzerine sessizce yazmasını önler.',
+        '.excalidraw, SVG ya da PNG dışa aktarır; elle yapılan düzenlemeler ajana yalnızca diagram_read’i çağırmasını istediğinizde ulaşır.',
+      ],
+      howWithAgent: [
+        'Eklentiyi web profilinize ekleyin ve dsh web’i yeniden başlatın.',
+        'Oturumdaki makalenin tek ve net bir diyagramını isteyin; ajan diagram_create’i çağırır.',
+        'Canvas sekmesini açın, doğrudan düzenleyin, sonra dışa aktarın ya da ajanın değişikliklerinizi geri okumasına izin verin.',
+      ],
+    },
+    'deepseek-harness-genui': {
+      tagline:
+        'Görev, odaklı bir React arayüzü büyütür — içinde seçtikleriniz ajana geri akar.',
+      whatIsIt:
+        'Ajan görevleri için bir çalışma zamanı arayüz katmanı: metin işi zorlaştırdığında ajan küçük bir React + TypeScript uygulaması yazar — satır içi, Canvas’ta, tam ekran ya da localhost’ta gösterilir — zor bir ilişkiyi açıklamak, karmaşık bir kararı toplamak ya da göreve özel onay sonrasında bağlı bir aracı çalıştırmak için.',
+      whyForDesign: [
+        'Arayüzler önce kod gelen React’tir; düzenler, kontroller ve diyagramlar ekran görüntüsü değil, gerçek bileşenlerdir.',
+        'Kaydedilen seçimler, girdiler ve taslaklar göreve geri döner; sonraki ajan turları bunları okur.',
+        'Dört görsel profilli bir DESIGN.md sistemi, üretilen uygulamaları tek bir tasarım dilinde tutar.',
+      ],
+      howWithAgent: [
+        'Kurulum komutunu çalıştırın — eklentiyi ekler, ardından Playwright için gereken Chromium’u kurar.',
+        'Etkileşimin işe yaradığı yerde bir arayüz isteyin: bir seçici, keşfedilebilir bir model, bir kod yolu gezgini.',
+        'Etkileşin, sonra devam edin — ajan tekrarlamanızı istemek yerine seçtiklerinizi okur.',
+      ],
+    },
+    'dsh-annotate': {
+      tagline:
+        'Tarayıcı öğelerini işaret edin ve ajana belirsiz tarifler değil, yapılandırılmış gerçekler gönderin.',
+      whatIsIt:
+        'Eşlik eden bir Chrome uzantısı üzerinden görsel tarayıcı geri bildirimi: /annotate seçim moduna girer; tıkladığınız her öğe, bir seçiciyi, DOM gerçeklerini, hesaplanmış stil vurgularını, erişilebilirlik verisini, yorumunuzu ve isteğe bağlı bir viewport ekran görüntüsünü ajanın bir sonraki turuna katar.',
+      whyForDesign: [
+        'Görsel geri bildirim, belirsiz bir tarife ya da yapıştırılmış bir ekran görüntüsüne dönüşmek yerine sayfadaki öğeye bağlı kalır.',
+        'Hesaplanmış stiller ve erişilebilirlik verisi, ajanın doğrudan üzerinde işlem yapabileceği yapılandırılmış gerçekler olarak gelir.',
+        'Host, origin ve uzantı kimliğiyle sınırlanan bir loopback WebSocket köprüsü kanalı yerel tutar.',
+      ],
+      howWithAgent: [
+        'Depoyu klonlayıp projeyi bir harness profiline ekleyin, ardından browser-extension klasörünü chrome://extensions üzerinden paketlenmemiş uzantı olarak yükleyin.',
+        '/annotate’i çalıştırın, sayfadaki öğelere tıklayın ve her birine bir yorum iliştirin.',
+        'Gönderin — yakalanan gerçekler ve viewport ekran görüntüsü ajanın bir sonraki turuna düşer.',
+      ],
+    },
+    'dsh-hyperframes': {
+      tagline:
+        'HeyGen’in HyperFrames’i, taşınmış hâliyle: HTML’i bitmiş videoya dönüştüren beş resmî skill.',
+      whatIsIt:
+        'Tek kurulum, beş resmî HyperFrames by HeyGen skill’ini harness’e kaydeder: görsel stiller, paletler, altyazılar ve sese tepkili geçişlerle HTML video kompozisyonu, hyperframes CLI’ı, bileşen kayıt defteri, web sitesinden videoya bir boru hattı ve bir GSAP animasyon referansı.',
+      whyForDesign: [
+        'Zaten içinde çalıştığınız ortamda hareket tasarımı: HTML ve CSS, render edilmiş videoya dönüşür.',
+        'Yedi adımlı web sitesinden videoya boru hattı, bir URL’yi üretilmiş bir klibe çevirir.',
+        'Skill’ler açık SKILL.md biçimini kullanır; aynı set Claude Code, Cursor ve Codex’e taşınır.',
+      ],
+      howWithAgent: [
+        'Eklentiyi web profilinize ekleyin ve yeniden başlatın.',
+        'Boru hattını tetiklemek için “bu URL’yi bir HyperFrames videosuna dönüştür” deyin.',
+        'hyperframes CLI ile render edin; tek bağımlılıklar Node 22+ ve FFmpeg.',
+      ],
+    },
+    'dsh-web-preview': {
+      tagline:
+        'Çalışma alanını önizleyen, projeyi çalıştıran ve öğeleri notlayan cam görünümlü bir yan panel.',
+      whatIsIt:
+        'Harness web arayüzü için bir yan web önizleme paneli: çalışma alanı dosyaları önizleme için sunulur — Markdown render edilmiş, kod satır numaralı, görseller ve HTML olduğu gibi — projeler türünü otomatik algılar (Cargo, package.json, go.mod, Python) ve canlı loglarla çalışır; bir işaretleme modu, öğe notlarını konuşmaya geri yakalar.',
+      whyForDesign: [
+        'Ajanın az önce yazdığı prototip sohbetin yanında açılır; adres çubuğu eşitlenir, panel genişliği sürüklenebilir.',
+        'İşaretleme modu, öğeleri üzerine gelerek vurgular, bir seçici ve HTML anlık görüntüsü yakalar ve notunuzu konuşmaya gönderir.',
+        'Bağlantılar, dosya yolları ve bırakılan dosyaların tümü panelde açılır; inceleme oturumdan hiç ayrılmaz.',
+      ],
+      howWithAgent: [
+        'Paketi web profil dizininize kurun, ardından o profilin cordis.patch.yml dosyasına dsh-web-preview-panel adlı bir insert girdisi ekleyerek monte edin.',
+        'dsh web’i yeniden başlatın ve konuşmanın sağ üstündeki ▶ önizleme düğmesini açın.',
+        'Projeyi panelden çalıştırın, öğeleri notlayın ve logları ya da notları doğrudan ajana gönderin.',
       ],
     },
   },

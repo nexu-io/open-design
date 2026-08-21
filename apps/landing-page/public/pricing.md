@@ -1,20 +1,20 @@
-# Pricing — Open Design
+# Pricing — OpenDesign
 
-Open Design is **free and open-source**. The desktop app (macOS, Windows, Linux)
+OpenDesign is **free and open-source**. The desktop app (macOS & Windows)
 is Apache-2.0 licensed and BYOK — you install it for free and pay only for your
 own agent/model API usage, which bills directly to your own provider account.
-Nothing is proxied through Open Design.
+Nothing is proxied through OpenDesign.
 
 Optional paid tiers add a **managed** experience: bundled model usage credits
 (so you do not need your own key) plus hosted cloud deploys. They are optional —
-not required to use Open Design.
+not required to use OpenDesign.
 
 ## Free — open-source desktop app
 - Price: **$0 / month, forever**
 - License: Apache-2.0 (full source at https://github.com/nexu-io/open-design)
 - Model access: **BYOK** — bring your own provider key; API usage bills to your
-  own account, never proxied through Open Design
-- Runs: local-first on your own machine (macOS, Windows, Linux)
+  own account, never proxied through OpenDesign
+- Runs: local-first on your own machine (macOS & Windows)
 - Includes: the full skill + design-system library, every supported coding agent
   (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen, and more), and artifacts
   saved as files in your own repository
@@ -76,7 +76,7 @@ not required to use Open Design.
 ## Notes
 - The open-source desktop app is always free; the paid tiers are an optional
   managed service (bundled model credits + hosted cloud deploys), not a
-  requirement to use Open Design.
+  requirement to use OpenDesign.
 - Overage cloud deploys beyond a tier's monthly limit: $2 each.
 - Intro/promotional pricing and current annual discounts may differ — see the
   live pricing page for the current numbers: https://open-design.ai/pricing/

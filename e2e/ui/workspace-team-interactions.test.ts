@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Page, Route } from '@playwright/test';
 
 import { expect, test } from '@/playwright/suite';
@@ -99,8 +100,8 @@ const TEAM_FULL: WorkspaceFixture = {
 const TEAM_UNKNOWN_SEATS: WorkspaceFixture = {
   ...TEAM_OWNER,
   workspaceName: 'Seat state loading',
-  // Deliberately model the pre-authority window. The production resolver must
-  // not infer spare capacity from permissions alone.
+  // Deliberately model the directory-only context, where invite permission is
+  // known but seat capacity remains authoritative at invite submission time.
   seatSummary: undefined as never,
 };
 
@@ -112,6 +113,7 @@ type WorkspaceMocks = {
   activeWorkspaceId: () => string;
   setCurrent: (workspace: WorkspaceFixture) => void;
   setBalance: (balanceUsd: string) => void;
+  setDirectoryUnavailable: (unavailable: boolean) => void;
 };
 
 type WorkspaceProjectMove = {
@@ -564,7 +566,7 @@ test('[P0] account replacement never paints the previous account workspace or pr
   await expect(page.getByText(accountA.project.name, { exact: true })).toHaveCount(0);
 
   releaseAccountBProjects();
-  await page.getByText('Loading Open Design…').waitFor({
+  await page.getByText('Loading OpenDesign…').waitFor({
     state: 'hidden',
     timeout: T.long,
   });
@@ -806,7 +808,7 @@ test('[P1] an already-open full team restores the local invite flow when a seat 
   await expect.poll(() => inviteUrls(page)).toHaveLength(1);
 });
 
-test('[P0] unknown team seat state fails closed across rail and project surfaces', async ({
+test('[P0] unknown team seat state keeps local invite available across rail and project surfaces', async ({
   page,
 }) => {
   await wireWorkspaceMocks(page, TEAM_UNKNOWN_SEATS, [TEAM_UNKNOWN_SEATS]);
@@ -821,12 +823,14 @@ test('[P0] unknown team seat state fails closed across rail and project surfaces
   await ensureRailOpen(page);
 
   await page.getByTestId('workspace-switcher').click();
-  await expect(
-    page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }),
-  ).toHaveCount(0);
-  await page.locator('.entry-nav-rail__menu-backdrop').click({ position: { x: 2, y: 2 } });
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Invite members' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+
   await page.getByTestId('entry-nav-all-projects').click();
-  await expect(page.getByRole('button', { name: 'Invite teammates' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Invite teammates' }).click();
+  await expect(dialog).toBeVisible();
 });
 
 test('[P0] ordinary team member sees team projects but no invite or workspace-admin actions', async ({
@@ -1363,6 +1367,150 @@ test('[P0] inbound shared-project transfer shows syncing instead of a false empt
   ]));
 });
 
+test('[P0] Team first open mounts ProjectView before background materialization and stays fail-closed', async ({
+  page,
+}) => {
+  await wireWorkspaceMocks(page, TEAM_MEMBER, [TEAM_MEMBER]);
+  const remoteProject = teamProject(
+    'ui-progressive-first-open',
+    'Progressive launch artifact',
+    'ui-remote-owner',
+  );
+  const placeholder = {
+    ...LOCAL_TEAM_DRAFT,
+    id: remoteProject.projectId,
+    name: remoteProject.name,
+  };
+  let bootstrapAccepted = false;
+  let materialized = false;
+  let bootstrapAttempts = 0;
+  let legacyPullAttempts = 0;
+  let statusAttempts = 0;
+  let releaseBackgroundPull!: () => void;
+  const backgroundPullGate = new Promise<void>((resolve) => {
+    releaseBackgroundPull = resolve;
+  });
+
+  await page.route('**/api/workspace/projects/team', async (route) => {
+    await route.fulfill({ json: { projects: [remoteProject] } });
+  });
+  await page.route(`**/api/workspaces/${TEAM_MEMBER.workspaceId}/projects**`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        projects: bootstrapAccepted
+          ? [scopedProjectSummary(placeholder, TEAM_MEMBER, 'team')]
+          : [],
+      },
+    });
+  });
+  await page.route(`**/api/projects/${remoteProject.projectId}/**`, async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+    if (pathname.endsWith('/collab/bootstrap') && request.method() === 'PUT') {
+      bootstrapAttempts += 1;
+      bootstrapAccepted = true;
+      await route.fulfill({
+        status: 202,
+        json: { ok: true, awaitingFirstMaterialization: true },
+      });
+      return;
+    }
+    if (pathname.endsWith('/workspace-scope') && request.method() === 'GET') {
+      await route.fulfill({
+        json: {
+          scope: {
+            kind: 'team',
+            projectId: remoteProject.projectId,
+            workspaceId: TEAM_MEMBER.workspaceId,
+            visibility: 'team',
+            context: TEAM_MEMBER,
+          },
+        },
+      });
+      return;
+    }
+    if (pathname.endsWith('/collab/status') && request.method() === 'GET') {
+      statusAttempts += 1;
+      await route.fulfill({
+        json: {
+          publishedVersion: 7,
+          materializedVersion: materialized ? 7 : null,
+          awaitingFirstMaterialization: !materialized,
+          syncState: 'synced',
+          ownerMemberId: remoteProject.ownerMemberId,
+          ownerDisplayName: 'Remote Owner',
+          contentTransferState: {
+            status: materialized ? 'idle' : 'downloading',
+            generation: 1,
+            expectedVersion: 7,
+          },
+        },
+      });
+      return;
+    }
+    if (pathname.endsWith('/collab/pull') && request.method() === 'POST') {
+      legacyPullAttempts += 1;
+      await backgroundPullGate;
+      await route.fulfill({ json: { ok: true, materializedVersion: 7 } });
+      return;
+    }
+    if (pathname.endsWith('/files') && request.method() === 'GET') {
+      await route.fulfill({
+        json: {
+          files: materialized
+            ? [{ name: 'index.html', path: 'index.html', type: 'file', size: 76 }]
+            : [],
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.route(`**/api/projects/${remoteProject.projectId}`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    if (!bootstrapAccepted) {
+      await route.fulfill({ status: 404, json: { error: 'PROJECT_NOT_FOUND' } });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        project: {
+          ...placeholder,
+          workspaceId: TEAM_MEMBER.workspaceId,
+        },
+      },
+    });
+  });
+
+  await gotoHome(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-all-projects').click();
+  await visibleProjectCard(page, remoteProject.projectId)
+    .locator('.recent-projects__card-main')
+    .click();
+
+  await expect.poll(() => bootstrapAttempts).toBe(1);
+  await expect(page).toHaveURL(new RegExp(`/projects/${remoteProject.projectId}$`));
+  await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+  await expect(page.getByTestId('design-files-tab')).toBeVisible();
+  await expect(page.getByTestId('design-files-syncing')).toBeVisible();
+  await expect(page.getByTestId('design-files-empty')).toHaveCount(0);
+  await expect(page.getByText('New sketch', { exact: true })).toHaveCount(0);
+  await expect.poll(() => legacyPullAttempts).toBe(1);
+
+  materialized = true;
+  releaseBackgroundPull();
+  await expect(page.getByTestId('design-files-syncing')).toHaveCount(0, { timeout: T.long });
+  await expect.poll(() => statusAttempts).toBeGreaterThan(1);
+});
+
 test('[P0] successful first-open materialization opens one read-only local mirror with the catalog title', async ({
   page,
 }) => {
@@ -1465,6 +1613,68 @@ test('[P0] successful first-open materialization opens one read-only local mirro
   await expect.poll(() => pullAttempts).toBe(1);
 });
 
+test('[P0] an open Team project stays usable while Workspace authority retries a 503', async ({
+  page,
+}) => {
+  // The ambient shell has already switched to B while this still-open project
+  // remains bound to A. That mismatch is what makes the project route own an
+  // independent directory revalidation instead of borrowing ambient context.
+  await pinWindowWorkspace(page, TEAM_SECOND);
+  const workspaceMocks = await wireWorkspaceMocks(
+    page,
+    TEAM_SECOND,
+    [TEAM_OWNER, TEAM_SECOND],
+  );
+
+  const projectId = randomUUID();
+  const created = await page.request.post('/api/projects', {
+    headers: {
+      'x-od-workspace-id': TEAM_OWNER.workspaceId,
+      'x-od-workspace-type': TEAM_OWNER.workspaceType,
+      'x-od-workspace-member-id': TEAM_OWNER.workspaceMemberId,
+      'x-od-workspace-role': TEAM_OWNER.role,
+      'x-od-workspace-member-status': TEAM_OWNER.memberStatus,
+      'x-od-workspace-lifecycle-state': TEAM_OWNER.lifecycleState,
+      'x-od-workspace-can-share-projects': 'true',
+      'x-od-workspace-can-write-synced-files': 'true',
+    },
+    data: {
+      id: projectId,
+      name: 'Workspace authority continuity',
+      designSystemId: null,
+      skillId: null,
+      metadata: { kind: 'prototype' },
+      pendingPrompt: null,
+    },
+  });
+  expect(created.ok()).toBe(true);
+
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+
+  workspaceMocks.setDirectoryUnavailable(true);
+  const failedRevalidation = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/workspace/directory'
+      && response.status() === 503;
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+  await failedRevalidation;
+  await expect(page.getByTestId('project-workspace-recovery-tip')).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
+
+  workspaceMocks.setDirectoryUnavailable(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+  await expect(page.getByTestId('project-workspace-recovery-tip')).toHaveCount(0, {
+    timeout: T.long,
+  });
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+});
+
 function workspace(
   input: Pick<
     WorkspaceFixture,
@@ -1506,6 +1716,7 @@ async function wireWorkspaceMocks(
 ): Promise<WorkspaceMocks> {
   let current = initial;
   let balanceUsd = '0.00';
+  let directoryUnavailable = false;
   const activeBodies: WorkspaceMocks['activeBodies'] = [];
   const inviteBodies: WorkspaceMocks['inviteBodies'] = [];
 
@@ -1548,6 +1759,13 @@ async function wireWorkspaceMocks(
       return;
     }
     if (pathname === '/api/workspace/directory' && method === 'GET') {
+      if (directoryUnavailable) {
+        await route.fulfill({
+          status: 503,
+          json: { error: 'workspace authority temporarily unavailable' },
+        });
+        return;
+      }
       await route.fulfill({
         json: {
           items: directory.map(directoryItem),
@@ -1627,6 +1845,9 @@ async function wireWorkspaceMocks(
     },
     setBalance: (nextBalanceUsd) => {
       balanceUsd = nextBalanceUsd;
+    },
+    setDirectoryUnavailable: (unavailable) => {
+      directoryUnavailable = unavailable;
     },
   };
 }
@@ -1782,7 +2003,7 @@ async function wireMultiWindowWorkspaceAuthority(
 
 async function gotoHome(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({
+  await page.getByText('Loading OpenDesign…').waitFor({
     state: 'hidden',
     timeout: T.long,
   });

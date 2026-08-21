@@ -8,9 +8,28 @@ import type { DesktopRenderSlidesInput } from '@open-design/sidecar-proto';
 
 // pptxgenjs ships a default-export class, but its NodeNext typings resolve the
 // default to the module namespace (no construct signature). At runtime the ESM
-// build's default IS the class, so reach it and re-type as a constructor.
+// build's default IS the class — except under tsx (the tools-dev daemon
+// runtime), which loads the CJS build and double-wraps it so `Module.default`
+// is `{ default: PptxGenJS }`, and `new PptxGenJSModule.default()` dies with
+// "PptxGenJS is not a constructor". Resolve every known shape once at module
+// load: bare CJS (the namespace itself is the class), pure ESM (default = the
+// class), and tsx CJS interop (default.default = the class).
 type PptxInstance = InstanceType<typeof import('pptxgenjs').default>;
-const PptxGenJS = PptxGenJSModule.default as unknown as { new (): PptxInstance };
+export type PptxConstructor = { new (): PptxInstance };
+
+export function resolvePptxConstructor(mod: unknown): PptxConstructor {
+  if (typeof mod === 'function') return mod as PptxConstructor;
+  const candidate = (mod as { default?: unknown } | null | undefined)?.default;
+  if (typeof candidate === 'function') return candidate as PptxConstructor;
+  const nested = (candidate as { default?: unknown } | null | undefined)?.default;
+  if (typeof nested === 'function') return nested as PptxConstructor;
+  throw new Error(
+    'unable to resolve the PptxGenJS constructor from the pptxgenjs module shape '
+      + `(typeof module: ${typeof mod}, typeof default: ${typeof candidate})`,
+  );
+}
+
+const PptxGenJS: PptxConstructor = resolvePptxConstructor(PptxGenJSModule);
 
 import { readProjectFile } from './projects.js';
 
@@ -151,7 +170,7 @@ export async function buildScreenshotPptx(
     pptx.defineLayout({ name: 'OD_DECK', width: PPTX_SLIDE_WIDTH_IN, height });
     pptx.layout = 'OD_DECK';
   }
-  pptx.author = 'Open Design';
+  pptx.author = 'OpenDesign';
   if (opts.title) pptx.title = opts.title;
   pptx.subject = 'Screenshot-based PPTX';
   for (const img of images) {

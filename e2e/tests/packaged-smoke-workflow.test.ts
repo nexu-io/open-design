@@ -76,8 +76,6 @@ const dailyBetaRecoveryScriptPath = join(
   "release",
   "resolve-daily-beta-recovery.ts",
 );
-const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
-const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
 const mainPrereleaseWinSmokeWorkflowPath = join(
   workspaceRoot,
@@ -87,11 +85,10 @@ const mainPrereleaseWinSmokeWorkflowPath = join(
 );
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 const releaseStableNotesScriptPath = join(workspaceRoot, ".github", "scripts", "release", "github", "stable-notes.sh");
-const releasePreviewScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-preview.ts");
 const releaseStableScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-stable.ts");
 const releaseBetaScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-beta.ts");
 const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package.json");
-const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
+const scopesScriptPath = join(workspaceRoot, ".github", "scripts", "scopes.py");
 const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
 const notifyReleaseFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-release-feishu.yml");
@@ -197,7 +194,7 @@ function extractValidateGateJqPrograms(workflow: string): { failures: string; re
   const needsCheck = sectionBetween(
     validate,
     "      - name: Check workspace validation jobs",
-    "      - name: Block merge while a merge-blocking label is present",
+    "      - name: Download pending hash map",
   );
   const programs = [...needsCheck.matchAll(/jq -r '([\s\S]*?)'/g)].map((match) => match[1] ?? "");
   expect(programs).toHaveLength(2);
@@ -256,39 +253,33 @@ async function readPackagedVersion(): Promise<string> {
 }
 
 async function runScopesPrint(eventName: string, eventPayload: unknown, changedFiles: string[] = []): Promise<Record<string, unknown>> {
-  const tempDir = await mkdtemp(join(tmpdir(), "od-scopes-"));
-  const eventPath = join(tempDir, "event.json");
-  const ghPath = join(tempDir, "gh");
-  const ghCmdPath = join(tempDir, "gh.cmd");
-  await writeFile(eventPath, JSON.stringify(eventPayload));
-  const script = `#!/usr/bin/env node
-const changedFiles = ${JSON.stringify(changedFiles)};
-if (process.argv.includes("--jq")) {
-  process.stdout.write(changedFiles.join("\\n"));
-  if (changedFiles.length > 0) process.stdout.write("\\n");
-} else {
-  process.stdout.write(JSON.stringify({ files: changedFiles.map((filename) => ({ filename })) }));
-}
-`;
-  await writeFile(ghPath, script);
-  await chmod(ghPath, 0o755);
-  await writeFile(ghCmdPath, `@echo off\r\n"${process.execPath}" "${ghPath}" %*\r\n`);
-
-  try {
-    const { stdout } = await execFileAsync(process.execPath, ["--experimental-strip-types", scopesScriptPath, "print"], {
-      cwd: workspaceRoot,
-      env: workflowFixtureEnv({
-        GITHUB_EVENT_NAME: eventName,
-        GITHUB_EVENT_PATH: eventPath,
-        GITHUB_REPOSITORY: "nexu-io/open-design",
-        GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
-        OPEN_DESIGN_GH_NODE_SCRIPT: ghPath,
-      }, tempDir),
-    });
-    return JSON.parse(stdout) as Record<string, unknown>;
-  } finally {
-    await rm(tempDir, { recursive: true, force: true });
-  }
+  const inputMode = (eventPayload as { inputs?: { ci_mode?: string } }).inputs?.ci_mode;
+  const context =
+    eventName === "workflow_dispatch" && inputMode !== "hot"
+      ? "full"
+      : eventName === "merge_group" && changedFiles.length === 0
+        ? "full"
+        : eventName === "merge_group"
+          ? "merge-queue"
+          : "pr";
+  const { stdout } = await execFileAsync("python3", [scopesScriptPath, "plan", "--context", context, "--files", ...changedFiles], {
+    cwd: workspaceRoot,
+  });
+  const value = JSON.parse(stdout) as {
+    scopes: Record<string, unknown>;
+    enabled: Record<string, boolean>;
+  };
+  return {
+    ...value.scopes,
+    run_e2e_vitest: value.enabled.e2e_vitest,
+    run_playwright_critical: value.enabled.playwright_critical,
+    run_playwright_visual: value.enabled.playwright_visual,
+    run_preflight: value.enabled.preflight,
+    run_ui_p0: value.enabled.ui_p0,
+    run_web_workspace_tests: value.enabled.web_workspace_tests,
+    run_windows_tools_pack_payload_tests: value.enabled.windows_tools_pack_payload_tests,
+    run_workspace_unit_tests: value.enabled.workspace_unit_tests,
+  };
 }
 
 async function runRunners(mode?: string): Promise<Record<string, string>> {
@@ -410,18 +401,17 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toContain("Smoke PR windows packaged runtime");
     expect(workflow).not.toContain("Smoke PR linux headless packaged runtime");
     expect(workflow).not.toContain("OD_PACKAGED_E2E_");
-    expect(workflow).not.toContain("actions/cache/save");
   });
 
-  it("[P2] runs Windows launcher payload archive validation when tools-pack is touched", async () => {
+  it("[P2] runs the independent Windows launcher payload test set", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const job = sectionBetween(workflow, "  windows_tools_pack_payload_tests:", "  web_workspace_tests:");
     const validate = sectionBetween(workflow, "  validate:", "          if [ -n \"$failures\" ]; then");
 
     expect(job).toContain("fromJSON(needs.runners.outputs.runs_on).windows_tools");
     expect(job).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).windows_tools)");
-    expect(job).toContain("needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true'");
-    expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts");
+    expect(job).toContain("fromJSON(needs.plan.outputs.run).windows_tools_pack_payload_tests");
+    expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher/windows/payload.test.ts");
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
 
@@ -543,13 +533,40 @@ describe("packaged smoke workflow", () => {
       readFile(commentWorkflowPath, "utf8"),
     ]);
 
-    // Producer: the merge_group gate emits a handoff/comment artifact for the labeled PR when
-    // it blocks, and uploads it on the failure path (the gate exits 1 exactly when it produces).
-    expect(ciWorkflow).toContain("<!-- merge-queue-needs-validation -->");
-    expect(ciWorkflow).toContain("emit_ejection_notice");
-    expect(ciWorkflow).toContain(
+    const mergePolicy = sectionBetween(ciWorkflow, "  merge_policy:", "  validate:");
+    const validate = sectionBetween(ciWorkflow, "  validate:", "  runtime_summary:");
+
+    // Producer: merge policy is a merge-group-only sibling of every workload. It emits a
+    // handoff/comment artifact for a labeled PR and uploads it on the failure path.
+    expect(mergePolicy).toContain("needs: [plan, runners]");
+    expect(mergePolicy).toContain("if: ${{ github.event_name == 'merge_group' }}");
+    expect(mergePolicy).toContain("fromJSON(needs.runners.outputs.runs_on).control");
+    expect(mergePolicy).toContain("<!-- merge-queue-needs-validation -->");
+    expect(mergePolicy).toContain("emit_ejection_notice");
+    expect(mergePolicy).toContain(
       "if: ${{ failure() && steps.merge_blocking_label_gate.outputs.comment_created == 'true' }}",
     );
+
+    // Policy converges only at the required workspace gate. It never becomes a prerequisite
+    // that could suppress workload coverage for a labeled merge group.
+    expect(validate).toContain("      - merge_policy");
+    expect(validate).toContain("if: ${{ always() }}");
+    expect(validate).not.toContain("Block merge while a merge-blocking label is present");
+    const workloadSections = [
+      ["  static_gate:", "  preflight:"],
+      ["  preflight:", "  workspace_unit_tests:"],
+      ["  workspace_unit_tests:", "  daemon_unit_tests:"],
+      ["  daemon_unit_tests:", "  windows_tools_pack_payload_tests:"],
+      ["  windows_tools_pack_payload_tests:", "  web_workspace_tests:"],
+      ["  web_workspace_tests:", "  e2e_vitest:"],
+      ["  e2e_vitest:", "  playwright_critical:"],
+      ["  playwright_critical:", "  ui_p0:"],
+      ["  ui_p0:", "  playwright_visual:"],
+      ["  playwright_visual:", "  merge_policy:"],
+    ] as const;
+    for (const [start, end] of workloadSections) {
+      expect(sectionBetween(ciWorkflow, start, end)).toContain("needs: [plan, runners]");
+    }
 
     // Consumer: a merge_group run's head_sha is the queue's synthetic merge commit, so the atom
     // binds merge_group artifacts to their producing run by run_id and skips the base-freshness
@@ -557,6 +574,269 @@ describe("packaged smoke workflow", () => {
     expect(commentWorkflow).toContain('"$RUN_EVENT" = "merge_group"');
     expect(commentWorkflow).toContain('"$artifact_run_id" != "$RUN_ID"');
     expect(commentWorkflow).toContain('[ "$RUN_EVENT" != "merge_group" ] && [ "$current_base" != "$base_sha" ]');
+  });
+
+  it("[P2] surfaces a merge-queue CI failure ejection as a PR comment handoff", async () => {
+    const ciWorkflow = await readFile(ciWorkflowPath, "utf8");
+    const mergePolicy = sectionBetween(ciWorkflow, "  merge_policy:", "  validate:");
+    const validate = sectionBetween(ciWorkflow, "  validate:", "  runtime_summary:");
+
+    // The label gate tells the generic notice whether it already announced this ejection, so a
+    // label-only ejection gets exactly one comment.
+    expect(mergePolicy).toContain(
+      "ejection_notice: ${{ steps.merge_blocking_label_gate.outputs.comment_created }}",
+    );
+    expect(validate).toContain("LABEL_NOTICE_EMITTED: ${{ needs.merge_policy.outputs.ejection_notice }}");
+
+    // Producer: merge-group only, only after the gate has already failed, unable to change the
+    // gate result, and uploaded on the failure path exactly like the label notice.
+    expect(validate).toContain("<!-- merge-queue-ci-failure -->");
+    expect(validate).toContain("if: ${{ failure() && github.event_name == 'merge_group' }}");
+    expect(validate).toContain("continue-on-error: true");
+    expect(validate).toContain(
+      "if: ${{ failure() && steps.merge_queue_failure_notice.outputs.comment_created == 'true' }}",
+    );
+    // It sits after hash publication so the success path is untouched and the gate's own jq
+    // programs stay isolated (see extractValidateGateJqPrograms).
+    expect(validate.indexOf("Save successful hash map")).toBeLessThan(
+      validate.indexOf("Produce merge-queue failure notice handoff"),
+    );
+
+    // Behavior: run the real step script against a stubbed `gh`, then read the handoff it
+    // produced through the same helper comment.atom.yml uses to consume it.
+    const script = extractWorkflowRunScript(ciWorkflow, "Produce merge-queue failure notice handoff");
+    const prHead = "4821c4ee".padEnd(40, "0");
+    const prBase = "1a7a23d4".padEnd(40, "0");
+    const groupHead = "e3051e63".padEnd(40, "0");
+    const runId = "32105196624";
+    const planRun = JSON.stringify({ static_gate: true, daemon_unit_tests: true, e2e_vitest: false });
+    const esc = String.fromCharCode(27);
+    const failedShardLog = [
+      `2026-08-18T06:05:15.3329113Z ${esc}[31m⎯⎯⎯ Failed Tests 1 ⎯⎯⎯${esc}[39m`,
+      `2026-08-18T06:05:15.3330283Z ${esc}[41m${esc}[1m FAIL ${esc}[22m${esc}[49m tests/project-archive.test.ts > buildProjectArchive > exposes a consumable stream with the same archive contents`,
+      `2026-08-18T06:05:15.3333182Z ${esc}[31mAssertionError: expected [ Array(6) ] to deeply equal [ 'DESIGN-HANDOFF.md', …(4) ]${esc}[39m`,
+      "2026-08-18T06:05:15.3398469Z ##[error]AssertionError: expected [ Array(6) ] to deeply equal [ 'DESIGN-HANDOFF.md', …(4) ]",
+      "2026-08-18T06:05:15.4000000Z ##[error]Process completed with exit code 1.",
+      "",
+    ].join("\n");
+
+    async function runNotice(args: {
+      needs: Record<string, unknown>;
+      labelNoticeEmitted?: string;
+      labels?: string[];
+      mergePolicyConclusion?: string;
+      // gh >= 2.97 refuses to print a body with terminal escape sequences unless
+      // `--allow-escape-sequences` is passed; older gh rejects that flag as unknown.
+      ghSupportsEscapeFlag?: boolean;
+    }): Promise<{
+      stdout: string;
+      output: Record<string, string>;
+      listed: Array<Record<string, unknown>>;
+      body: string;
+    }> {
+      const dir = await mkdtemp(join(tmpdir(), "od-merge-queue-notice-"));
+      const ghPath = join(dir, "gh");
+      const outputPath = join(dir, "github-output");
+      const runnerTemp = join(dir, "runner-temp");
+      await mkdir(runnerTemp);
+      await writeFile(outputPath, "");
+      const mergePolicyConclusion = args.mergePolicyConclusion ?? "success";
+      const fixtures = {
+        pull: {
+          head: { sha: prHead },
+          base: { sha: prBase },
+          labels: (args.labels ?? []).map((name) => ({ name })),
+        },
+        jobs: {
+          jobs: [
+            {
+              id: 101,
+              name: "Daemon tests (1/4)",
+              conclusion: "failure",
+              html_url: `https://github.com/nexu-io/open-design/actions/runs/${runId}/job/101`,
+              steps: [
+                { name: "Checkout", conclusion: "success" },
+                { name: "Run daemon test shard", conclusion: "failure" },
+              ],
+            },
+            { id: 102, name: "Daemon tests (2/4)", conclusion: "success", html_url: "", steps: [] },
+            {
+              id: 103,
+              name: "Merge policy",
+              conclusion: mergePolicyConclusion,
+              html_url: `https://github.com/nexu-io/open-design/actions/runs/${runId}/job/103`,
+              steps: [{ name: "Block merge while a merge-blocking label is present", conclusion: mergePolicyConclusion }],
+            },
+            // Replaying a completed run reports the gate itself as failed; it must never be listed.
+            { id: 104, name: "Validate workspace", conclusion: "failure", html_url: "", steps: [] },
+          ],
+        },
+        compare: {
+          commits: [
+            { commit: { message: "fix(daemon): keep daemon as sole writer of run events (#6559)\n\nbody" } },
+            { commit: { message: "fix(daemon): list dot-prefixed user content in managed projects (#6214)" } },
+          ],
+        },
+        logs: failedShardLog,
+      };
+      const supportsEscapeFlag = args.ghSupportsEscapeFlag ?? true;
+      await writeFile(
+        ghPath,
+        `#!/usr/bin/env node
+const fixtures = JSON.parse(process.env.FAKE_GH_FIXTURES);
+const supportsEscapeFlag = ${supportsEscapeFlag ? "true" : "false"};
+const argv = process.argv.slice(2);
+const args = argv.join(" ");
+const hasEscapeFlag = argv.includes("--allow-escape-sequences");
+if (args === "--version") process.stdout.write(supportsEscapeFlag ? "gh version 2.98.0 (fake)\\n" : "gh version 2.87.3 (fake)\\n");
+// Real help text is long: a probe that lets grep exit early would SIGPIPE gh and, under
+// pipefail, read as "flag unsupported". Pad well past the pipe buffer so that stays red.
+else if (args === "api --help") process.stdout.write((supportsEscapeFlag ? "      --allow-escape-sequences   Allow printing terminal escape sequences\\n" : "      --cache duration           Cache the response\\n") + "      --padding\\n".repeat(8192));
+else if (hasEscapeFlag && !supportsEscapeFlag) { process.stderr.write("unknown flag: --allow-escape-sequences\\n"); process.exit(1); }
+else if (/\\/pulls\\/6214$/.test(args)) process.stdout.write(JSON.stringify(fixtures.pull));
+else if (/\\/actions\\/runs\\/${runId}\\/jobs/.test(args)) process.stdout.write(JSON.stringify(fixtures.jobs));
+else if (/\\/actions\\/jobs\\/\\d+\\/logs$/.test(args)) {
+  // Real gh >= 2.97 behavior for a body full of ANSI codes: nothing on stdout, exit 1.
+  if (supportsEscapeFlag && !hasEscapeFlag) { process.stderr.write("the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway\\n"); process.exit(1); }
+  process.stdout.write(fixtures.logs);
+}
+else if (/\\/compare\\//.test(args)) process.stdout.write(JSON.stringify(fixtures.compare));
+else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit(1); }
+`,
+      );
+      await chmod(ghPath, 0o755);
+      try {
+        const { stdout } = await execFileAsync("bash", ["-c", script], {
+          cwd: workspaceRoot,
+          env: workflowFixtureEnv(
+            {
+              GH_TOKEN: "fake",
+              REPO: "nexu-io/open-design",
+              RUN_ID: runId,
+              NEEDS_JSON: JSON.stringify(args.needs),
+              MERGE_GROUP_REF: `gh-readonly-queue/main/pr-6214-${prBase}`,
+              BASE_SHA: prBase,
+              HEAD_SHA: groupHead,
+              LABEL_NOTICE_EMITTED: args.labelNoticeEmitted ?? "",
+              SELF_JOB_NAME: "Validate workspace",
+              GITHUB_OUTPUT: outputPath,
+              GITHUB_SERVER_URL: "https://github.com",
+              RUNNER_TEMP: runnerTemp,
+              FAKE_GH_FIXTURES: JSON.stringify(fixtures),
+            },
+            dir,
+          ),
+        });
+        const output = parseGithubOutput(await readFile(outputPath, "utf8"));
+        let listed: Array<Record<string, unknown>> = [];
+        let body = "";
+        if (output.comment_path) {
+          const { stdout: listStdout } = await execFileAsync(
+            "python3",
+            [handoffScriptPath, "list", "comment", output.comment_path],
+            { cwd: workspaceRoot },
+          );
+          listed = listStdout
+            .trim()
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as Record<string, unknown>);
+          body = await readFile(
+            join(output.comment_path, "handoff", "comment", "merge-queue-ci-failure-pr-6214", "body.md"),
+            "utf8",
+          );
+        }
+        return { stdout, output, listed, body };
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+
+    // A failed workload: one notice for the PR heading the group, naming the job, the step,
+    // the failing assertion, the run, and the PR batched ahead of it.
+    const workloadFailure = await runNotice({
+      needs: {
+        plan: { result: "success", outputs: { run: planRun } },
+        merge_policy: { result: "success", outputs: { ejection_notice: "" } },
+        static_gate: { result: "success" },
+        daemon_unit_tests: { result: "failure" },
+        e2e_vitest: { result: "skipped" },
+      },
+    });
+    expect(workloadFailure.output.comment_created).toBe("true");
+    expect(workloadFailure.output.comment_name).toBe("handoff-comment-merge-queue-ci-failure-pr-6214");
+    expect(workloadFailure.listed).toHaveLength(1);
+    expect(workloadFailure.listed[0]).toMatchObject({
+      kind: "comment",
+      id: "merge-queue-ci-failure-pr-6214",
+      pr_number: 6214,
+      head_sha: prHead,
+      base_sha: prBase,
+      run_id: 32105196624,
+      marker: "<!-- merge-queue-ci-failure -->",
+    });
+    expect(workloadFailure.body).toContain("<!-- merge-queue-ci-failure -->");
+    expect(workloadFailure.body).toContain(
+      `[run ${runId}](https://github.com/nexu-io/open-design/actions/runs/${runId})`,
+    );
+    expect(workloadFailure.body).toContain(
+      `- **Daemon tests (1/4)** — failure at \`Run daemon test shard\` ([job log](https://github.com/nexu-io/open-design/actions/runs/${runId}/job/101))`,
+    );
+    expect(workloadFailure.body).not.toContain("Daemon tests (2/4)");
+    expect(workloadFailure.body).not.toContain("Validate workspace");
+    expect(workloadFailure.body).toContain(
+      "FAIL  tests/project-archive.test.ts > buildProjectArchive > exposes a consumable stream with the same archive contents",
+    );
+    expect(workloadFailure.body).toContain("AssertionError: expected [ Array(6) ]");
+    expect(workloadFailure.body).not.toContain("Process completed with exit code");
+    expect(workloadFailure.body).not.toContain(esc);
+    expect(workloadFailure.body).toContain("queued ahead of it (#6559)");
+    expect(workloadFailure.body).toContain("add the PR back to the merge queue");
+
+    // A label-only ejection is already announced by the gate's notice: no second comment.
+    const labelOnly = await runNotice({
+      needs: {
+        plan: { result: "success", outputs: { run: planRun } },
+        merge_policy: { result: "failure", outputs: { ejection_notice: "true" } },
+        static_gate: { result: "success" },
+        daemon_unit_tests: { result: "success" },
+      },
+      labelNoticeEmitted: "true",
+      labels: ["needs-validation"],
+      mergePolicyConclusion: "failure",
+    });
+    expect(labelOnly.output.comment_created).toBeUndefined();
+    expect(labelOnly.stdout).toContain("its own notice covers this ejection");
+
+    // A workload that failed alongside a blocking label is still reported, without repeating
+    // the policy job — and the live label alone is enough to recognize the label ejection.
+    const labelPlusWorkload = await runNotice({
+      needs: {
+        plan: { result: "success", outputs: { run: planRun } },
+        merge_policy: { result: "failure", outputs: { ejection_notice: "" } },
+        static_gate: { result: "success" },
+        daemon_unit_tests: { result: "failure" },
+      },
+      labels: ["needs-maintainer-check"],
+      mergePolicyConclusion: "failure",
+    });
+    expect(labelPlusWorkload.output.comment_created).toBe("true");
+    expect(labelPlusWorkload.body).toContain("**Daemon tests (1/4)**");
+    expect(labelPlusWorkload.body).not.toContain("Merge policy");
+
+    // A runner whose gh predates the escape-sequence policy must still get the excerpt: the
+    // probe finds no flag and the plain fetch is used.
+    const olderGh = await runNotice({
+      needs: {
+        plan: { result: "success", outputs: { run: planRun } },
+        merge_policy: { result: "success", outputs: { ejection_notice: "" } },
+        daemon_unit_tests: { result: "failure" },
+      },
+      ghSupportsEscapeFlag: false,
+    });
+    expect(olderGh.output.comment_created).toBe("true");
+    expect(olderGh.body).toContain("FAIL  tests/project-archive.test.ts");
+    expect(olderGh.stdout).toContain("gh version 2.87.3 (fake)");
   });
 
   it("[P1] routes configured contributors into an independent maintainer merge block", async () => {
@@ -1078,15 +1358,14 @@ process.stdin.on("end", () => {
 
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
+    const plan = sectionBetween(workflow, "  plan:", "  static_gate:");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
     expect(workflow).toContain("ci_mode:");
-    expect(scopes).toContain("ci_mode: ${{ steps.detect.outputs.ci_mode }}");
-    expect(scopes).toContain("ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}");
-    expect(scopes).toContain("run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}");
-    expect(workflow).toContain("needs.scopes.outputs.run_ui_p0 == 'true'");
-    expect(validate).toContain('when($out.run_ui_p0 == "true"; ["ui_p0"])');
+    expect(plan).toContain("run: ${{ steps.hash.outputs.run }}");
+    expect(plan).toContain("scopes: ${{ steps.scopes.outputs.scopes }}");
+    expect(workflow).toContain("fromJSON(needs.plan.outputs.run).ui_p0");
+    expect(validate).toContain("[$run | to_entries[] | select(.value) | .key]");
 
     await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["apps/web/src/app/page.tsx"])).resolves.toMatchObject({
       ci_mode: "hot",
@@ -1129,12 +1408,12 @@ process.stdin.on("end", () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const workspaceUnit = sectionBetween(workflow, "  workspace_unit_tests:", "  daemon_unit_tests:");
 
-    expect(workspaceUnit).toContain(`if [ "\${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+    expect(workspaceUnit).toContain(`if [ "\${{ fromJSON(needs.plan.outputs.scopes).tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/desktop build
             pnpm --filter @open-design/desktop test
             pnpm --filter @open-design/packaged test
             pnpm --filter @open-design/tools-pack test
-            if [ "\${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
+            if [ "\${{ fromJSON(needs.plan.outputs.run).e2e_vitest }}" != "true" ]; then
               pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
             fi
           fi`);
@@ -1145,12 +1424,12 @@ process.stdin.on("end", () => {
     const daemonTests = sectionBetween(workflow, "  daemon_unit_tests:", "  windows_tools_pack_payload_tests:");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
-    expect(daemonTests).toContain("if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}");
+    expect(daemonTests).toContain("if: ${{ fromJSON(needs.plan.outputs.run).daemon_unit_tests }}");
     expect(daemonTests).toContain("fail-fast: false");
     expect(daemonTests).toContain("shard: [1, 2, 3, 4]");
     expect(daemonTests).toContain("pnpm --filter @open-design/daemon test --shard=${{ matrix.shard }}/4");
     expect(validate).toContain("- daemon_unit_tests");
-    expect(validate).toContain('when($out.daemon_tests_required == "true"; ["daemon_unit_tests"])');
+    expect(validate).toContain("[$run | to_entries[] | select(.value) | .key]");
   });
 
   it("[P2] skips the critical fallback for pure packaged-leaf changes and stays fail-closed elsewhere", async () => {
@@ -1186,10 +1465,28 @@ process.stdin.on("end", () => {
       run_playwright_visual: false,
       run_ui_p0: false,
       run_web_workspace_tests: false,
-      run_windows_tools_pack_payload_tests: true,
+      run_windows_tools_pack_payload_tests: false,
       tools_dev_tests_required: true,
       tools_pack_tests_required: true,
+      windows_tools_pack_payload_tests_required: false,
       workspace_validation_required: true,
+    });
+
+    await expect(runScopesPrint("merge_group", mergeGroup, ["tools/pack/src/mac/app.ts"])).resolves.toMatchObject({
+      run_windows_tools_pack_payload_tests: false,
+      tools_pack_tests_required: true,
+      windows_tools_pack_payload_tests_required: false,
+    });
+
+    await expect(runScopesPrint("merge_group", mergeGroup, ["tools/pack/src/win/custom-installer.ts"])).resolves.toMatchObject({
+      run_windows_tools_pack_payload_tests: true,
+      tools_pack_tests_required: true,
+      windows_tools_pack_payload_tests_required: true,
+    });
+
+    await expect(runScopesPrint("merge_group", mergeGroup, ["packages/launcher-proto/src/index.ts"])).resolves.toMatchObject({
+      run_windows_tools_pack_payload_tests: true,
+      windows_tools_pack_payload_tests_required: true,
     });
 
     await expect(runScopesPrint("merge_group", mergeGroup, ["apps/desktop/package.json"])).resolves.toMatchObject({
@@ -1265,30 +1562,77 @@ process.stdin.on("end", () => {
     expect(validate).not.toContain("run_docker_build");
     expect(validate).toContain("Check workspace validation jobs");
 
-    const baseOutputs = {
-      run_preflight: "false",
-      run_workspace_unit_tests: "false",
-      run_windows_tools_pack_payload_tests: "false",
-      run_web_workspace_tests: "false",
-      run_e2e_vitest: "false",
-      run_playwright_critical: "false",
-      run_ui_p0: "false",
-      run_playwright_visual: "false",
+    const baseRun = {
+      static_gate: false,
+      preflight: false,
+      workspace_unit_tests: false,
+      daemon_unit_tests: false,
+      windows_tools_pack_payload_tests: false,
+      web_workspace_tests: false,
+      e2e_vitest: false,
+      playwright_critical: false,
+      ui_p0: false,
+      playwright_visual: false,
     };
     // Core gate only cares about app jobs — unknown packaging keys are ignored.
     await expect(
       validateGatePasses(workflow, {
-        scopes: { result: "success", outputs: baseOutputs },
-        static_gate: { result: "success" },
+        plan: { result: "success", outputs: { run: JSON.stringify(baseRun) } },
+        merge_policy: { result: "skipped" },
       }),
     ).resolves.toBe(true);
 
+    await expect(
+      validateGatePasses(workflow, {
+        plan: { result: "success", outputs: { run: JSON.stringify(baseRun) } },
+        merge_policy: { result: "success" },
+      }),
+    ).resolves.toBe(true);
+
+    await expect(
+      validateGatePasses(workflow, {
+        plan: { result: "success", outputs: { run: JSON.stringify(baseRun) } },
+        merge_policy: { result: "failure" },
+      }),
+    ).resolves.toBe(false);
+
     const needsWithFailedWeb = {
-      scopes: { result: "success", outputs: { ...baseOutputs, run_web_workspace_tests: "true" } },
-      static_gate: { result: "success" },
+      plan: { result: "success", outputs: { run: JSON.stringify({ ...baseRun, web_workspace_tests: true }) } },
       web_workspace_tests: { result: "failure" },
     };
     await expect(validateGatePasses(workflow, needsWithFailedWeb)).resolves.toBe(false);
+  });
+
+  it("[P1] publishes hash state only after the workspace gate succeeds", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const plan = sectionBetween(workflow, "  plan:", "  static_gate:");
+    const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
+
+    expect(plan).toContain("Upload pending hash map");
+    expect(plan).not.toContain("actions/cache/save");
+    expect(validate).toContain("Download pending hash map");
+    expect(validate).toContain("Save successful hash map");
+    expect(validate.indexOf("Save successful hash map")).toBeGreaterThan(
+      validate.indexOf("Check workspace validation jobs"),
+    );
+    expect(validate).not.toContain("Block merge while a merge-blocking label is present");
+
+    const run = {
+      static_gate: false,
+      preflight: false,
+      workspace_unit_tests: false,
+      daemon_unit_tests: false,
+      windows_tools_pack_payload_tests: false,
+      web_workspace_tests: false,
+      e2e_vitest: true,
+      playwright_critical: false,
+      ui_p0: false,
+      playwright_visual: false,
+    };
+    await expect(validateGatePasses(workflow, {
+      plan: { result: "success", outputs: { run: JSON.stringify(run) } },
+      e2e_vitest: { result: "failure" },
+    })).resolves.toBe(false);
   });
 
   it("[P1] includes launcher protocol in the Nix daemon workspace build", async () => {
@@ -1303,8 +1647,8 @@ process.stdin.on("end", () => {
 
   it("[P2] routes trusted Linux CI through the Nexu runner fleet", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const runners = sectionBetween(workflow, "  runners:", "  scopes:");
-    const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
+    const runners = sectionBetween(workflow, "  runners:", "  plan:");
+    const plan = sectionBetween(workflow, "  plan:", "  static_gate:");
     const staticGate = sectionBetween(workflow, "  static_gate:", "  preflight:");
     const workspaceUnitTests = sectionBetween(workflow, "  workspace_unit_tests:", "  daemon_unit_tests:");
     const daemonUnitTests = sectionBetween(workflow, "  daemon_unit_tests:", "  windows_tools_pack_payload_tests:");
@@ -1312,16 +1656,16 @@ process.stdin.on("end", () => {
     const e2eVitest = sectionBetween(workflow, "  e2e_vitest:", "  playwright_critical:");
     const preflight = sectionBetween(workflow, "  preflight:", "  workspace_unit_tests:");
     const uiP0 = sectionBetween(workflow, "  ui_p0:", "  playwright_visual:");
-    const visual = sectionBetween(workflow, "  playwright_visual:", "  validate:");
+    const visual = sectionBetween(workflow, "  playwright_visual:", "  merge_policy:");
 
     expect(runners).toContain("|| 'nexu-runners-small'");
     expect(runners).toContain("&& 'ubuntu-24.04'");
     expect(runners).toContain("runs_on: ${{ steps.runners.outputs.runs_on }}");
     expect(runners).toContain("decision: ${{ steps.runners.outputs.decision }}");
     expect(runners).toContain("python3 .github/scripts/runners.py");
-    expect(scopes).toContain("needs: [runners]");
-    expect(scopes).toContain("fromJSON(needs.runners.outputs.runs_on).control");
-    expect(staticGate).toContain("needs: [runners]");
+    expect(plan).toContain("needs: [runners]");
+    expect(plan).toContain("fromJSON(needs.runners.outputs.runs_on).control");
+    expect(staticGate).toContain("needs: [plan, runners]");
     expect(staticGate).toContain("fromJSON(needs.runners.outputs.runs_on).control");
     expect(workspaceUnitTests).toContain("fromJSON(needs.runners.outputs.runs_on).workspace_unit");
     expect(workspaceUnitTests).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit)");
@@ -1348,7 +1692,7 @@ process.stdin.on("end", () => {
     expect(uiP0).toContain(
       "toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0)",
     );
-    expect(uiP0).toContain("include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}");
+    expect(uiP0).toContain("include: ${{ fromJSON(needs.plan.outputs.ui_p0_matrix) }}");
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
       "project-workspace",
@@ -1456,7 +1800,7 @@ process.stdin.on("end", () => {
 
   it("[P1] routes external fork PRs through GitHub-hosted runner profiles", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const runners = sectionBetween(workflow, "  runners:", "  scopes:");
+    const runners = sectionBetween(workflow, "  runners:", "  plan:");
 
     expect(runners).toContain("github.event_name == 'pull_request'");
     expect(runners).toContain("github.event.pull_request.head.repo.full_name != github.repository");
@@ -1552,6 +1896,11 @@ process.stdin.on("end", () => {
     expect(e2eVitestGate).toContain("needs: metadata");
     expect(e2eVitestGate).toContain("ref: ${{ needs.metadata.outputs.commit }}");
     expect(e2eVitestGate).toContain("playwright install --with-deps chromium");
+    expect(e2eVitestGate).toContain("Allow Chromium user namespaces on GitHub Ubuntu");
+    expect(e2eVitestGate).toContain("kernel.apparmor_restrict_unprivileged_userns=0");
+    expect(e2eVitestGate).not.toContain("--no-sandbox");
+    expect(e2eVitestGate.indexOf("kernel.apparmor_restrict_unprivileged_userns=0"))
+      .toBeLessThan(e2eVitestGate.indexOf("pnpm --filter @open-design/e2e test"));
     expect(e2eVitestGate).toContain("pnpm --filter @open-design/e2e test");
 
     const daemonGate = sectionBetween(prerelease, "  daemon_unit_tests:", "  verify:");
@@ -1626,7 +1975,7 @@ process.stdin.on("end", () => {
 
     const performanceProfiles = await runRunners("performance");
     const performanceRunsOn = runnerRunsOn(performanceProfiles);
-    expect(runnerDecision(performanceProfiles)).toEqual({ schema_version: 1, mode: "performance" });
+    expect(runnerDecision(performanceProfiles)).toEqual({ schema_version: 1, mode: "default" });
     expect(performanceRunsOn.control).toEqual(["nexu-runners-small"]);
     expect(performanceRunsOn.general_medium).toEqual(["nexu-runners-medium"]);
     expect(performanceRunsOn.workspace_unit).toEqual(["nexu-runners-medium"]);
@@ -1664,9 +2013,7 @@ process.stdin.on("end", () => {
     expect(economicRunsOn.visual_hot).toEqual(["ubuntu-24.04"]);
 
     for (const invalidMode of ["Economic", " economic "]) {
-      const fallbackProfiles = await runRunners(invalidMode);
-      expect(runnerDecision(fallbackProfiles)).toEqual({ schema_version: 1, mode: "default" });
-      expect(runnerRunsOn(fallbackProfiles).control).toEqual(["nexu-runners-small"]);
+      await expect(runRunners(invalidMode)).rejects.toThrow("unknown runner mode");
     }
   });
 
@@ -1797,10 +2144,9 @@ process.stdin.on("end", () => {
   });
 
   it("[P2] keeps release namespaces aligned with release channels", async () => {
-    const [releaseStableWorkflow, releaseStableScript, releasePreviewWorkflow, releasePrereleaseWorkflow, releaseBetaWorkflow] = await Promise.all([
+    const [releaseStableWorkflow, releaseStableScript, releasePrereleaseWorkflow, releaseBetaWorkflow] = await Promise.all([
       readFile(releaseStableWorkflowPath, "utf8"),
       readFile(releaseStableScriptPath, "utf8"),
-      readFile(releasePreviewWorkflowPath, "utf8"),
       readFile(releasePrereleaseWorkflowPath, "utf8"),
       readFile(releaseBetaWorkflowPath, "utf8"),
     ]);
@@ -1825,7 +2171,6 @@ process.stdin.on("end", () => {
     expect(releaseStableWorkflow).not.toMatch(/OD_PACKAGED_E2E_NAMESPACE: release-stable(?:-win|-linux)?\b/);
     expect(releaseStableWorkflow).not.toMatch(/namespaces\/release-stable(?:-intel|-win|-linux)?\b/);
 
-    expectChannelWorkflowNamespaces(releasePreviewWorkflow, "preview", { hasLinuxSmoke: false });
     expectChannelWorkflowNamespaces(releasePrereleaseWorkflow, "prerelease", { hasLinuxSmoke: true });
     expect(releaseBetaWorkflow).toContain("RELEASE_NAMESPACE: release-beta");
     expect(releaseBetaWorkflow).toContain("RELEASE_NAMESPACE: release-beta-win");
@@ -1860,7 +2205,6 @@ process.stdin.on("end", () => {
     expect(betaWindowsBuildScript).toContain('$env:OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE = "tools-serve"');
 
     expectWindowsUpdaterSmokeContract(releaseBetaWorkflow, "beta");
-    expectWindowsUpdaterSmokeContract(releasePreviewWorkflow, "preview");
     expectWindowsUpdaterSmokeContract(releasePrereleaseWorkflow, "prerelease");
     expectWindowsUpdaterSmokeContract(releaseStableWorkflow, "stable");
   });
@@ -1897,23 +2241,23 @@ process.stdin.on("end", () => {
   });
 
   it("[P2] keeps counted release workflow calls on a consistent ref and output contract", async () => {
-    const [previewWorkflow, prereleaseWorkflow, previewScript] = await Promise.all([
-      readFile(releasePreviewWorkflowPath, "utf8"),
-      readFile(releasePrereleaseWorkflowPath, "utf8"),
-      readFile(releasePreviewScriptPath, "utf8"),
-    ]);
+    const prereleaseWorkflow = await readFile(releasePrereleaseWorkflowPath, "utf8");
 
-    expectCountedReleaseWorkflowCallContract(previewWorkflow, "preview");
     expectCountedReleaseWorkflowCallContract(prereleaseWorkflow, "prerelease");
-
-    expect(previewWorkflow).toContain("OPEN_DESIGN_PREVIEW_VERSION: ${{ inputs.release_version }}");
-    expect(previewWorkflow).toContain("Empty uses preview/vX.Y.Z when present, otherwise apps/packaged/package.json.");
-    expect(previewScript).toContain("function resolvePreviewBaseVersion");
-    expect(previewScript).toContain('source: "apps/packaged/package.json"');
-    expect(previewScript).not.toContain("release-preview can only run from preview/vX.Y.Z branches");
 
     expect(prereleaseWorkflow).toContain("OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}");
     expect(prereleaseWorkflow).toContain("Required when ref is not release/vX.Y.Z");
+  });
+
+  it("[P2] retires dedicated betas and preview release entrypoints", () => {
+    for (const path of [
+      join(workspaceRoot, ".github", "workflows", "release-beta-s.yml"),
+      join(workspaceRoot, ".github", "workflows", "release-preview.yml"),
+      join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-betas.ts"),
+      join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-preview.ts"),
+    ]) {
+      expect(existsSync(path), path).toBe(false);
+    }
   });
 
   it("[P2] makes a publish=false beta dispatch retrievable on both platforms without touching a channel", async () => {
@@ -1965,9 +2309,7 @@ process.stdin.on("end", () => {
   it("[P2] publishes release notes through one channel-neutral tools-release pipeline", async () => {
     const workflows = await Promise.all([
       readFile(releaseBetaWorkflowPath, "utf8"),
-      readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
       readFile(releasePrereleaseWorkflowPath, "utf8"),
-      readFile(releasePreviewWorkflowPath, "utf8"),
       readFile(releaseStableWorkflowPath, "utf8"),
     ]);
 
@@ -1987,7 +2329,7 @@ process.stdin.on("end", () => {
       );
     }
 
-    const stableWorkflow = workflows[4] ?? "";
+    const stableWorkflow = workflows[2] ?? "";
     expect(stableWorkflow).toContain("Validate stable release note policy");
     expect(stableWorkflow).toContain(
       "RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}",
@@ -2588,7 +2930,14 @@ process.stdin.on("end", () => {
     expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
     expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
     expect(productionWorkflow).toContain("Publish immutable DeepSeek Harness bootstrap installers to R2");
-    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_VERSION: v1");
+    expect(productionWorkflow).toContain("id: dsh_bootstrap");
+    // The bootstrap version follows the installer bytes. Pinning it in the
+    // workflow is what turned a copy edit inside install-dsh.ps1 into a hard
+    // production deploy failure, so the promotion must read the version the
+    // publisher resolved instead of naming one.
+    expect(productionWorkflow).not.toMatch(/DSH_BOOTSTRAP_VERSION: v\d/);
+    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_VERSION: ${{ steps.dsh_bootstrap.outputs.version }}");
+    expect(productionWorkflow).toContain('"$RELEASE_PUBLIC_ORIGIN/bootstrap/dsh/$DSH_BOOTSTRAP_VERSION/$name"');
     expect(productionWorkflow).toContain("DSH_BOOTSTRAP_SOURCE_DIR: apps/landing-page/public");
     expect(productionWorkflow).toContain("RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}");
     expect(productionWorkflow).toContain("RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}");
@@ -2740,22 +3089,18 @@ process.stdin.on("end", () => {
     expect(output).toContain("OPEN_DESIGN_RELEASE_DRY_RUN must be metadata, prepublish, true, or false");
   });
 
-  it("keeps both beta release lanes on the shared payload-aware metadata surface", async () => {
-    const [releaseBetaWorkflow, releaseBetaSelfHostedWorkflow, platformPublishScript, publishMetadataScript] = await Promise.all([
+  it("keeps beta on the shared payload-aware metadata surface", async () => {
+    const [releaseBetaWorkflow, platformPublishScript, publishMetadataScript] = await Promise.all([
       readFile(releaseBetaWorkflowPath, "utf8"),
-      readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
       readFile(releaseBetaPlatformPublishScriptPath, "utf8"),
       readFile(releasePublishMetadataScriptPath, "utf8"),
     ]);
 
-    for (const workflow of [releaseBetaWorkflow, releaseBetaSelfHostedWorkflow]) {
-      expect(workflow).toContain("RELEASE_ARTIFACT_MODE: dmg-and-payload");
-      expect(workflow).toContain("tools-release publish-platform");
-      expect(workflow).toContain("tools-release publish-metadata");
-      expect(workflow).toContain("RELEASE_MANIFEST_DIR:");
-    }
+    expect(releaseBetaWorkflow).toContain("RELEASE_ARTIFACT_MODE: dmg-and-payload");
+    expect(releaseBetaWorkflow).toContain("tools-release publish-platform");
+    expect(releaseBetaWorkflow).toContain("tools-release publish-metadata");
+    expect(releaseBetaWorkflow).toContain("RELEASE_MANIFEST_DIR:");
     expect(releaseBetaWorkflow).toContain("RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}");
-    expect(releaseBetaSelfHostedWorkflow).toContain("RELEASE_ASSET_SUFFIX: auto");
     expect(platformPublishScript).toContain("artifacts.payload");
     expect(platformPublishScript).toContain("open-design-${releaseVersion}${assetSuffix}-mac-${arch}-payload.zip");
     expect(platformPublishScript).toContain("open-design-${releaseVersion}${assetSuffix}-win-x64-payload.7z");
@@ -2772,150 +3117,6 @@ process.stdin.on("end", () => {
 
     expect(prepareStep).toContain(artifactMode);
     expect(publishStep).toContain(artifactMode);
-  });
-
-  it("keeps the self-hosted beta lane metadata-driven with reusable platform publish scripts", async () => {
-    const [workflow, posixBuildScript, windowsBuildScript, platformPublishScript, publishMetadataScript] = await Promise.all([
-      readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
-      readFile(releaseBetaPosixBuildScriptPath, "utf8"),
-      readFile(releaseBetaWindowsBuildScriptPath, "utf8"),
-      readFile(releaseBetaPlatformPublishScriptPath, "utf8"),
-      readFile(releasePublishMetadataScriptPath, "utf8"),
-    ]);
-
-    expect(workflow).toContain("enable_win_x64:");
-    expect(workflow).toContain("enable_mac_arm64:");
-    expect(workflow).toContain("enable_mac_x64:");
-    expect(workflow).toContain("enable_linux_x64:");
-    expect(workflow).toMatch(/enable_win_x64:[\s\S]*?default: true/);
-    expect(workflow).toMatch(/enable_mac_arm64:[\s\S]*?default: true/);
-    expect(workflow).toMatch(/publish:[\s\S]*?default: true/);
-    expect(workflow).toMatch(/release_public_origin:[\s\S]*?default: "https:\/\/s3\.nexu\.space\/od-releases"/);
-    expect(workflow).toContain("win_x64_smoke_mode:");
-    expect(workflow).toContain("win_x64_target:");
-    expect(workflow).toContain("win_x64_update_metadata_url:");
-    expect(workflow).toContain("win_x64_update_target_version:");
-    expect(workflow).toContain("mac_arm64_sign_mode:");
-    expect(workflow).toContain("mac_arm64_smoke_mode:");
-    expect(workflow).toMatch(/win_x64_smoke_mode:[\s\S]*?options:[\s\S]*?- skip[\s\S]*?- core[\s\S]*?- full[\s\S]*?default: core/);
-    expect(workflow).toMatch(/mac_arm64_smoke_mode:[\s\S]*?options:[\s\S]*?- skip[\s\S]*?- core[\s\S]*?- full[\s\S]*?default: core/);
-    expect(workflow).toMatch(/win_x64_sign_mode:[\s\S]*?options:[\s\S]*?- "off"[\s\S]*?- "on"[\s\S]*?default: "off"/);
-    expect(workflow).toMatch(/mac_arm64_sign_mode:[\s\S]*?options:[\s\S]*?- "no"[\s\S]*?- "sign-only"[\s\S]*?- "notarize"[\s\S]*?default: "sign-only"/);
-    expect(workflow).not.toContain("win_enable:");
-    expect(workflow).not.toContain("mac_enable:");
-    expect(workflow).not.toMatch(/^      enable_win:/m);
-    expect(workflow).not.toMatch(/^      enable_mac:/m);
-    expect(workflow).not.toMatch(/^      sign_mode:/m);
-    expect(workflow).not.toMatch(/^      smoke_mode:/m);
-    expect(workflow).not.toMatch(/^      update_metadata_url:/m);
-    expect(workflow).not.toMatch(/^      update_target_version:/m);
-    expect(workflow).toContain("name: Prepare betas metadata");
-    expect(workflow).toContain("OPEN_DESIGN_BETAS_METADATA_URL: ${{ inputs.release_public_origin }}/betas/latest/metadata.json");
-    expect(workflow).toContain("OPEN_DESIGN_STABLE_METADATA_URL: https://releases.open-design.ai/stable/latest/metadata.json");
-    expect(workflow).toContain('repo_dir="$PWD/_release-metadata"');
-    expect(workflow).toContain("--filter=blob:none --depth=1");
-    expect(workflow).toContain("for attempt in 1 2 3");
-    expect(workflow).toContain("working-directory: _release-metadata");
-    expect(workflow).toContain("Install metadata toolchain");
-    expect(workflow).toContain("pnpm install --frozen-lockfile --prefer-offline");
-    expect(workflow).toContain("tools-release prepare betas");
-    expect(workflow).not.toContain('git fetch --force --depth=1 origin "+refs/tags/open-design-v*:refs/tags/open-design-v*"');
-    expect(workflow).toContain("release-beta-s requires at least one target to be enabled");
-    expect(workflow).toContain("release_version: ${{ inputs.publish && steps.reserve.outputs.release_version || inputs.release_version != '' && inputs.release_version || steps.betas.outputs.release_version }}");
-    expect(workflow).toContain("if: ${{ inputs.publish }}");
-    expect(workflow).toContain("Reject unsupported self-hosted mac_x64");
-    expect(workflow).toContain("Reject unsupported self-hosted linux_x64");
-    expect(workflow).toContain("name: Probe Windows signing capability");
-    expect(workflow).toContain("probe-win-signing.ps1");
-    expect(workflow).toContain("needs: metadata");
-    expect(workflow).toContain('-ReleaseTarget win_x64');
-    expect(workflow).toContain('-ReleaseVersion "${{ needs.metadata.outputs.release_version }}"');
-    expect(workflow).toContain('OD_BETA_WINDOWS_SIGNING_ENABLED: ${{ steps.sign_probe.outputs.enabled }}');
-    expect(workflow).toContain('OD_BETA_WINDOWS_SIGNING_PROBED: ${{ steps.sign_probe.outputs.probed }}');
-    expect(workflow).toContain('OD_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}');
-    expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
-    expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}");
-    expect(windowsBuildScript).toContain('"pnpm.cmd", "exec", "tools-pack", "win", "build"');
-    expect(windowsBuildScript).toContain('if ($SmokeMode -eq "full" -and -not $hasExternalUpdateMetadata -and -not $hasExternalUpdateArtifactPair)');
-    expect(windowsBuildScript).not.toContain("fnm");
-    expect(windowsBuildScript).not.toContain("RUNNER_TEMP");
-    expect(windowsBuildScript).not.toContain("GITHUB_OUTPUT");
-    expect(windowsBuildScript).not.toContain("GITHUB_STEP_SUMMARY");
-    expect(posixBuildScript).toContain("RELEASE_TARGET");
-    expect(posixBuildScript).toContain("REQUIRE_VELA_CLI");
-    expect(posixBuildScript).toContain('--cache-dir "$TOOLS_PACK_CACHE_DIR"');
-    expect(posixBuildScript).not.toContain("OPEN_DESIGN_RELEASE_PROFILE");
-    expect(posixBuildScript).not.toContain("corepack prepare");
-    expect(posixBuildScript).not.toContain("RUNNER_TEMP");
-    expect(workflow).toContain("Publish win_x64 platform");
-    expect(workflow).toContain("tools-release publish-platform");
-    expect(workflow).toContain("Write win_x64 release report");
-    expect(workflow).toContain("RELEASE_REPORT_DIR: C:\\.tmp\\runner\\od-beta\\win_x64\\release-report\\win_x64");
-    expect(posixBuildScript).toContain('OD_PACKAGED_E2E_MAC_SMOKE_PROFILE="$RELEASE_SMOKE_MODE"');
-    expect(workflow).toContain("runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]");
-    expect(workflow).toContain("path: _release-build");
-    expect(workflow).toContain("working-directory: _release-build");
-    expect(workflow).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
-    expect(workflow).toContain("MAC_TOOLS_PACK_CACHE_DIR: /Users/runner/.tmp/runner/od-beta/mac_arm64/tools-pack-cache");
-    expect(workflow).toContain("MAC_TOOLS_PACK_DIR: /Users/runner/.tmp/runner/od-beta/mac_arm64/tools-pack");
-    expect(workflow).toContain("TOOLS_PACK_CACHE_DIR: ${{ env.MAC_TOOLS_PACK_CACHE_DIR }}");
-    expect(workflow).toContain("TOOLS_PACK_DIR: ${{ env.MAC_TOOLS_PACK_DIR }}");
-    expect(workflow).toContain("Write mac_arm64 release report");
-    expect(workflow).toContain("fnm exec --using=24 -- pnpm exec tools-release write-report");
-    expect(workflow).toContain("fnm.exe\" exec --using=24 -- pnpm.cmd exec tools-release write-report");
-    expect(workflow).toContain("fnm.exe\" exec --using=24 -- pnpm.cmd exec tools-release publish-platform");
-    expect(workflow).toContain("Prepare mac_arm64 assets");
-    expect(workflow).toContain("RELEASE_TARGET: mac_arm64");
-    expect(workflow).toContain("RELEASE_SIGNED: ${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && 'true' || 'false' }}");
-    expect(workflow).toContain("RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_arm64-report.zip");
-    expect(workflow).toContain("name: Publish betas metadata to Nexu S3");
-    expect(workflow).toContain("Upload mac_arm64 publish manifest fallback");
-    expect(workflow).toContain("Upload win_x64 publish manifest fallback");
-    expect(workflow).toContain("Download mac_arm64 publish manifest fallback");
-    expect(workflow).toContain("Download win_x64 publish manifest fallback");
-    expect(workflow).toContain("continue-on-error: true");
-    expect(workflow).toContain("Download mac_arm64 platform manifest");
-    expect(workflow).toContain("Download win_x64 platform manifest");
-    expect(workflow).not.toContain('manifest_url="${RELEASE_PUBLIC_ORIGIN%/}/betas/versions/${RELEASE_VERSION}${RELEASE_ASSET_SUFFIX}/platforms/${RELEASE_TARGET}.json"');
-    expect(workflow).not.toContain('curl -fsSL "$manifest_url" -o "$RELEASE_MANIFEST_DIR/$RELEASE_TARGET.json"');
-    expect(workflow).not.toContain('fallback_manifest="$RELEASE_FALLBACK_MANIFEST_DIR/$RELEASE_TARGET.json"');
-    expect(workflow).toContain("tools-release download-platform-manifest");
-    expect(workflow).toContain("RELEASE_STORAGE_ENDPOINT: ${{ secrets.NEXU_S3_ENDPOINT }}");
-    expect(workflow).toContain("tools-release publish-metadata");
-    expect(workflow).toContain("RELEASE_ASSET_SUFFIX: auto");
-    expect(workflow).toContain("RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests");
-    expect(workflow).toContain("-IncludeZip $${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}");
-    expect(workflow).toContain("release-beta-s publish requires win_x64_target=nsis or all");
-    expect(workflow).toContain("open-design-betas-win-x64-publish-manifest");
-    expect(workflow).toContain("open-design-betas-mac-arm64-publish-manifest");
-    expect(workflow).toContain('STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}');
-    expect(workflow).not.toContain("Verify betas metadata");
-    expect(workflow).not.toContain("tools-release verify-metadata");
-    expect(workflow).not.toContain("tools-release summary-metadata");
-    expect(workflow).toContain("release-beta-s publishes to an internal S3 namespace; public metadata fetch verification is intentionally skipped.");
-    expect(publishMetadataScript).toContain("validateManifest");
-    expect(publishMetadataScript).toContain("manifest.releaseVersion !== releaseVersion");
-    expect(publishMetadataScript).toContain("manifest.github?.runId !== currentRunId");
-    expect(publishMetadataScript).not.toContain("manifest.github?.runAttempt !== currentRunAttempt");
-    expect(publishMetadataScript).toContain("manifest.github?.commit !== currentCommit");
-    expect(publishMetadataScript).toContain("manifest.platformKey !== target");
-    expect(publishMetadataScript).toContain("manifest.r2.versionPrefix.includes(`/versions/${releaseVersion}`)");
-    expect(publishMetadataScript).toContain('if (assetVersionSuffix === "auto")');
-    expect(publishMetadataScript).toContain('assetVersionSuffix = allReadyTargetsSigned ? ".signed" : ".unsigned";');
-    expect(publishMetadataScript).toContain("const feedVersionPrefix = manifest.r2?.versionPrefix;");
-    expect(publishMetadataScript).toContain("refusing stale ${def.target} platform manifest");
-    expect(publishMetadataScript).toContain("publishLatestPlatformObjects");
-    expect(platformPublishScript).not.toContain("await upload(join(releaseAssetsDir, name), `${latestPrefix}/${name}`");
-    expect(platformPublishScript).not.toContain("await upload(manifestPath, `${latestPrefix}/platforms/${target}.json`");
-    expect(platformPublishScript).toContain('const target = requiredTarget();');
-    expect(platformPublishScript).toContain("legacyPlatformKey");
-    expect(workflow).not.toContain("win_enable:");
-    expect(workflow).not.toContain("mac_enable:");
-    expect(workflow).not.toContain(".github/scripts/release/build-mac.sh");
-    expect(workflow).not.toContain(".github/scripts/release/r2/publish-platform.ts");
-    expect(workflow).not.toContain("publish-beta-metadata.ps1");
-    expect(workflow).not.toContain("probe-beta-public-read.ps1");
-    expect(workflow).not.toContain("publish-beta.ps1 -IndexPath");
   });
 
   it("rejects stale latest platform manifests from a previous beta version", async () => {
@@ -3402,27 +3603,6 @@ process.stdin.on("end", () => {
     }
   });
 
-  it("keeps beta runner bootstrap in workflows instead of release scripts", async () => {
-    const [workflow, posixBuildScript, winBuildScript] = await Promise.all([
-      readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
-      readFile(releaseBetaPosixBuildScriptPath, "utf8"),
-      readFile(releaseBetaWindowsBuildScriptPath, "utf8"),
-    ]);
-
-    expect(workflow).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
-    expect(workflow).toContain('& "C:\\Users\\runner\\.cargo\\bin\\fnm.exe" exec --using=24 -- pwsh -NoProfile -File tools\\release\\scripts\\build-platform.ps1');
-    expect(workflow).toContain("corepack prepare pnpm@10.33.2 --activate");
-    expect(workflow).toContain('pnpm.cmd install --frozen-lockfile --prefer-offline');
-    expect(workflow).toContain("sudo -n \"$OPEN_DESIGN_MAC_SIGNING_HELPER\" \"$cert_path\" \"$password_path\"");
-    expect(workflow).not.toContain("PATH: /usr/local/libexec/open-design/wrappers:${{ env.PATH }}");
-    expect(posixBuildScript).not.toContain("fnm");
-    expect(posixBuildScript).not.toContain("corepack");
-    expect(posixBuildScript).not.toContain("pnpm install");
-    expect(winBuildScript).not.toContain("fnm");
-    expect(winBuildScript).not.toContain("corepack");
-    expect(winBuildScript).not.toContain("pnpm install");
-  });
-
   it("resolves the generated Windows update fixture outside the measured build child scope", async () => {
     const winBuildScript = await readFile(releaseBetaWindowsBuildScriptPath, "utf8");
 
@@ -3436,7 +3616,7 @@ process.stdin.on("end", () => {
 
 function expectChannelWorkflowNamespaces(
   workflow: string,
-  channel: "beta" | "preview" | "prerelease",
+  channel: "beta" | "prerelease",
   options: { hasLinuxSmoke: boolean },
 ): void {
   const namespace = `release-${channel}`;

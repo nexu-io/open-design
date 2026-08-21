@@ -25,6 +25,8 @@ export type RunVelaBilling = (args: string[]) => Promise<string>;
 export interface FetchVelaBillingOptions {
   /** Injectable child-process runner; defaults to spawning the vela binary. */
   run?: RunVelaBilling;
+  /** Settings-selected AMR environment applied to the spawned Vela command. */
+  configuredEnv?: Record<string, string>;
 }
 
 export class VelaWorkspaceBillingSnapshotUnsupportedError extends Error {
@@ -70,7 +72,7 @@ export function isVelaWorkspaceAuthorizationError(error: unknown): boolean {
 export async function fetchVelaBillingSummary(
   options: FetchVelaBillingOptions = {},
 ): Promise<WorkspaceBillingSummary | null> {
-  const run = options.run ?? defaultRunVelaBilling;
+  const run = resolveVelaBillingRunner(options);
   let stdout: string;
   try {
     stdout = await run(['summary', '--format', 'json']);
@@ -91,7 +93,7 @@ export async function fetchVelaWorkspaceBalance(
 ): Promise<WorkspaceWalletBalance | null> {
   const requestedWorkspaceId = workspaceId.trim();
   if (!requestedWorkspaceId) return null;
-  const run = options.run ?? defaultRunVelaBilling;
+  const run = resolveVelaBillingRunner(options);
   let stdout: string;
   try {
     stdout = await run([
@@ -122,7 +124,7 @@ export async function fetchVelaWorkspaceBillingProjection(
   if (!requestedWorkspaceId) {
     return { snapshot: null, workspaceBalance: null };
   }
-  const run = options.run ?? defaultRunVelaBilling;
+  const run = resolveVelaBillingRunner(options);
   try {
     const stdout = await run([
       'workspace-snapshot',
@@ -174,7 +176,7 @@ export async function fetchVelaWorkspaceBillingProjection(
   }
 }
 
-export interface BillingCheckoutOptions {
+export interface BillingCheckoutOptions extends FetchVelaBillingOptions {
   /** Team workspace id whose subscription is being purchased. */
   workspaceId?: string;
   /** Vela team subscription plan id. */
@@ -184,8 +186,6 @@ export interface BillingCheckoutOptions {
   /** Where Stripe returns the user after success / cancel. */
   successUrl?: string;
   cancelUrl?: string;
-  /** Injectable child-process runner; defaults to spawning the vela binary. */
-  run?: RunVelaBilling;
 }
 
 /**
@@ -215,7 +215,7 @@ export async function fetchBillingCheckoutUrl(
   ];
   if (options.successUrl) args.push('--success-url', options.successUrl);
   if (options.cancelUrl) args.push('--cancel-url', options.cancelUrl);
-  const run = options.run ?? defaultRunVelaBilling;
+  const run = resolveVelaBillingRunner(options);
   let stdout: string;
   try {
     stdout = await run(args);
@@ -238,7 +238,7 @@ export async function fetchVelaBillingCatalog(
 ): Promise<WorkspaceBillingCatalog | null> {
   const trimmedWorkspaceId = workspaceId.trim();
   if (!trimmedWorkspaceId) return null;
-  const run = options.run ?? defaultRunVelaBilling;
+  const run = resolveVelaBillingRunner(options);
   let stdout: string;
   try {
     stdout = await run([
@@ -505,11 +505,21 @@ function parseTeamPlanId(value: unknown): WorkspaceTeamBillingPlanId | null {
     : null;
 }
 
-const defaultRunVelaBilling: RunVelaBilling = async (args) => {
+function resolveVelaBillingRunner(options: FetchVelaBillingOptions): RunVelaBilling {
+  return options.run ?? ((args) => defaultRunVelaBilling(args, options.configuredEnv));
+}
+
+const defaultRunVelaBilling = async (
+  args: string[],
+  configuredEnv: Record<string, string> = {},
+): Promise<string> => {
   let stderr = '';
   try {
     return await runVelaCommand(['billing', ...args], {
-      configuredEnv: { VELA_INVOCATION_SOURCE: 'open-design' },
+      configuredEnv: {
+        ...configuredEnv,
+        VELA_INVOCATION_SOURCE: 'open-design',
+      },
       maxBuffer: 4 * 1024 * 1024,
       onStderr: (value) => {
         stderr = value;

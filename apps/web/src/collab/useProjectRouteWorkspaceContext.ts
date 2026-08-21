@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { BackoffController } from '../lib/backoff';
 import {
   WORKSPACE_CONTEXT_REFRESH_EVENT,
   resolveBoundProjectWorkspaceContext,
@@ -14,6 +15,9 @@ export interface ProjectRouteWorkspaceContextState {
   failure?: 'forbidden' | 'unavailable';
   retry: () => void;
 }
+
+const PROJECT_ROUTE_RETRY_BASE_MS = 1_000;
+const PROJECT_ROUTE_RETRY_MAX_MS = 30_000;
 
 export function projectResourceReadsCanStart(
   persistedWorkspaceId: string | null | undefined,
@@ -63,8 +67,36 @@ export function useProjectRouteWorkspaceContext(
   const requestEpochRef = useRef(0);
   const consumedBootstrapContextRef = useRef<WorkspaceCollabContext | null>(null);
   const [refreshRevision, setRefreshRevision] = useState(0);
+  const retryTimerRef = useRef<number | null>(null);
+  const retryBackoffRef = useRef<BackoffController | null>(null);
+  if (retryBackoffRef.current === null) {
+    retryBackoffRef.current = new BackoffController({
+      initialMs: PROJECT_ROUTE_RETRY_BASE_MS,
+      maxMs: PROJECT_ROUTE_RETRY_MAX_MS,
+      factor: 2,
+      jitter: true,
+    });
+  }
+  const clearScheduledRetry = useCallback(() => {
+    if (retryTimerRef.current === null) return;
+    window.clearTimeout(retryTimerRef.current);
+    retryTimerRef.current = null;
+  }, []);
+  const resetRetryBackoff = useCallback(() => {
+    clearScheduledRetry();
+    retryBackoffRef.current?.reset();
+  }, [clearScheduledRetry]);
   const retry = useCallback(() => {
+    clearScheduledRetry();
     setRefreshRevision((current) => current + 1);
+  }, [clearScheduledRetry]);
+  const scheduleRetry = useCallback(() => {
+    if (retryTimerRef.current !== null) return;
+    const delay = retryBackoffRef.current?.nextDelay() ?? PROJECT_ROUTE_RETRY_BASE_MS;
+    retryTimerRef.current = window.setTimeout(() => {
+      retryTimerRef.current = null;
+      setRefreshRevision((current) => current + 1);
+    }, delay);
   }, []);
   const [resolved, setResolved] = useState<{
     workspaceId: string;
@@ -75,6 +107,16 @@ export function useProjectRouteWorkspaceContext(
       ? { context: initialExactContext, loading: initialExactContext === null }
       : { context: null, loading: false },
   }));
+
+  useEffect(() => {
+    resetRetryBackoff();
+    return () => {
+      // Retire a directory read that settles after this project route unmounts
+      // or changes Workspace, so it cannot arm a detached retry timer.
+      requestEpochRef.current += 1;
+      clearScheduledRetry();
+    };
+  }, [workspaceId, clearScheduledRetry, resetRetryBackoff]);
 
   useEffect(() => {
     const refresh = () => setRefreshRevision((current) => current + 1);
@@ -93,6 +135,7 @@ export function useProjectRouteWorkspaceContext(
       // context during the fresh lookup would let a newly mounted resource
       // effect emit one more wave with the previous account/member headers.
       requestEpochRef.current += 1;
+      resetRetryBackoff();
       setIdentityRefreshPending(Boolean(workspaceId));
       setResolved({
         workspaceId,
@@ -110,20 +153,12 @@ export function useProjectRouteWorkspaceContext(
       window.removeEventListener('focus', refresh);
       window.removeEventListener('pageshow', refresh);
     };
-  }, [workspaceId]);
-
-  useEffect(() => {
-    if (
-      resolved.workspaceId !== workspaceId
-      || resolved.state.failure !== 'unavailable'
-    ) return undefined;
-    const timer = window.setTimeout(retry, 5_000);
-    return () => window.clearTimeout(timer);
-  }, [resolved, retry, workspaceId]);
+  }, [workspaceId, resetRetryBackoff]);
 
   useEffect(() => {
     const requestEpoch = ++requestEpochRef.current;
     if (!workspaceId) {
+      resetRetryBackoff();
       setIdentityRefreshPending(false);
       setResolved({
         workspaceId,
@@ -132,6 +167,7 @@ export function useProjectRouteWorkspaceContext(
       return;
     }
     if (exactAmbientContext) {
+      resetRetryBackoff();
       setIdentityRefreshPending(false);
       setResolved({
         workspaceId,
@@ -150,6 +186,7 @@ export function useProjectRouteWorkspaceContext(
       // reuse the same snapshot while a genuinely new verification for the same
       // member remains adoptable.
       consumedBootstrapContextRef.current = exactBootstrapContext;
+      resetRetryBackoff();
       setIdentityRefreshPending(false);
       setResolved({
         workspaceId,
@@ -174,6 +211,7 @@ export function useProjectRouteWorkspaceContext(
     }).then(
       (context) => {
         if (requestEpochRef.current !== requestEpoch) return;
+        resetRetryBackoff();
         setIdentityRefreshPending(false);
         setResolved({
           workspaceId,
@@ -185,10 +223,25 @@ export function useProjectRouteWorkspaceContext(
       () => {
         if (requestEpochRef.current !== requestEpoch) return;
         setIdentityRefreshPending(false);
-        setResolved({
+        setResolved((current) => ({
           workspaceId,
-          state: { context: null, loading: false, failure: 'unavailable' },
-        });
+          // A rejected directory request proves nothing about this project's
+          // membership. That includes account-level 401/403 responses: the
+          // ambient shell owns reauthentication, while only a successful
+          // directory response without this member is project-level denial.
+          // Keep only an authority already verified for this exact persisted
+          // Workspace; account changes synchronously cleared it above before
+          // this request could start. A cold route with no witness still fails
+          // closed with `context: null`.
+          state: {
+            context: current.workspaceId === workspaceId
+              ? current.state.context
+              : null,
+            loading: false,
+            failure: 'unavailable',
+          },
+        }));
+        scheduleRetry();
       },
     );
   }, [
@@ -196,6 +249,8 @@ export function useProjectRouteWorkspaceContext(
     exactAmbientIdentity,
     exactBootstrapIdentity,
     refreshRevision,
+    resetRetryBackoff,
+    scheduleRetry,
   ]);
 
   if (!workspaceId) return { context: null, loading: false, retry };

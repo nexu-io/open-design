@@ -38,6 +38,42 @@ describe('resolveWorkspaceSettingsUrl', () => {
     ).toBeUndefined();
     expect(resolveWorkspaceSettingsUrl('ws-1', 'not-a-url')).toBe('not-a-url');
   });
+
+  it('builds the link from the selected AMR profile origin', () => {
+    expect(resolveWorkspaceSettingsUrl('ws-1', undefined, {
+      OPEN_DESIGN_AMR_PROFILE: 'prod',
+      OD_VELA_WEB_URL: 'https://prod.example',
+      OD_VELA_WEB_URLS: JSON.stringify({
+        prod: 'https://prod.example',
+        test: 'https://test.example',
+      }),
+    }, {
+      OPEN_DESIGN_AMR_PROFILE: 'test',
+    })).toBe('https://test.example/settings?workspaceId=ws-1&source=open_design');
+  });
+
+  it('does not let a prod URL from workspace context override the selected profile origin', () => {
+    expect(resolveWorkspaceSettingsUrl('ws-1', 'https://prod.example/settings', {
+      OPEN_DESIGN_AMR_PROFILE: 'prod',
+      OD_VELA_WEB_URL: 'https://prod.example',
+      OD_VELA_WEB_URLS: JSON.stringify({
+        prod: 'https://prod.example',
+        'feature-test': 'https://feature.example',
+      }),
+    }, {
+      OPEN_DESIGN_AMR_PROFILE: 'feature-test',
+    })).toBe('https://feature.example/settings?workspaceId=ws-1&source=open_design');
+  });
+
+  it('fails closed instead of reusing an explicit URL when the selected profile has no trusted origin', () => {
+    expect(resolveWorkspaceSettingsUrl('ws-1', 'https://prod.example/settings', {
+      OPEN_DESIGN_AMR_PROFILE: 'prod',
+      OD_VELA_WEB_URL: 'https://prod.example',
+      OD_VELA_WEB_URLS: JSON.stringify({ prod: 'https://prod.example' }),
+    }, {
+      OPEN_DESIGN_AMR_PROFILE: 'feature-test',
+    })).toBeUndefined();
+  });
 });
 
 describe('parseWorkspaceCollabContext', () => {

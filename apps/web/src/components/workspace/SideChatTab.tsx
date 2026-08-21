@@ -146,7 +146,7 @@ export function SideChatTab({
           messages={controlledChat?.messages ?? chat.messages}
           streaming={controlledChat?.streaming ?? chat.streaming}
           loading={controlledChat?.loading ?? chat.loading}
-          sendDisabled={controlledChat?.sendDisabled}
+          sendDisabled={controlledChat?.sendDisabled ?? chat.sendDisabled}
           queuedItems={controlledChat?.queuedItems}
           onRemoveQueuedSend={controlledChat?.onRemoveQueuedSend}
           onUpdateQueuedSend={controlledChat?.onUpdateQueuedSend}

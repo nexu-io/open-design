@@ -1214,7 +1214,7 @@ process.stdin.on('end', () => {
   fs.writeFileSync(path.join(pluginDir, 'open-design.json'), JSON.stringify({ name: 'generated-plugin' }, null, 2));
   fs.writeFileSync(path.join(pluginDir, 'SKILL.md'), '# Generated plugin\\n');
   console.log(JSON.stringify({ type: 'step_start' }));
-  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 OpenDesign 插件脚手架。先读取文档规范，再生成插件文件。' } }));
   console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
   process.exit(0);
 });
@@ -1228,7 +1228,7 @@ process.stdin.on('end', () => {
             projectId,
             conversationId,
             pluginId: 'od-plugin-authoring',
-            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 OpenDesign 插件脚手架。',
           }),
         });
         expect(createResponse.status).toBe(202);
@@ -1278,7 +1278,7 @@ process.stdin.on('end', () => {
 process.stdin.resume();
 process.stdin.on('end', () => {
   console.log(JSON.stringify({ type: 'step_start' }));
-  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 OpenDesign 插件脚手架。先读取文档规范，再生成插件文件。' } }));
   console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
   process.exit(0);
 });
@@ -1292,7 +1292,7 @@ process.stdin.on('end', () => {
             projectId,
             conversationId,
             pluginId: 'od-plugin-authoring',
-            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 OpenDesign 插件脚手架。',
           }),
         });
         expect(createResponse.status).toBe(202);
@@ -2239,7 +2239,7 @@ process.stdin.on('end', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             agentId: 'opencode',
-            message: 'build the Open Design landing page',
+            message: 'build the OpenDesign landing page',
             skillId: 'editorial-collage',
             skillIds: ['open-design-landing'],
           }),
@@ -3036,6 +3036,108 @@ process.exit(1);
         expect(eventsBody).toContain('/login');
         expect(eventsBody).toContain('CLAUDE_CONFIG_DIR');
         expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('prefers a terminal Claude prompt-length error over auth-shaped stderr (#6979)', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.error(JSON.stringify({ apiKeySource: 'none' }));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'Prompt is too long',
+  stop_reason: null,
+}));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        await waitForRunStatus(baseUrl, runId);
+        const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+        const statusBody = await statusResponse.json() as {
+          status: string;
+          failureCategory: string | null;
+          failureDetail: string | null;
+        };
+
+        expect(eventsBody).toContain('AGENT_PROMPT_TOO_LARGE');
+        expect(eventsBody).toContain('Prompt is too long');
+        expect(eventsBody).toContain('"retryable":false');
+        expect(eventsBody).not.toContain('could not authenticate');
+        expect(statusBody).toMatchObject({
+          status: 'failed',
+          failureCategory: 'prompt_too_large',
+          failureDetail: 'prompt_too_large',
+        });
+      },
+    );
+  });
+
+  it('does not treat prompt-length text in an assistant payload as the terminal cause (#6979)', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  parent_tool_use_id: null,
+  message: {
+    id: 'msg-prompt-text',
+    content: [{ type: 'text', text: 'The upstream phrase was: Prompt is too long.' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'A different terminal failure',
+  stop_reason: null,
+}));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).toContain('A different terminal failure');
+        expect(eventsBody).not.toContain('AGENT_PROMPT_TOO_LARGE');
       },
     );
   });

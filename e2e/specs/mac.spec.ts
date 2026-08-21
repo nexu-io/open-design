@@ -8,6 +8,16 @@ import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
+import { createFakeAgentRuntimes } from '@/fake-agents';
+import {
+  assertPackagedHomeFirstRunResult,
+  PACKAGED_HOME_FIRST_RUN_OUTPUT,
+  PACKAGED_HOME_FIRST_RUN_PROMPT,
+  packagedHomeFirstRunExpression,
+  packagedHomeFirstRunSnapshotExpression,
+  packagedHomeFirstRunSubmitExpression,
+  type PackagedHomeFirstRunResult,
+} from '@/vitest/packaged-home-first-run';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
   assertPackagedPtySmokeResult,
@@ -352,6 +362,66 @@ const desktopMacDescribe = shouldRunDesktopMacSmoke ? describe : describe.skip;
 macDescribe('packaged mac runtime smoke', () => {
   let installedAppPath: string | null = null;
   let started = false;
+
+  test('[P0] @electron-smoke cold first Home run renders assistant output without refresh or workspace-tab switching', async () => {
+    const fakeAgentRoot = join(toolsPackDir, 'fixtures', `home-first-run-${namespace}`);
+    let firstRunInstalledAppPath: string | null = null;
+    let firstRunStarted = false;
+    try {
+      await resetPackagedRuntimeState();
+      const fakeAgents = await createFakeAgentRuntimes({
+        root: fakeAgentRoot,
+        runtimeIds: ['codex'],
+      });
+      const install = await runToolsPackJson<MacInstallResult>('install');
+      firstRunInstalledAppPath = install.installedAppPath;
+      await seedPackagedHomeFirstRunConfig(fakeAgents.codex.env);
+
+      const start = await runToolsPackJson<MacStartResult>('start');
+      firstRunStarted = true;
+      expect(start.source).toBe('installed');
+      await waitForHealthyDesktop();
+
+      const setup = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        packagedHomeFirstRunExpression(),
+      ]);
+      if (setup.eval?.ok !== true) {
+        throw new Error(`packaged first Home run setup failed: ${formatUnknown(setup.eval)}`);
+      }
+      expect(setup.eval.value).toMatchObject({
+        inputTextBeforeSubmit: PACKAGED_HOME_FIRST_RUN_PROMPT,
+        submitClicked: false,
+      });
+
+      await waitForPackagedHomeFirstRunSubmit();
+      const firstRun = await waitForPackagedHomeFirstRunOutput();
+      expect(firstRun.submitClicked).toBe(true);
+      expect(firstRun.projectId).toEqual(expect.any(String));
+      expect(firstRun.hrefBefore).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/$)/);
+      expect(firstRun.hrefAfter).toContain(`/projects/${firstRun.projectId}`);
+      expect(firstRun.injectedAuthorityOutageCount).toBe(1);
+      expect(firstRun.createRunRequestCount).toBeGreaterThanOrEqual(2);
+      expect(firstRun.createRunResponseStatuses[0]).toBe(503);
+      expect(firstRun.createRunResponseStatuses.at(-1)).toBeGreaterThanOrEqual(200);
+      expect(firstRun.createRunResponseStatuses.at(-1)).toBeLessThan(300);
+      expect(firstRun.runEventRequestCount).toBeGreaterThan(0);
+      expect(firstRun.runEventResponseStatuses).toContain(200);
+      expect(firstRun.runEventsContainExpectedOutput).toBe(true);
+      expect(firstRun.daemonAssistantText).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
+      expect(firstRun.assistantText).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
+      expect(firstRun.workspaceTabClicksBeforeOutput).toBe(0);
+      expect(firstRun.navigationEntryCountAfter).toBe(firstRun.navigationEntryCountBefore);
+      expect(firstRun.performanceTimeOriginAfter).toBe(firstRun.performanceTimeOriginBefore);
+    } finally {
+      if (firstRunStarted || firstRunInstalledAppPath != null) {
+        await runToolsPackJson<MacUninstallResult>('uninstall').catch((error: unknown) => {
+          console.error('failed to uninstall packaged first-Home-run app during cleanup', error);
+        });
+      }
+      await rm(fakeAgentRoot, { force: true, recursive: true }).catch(() => undefined);
+    }
+  }, 180_000);
 
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
@@ -2140,6 +2210,62 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
+async function waitForPackagedHomeFirstRunOutput(): Promise<PackagedHomeFirstRunResult> {
+  const timeoutMs = 15_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+      '--expr',
+      packagedHomeFirstRunSnapshotExpression(),
+    ]);
+    lastResult = inspect;
+    if (inspect.eval?.ok === true) {
+      const snapshot = assertPackagedHomeFirstRunResult(inspect.eval.value);
+      lastResult = snapshot;
+      if (
+        snapshot.assistantText.includes(PACKAGED_HOME_FIRST_RUN_OUTPUT)
+        && snapshot.daemonAssistantText.includes(PACKAGED_HOME_FIRST_RUN_OUTPUT)
+        && snapshot.runEventsContainExpectedOutput
+      ) {
+        return snapshot;
+      }
+    }
+    await delay(750);
+  }
+
+  throw new Error(
+    `packaged first Home run did not render assistant output without recovery: ${formatUnknown(lastResult)}`,
+  );
+}
+
+async function waitForPackagedHomeFirstRunSubmit(): Promise<void> {
+  const timeoutMs = 15_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+      '--expr',
+      packagedHomeFirstRunSubmitExpression(),
+    ]);
+    lastResult = inspect;
+    if (
+      inspect.eval?.ok === true
+      && isRecord(inspect.eval.value)
+      && inspect.eval.value.submitClicked === true
+    ) {
+      return;
+    }
+    await delay(250);
+  }
+
+  throw new Error(
+    `packaged first Home run submit never became ready: ${formatUnknown(lastResult)}`,
+  );
+}
+
 async function waitForHealthyDesktopVersion(
   expectedVersion: string,
   previousPid: number | null | undefined,
@@ -2595,7 +2721,7 @@ async function assertMacInviteProtocolRegistration(installedAppPath: string): Pr
 
 async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
   // `-a` pins delivery to this namespace's installed test bundle instead of a
-  // developer's stable Open Design app that may own the same global scheme.
+  // developer's stable OpenDesign app that may own the same global scheme.
   await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
 }
 
@@ -2613,9 +2739,31 @@ async function fileSizeBytes(filePath: string): Promise<number> {
 }
 
 async function seedPackagedOnboardingComplete(): Promise<void> {
+  await seedPackagedAppConfig({ onboardingCompleted: true });
+}
+
+async function seedPackagedHomeFirstRunConfig(
+  codexEnv: Record<string, string>,
+): Promise<void> {
+  await seedPackagedAppConfig({
+    mode: 'daemon',
+    apiKey: '',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-sonnet-4-5',
+    agentId: 'codex',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: { codex: { model: 'default', reasoning: 'default' } },
+    agentCliEnv: { codex: codexEnv },
+  });
+}
+
+async function seedPackagedAppConfig(config: Record<string, unknown>): Promise<void> {
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
-  await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 }
 
 async function resetPackagedMacRuntimeData(): Promise<void> {

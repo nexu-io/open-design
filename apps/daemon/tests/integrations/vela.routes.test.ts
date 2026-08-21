@@ -1507,7 +1507,7 @@ describe('POST /api/integrations/vela/login', () => {
     await waitForVelaLoginIdle();
   });
 
-  it('passes Open Design attribution device id to vela login', async () => {
+  it('passes OpenDesign attribution device id to vela login', async () => {
     const dataDir = process.env.OD_DATA_DIR as string;
     const previous = await readAppConfig(dataDir);
     const dumpPath = path.join(tmpHome, 'vela-env-attribution.json');
@@ -1661,7 +1661,7 @@ describe('POST /api/integrations/vela/login', () => {
     }
   });
 
-  it('omits Open Design attribution device id without analytics consent headers', async () => {
+  it('omits OpenDesign attribution device id without analytics consent headers', async () => {
     const dataDir = process.env.OD_DATA_DIR as string;
     const previous = await readAppConfig(dataDir);
     const dumpPath = path.join(tmpHome, 'vela-env-attribution-no-headers.json');
@@ -1692,7 +1692,7 @@ describe('POST /api/integrations/vela/login', () => {
     }
   });
 
-  it('omits Open Design attribution device id when telemetry metrics are disabled', async () => {
+  it('omits OpenDesign attribution device id when telemetry metrics are disabled', async () => {
     const dataDir = process.env.OD_DATA_DIR as string;
     const previous = await readAppConfig(dataDir);
     const dumpPath = path.join(tmpHome, 'vela-env-attribution-metrics-off.json');
@@ -2514,7 +2514,7 @@ describe('ALL /api/integrations/vela/message-center/*', () => {
 });
 
 describe('POST /api/integrations/vela/analytics-entry', () => {
-  it('mirrors Open Design AMR entry clicks to the AMR analytics ingest shape', async () => {
+  it('mirrors OpenDesign AMR entry clicks to the AMR analytics ingest shape', async () => {
     const requests: unknown[] = [];
     const captureServer = createServer((req, res) => {
       let raw = '';
@@ -2711,7 +2711,7 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
     }
   });
 
-  it('mirrors Open Design onboarding profile snapshots with the header-derived device id', async () => {
+  it('mirrors OpenDesign onboarding profile snapshots with the header-derived device id', async () => {
     const requests: unknown[] = [];
     const captureServer = createServer((req, res) => {
       let raw = '';

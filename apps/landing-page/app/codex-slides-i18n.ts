@@ -66,7 +66,7 @@ export type CodexSlidesCopy = {
   label: string;
   heading: string;
   lead: string;
-  /** Primary CTA label. Names Open Design explicitly (this is a sister-product
+  /** Primary CTA label. Names OpenDesign explicitly (this is a sister-product
    * page, so the generic shared "Download desktop" would be ambiguous). */
   downloadCta: string;
   heroAlt: string;
@@ -133,7 +133,7 @@ const EN: CodexSlidesCopy = {
   heading: 'The AI slide studio inside your coding agent',
   lead:
     'Most AI slide generators hide the work behind one request and hand back a file. Codex Slides keeps the whole chain live inside Codex: research, outline, visual direction, render, edit, present, and export. Every deck stays a durable project on your own disk, and because it is image-native, each slide is a full visual canvas rather than a template with the text swapped out.',
-  downloadCta: 'Download Open Design',
+  downloadCta: 'Download OpenDesign',
   heroAlt:
     'Codex Slides: Codex on the left driving the slide studio in the browser, a rendered market-report slide on the right',
 
@@ -229,9 +229,9 @@ const EN: CodexSlidesCopy = {
     'Add the repository as a plugin marketplace, install the plugin, restart Codex, and start a new task. You need Codex with plugin support, Node.js 20 or newer, and one `codex login`. No separate OpenAI key and no `.env` file for the default workflow.',
 
   finalEyebrow: 'Next step',
-  tiebackTitle: 'Part of the Open Design family',
+  tiebackTitle: 'Part of the OpenDesign family',
   tiebackBody:
-    'Open Design is the open, local-first design workspace that sits outside the coding agent you already use. Codex Slides is that same idea aimed at presentations: your agent does the work in the open, the project stays on your machine, and nothing is locked behind a subscription. For the full design toolkit beyond slides, get the Open Design app.',
+    'OpenDesign is the open, local-first design workspace that sits outside the coding agent you already use. Codex Slides is that same idea aimed at presentations: your agent does the work in the open, the project stays on your machine, and nothing is locked behind a subscription. For the full design toolkit beyond slides, get the OpenDesign app.',
 
   schemaAlternateName: 'The open-source AI slide studio inside Codex',
   schemaWhatQuestion: 'What is Codex Slides?',
@@ -243,9 +243,9 @@ const EN: CodexSlidesCopy = {
   schemaExportQuestion: 'Can Codex Slides export real PowerPoint files?',
   schemaExportAnswer:
     'Yes. Codex Slides exports a real PPTX and a print-ready PDF, both preserving the project\'s speaker notes, at 1K/2K/4K render quality across five aspect ratios (16:9, 4:3, 1:1, 9:16, 3:4). Because it is image-native, exported PPTX slides contain full-slide images rather than individually editable PowerPoint shapes; editable-shape export is planned.',
-  schemaRelationQuestion: 'Is Codex Slides related to Open Design?',
+  schemaRelationQuestion: 'Is Codex Slides related to OpenDesign?',
   schemaRelationAnswer:
-    'Yes. Codex Slides is a sister project from the team behind Open Design, the same open, local-first, agent-native approach applied to presentations instead of design files.',
+    'Yes. Codex Slides is a sister project from the team behind OpenDesign, the same open, local-first, agent-native approach applied to presentations instead of design files.',
 };
 
 export function getCodexSlidesCopy(locale: LandingLocaleCode): CodexSlidesCopy {

@@ -6,7 +6,7 @@
  * shape for client-side reconciliation and smoke checks.
  *
  * Keep `PRICING_SNAPSHOT` and `public/pricing/plans.json` in lockstep until
- * Open Design Cloud exposes an external JSON contract that can replace this
+ * OpenDesign Cloud exposes an external JSON contract that can replace this
  * static landing-page contract.
  */
 
@@ -79,29 +79,122 @@ export interface PricingContract {
   teamTiers: TeamPlanTierConfig[];
 }
 
-/** Production dashboard that owns the authenticated billing-plan dialog. */
-export const CLOUD_BASE_URL = 'https://open-design.ai/cloud/dashboard';
+/** Query parameter carrying the Cloud Console deployment that opened Pricing. */
+export const CLOUD_CONSOLE_BASE_PARAM = 'cloud_console_base';
+
+/** Production Cloud Console used for direct public Pricing visits. */
+export const DEFAULT_CLOUD_CONSOLE_BASE_URL = 'https://open-design.ai/cloud/';
+
+/** Hosted domains (including their subdomains) allowed to receive a Pricing handoff. */
+export const HOSTED_CLOUD_CONSOLE_DOMAINS = [
+  'open-design.ai',
+  'powerformer.net',
+] as const;
+
+function isHostedCloudConsole(url: URL): boolean {
+  return (
+    url.protocol === 'https:' &&
+    url.port.length === 0 &&
+    url.pathname.endsWith('/') &&
+    HOSTED_CLOUD_CONSOLE_DOMAINS.some(
+      (domain) => url.hostname === domain || url.hostname.endsWith(`.${domain}`),
+    )
+  );
+}
+
+function isLoopbackCloudConsole(url: URL): boolean {
+  return (
+    url.protocol === 'http:' &&
+    (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
+    url.port.length > 0 &&
+    url.pathname === '/'
+  );
+}
+
+/**
+ * Resolve an explicit environment handoff without exposing an open redirect.
+ * A missing value is a normal direct public visit and uses production; a
+ * present but invalid value fails visibly at the Pricing CTA seam.
+ */
+export function resolveCloudConsoleBase(rawValue: string | null): string {
+  if (rawValue === null) return DEFAULT_CLOUD_CONSOLE_BASE_URL;
+  const value = rawValue.trim();
+  if (!value) throw new RangeError('Invalid Cloud Console base: value is empty');
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new RangeError('Invalid Cloud Console base: expected an absolute URL');
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new RangeError('Invalid Cloud Console base: credentials and URL state are not allowed');
+  }
+
+  const normalized = url.toString();
+  if (!isHostedCloudConsole(url) && !isLoopbackCloudConsole(url)) {
+    throw new RangeError('Invalid Cloud Console base: destination is not allowlisted');
+  }
+  return normalized;
+}
+
+/** Production dashboard that owns authenticated checkout. */
+export const CLOUD_BASE_URL = new URL(
+  'dashboard',
+  DEFAULT_CLOUD_CONSOLE_BASE_URL,
+).toString();
 
 /** Public pricing contract served by the landing page. */
 export const PLANS_JSON_URL = '/pricing/plans.json';
 
+/** Confirmed Go launch prices shared by the page, SEO metadata, and tests. */
+export const GO_PLAN = {
+  tier: 'go',
+  monthly: { priceUsd: 10, introPriceUsd: 5 },
+  yearly: { priceUsd: 60 },
+} as const;
+
 /**
- * Stable Vela contract for opening the billing plan chooser. `view=plans` and
- * `checkout=auto` are wallet-era compatibility aliases and must not be emitted
- * by the landing page.
+ * Stable Vela contract for opening the generic billing entry. Specific plan
+ * CTAs use `cloudSubscribeUrl` so Vela can start checkout without reopening a
+ * plan chooser.
  */
 export const CLOUD_CONSOLE_URL = `${CLOUD_BASE_URL}?billing=plan`;
 
 /**
- * Compatibility helper retained for existing call sites. Landing pricing is a
- * static comparison surface, so every CTA opens the authoritative plan chooser
- * rather than guessing a user's current workspace, plan, or permitted change.
+ * Landing pricing is the authoritative comparison surface. A selected plan and
+ * interval are handed to Vela so the dashboard can authenticate and continue
+ * directly into checkout.
  */
 export function cloudSubscribeUrl(
-  _tier: string,
-  _interval: 'monthly' | 'yearly',
+  tier: string,
+  interval: 'monthly' | 'yearly',
 ): string {
-  return CLOUD_CONSOLE_URL;
+  const url = new URL(CLOUD_BASE_URL);
+  url.searchParams.set('billing', 'plan');
+  url.searchParams.set('plan', tier);
+  url.searchParams.set('interval', interval);
+  url.searchParams.set('checkout', 'auto');
+  return url.toString();
+}
+
+/**
+ * Exact Team checkout handoff. Landing owns the comparison controls; Vela owns
+ * authentication, live catalog validation, workspace permissions, and Stripe.
+ * Carry the visitor's complete selection so Vela can prefill its existing
+ * confirmation dialog instead of asking for the same choices a second time.
+ */
+export function cloudTeamSubscribeUrl(
+  tier: TeamPlanTier,
+  interval: BillingInterval,
+  seats: number,
+): string {
+  if (!Number.isSafeInteger(seats) || seats < 1) {
+    throw new RangeError('Team checkout seats must be a positive integer');
+  }
+  const url = new URL(cloudSubscribeUrl(tier, interval));
+  url.searchParams.set('seats', String(seats));
+  return url.toString();
 }
 
 /**

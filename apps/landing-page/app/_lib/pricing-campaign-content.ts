@@ -9,6 +9,8 @@ export interface PricingCampaignContent {
   modelBenefits: readonly [string, string];
   paidBenefitNote: string;
   teamBenefitNote: string;
+  teamOfferTitle: string;
+  teamOfferModels: string;
   disclaimer: string;
   linkLabel: string;
   closeLabel: string;
@@ -24,7 +26,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['Unlimited DeepSeek V4 Pro', 'Unlimited DeepSeek V4 Flash'],
     paidBenefitNote: 'Aug 13—Aug 27 · FREE for two weeks',
     teamBenefitNote: 'Aug 13—Aug 27 · FREE for two weeks',
-    disclaimer: 'Unlimited model quota and free generations included in a plan are available only in Open Design; they cannot be used through MCP/CLI/API or in other scenarios. Some models may require queuing during peak hours. The organizer reserves the right of final interpretation.',
+    teamOfferTitle: 'Unlimited model access',
+    teamOfferModels: 'DeepSeek V4 Flash and V4 Pro',
+    disclaimer: 'Unlimited model quota and free generations included in a plan are available only in OpenDesign; they cannot be used through MCP/CLI/API or in other scenarios. Some models may require queuing during peak hours. The organizer reserves the right of final interpretation.',
     linkLabel: 'View campaign benefits', closeLabel: 'Dismiss campaign banner',
   },
   zh: {
@@ -36,7 +40,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['DeepSeek V4 Pro 无限使用', 'DeepSeek V4 Flash 无限使用'],
     paidBenefitNote: '8月13日—8月27日 · 两周免费用',
     teamBenefitNote: '8月13日—8月27日 · 两周免费用',
-    disclaimer: '套餐内的无限制模型额度与免费生成次数，仅可通过Open Design使用；无法在MCP/CLI/API及其他场景使用。部分模型高峰期需要排队。解释权归官方所有。',
+    teamOfferTitle: '无限模型使用权益',
+    teamOfferModels: 'DeepSeek V4 Flash 与 V4 Pro',
+    disclaimer: '套餐内的无限制模型额度与免费生成次数，仅可通过OpenDesign使用；无法在MCP/CLI/API及其他场景使用。部分模型高峰期需要排队。解释权归官方所有。',
     linkLabel: '查看活动权益', closeLabel: '关闭活动横幅',
   },
   'zh-tw': {
@@ -48,7 +54,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['DeepSeek V4 Pro 無限使用', 'DeepSeek V4 Flash 無限使用'],
     paidBenefitNote: '8月13日—8月27日 · 兩週免費用',
     teamBenefitNote: '8月13日—8月27日 · 兩週免費用',
-    disclaimer: '方案內的無限制模型額度與免費生成次數，僅可透過 Open Design 使用；無法在 MCP/CLI/API 及其他場景使用。部分模型在高峰時段可能需要排隊。最終解釋權歸官方所有。',
+    teamOfferTitle: '無限模型使用權益',
+    teamOfferModels: 'DeepSeek V4 Flash 與 V4 Pro',
+    disclaimer: '方案內的無限制模型額度與免費生成次數，僅可透過 OpenDesign 使用；無法在 MCP/CLI/API 及其他場景使用。部分模型在高峰時段可能需要排隊。最終解釋權歸官方所有。',
     linkLabel: '查看活動權益', closeLabel: '關閉活動橫幅',
   },
   ja: {
@@ -60,7 +68,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['DeepSeek V4 Proを無制限で利用', 'DeepSeek V4 Flashを無制限で利用'],
     paidBenefitNote: '8月13日〜8月27日 · 2週間無料',
     teamBenefitNote: '8月13日〜8月27日 · 2週間無料',
-    disclaimer: 'プランに含まれる無制限のモデル枠と無料生成回数は、Open Design内でのみ利用できます。MCP/CLI/APIなど、その他の環境では利用できません。一部のモデルはピーク時に待ち時間が発生する場合があります。最終的な解釈権は運営者に帰属します。',
+    teamOfferTitle: 'モデルを無制限に利用',
+    teamOfferModels: 'DeepSeek V4 Flash と V4 Pro',
+    disclaimer: 'プランに含まれる無制限のモデル枠と無料生成回数は、OpenDesign内でのみ利用できます。MCP/CLI/APIなど、その他の環境では利用できません。一部のモデルはピーク時に待ち時間が発生する場合があります。最終的な解釈権は運営者に帰属します。',
     linkLabel: '特典を見る', closeLabel: 'キャンペーンバナーを閉じる',
   },
   ko: {
@@ -72,7 +82,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['DeepSeek V4 Pro 무제한 사용', 'DeepSeek V4 Flash 무제한 사용'],
     paidBenefitNote: '8월 13일—8월 27일 · 2주 무료',
     teamBenefitNote: '8월 13일—8월 27일 · 2주 무료',
-    disclaimer: '플랜에 포함된 무제한 모델 한도와 무료 생성 횟수는 Open Design에서만 사용할 수 있으며 MCP/CLI/API 또는 기타 환경에서는 사용할 수 없습니다. 일부 모델은 피크 시간대에 대기해야 할 수 있습니다. 최종 해석 권한은 운영사에 있습니다.',
+    teamOfferTitle: '모델 무제한 사용',
+    teamOfferModels: 'DeepSeek V4 Flash 및 V4 Pro',
+    disclaimer: '플랜에 포함된 무제한 모델 한도와 무료 생성 횟수는 OpenDesign에서만 사용할 수 있으며 MCP/CLI/API 또는 기타 환경에서는 사용할 수 없습니다. 일부 모델은 피크 시간대에 대기해야 할 수 있습니다. 최종 해석 권한은 운영사에 있습니다.',
     linkLabel: '이벤트 혜택 보기', closeLabel: '이벤트 배너 닫기',
   },
   de: {
@@ -84,7 +96,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['DeepSeek V4 Pro unbegrenzt nutzen', 'DeepSeek V4 Flash unbegrenzt nutzen'],
     paidBenefitNote: '13.—27. August · zwei Wochen kostenlos',
     teamBenefitNote: '13.—27. August · zwei Wochen kostenlos',
-    disclaimer: 'Das im Tarif enthaltene unbegrenzte Modellkontingent und die kostenlosen Generierungen können nur in Open Design genutzt werden, nicht über MCP/CLI/API oder in anderen Umgebungen. Bei einigen Modellen kann es zu Spitzenzeiten zu Wartezeiten kommen. Der Veranstalter behält sich die endgültige Auslegung vor.',
+    teamOfferTitle: 'Unbegrenzter Modellzugang',
+    teamOfferModels: 'DeepSeek V4 Flash und V4 Pro',
+    disclaimer: 'Das im Tarif enthaltene unbegrenzte Modellkontingent und die kostenlosen Generierungen können nur in OpenDesign genutzt werden, nicht über MCP/CLI/API oder in anderen Umgebungen. Bei einigen Modellen kann es zu Spitzenzeiten zu Wartezeiten kommen. Der Veranstalter behält sich die endgültige Auslegung vor.',
     linkLabel: 'Aktionsvorteile ansehen', closeLabel: 'Aktionsbanner schließen',
   },
   fr: {
@@ -96,7 +110,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['DeepSeek V4 Pro en illimité', 'DeepSeek V4 Flash en illimité'],
     paidBenefitNote: 'Du 13 au 27 août · gratuits pendant deux semaines',
     teamBenefitNote: 'Du 13 au 27 août · gratuits pendant deux semaines',
-    disclaimer: 'Le quota de modèles illimité et les générations gratuites inclus dans le forfait sont utilisables uniquement dans Open Design, et non via MCP/CLI/API ni dans d’autres contextes. Certains modèles peuvent nécessiter une mise en file d’attente aux heures de pointe. L’organisateur se réserve le droit d’interprétation finale.',
+    teamOfferTitle: 'Accès illimité aux modèles',
+    teamOfferModels: 'DeepSeek V4 Flash et V4 Pro',
+    disclaimer: 'Le quota de modèles illimité et les générations gratuites inclus dans le forfait sont utilisables uniquement dans OpenDesign, et non via MCP/CLI/API ni dans d’autres contextes. Certains modèles peuvent nécessiter une mise en file d’attente aux heures de pointe. L’organisateur se réserve le droit d’interprétation finale.',
     linkLabel: 'Voir les avantages de la campagne', closeLabel: 'Fermer la bannière',
   },
   ru: {
@@ -108,7 +124,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['DeepSeek V4 Pro без ограничений', 'DeepSeek V4 Flash без ограничений'],
     paidBenefitNote: '13—27 августа · две недели бесплатно',
     teamBenefitNote: '13—27 августа · две недели бесплатно',
-    disclaimer: 'Безлимитная квота моделей и бесплатные генерации, включённые в тариф, доступны только в Open Design. Они недоступны через MCP/CLI/API или в других сценариях. Для некоторых моделей в часы пик может потребоваться ожидание в очереди. Организатор оставляет за собой право окончательного толкования.',
+    teamOfferTitle: 'Безлимитный доступ к моделям',
+    teamOfferModels: 'DeepSeek V4 Flash и V4 Pro',
+    disclaimer: 'Безлимитная квота моделей и бесплатные генерации, включённые в тариф, доступны только в OpenDesign. Они недоступны через MCP/CLI/API или в других сценариях. Для некоторых моделей в часы пик может потребоваться ожидание в очереди. Организатор оставляет за собой право окончательного толкования.',
     linkLabel: 'Посмотреть преимущества', closeLabel: 'Закрыть баннер',
   },
   es: {
@@ -120,7 +138,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['Uso ilimitado de DeepSeek V4 Pro', 'Uso ilimitado de DeepSeek V4 Flash'],
     paidBenefitNote: 'Del 13 al 27 de agosto · gratis durante dos semanas',
     teamBenefitNote: 'Del 13 al 27 de agosto · gratis durante dos semanas',
-    disclaimer: 'La cuota ilimitada de modelos y las generaciones gratuitas incluidas en el plan solo pueden utilizarse en Open Design, no mediante MCP/CLI/API ni en otros entornos. Algunos modelos pueden requerir espera en horas punta. El organizador se reserva el derecho de interpretación final.',
+    teamOfferTitle: 'Acceso ilimitado a modelos',
+    teamOfferModels: 'DeepSeek V4 Flash y V4 Pro',
+    disclaimer: 'La cuota ilimitada de modelos y las generaciones gratuitas incluidas en el plan solo pueden utilizarse en OpenDesign, no mediante MCP/CLI/API ni en otros entornos. Algunos modelos pueden requerir espera en horas punta. El organizador se reserva el derecho de interpretación final.',
     linkLabel: 'Ver beneficios', closeLabel: 'Cerrar el banner',
   },
   'pt-br': {
@@ -132,7 +152,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['Uso ilimitado do DeepSeek V4 Pro', 'Uso ilimitado do DeepSeek V4 Flash'],
     paidBenefitNote: '13 a 27 de agosto · grátis por duas semanas',
     teamBenefitNote: '13 a 27 de agosto · grátis por duas semanas',
-    disclaimer: 'A cota ilimitada de modelos e as gerações gratuitas incluídas no plano só podem ser usadas no Open Design, e não via MCP/CLI/API nem em outros cenários. Alguns modelos podem exigir espera em horários de pico. O organizador se reserva o direito de interpretação final.',
+    teamOfferTitle: 'Acesso ilimitado aos modelos',
+    teamOfferModels: 'DeepSeek V4 Flash e V4 Pro',
+    disclaimer: 'A cota ilimitada de modelos e as gerações gratuitas incluídas no plano só podem ser usadas no OpenDesign, e não via MCP/CLI/API nem em outros cenários. Alguns modelos podem exigir espera em horários de pico. O organizador se reserva o direito de interpretação final.',
     linkLabel: 'Ver benefícios', closeLabel: 'Fechar banner',
   },
   it: {
@@ -144,7 +166,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['DeepSeek V4 Pro senza limiti', 'DeepSeek V4 Flash senza limiti'],
     paidBenefitNote: '13—27 agosto · gratis per due settimane',
     teamBenefitNote: '13—27 agosto · gratis per due settimane',
-    disclaimer: 'La quota modelli illimitata e le generazioni gratuite incluse nel piano sono utilizzabili solo in Open Design, non tramite MCP/CLI/API né in altri contesti. Alcuni modelli potrebbero richiedere attesa nelle ore di punta. L’organizzatore si riserva il diritto di interpretazione finale.',
+    teamOfferTitle: 'Accesso illimitato ai modelli',
+    teamOfferModels: 'DeepSeek V4 Flash e V4 Pro',
+    disclaimer: 'La quota modelli illimitata e le generazioni gratuite incluse nel piano sono utilizzabili solo in OpenDesign, non tramite MCP/CLI/API né in altri contesti. Alcuni modelli potrebbero richiedere attesa nelle ore di punta. L’organizzatore si riserva il diritto di interpretazione finale.',
     linkLabel: 'Scopri i vantaggi', closeLabel: 'Chiudi il banner',
   },
   tr: {
@@ -156,7 +180,9 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     modelBenefits: ['DeepSeek V4 Pro sınırsız kullanım', 'DeepSeek V4 Flash sınırsız kullanım'],
     paidBenefitNote: '13—27 Ağustos · iki hafta ücretsiz',
     teamBenefitNote: '13—27 Ağustos · iki hafta ücretsiz',
-    disclaimer: 'Paket kapsamındaki sınırsız model kotası ve ücretsiz üretim hakları yalnızca Open Design içinde kullanılabilir; MCP/CLI/API veya diğer senaryolarda kullanılamaz. Bazı modeller yoğun saatlerde sıraya alınabilir. Nihai yorum hakkı organizatöre aittir.',
+    teamOfferTitle: 'Sınırsız model erişimi',
+    teamOfferModels: 'DeepSeek V4 Flash ve V4 Pro',
+    disclaimer: 'Paket kapsamındaki sınırsız model kotası ve ücretsiz üretim hakları yalnızca OpenDesign içinde kullanılabilir; MCP/CLI/API veya diğer senaryolarda kullanılamaz. Bazı modeller yoğun saatlerde sıraya alınabilir. Nihai yorum hakkı organizatöre aittir.',
     linkLabel: 'Kampanya avantajlarını gör', closeLabel: 'Kampanya bandını kapat',
   },
 } satisfies Partial<Record<LandingLocaleCode, PricingCampaignContent>>;

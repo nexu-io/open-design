@@ -62,15 +62,18 @@ function renderPillRow(labelFor: (chipId: string) => string) {
 }
 
 describe('TypePillRow', () => {
-  it('keeps Image inline and moves Video into All when the row overflows', () => {
+  it('keeps a strict ordered prefix inline and moves the remaining suffix into All', () => {
     renderPillRow((chipId) => chipId);
 
-    expect(screen.queryByTestId('home-hero-type-pill-image')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-deck')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-prototype')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-wireframe')).not.toBeNull();
+    expect(screen.queryByTestId('home-hero-type-pill-image')).toBeNull();
     expect(screen.queryByTestId('home-hero-type-pill-video')).toBeNull();
 
     fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
+    expect(screen.queryByTestId('home-hero-type-pill-image-more')).not.toBeNull();
     expect(screen.queryByTestId('home-hero-type-pill-video-more')).not.toBeNull();
-    expect(screen.queryByTestId('home-hero-type-pill-image-more')).toBeNull();
   });
 
   it('recomputes the inline split when rendered labels change without resizing the container', () => {

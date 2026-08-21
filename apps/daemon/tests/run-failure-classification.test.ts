@@ -1739,6 +1739,18 @@ describe('classifyRunFailure — batch A reclassification out of execution_faile
     expect(result?.failure_detail).toBe('prompt_too_large');
   });
 
+  it('classifies a text-only Claude "Prompt is too long" failure as prompt_too_large (#6979)', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'API Error: Prompt is too long.',
+    );
+
+    expect(result?.failure_category).toBe('prompt_too_large');
+    expect(result?.failure_detail).toBe('prompt_too_large');
+    expect(result?.retryable).toBe(false);
+    expect(result?.user_action).toBe('reduce_context');
+  });
+
   it('classifies AMR request body limits as prompt_too_large', () => {
     const result = classify(
       'AGENT_EXECUTION_FAILED',

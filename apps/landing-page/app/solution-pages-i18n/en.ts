@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const EN: SolutionLocaleCopy = {
   aiWireframeGenerator: {
-    title: 'AI Wireframe Generator — prompt to wireframe with Open Design',
+    title: 'AI Wireframe Generator — prompt to wireframe with OpenDesign',
     description:
-      'A free, open-source AI wireframe generator that turns a prompt into editable, multi-screen wireframes — and takes them all the way to shipped code. Open Design runs inside the coding agent you already use, so the wireframe and the real product share one source.',
+      'A free, open-source AI wireframe generator that turns a prompt into editable, multi-screen wireframes — and takes them all the way to shipped code. OpenDesign runs inside the coding agent you already use, so the wireframe and the real product share one source.',
     breadcrumb: 'AI wireframe generator',
     label: 'Tool · AI wireframe generator',
     heading: 'Wireframe at the speed of a prompt',
@@ -13,12 +13,12 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of a prompt turning into an editable wireframe and then a finished UI, framed by a green selection box',
     tldrTitle: 'In one line',
     tldrBody:
-      'Most AI wireframe generators hand you a picture you rebuild later. Open Design generates the wireframe inside your coding agent and carries it from prompt to shipped code — no export step, no handoff gap, no per-seat meter.',
+      'Most AI wireframe generators hand you a picture you rebuild later. OpenDesign generates the wireframe inside your coding agent and carries it from prompt to shipped code — no export step, no handoff gap, no per-seat meter.',
     stepsTitle: 'How the AI wireframe generator works',
     steps: [
       {
         title: 'Describe the screen',
-        body: 'Tell your agent what to wireframe in plain language — "a dashboard with a sidebar, a stats row, and a recent-activity table." Open Design loads the wireframe skill so the agent lays out structure and hierarchy, not just a single static image.',
+        body: 'Tell your agent what to wireframe in plain language — "a dashboard with a sidebar, a stats row, and a recent-activity table." OpenDesign loads the wireframe skill so the agent lays out structure and hierarchy, not just a single static image.',
         imageAlt: 'Illustration of a plain-language screen description typed into a terminal',
       },
       {
@@ -37,9 +37,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a wireframe flowing into shipped code held in a green selection frame',
       },
     ],
-    tableTitle: 'Open Design vs. typical AI wireframe generators',
+    tableTitle: 'OpenDesign vs. typical AI wireframe generators',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Typical AI wireframe generators',
     tableRows: [
       {
@@ -101,7 +101,7 @@ export const EN: SolutionLocaleCopy = {
         thumb: 'example-kami-landing',
       },
     ],
-    galleryTitle: 'Wireframes built with Open Design',
+    galleryTitle: 'Wireframes built with OpenDesign',
     galleryLead:
       'Every one started as a prompt and rendered to an editable, clickable artifact. Pick a template close to your idea, describe your variation, and the agent adapts it — from wireframe to shipped code.',
     gallery: [
@@ -116,7 +116,7 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Is the AI wireframe generator free?',
-        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the wireframe generator itself.',
+        a: 'Yes. OpenDesign is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the wireframe generator itself.',
       },
       {
         q: 'Are the wireframes editable, or just images?',
@@ -128,24 +128,24 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Which agents does it work with?',
-        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+        a: 'OpenDesign works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
       },
     ],
     ctaTitle: 'Generate your first wireframe tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn your next screen idea into an editable wireframe — and then into shipped code — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn your next screen idea into an editable wireframe — and then into shipped code — in the agent you already use.',
     relatedTitle: 'Related tools & guides',
     related: [
       { href: '/solutions/ai-ui-generator/', label: 'AI UI generator' },
-      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with OpenDesign' },
       { href: '/blog/design-to-code-tools/', label: 'Best design-to-code tools' },
-      { href: '/solutions/prototype/', label: 'Prototyping with Open Design' },
+      { href: '/solutions/prototype/', label: 'Prototyping with OpenDesign' },
     ],
   },
   aiUiGenerator: {
-    title: 'AI UI Generator — prompt to production UI with Open Design',
+    title: 'AI UI Generator — prompt to production UI with OpenDesign',
     description:
-      'A free, open-source AI UI generator that turns a prompt into a real, component-based interface — and takes it all the way to shipped code. Open Design runs inside the coding agent you already use, so the generated UI and the production code are the same artifact.',
+      'A free, open-source AI UI generator that turns a prompt into a real, component-based interface — and takes it all the way to shipped code. OpenDesign runs inside the coding agent you already use, so the generated UI and the production code are the same artifact.',
     breadcrumb: 'AI UI generator',
     label: 'Tool · AI UI generator',
     heading: 'Generate UI you can actually ship',
@@ -154,12 +154,12 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of a prompt turning into a component-based UI and then production code, framed by a green selection box',
     tldrTitle: 'In one line',
     tldrBody:
-      'Most AI UI generators give you a mockup or a throwaway React snippet. Open Design generates the UI inside your coding agent and carries it from prompt to shipped code — real components, your design system, no export step, no per-seat meter.',
+      'Most AI UI generators give you a mockup or a throwaway React snippet. OpenDesign generates the UI inside your coding agent and carries it from prompt to shipped code — real components, your design system, no export step, no per-seat meter.',
     stepsTitle: 'How the AI UI generator works',
     steps: [
       {
         title: 'Describe the interface',
-        body: 'Tell your agent what to build in plain language — "a settings page with a sidebar, tabbed sections, and a save bar." Open Design loads the UI skill so the agent reaches for real components and a design system, not a one-off screen.',
+        body: 'Tell your agent what to build in plain language — "a settings page with a sidebar, tabbed sections, and a save bar." OpenDesign loads the UI skill so the agent reaches for real components and a design system, not a one-off screen.',
         imageAlt: 'Illustration of a plain-language UI description typed into a terminal',
       },
       {
@@ -178,9 +178,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a generated UI flowing into shipped code held in a green selection frame',
       },
     ],
-    tableTitle: 'Open Design vs. typical AI UI generators',
+    tableTitle: 'OpenDesign vs. typical AI UI generators',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Typical AI UI generators',
     tableRows: [
       {
@@ -242,7 +242,7 @@ export const EN: SolutionLocaleCopy = {
         thumb: 'example-kami-landing',
       },
     ],
-    galleryTitle: 'UI built with Open Design',
+    galleryTitle: 'UI built with OpenDesign',
     galleryLead:
       'Every one started as a prompt and rendered to a real, component-based artifact. Pick a template close to your idea, describe your variation, and the agent adapts it — from UI to shipped code.',
     gallery: [
@@ -257,7 +257,7 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Is the AI UI generator free?',
-        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the UI generator itself.',
+        a: 'Yes. OpenDesign is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the UI generator itself.',
       },
       {
         q: 'Does it generate real components or just a mockup?',
@@ -269,22 +269,22 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Which agents does it work with?',
-        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+        a: 'OpenDesign works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
       },
     ],
     ctaTitle: 'Generate your first UI tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn your next interface idea into a real, component-based UI — and then into shipped code — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn your next interface idea into a real, component-based UI — and then into shipped code — in the agent you already use.',
     relatedTitle: 'Related tools & guides',
     related: [
       { href: '/solutions/ai-wireframe-generator/', label: 'AI wireframe generator' },
-      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with OpenDesign' },
       { href: '/blog/best-ai-design-tools/', label: 'Best AI design tools' },
-      { href: '/solutions/designer/', label: 'Open Design for designers' },
+      { href: '/solutions/designer/', label: 'OpenDesign for designers' },
     ],
   },
   designToCode: {
-    title: 'Design to Code — turn a design into shipped code with Open Design',
+    title: 'Design to Code — turn a design into shipped code with OpenDesign',
     description:
       'A free, open-source design-to-code workflow that turns a prompt or a design into real, editable code — inside the coding agent you already use. No export, no handoff: the design and the production code are one artifact you own and ship.',
     breadcrumb: 'Design to code',
@@ -295,12 +295,12 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of a design turning into clean production code, framed by a green selection box',
     tldrTitle: 'In one line',
     tldrBody:
-      'Most design-to-code tools export a one-time snapshot you then babysit. Open Design keeps the design and the code as one living artifact inside your agent — iterate by talking, ship code you own, no per-seat meter.',
+      'Most design-to-code tools export a one-time snapshot you then babysit. OpenDesign keeps the design and the code as one living artifact inside your agent — iterate by talking, ship code you own, no per-seat meter.',
     stepsTitle: 'How design to code works',
     steps: [
       {
         title: 'Start from a prompt or a design',
-        body: 'Describe the screen in plain language, or point your agent at a design direction. Open Design loads the right skill so the agent builds structure and components, not a brittle one-off conversion.',
+        body: 'Describe the screen in plain language, or point your agent at a design direction. OpenDesign loads the right skill so the agent builds structure and components, not a brittle one-off conversion.',
         imageAlt: 'Illustration of a design and a prompt feeding into a terminal',
       },
       {
@@ -319,9 +319,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of finished code held in a green selection frame, ready to ship',
       },
     ],
-    tableTitle: 'Open Design vs. typical design-to-code tools',
+    tableTitle: 'OpenDesign vs. typical design-to-code tools',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Typical design-to-code tools',
     tableRows: [
       {
@@ -383,7 +383,7 @@ export const EN: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Shipped from design with Open Design',
+    galleryTitle: 'Shipped from design with OpenDesign',
     galleryLead:
       'Every one started as a prompt or a design and became code you can ship. Pick a template close to your idea, describe your variation, and the agent converts it — design to code, with no handoff.',
     gallery: [
@@ -398,7 +398,7 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Is the design-to-code workflow free?',
-        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the design-to-code workflow itself.',
+        a: 'Yes. OpenDesign is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the design-to-code workflow itself.',
       },
       {
         q: 'What kind of code does it produce?',
@@ -410,38 +410,38 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Which agents does it work with?',
-        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+        a: 'OpenDesign works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
       },
     ],
     ctaTitle: 'Turn your next design into code tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn your next screen — prompt, wireframe, or design — into clean, shippable code in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn your next screen — prompt, wireframe, or design — into clean, shippable code in the agent you already use.',
     relatedTitle: 'Related tools & guides',
     related: [
       { href: '/solutions/ai-wireframe-generator/', label: 'AI wireframe generator' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI generator' },
       { href: '/blog/design-to-code-tools/', label: 'Best design-to-code tools' },
-      { href: '/solutions/engineering/', label: 'Open Design for engineering' },
+      { href: '/solutions/engineering/', label: 'OpenDesign for engineering' },
     ],
   },
   aiLandingPageGenerator: {
     title: 'AI Landing Page Generator — prompt to a landing page you ship',
     description:
-      'A free, open-source AI landing page generator that turns a prompt into a real, responsive landing page — and takes it all the way to shipped code. Open Design runs inside the coding agent you already use, so the generated page and the deployed page are the same artifact you own.',
+      'A free, open-source AI landing page generator that turns a prompt into a real, responsive landing page — and takes it all the way to shipped code. OpenDesign runs inside the coding agent you already use, so the generated page and the deployed page are the same artifact you own.',
     breadcrumb: 'AI landing page generator',
     label: 'Tool · AI landing page generator',
     heading: 'Generate a landing page you can ship',
     lead: 'Describe the offer and let your agent generate a real, responsive landing page — hero, features, pricing, waitlist, on brand. Then keep going: the same artifact becomes shipped code you deploy, in the agent you already run.',
     heroImageAlt:
-      'Real responsive landing page generated with Open Design, showing the Qelora project homepage',
+      'Real responsive landing page generated with OpenDesign, showing the Qelora project homepage',
     tldrTitle: 'In one line',
     tldrBody:
-      'Most AI landing page builders lock your page inside their editor and meter it per seat. Open Design generates the landing page inside your coding agent and carries it from prompt to shipped code — real sections, your brand, no export step, no per-seat meter.',
+      'Most AI landing page builders lock your page inside their editor and meter it per seat. OpenDesign generates the landing page inside your coding agent and carries it from prompt to shipped code — real sections, your brand, no export step, no per-seat meter.',
     stepsTitle: 'How the AI landing page generator works',
     steps: [
       {
         title: 'Describe the page',
-        body: 'Tell your agent what to build in plain language — "a launch page for a note-taking app: hero, three features, pricing, and a waitlist form." Open Design loads the landing-page skill so the agent lays out real sections with clear hierarchy.',
+        body: 'Tell your agent what to build in plain language — "a launch page for a note-taking app: hero, three features, pricing, and a waitlist form." OpenDesign loads the landing-page skill so the agent lays out real sections with clear hierarchy.',
         imageAlt: 'Illustration of a plain-language landing-page brief typed into a terminal',
       },
       {
@@ -460,9 +460,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a landing page flowing into shipped code held in a green selection frame',
       },
     ],
-    tableTitle: 'Open Design vs. typical AI landing page builders',
+    tableTitle: 'OpenDesign vs. typical AI landing page builders',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Typical AI landing page builders',
     tableRows: [
       {
@@ -524,7 +524,7 @@ export const EN: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Landing pages built with Open Design',
+    galleryTitle: 'Landing pages built with OpenDesign',
     galleryLead:
       'Every one started as a prompt and rendered to a real, responsive artifact. Pick a template close to your idea, describe your variation, and the agent adapts it — from landing page to shipped code.',
     gallery: [
@@ -539,7 +539,7 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Is the AI landing page generator free?',
-        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-page meter on the landing page generator itself.',
+        a: 'Yes. OpenDesign is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-page meter on the landing page generator itself.',
       },
       {
         q: 'Can I host the page anywhere?',
@@ -551,22 +551,22 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Which agents does it work with?',
-        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+        a: 'OpenDesign works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
       },
     ],
     ctaTitle: 'Generate your first landing page tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn your next launch idea into a real, responsive landing page — and then into shipped code — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn your next launch idea into a real, responsive landing page — and then into shipped code — in the agent you already use.',
     relatedTitle: 'Related tools & guides',
     related: [
       { href: '/solutions/ai-ui-generator/', label: 'AI UI generator' },
-      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
-      { href: '/solutions/marketing/', label: 'Open Design for marketing' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with OpenDesign' },
+      { href: '/solutions/marketing/', label: 'OpenDesign for marketing' },
       { href: '/blog/best-ai-design-tools/', label: 'Best AI design tools' },
     ],
   },
   figmaToCode: {
-    title: 'Figma to Code — turn Figma designs into shipped code with Open Design',
+    title: 'Figma to Code — turn Figma designs into shipped code with OpenDesign',
     description:
       'A free, open-source Figma-to-code workflow that turns a Figma design into clean, component-based code — inside the coding agent you already use, from Claude Code to Codex. Pull the design through the Figma MCP and let the agent build real code you own and ship, with no locked-in export.',
     breadcrumb: 'Figma to code',
@@ -577,12 +577,12 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of a Figma design turning into clean production code inside a coding agent, framed by a green selection box',
     tldrTitle: 'In one line',
     tldrBody:
-      'Most Figma-to-code plugins export a one-time snapshot of absolute-positioned markup you then rewrite. Open Design keeps the design and the code as one living artifact inside your agent — pull frames through the Figma MCP, iterate by talking, ship code you own.',
+      'Most Figma-to-code plugins export a one-time snapshot of absolute-positioned markup you then rewrite. OpenDesign keeps the design and the code as one living artifact inside your agent — pull frames through the Figma MCP, iterate by talking, ship code you own.',
     stepsTitle: 'How Figma to code works',
     steps: [
       {
         title: 'Connect Figma to your agent',
-        body: 'With the Figma MCP set up, your coding agent — Claude Code, Codex, Cursor Agent — can read a Figma file or a selected frame directly. Open Design loads the right skill so the agent turns design intent into structure, not a brittle pixel copy.',
+        body: 'With the Figma MCP set up, your coding agent — Claude Code, Codex, Cursor Agent — can read a Figma file or a selected frame directly. OpenDesign loads the right skill so the agent turns design intent into structure, not a brittle pixel copy.',
         imageAlt: 'Illustration of a Figma frame connecting to a terminal through an MCP link',
       },
       {
@@ -601,9 +601,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of finished code held in a green selection frame, ready to ship',
       },
     ],
-    tableTitle: 'Open Design vs. typical Figma-to-code tools',
+    tableTitle: 'OpenDesign vs. typical Figma-to-code tools',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Typical Figma-to-code tools',
     tableRows: [
       {
@@ -665,7 +665,7 @@ export const EN: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Shipped from Figma with Open Design',
+    galleryTitle: 'Shipped from Figma with OpenDesign',
     galleryLead:
       'Every one started as a Figma frame and became code you can ship. Pick a template close to your design, describe your variation, and the agent converts it — Figma to code, with no locked-in export.',
     gallery: [
@@ -679,7 +679,7 @@ export const EN: SolutionLocaleCopy = {
     faqTitle: 'Figma to code FAQ',
     faq: [
       {
-        q: 'How does Open Design turn Figma into code?',
+        q: 'How does OpenDesign turn Figma into code?',
         a: 'Through the Figma MCP, your coding agent — Claude Code, Codex, Cursor Agent — reads the Figma file or a selected frame directly and generates clean, component-based code, instead of exporting a one-time snapshot from a plugin.',
       },
       {
@@ -688,26 +688,26 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Is it free?',
-        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-export meter on the Figma-to-code workflow itself.',
+        a: 'Yes. OpenDesign is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-export meter on the Figma-to-code workflow itself.',
       },
       {
         q: 'Which agents does it work with?',
-        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys and your own Figma MCP setup; nothing is hosted for you.',
+        a: 'OpenDesign works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys and your own Figma MCP setup; nothing is hosted for you.',
       },
     ],
     ctaTitle: 'Turn your next Figma frame into code tonight',
     ctaBody:
-      'Star the repo, install Open Design, connect the Figma MCP, and turn your next Figma design into clean, shippable code in the agent you already use.',
+      'Star the repo, install OpenDesign, connect the Figma MCP, and turn your next Figma design into clean, shippable code in the agent you already use.',
     relatedTitle: 'Related tools & guides',
     related: [
-      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with OpenDesign' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI generator' },
-      { href: '/agents/claude-code-design/', label: 'Open Design for Claude Code' },
-      { href: '/solutions/engineering/', label: 'Open Design for engineering' },
+      { href: '/agents/claude-code-design/', label: 'OpenDesign for Claude Code' },
+      { href: '/solutions/engineering/', label: 'OpenDesign for engineering' },
     ],
   },
   screenshotToCode: {
-    title: 'Screenshot to Code — turn a screenshot into code with Open Design',
+    title: 'Screenshot to Code — turn a screenshot into code with OpenDesign',
     description:
       'A free, open-source screenshot-to-code workflow that turns a screenshot of any UI into clean, component-based code — inside the coding agent you already use. Drop in an image, describe what you want, and the agent rebuilds it as real code you own and ship, no locked-in export.',
     breadcrumb: 'Screenshot to code',
@@ -718,12 +718,12 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of a UI screenshot turning into clean production code inside a coding agent, framed by a green selection box',
     tldrTitle: 'In one line',
     tldrBody:
-      'Most screenshot-to-code tools spit out one-time, absolute-positioned markup you then rewrite. Open Design rebuilds the screenshot inside your coding agent as clean, component-based code — real structure, your design system, no export step, no per-seat meter.',
+      'Most screenshot-to-code tools spit out one-time, absolute-positioned markup you then rewrite. OpenDesign rebuilds the screenshot inside your coding agent as clean, component-based code — real structure, your design system, no export step, no per-seat meter.',
     stepsTitle: 'How screenshot to code works',
     steps: [
       {
         title: 'Drop in the screenshot',
-        body: 'Give your agent an image of the screen you want — a screenshot of an app, a website, or a design. Open Design loads the right skill so the agent reads the layout and intent, not just pixels.',
+        body: 'Give your agent an image of the screen you want — a screenshot of an app, a website, or a design. OpenDesign loads the right skill so the agent reads the layout and intent, not just pixels.',
         imageAlt: 'Illustration of a UI screenshot being dropped into a terminal',
       },
       {
@@ -742,9 +742,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of finished code held in a green selection frame, ready to ship',
       },
     ],
-    tableTitle: 'Open Design vs. typical screenshot-to-code tools',
+    tableTitle: 'OpenDesign vs. typical screenshot-to-code tools',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Typical screenshot-to-code tools',
     tableRows: [
       {
@@ -806,7 +806,7 @@ export const EN: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Rebuilt from a screenshot with Open Design',
+    galleryTitle: 'Rebuilt from a screenshot with OpenDesign',
     galleryLead:
       'Every one started as an image and became code you can ship. Pick a template close to your screenshot, describe your variation, and the agent rebuilds it — screenshot to code, with no locked-in export.',
     gallery: [
@@ -820,8 +820,8 @@ export const EN: SolutionLocaleCopy = {
     faqTitle: 'Screenshot to code FAQ',
     faq: [
       {
-        q: 'How does Open Design turn a screenshot into code?',
-        a: 'You give your coding agent an image of the screen and Open Design loads the right skill so the agent rebuilds it as clean, component-based code — reading layout and intent, not just tracing pixels.',
+        q: 'How does OpenDesign turn a screenshot into code?',
+        a: 'You give your coding agent an image of the screen and OpenDesign loads the right skill so the agent rebuilds it as clean, component-based code — reading layout and intent, not just tracing pixels.',
       },
       {
         q: 'What kind of code does it produce?',
@@ -829,26 +829,26 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Is it free?',
-        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the screenshot-to-code workflow itself.',
+        a: 'Yes. OpenDesign is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the screenshot-to-code workflow itself.',
       },
       {
         q: 'Which agents does it work with?',
-        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+        a: 'OpenDesign works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
       },
     ],
     ctaTitle: 'Turn your next screenshot into code tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn a screenshot of the screen you want into clean, shippable code in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn a screenshot of the screen you want into clean, shippable code in the agent you already use.',
     relatedTitle: 'Related tools & guides',
     related: [
-      { href: '/solutions/figma-to-code/', label: 'Figma to code with Open Design' },
-      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/solutions/figma-to-code/', label: 'Figma to code with OpenDesign' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with OpenDesign' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI generator' },
-      { href: '/solutions/engineering/', label: 'Open Design for engineering' },
+      { href: '/solutions/engineering/', label: 'OpenDesign for engineering' },
     ],
   },
   htmlToPpt: {
-    title: 'HTML to PPT — turn HTML into an editable PowerPoint with Open Design',
+    title: 'HTML to PPT — turn HTML into an editable PowerPoint with OpenDesign',
     description:
       'A free, open-source HTML-to-PPT workflow: your coding agent builds a polished HTML deck and exports a real, editable .pptx — inside the agent you already use. No cloud converter, no flat slide images, no locked export. The HTML and the PowerPoint are files you own.',
     breadcrumb: 'HTML to PPT',
@@ -859,12 +859,12 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of an HTML deck converting into an editable PowerPoint file inside a coding agent, framed by a green selection box',
     tldrTitle: 'In one line',
     tldrBody:
-      'Most HTML-to-PPT converters flatten your page into static slide images you cannot edit. Open Design builds the deck as HTML inside your coding agent and exports a real, editable .pptx — native text and shapes, your design system, no per-seat meter, no vendor lock.',
+      'Most HTML-to-PPT converters flatten your page into static slide images you cannot edit. OpenDesign builds the deck as HTML inside your coding agent and exports a real, editable .pptx — native text and shapes, your design system, no per-seat meter, no vendor lock.',
     stepsTitle: 'How HTML to PPT works',
     steps: [
       {
         title: 'Start from HTML, a doc, or a prompt',
-        body: 'Point your agent at an HTML page, a markdown doc, or just describe the deck. Open Design loads the right skill so the agent reads structure and intent — headings, sections, data — not just raw markup.',
+        body: 'Point your agent at an HTML page, a markdown doc, or just describe the deck. OpenDesign loads the right skill so the agent reads structure and intent — headings, sections, data — not just raw markup.',
         imageAlt: 'Illustration of HTML and a markdown doc being handed to a coding agent',
       },
       {
@@ -874,7 +874,7 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         title: 'Export an editable .pptx',
-        body: 'Open Design’s pptx-generator turns the HTML deck into a real PowerPoint — native shapes, editable text, and charts you can still change — with an HTML-to-PPTX fidelity audit, not a flat image per slide.',
+        body: 'OpenDesign’s pptx-generator turns the HTML deck into a real PowerPoint — native shapes, editable text, and charts you can still change — with an HTML-to-PPTX fidelity audit, not a flat image per slide.',
         imageAlt: 'Illustration of an HTML deck exporting into an editable PowerPoint file',
       },
       {
@@ -883,9 +883,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of finished slides held in a green selection frame, ready to hand off',
       },
     ],
-    tableTitle: 'Open Design vs. typical HTML-to-PPT converters',
+    tableTitle: 'OpenDesign vs. typical HTML-to-PPT converters',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Typical HTML-to-PPT converters',
     tableRows: [
       {
@@ -930,7 +930,7 @@ export const EN: SolutionLocaleCopy = {
     ],
     galleryTitle: 'Slide templates you can start from',
     galleryLead:
-      'Real decks rendered by Open Design, ready to export to an editable .pptx. Pick a theme close to your content, describe your variation, and the agent builds the deck — then hands you the PowerPoint you own.',
+      'Real decks rendered by OpenDesign, ready to export to an editable .pptx. Pick a theme close to your content, describe your variation, and the agent builds the deck — then hands you the PowerPoint you own.',
     gallery: [
       { thumb: 'deck-pitch', caption: 'Pitch deck' },
       { thumb: 'deck-product-launch', caption: 'Product launch deck' },
@@ -944,8 +944,8 @@ export const EN: SolutionLocaleCopy = {
     faqTitle: 'HTML to PPT FAQ',
     faq: [
       {
-        q: 'How does Open Design turn HTML into a PPT?',
-        a: 'Your coding agent builds the content into a clean HTML deck, then Open Design’s pptx-generator skill exports it to a real, editable .pptx — native shapes and text, audited for HTML-to-PPTX fidelity, not a flat image per slide.',
+        q: 'How does OpenDesign turn HTML into a PPT?',
+        a: 'Your coding agent builds the content into a clean HTML deck, then OpenDesign’s pptx-generator skill exports it to a real, editable .pptx — native shapes and text, audited for HTML-to-PPTX fidelity, not a flat image per slide.',
       },
       {
         q: 'Can I convert HTML to an editable PowerPoint?',
@@ -957,22 +957,22 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Is it free?',
-        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own keys — there is no per-file or per-credit meter on the HTML-to-PPT workflow.',
+        a: 'Yes. OpenDesign is open source and runs inside the coding agent you already use with your own keys — there is no per-file or per-credit meter on the HTML-to-PPT workflow.',
       },
       {
         q: 'What’s the difference from generating slides?',
-        a: 'Generating a deck usually starts from a prompt or outline; HTML to PPT starts from HTML or markdown you already have and focuses on the editable .pptx export. Both use the same Open Design deck engine — see the slides use case for the outline-first flow.',
+        a: 'Generating a deck usually starts from a prompt or outline; HTML to PPT starts from HTML or markdown you already have and focuses on the editable .pptx export. Both use the same OpenDesign deck engine — see the slides use case for the outline-first flow.',
       },
     ],
     ctaTitle: 'Turn your next HTML deck into an editable PPT',
     ctaBody:
-      'Star the repo, install Open Design, and turn HTML — or a prompt — into a clean deck and a real, editable .pptx, in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn HTML — or a prompt — into a clean deck and a real, editable .pptx, in the agent you already use.',
     relatedTitle: 'Related tools & guides',
     related: [
       { href: '/solutions/slides/', label: 'Generate presentation decks' },
-      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with OpenDesign' },
       { href: '/plugins/templates/', label: 'Browse deck templates' },
-      { href: '/solutions/marketing/', label: 'Open Design for marketing' },
+      { href: '/solutions/marketing/', label: 'OpenDesign for marketing' },
     ],
   },
   aiPrototypeGenerator: {
@@ -982,17 +982,17 @@ export const EN: SolutionLocaleCopy = {
     breadcrumb: 'AI prototype generator',
     label: 'Tool · AI prototype generator',
     heading: 'The AI prototype generator that ships code',
-    lead: 'Describe the flow and let your agent generate a real, clickable prototype — linked screens, consistent styles, working interactions. Unlike prototype generators that stop at a mockup, Open Design carries the same artifact to shipped code, in the agent you already run.',
+    lead: 'Describe the flow and let your agent generate a real, clickable prototype — linked screens, consistent styles, working interactions. Unlike prototype generators that stop at a mockup, OpenDesign carries the same artifact to shipped code, in the agent you already run.',
     heroImageAlt:
       'Editorial illustration of a prompt turning into a clickable multi-screen prototype and then production code, framed by a green selection box',
     tldrTitle: 'In one line',
     tldrBody:
-      'Most AI prototype generators (Figma, Cursor, Penpot) stop at a clickable mockup you then rebuild. Open Design generates the prototype inside your coding agent and carries it from prompt to shipped code — no export step, no handoff gap, no per-seat meter.',
+      'Most AI prototype generators (Figma, Cursor, Penpot) stop at a clickable mockup you then rebuild. OpenDesign generates the prototype inside your coding agent and carries it from prompt to shipped code — no export step, no handoff gap, no per-seat meter.',
     stepsTitle: 'How the AI prototype generator works',
     steps: [
       {
         title: 'Describe the flow',
-        body: 'Tell your agent the journey in plain language — "an onboarding flow: sign-up, plan picker, and a dashboard." Open Design loads the prototype skill so the agent lays out linked screens, not a single static frame.',
+        body: 'Tell your agent the journey in plain language — "an onboarding flow: sign-up, plan picker, and a dashboard." OpenDesign loads the prototype skill so the agent lays out linked screens, not a single static frame.',
         imageAlt: 'Illustration of a plain-language flow description typed into a terminal',
       },
       {
@@ -1011,9 +1011,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a prototype flowing into shipped code held in a green selection frame',
       },
     ],
-    tableTitle: 'Open Design vs. typical AI prototype generators',
+    tableTitle: 'OpenDesign vs. typical AI prototype generators',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Figma / Cursor / Penpot prototype generators',
     tableRows: [
       {
@@ -1075,7 +1075,7 @@ export const EN: SolutionLocaleCopy = {
         thumb: 'example-kami-landing',
       },
     ],
-    galleryTitle: 'Prototypes built with Open Design',
+    galleryTitle: 'Prototypes built with OpenDesign',
     galleryLead:
       'Every one started as a prompt and rendered to a clickable, editable artifact. Pick a template close to your idea, describe your variation, and the agent adapts it — from prototype to shipped code.',
     gallery: [
@@ -1090,11 +1090,11 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Is the AI prototype generator free?',
-        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the prototype generator itself.',
+        a: 'Yes. OpenDesign is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the prototype generator itself.',
       },
       {
         q: 'How is it different from Figma, Cursor, or Penpot prototype generators?',
-        a: 'Those stop at a clickable mockup inside their app. Open Design generates the prototype in your coding agent and carries the same artifact all the way to shipped code you own — no export, no rebuild for production.',
+        a: 'Those stop at a clickable mockup inside their app. OpenDesign generates the prototype in your coding agent and carries the same artifact all the way to shipped code you own — no export, no rebuild for production.',
       },
       {
         q: 'Are the prototypes clickable and multi-screen?',
@@ -1102,44 +1102,44 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Which agents does it work with?',
-        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+        a: 'OpenDesign works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
       },
     ],
     ctaTitle: 'Generate your first prototype tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn your next flow into a clickable prototype — and then into shipped code — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn your next flow into a clickable prototype — and then into shipped code — in the agent you already use.',
     relatedTitle: 'Related tools & guides',
     related: [
-      { href: '/solutions/prototype/', label: 'Prototyping with Open Design' },
+      { href: '/solutions/prototype/', label: 'Prototyping with OpenDesign' },
       { href: '/solutions/ai-wireframe-generator/', label: 'AI wireframe generator' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI generator' },
-      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with OpenDesign' },
     ],
   },
   prototype: {
-    title: 'Build interactive prototypes with Open Design + Claude Code',
+    title: 'Build interactive prototypes with OpenDesign + Claude Code',
     description:
-      'Turn a prompt into a clickable, multi-screen prototype without leaving your terminal. Open Design gives your coding agent the design skills, templates, and design system to ship real prototypes you can open in a browser.',
+      'Turn a prompt into a clickable, multi-screen prototype without leaving your terminal. OpenDesign gives your coding agent the design skills, templates, and design system to ship real prototypes you can open in a browser.',
     breadcrumb: 'Prototype',
     label: 'Use case · Prototype',
     heading: 'Prototype at the speed of a prompt',
     lead: 'Describe the flow you have in mind and let your agent assemble a real, clickable prototype — multiple screens, shared styles, and live interactions — rendered straight to HTML you can open, share, and hand to engineering.',
     heroImageAlt:
-      'Real web prototype generated with Open Design, showing the responsive Qelora project homepage',
+      'Real web prototype generated with OpenDesign, showing the responsive Qelora project homepage',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design is the design layer for the coding agent you already use. For prototyping, that means going from a one-paragraph idea to a navigable, styled prototype in a single session — no design tool, no export step, no handoff gap.',
-    stepsTitle: 'How prototyping works with Open Design',
+      'OpenDesign is the design layer for the coding agent you already use. For prototyping, that means going from a one-paragraph idea to a navigable, styled prototype in a single session — no design tool, no export step, no handoff gap.',
+    stepsTitle: 'How prototyping works with OpenDesign',
     steps: [
       {
         title: 'Describe the flow',
-        body: 'Tell your agent what you are building in plain language — "an onboarding flow with a welcome screen, a plan picker, and a confirmation." Open Design loads the prototype skill so the agent knows to produce screens, not a single page.',
+        body: 'Tell your agent what you are building in plain language — "an onboarding flow with a welcome screen, a plan picker, and a confirmation." OpenDesign loads the prototype skill so the agent knows to produce screens, not a single page.',
         imageAlt:
           'Illustration of a person typing a plain-language description of an app flow into a terminal',
       },
       {
         title: 'Generate styled screens',
-        body: 'The agent applies a design system and prototype templates from Open Design, so every screen shares typography, spacing, and components instead of looking like a rough draft. You get a coherent set of screens, not disconnected mockups.',
+        body: 'The agent applies a design system and prototype templates from OpenDesign, so every screen shares typography, spacing, and components instead of looking like a rough draft. You get a coherent set of screens, not disconnected mockups.',
         imageAlt:
           'Illustration of several app screens appearing in sequence, all sharing one consistent visual style',
       },
@@ -1156,9 +1156,9 @@ export const EN: SolutionLocaleCopy = {
           'Illustration of a prototype being revised then passed to an engineer, with design and code merging into one file',
       },
     ],
-    tableTitle: 'Prototyping with Open Design vs. the old way',
+    tableTitle: 'Prototyping with OpenDesign vs. the old way',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Traditional prototyping tools',
     tableRows: [
       {
@@ -1225,7 +1225,7 @@ export const EN: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Prototypes people built with Open Design',
+    galleryTitle: 'Prototypes people built with OpenDesign',
     galleryLead:
       'Every one of these started as a prompt and rendered to a clickable artifact. Pick a template close to your idea, describe your variation, and the agent adapts it.',
     gallery: [
@@ -1239,8 +1239,8 @@ export const EN: SolutionLocaleCopy = {
     faqTitle: 'Prototyping FAQ',
     faq: [
       {
-        q: 'Do I need a design tool like Figma to prototype with Open Design?',
-        a: 'No. Open Design runs inside your coding agent and renders prototypes to HTML. You describe the flow in language; the agent produces the screens. There is no separate canvas tool to learn or pay for.',
+        q: 'Do I need a design tool like Figma to prototype with OpenDesign?',
+        a: 'No. OpenDesign runs inside your coding agent and renders prototypes to HTML. You describe the flow in language; the agent produces the screens. There is no separate canvas tool to learn or pay for.',
       },
       {
         q: 'Are the prototypes interactive or just static mockups?',
@@ -1248,7 +1248,7 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Which agents can I use?',
-        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+        a: 'OpenDesign works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
       },
       {
         q: 'Can a prototype become the real product?',
@@ -1257,22 +1257,22 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Prototype your next idea tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn your next "what if" into something you can click — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn your next "what if" into something you can click — in the agent you already use.',
   },
   dashboard: {
-    title: 'Generate data dashboards with Open Design + Claude Code',
+    title: 'Generate data dashboards with OpenDesign + Claude Code',
     description:
       'Describe the metrics you track and let your coding agent build a styled, responsive dashboard — charts, KPI cards, and tables rendered to HTML you can host anywhere. No BI tool seat, no drag-and-drop builder.',
     breadcrumb: 'Dashboard',
     label: 'Use case · Dashboard',
     heading: 'Dashboards from a description, not a drag-and-drop builder',
-    lead: 'Tell your agent what to show and how it should feel. Open Design supplies the chart patterns, layout system, and visual language so you get a coherent, presentable dashboard — not a wall of default-styled widgets.',
+    lead: 'Tell your agent what to show and how it should feel. OpenDesign supplies the chart patterns, layout system, and visual language so you get a coherent, presentable dashboard — not a wall of default-styled widgets.',
     heroImageAlt:
       'Editorial illustration of raw numbers on the left flowing into a clean dashboard of charts and KPI cards on the right',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design turns a plain-language spec of your metrics into a styled dashboard your agent renders to HTML — versioned in your repo, hostable anywhere, with no per-seat BI subscription.',
-    stepsTitle: 'How dashboards work with Open Design',
+      'OpenDesign turns a plain-language spec of your metrics into a styled dashboard your agent renders to HTML — versioned in your repo, hostable anywhere, with no per-seat BI subscription.',
+    stepsTitle: 'How dashboards work with OpenDesign',
     steps: [
       {
         title: 'Describe the metrics',
@@ -1281,7 +1281,7 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         title: 'Pick the chart patterns',
-        body: 'Open Design ships chart and layout templates, so trends become line charts, breakdowns become bars, and ratios become the right visual — consistent typography and spacing throughout instead of mismatched defaults.',
+        body: 'OpenDesign ships chart and layout templates, so trends become line charts, breakdowns become bars, and ratios become the right visual — consistent typography and spacing throughout instead of mismatched defaults.',
         imageAlt: 'Illustration of several chart types arranged into a coherent grid',
       },
       {
@@ -1295,9 +1295,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a dashboard being refined then deployed',
       },
     ],
-    tableTitle: 'Dashboards with Open Design vs. the old way',
+    tableTitle: 'Dashboards with OpenDesign vs. the old way',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'BI tools / hand-coded',
     tableRows: [
       {
@@ -1340,7 +1340,7 @@ export const EN: SolutionLocaleCopy = {
       { title: "Social & marketing", body: "Channel performance and campaign tracking in one view.", thumb: "example-social-media-dashboard" },
       { title: "Domain reports", body: "Structured reports for any field — from clinical to trading.", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: 'Dashboards people built with Open Design',
+    galleryTitle: 'Dashboards people built with OpenDesign',
     galleryLead:
       'Real dashboards rendered from a prompt and a data source. Start from one close to yours and describe the metrics you track.',
     gallery: [
@@ -1355,7 +1355,7 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Do I need a BI tool like Tableau or Looker?',
-        a: 'No. Open Design renders dashboards to HTML inside your coding agent. You describe the metrics and point it at your data; there is no separate BI platform to license or learn.',
+        a: 'No. OpenDesign renders dashboards to HTML inside your coding agent. You describe the metrics and point it at your data; there is no separate BI platform to license or learn.',
       },
       {
         q: 'Where does the data come from?',
@@ -1372,22 +1372,22 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Build your dashboard tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn your metrics into a dashboard you can host anywhere — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn your metrics into a dashboard you can host anywhere — in the agent you already use.',
   },
   slides: {
-    title: 'Generate presentation decks with Open Design + Claude Code',
+    title: 'Generate presentation decks with OpenDesign + Claude Code',
     description:
-      'Turn an outline into a designed, on-brand slide deck without opening a presentation app. Open Design gives your coding agent deck templates and a visual system, rendering slides to HTML you can present, export, or share.',
+      'Turn an outline into a designed, on-brand slide deck without opening a presentation app. OpenDesign gives your coding agent deck templates and a visual system, rendering slides to HTML you can present, export, or share.',
     breadcrumb: 'Slides',
     label: 'Use case · Slides',
     heading: 'Decks that look designed, written by a prompt',
-    lead: 'Hand your agent an outline and a tone. Open Design applies a deck template and visual system so every slide is laid out, typeset, and on-brand — not a bullet list on a blank background.',
+    lead: 'Hand your agent an outline and a tone. OpenDesign applies a deck template and visual system so every slide is laid out, typeset, and on-brand — not a bullet list on a blank background.',
     heroImageAlt:
-      'Open Design generating a real twelve-slide presentation with speaker notes and an editable HTML source file',
+      'OpenDesign generating a real twelve-slide presentation with speaker notes and an editable HTML source file',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design turns an outline into a designed HTML deck your agent renders in one session — present it in the browser, export to PDF or PPTX, and keep the source in your repo.',
-    stepsTitle: 'How decks work with Open Design',
+      'OpenDesign turns an outline into a designed HTML deck your agent renders in one session — present it in the browser, export to PDF or PPTX, and keep the source in your repo.',
+    stepsTitle: 'How decks work with OpenDesign',
     steps: [
       {
         title: 'Give it the outline',
@@ -1396,7 +1396,7 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         title: 'Choose a deck style',
-        body: 'Open Design ships deck templates — editorial, Swiss-international, dark technical, and more. The agent applies one so typography, grid, and accents stay consistent across every slide.',
+        body: 'OpenDesign ships deck templates — editorial, Swiss-international, dark technical, and more. The agent applies one so typography, grid, and accents stay consistent across every slide.',
         imageAlt: 'Illustration of several deck style options laid side by side',
       },
       {
@@ -1410,9 +1410,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a deck being presented and exported to multiple formats',
       },
     ],
-    tableTitle: 'Decks with Open Design vs. the old way',
+    tableTitle: 'Decks with OpenDesign vs. the old way',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'PowerPoint / Keynote / AI slide tools',
     tableRows: [
       {
@@ -1455,7 +1455,7 @@ export const EN: SolutionLocaleCopy = {
       { title: "Presenter mode", body: "Reveal-style decks built to present live in the browser.", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "Technical blueprints", body: "Architecture and knowledge decks that map complex systems.", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: 'Decks people built with Open Design',
+    galleryTitle: 'Decks people built with OpenDesign',
     galleryLead:
       'Real decks rendered from an outline. Pick a style close to your talk and describe the content.',
     gallery: [
@@ -1470,7 +1470,7 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Do I need PowerPoint or Keynote?',
-        a: 'No. Open Design renders decks to HTML inside your coding agent and can export to PDF or PPTX. You present from the browser or hand off a file — no presentation app required to build it.',
+        a: 'No. OpenDesign renders decks to HTML inside your coding agent and can export to PDF or PPTX. You present from the browser or hand off a file — no presentation app required to build it.',
       },
       {
         q: 'Are these just AI-generated bullet points?',
@@ -1478,7 +1478,7 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         q: 'Can I export to an editable PowerPoint?',
-        a: 'Yes. Open Design’s pptx-generator exports the deck to a real .pptx with native, editable text and shapes — audited for HTML-to-PPTX fidelity, not flat slide images — plus PDF and the HTML you present from. See the HTML to PPT tool for the conversion-first flow.',
+        a: 'Yes. OpenDesign’s pptx-generator exports the deck to a real .pptx with native, editable text and shapes — audited for HTML-to-PPTX fidelity, not flat slide images — plus PDF and the HTML you present from. See the HTML to PPT tool for the conversion-first flow.',
       },
       {
         q: 'Which agents can I use?',
@@ -1487,29 +1487,29 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Build your next deck tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn your outline into a designed deck — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn your outline into a designed deck — in the agent you already use.',
     relatedTitle: 'Related tools & guides',
     related: [
-      { href: '/solutions/html-to-ppt/', label: 'HTML to PPT with Open Design' },
-      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/solutions/html-to-ppt/', label: 'HTML to PPT with OpenDesign' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with OpenDesign' },
       { href: '/plugins/templates/', label: 'Browse deck templates' },
-      { href: '/solutions/marketing/', label: 'Open Design for marketing' },
+      { href: '/solutions/marketing/', label: 'OpenDesign for marketing' },
     ],
   },
   image: {
-    title: 'Generate on-brand graphics with Open Design + Claude Code',
+    title: 'Generate on-brand graphics with OpenDesign + Claude Code',
     description:
       'Produce social cards, article covers, and marketing graphics from a prompt — laid out with real typography and your brand system, rendered to crisp HTML you can export to PNG. No design app, no template subscription.',
     breadcrumb: 'Image',
     label: 'Use case · Image',
     heading: 'On-brand graphics, generated and laid out for you',
-    lead: 'Describe the card or cover you need. Open Design composes it with real type, grid, and your brand colors — then renders to HTML you can export as an image, instead of wrestling a design app or a generic template.',
+    lead: 'Describe the card or cover you need. OpenDesign composes it with real type, grid, and your brand colors — then renders to HTML you can export as an image, instead of wrestling a design app or a generic template.',
     heroImageAlt:
       'Editorial illustration of a prompt turning into a set of laid-out social cards and article covers',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design turns a prompt into a typeset, on-brand graphic your agent renders to HTML and exports to PNG — repeatable, versioned, and free of per-seat design tools.',
-    stepsTitle: 'How graphics work with Open Design',
+      'OpenDesign turns a prompt into a typeset, on-brand graphic your agent renders to HTML and exports to PNG — repeatable, versioned, and free of per-seat design tools.',
+    stepsTitle: 'How graphics work with OpenDesign',
     steps: [
       {
         title: 'Describe the graphic',
@@ -1518,7 +1518,7 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         title: 'Apply the brand system',
-        body: 'Open Design pulls your colors, type, and spacing from a reusable design system, so every card matches the rest of your brand instead of looking like a one-off.',
+        body: 'OpenDesign pulls your colors, type, and spacing from a reusable design system, so every card matches the rest of your brand instead of looking like a one-off.',
         imageAlt: 'Illustration of brand colors and type being applied to a card layout',
       },
       {
@@ -1532,9 +1532,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of one card template producing a consistent series of graphics',
       },
     ],
-    tableTitle: 'Graphics with Open Design vs. the old way',
+    tableTitle: 'Graphics with OpenDesign vs. the old way',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Design apps / generic templates',
     tableRows: [
       {
@@ -1577,7 +1577,7 @@ export const EN: SolutionLocaleCopy = {
       { title: "Carousels", body: "Multi-slide social carousels that stay consistent across frames.", thumb: "example-social-carousel" },
       { title: "UI mock frames", body: "Notification and device frames for product storytelling.", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: 'Graphics people built with Open Design',
+    galleryTitle: 'Graphics people built with OpenDesign',
     galleryLead:
       'Real cards and covers rendered from a prompt. Pick one close to what you need and swap in your copy.',
     gallery: [
@@ -1592,7 +1592,7 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Is this an AI image generator like Midjourney?',
-        a: 'No. Open Design composes graphics with real layout and typography — your headline, your brand, exact dimensions — and renders to HTML you export as PNG. It is design composition, not pixel generation.',
+        a: 'No. OpenDesign composes graphics with real layout and typography — your headline, your brand, exact dimensions — and renders to HTML you export as PNG. It is design composition, not pixel generation.',
       },
       {
         q: 'Can I make a consistent series of cards?',
@@ -1609,22 +1609,22 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Make your next graphic tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn a prompt into an on-brand graphic — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn a prompt into an on-brand graphic — in the agent you already use.',
   },
   video: {
-    title: 'Generate motion graphics & short video with Open Design + Claude Code',
+    title: 'Generate motion graphics & short video with OpenDesign + Claude Code',
     description:
       'Turn a script into animated frames and short-form video — title cards, motion backgrounds, and outros composed with your brand system and rendered from HTML. No motion-graphics suite, no timeline scrubbing.',
     breadcrumb: 'Video',
     label: 'Use case · Video',
     heading: 'Motion graphics from a script, not a timeline',
-    lead: 'Describe the moment you want — a title reveal, a data animation, a logo outro. Open Design composes animated frames with your brand system and renders them to video, no motion-graphics suite required.',
+    lead: 'Describe the moment you want — a title reveal, a data animation, a logo outro. OpenDesign composes animated frames with your brand system and renders them to video, no motion-graphics suite required.',
     heroImageAlt:
       'Editorial illustration of a script turning into a sequence of animated video frames',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design turns a script into animated, on-brand frames your agent renders to short-form video — composed from HTML, versioned in your repo, with no timeline editor to learn.',
-    stepsTitle: 'How motion works with Open Design',
+      'OpenDesign turns a script into animated, on-brand frames your agent renders to short-form video — composed from HTML, versioned in your repo, with no timeline editor to learn.',
+    stepsTitle: 'How motion works with OpenDesign',
     steps: [
       {
         title: 'Describe the moment',
@@ -1633,7 +1633,7 @@ export const EN: SolutionLocaleCopy = {
       },
       {
         title: 'Apply the brand & motion style',
-        body: 'Open Design supplies frame templates — cinematic light leaks, glitch titles, logo outros — and applies your colors and type, so the motion looks intentional and on-brand.',
+        body: 'OpenDesign supplies frame templates — cinematic light leaks, glitch titles, logo outros — and applies your colors and type, so the motion looks intentional and on-brand.',
         imageAlt: 'Illustration of brand styling applied to animated frames',
       },
       {
@@ -1647,9 +1647,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a video clip being refined and exported for social',
       },
     ],
-    tableTitle: 'Motion with Open Design vs. the old way',
+    tableTitle: 'Motion with OpenDesign vs. the old way',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'After Effects / motion suites',
     tableRows: [
       {
@@ -1692,7 +1692,7 @@ export const EN: SolutionLocaleCopy = {
       { title: "Glitch titles", body: "Title reveals with motion and texture.", thumb: "example-frame-glitch-title" },
       { title: "Logo outros", body: "Branded closing animations for any clip.", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: 'Motion people built with Open Design',
+    galleryTitle: 'Motion people built with OpenDesign',
     galleryLead:
       'Real animated frames and clips rendered from a prompt. Pick one close to your idea and describe the motion.',
     gallery: [
@@ -1707,7 +1707,7 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Do I need After Effects or a motion-graphics suite?',
-        a: 'No. Open Design composes animated frames in HTML and renders them to video inside your coding agent. There is no timeline editor to learn or license.',
+        a: 'No. OpenDesign composes animated frames in HTML and renders them to video inside your coding agent. There is no timeline editor to learn or license.',
       },
       {
         q: 'What kind of video is this good for?',
@@ -1724,31 +1724,31 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Animate your next idea tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn a script into motion — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn a script into motion — in the agent you already use.',
   },
   designSystem: {
-    title: 'Build and apply a design system with Open Design + Claude Code',
+    title: 'Build and apply a design system with OpenDesign + Claude Code',
     description:
       'Capture your brand as a reusable design system your coding agent applies to every artifact — colors, type, components, and tone in one DESIGN.md. Define it once; every prototype, deck, and dashboard stays on brand.',
     breadcrumb: 'Design System',
     label: 'Use case · Design System',
     heading: 'One design system, applied to everything your agent makes',
-    lead: 'Define your brand once and Open Design carries it into every output — prototypes, decks, dashboards, graphics. The system lives in your repo as a DESIGN.md the agent reads, so consistency is automatic, not manual.',
+    lead: 'Define your brand once and OpenDesign carries it into every output — prototypes, decks, dashboards, graphics. The system lives in your repo as a DESIGN.md the agent reads, so consistency is automatic, not manual.',
     heroImageAlt:
       'Editorial illustration of a single design system radiating into many on-brand artifacts',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design captures your brand as a portable design system your agent applies to every artifact — defined once in your repo, enforced everywhere, with no central design tool to gate-keep it.',
-    stepsTitle: 'How design systems work with Open Design',
+      'OpenDesign captures your brand as a portable design system your agent applies to every artifact — defined once in your repo, enforced everywhere, with no central design tool to gate-keep it.',
+    stepsTitle: 'How design systems work with OpenDesign',
     steps: [
       {
         title: 'Capture the system',
-        body: 'Describe your brand — colors, type, spacing, voice — or point the agent at an existing site to extract it. Open Design writes it into a DESIGN.md that lives in your project.',
+        body: 'Describe your brand — colors, type, spacing, voice — or point the agent at an existing site to extract it. OpenDesign writes it into a DESIGN.md that lives in your project.',
         imageAlt: 'Illustration of a brand being captured into a single design-system file',
       },
       {
         title: 'Start from a proven base',
-        body: 'Open Design ships 140+ reference design systems — from Apple and Linear to editorial and brutalist. Fork one close to your brand instead of starting from a blank page.',
+        body: 'OpenDesign ships 140+ reference design systems — from Apple and Linear to editorial and brutalist. Fork one close to your brand instead of starting from a blank page.',
         imageAlt: 'Illustration of a gallery of reference design systems being browsed',
       },
       {
@@ -1762,9 +1762,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a design system being updated and propagating to all outputs',
       },
     ],
-    tableTitle: 'Design systems with Open Design vs. the old way',
+    tableTitle: 'Design systems with OpenDesign vs. the old way',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Design-tool libraries / style guides',
     tableRows: [
       {
@@ -1807,7 +1807,7 @@ export const EN: SolutionLocaleCopy = {
       { title: "OpenAI", body: "Minimal, neutral, research-grade.", thumb: "design-system-openai" },
       { title: "GitHub", body: "Dense, technical, developer-native.", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Design systems in Open Design',
+    galleryTitle: 'Design systems in OpenDesign',
     galleryLead:
       'A few of the 140+ reference systems you can fork as a starting point. Pick one close to your brand and adapt it.',
     gallery: [
@@ -1822,11 +1822,11 @@ export const EN: SolutionLocaleCopy = {
     faq: [
       {
         q: 'What exactly is the design system here?',
-        a: 'A DESIGN.md file in your repo that captures colors, type, spacing, components, and voice. Every Open Design skill reads it, so your brand is applied automatically to whatever the agent produces.',
+        a: 'A DESIGN.md file in your repo that captures colors, type, spacing, components, and voice. Every OpenDesign skill reads it, so your brand is applied automatically to whatever the agent produces.',
       },
       {
         q: 'Do I have to start from scratch?',
-        a: 'No. Open Design ships 140+ reference design systems you can fork — from Apple and Linear to editorial and brutalist — then adapt to your brand.',
+        a: 'No. OpenDesign ships 140+ reference design systems you can fork — from Apple and Linear to editorial and brutalist — then adapt to your brand.',
       },
       {
         q: 'How does it stay consistent across decks, dashboards, and prototypes?',
@@ -1839,12 +1839,12 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Define your design system tonight',
     ctaBody:
-      'Star the repo, install Open Design, and give your agent one brand to apply everywhere — in the agent you already use.',
+      'Star the repo, install OpenDesign, and give your agent one brand to apply everywhere — in the agent you already use.',
   },
   roleSoloBuilder: {
-    title: 'Open Design for solo builders & indie hackers',
+    title: 'OpenDesign for solo builders & indie hackers',
     description:
-      'Ship like a team of one. Open Design turns your coding agent into the design half of your startup — prototypes, landing pages, dashboards, and brand visuals, all from a prompt, all on brand, all in your repo.',
+      'Ship like a team of one. OpenDesign turns your coding agent into the design half of your startup — prototypes, landing pages, dashboards, and brand visuals, all from a prompt, all on brand, all in your repo.',
     breadcrumb: 'Solo Builder',
     label: 'For · Solo Builders',
     heading: 'Your design team is the agent you already run',
@@ -1853,8 +1853,8 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of one person at a desk surrounded by a landing page, an app, a dashboard and social cards all in one consistent style',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design is the design department a solo founder never had: prompt-to-artifact across every surface your product needs, on one brand, with zero handoff and no extra tools.',
-    stepsTitle: 'How a solo builder uses Open Design',
+      'OpenDesign is the design department a solo founder never had: prompt-to-artifact across every surface your product needs, on one brand, with zero handoff and no extra tools.',
+    stepsTitle: 'How a solo builder uses OpenDesign',
     steps: [
       {
         title: 'Define your brand once',
@@ -1872,9 +1872,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of an artifact going straight from prompt to live',
       },
     ],
-    tableTitle: 'Solo building with Open Design vs. doing it the hard way',
+    tableTitle: 'Solo building with OpenDesign vs. doing it the hard way',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Going it alone today',
     tableRows: [
       { capability: 'Cover every design surface', withOd: 'One agent does prototype, landing, dashboard, brand', without: 'Stitch together five SaaS tools and tutorials' },
@@ -1892,7 +1892,7 @@ export const EN: SolutionLocaleCopy = {
       { title: 'Mobile flows', body: 'App screens when you go beyond the web.', thumb: 'example-mobile-app' },
       { title: 'Social cards', body: 'Launch and update cards for every channel.', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: 'Built solo with Open Design',
+    galleryTitle: 'Built solo with OpenDesign',
     galleryLead:
       'Every surface a one-person startup needs, from a prompt. Pick one close to your next move and describe it.',
     gallery: [
@@ -1912,12 +1912,12 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Build your whole thing tonight',
     ctaBody:
-      'Star the repo, install Open Design, and let one agent be your design team — in the agent you already use.',
+      'Star the repo, install OpenDesign, and let one agent be your design team — in the agent you already use.',
   },
   roleDesigner: {
-    title: 'Open Design for designers',
+    title: 'OpenDesign for designers',
     description:
-      'Spend your time on taste, not toil. Open Design lets your agent handle the repetitive production work — variants, states, full design systems — while you direct the look and keep final say.',
+      'Spend your time on taste, not toil. OpenDesign lets your agent handle the repetitive production work — variants, states, full design systems — while you direct the look and keep final say.',
     breadcrumb: 'Designer',
     label: 'For · Designers',
     heading: 'Direct the design — let the agent do the production',
@@ -1926,8 +1926,8 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of a designer directing while an agent fills in screens, variants and a design system',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design is the production assistant that never tires: you define the design system and call the taste; the agent generates the rest, on system, in your repo.',
-    stepsTitle: 'How a designer uses Open Design',
+      'OpenDesign is the production assistant that never tires: you define the design system and call the taste; the agent generates the rest, on system, in your repo.',
+    stepsTitle: 'How a designer uses OpenDesign',
     steps: [
       {
         title: 'Encode your system',
@@ -1945,9 +1945,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a designer giving direction and the design updating',
       },
     ],
-    tableTitle: 'Designing with Open Design vs. the manual way',
+    tableTitle: 'Designing with OpenDesign vs. the manual way',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Manual design tooling',
     tableRows: [
       { capability: 'Build a design system', withOd: 'A DESIGN.md the agent applies everywhere', without: 'A library you maintain by hand per tool' },
@@ -1965,7 +1965,7 @@ export const EN: SolutionLocaleCopy = {
       { title: 'App screens', body: 'High-fidelity mobile and web screens.', thumb: 'example-mobile-app' },
       { title: 'Dashboards', body: 'Data UI that respects your system.', thumb: 'example-dashboard' },
     ],
-    galleryTitle: 'Directed with Open Design',
+    galleryTitle: 'Directed with OpenDesign',
     galleryLead:
       'High-fidelity, on-system work the agent produced from direction. Pick one close to your style and refine it.',
     gallery: [
@@ -1985,12 +1985,12 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Direct your next design tonight',
     ctaBody:
-      'Star the repo, install Open Design, and let the agent handle production while you call the taste — in the agent you already use.',
+      'Star the repo, install OpenDesign, and let the agent handle production while you call the taste — in the agent you already use.',
   },
   roleEngineering: {
-    title: 'Open Design for engineers',
+    title: 'OpenDesign for engineers',
     description:
-      'Skip the design handoff. Open Design turns a DESIGN.md into real front-end your coding agent writes directly — on-system UI, prototypes, and dashboards, in the repo, no Figma round-trip.',
+      'Skip the design handoff. OpenDesign turns a DESIGN.md into real front-end your coding agent writes directly — on-system UI, prototypes, and dashboards, in the repo, no Figma round-trip.',
     breadcrumb: 'Engineering',
     label: 'For · Engineering',
     heading: 'From spec to front-end, no handoff in between',
@@ -1999,8 +1999,8 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of a DESIGN.md flowing directly into front-end code and rendered UI, skipping a handoff step',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design closes the designer-to-engineer gap by making the design system machine-readable: the same agent that writes your code applies the system and renders real UI.',
-    stepsTitle: 'How an engineer uses Open Design',
+      'OpenDesign closes the designer-to-engineer gap by making the design system machine-readable: the same agent that writes your code applies the system and renders real UI.',
+    stepsTitle: 'How an engineer uses OpenDesign',
     steps: [
       {
         title: 'Read the system, not a redline',
@@ -2018,9 +2018,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of generated UI landing as a reviewable PR',
       },
     ],
-    tableTitle: 'Front-end with Open Design vs. the handoff way',
+    tableTitle: 'Front-end with OpenDesign vs. the handoff way',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Design-to-dev handoff',
     tableRows: [
       { capability: 'Get a design to build from', withOd: 'A DESIGN.md your agent reads directly', without: 'A Figma file you re-interpret by hand' },
@@ -2038,7 +2038,7 @@ export const EN: SolutionLocaleCopy = {
       { title: 'Landing pages', body: 'Marketing pages without waiting on design.', thumb: 'example-saas-landing' },
       { title: 'Kanban / boards', body: 'Internal workflow UIs.', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: 'Built by engineers with Open Design',
+    galleryTitle: 'Built by engineers with OpenDesign',
     galleryLead:
       'Real, on-system front-end generated straight in the repo. Pick one close to what you are building and describe it.',
     gallery: [
@@ -2058,22 +2058,22 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Generate your next UI tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn a DESIGN.md into front-end — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn a DESIGN.md into front-end — in the agent you already use.',
   },
   roleProductManagers: {
-    title: 'Open Design for product managers',
+    title: 'OpenDesign for product managers',
     description:
-      'Stop waiting on design bandwidth to communicate an idea. Open Design lets a PM turn a prompt into a clickable prototype or wireframe — to align stakeholders and brief the team, without a design ticket.',
+      'Stop waiting on design bandwidth to communicate an idea. OpenDesign lets a PM turn a prompt into a clickable prototype or wireframe — to align stakeholders and brief the team, without a design ticket.',
     breadcrumb: 'Product Managers',
     label: 'For · Product Managers',
     heading: 'Make the idea clickable before the kickoff',
     lead: 'Describe the flow and your agent renders a real, clickable prototype you can put in front of stakeholders today — so reviews discuss the actual thing, not a paragraph in a doc.',
     heroImageAlt:
-      'Real interactive team dashboard artifact generated with Open Design for stakeholder review',
+      'Real interactive team dashboard artifact generated with OpenDesign for stakeholder review',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design gives a PM a design-free way to make ideas tangible: prompt-to-prototype for alignment and briefs, without spending the team’s design budget.',
-    stepsTitle: 'How a PM uses Open Design',
+      'OpenDesign gives a PM a design-free way to make ideas tangible: prompt-to-prototype for alignment and briefs, without spending the team’s design budget.',
+    stepsTitle: 'How a PM uses OpenDesign',
     steps: [
       {
         title: 'Describe the flow',
@@ -2091,9 +2091,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of a prototype shared for alignment then handed to the team',
       },
     ],
-    tableTitle: 'PM work with Open Design vs. waiting on design',
+    tableTitle: 'PM work with OpenDesign vs. waiting on design',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Without it today',
     tableRows: [
       { capability: 'Make an idea tangible', withOd: 'Prompt → clickable prototype yourself', without: 'File a design ticket and wait for bandwidth' },
@@ -2111,7 +2111,7 @@ export const EN: SolutionLocaleCopy = {
       { title: 'Web prototypes', body: 'Multi-screen web flows to review.', thumb: 'example-web-prototype' },
       { title: 'Trend views', body: '30-day and trend snapshots for context.', thumb: 'example-last30days' },
     ],
-    galleryTitle: 'Prototyped by PMs with Open Design',
+    galleryTitle: 'Prototyped by PMs with OpenDesign',
     galleryLead:
       'Clickable flows rendered from a description, ready for a stakeholder review. Pick one close to your idea and describe it.',
     gallery: [
@@ -2131,12 +2131,12 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Make your idea clickable tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn your next spec into something people can click — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn your next spec into something people can click — in the agent you already use.',
   },
   roleMarketing: {
-    title: 'Open Design for marketing teams',
+    title: 'OpenDesign for marketing teams',
     description:
-      'Ship campaigns at content speed. Open Design lets your agent produce landing pages, social cards, and campaign visuals from a prompt — on brand, on demand, without queuing design.',
+      'Ship campaigns at content speed. OpenDesign lets your agent produce landing pages, social cards, and campaign visuals from a prompt — on brand, on demand, without queuing design.',
     breadcrumb: 'Marketing',
     label: 'For · Marketing',
     heading: 'Campaign visuals at the speed of a prompt',
@@ -2145,8 +2145,8 @@ export const EN: SolutionLocaleCopy = {
       'Editorial illustration of a marketer turning a brief into a landing page and a set of on-brand social cards',
     tldrTitle: 'In one line',
     tldrBody:
-      'Open Design is the always-on design resource for marketing: prompt-to-asset for landing pages and social, on brand, so campaigns ship at the speed you write copy.',
-    stepsTitle: 'How a marketing team uses Open Design',
+      'OpenDesign is the always-on design resource for marketing: prompt-to-asset for landing pages and social, on brand, so campaigns ship at the speed you write copy.',
+    stepsTitle: 'How a marketing team uses OpenDesign',
     steps: [
       {
         title: 'Lock the brand',
@@ -2164,9 +2164,9 @@ export const EN: SolutionLocaleCopy = {
         imageAlt: 'Illustration of campaign assets shipping and being iterated quickly',
       },
     ],
-    tableTitle: 'Marketing with Open Design vs. the usual scramble',
+    tableTitle: 'Marketing with OpenDesign vs. the usual scramble',
     tableColCapability: 'What you need',
-    tableColWithOd: 'With Open Design',
+    tableColWithOd: 'With OpenDesign',
     tableColWithout: 'Without it today',
     tableRows: [
       { capability: 'Launch a landing page', withOd: 'Prompt → on-brand page, deployable', without: 'Brief design or fight a website builder' },
@@ -2184,7 +2184,7 @@ export const EN: SolutionLocaleCopy = {
       { title: 'Article covers', body: 'Blog and newsletter covers.', thumb: 'example-article-magazine' },
       { title: 'Web pages', body: 'Microsites and campaign pages.', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: 'Shipped by marketing with Open Design',
+    galleryTitle: 'Shipped by marketing with OpenDesign',
     galleryLead:
       'On-brand campaign assets rendered from a prompt. Pick one close to your campaign and swap in your copy.',
     gallery: [
@@ -2204,7 +2204,7 @@ export const EN: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Ship your next campaign tonight',
     ctaBody:
-      'Star the repo, install Open Design, and turn briefs into on-brand assets — in the agent you already use.',
+      'Star the repo, install OpenDesign, and turn briefs into on-brand assets — in the agent you already use.',
   },
 };
 

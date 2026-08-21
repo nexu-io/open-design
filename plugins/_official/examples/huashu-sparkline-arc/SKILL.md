@@ -3,9 +3,9 @@ name: huashu-sparkline-arc
 en_name: "Write a Revenue-Driver Story like a Board-Level Finance Partner"
 zh_name: "像董事会级财务伙伴一样写收入驱动分析"
 description: |
-  Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.
+  OpenDesign's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.
 en_description: |
-  Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.
+  OpenDesign's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.
 zh_description: |
   像董事会级财务伙伴一样写收入驱动分析——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -39,7 +39,7 @@ od:
     zh-CN: "用「叙事波形」模板把我的变革故事做成 Duarte 式 HTML 幻灯片：1920×1080 固定画布、每页一条横贯全屏的 SVG 贝塞尔波形线、品牌橙 #FF6B2C 只标转折点、灰化对照波形、stroke-dashoffset 逐段 reveal、Inter + Geist Mono 双字体。从 example.html 出发只换内容，不要重写设计。"
   category: "data-finance"
   scenario: "finance"
-  example_prompt: "Create \"Write a Revenue-Driver Story like a Board-Level Finance Partner\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Audience: board, finance leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
+  example_prompt: "Create \"Write a Revenue-Driver Story like a Board-Level Finance Partner\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: OpenDesign's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Audience: board, finance leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
 ---
 
 # Narrative Sparkline · 叙事波形

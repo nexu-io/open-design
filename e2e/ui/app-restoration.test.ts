@@ -2011,7 +2011,7 @@ test('[P1] Browser Inspiration page_info action seeds Browser tab context into t
 
   const input = page.getByTestId('chat-composer-input');
   await expect(input).toContainText('@agent-browser');
-  await expect(input).toContainText('Use the selected Open Design Browser tab as the bound target.');
+  await expect(input).toContainText('Use the selected OpenDesign Browser tab as the bound target.');
   await expect(input).toContainText('Operation: page_info');
   await expect(input).toContainText('- tab: Browser');
   await expect(input).toContainText('- url: about:blank');
@@ -2932,7 +2932,7 @@ async function createProjectNameOnly(
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -3001,7 +3001,7 @@ async function expectProjectsView(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function getCurrentProjectContext(

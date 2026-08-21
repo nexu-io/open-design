@@ -8,7 +8,7 @@ export const zh: CodexCopyOverride = {
   collectionEyebrow: '精选合集',
   collectionHeading: '让 Codex 真正做出好界面的设计插件',
   collectionLede:
-    'OpenAI Codex 能写出跑得起来的代码。但没人管它的时候，它只会挑最保险的字体、最平庸的间距，再把 Helvetica 往中间一放。这里精选的插件专门给它补审美：审美类 Skill 和设计系统规则。挑一个装，或者在 Open Design 里全跑起来。',
+    'OpenAI Codex 能写出跑得起来的代码。但没人管它的时候，它只会挑最保险的字体、最平庸的间距，再把 Helvetica 往中间一放。这里精选的插件专门给它补审美：审美类 Skill 和设计系统规则。挑一个装，或者在 OpenDesign 里全跑起来。',
   collectionStats: [
     { value: '50', label: '个精选插件' },
     { value: '13', label: '个来源仓库' },
@@ -20,13 +20,13 @@ export const zh: CodexCopyOverride = {
     '在写下第一行代码之前，就把 Codex 的默认审美判断改掉。',
     '把你的 token 和组件变成规则，让 Codex 照着做，而不是自己瞎编。',
   ],
-  collectionCloserHeading: '省掉配置，在 Open Design 里用 Codex 做设计',
+  collectionCloserHeading: '省掉配置，在 OpenDesign 里用 Codex 做设计',
   filterAll: '全部',
   collectionCloserBody:
-    'Open Design 是围绕 Codex 运转的开源、Agent 原生设计工作空间。它让你的设计系统、Skill 和模板始终保持一致，Agent 交付的成果真正属于你。',
+    'OpenDesign 是围绕 Codex 运转的开源、Agent 原生设计工作空间。它让你的设计系统、Skill 和模板始终保持一致，Agent 交付的成果真正属于你。',
   categoryFrontend: '前端与 UI',
   categoryDesignSystems: '设计系统',
-  ctaDownload: '下载 Open Design',
+  ctaDownload: '下载 OpenDesign',
   ctaStarList: '给这份清单点 Star',
   ctaBrowseAll: '浏览全部插件',
   ctaViewSource: '查看源地址',
@@ -60,9 +60,9 @@ export const zh: CodexCopyOverride = {
   detailMoreOnList: '在 codex-design 清单上了解更多',
   detailRelated: '更多 Codex 设计插件',
   finalEyebrow: '下一步',
-  detailCloserHeading: '用 Open Design 做设计，省掉那些配置',
+  detailCloserHeading: '用 OpenDesign 做设计，省掉那些配置',
   detailCloserBody:
-    '你可以自己装这个插件，也可以用 Open Design 在 Codex 外面套一整层精选设计层。自带 API Key，产出归你所有。',
+    '你可以自己装这个插件，也可以用 OpenDesign 在 Codex 外面套一整层精选设计层。自带 API Key，产出归你所有。',
   skills: {
     'gpt-taste': {
       tagline: '用 GSAP 滚动动效和无缝拼接的 bento 网格，做出获奖级的落地页。',

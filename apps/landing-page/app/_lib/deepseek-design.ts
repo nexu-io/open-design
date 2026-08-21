@@ -51,8 +51,8 @@ export const DEEPSEEK_COLLECTION: DeepseekCollection = {
   heading: 'DeepSeek Harness plugins for design',
   lede: 'A curated collection of dsh plugins for design work: vision bridges that read screenshots, canvases and generative UI the agent can draw on, design review tools, and workbenches that preview it all. DeepSeek Harness reads the same SKILL.md format as Claude Code and Codex, so your design skill library carries over.',
   stats: [
-    { value: '13', label: 'curated dsh plugins' },
-    { value: '13', label: 'source repos' },
+    { value: '19', label: 'curated dsh plugins' },
+    { value: '19', label: 'source repos' },
     { value: 'SKILL.md', label: 'shared with Claude Code & Codex' },
   ],
   intro:
@@ -233,6 +233,47 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     source: { label: 'akqwpeter-prog/dsh-media-skills', url: 'https://github.com/akqwpeter-prog/dsh-media-skills' },
   },
 
+  {
+    slug: 'dsh-vision-router',
+    name: 'dsh-vision-router',
+    category: 'Vision & Input',
+    badge: 'ysr666',
+    stars: 155,
+    tagline: 'Free, keyless eyes for text-only agents: a built-in vision chain plus eleven pixel-level tools.',
+    image: '/plugins/deepseek-harness-design/skills/dsh-vision-router.webp',
+    whatIsIt:
+      'A vision router that keeps the original pixels on the vision model’s side and DeepSeek on the reasoning side. Pick a “+ Auto Vision” model group, paste an image, and the agent drives eleven pixel-level tools — grounding, crop, pixel diff, palette, OCR, SVG trace, cutout, HTML screenshots — over a free anonymous vision fallback chain with no account and no key.',
+    whyForDesign: [
+      'A verifiable pixel loop for UI restoration: reference → screenshot → pixel diff with a red heatmap → fix → repeat until the mismatch converges.',
+      'Grounding and detection return original-image pixel boxes, and its README documents a rebuild verified down to a 2.54% final diff.',
+      'Palette extraction, SVG vectorization of icons and background cutout cover the small design chores around a rebuild.',
+    ],
+    howWithAgent: [
+      'Add the plugin to your web profile; its composition patch wires everything with zero manual file edits.',
+      'Open the model selector and choose a group marked “+ Auto Vision” before sending images.',
+      'Paste a screenshot and let the agent chain vision_ground, vision_crop, vision_describe and vision_pixel_diff.',
+    ],
+    covers: [
+      'Why this exists',
+      'How it compares',
+      'Quick start',
+      'Highlights',
+      'Tools',
+      'Provider fallback chain',
+    ],
+    tags: ['Vision', 'Pixel diff', 'Free tier', 'OCR'],
+    agentNote: 'Verified by 149 checked-in tests and certified on the dsh-recommend index',
+    repo: 'ysr666/dsh-vision-router',
+    install: {
+      kind: 'installer',
+      command: 'npx @deepseek-ai/dsh plugin --profile web add dsh-vision-router',
+    },
+    license: MIT,
+    upstreamDescription:
+      'Paste an image and it just works — eyes for text-only agents on DeepSeek Harness. Free out of the box, no key, no Python, one command.',
+    source: { label: 'ysr666/dsh-vision-router', url: 'https://github.com/ysr666/dsh-vision-router' },
+  },
+
   /* --------------------------- Canvas & Generative UI -------------------- */
   {
     slug: 'dsh-openpencil',
@@ -381,6 +422,87 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     source: { label: 'THU-MAIC/dsh-openmaic', url: 'https://github.com/THU-MAIC/dsh-openmaic' },
   },
 
+  {
+    slug: 'dsh-diagram',
+    name: 'dsh-diagram',
+    category: 'Canvas & Generative UI',
+    badge: 'hanzhangzzz',
+    stars: 2,
+    tagline: 'Turn any article in the session into an editable Excalidraw canvas, not a disposable image.',
+    image: '/plugins/deepseek-harness-design/skills/dsh-diagram.webp',
+    whatIsIt:
+      'An Excalidraw canvas inside the harness: the agent calls diagram_create to build a flowchart, architecture diagram, timeline, hierarchy or comparison from a compact semantic spec, and a Canvas tab opens the full editor so you refine text, nodes and connections directly in the session.',
+    whyForDesign: [
+      'Editable, not disposable: keep working in a real vector canvas instead of accepting a static generated image.',
+      'Revision-based compare-and-set autosave prevents a stale editor from silently overwriting newer work.',
+      'Exports .excalidraw, SVG or PNG, and manual edits reach the agent only when you ask it to call diagram_read.',
+    ],
+    howWithAgent: [
+      'Add the plugin to your web profile and restart dsh web.',
+      'Ask for one clear diagram of the article in the session; the agent calls diagram_create.',
+      'Open the Canvas tab, edit directly, then export or let the agent read your changes back.',
+    ],
+    covers: [
+      'Why dsh-diagram?',
+      'Quick install',
+      'Create your first diagram',
+      'What it adds',
+      'Compatibility',
+      'Data, security, and limits',
+    ],
+    tags: ['Excalidraw', 'Diagrams', 'Canvas', 'Editable'],
+    agentNote: 'Fails closed unless dsh web binds to 127.0.0.1 — the canvas RPC never faces the LAN',
+    repo: 'hanzhangzzz/dsh-diagram',
+    install: {
+      kind: 'installer',
+      command: 'dsh plugin --profile web add dsh-diagram@latest',
+    },
+    license: MIT,
+    upstreamDescription:
+      'Turn any article already available in a DeepSeek Harness session into an editable Excalidraw canvas. The Agent creates the structure; you refine the text, nodes, and connections directly in DSH.',
+    source: { label: 'hanzhangzzz/dsh-diagram', url: 'https://github.com/hanzhangzzz/dsh-diagram' },
+  },
+  {
+    slug: 'deepseek-harness-genui',
+    name: 'deepseek-harness-genui',
+    category: 'Canvas & Generative UI',
+    badge: 'pengyue-polaron',
+    stars: 4,
+    tagline: 'The task grows a focused React interface — and what you choose in it flows back to the agent.',
+    image: '/plugins/deepseek-harness-design/skills/deepseek-harness-genui.webp',
+    whatIsIt:
+      'A runtime interface layer for agent tasks: when text gets in the way, the agent writes a small React + TypeScript app — shown inline, in Canvas, full screen or on localhost — to explain a difficult relationship, collect a complex decision, or operate a connected tool after task-scoped approval.',
+    whyForDesign: [
+      'Interfaces are code-first React, so layouts, controls and diagrams are real components, not screenshots.',
+      'Saved selections, inputs and drafts return to the task for later agent turns to read.',
+      'A DESIGN.md system with four visual profiles keeps generated apps on one design language.',
+    ],
+    howWithAgent: [
+      'Run the install command — it adds the plugin, then installs the Chromium that Playwright needs.',
+      'Ask for an interface when interaction helps: a picker, an explorable model, a code-path explorer.',
+      'Interact, then follow up — the agent reads what you selected instead of asking you to repeat it.',
+    ],
+    covers: [
+      'What Changes',
+      'When an Interface Helps',
+      'Inline & Canvas',
+      'How It Works',
+      'Design MD',
+      'Safety',
+    ],
+    tags: ['Generative UI', 'React', 'Canvas', 'Task state'],
+    agentNote: 'Generated code runs sandboxed; tool calls must be declared, scoped and approved',
+    repo: 'pengyue-polaron/deepseek-harness-genui',
+    install: {
+      kind: 'installer',
+      command: 'dsh plugin --profile web add dsh-plugin-genui && dsh plugin --profile web exec playwright install chromium',
+    },
+    license: MIT,
+    upstreamDescription:
+      'DeepSeek Harness GenUI is a runtime interface layer for Agent tasks. When text gets in the way, the Agent can make the current task grow a focused UI—to explain a difficult relationship, collect a complex decision, or operate a connected tool.',
+    source: { label: 'pengyue-polaron/deepseek-harness-genui', url: 'https://github.com/pengyue-polaron/deepseek-harness-genui' },
+  },
+
   /* ------------------------------ Design Workflow ------------------------ */
   {
     slug: 'dsh-web-review',
@@ -493,6 +615,74 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     source: { label: 'YYTbit/dsh-plugin-claude-bridge', url: 'https://github.com/YYTbit/dsh-plugin-claude-bridge' },
   },
 
+  {
+    slug: 'dsh-annotate',
+    name: 'dsh-annotate',
+    category: 'Design Workflow',
+    badge: 'BrambleXu',
+    stars: 5,
+    tagline: 'Point at browser elements and send the agent structured facts, not vague descriptions.',
+    image: '/plugins/deepseek-harness-design/skills/dsh-annotate.webp',
+    whatIsIt:
+      'Visual browser feedback through a companion Chrome extension: /annotate enters selection mode, and each element you click contributes a selector, DOM facts, computed-style highlights, accessibility data, your comment and an optional viewport screenshot to the agent’s next turn.',
+    whyForDesign: [
+      'Visual feedback stays attached to the page element instead of becoming a vague description or a pasted screenshot.',
+      'Computed styles and accessibility data arrive as structured facts the agent can act on directly.',
+      'A loopback WebSocket bridge restricted by host, origin and extension ID keeps the channel local.',
+    ],
+    howWithAgent: [
+      'Clone the repo and add the project to a harness profile, then load its browser-extension folder as an unpacked extension from chrome://extensions.',
+      'Run /annotate, click elements on the page and attach a comment to each.',
+      'Submit — the captured facts and viewport screenshot land in the agent’s next turn.',
+    ],
+    covers: ['Why this exists', 'Features', 'Install', 'Use', 'Configure', 'Scope'],
+    tags: ['Annotation', 'Browser', 'Accessibility', 'Feedback'],
+    agentNote: 'Interaction inspired by pi-annotate, rebuilt on the harness’s human-command and attachment APIs',
+    repo: 'BrambleXu/dsh-annotate',
+    install: {
+      kind: 'installer',
+      command: 'git clone https://github.com/BrambleXu/dsh-annotate.git && dsh plugin --profile demo add ./dsh-annotate',
+    },
+    license: MIT,
+    upstreamDescription:
+      'Visual browser element annotation for DeepSeek Harness, capturing DOM, styles, accessibility data, comments, and viewport screenshots.',
+    source: { label: 'BrambleXu/dsh-annotate', url: 'https://github.com/BrambleXu/dsh-annotate' },
+  },
+  {
+    slug: 'dsh-hyperframes',
+    name: 'dsh-hyperframes',
+    category: 'Design Workflow',
+    badge: 'STARDUSTLC666',
+    stars: 2,
+    tagline: 'HyperFrames by HeyGen, ported: five official skills that turn HTML into finished video.',
+    image: '/plugins/deepseek-harness-design/skills/dsh-hyperframes.webp',
+    whatIsIt:
+      'One install registers the five official HyperFrames by HeyGen skills in the harness: HTML video composition with visual styles, palettes, captions and audio-reactive transitions, the hyperframes CLI, the component registry, a website-to-video pipeline, and a GSAP animation reference.',
+    whyForDesign: [
+      'Motion design in the medium you already work in: HTML and CSS become rendered video.',
+      'A seven-step website-to-video pipeline turns a URL into a produced clip.',
+      'The skills use the open SKILL.md format, so the same set carries to Claude Code, Cursor and Codex.',
+    ],
+    howWithAgent: [
+      'Add the plugin to your web profile and restart.',
+      'Say “turn this URL into a HyperFrames video” to trigger the pipeline.',
+      'Render through the hyperframes CLI; Node 22+ and FFmpeg are the only dependencies.',
+    ],
+    covers: ['安装', '技能清单', '依赖', '移植说明', '跨平台使用'],
+    tags: ['Video', 'Motion', 'HTML', 'HyperFrames'],
+    agentNote: 'Ported from the official Codex plugin cache with frontmatter converted to the dsh format',
+    bundle: 'Five skills: hyperframes, hyperframes-cli, hyperframes-registry, website-to-hyperframes, gsap',
+    repo: 'STARDUSTLC666/dsh-hyperframes',
+    install: {
+      kind: 'installer',
+      command: 'dsh plugin --profile web add dsh-hyperframes',
+    },
+    license: { label: 'MIT (per README)', url: 'https://github.com/STARDUSTLC666/dsh-hyperframes#license' },
+    upstreamDescription:
+      'DSH（DeepSeek Harness）视频创作技能插件：安装即把 HyperFrames by HeyGen 官方移植技能五件套注册进 DSH（HTML 写视频：合成、GSAP 动画、字幕、配音、音频响应、网址转视频）。',
+    source: { label: 'STARDUSTLC666/dsh-hyperframes', url: 'https://github.com/STARDUSTLC666/dsh-hyperframes' },
+  },
+
   /* ----------------------------- Workspace & Preview --------------------- */
   {
     slug: 'dsh-web-ui',
@@ -572,6 +762,39 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     upstreamDescription:
       '\u4e00\u4e2a\u4fa7\u8fb9\u680f\u7684\u5b8c\u6574\u5de5\u4f5c\u53f0\uff0c\u652f\u6301\u4e09\u65b9\u62d3\u5c55\u6ce8\u518c\u65b0Tab\u9875\u9762\uff0c\u5185\u7f6e\u6587\u4ef6\u6e32\u67d3\u7f16\u8f91/\u7ec8\u7aef/Git/\u5b50\u4ee3\u7406',
     source: { label: 'omdsh-dev/DSH-better-sidebar', url: 'https://github.com/omdsh-dev/DSH-better-sidebar' },
+  },
+  {
+    slug: 'dsh-web-preview',
+    name: 'dsh-web-preview',
+    category: 'Workspace & Preview',
+    badge: 'zoumutou',
+    stars: 1,
+    tagline: 'A glass side panel that previews the workspace, runs the project and annotates elements.',
+    image: '/plugins/deepseek-harness-design/skills/dsh-web-preview.webp',
+    whatIsIt:
+      'A side web-preview panel for the harness web UI: workspace files are served for preview — Markdown rendered, code with line numbers, images and HTML as-is — projects auto-detect their type (Cargo, package.json, go.mod, Python) and run with live logs, and a marking mode captures element annotations back into the conversation.',
+    whyForDesign: [
+      'The prototype the agent just wrote opens beside the chat, with the address bar synced and the panel width draggable.',
+      'Marking mode hover-highlights elements, captures a selector and HTML snapshot, and sends your note to the conversation.',
+      'Links, file paths and dropped files all open in the panel, so review never leaves the session.',
+    ],
+    howWithAgent: [
+      'Install the package into your web profile directory, then mount it by adding an insert entry named dsh-web-preview-panel to that profile’s cordis.patch.yml.',
+      'Restart dsh web and open the ▶ preview button at the top right of the conversation.',
+      'Run the project from the panel, annotate elements, and send logs or notes straight to the agent.',
+    ],
+    covers: ['功能', '安装', '开发', '协议'],
+    tags: ['Preview', 'Side panel', 'Project runner', 'Annotation'],
+    agentNote: 'A standard Cordis plugin package with host and client halves; per-session isolated state',
+    repo: 'zoumutou/dsh-web-preview',
+    install: {
+      kind: 'installer',
+      command: 'cd ~/.dsh/profiles/web && npm install dsh-web-preview-panel',
+    },
+    license: MIT,
+    upstreamDescription:
+      'DeepSeek Harness（DSH）侧边网页预览面板 —— 一个标准 Cordis 插件包（Host + Client 双半），把工作区目录托管成 iframe 预览，并支持项目运行、元素标记批注与链接点击接管。',
+    source: { label: 'zoumutou/dsh-web-preview', url: 'https://github.com/zoumutou/dsh-web-preview' },
   },
 ];
 

@@ -44,7 +44,7 @@ function accentVars(accentColor: string): Record<(typeof ACCENT_VARS)[number], s
 }
 
 /**
- * The one appearance Open Design ships.
+ * The one appearance OpenDesign ships.
  *
  * Product removed the theme setting: the workspace surfaces have no dark
  * tokens, so a dark app is a broken app. `data-theme` is therefore a constant

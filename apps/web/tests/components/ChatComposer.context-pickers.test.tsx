@@ -18,7 +18,7 @@ import { ChatComposer, type ChatComposerHandle } from '../../src/components/Chat
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
 import type { AppliedPluginSnapshot, ProjectMetadata } from '@open-design/contracts';
-import { composerText, pressEnter, typeAndSettle } from '../helpers/lexical-composer';
+import { composerText, pressEnter, typeAndSettle, typeInComposer } from '../helpers/lexical-composer';
 
 const COMMUNITY_PLUGIN = {
   id: 'community-deck',
@@ -1046,6 +1046,25 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByLabelText('Remove Deck Builder'));
     await waitFor(() => expect(composerText().trim()).toBe(''));
     expect(screen.queryByTestId('staged-contexts')).toBeNull();
+  });
+
+  it('does not keep a removed @ skill marked active when the mention picker reopens', async () => {
+    renderComposer({ currentSkillId: 'deck-builder' });
+    await flushMounts();
+
+    await typeAndSettle('@deck');
+    await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
+    fireEvent.click(screen.getByText('Deck Builder'));
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+
+    typeInComposer('');
+    await waitFor(() => expect(screen.queryByTestId('staged-contexts')).toBeNull());
+
+    await typeAndSettle('@deck');
+    const picker = await screen.findByTestId('mention-popover');
+    const skill = within(picker).getByRole('option', { name: /Deck Builder/ });
+
+    expect(skill.textContent).not.toContain('Active');
   });
 
   it('shows all matching skills and ranks exact prefix matches first', async () => {

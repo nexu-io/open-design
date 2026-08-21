@@ -1,17 +1,19 @@
-<h1 align="center">Open Design: オープンソースの Claude Design 代替ツール</h1>
+<h1 align="center">OpenDesign: オープンソースの Claude Design 代替ツール</h1>
 
-> ⚡ **Open Design Cloud——公式モデルサービス。** 一度のチャージで、Open Design の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[Open Design Cloud を試す](https://open-design.ai/cloud/)
+> ⚡ **[OpenDesign Cloud——公式モデルサービス。](https://open-design.ai/zh/pricing/)** 一度のチャージで、OpenDesign 内のエージェントモデルと画像モデルを利用できます。エージェントには GPT、Claude、DeepSeek、画像には GPT Image 2.0、Seedream 5.0 Pro、Nano Banana 2.0 を提供します。
 >
-> 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/mHAjSMV6gz)。
+> 🚀 **[DeepSeek V4 Flash と V4 Pro が利用可能になりました。](https://open-design.ai/zh/pricing/)** プロトタイプ、スライド、デザインシステム、日常的なエージェントタスクに最先端の知能を活用できます。OpenDesign メンバーは、アプリ内で両モデルを 2 週間無制限に利用できます。
+>
+> 🧩 **[DeepSeek Harness に対応しました。](https://open-design.ai/zh/agents/deepseek-harness-design/)** DeepSeek 公式の `dsh` Agent Harness を OpenDesign のネイティブランタイムとして接続できます。構造化思考、ツール呼び出し、モデル検出、キャンセル、セッション再開に対応し、生成ファイルはライブプレビューと納品のため OpenDesign のワークフロー内に保持されます。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
 </p>
 
 <p align="center">
   <a href="https://open-design.ai/">ウェブサイト</a> ·
   <a href="https://open-design.ai/">ダウンロード</a> ·
-  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
+  <a href="https://open-design.ai/cloud/">OpenDesign Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">@OpenDesignHQ をフォロー</a>
 </p>
@@ -27,11 +29,11 @@
 
 ---
 
-## Open Design とは
+## OpenDesign とは
 
 🎨 **ローカルファーストでオープンソースの Claude Design 代替ツール。** &nbsp;🖥️ **macOS と Windows 向けのネイティブデスクトップアプリ。** &nbsp;⚡ **100 種類以上の機能スキル + 独立したレンダリングテンプレートカタログ** · ✨ **151 のデザインシステムパッケージ** · 📦 **277 のすぐ使えるプラグイン。** &nbsp;🖼️ **ウェブ · デスクトップ · モバイルのプロトタイプ**、**ライブダッシュボード／アーティファクト**、**スライド**、**画像**、**動画**、さらに **HyperFrames** のモーショングラフィックスを生成。🔒 サンドボックス化された iframe プレビュー · HTML / PDF / PPTX / MP4 エクスポート。&nbsp;🤖 **25 種類のローカル CLI 実行ファイル上で動作**、もしくは BYOK 経由で任意の OpenAI 互換エンドポイント上でも動作します。
 
-Open Design は、そのループをエージェントが読み書きできる **機能スキル・レンダリングデザインテンプレート・デザインシステム・プラグインのファイルシステム** にします。
+OpenDesign は、そのループをエージェントが読み書きできる **機能スキル・レンダリングデザインテンプレート・デザインシステム・プラグインのファイルシステム** にします。
 
 これはまた、**エージェント時代の Figma 代替ツール**でもあります——キャンバス上でピクセルを動かす代わりに、本物の CSS、本物のフォント、本物のコンポーネントによる単一ページのアーティファクトを納品し、HTML / PDF / PPTX / MP4 へ直接エクスポートします。すでにあなたのデザインシステムによって形づくられ、すでに日常的に使うエージェントの中で実行可能です。
 
@@ -40,15 +42,15 @@ Open Design は、そのループをエージェントが読み書きできる *
 
 ## プロダクトツアー
 
-Open Design が何であり、何ができるのかを手早く見ていきましょう。**Home** から始め、**Automation** で繰り返しのワークフローをオーケストレーションし、**Design System** でブランドの契約書を抽出し、**Plugins** と **連携機能**で拡張します。どのプロジェクトの **Studio** 内でも、同じデザインシステムがプロトタイプ、ライブアーティファクト、HyperFrames、スライド、画像をストリーミング出力します。
+OpenDesign の中核ワークフローを手早く紹介します。**Home** でブリーフを入力し、**Plugins** で再利用可能なスキルを探し、ブランドの参考資料を **Design System** に変換します。その後、プロジェクトの **Studio** でプロトタイプ、スライド、モバイルアプリ、画像、ドキュメント、HyperFrame を一か所で作成・改善できます。
 
 ### コアページ
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
-<sub><b>Home</b> — 概観のエントリーポイント。スキルとデザインシステムを選び、ブリーフを入力して、すべてを一か所から始められます。</sub>
+<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
+<sub><b>Home</b> — アーティファクトの種類を選び、ブリーフを入力し、開始前にデザインシステム、作業ディレクトリ、モデルを設定します。</sub>
 </td>
 </tr>
 </table>
@@ -56,58 +58,57 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
-<sub><b>Automation</b> — 繰り返しのデザインワークフローを、再利用可能でスケジュール可能な自動化へとオーケストレーションします。</sub>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
+<sub><b>Plugins</b> — 公式スキルをカテゴリ別に閲覧し、カタログを検索して <code>Try it</code> からワークフローを開始します。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
-<sub><b>Design System</b> — チームの <code>DESIGN.md</code> を、すべての出力を形づくるブランドの契約書へと抽出します。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
-<sub><b>Plugin</b> — ワークフロープラグインを閲覧・インストール・配布し、必要に応じて生成を拡張します。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — 外部システムや MCP ツールを接続し、任意の IDE・スクリプト・自動化から Open Design を利用できます。</sub>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
+<sub><b>Design System</b> — ブランドのビジュアル言語を抽出・調整し、結果をプレビューして、同じワークスペースでそのまま制作を続けます。</sub>
 </td>
 </tr>
 </table>
 
-### Studio — 1 つのプロジェクトで多様なアーティファクトタイプを
+### Studio — 1 つのプロジェクトで多様なアーティファクトを
 
-プロジェクトの Studio 内では、同じデザインシステムが複数のアーティファクトタイプをストリーミング出力します。
+プロジェクトの Studio では、会話、生成ファイル、ライブプレビューが 6 種類のアーティファクトを通じて一か所にまとまります。
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>Prototype</b> — あなたのデザインシステムを読み取り、サンドボックス化された iframe にレンダリングされる単一ページの HTML アーティファクト。即座にプレビューでき、ソースとしてダウンロード可能です。</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="プロトタイプ" /><br/>
+<sub><b>プロトタイプ</b> — Web 体験を生成または再構築し、レンダリングされたページを確認しながら、その場でエージェントと反復します。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — プログラムによるモーションとアニメーショングラフィックスを、本物の MP4 にレンダリングします（例: 1920×1080 · 30fps）。</sub>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="スライド" /><br/>
+<sub><b>スライド</b> — 複数スライドのプレゼンテーションを作成し、サムネイルとスピーカーノートを確認して、完成したらエクスポートします。</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
-<sub><b>Deck</b> — ページ送りでき、キーボードで操作でき、PPTX / PDF にエクスポートできるピッチデック。</sub>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="モバイルアプリ" /><br/>
+<sub><b>モバイルアプリ</b> — デバイスプレビューでモバイル UI を生成・調整し、会話、出力ファイル、次の操作を横に表示したまま進めます。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
-<sub><b>Image</b> — 高解像度の生成とダウンロードに対応した、ブランドグレードの画像とビジュアルアセット。</sub>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="画像" /><br/>
+<sub><b>画像</b> — プロジェクトの会話からビジュアル素材を生成し、結果をフルサイズで確認してからダウンロードまたは開きます。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="ドキュメント" /><br/>
+<sub><b>ドキュメント</b> — 洗練された複数ページのガイドや編集ドキュメントを作成し、レイアウトを確認して、完成したらエクスポートまたは共有します。</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
+<sub><b>HyperFrame</b> — コード駆動のモーショングラフィックスを作成し、Studio 内でアニメーションをプレビューして、完成した動画をエクスポートします。</sub>
 </td>
 </tr>
 </table>
-
 ---
 
 ## プラットフォーム互換性
 
-> Open Design は、主流のコーディングエージェントがネイティブに利用する **スキル、CLI、MCP サーバー**として提供されます。OD をインストールすれば、`od mcp install <agent>` 一発で MCP サーバーがそのエージェントの設定に組み込まれ、どのエージェントの内部からでも同じツールを呼び出せます。
+> OpenDesign は、主流のコーディングエージェントがネイティブに利用する **スキル、CLI、MCP サーバー**として提供されます。OD をインストールすれば、`od mcp install <agent>` 一発で MCP サーバーがそのエージェントの設定に組み込まれ、どのエージェントの内部からでも同じツールを呼び出せます。
 
 | コーディングエージェント／プラットフォーム &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | ステータス &nbsp;&nbsp; | MCP サーバーのワンラインインストール &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -132,7 +133,7 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 `od mcp install <agent> --print` でドライランのプレビュー · `--uninstall` で削除 · 完全な一覧は `od mcp install --help` で確認できます。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **CLI を一つもインストールしていない場合は？** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` の BYOK プロキシが同じループ（プロセスのスポーンなし）を提供します——`baseUrl` + `apiKey` + `model` を貼り付けるだけで、OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM、または任意の OpenAI 互換エンドポイントに対応します。ターゲットごとの SSRF 保護が、内部 IP／リンクローカル／CGNAT をデーモンのエッジでブロックします。
@@ -150,16 +151,6 @@ Runtime 定義は [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 デフォルトの出力サーフェス。あなたの `DESIGN.md` を読み取り、サンドボックス化された iframe にレンダリングされる単一ページの HTML アーティファクトです。
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
-<sub><b>エントリービュー</b> — スキルを選び、デザインシステムを選び、ブリーフを入力します。プロトタイプ、ダッシュボード、スライド、モバイルアプリ、雑誌風ページのための単一のサーフェスです。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
-<sub><b>モバイルプロトタイプ</b> — ピクセル精度の iPhone 15 Pro のクロームと、マルチスクリーンのフロー。エージェントは決して電話のフレームを描き直しません。共有されるデバイスフレームは <code>assets/frames/</code> にあります。</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>
@@ -232,7 +223,7 @@ Runtime 定義は [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 
 ### 5 · 動画と HyperFrames — エージェントネイティブなモーショングラフィックス
 
-**[HyperFrames][hyperframes]** は HeyGen のオープンソースでエージェントネイティブな動画フレームワークであり、Open Design に第一級の存在として統合されています。エージェントが HTML + CSS + GSAP を書き、HyperFrames がそれをヘッドレス Chrome + FFmpeg を通じて決定論的な MP4 にレンダリングします。シネマティックな t2v / i2v のための **Seedance 2.0**、ルーティングされたモデルバリアントのための **Veo 3 / Sora 2 / Kling 2**、そしてオーディオレイヤーのための **Suno v5 / Lyria 2** と組み合わせられます。
+**[HyperFrames][hyperframes]** は HeyGen のオープンソースでエージェントネイティブな動画フレームワークであり、OpenDesign に第一級の存在として統合されています。エージェントが HTML + CSS + GSAP を書き、HyperFrames がそれをヘッドレス Chrome + FFmpeg を通じて決定論的な MP4 にレンダリングします。シネマティックな t2v / i2v のための **Seedance 2.0**、ルーティングされたモデルバリアントのための **Veo 3 / Sora 2 / Kling 2**、そしてオーディオレイヤーのための **Suno v5 / Lyria 2** と組み合わせられます。
 
 <table>
 <tr>
@@ -255,11 +246,11 @@ Runtime 定義は [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 
 ---
 
-## なぜ Open Design なのか
+## なぜ OpenDesign なのか
 
 > **2026 年 4 月、Anthropic は Claude Design をリリースしました——LLM が散文を書くのをやめ、デザインアーティファクトを直接納品し始めた初めての出来事でした。** これは一気に広まりました。しかし、それはクローズドソースのまま、有料のみ、クラウドのみで、Anthropic のモデル、Anthropic のスキル、Anthropic のサーフェスに縛られていました。チェックアウトもなく、セルフホストもなく、Vercel デプロイもなく、自前のエージェントへの差し替えもできません。
 
-Open Design (OD) はそのオープンソースの代替ツールです。同じループ、同じアーティファクトファーストのメンタルモデル、ロックインは一切なし:
+OpenDesign (OD) はそのオープンソースの代替ツールです。同じループ、同じアーティファクトファーストのメンタルモデル、ロックインは一切なし:
 
 - 🤖 **エージェントネイティブ、モデル非依存。** 私たちはエージェントを同梱しません。すでにあなたの `PATH` にある `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` がデザインエンジンです。ワンクリックで差し替えられます。
 - 🧠 **デフォルトでブランドグレード。** すべてのレンダリングは、アクティブなパッケージの `DESIGN.md` を中核のブランド契約として読み取ります。151 のデザインシステムパッケージが同梱され、従来のパッケージは `DESIGN.md` だけでも、新しいパッケージは `manifest.json`、`tokens.css`、コンポーネント、アセット、出典情報を追加できます。フォルダをドロップすればピッカーが見つけます。
@@ -270,7 +261,7 @@ Open Design (OD) はそのオープンソースの代替ツールです。同じ
 
 ### 比較
 
-| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
 |---|---|---|---|---|
 | オープンソース | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | セルフホスト／デスクトップ | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
@@ -287,7 +278,7 @@ Open Design (OD) はそのオープンソースの代替ツールです。同じ
 
 ### 🖥️ デスクトップアプリをダウンロード（推奨——設定ゼロ）
 
-Open Design を使う最も速い方法。Node も、pnpm も、クローンも不要です。
+OpenDesign を使う最も速い方法。Node も、pnpm も、クローンも不要です。
 
 - **macOS**（Apple Silicon · Intel x64）→ [**open-design.ai**](https://open-design.ai/) または [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/) または [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -297,7 +288,7 @@ Open Design を使う最も速い方法。Node も、pnpm も、クローンも�
 
 ### 🤖 コーディングエージェントにインストール（UI なし）
 
-GUI を一度も開くことなく Open Design を使えます——Claude Code、Codex、Cursor、Copilot、OpenClaw、Antigravity、Hermes、Kimi などの内部で、スキル、プラグイン、または MCP サーバーとして呼び出せます。
+GUI を一度も開くことなく OpenDesign を使えます——Claude Code、Codex、Cursor、Copilot、OpenClaw、Antigravity、Hermes、Kimi などの内部で、スキル、プラグイン、または MCP サーバーとして呼び出せます。
 
 ```bash
 # One-line install into the agent you're using:
@@ -312,7 +303,7 @@ od mcp install <agent>
 > Use open-design to generate a landing page with the Linear design system
 ```
 
-ファイルシステム対応のローカル CLI 実行では、エージェントが選択した機能スキルまたはデザインテンプレートと `DESIGN.md` を合成し、正規プロジェクトファイルを書き、Open Design がそれをプレビューします。ファイルツールのない BYOK/API 実行は、完全な `<artifact>` ブロックを 1 つ返します。
+ファイルシステム対応のローカル CLI 実行では、エージェントが選択した機能スキルまたはデザインテンプレートと `DESIGN.md` を合成し、正規プロジェクトファイルを書き、OpenDesign がそれをプレビューします。ファイルツールのない BYOK/API 実行は、完全な `<artifact>` ブロックを 1 つ返します。
 
 ### 🐳 Docker で実行
 
@@ -329,7 +320,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-Sealos App Store テンプレートは、公開済みの Open Design Docker イメージを永続的なワークスペースストレージと公開プロキシの Basic Auth 付きで実行します。独自の公開または共有 Docker デプロイでは、[`deploy/README.md`](../../deploy/README.md#local-compose) のリバースプロキシと `OPEN_DESIGN_ALLOWED_ORIGINS` の手順に従ってください。
+Sealos App Store テンプレートは、公開済みの OpenDesign Docker イメージを永続的なワークスペースストレージと公開プロキシの Basic Auth 付きで実行します。独自の公開または共有 Docker デプロイでは、[`deploy/README.md`](../../deploy/README.md#local-compose) のリバースプロキシと `OPEN_DESIGN_ALLOWED_ORIGINS` の手順に従ってください。
 
 ### 🧑‍💻 ソースから実行
 
@@ -352,13 +343,13 @@ Node `~24`、pnpm `10.33.x`。Windows ユーザーは [`docs/windows-troubleshoo
 2. **デザイナー（またはエージェント）が方向性を確定します。** ブランドがない？ 5 つの厳選された方向性から選びます。ブランドがある？ スクリーンショット／URL をドロップ → エージェントが GitHub に接続し、Figma をインポートし、再利用可能な `DESIGN.md` に体系化します。
 3. **エージェントが最初の成果物を作ります。** ファイルシステム対応 CLI は正規ファイルを書き、ファイルツールのない BYOK/API は完全な `<artifact>` ブロックを返します。
 4. **エンジニアリングへ引き渡します。** アーティファクトは本物の HTML/CSS です——Cursor、Codex、または Claude Code にドロップして、コードとして開発を続けられます。あるいは PPTX / PDF / MP4 をマーケティングへ直接エクスポートできます。
-5. **Open Design は使うほど賢くなります。** あなたのスクリーンショット、フォント、パレット、確定したアーティファクトは、次回のセッションのデフォルトとして蓄積されます。やり直しは減り、ブレも減ります。
+5. **OpenDesign は使うほど賢くなります。** あなたのスクリーンショット、フォント、パレット、確定したアーティファクトは、次回のセッションのデフォルトとして蓄積されます。やり直しは減り、ブレも減ります。
 
 ---
 
-## コーディングエージェントから Open Design を使う
+## コーディングエージェントから OpenDesign を使う
 
-Open Design は **stdio MCP サーバー**とエージェントごとの**インストールスクリプト**を提供します。別のリポジトリにある MCP 互換のエージェントは、あなたのローカルの Open Design プロジェクトからファイル——トークン CSS、JSX コンポーネント、エントリー HTML——を、名前で問い合わせ可能な構造化 API として直接読み取れます。エージェントは常に、古いエクスポートではなくライブのファイルを見ます。
+OpenDesign は **stdio MCP サーバー**とエージェントごとの**インストールスクリプト**を提供します。別のリポジトリにある MCP 互換のエージェントは、あなたのローカルの OpenDesign プロジェクトからファイル——トークン CSS、JSX コンポーネント、エントリー HTML——を、名前で問い合わせ可能な構造化 API として直接読み取れます。エージェントは常に、古いエクスポートではなくライブのファイルを見ます。
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -490,7 +481,7 @@ od plugin uninstall od-default       # uninstall
 
 ### プラグインを作る
 
-Open Design プラグインには `open-design.json` と型固有 payload が必要です。スキルとシナリオは `SKILL.md` も含み、ほかの型は独自 payload を使います:
+OpenDesign プラグインには `open-design.json` と型固有 payload が必要です。スキルとシナリオは `SKILL.md` も含み、ほかの型は独自 payload を使います:
 
 ```
 my-plugin/
@@ -515,7 +506,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ### プラグインを貢献する
 
-1. プラグインフォルダを [`plugins/community/`](../../plugins/community/)（サードパーティプラグイン）にドロップするか、または——Open Design に同梱して提供するには——[`plugins/_official/`](../../plugins/_official/) の該当するティアにドロップします。
+1. プラグインフォルダを [`plugins/community/`](../../plugins/community/)（サードパーティプラグイン）にドロップするか、または——OpenDesign に同梱して提供するには——[`plugins/_official/`](../../plugins/_official/) の該当するティアにドロップします。
 2. 検証を通過させます: `od plugin validate`、`pnpm guard`、`pnpm --filter @open-design/plugin-runtime typecheck`。
 3. [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) のテンプレートを使って PR を記入します（ID、バージョン、レーン、モード、機能、トリガー例。ビジュアルプラグインにはスクリーンショット／プレビューを添付）。
 4. 外部レジストリ（skills.sh / ClawHub / スタンドアロンの GitHub）に公開する → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md)。
@@ -578,7 +569,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] サイドカープロトコル + Electron デスクトップ + IPC 自動化
 - [x] アーティファクト lint API + 5 次元の自己批評による発行前ゲート
 - [x] **0.8.0** — プラグインマーケットプレイスのインフラ（261 の公式プラグイン、マニフェスト仕様、エージェントごとのインストールスクリプト）
-- [x] **0.9.0** — Open Design Cloud（アプリに組み込まれた公式 Model Router: 設定ゼロ、ワンクリックのサインイン）
+- [x] **0.9.0** — OpenDesign Cloud（アプリに組み込まれた公式 Model Router: 設定ゼロ、ワンクリックのサインイン）
 - [x] パッケージ化された Electron ビルド — macOS（Apple Silicon + Intel） + Windows（x64） + Linux AppImage（オプションのレーン）
 - [ ] コメントモードの外科的な編集 — 一部提供済み。信頼性の高いターゲット指定のパッチ適用は進行中
 - [ ] AI が発行する tweaks パネルの UX — 未実装
@@ -606,7 +597,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 貢献
 
-Open Design が動き続けるのは、貢献者——デザイナー、エンジニア、プロンプトの作者——が現れ続けるからです。最もよく使われるスキル、デザインシステム、プラグインの多くは、コアチームの外の人々によって書かれました。
+OpenDesign が動き続けるのは、貢献者——デザイナー、エンジニア、プロンプトの作者——が現れ続けるからです。最もよく使われるスキル、デザインシステム、プラグインの多くは、コアチームの外の人々によって書かれました。
 
 ### 🎯 どこから始めるか（最大のレバレッジ、最小の変更）
 
@@ -643,9 +634,9 @@ gh pr create --fill
 
 完全なエージェントフレンドリーな貢献フロー、コードスタイル、PR の基準 → [English](../../CONTRIBUTING.md)（[Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)）。
 
-### 🏅 Open Design Fellow プログラム
+### 🏅 OpenDesign Fellow プログラム
 
-私たちは世界中で **Open Design Fellow** を募集しています——Fellow はコアチームとともにプロダクトを形づくり、各地域で Open Design を公式に代表し、資金面のサポート（$1,000 / MR）、無料の LLM クレジット、直通のレビュートラックに支えられながら、ローカルでコミュニティを育てます。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/mHAjSMV6gz) のアナウンス。
+私たちは世界中で **OpenDesign Fellow** を募集しています——Fellow はコアチームとともにプロダクトを形づくり、各地域で OpenDesign を公式に代表し、資金面のサポート（$1,000 / MR）、無料の LLM クレジット、直通のレビュートラックに支えられながら、ローカルでコミュニティを育てます。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/mHAjSMV6gz) のアナウンス。
 
 ---
 
@@ -679,7 +670,7 @@ gh pr create --fill
 参加してくださったすべての方に感謝します——コード、ドキュメント、フィードバック、鋭い issue、新しいスキル、新しいデザインシステム。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="OpenDesign contributors" />
 </a>
 
 ---
@@ -687,7 +678,7 @@ gh pr create --fill
 ## リポジトリのアクティビティ
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="OpenDesign — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 上の SVG は、[`lowlighter/metrics`](https://github.com/lowlighter/metrics) を使って [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) によって毎日再生成されます。
@@ -697,7 +688,7 @@ gh pr create --fill
 ## スターをお願いします
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star OpenDesign on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 これで 30 分を節約できたなら、★ を付けてください。スターは家賃を払ってはくれません——でも、次のデザイナー、エージェント、貢献者に、この実験が注目に値することを伝えてくれます。ワンクリック、3 秒、本物のシグナルです。
@@ -706,7 +697,7 @@ gh pr create --fill
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 
@@ -724,7 +715,7 @@ gh pr create --fill
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | デーモン + アダプターのアーキテクチャ——PATH スキャンによるエージェント検出、唯一の特権プロセスとしてのローカルデーモン。 |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 当初の 9 セクション `DESIGN.md` スキーマと upstream 由来 70 システムの歴史的な出典。現在のパッケージはこの基盤を拡張できます。 |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` の下に追加された 57 のデザインスキルの出典。 |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 のモーショングラフィックスフレームワークで、Open Design に第一級の `hyperframes-html` として統合されています。 |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 のモーショングラフィックスフレームワークで、OpenDesign に第一級の `hyperframes-html` として統合されています。 |
 | [Claude Code skills][skill] | 私たちがそのまま採用している `SKILL.md` 規約。 |
 
 詳細な来歴 → [`docs/references.md`](../../docs/references.md)。

@@ -16,6 +16,7 @@ import type {
 import { eventsEndedWithUnfinishedWork } from '@open-design/contracts';
 import { migrateCollabSyncSnapshots } from './collab/sync-snapshot-store.js';
 import { migrateCommentRelayOutbox } from './collab/comment-relay-outbox.js';
+import { migratePublicFilePublications } from './collab/public-file-publication-store.js';
 import {
   collapseWorkspaceProjectHomes,
   type WorkspaceProjectHomeRow,
@@ -228,6 +229,21 @@ function migrate(db: SqliteDb): void {
 
     CREATE INDEX IF NOT EXISTS idx_messages_conv
       ON messages(conversation_id, position);
+
+    -- Agent streams write small immutable batches while a run is active. The
+    -- batches are folded into messages.events_json once, at the terminal
+    -- boundary, so a long thinking stream never rewrites its full history on
+    -- every flush window.
+    CREATE TABLE IF NOT EXISTS message_event_batches (
+      id INTEGER PRIMARY KEY,
+      message_id TEXT NOT NULL,
+      events_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_message_event_batches_message
+      ON message_event_batches(message_id, id);
 
     CREATE TABLE IF NOT EXISTS preview_comments (
       id TEXT PRIMARY KEY,
@@ -544,6 +560,7 @@ function migrate(db: SqliteDb): void {
   migratePlugins(db);
   migrateCollabSyncSnapshots(db);
   migrateCommentRelayOutbox(db);
+  migratePublicFilePublications(db);
 }
 
 /**
@@ -1986,7 +2003,7 @@ function normalizeTemplate(row: DbRow) {
 // ---------- conversations ----------
 
 export function listConversations(db: SqliteDb, projectId: string) {
-  return rows(db
+  const listed = rows(db
     .prepare(
       `WITH project_conversations AS (
           SELECT id, project_id AS projectId, title, session_mode AS sessionMode,
@@ -2000,13 +2017,13 @@ export function listConversations(db: SqliteDb, projectId: string) {
                  run_status AS latestRunStatus,
                  started_at AS latestRunStartedAt,
                  ended_at AS latestRunEndedAt,
-                 events_json AS latestRunEventsJson
+                 id AS latestRunMessageId
             FROM (
               SELECT m.conversation_id,
                      m.run_status,
                      m.started_at,
                      m.ended_at,
-                     m.events_json,
+                     m.id,
                      ROW_NUMBER() OVER (
                        PARTITION BY m.conversation_id
                        ORDER BY m.position DESC
@@ -2037,7 +2054,7 @@ export function listConversations(db: SqliteDb, projectId: string) {
         SELECT c.id, c.projectId, c.title, c.sessionMode, c.createdAt, c.updatedAt,
                COALESCE(mc.messageCount, 0) AS messageCount,
                lr.latestRunStatus, lr.latestRunStartedAt,
-               lr.latestRunEndedAt, lr.latestRunEventsJson,
+               lr.latestRunEndedAt, lr.latestRunMessageId,
                trd.totalDurationMs
           FROM project_conversations c
           LEFT JOIN latest_runs lr ON lr.conversationId = c.id
@@ -2045,7 +2062,50 @@ export function listConversations(db: SqliteDb, projectId: string) {
           LEFT JOIN total_run_durations trd ON trd.conversationId = c.id
          ORDER BY c.updatedAt DESC`,
     )
-    .all(projectId)).map(normalizeConversation);
+    .all(projectId));
+  return attachLatestRunEvents(db, listed).map(normalizeConversation);
+}
+
+/**
+ * Resolve `latestRunEventsJson` for the rows that actually need it.
+ *
+ * The summary only reads the event log to recover a `durationMs` from the run's
+ * last `usage` event, and only when the run's timestamps cannot supply one (see
+ * `conversationRunSummaryFromRow`). Selecting `events_json` inside the
+ * `latest_runs` window function instead forces SQLite to materialize the full
+ * event log of every assistant message in the project just to order them —
+ * unbounded work for a field the common path never looks at, since event logs
+ * grow with tool output (image tool results carry inline base64).
+ *
+ * So the query carries only the message id, and the log is fetched here for the
+ * few rows whose timestamps are incomplete. A project whose runs all ended
+ * normally reads no event logs at all.
+ */
+function attachLatestRunEvents(db: SqliteDb, listed: DbRow[]): DbRow[] {
+  // Mirror `conversationRunSummaryFromRow`'s own nullish handling exactly: it
+  // maps a null timestamp to `undefined` before the finiteness check, so a null
+  // column means "no duration available from timestamps". Testing
+  // `Number.isFinite(Number(value))` instead would treat null as 0 — a finite
+  // number — and silently skip the fetch for precisely the rows that need it.
+  const hasBothTimestamps = (row: DbRow) =>
+    row.latestRunStartedAt != null
+    && row.latestRunEndedAt != null
+    && Number.isFinite(Number(row.latestRunStartedAt))
+    && Number.isFinite(Number(row.latestRunEndedAt));
+
+  const pending = listed.filter(
+    (row) => row.latestRunMessageId != null && !hasBothTimestamps(row),
+  );
+  if (pending.length === 0) return listed;
+
+  const statement = db.prepare(
+    `SELECT events_json AS eventsJson FROM messages WHERE id = ?`,
+  );
+  for (const row of pending) {
+    const found = statement.get(row.latestRunMessageId) as DbRow | undefined;
+    row.latestRunEventsJson = found?.eventsJson ?? null;
+  }
+  return listed;
 }
 
 /**
@@ -2500,8 +2560,23 @@ export function clearAgentSession(
 
 // ---------- messages ----------
 
+/**
+ * Number of messages in a conversation.
+ *
+ * For emptiness checks prefer this over `listMessages(...).length`: the latter
+ * loads and parses every message's JSON columns — including the event log,
+ * which grows with tool output — to answer a question `COUNT(*)` answers
+ * without touching them.
+ */
+export function countMessages(db: SqliteDb, conversationId: string): number {
+  const row = db
+    .prepare(`SELECT COUNT(*) AS count FROM messages WHERE conversation_id = ?`)
+    .get(conversationId) as DbRow | undefined;
+  return Number(row?.count ?? 0);
+}
+
 export function listMessages(db: SqliteDb, conversationId: string) {
-  return (db
+  const messages = db
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
@@ -2524,8 +2599,13 @@ export function listMessages(db: SqliteDb, conversationId: string) {
         WHERE conversation_id = ?
         ORDER BY position ASC`,
     )
-    .all(conversationId) as DbRow[])
-    .map(normalizeMessage);
+    .all(conversationId) as DbRow[];
+  const eventBatches = readConversationMessageEventBatches(db, conversationId);
+  return messages.map((message) => normalizeMessage(
+    db,
+    message,
+    eventBatches.get(String(message.id)) ?? [],
+  ));
 }
 
 export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
@@ -2551,7 +2631,7 @@ export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
         WHERE id = ?${conversationId ? ' AND conversation_id = ?' : ''}`,
     )
     .get(conversationId ? [id, conversationId] : id) as DbRow | undefined;
-  return row ? normalizeMessage(row) : null;
+  return row ? normalizeMessage(db, row) : null;
 }
 
 export function conversationTurnIndexForRun(
@@ -2587,11 +2667,40 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
   const persistedEvents = Array.isArray(m.events)
     ? compactAdjacentMessageAgentEvents(m.events)
     : m.events;
+  const eventBatchProjection = hasMessageEventBatchStorage(db)
+    ? `EXISTS(
+                SELECT 1 FROM message_event_batches AS batch
+                 WHERE batch.message_id = messages.id
+              )`
+    : '0';
   const existing = db
-    .prepare(`SELECT position FROM messages WHERE id = ?`)
+    .prepare(
+      `SELECT position, run_id AS runId, run_status AS runStatus,
+              content, events_json AS eventsJson,
+              ${eventBatchProjection} AS hasEventBatches
+         FROM messages WHERE id = ?`,
+    )
     .get(m.id) as DbRow | undefined;
   const now = Date.now();
   if (existing) {
+    // While the daemon owns an active run, its append-only batches are the
+    // event source of truth. Browser PUT snapshots can arrive between two
+    // daemon flushes; writing that whole snapshot here would duplicate the
+    // same events when the next batch is read or finalized.
+    const incomingRunIsTerminal = isTerminalMessageRunStatus(m.runStatus);
+    const preserveDaemonEventSnapshot =
+      existing.hasEventBatches === 1 ||
+      (typeof existing.runId === 'string' &&
+        (existing.runStatus === 'queued' || existing.runStatus === 'running') &&
+        !incomingRunIsTerminal);
+    const nextEventsJson = preserveDaemonEventSnapshot
+      ? existing.eventsJson ?? null
+      : persistedEvents
+        ? JSON.stringify(persistedEvents)
+        : null;
+    const nextContent = preserveDaemonEventSnapshot
+      ? existing.content ?? ''
+      : m.content;
     db.prepare(
       `UPDATE messages
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
@@ -2609,14 +2718,14 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
         WHERE id = ?`,
     ).run(
       m.role,
-      m.content,
+      nextContent,
       m.agentId ?? null,
       m.agentName ?? null,
       m.runId ?? null,
       m.runStatus ?? null,
       normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
-      persistedEvents ? JSON.stringify(persistedEvents) : null,
+      nextEventsJson,
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
@@ -2715,7 +2824,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
          FROM messages WHERE id = ?`,
     )
     .get(m.id) as DbRow | undefined;
-  return row ? normalizeMessage(row) : null;
+  return row ? normalizeMessage(db, row) : null;
 }
 
 export function getMessageTelemetryFinalizationState(db: SqliteDb, messageId: string) {
@@ -2743,6 +2852,10 @@ export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event:
   const label = typeof event?.label === 'string' ? event.label.trim() : '';
   const detail = typeof event?.detail === 'string' ? event.detail.trim() : '';
   if (!label) return null;
+  // Status events are written outside the high-volume run stream (for
+  // example, routine completion). Fold any crash-left batches first so this
+  // update cannot strand or overwrite them.
+  finalizeMessageAgentEvents(db, messageId);
   const row = db
     .prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
     .get(messageId) as DbRow | undefined;
@@ -2780,22 +2893,11 @@ export function compactAdjacentMessageAgentEvents(
   return events;
 }
 
-export function appendMessageAgentEvents(
-  db: SqliteDb,
-  messageId: string,
+function mergeMessageAgentEvents(
+  existingEvents: readonly DbRow[],
   incomingEvents: readonly DbRow[],
-): DbRow[] | null {
-  if (incomingEvents.length === 0) return null;
-  const row = db
-    .prepare(`SELECT content, events_json AS eventsJson FROM messages WHERE id = ?`)
-    .get(messageId) as DbRow | undefined;
-  if (!row) return null;
-  const parsed = parseJsonOrUndef(row.eventsJson);
-  const parsedEvents = Array.isArray(parsed) ? parsed : [];
-  const events = compactAdjacentMessageAgentEvents(parsedEvents);
-  let textDelta = '';
-  let changed = events.length !== parsedEvents.length;
-
+): DbRow[] {
+  const events = compactAdjacentMessageAgentEvents(existingEvents);
   for (const event of incomingEvents) {
     if (!event || typeof event !== 'object') continue;
     const kind = typeof event.kind === 'string' ? event.kind : '';
@@ -2805,22 +2907,163 @@ export function appendMessageAgentEvents(
       (kind === 'text' || kind === 'thinking') && typeof event.text === 'string';
     if (isMergeableDelta && last?.kind === kind && typeof last.text === 'string') {
       last.text += event.text;
-      if (kind === 'text') textDelta += event.text;
-      changed = changed || event.text.length > 0;
       continue;
     }
     if (!isMergeableDelta && last && JSON.stringify(last) === JSON.stringify(event)) {
       continue;
     }
     events.push(event);
-    if (kind === 'text' && typeof event.text === 'string') textDelta += event.text;
-    changed = true;
   }
-
-  if (!changed) return events;
-  db.prepare(`UPDATE messages SET content = COALESCE(content, '') || ?, events_json = ? WHERE id = ?`)
-    .run(textDelta, JSON.stringify(events), messageId);
   return events;
+}
+
+const messageEventBatchStorageByDb = new WeakMap<SqliteDb, boolean>();
+
+function hasMessageEventBatchStorage(db: SqliteDb): boolean {
+  const cached = messageEventBatchStorageByDb.get(db);
+  if (cached !== undefined) return cached;
+  let exists = false;
+  try {
+    exists = Boolean(
+      db.prepare(
+        `SELECT 1
+           FROM sqlite_master
+          WHERE type = 'table' AND name = 'message_event_batches'`,
+      ).get(),
+    );
+  } catch {
+    // A few integration boundaries deliberately expose only the prepared
+    // statements they consume. Treat those lightweight DB adapters like a
+    // pre-batch schema and preserve the legacy snapshot behavior.
+  }
+  messageEventBatchStorageByDb.set(db, exists);
+  return exists;
+}
+
+export function clearMessageAgentEventBatches(db: SqliteDb, messageId: string): void {
+  if (!hasMessageEventBatchStorage(db)) return;
+  db.prepare(`DELETE FROM message_event_batches WHERE message_id = ?`).run(messageId);
+}
+
+function readMessageEventBatches(db: SqliteDb, messageId: string): DbRow[][] {
+  if (!hasMessageEventBatchStorage(db)) return [];
+  const rows = db.prepare(
+    `SELECT events_json AS eventsJson
+       FROM message_event_batches
+      WHERE message_id = ?
+      ORDER BY id ASC`,
+  ).all(messageId) as DbRow[];
+  return rows.flatMap((batch) => {
+    const parsed = parseJsonOrUndef(batch.eventsJson);
+    return Array.isArray(parsed) ? [parsed] : [];
+  });
+}
+
+function readConversationMessageEventBatches(
+  db: SqliteDb,
+  conversationId: string,
+): Map<string, DbRow[][]> {
+  if (!hasMessageEventBatchStorage(db)) return new Map();
+  const rows = db.prepare(
+    `SELECT batch.message_id AS messageId, batch.events_json AS eventsJson
+       FROM message_event_batches AS batch
+       JOIN messages AS message ON message.id = batch.message_id
+      WHERE message.conversation_id = ?
+      ORDER BY batch.id ASC`,
+  ).all(conversationId) as DbRow[];
+  const batches = new Map<string, DbRow[][]>();
+  for (const row of rows) {
+    const parsed = parseJsonOrUndef(row.eventsJson);
+    if (!Array.isArray(parsed)) continue;
+    const messageId = String(row.messageId);
+    const messageBatches = batches.get(messageId) ?? [];
+    messageBatches.push(parsed);
+    batches.set(messageId, messageBatches);
+  }
+  return batches;
+}
+
+function materializeMessageAgentEvents(
+  db: SqliteDb,
+  messageId: string,
+  eventsJson: unknown,
+  eventBatches?: DbRow[][],
+): { events: DbRow[]; batchCount: number; baseEventCount: number; textDelta: string } {
+  const parsed = parseJsonOrUndef(eventsJson);
+  const baseEvents = Array.isArray(parsed) ? parsed : [];
+  let events = compactAdjacentMessageAgentEvents(baseEvents);
+  const batches = eventBatches ?? readMessageEventBatches(db, messageId);
+  let textDelta = '';
+  for (const batch of batches) {
+    for (const event of batch) {
+      if (event?.kind === 'text' && typeof event.text === 'string') textDelta += event.text;
+    }
+    events = mergeMessageAgentEvents(events, batch);
+  }
+  return {
+    events,
+    batchCount: batches.length,
+    baseEventCount: baseEvents.length,
+    textDelta,
+  };
+}
+
+export function appendMessageAgentEvents(
+  db: SqliteDb,
+  messageId: string,
+  incomingEvents: readonly DbRow[],
+): DbRow[] | null {
+  if (incomingEvents.length === 0) return null;
+  const events = mergeMessageAgentEvents([], incomingEvents);
+  if (events.length === 0) return null;
+  if (!hasMessageEventBatchStorage(db)) {
+    const row = db
+      .prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
+      .get(messageId) as DbRow | undefined;
+    if (!row) return null;
+    const parsed = parseJsonOrUndef(row.eventsJson);
+    const existingEvents = Array.isArray(parsed) ? parsed : [];
+    const materializedEvents = mergeMessageAgentEvents(existingEvents, events);
+    const textDelta = events
+      .filter((event) => event?.kind === 'text' && typeof event.text === 'string')
+      .map((event) => event.text)
+      .join('');
+    db.prepare(
+      `UPDATE messages
+          SET content = COALESCE(content, '') || ?, events_json = ?
+        WHERE id = ?`,
+    ).run(textDelta, JSON.stringify(materializedEvents), messageId);
+    return materializedEvents;
+  }
+  const inserted = db.prepare(
+    `INSERT INTO message_event_batches (message_id, events_json, created_at)
+     SELECT ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM messages WHERE id = ?)`,
+  ).run(messageId, JSON.stringify(events), Date.now(), messageId);
+  return inserted.changes > 0 ? events : null;
+}
+
+export function finalizeMessageAgentEvents(
+  db: SqliteDb,
+  messageId: string,
+): DbRow[] | null {
+  return db.transaction(() => {
+    const row = db.prepare(
+      `SELECT events_json AS eventsJson FROM messages WHERE id = ?`,
+    ).get(messageId) as DbRow | undefined;
+    if (!row) return null;
+    const materialized = materializeMessageAgentEvents(db, messageId, row.eventsJson);
+    if (materialized.batchCount === 0 || !hasMessageEventBatchStorage(db)) {
+      return materialized.events;
+    }
+    db.prepare(
+      `UPDATE messages
+          SET content = COALESCE(content, '') || ?, events_json = ?
+        WHERE id = ?`,
+    ).run(materialized.textDelta, JSON.stringify(materialized.events), messageId);
+    clearMessageAgentEventBatches(db, messageId);
+    return materialized.events;
+  })();
 }
 
 export function appendMessageAgentEvent(
@@ -3742,18 +3985,146 @@ function randomCommentId(): string {
   return `cmt_${randomUUID().slice(0, 8)}`;
 }
 
-function normalizeMessage(row: DbRow) {
+const LEGACY_MESSAGE_EVENT_COMPACTION_MIN_CHARS = 256 * 1024;
+const MESSAGE_EVENT_MAINTENANCE_QUEUE_LIMIT = 1;
+
+type MessageEventMaintenanceJob =
+  | {
+      kind: 'compact_legacy';
+      messageId: string;
+      expectedEventsJson: string;
+      events: DbRow[];
+    }
+  | {
+      kind: 'finalize_batches';
+      messageId: string;
+    };
+
+type MessageEventMaintenanceState = {
+  queue: MessageEventMaintenanceJob[];
+  queuedMessageIds: Set<string>;
+  scheduled: boolean;
+  running: boolean;
+};
+
+const messageEventMaintenanceStates = new WeakMap<SqliteDb, MessageEventMaintenanceState>();
+
+function isTerminalMessageRunStatus(value: unknown): boolean {
+  return value === 'succeeded' || value === 'failed' || value === 'canceled';
+}
+
+function scheduleMessageEventMaintenance(
+  db: SqliteDb,
+  job: MessageEventMaintenanceJob,
+): void {
+  let state = messageEventMaintenanceStates.get(db);
+  if (!state) {
+    state = {
+      queue: [],
+      queuedMessageIds: new Set(),
+      scheduled: false,
+      running: false,
+    };
+    messageEventMaintenanceStates.set(db, state);
+  }
+  if (
+    state.queuedMessageIds.has(job.messageId) ||
+    state.queuedMessageIds.size >= MESSAGE_EVENT_MAINTENANCE_QUEUE_LIMIT
+  ) return;
+  state.queue.push(job);
+  state.queuedMessageIds.add(job.messageId);
+  scheduleNextMessageEventMaintenance(db, state);
+}
+
+function scheduleNextMessageEventMaintenance(
+  db: SqliteDb,
+  state: MessageEventMaintenanceState,
+): void {
+  if (state.scheduled || state.running || state.queue.length === 0) return;
+  state.scheduled = true;
+  const immediate = setImmediate(() => {
+    state.scheduled = false;
+    const job = state.queue.shift();
+    if (!job) return;
+    state.running = true;
+    try {
+      if (!db.open) return;
+      if (job.kind === 'finalize_batches') {
+        finalizeMessageAgentEvents(db, job.messageId);
+      } else {
+        const compactedJson = JSON.stringify(job.events);
+        if (compactedJson.length < job.expectedEventsJson.length) {
+          const noPendingBatches = hasMessageEventBatchStorage(db)
+            ? `AND NOT EXISTS (
+                  SELECT 1 FROM message_event_batches AS batch
+                   WHERE batch.message_id = messages.id
+                )`
+            : '';
+          db.prepare(
+            `UPDATE messages
+                SET events_json = ?
+              WHERE id = ?
+                AND events_json = ?
+                AND run_status IN ('succeeded', 'failed', 'canceled')
+                ${noPendingBatches}`,
+          ).run(compactedJson, job.messageId, job.expectedEventsJson);
+        }
+      }
+    } catch (error) {
+      console.warn('[db] message event maintenance failed', error);
+    } finally {
+      state.running = false;
+      state.queuedMessageIds.delete(job.messageId);
+      scheduleNextMessageEventMaintenance(db, state);
+    }
+  });
+  immediate.unref?.();
+}
+
+function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
+  const eventsJson = typeof row.eventsJson === 'string' ? row.eventsJson : null;
+  const materializedEvents = materializeMessageAgentEvents(
+    db,
+    String(row.id),
+    eventsJson,
+    eventBatches,
+  );
+  if (isTerminalMessageRunStatus(row.runStatus)) {
+    if (materializedEvents.batchCount > 0) {
+      // A terminal row with batches means the daemon stopped between its last
+      // append and terminal folding. Recover only when that conversation is
+      // actually read; startup never scans or parses every historical row.
+      scheduleMessageEventMaintenance(db, {
+        kind: 'finalize_batches',
+        messageId: String(row.id),
+      });
+    } else if (
+      eventsJson &&
+      eventsJson.length >= LEGACY_MESSAGE_EVENT_COMPACTION_MIN_CHARS &&
+      materializedEvents.events.length < materializedEvents.baseEventCount
+    ) {
+      scheduleMessageEventMaintenance(db, {
+        kind: 'compact_legacy',
+        messageId: String(row.id),
+        expectedEventsJson: eventsJson,
+        events: materializedEvents.events,
+      });
+    }
+  }
   return {
     id: row.id,
     role: row.role,
-    content: row.content,
+    content: `${typeof row.content === 'string' ? row.content : ''}${materializedEvents.textDelta}`,
     agentId: row.agentId ?? undefined,
     agentName: row.agentName ?? undefined,
     runId: row.runId ?? undefined,
     runStatus: row.runStatus ?? undefined,
     resultDeliveryState: normalizeResultDeliveryState(row.resultDeliveryState),
     lastRunEventId: row.lastRunEventId ?? undefined,
-    events: parseJsonOrUndef(row.eventsJson),
+    events:
+      eventsJson !== null || materializedEvents.batchCount > 0
+        ? materializedEvents.events
+        : undefined,
     attachments: parseJsonOrUndef(row.attachmentsJson),
     commentAttachments: parseJsonOrUndef(row.commentAttachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),

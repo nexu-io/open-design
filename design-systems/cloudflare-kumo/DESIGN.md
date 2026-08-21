@@ -5,18 +5,18 @@
 
 ## Provenance and intended use
 
-This is an **Open Design curated integration** of Cloudflare's Kumo UI, not an official Cloudflare-maintained Open Design package and not an endorsement or partnership. It is based only on Cloudflare's official sources:
+This is an **OpenDesign curated integration** of Cloudflare's Kumo UI, not an official Cloudflare-maintained OpenDesign package and not an endorsement or partnership. It is based only on Cloudflare's official sources:
 
 - [Kumo documentation](https://kumo-ui.com/), including the color, accessibility, component, and chart guidance.
 - [`cloudflare/kumo`](https://github.com/cloudflare/kumo/tree/0c5832575c99988917b81cd752002e10f3dc9c7a) at commit `0c5832575c99988917b81cd752002e10f3dc9c7a`.
 - npm package `@cloudflare/kumo` version `2.9.2`.
 - Upstream license: MIT, Copyright (c) 2026 Cloudflare, Inc.
 
-Use this package for developer tools, infrastructure consoles, administration surfaces, data-heavy dashboards, and product workflows that benefit from Kumo's compact component density. The package translates Kumo's semantic roles into Open Design's shared token contract; it does not vendor the React library, its components, or Cloudflare assets.
+Use this package for developer tools, infrastructure consoles, administration surfaces, data-heavy dashboards, and product workflows that benefit from Kumo's compact component density. The package translates Kumo's semantic roles into OpenDesign's shared token contract; it does not vendor the React library, its components, or Cloudflare assets.
 
 ## Visual principles and atmosphere
 
-Kumo interfaces are quiet, compact, and operational. Start with a near-white canvas (`--bg: oklch(98.75% 0 0)`) and white component surfaces (`--surface: #ffffff`). Use the recessed neutral (`--surface-warm: oklch(96% 0 0)`) for segmented controls, table tints, or nested regions; despite the Open Design slot name, this surface is neutral rather than warm.
+Kumo interfaces are quiet, compact, and operational. Start with a near-white canvas (`--bg: oklch(98.75% 0 0)`) and white component surfaces (`--surface: #ffffff`). Use the recessed neutral (`--surface-warm: oklch(96% 0 0)`) for segmented controls, table tints, or nested regions; despite the OpenDesign slot name, this surface is neutral rather than warm.
 
 Build depth with surface hierarchy, rings, and restrained shadows instead of decorative gradients. Kumo's official order is canvas → base component → elevated layer → recessed/tinted region. A `LayerCard`-style surface uses an `8px` radius, a semantic ring, and a small shadow. Keep related labels, descriptions, and actions tightly grouped; allow larger gaps only between separate tasks or sections.
 
@@ -26,7 +26,7 @@ Prefer sentence-case headings, short action-oriented labels, and content-first c
 
 Choose tokens by role, never by the hue you happen to want. The light-mode bindings are:
 
-| Open Design token | Kumo role | Value |
+| OpenDesign token | Kumo role | Value |
 | --- | --- | --- |
 | `--bg` | canvas | `oklch(98.75% 0 0)` |
 | `--surface` | base component | `#ffffff` |
@@ -41,7 +41,7 @@ Choose tokens by role, never by the hue you happen to want. The light-mode bindi
 | `--warn` | warning indicator | `oklch(73.9% 0.177 58.2)` |
 | `--danger` | error/destructive indicator | `oklch(63.7% 0.237 25.331)` |
 
-Set `data-mode="dark"` to follow Kumo's native mode hook. In generated Open Design artifacts, `data-theme="dark"` resolves the same override. Dark mode changes semantic values rather than adding `dark:` utility variants: the canvas becomes `oklch(10% 0 0)`, component surfaces become `oklch(17% 0 0)`, primary text becomes `oklch(97% 0 0)`, and the line/hairline pair becomes `oklch(32% 0 0)` / `oklch(26.9% 0 0)`.
+Set `data-mode="dark"` to follow Kumo's native mode hook. In generated OpenDesign artifacts, `data-theme="dark"` resolves the same override. Dark mode changes semantic values rather than adding `dark:` utility variants: the canvas becomes `oklch(10% 0 0)`, component surfaces become `oklch(17% 0 0)`, primary text becomes `oklch(97% 0 0)`, and the line/hairline pair becomes `oklch(32% 0 0)` / `oklch(26.9% 0 0)`.
 
 Do not substitute Cloudflare orange (`#f6821f`) for every primary control. Kumo distinguishes its orange brand text role from the blue semantic brand background used by primary actions. Use semantic status colors only when meaning is present, and use tints or neutral surfaces behind longer status copy rather than flooding an interface with solid status color.
 
@@ -60,7 +60,7 @@ The base Kumo text scale is deliberately compact:
 | `--text-xl` | `20px` | dialog or card title |
 | `--text-2xl` | `24px` | section heading |
 | `--text-3xl` | `30px` | page heading |
-| `--text-4xl` | `36px` | Open Design compatibility ceiling |
+| `--text-4xl` | `36px` | OpenDesign compatibility ceiling |
 
 Body leading is `1.5`; display leading is `1.2`. Keep `--tracking-display: 0`: the official Kumo design skill explicitly avoids manual tracking. Use weight `600` for headings, `500` for emphasized inline text and control labels, and `400` for ordinary copy. Do not use `700` as the default emphasis mechanism.
 
@@ -70,7 +70,7 @@ Kumo components use compact Tailwind utility spacing on a `4px` rhythm. The shar
 
 Control radii map to Kumo's `rounded-sm`, `rounded-md`, and `rounded-lg` patterns: `4px`, `6px`, and `8px`; reserve `9999px` for pills, circular icon actions, and status shapes. Nested shapes within `8px` of each other must use concentric radii: outer radius equals inner radius plus the intervening padding.
 
-Kumo does not publish global section or container tokens, so the following are explicitly Open Design compatibility bindings rather than upstream claims: section spacing is `64px` desktop, `48px` tablet, and `32px` phone; the container cap is `1200px` with `24px`, `16px`, and `12px` gutters. Treat these as starting values for product dashboards, not as Cloudflare layout specifications.
+Kumo does not publish global section or container tokens, so the following are explicitly OpenDesign compatibility bindings rather than upstream claims: section spacing is `64px` desktop, `48px` tablet, and `32px` phone; the container cap is `1200px` with `24px`, `16px`, and `12px` gutters. Treat these as starting values for product dashboards, not as Cloudflare layout specifications.
 
 ## Components and composition patterns
 
@@ -133,4 +133,4 @@ Respect `prefers-reduced-motion: reduce`. This package sets `--motion-fast` and 
 - Slow hover color transitions, ornamental motion, or animations that ignore reduced-motion preferences.
 - Borders combined indiscriminately with shadows; use Kumo's line/hairline ring hierarchy.
 - Nested LayerCards, conditional dialog mounting, placeholder-only form labels, or unlabeled icon buttons.
-- Claiming that Open Design's compatibility section/layout bindings are official Kumo tokens.
+- Claiming that OpenDesign's compatibility section/layout bindings are official Kumo tokens.

@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { startServer } from '../src/server.js';
 import { writeMcpConfig } from '../src/mcp-config.js';
 import { clearToken, setToken } from '../src/mcp-tokens.js';
-import { runHadFailedDesignSystemWrapper } from '../src/runtimes/run-artifacts.js';
 
 // End-to-end coverage for codex native (capture-style) session resume.
 //
@@ -198,91 +197,6 @@ describe('codex native session resume', () => {
     expect(turn1.argv).not.toContain('resume');
     expect(turn2.argv[0]).toBe('exec');
     expect(turn2.argv).not.toContain('resume');
-  });
-
-  it.runIf(process.platform !== 'win32')(
-    'executes the active DS resolver through the Codex shell environment policy',
-    async () => {
-      binDir = await mkdtemp(path.join(os.tmpdir(), 'od-codex-ds-shell-bin-'));
-      const { bin, logPath } = await writeExecutingDesignSystemWrapperCodex(
-        binDir,
-        'codex-ds-shell-success',
-      );
-
-      // These values reach the Codex process but must not cross its shell-tool
-      // boundary. The run-scoped OD wrapper variables below are supplied by
-      // the daemon and are the only non-baseline values the wrapper needs.
-      process.env.SHOULD_NOT_LEAK = 'unrelated-secret';
-      process.env.OD_API_TOKEN = 'unrelated-api-token';
-      clearTelemetryEnv();
-      started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
-      await putConfig(started.url, {
-        agentId: 'codex',
-        agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
-        telemetry: { metrics: true, content: false, artifactManifest: false },
-        privacyDecisionAt: Date.now(),
-      });
-
-      const conversationId = await createConversation(started.url, {
-        designSystemId: 'hud',
-      });
-      const run = await sendRunAndWait(
-        started.url,
-        conversationId,
-        'Resolve the account settings component with the active design system.',
-        'codex',
-        'hud',
-      );
-
-      const [invocation] = await readChatTurnExecs(logPath, conversationId);
-      expect(invocation?.argv).toContain('allow_login_shell=false');
-      const includeOnly = invocation?.argv.find((arg) =>
-        arg.startsWith('shell_environment_policy.include_only='),
-      );
-      expect(includeOnly).toContain('"OD_NODE_BIN"');
-      expect(includeOnly).toContain('"OD_BIN"');
-      expect(includeOnly).toContain('"OD_TOOL_TOKEN"');
-      expect(includeOnly).not.toContain('OD_API_TOKEN');
-      const events = await readRunEvents(run.eventsLogPath);
-      expect(runHadFailedDesignSystemWrapper(events)).toBe(false);
-      expect(JSON.stringify(events)).toContain('account.settings');
-      expect(JSON.stringify(events)).toContain('unrelatedCredentialPresent\\":false');
-      expect(run.status).toBe('succeeded');
-    },
-  );
-
-  it('fails a zero-artifact structured DS turn when the Codex wrapper shell command failed', async () => {
-    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-codex-ds-wrapper-bin-'));
-    const { bin, logPath } = await writeFailedDesignSystemWrapperCodex(
-      binDir,
-      'codex-ds-wrapper-failure',
-    );
-
-    clearTelemetryEnv();
-    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
-    await putConfig(started.url, {
-      agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
-      telemetry: { metrics: true, content: false, artifactManifest: false },
-      privacyDecisionAt: Date.now(),
-    });
-
-    const conversationId = await createConversation(started.url, {
-      designSystemId: 'hud',
-    });
-    const run = await sendRunAndWait(
-      started.url,
-      conversationId,
-      'Build an account settings page with the active design system.',
-      'codex',
-      'hud',
-    );
-
-    const [invocation] = await readChatTurnExecs(logPath, conversationId);
-    expect(invocation?.stdin).toContain('tools design-systems resolve');
-    const events = await readRunEvents(run.eventsLogPath);
-    expect(runHadFailedDesignSystemWrapper(events)).toBe(true);
-    expect(run.status).toBe('failed');
   });
 
   it('reseeds (no resume) when another agent ran in the conversation between codex turns', async () => {
@@ -508,72 +422,6 @@ async function writeNoHandleCodex(
   return { bin, logPath };
 }
 
-async function writeFailedDesignSystemWrapperCodex(
-  dir: string,
-  name: string,
-): Promise<{ bin: string; logPath: string }> {
-  const bin = path.join(dir, name);
-  const logPath = path.join(dir, `${name}-log.jsonl`);
-  await writeFile(
-    bin,
-    fakeCodexSource({
-      logPath,
-      body: `
-  const command = '\"$OD_NODE_BIN\" \"$OD_BIN\" tools design-systems resolve --intent account.settings';
-  console.log(JSON.stringify({ type: 'thread.started', thread_id: THREAD }));
-  console.log(JSON.stringify({ type: 'turn.started' }));
-  console.log(JSON.stringify({ type: 'item.started', item: { id: 'resolve-1', type: 'command_execution', command } }));
-  console.log(JSON.stringify({ type: 'item.completed', item: { id: 'resolve-1', type: 'command_execution', command, aggregated_output: 'zsh:1: permission denied', exit_code: 126, status: 'failed' } }));
-  console.log(JSON.stringify({ type: 'item.completed', item: { id: 'item-1', type: 'agent_message', text: 'I could not access the design-system resolver, so I did not create files.' } }));
-  console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 8, cached_input_tokens: 0, output_tokens: 10 } }));
-  setTimeout(() => process.exit(0), 10);`,
-    }),
-    'utf8',
-  );
-  await chmod(bin, 0o755);
-  return { bin, logPath };
-}
-
-async function writeExecutingDesignSystemWrapperCodex(
-  dir: string,
-  name: string,
-): Promise<{ bin: string; logPath: string }> {
-  const bin = path.join(dir, name);
-  const logPath = path.join(dir, `${name}-log.jsonl`);
-  await writeFile(
-    bin,
-    fakeCodexSource({
-      logPath,
-      body: `
-  const includeOnly = argv.find((arg) => arg.startsWith('shell_environment_policy.include_only='));
-  const includedKeys = new Set([...(includeOnly || '').matchAll(/"([A-Z][A-Z0-9_]*)"/g)].map((match) => match[1]));
-  const toolEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => includedKeys.has(key)));
-  const unrelatedCredentialPresent = Boolean(toolEnv.OPENAI_API_KEY || toolEnv.OD_API_TOKEN || toolEnv.SHOULD_NOT_LEAK);
-  const command = '"$OD_NODE_BIN" "$OD_BIN" tools design-systems resolve --intent account.settings';
-  const result = require('node:child_process').spawnSync('/bin/sh', ['-c', command], {
-    env: toolEnv,
-    encoding: 'utf8',
-  });
-  const output = JSON.stringify({
-    stdout: result.stdout,
-    stderr: result.stderr,
-    unrelatedCredentialPresent,
-  });
-  const failed = result.status !== 0 || unrelatedCredentialPresent;
-  console.log(JSON.stringify({ type: 'thread.started', thread_id: THREAD }));
-  console.log(JSON.stringify({ type: 'turn.started' }));
-  console.log(JSON.stringify({ type: 'item.started', item: { id: 'resolve-1', type: 'command_execution', command } }));
-  console.log(JSON.stringify({ type: 'item.completed', item: { id: 'resolve-1', type: 'command_execution', command, aggregated_output: output, exit_code: failed ? (result.status || 1) : 0, status: failed ? 'failed' : 'completed' } }));
-  console.log(JSON.stringify({ type: 'item.completed', item: { id: 'item-1', type: 'agent_message', text: output } }));
-  console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 8, cached_input_tokens: 0, output_tokens: 10 } }));
-  setTimeout(() => process.exit(0), 10);`,
-    }),
-    'utf8',
-  );
-  await chmod(bin, 0o755);
-  return { bin, logPath };
-}
-
 function fakeCodexSource(opts: { logPath: string; body: string }): string {
   return `#!/usr/bin/env node
 const fs = require('node:fs');
@@ -615,8 +463,6 @@ function snapshotEnv(): Record<string, string | undefined> {
     OPEN_DESIGN_TELEMETRY_RELAY_URL: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL,
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
-    OD_API_TOKEN: process.env.OD_API_TOKEN,
-    SHOULD_NOT_LEAK: process.env.SHOULD_NOT_LEAK,
   };
 }
 
@@ -645,10 +491,7 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
   expect(response.status).toBe(200);
 }
 
-async function createConversation(
-  url: string,
-  options: { designSystemId?: string } = {},
-): Promise<string> {
+async function createConversation(url: string): Promise<string> {
   const projectId = `codex_resume_${randomUUID()}`;
   const projectResponse = await fetch(`${url}/api/projects`, {
     method: 'POST',
@@ -657,9 +500,6 @@ async function createConversation(
       id: projectId,
       name: 'Codex resume smoke',
       metadata: { kind: 'prototype' },
-      ...(options.designSystemId
-        ? { designSystemId: options.designSystemId }
-        : {}),
       skipDiscoveryBrief: true,
     }),
   });
@@ -676,7 +516,6 @@ async function sendRunAndWait(
   encoded: string,
   message: string,
   agentId = 'codex',
-  designSystemId?: string,
 ): Promise<RunStatus> {
   const [projectId, conversationId] = encoded.split('::');
   const assistantMessageId = `assistant_codex_${randomUUID()}`;
@@ -694,7 +533,6 @@ async function sendRunAndWait(
       assistantMessageId,
       clientRequestId: `client_codex_${randomUUID()}`,
       agentId,
-      ...(designSystemId ? { designSystemId } : {}),
       message,
       currentPrompt: message,
     }),

@@ -686,6 +686,30 @@ describe("DesignFilesPanel page thumbnails", () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("mounts a cached HTML thumbnail with the desktop layout viewport on its first render", () => {
+    const cachedFile = file({
+      name: "deck.html",
+      kind: "html",
+      mime: "text/html",
+      size: 16 * 1024,
+      mtime: 1700000000001,
+    });
+    setHtmlSourceSnapshot({
+      authorizationScopeKey: "local",
+      projectId: "test-project",
+      fileName: cachedFile.name,
+      refreshKey: `${cachedFile.mtime}:${cachedFile.size}:8`,
+      source: "<!doctype html><html><body><main>Deck</main></body></html>",
+    });
+
+    const { container } = renderPanel([cachedFile], { filesRefreshKey: 8 });
+    const iframe = container.querySelector<HTMLIFrameElement>(".df-card-thumb iframe");
+
+    expect(iframe).toBeTruthy();
+    expect(iframe?.style.width).toBe("1200px");
+    expect(iframe?.style.height).toBe("675px");
+  });
 });
 
 describe("DesignFilesPanel directory navigation", () => {

@@ -41,7 +41,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 - `apps/nextjs` has been removed; do not restore it.
 - Packaged web uses Next.js SSR through the web sidecar; do not put Next output under daemon `OD_RESOURCE_ROOT`.
-- Packaged `OD_RESOURCE_ROOT` is for daemon non-Next read-only resources. The authoritative bundled-tree list lives in `tools/pack/src/resources.ts` and currently includes skills, design templates, design systems, craft, official and registry plugin data, frames, community pets, prompt templates, and baked plugin-preview metadata.
+- Packaged `OD_RESOURCE_ROOT` is for daemon non-Next read-only resources. The authoritative bundled-tree list lives in `tools/pack/src/resources/index.ts` and currently includes skills, design templates, design systems, craft, official and registry plugin data, frames, community pets, prompt templates, and baked plugin-preview metadata.
 - Packaged data/log/runtime/cache paths must be namespace-scoped and must not depend on daemon or web ports.
 - Daemon↔web packaged traffic still uses an HTTP origin/port because Next.js dev server and SSR proxy paths assume HTTP origins; switching to Unix sockets would require patching Next internals. The invariant is that data/log/runtime/cache paths never embed ports.
 

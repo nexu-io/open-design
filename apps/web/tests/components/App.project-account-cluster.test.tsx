@@ -10,6 +10,7 @@
 // Workspace authority whenever `route.kind === 'project'`.
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -50,6 +51,8 @@ const PROJECT_ROUTE: Route = {
 };
 const useRouteMock = vi.fn<() => Route>(() => PROJECT_ROUTE);
 const useProjectRouteWorkspaceContextMock = vi.hoisted(() => vi.fn());
+const projectViewMountedMock = vi.hoisted(() => vi.fn());
+const projectViewUnmountedMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -71,7 +74,13 @@ vi.mock('../../src/components/EntryView', () => ({
 }));
 
 vi.mock('../../src/components/ProjectView', () => ({
-  ProjectView: () => <div>Project view</div>,
+  ProjectView: () => {
+    useEffect(() => {
+      projectViewMountedMock();
+      return () => projectViewUnmountedMock();
+    }, []);
+    return <div>Project view</div>;
+  },
 }));
 
 vi.mock('../../src/components/pet/PetOverlay', () => ({
@@ -342,10 +351,13 @@ describe('project route — floating account cluster', () => {
     expect(open.mock.calls[0]?.[0]).toContain('/dashboard?workspaceId=ws-project');
   });
 
-  it('renders no cluster while signed out (context resolves to null)', async () => {
+  it.each([
+    ['signed out', false],
+    ['workspace identity is still loading', true],
+  ])('renders no cluster when %s', async (_state, loading) => {
     useProjectRouteWorkspaceContextMock.mockReturnValue({
       context: null,
-      loading: false,
+      loading,
       retry: vi.fn(),
     });
     vi.stubGlobal(
@@ -354,9 +366,45 @@ describe('project route — floating account cluster', () => {
     );
     render(<App />);
 
-    await screen.findByText('Project view');
+    await screen.findByText(loading ? 'Loading workspace…' : 'Project view');
     await waitFor(() => {
+      expect(document.querySelector('.entry-top-right-cluster')).toBeNull();
+      expect(screen.queryByTestId('entry-top-right-github')).toBeNull();
       expect(screen.queryByTestId('entry-nav-account')).toBeNull();
+      expect(screen.queryByTestId('entry-nav-account-updater')).toBeNull();
     });
+  });
+
+  it('keeps the same project instance mounted through a transient authority outage and recovery', async () => {
+    const view = render(<App />);
+
+    expect(await screen.findByText('Project view')).toBeTruthy();
+    expect(projectViewMountedMock).toHaveBeenCalledTimes(1);
+    expect(projectViewUnmountedMock).not.toHaveBeenCalled();
+
+    useProjectRouteWorkspaceContextMock.mockReturnValue({
+      context: PROJECT_WORKSPACE_CONTEXT,
+      loading: false,
+      failure: 'unavailable',
+      retry: vi.fn(),
+    });
+    view.rerender(<App />);
+
+    expect(await screen.findByText('Project view')).toBeTruthy();
+    expect(screen.getByTestId('project-workspace-recovery-tip')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
+    expect(projectViewMountedMock).toHaveBeenCalledTimes(1);
+    expect(projectViewUnmountedMock).not.toHaveBeenCalled();
+
+    useProjectRouteWorkspaceContextMock.mockReturnValue({
+      context: PROJECT_WORKSPACE_CONTEXT,
+      loading: false,
+      retry: vi.fn(),
+    });
+    view.rerender(<App />);
+
+    expect(screen.queryByTestId('project-workspace-recovery-tip')).toBeNull();
+    expect(projectViewMountedMock).toHaveBeenCalledTimes(1);
+    expect(projectViewUnmountedMock).not.toHaveBeenCalled();
   });
 });

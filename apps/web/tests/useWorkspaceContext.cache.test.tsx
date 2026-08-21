@@ -62,6 +62,44 @@ describe('useWorkspaceContext module cache', () => {
     second.unmount();
   });
 
+  it('restores the daemon-saved workspace when a new client session has no tab selection', async () => {
+    const personal = workspaceContextFixture({
+      workspaceId: 'ws-personal',
+      workspaceMemberId: 'member-personal',
+      workspaceType: 'personal',
+      workspaceName: 'Personal',
+    });
+    const lastUsed = workspaceContextFixture({
+      workspaceId: 'ws-last-used',
+      workspaceMemberId: 'member-last-used',
+      workspaceName: 'Last used team',
+    });
+    const contextScopes: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === '/api/workspace/directory') {
+          const directory = workspaceDirectoryFixture([personal, lastUsed]);
+          return new Response(JSON.stringify({
+            ...directory,
+            activeWorkspaceId: lastUsed.workspaceId,
+          }), { status: 200 });
+        }
+        const headers = new Headers(init?.headers);
+        contextScopes.push(headers.get('x-od-workspace-id') ?? '');
+        return new Response(JSON.stringify({ context: lastUsed }), { status: 200 });
+      }),
+    );
+
+    const result = renderHook(() => useWorkspaceContext());
+
+    await waitFor(() => expect(result.result.current.context).toEqual(lastUsed));
+    expect(contextScopes).toEqual([lastUsed.workspaceId]);
+    expect(window.sessionStorage.getItem('od.workspaceSelection.v1')).toContain(
+      lastUsed.workspaceId,
+    );
+  });
+
   it('fills a missing context workspace name from the verified tab selection', async () => {
     const legacyContext = workspaceContextFixture({
       workspaceId: 'ws-legacy',

@@ -283,8 +283,14 @@ describe('CLI startup boundaries', () => {
       const failed = error as { code?: number; stderr?: string };
       const stderr = failed.stderr ?? '';
       expect(failed.code).toBe(3);
-      expect(stderr).toContain('failed to reach daemon');
+      expect(JSON.parse(stderr)).toEqual({
+        error: {
+          code: 'MEDIA_DISPATCHER_UNREACHABLE',
+          message: 'local media dispatcher could not be reached',
+        },
+      });
       expect(stderr).not.toContain('OD_DATA_DIR');
+      expect(stderr).not.toContain('127.0.0.1');
     } finally {
       await chmod(dataDir, 0o700).catch(() => undefined);
       await rm(root, { recursive: true, force: true });

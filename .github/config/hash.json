@@ -1,0 +1,41 @@
+{
+  "schema": { "version": 1 },
+  "suites": {
+    "ci-control": [
+      ".github/config/hash.json",
+      ".github/config/scopes.json",
+      ".github/scripts/hash.py",
+      ".github/scripts/scopes.py",
+      ".github/scripts/lib/",
+      ".github/workflows/ci.yml"
+    ],
+    "web": [
+      "apps/web/", "packages/components/", "packages/contracts/", "packages/host/",
+      "packages/platform/", "packages/release/", "packages/sidecar/", "packages/sidecar-proto/",
+      "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"
+    ],
+    "tools-pack": [
+      "tools/pack/", "apps/packaged/", "apps/desktop/", "packages/components/", "packages/host/",
+      "packages/platform/", "packages/release/", "packages/sidecar/", "packages/sidecar-proto/",
+      "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"
+    ],
+    "ui": [
+      "suite://web", "apps/daemon/", "e2e/", ".github/actions/setup-playwright/",
+      ".github/actions/setup-workspace/"
+    ]
+  },
+  "workflows": {
+    "ci": {
+      "static_gate": ["*"],
+      "preflight": ["*"],
+      "workspace_unit_tests": ["*"],
+      "daemon_unit_tests": ["*"],
+      "windows_tools_pack_payload_tests": ["*"],
+      "web_workspace_tests": ["*"],
+      "e2e_vitest": ["*"],
+      "playwright_critical": ["*"],
+      "ui_p0": ["*"],
+      "playwright_visual": ["*"]
+    }
+  }
+}

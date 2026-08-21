@@ -15,7 +15,7 @@ Ce document définit les règles pour devenir Maintainer de `nexu-io/open-design
 |---|---|
 | **Contributor** | Toute personne ayant au moins 1 merged PR. Aucune permission spéciale. |
 | **External Maintainer** | Un contributeur de la communauté promu selon les règles ci-dessous. Peut faire des reviews, approve, fermer/rouvrir des issues, et s'auto-assigner des issues. **Ne peut pas cliquer sur le merge button** — cela reste réservé au Core Team. |
-| **Core Team** | L'équipe interne d'Open Design. Détient un accès en écriture complet sur le repository et constitue l'autorité finale sur les décisions de gouvernance. La liste est tenue en interne. |
+| **Core Team** | L'équipe interne d'OpenDesign. Détient un accès en écriture complet sur le repository et constitue l'autorité finale sur les décisions de gouvernance. La liste est tenue en interne. |
 
 Le reste de ce document concerne les **External Maintainers** sauf indication contraire.
 

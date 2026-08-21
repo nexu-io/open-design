@@ -24,7 +24,7 @@ export type CollabCluster = {
 };
 
 /**
- * Start genuinely isolated Open Design clients for collaboration E2E.
+ * Start genuinely isolated OpenDesign clients for collaboration E2E.
  *
  * A second BrowserContext against the normal Playwright worker fixture is not
  * a second client: both pages still share one daemon, sqlite database, project

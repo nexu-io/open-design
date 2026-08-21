@@ -9,9 +9,9 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     examplePrompt:
-      'Vérifiez la preview locale Open Design avec agent-browser : démarrez ou connectez Chrome CDP, ouvrez http://127.0.0.1:17573/, puis rapportez le titre, l’URL, le texte visible et enregistrez un screenshot.',
+      'Vérifiez la preview locale OpenDesign avec agent-browser : démarrez ou connectez Chrome CDP, ouvrez http://127.0.0.1:17573/, puis rapportez le titre, l’URL, le texte visible et enregistrez un screenshot.',
     description:
-      'Automatisation navigateur pour valider la preview locale Open Design. Se connecte à un endpoint Chrome CDP vérifié, lit l’état rendu de la page, peut cliquer/saisir si nécessaire et enregistre un screenshot.',
+      'Automatisation navigateur pour valider la preview locale OpenDesign. Se connecte à un endpoint Chrome CDP vérifié, lit l’état rendu de la page, peut cliquer/saisir si nécessaire et enregistre un screenshot.',
   },
   'blog-post': {
     examplePrompt:
@@ -40,11 +40,11 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'open-design-landing': {
     examplePrompt:
-      'Concevez la landing page marketing Open Design dans le style Atelier Zero / Monocle — canvas papier chaud, collage surréaliste plâtre + architecture, grande typographie display serif italique mixée, chiffres romains comme marqueurs de sections et un seul accent corail.',
+      'Concevez la landing page marketing OpenDesign dans le style Atelier Zero / Monocle — canvas papier chaud, collage surréaliste plâtre + architecture, grande typographie display serif italique mixée, chiffres romains comme marqueurs de sections et un seul accent corail.',
   },
   'open-design-landing-deck': {
     examplePrompt:
-      'Créez le pitch deck Open Design dans le style Atelier Zero — cover avec hero plate, séparateurs de section en chiffres romains, slide stats (31 Skills · 72 systèmes · 12 CLIs), citation client, CTA et end-card mega italic-serif. Pagination horizontal-swipe comme un magazine imprimé.',
+      'Créez le pitch deck OpenDesign dans le style Atelier Zero — cover avec hero plate, séparateurs de section en chiffres romains, slide stats (31 Skills · 72 systèmes · 12 CLIs), citation client, CTA et end-card mega italic-serif. Pagination horizontal-swipe comme un magazine imprimé.',
     description:
       'Crée un slide deck single-file dans le style Atelier Zero (papier chaud, spans accent en serif italique, points finaux corail, plaques de collage surréalistes). Pagination magazine horizontale avec navigation par flèches et espace, HUD live avec compteur de slides et progress bar ; partage le stylesheet et la bibliothèque d’images à 16 slots avec le Skill frère `open-design-landing`.',
   },

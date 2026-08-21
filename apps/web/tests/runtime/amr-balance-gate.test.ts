@@ -14,13 +14,18 @@ import {
   retryUnavailableAmrBalanceGate,
   setAmrLowBalanceWarnOptedOut,
 } from '../../src/runtime/amr-balance-gate';
-import { fetchAmrWalletSnapshot } from '../../src/providers/daemon';
+import {
+  fetchAmrWalletSnapshot,
+  fetchVelaLoginStatus,
+} from '../../src/providers/daemon';
 
 vi.mock('../../src/providers/daemon', () => ({
   fetchAmrWalletSnapshot: vi.fn(),
+  fetchVelaLoginStatus: vi.fn(),
 }));
 
 const mockedFetch = vi.mocked(fetchAmrWalletSnapshot);
+const mockedFetchStatus = vi.mocked(fetchVelaLoginStatus);
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -83,10 +88,12 @@ function authoritativeWorkspaceBillingResponse(
 
 beforeEach(() => {
   window.localStorage.clear();
+  mockedFetchStatus.mockRejectedValue(new Error('status unavailable'));
 });
 
 afterEach(() => {
   mockedFetch.mockReset();
+  mockedFetchStatus.mockReset();
   vi.unstubAllGlobals();
 });
 
@@ -179,6 +186,35 @@ describe('checkAmrBalanceGate', () => {
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
   });
 
+  it.each([
+    ['plus', 'kimi-k2.7-code'],
+    ['pro', 'glm-5.2'],
+    ['max', 'minimax-m2.7'],
+  ])('does not soft-warn a %s unlimited model at low balance', async (plan, modelId) => {
+    const low = snapshot({
+      balanceUsd: '1.20',
+      user: { id: 'u1', email: 'user@example.com', plan },
+    });
+    mockedFetch.mockResolvedValueOnce(low);
+
+    await expect(checkAmrBalanceGate(undefined, modelId)).resolves.toEqual({
+      kind: 'allow',
+    });
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('still soft-warns when a low-balance Pro account selects MiniMax M2.7', async () => {
+    const low = snapshot({
+      balanceUsd: '1.20',
+      user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
+    });
+    mockedFetch.mockResolvedValueOnce(low);
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'minimax-m2.7'),
+    ).resolves.toEqual({ kind: 'soft', snapshot: low });
+  });
+
   it('skips the soft warning once the user opted out — but never the hard block', async () => {
     expect(isAmrLowBalanceWarnOptedOut()).toBe(false);
     setAmrLowBalanceWarnOptedOut();
@@ -206,6 +242,62 @@ describe('checkAmrBalanceGate', () => {
       snapshot: fresh,
     });
     expect(mockedFetch).toHaveBeenNthCalledWith(2, { refresh: true });
+  });
+
+  it.each([
+    ['go', 'glm-5.2'],
+    ['plus', 'kimi-k2.7-code'],
+    ['pro', 'glm-5.2'],
+    ['max', 'glm-5.1'],
+  ])('allows a %s unlimited model with a fresh zero-dollar wallet', async (plan, modelId) => {
+    const planAccount = snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan },
+    });
+    mockedFetch
+      .mockResolvedValueOnce({ ...planAccount, source: 'daemon_cache' })
+      .mockResolvedValueOnce(planAccount);
+
+    await expect(
+      checkAmrBalanceGate(undefined, modelId),
+    ).resolves.toEqual({ kind: 'allow' });
+    expect(mockedFetch).toHaveBeenNthCalledWith(2, { refresh: true });
+  });
+
+  it('uses the live billing account when the fresh wallet omits the Go plan', async () => {
+    const emptyWallet = snapshot({ balanceUsd: '0' });
+    mockedFetch
+      .mockResolvedValueOnce({ ...emptyWallet, source: 'daemon_cache' })
+      .mockResolvedValueOnce(emptyWallet);
+    mockedFetchStatus.mockResolvedValue({
+      loggedIn: true,
+      profile: 'prod',
+      user: null,
+      account: { plan: 'go', balanceUsd: '0' },
+      configPath: '/tmp/vela.json',
+    });
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'glm-5.2'),
+    ).resolves.toEqual({ kind: 'allow' });
+  });
+
+  it('keeps the zero-dollar block for a model outside the current plan allowance', async () => {
+    const plusAccount = snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan: 'plus' },
+    });
+    mockedFetch
+      .mockResolvedValueOnce({ ...plusAccount, source: 'daemon_cache' })
+      .mockResolvedValueOnce(plusAccount);
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'glm-5.1'),
+    ).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: plusAccount,
+    });
   });
 
   it('hard-blocks a signed-out account after refresh confirmation', async () => {
@@ -338,6 +430,113 @@ describe('checkAmrBalanceGate', () => {
       expect(result.snapshot.balanceUsd).toBe('1.25');
     }
     expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the personal workspace wallet instead of an empty account wallet', async () => {
+    mockedFetch.mockResolvedValue(snapshot({ balanceUsd: '0' }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        expect(input.toString()).toBe(
+          '/api/workspace/billing?scope=workspace&workspaceId=ws-personal-a&freshness=authoritative',
+        );
+        return new Response(
+          JSON.stringify(authoritativeWorkspaceBillingResponse(
+            'ws-personal-a',
+            'wm-personal-a',
+            '98.22',
+          )),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+
+    await expect(checkAmrBalanceGate({
+      workspaceType: 'personal',
+      workspaceId: 'ws-personal-a',
+      workspaceMemberId: 'wm-personal-a',
+    })).resolves.toEqual({ kind: 'allow' });
+  });
+
+  it('allows a personal Go workspace with a zero-dollar wallet', async () => {
+    mockedFetch.mockResolvedValue(snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan: 'go' },
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify(authoritativeWorkspaceBillingResponse(
+          'ws-personal-go',
+          'wm-personal-go',
+          '0',
+        )),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+
+    await expect(
+      checkAmrBalanceGate({
+        workspaceType: 'personal',
+        workspaceId: 'ws-personal-go',
+        workspaceMemberId: 'wm-personal-go',
+      }, 'deepseek-v4-pro'),
+    ).resolves.toEqual({ kind: 'allow' });
+  });
+
+  it('does not soft-warn an unlimited model in a low-balance personal workspace', async () => {
+    mockedFetch.mockResolvedValue(snapshot({
+      balanceUsd: '1.50',
+      user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify(authoritativeWorkspaceBillingResponse(
+          'ws-personal-pro',
+          'wm-personal-pro',
+          '1.50',
+        )),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+
+    await expect(
+      checkAmrBalanceGate({
+        workspaceType: 'personal',
+        workspaceId: 'ws-personal-pro',
+        workspaceMemberId: 'wm-personal-pro',
+      }, 'glm-5.2'),
+    ).resolves.toEqual({ kind: 'allow' });
+  });
+
+  it('does not use a personal Go plan to bypass a team workspace zero balance', async () => {
+    const goAccount = snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan: 'go' },
+    });
+    mockedFetch.mockResolvedValue(goAccount);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify(authoritativeWorkspaceBillingResponse(
+          'ws-team-go-member',
+          'wm-team-go-member',
+          '0',
+        )),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+
+    await expect(checkAmrBalanceGate({
+      workspaceType: 'team',
+      workspaceId: 'ws-team-go-member',
+      workspaceMemberId: 'wm-team-go-member',
+    }, 'deepseek-v4-flash')).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: expect.objectContaining({ balanceUsd: '0' }),
+    });
   });
 
   it('does not authorize a positive balance from a daemon that cannot prove an authoritative read', async () => {

@@ -1,0 +1,127 @@
+---
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import SiteAnalytics from '../../../_components/site-analytics.astro';
+import HeaderEnhancer from '../../../_components/header-enhancer.astro';
+import { Header, type HeaderProps } from '../../../_components/header';
+import LocaleSwitcherScript from '../../../_components/locale-switcher-script.astro';
+import SeoHead from '../../../_components/seo-head.astro';
+import SiteFooter from '../../../_components/site-footer.astro';
+import { getCatalogCounts } from '../../../_lib/catalog';
+import { getGithubRepoMeta } from '../../../_lib/github';
+import { getHeaderLocaleSwitcher, getLocaleDefinition, localeFromPath, localizedHref } from '../../../i18n';
+import '../../../globals.css';
+import '../../../sub-pages.css';
+import '../../../_partials/ikigai-one.css';
+import { EVENT_BODY, EVENT_META } from '../../../_partials/open-design-hong-kong-workshop-i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
+const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
+const copy = EVENT_META[locale] ?? EVENT_META.en!;
+const title = copy.title;
+const description = copy.description;
+const datePublished = new Date('2026-08-16');
+const fallbackSite = 'https://open-design.ai/';
+const ogImage = new URL('/stories/open-design-hong-kong-workshop-cover.webp', Astro.site ?? fallbackSite).toString();
+
+const storyMain = (EVENT_BODY[locale] ?? EVENT_BODY.en!).replace(
+  /href="(\/[^"]+)"/g,
+  (_match, pathname: string) => `href="${localizedHref(pathname, locale)}"`,
+);
+
+const headerHtml = renderToStaticMarkup(
+  createElement<HeaderProps>(Header, {
+    counts,
+    github,
+    brandHref: localizedHref('/', locale),
+    active: 'community',
+    locale,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
+  }),
+);
+---
+
+<!doctype html>
+<html lang={localeDef.htmlLang} dir={localeDef.dir}>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <SeoHead kind='article' title={title} description={description} pathname={Astro.url.pathname} datePublished={datePublished} category='Community' image={ogImage} />
+    <SiteAnalytics />
+  </head>
+  <body>
+    <div class='shell'>
+      <div class='site-chrome' data-chrome-headroom>
+        <Fragment set:html={headerHtml} />
+      </div>
+      <Fragment set:html={storyMain} />
+      <SiteFooter counts={counts} locale={locale} localeCanonicalOnly />
+    </div>
+    <HeaderEnhancer />
+    <LocaleSwitcherScript />
+    <script is:inline>
+      (function () {
+        var r = document.querySelector('.meetup-v4');
+        if (!r || !('IntersectionObserver' in window)) return;
+        r.classList.add('anim');
+        var io = new IntersectionObserver(
+          function (es) {
+            es.forEach(function (e) {
+              if (e.isIntersecting) {
+                e.target.classList.add('inview');
+                io.unobserve(e.target);
+              }
+            });
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -7% 0px' },
+        );
+        document.querySelectorAll('.meetup-v4 .v4band').forEach(function (b) {
+          io.observe(b);
+        });
+      })();
+    </script>
+    <style is:global>
+      .meetup-v4 { background: var(--paper); }
+      .meetup-v4 .meetup-hero::before {
+        background-image:
+          linear-gradient(180deg, rgba(250,250,250,.72), rgba(250,250,250,.95) 66%, var(--paper)),
+          url(/stories/open-design-hong-kong-workshop-cover.webp);
+        background-position: center 42%;
+      }
+      .meetup-v4 .v4hero { padding-top: 132px; }
+      .meetup-v4 .v4statstrip { grid-template-columns: repeat(3, 1fr); }
+      .meetup-v4 .meetup-snap .v4snap-logo { width: 58px; height: 58px; object-fit: cover; }
+      .meetup-v4 .v4promo img,
+      .meetup-v4 .v4feat-img img { border: 1px solid var(--line); background: #fff; }
+      .meetup-v4 .v4promo figcaption { margin-top: 14px; font-size: 13px; color: var(--ink-faint); font-family: var(--mono); letter-spacing: .02em; }
+      .meetup-v4 .meetup-wide-photo { max-width: 920px; }
+      .meetup-v4 .meetup-wide-photo img { aspect-ratio: 16 / 9; object-fit: cover; }
+      .meetup-v4 .meetup-flow { display: flex; flex-wrap: wrap; gap: 9px; margin: 22px 0 4px; }
+      .meetup-v4 .meetup-flow span { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.58); color: var(--ink-soft); font-family: var(--mono); font-size: 12px; letter-spacing: .02em; }
+      .meetup-v4 .meetup-case-intro { max-width: 800px; padding: 0; margin: 0 auto 38px; }
+      .meetup-v4 .meetup-case-intro .v4h2 { max-width: 760px; font-size: clamp(30px, 3.1vw, 38px); }
+      .meetup-v4 .meetup-case-intro .v4lede { max-width: 740px; }
+      .meetup-v4 .meetup-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; max-width: 960px; margin: 0 auto; }
+      .meetup-v4 .meetup-pair figure { margin: 0; }
+      .meetup-v4 .meetup-pair img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border: 1px solid var(--line); border-radius: var(--spacing-8); background: #fff; box-shadow: 0 34px 70px -34px rgba(20,20,30,.55); }
+      .meetup-v4 .meetup-pair figcaption { margin-top: 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.45; color: var(--ink-faint); }
+      .meetup-v4 .meetup-showcase-photo img { aspect-ratio: 4 / 3; object-fit: cover; }
+      .meetup-v4 .meetup-feedback { margin-top: 34px; }
+      .meetup-v4 .meetup-feedback h3,
+      .meetup-v4 .meetup-feedback p { color: inherit; }
+      .meetup-v4 .meetup-lessons { margin-top: 34px; }
+      .meetup-v4 .meetup-final::before {
+        background-image:
+          linear-gradient(rgba(16,16,18,.84), rgba(16,16,18,.92)),
+          url(/stories/open-design-hong-kong-workshop-cover.webp);
+        background-position: center 42%;
+      }
+      @media (max-width: 820px) {
+        .meetup-v4 .v4hero { padding-top: 108px; }
+        .meetup-v4 .meetup-pair { grid-template-columns: 1fr; }
+      }
+    </style>
+  </body>
+</html>

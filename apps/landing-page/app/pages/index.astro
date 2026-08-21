@@ -10,7 +10,7 @@ import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
 import DownloadEngagementPrompt from '../_components/download-engagement-prompt.astro';
-import HomeLaunchWeekFloat from '../_components/home-launch-week-float.astro';
+import GoBanner from '../_components/go-banner.astro';
 import {
   heroBgImage,
   heroBgSrcset,
@@ -61,8 +61,8 @@ const OFFICIAL_URL = `${origin}official/`;
 const websiteSchema = {
   '@type': 'WebSite',
   '@id': `${origin}#website`,
-  name: 'Open Design',
-  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  name: 'OpenDesign',
+  alternateName: ['Open Design', 'open-design', 'opendesign', 'Open Design AI', 'OpenDesign AI', 'OD'],
   url: origin,
   inLanguage: localeDef.htmlLang,
   availableLanguage: LANDING_LOCALES.map((entry) => entry.htmlLang),
@@ -72,8 +72,8 @@ const websiteSchema = {
 const organizationSchema = {
   '@type': 'Organization',
   '@id': `${origin}#organization`,
-  name: 'Open Design',
-  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD', 'nexu-io/open-design'],
+  name: 'OpenDesign',
+  alternateName: ['Open Design', 'open-design', 'opendesign', 'Open Design AI', 'OpenDesign AI', 'OD', 'nexu-io/open-design'],
   url: origin,
   logo: {
     '@type': 'ImageObject',
@@ -91,13 +91,13 @@ const organizationSchema = {
 const softwareSchema = {
   '@type': 'SoftwareApplication',
   '@id': `${origin}#software`,
-  name: 'Open Design',
-  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  name: 'OpenDesign',
+  alternateName: ['Open Design', 'open-design', 'opendesign', 'Open Design AI', 'OpenDesign AI', 'OD'],
   description,
   url: origin,
   inLanguage: localeDef.htmlLang,
   applicationCategory: 'DesignApplication',
-  operatingSystem: 'macOS, Windows, Linux',
+  operatingSystem: 'macOS, Windows',
   license: 'https://www.apache.org/licenses/LICENSE-2.0',
   softwareVersion: github.versionLabel,
   downloadUrl: RELEASES_URL,
@@ -205,7 +205,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     />
 
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Open Design" />
+    <meta property="og:site_name" content="OpenDesign" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={metaDescription} />
     <meta property="og:url" content={canonical} />
@@ -230,6 +230,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     <script is:inline type="application/ld+json" set:html={JSON.stringify(homepageGraph)} />
   </head>
   <body>
+    <GoBanner locale={locale} />
     <div class="home-campaign-banner" data-home-campaign-banner data-campaign-window-label={campaignCopy.windowLabel} data-campaign-day-unit={campaignCopy.dayUnit} data-campaign-start-at={DEEPSEEK_V4_PRO_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive} hidden>
       <a class="home-campaign-banner__link" href={campaignPricingHref} aria-label={`${campaignCopy.title} · ${campaignCopy.linkLabel}`}>
         <span class="home-campaign-banner__badge" data-home-campaign-countdown>{campaignCopy.badge}</span>
@@ -241,7 +242,6 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
       </a>
       <button class="home-campaign-banner__close" type="button" aria-label={campaignCopy.closeLabel} data-home-campaign-close>×</button>
     </div>
-    <HomeLaunchWeekFloat locale={locale} />
     <Fragment set:html={pageHtml} />
     <DownloadEngagementPrompt locale={locale} />
     <style is:global>
@@ -254,9 +254,9 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         left: 0;
         right: 0;
         min-height: var(--home-campaign-banner-height);
-        border-bottom: 1px solid color-mix(in srgb, var(--coral) 36%, var(--line));
+        border-bottom: 1px solid color-mix(in srgb, #78ea57 36%, var(--line));
         color: var(--ink);
-        background: color-mix(in srgb, var(--coral) 11%, #fff);
+        background: #d8ffb5;
         font-family: var(--sans);
         font-size: 13px;
         line-height: 1.25;
@@ -369,7 +369,10 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         const updateCampaignVisibility = () => {
           const now = Date.now();
           const active = now >= startAt && now < endAt;
-          const visible = active && !dismissed;
+          const goOwns =
+            document.documentElement.classList.contains('go-banner-active') ||
+            document.documentElement.classList.contains('go-banner-pending');
+          const visible = active && !dismissed && !goOwns;
           if (banner) banner.hidden = !visible;
           document.documentElement.classList.toggle('home-campaign-banner-active', visible);
           if (!active || !countdown) return active;
@@ -385,9 +388,13 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           }
           return active;
         };
+        window.addEventListener('go-banner:state-change', updateCampaignVisibility);
         updateCampaignVisibility();
         const campaignTimer = window.setInterval(updateCampaignVisibility, 1000);
-        window.addEventListener('pagehide', () => window.clearInterval(campaignTimer), { once: true });
+        window.addEventListener('pagehide', () => {
+          window.clearInterval(campaignTimer);
+          window.removeEventListener('go-banner:state-change', updateCampaignVisibility);
+        }, { once: true });
         campaignLink?.addEventListener('click', (event) => {
           const eligible = Date.now() >= startAt && Date.now() < endAt;
           const attribution = eligible
@@ -490,13 +497,13 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         };
 
         // Pull a clean 'v0.3.0'-style label from a GitHub release record.
-        // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+        // We prefer release.name (e.g. 'OpenDesign 0.3.0') because that's
         // what we hand-author; fall back to tag_name (e.g.
         // 'open-design-v0.3.0') with the project prefix stripped.
         //
         // Expected input shapes (release.name / release.tag_name):
-        //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
-        //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+        //   { name: 'OpenDesign 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+        //   { name: 'OpenDesign v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
         //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
         //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
         //   { name: null,                 tag_name: null }                  → null (caller skips)
@@ -1707,7 +1714,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
             if (ev.key === 'Escape') setNavOpen(false);
           });
         })();
-        // Open Design Cloud header account. Same as `enhanceMobileNav`
+        // OpenDesign Cloud header account. Same as `enhanceMobileNav`
         // above, this mirrors `header-enhancer.astro` because the homepage does
         // not include that enhancer. Detect a live cloud session and reveal the
         // avatar menu for signed-in visitors; signed-out visitors keep the
@@ -2274,6 +2281,34 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           { rootMargin: '0px 0px 150% 0px' },
         );
         containers.forEach((container) => io.observe(container));
+      })();
+    </script>
+    <script is:inline>
+      // Hero video facade: swap the poster for the YouTube iframe on demand so
+      // the first screen ships no third-party script until the visitor asks.
+      (() => {
+        const frame = document.querySelector('[data-hero-video]');
+        if (!frame) return;
+        const id = frame.getAttribute('data-video-id');
+        if (!id) return;
+        const play = () => {
+          if (frame.classList.contains('is-playing')) return;
+          const iframe = document.createElement('iframe');
+          iframe.src =
+            'https://www.youtube-nocookie.com/embed/' +
+            encodeURIComponent(id) +
+            '?autoplay=1&rel=0&playsinline=1&modestbranding=1';
+          iframe.title = 'OpenDesign product walkthrough';
+          iframe.allow =
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+          iframe.setAttribute('allowfullscreen', '');
+          iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+          frame.classList.add('is-playing');
+          frame.appendChild(iframe);
+        };
+        // Pointer: anywhere on the poster. Keyboard: the labelled <button> is
+        // the only focusable control and its native activation fires `click`.
+        frame.addEventListener('click', play);
       })();
     </script>
   </body>

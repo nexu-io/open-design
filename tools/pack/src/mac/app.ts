@@ -4,7 +4,7 @@ import { dirname, join, relative } from "node:path";
 
 import { rebuild, type RebuildOptions } from "@electron/rebuild";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import {
   MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
   MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES,
@@ -18,14 +18,14 @@ import {
   renderMacPackagedMainEntry,
   shouldInstallInternalPackageForMacPrebundle,
   shouldUseMacStandalonePrebundle,
-} from "../mac-prebundle.js";
+} from "./prebundle.js";
 import {
   prepareNodePtyRuntime,
   resolveNodePtyRuntimeArch,
 } from "../node-pty-runtime.js";
-import { copyBundledResourceTrees, packBundledDshRuntime } from "../resources.js";
+import { copyBundledResourceTrees, packBundledDshRuntime } from "../resources/index.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
 import {
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
@@ -174,6 +174,7 @@ export function renderMacPackagedConfig(options: {
       ...(options.config.posthogKey == null ? {} : { posthogKey: options.config.posthogKey }),
       ...(options.config.posthogHost == null ? {} : { posthogHost: options.config.posthogHost }),
       ...(options.config.velaWebUrl == null ? {} : { velaWebUrl: options.config.velaWebUrl }),
+      ...(options.config.velaWebUrls == null ? {} : { velaWebUrls: options.config.velaWebUrls }),
       ...(options.usePrebundledStandaloneWeb ? { webSidecarEntryRelative: MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } : {}),
       webOutputMode: options.config.webOutputMode,
       ...(options.config.portable ? {} : { namespaceBaseRoot: options.config.roots.runtime.namespaceBaseRoot }),

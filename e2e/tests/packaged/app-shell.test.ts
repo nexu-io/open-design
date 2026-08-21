@@ -80,7 +80,7 @@ function renderFixture(
     body: { textContent: options.bodyText ?? '' },
     querySelector: (selectors) => elements.find((element) => matchesSelector(element, selectors)) ?? null,
     querySelectorAll: (selectors) => elements.filter((element) => matchesSelector(element, selectors)),
-    title: options.title ?? 'Open Design',
+    title: options.title ?? 'OpenDesign',
   };
 }
 

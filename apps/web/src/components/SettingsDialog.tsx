@@ -166,7 +166,6 @@ import { SettingsWorkspaceSection } from './SettingsWorkspaceSection';
 import {
   useWorkspaceBillingResponse,
   useWorkspaceContext,
-  workspaceBillingBalanceUsd,
   workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
 import { canUpgradeFromPlanTier, resolvePlanTier } from '../collab/team-plan';
@@ -880,7 +879,7 @@ function cleanAgentVersionLabel(
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : agent.name;
+  return agent.id === 'amr' ? 'OpenDesign' : agent.name;
 }
 
 const AGENT_CLI_ENV_FIELDS = [
@@ -1641,15 +1640,9 @@ export function SettingsDialog({
     context: workspaceContext,
     loading: workspaceContextLoading,
   } = useWorkspaceContext();
-  // recvpZPzGJL7o7: the local-CLI card's balance came ONLY from vela's
-  // account-scoped sources (`amrCardStatus.account.balanceUsd`, then the
-  // `/api/integrations/vela/wallet` snapshot) — the same account-scoped
-  // projection `resolvePlanTier` exists to correct for the plan-tier badge
-  // right next to it, via the SAME card's `amrCardResolvedPlan` below. A team
-  // member reads their PERSONAL wallet there even while the card's own badge
-  // correctly names the team's paid plan, because nothing fed the workspace's
-  // real balance into the number. `useWorkspaceBillingResponse` carries the
-  // explicit v2 workspace-wallet source independently from account metadata.
+  // Workspace billing remains available for workspace plan/upgrade decisions.
+  // The local-CLI card itself describes the selected CLI login and profile, so
+  // its email, account plan and balance must stay on one account-scoped source.
   const workspaceBillingResponse = useWorkspaceBillingResponse();
   // Same partition for the plan half: `response.summary` is an ACCOUNT read, so
   // the AMR card's plan badge and both upgrade routes must consume it projected
@@ -1659,14 +1652,9 @@ export function SettingsDialog({
     workspaceContext,
   );
   const showWorkspaceSettings = canShowWorkspaceSettings(workspaceContext);
-  // The 「升级」 buttons on the AMR model card route through
-  // `workspaceUpgradeUrl` — the one decision point every upgrade affordance
-  // shares (see its docblock in `EntryNavRail.tsx`): personal workspace →
-  // B's personal plan modal (`billing=plan`, recvpYEiH019cD); team → the
-  // checkout vs change-plan dashboard dialog by subscription state
-  // (recvpSQKna0LwR). The profile fallback keeps the buttons alive after a
-  // signed-out/no-context read; while that read is still loading, hide them so
-  // an owner-only action cannot flash briefly for an admin/member.
+  // All generic AMR upgrade buttons route through public Pricing. While the
+  // workspace read is pending, hide the owner-only action to avoid a flash for
+  // admins or members.
   const amrUpgradeUrl = (profile: string | null | undefined): string | null =>
     workspaceContextLoading
       ? null
@@ -4458,7 +4446,7 @@ export function SettingsDialog({
               </div>
               </div>
               {cfg.mode === 'daemon' && !amrCardSignedIn ? (
-                // Only prompt to sign into Open Design Cloud when NOT already
+                // Only prompt to sign into OpenDesign Cloud when NOT already
                 // signed in — the AMR/vela session IS the cloud identity (one
                 // session drives both), so a logged-in user has nothing to do
                 // here and the callout was showing spuriously.
@@ -4467,7 +4455,7 @@ export function SettingsDialog({
                     <strong>{t('settings.cloudCalloutTitle')}</strong>
                     <p>{t('settings.cloudCalloutBody')}</p>
                   </div>
-                  {/* Same device-auth flow as the 授权 button on the Open Design
+                  {/* Same device-auth flow as the 授权 button on the OpenDesign
                       agent card below — the AMR/vela session IS the cloud
                       identity, so signing in here is that one flow. This used to
                       navigate to onboarding, which walked the user through the
@@ -4675,14 +4663,6 @@ export function SettingsDialog({
                             amrWalletVisible && amrWalletSnapshot?.status === 'available'
                               ? formatVelaBalanceUsd(amrWalletSnapshot.balanceUsd)
                               : null;
-                          // recvpZPzGJL7o7: `amrStatusBalance` and `amrWalletBalance`
-                          // are both vela ACCOUNT-scoped reads. A team balance
-                          // may only come from the nested v2 workspace wallet
-                          // response whose workspace identity Vela returned;
-                          // never display the account summary's balance as a
-                          // team fallback. Personal/local use keeps the account
-                          // summary and login-status fallbacks.
-                          //
                           // recvqakgSc1Pwd: this must read `balanceUsd` — the
                           // dollar figure vela already computed — not
                           // `totalAvailableCredits`, a raw credits COUNT on a
@@ -4691,19 +4671,9 @@ export function SettingsDialog({
                           // credits count as a dollar amount is what put
                           // "Balance $388307.00" on a workspace whose real
                           // balance was under $39.
-                          const workspaceBalanceUsd = workspaceBillingBalanceUsd(
-                            workspaceBillingResponse,
-                            workspaceContext,
-                          );
-                          const amrWorkspaceBalance =
-                            amrWalletVisible && workspaceBalanceUsd
-                              ? formatVelaBalanceUsd(workspaceBalanceUsd)
-                              : null;
                           const amrCardBalanceLabel =
                             isAmrAgent && active && amrCardSignedIn
-                              ? workspaceContext?.workspaceType === 'team'
-                                ? amrWorkspaceBalance
-                                : amrWorkspaceBalance ?? amrStatusBalance ?? amrWalletBalance
+                              ? amrStatusBalance ?? amrWalletBalance
                               : null;
                           // vela's `account.plan` is ACCOUNT-scoped, so a member
                           // whose plan is held by the team workspace reads
@@ -8130,7 +8100,7 @@ function MediaProvidersSection({
 // Important: every snippet uses absolute paths to the daemon's current
 // Node-compatible runtime and built cli.js, fetched at runtime. macOS
 // and Linux ship a system /usr/bin/od (octal-dump) that shadows any
-// `od` we might add to PATH, and most Open Design users run from
+// `od` we might add to PATH, and most OpenDesign users run from
 // source where `od` is not installed globally. The installer panel
 // must NOT reference bare `od`.
 type McpClientId =

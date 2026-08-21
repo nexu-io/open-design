@@ -3,7 +3,7 @@
   "version": "0.8.0",
   "private": true,
   "type": "module",
-  "description": "Shared Open Design React UI primitives.",
+  "description": "Shared OpenDesign React UI primitives.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

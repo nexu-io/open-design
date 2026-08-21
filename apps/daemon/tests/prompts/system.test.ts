@@ -232,7 +232,7 @@ describe('composeSystemPrompt', () => {
         skillMode: surface,
         metadata: { kind: surface } as any,
       });
-      expect(prompt).not.toContain('# Open Design Charter');
+      expect(prompt).not.toContain('# OpenDesign Charter');
       expect(prompt).not.toContain('## Requirements Clarification Phase');
       expect(prompt).not.toContain('## Delivery');
       // Nor the Ask-mode charter (fourth-round finding): CHAT_MODE_OVERRIDE
@@ -242,7 +242,7 @@ describe('composeSystemPrompt', () => {
     }
     // Non-media slim runs keep the charter head.
     const design = composeSystemPrompt({ promptCoreVariant: 'slim' });
-    expect(design).toContain('# Open Design Charter');
+    expect(design).toContain('# OpenDesign Charter');
     expect(design).toContain('## Requirements Clarification Phase');
   });
 
@@ -270,8 +270,10 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('## Active skill — hyperframes');
     expect(prompt).toContain('**Pre-flight (do this before any other tool):**');
     expect(prompt).toContain('`references/html-in-canvas.md`');
+    expect(prompt).toContain('`"$OD_NODE_BIN" "$OD_BIN" media scaffold`');
     expect(prompt).toContain('media generate --surface video --model hyperframes-html --composition-dir <rel>');
-    expect(prompt).toContain('Do not run `npx hyperframes render` yourself');
+    expect(prompt).toContain('Do not run HyperFrames `render` yourself');
+    expect(prompt).not.toContain('npx hyperframes');
     expect(prompt).not.toContain('intentionally rejected for this model');
     expect(prompt).not.toContain('AGENT_RENDERED');
     expect(prompt).not.toContain('rendered by you directly via npx');
@@ -279,8 +281,10 @@ describe('composeSystemPrompt', () => {
 
   it('keeps both hyperframes skill copies aligned with the daemon render handoff', () => {
     for (const markdown of [hyperframesSkillMarkdown, officialHyperframesSkillMarkdown]) {
+      expect(markdown).toContain('"$OD_NODE_BIN" "$OD_BIN" media scaffold');
       expect(markdown).toContain('media generate --surface video --model hyperframes-html --composition-dir <rel>');
-      expect(markdown).toContain('Do not run `npx hyperframes render`');
+      expect(markdown).toContain('Do not run HyperFrames `render`');
+      expect(markdown).not.toContain('npx hyperframes');
       expect(markdown).not.toContain('AGENT_RENDERED');
       expect(markdown).not.toContain('rendered by you directly via npx');
       expect(markdown).not.toContain('dispatcher path returns a 400');
@@ -382,7 +386,7 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('filesystem execution profile');
       expect(prompt).toContain("runtime's native tool-call interface");
       expect(prompt).toContain('Never type a tool invocation into assistant text');
-      expect(prompt).toContain('This tool-call rule does not apply to Open Design UI markup');
+      expect(prompt).toContain('This tool-call rule does not apply to OpenDesign UI markup');
       expect(prompt).toContain('emit the complete `<question-form>...</question-form>` block directly');
       expect(prompt).toContain('Do not output generated source code in a `<artifact type="text/html">...</artifact>` block.');
     });
@@ -396,7 +400,7 @@ describe('composeSystemPrompt', () => {
       expect(amrPrompt).toContain(
         'Video model: `vela/doubao-seedance-2-0-260128`',
       );
-      expect(amrPrompt).toContain('### Open Design Cloud media defaults');
+      expect(amrPrompt).toContain('### OpenDesign Cloud media defaults');
       expect(amrPrompt).not.toContain('### Run-scoped BYOK media defaults');
       expect(amrPrompt).toContain('Never invoke the `vela` CLI directly');
       expect(amrPrompt).toContain('trusted Workspace attribution');
@@ -406,14 +410,15 @@ describe('composeSystemPrompt', () => {
       expect(claudePrompt).toContain('`--model flux-pro-ultra`');
     });
 
-    it('keeps image completion copy generic while retaining internal diagnostics', () => {
+    it('keeps image completion copy concrete while retaining internal diagnostics', () => {
       const imagePrompt = composeSystemPrompt({
         agentId: 'amr',
         locale: 'zh-CN',
         metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
       });
       expect(imagePrompt).toContain('reply exactly `图片已生成`');
-      expect(imagePrompt).toContain('reply exactly `图片生成服务暂时不可用`');
+      expect(imagePrompt).toContain('MEDIA_DISPATCH_FAILED');
+      expect(imagePrompt).toContain('图片未生成：媒体生成调度失败，原因未分类');
       expect(imagePrompt).toContain('tool output and daemon logs');
       expect(imagePrompt).not.toContain('the filename, the model used');
       expect(imagePrompt).not.toContain('surface them verbatim to the user');
@@ -425,17 +430,38 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'prototype' } as any,
       });
       expect(prototypePrompt).toContain('reply exactly `图片已生成`');
-      expect(prototypePrompt).toContain('reply exactly `图片生成服务暂时不可用`');
+      expect(prototypePrompt).toContain('MEDIA_DISPATCH_FAILED');
+      expect(prototypePrompt).toContain('图片未生成：媒体生成调度失败，原因未分类');
       expect(prototypePrompt).toContain('IMAGE_MODEL="vela/gpt-image-2"');
       expect(prototypePrompt).not.toContain(
         'For the best fal image model use `--model flux-pro-ultra`',
       );
     });
 
+    // The provider-error branch has to reach the prompt the DAEMON composes,
+    // not just the copy in packages/contracts. Reclassifying a provider verdict
+    // as an outage hides the actionable code and message from the user.
+    it('preserves structured provider errors in both prompts', () => {
+      for (const metadata of [
+        { kind: 'image', imageModel: 'vela/gpt-image-2' },
+        { kind: 'prototype' },
+      ]) {
+        const prompt = composeSystemPrompt({
+          agentId: 'amr',
+          locale: 'zh-CN',
+          metadata: metadata as any,
+        });
+        expect(prompt).toContain('错误代码：`{code}`');
+        expect(prompt).toContain(
+          'public code and message without reclassifying either one from wording or HTTP',
+        );
+      }
+    });
+
     it('prioritizes question forms over native tool calls when clarifying', () => {
       const prompt = composeSystemPrompt({ agentId: 'amr' });
       expect(prompt).toContain('## Structured clarification on any turn');
-      expect(prompt).toContain('`<question-form>` is assistant text for the Open Design UI, not a native tool call');
+      expect(prompt).toContain('`<question-form>` is assistant text for the OpenDesign UI, not a native tool call');
       expect(prompt).toContain(
         'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',
       );
@@ -530,7 +556,10 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'image' },
         mediaExecution: { mode: 'disabled' },
       });
-      expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
+      expect(prompt).toContain('OpenDesign-owned media execution is **disabled for this run**');
+      expect(prompt).toContain('MEDIA_EXECUTION_DISABLED');
+      expect(prompt).toContain('本次任务未启用图片生成');
+      expect(prompt).not.toContain('describe the intended creative brief');
       expect(prompt).not.toContain('## Media generation contract');
       expect(prompt).not.toContain('External MCP servers — already authenticated');
     });
@@ -713,62 +742,6 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('preview/colors.html: Colors; colors');
       expect(prompt).toContain('source/evidence.md: import evidence notes');
       expect(prompt).toContain('Keep the push prompt light');
-    });
-
-    it('routes listed business intents through the structured resolver before generation', () => {
-      const prompt = composeSystemPrompt({
-        designSystemTitle: 'default',
-        designSystemBody: '# x\n\nbody',
-        designSystemComponentsManifest: sampleComponentsManifest,
-        designSystemFixtureHtml: sampleFixtureHtml,
-        designSystemIntentIndex:
-          'Canonical business intents declared by the active design system:\n- `account.settings.save` → Button.primary — Save account changes',
-        executionProfile: 'filesystem',
-      });
-
-      expect(prompt).toContain('## Structured component intent routing — default');
-      expect(prompt).toContain('tools design-systems resolve --intent <canonical-intent>');
-      expect(prompt).toContain('`account.settings.save` → Button.primary');
-      expect(prompt).toContain('include every required state');
-      expect(prompt).toContain('sole component-selection authority');
-      expect(prompt).not.toContain('match component shapes from the reference component manifest');
-      expect(prompt).not.toContain('## Reference component manifest');
-      expect(prompt).not.toContain('## Reference fixture');
-      expect(prompt).not.toContain('components.manifest schema v1');
-      expect(prompt).not.toContain('class="btn btn-primary"');
-    });
-
-    it('keeps text-artifact runs honest when they cannot call the resolver', () => {
-      const prompt = composeSystemPrompt({
-        designSystemTitle: 'default',
-        designSystemBody: '# x\n\nbody',
-        designSystemIntentIndex:
-          'Canonical business intents declared by the active design system:\n- `account.settings.save` → Button.primary',
-        executionProfile: 'text_artifact',
-      });
-
-      expect(prompt).toContain('This runtime cannot call the resolver');
-      expect(prompt).not.toContain('tools design-systems resolve --intent <canonical-intent>');
-      expect(prompt).toContain('do not invent hidden variants, properties, states, or implementation details');
-    });
-
-    it('surfaces a declared invalid runtime instead of silently presenting it as legacy', () => {
-      const prompt = composeSystemPrompt({
-        designSystemTitle: 'broken',
-        designSystemBody: '# x\n\nbody',
-        designSystemComponentsManifest: sampleComponentsManifest,
-        designSystemFixtureHtml: sampleFixtureHtml,
-        designSystemRuntimeIssue: 'manifests/intent-map.json: unknown component MissingButton',
-      });
-
-      expect(prompt).toContain('## Structured design-system runtime unavailable — broken');
-      expect(prompt).toContain('Do not silently treat it as a valid legacy component map');
-      expect(prompt).toContain('unknown component MissingButton');
-      expect(prompt).toContain('do not fall back to a legacy manifest or fixture');
-      expect(prompt).not.toContain('## Reference component manifest');
-      expect(prompt).not.toContain('## Reference fixture');
-      expect(prompt).not.toContain('components.manifest schema v1');
-      expect(prompt).not.toContain('class="btn btn-primary"');
     });
 
     it('adds importMode guidance when the manifest declares consumption semantics', () => {

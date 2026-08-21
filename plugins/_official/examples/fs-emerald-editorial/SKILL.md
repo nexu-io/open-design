@@ -3,9 +3,9 @@ name: fs-emerald-editorial
 en_name: "Write a Brand-Launch Narrative like a Growth Strategy Lead"
 zh_name: "像增长策略负责人一样写品牌发布叙事"
 description: |
-  Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Built as a decision-grade marketing & GTM deck for marketing team, press.
+  OpenDesign's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Built as a decision-grade marketing & GTM deck for marketing team, press.
 en_description: |
-  Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Built as a decision-grade marketing & GTM deck for marketing team, press.
+  OpenDesign's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Built as a decision-grade marketing & GTM deck for marketing team, press.
 zh_description: |
   像增长策略负责人一样写品牌发布叙事——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -39,7 +39,7 @@ od:
     zh-CN: "用祖母绿封面故事（Emerald Editorial）把我的季度回顾做成杂志封面级商务刊幻灯片：祖母绿画布、海军蓝油墨、Bodoni Moda 900 大标题、双线刊头装饰，固定 1920x1080 舞台。从 example.html 出发只替换内容，保留设计系统。"
   category: "marketing-gtm"
   scenario: "marketing"
-  example_prompt: "Create \"Write a Brand-Launch Narrative like a Growth Strategy Lead\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Audience: marketing team, press. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
+  example_prompt: "Create \"Write a Brand-Launch Narrative like a Growth Strategy Lead\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: OpenDesign's 'design on your desk' brand-launch narrative: the market moment, the story, and the proof that converts. Audience: marketing team, press. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
 ---
 
 # Emerald Editorial（祖母绿封面故事）

@@ -265,7 +265,9 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     );
 
     expect(srcDocFrame().getAttribute('srcDoc')).toContain('REVISIT-CACHED-V1');
-    expect(screen.queryByRole('status', { name: /loading/i })).not.toBeInTheDocument();
+    // This source-cache regression deliberately does not forge the iframe's
+    // exact paint-probe acknowledgement. The first-load cover and its
+    // paint-verified remount behavior are exercised in FileViewer.test.tsx.
     expect(
       remountFetch.mock.calls.some(([input]) => String(input).startsWith(RAW_URL_PREFIX)),
     ).toBe(false);

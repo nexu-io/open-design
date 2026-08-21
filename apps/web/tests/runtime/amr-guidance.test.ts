@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_AMR_RECHARGE_URL,
+  OPEN_DESIGN_PRICING_URL,
   amrConsoleUrlForWorkspace,
   amrPlansUrlForWorkspace,
   amrProfileBadgeLabel,
@@ -90,25 +91,21 @@ describe('amr-guidance origin literals', () => {
       'utf8',
     );
     const origins = [...source.matchAll(/https?:\/\/[^'"`\s)]+/g)].map((match) => match[0]);
-    // Exactly three: the public prod console, the local dev server, and the one
-    // grandfathered internal entry that predates this rule. A fourth means
+    // Exactly four: public prod console + Pricing, the local dev server, and
+    // the one grandfathered internal entry that predates this rule. A fifth means
     // someone hardcoded an environment hostname instead of injecting it.
-    expect(origins).toHaveLength(3);
+    expect(origins).toHaveLength(4);
   });
 });
 
 describe('workspace-scoped AMR URLs', () => {
-  // `billing=plan` is the console's own state-aware upgrade intent: its
-  // dashboard resolves it against the workspace's real subscription state
-  // (personal → the personal plan modal, team → checkout or change-plan), so
-  // this client does not have to guess which dialog to ask for.
-  it('pins console and plans links to the exact workspace', () => {
+  it('pins console links to the workspace and sends plan discovery to Pricing', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(amrConsoleUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
       `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a`,
     );
     expect(amrPlansUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a&billing=plan`,
+      OPEN_DESIGN_PRICING_URL,
     );
   });
 
@@ -337,7 +334,7 @@ describe('resolveRunFailureUi', () => {
     });
   });
 
-  // PRD "需要登录" — non-AMR agents. Open Design can't sign in for them (their
+  // PRD "需要登录" — non-AMR agents. OpenDesign can't sign in for them (their
   // login lives in the user's own terminal), so the card shows the {agent}
   // sign-in copy, a plain Retry primary, and promotes AMR via the switch card.
   it('shows sign-in copy + retry + AMR promotion for non-AMR AGENT_AUTH_REQUIRED / UNAUTHORIZED', () => {

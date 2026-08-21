@@ -529,9 +529,10 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       const status = readVelaLoginStatus(mergeVelaEnv(env, configuredEnv));
       // Reported on every response, signed in or not: the client builds console
       // links (wallet, plans, upgrade) from it and must not have to carry a
-      // hostname table for internal AMR environments. Absent for prod/fork
-      // builds, where the client keeps using the public product console.
-      const consoleOrigin = resolveVelaConsoleOrigin(env);
+      // hostname table for internal AMR environments. The resolver also sees
+      // the settings-selected profile, so this cannot retain the package's
+      // console origin after an environment switch.
+      const consoleOrigin = resolveVelaConsoleOrigin(env, configuredEnv);
       if (consoleOrigin) status.consoleOrigin = consoleOrigin;
       if (status.loggedIn && status.sessionState === 'authenticated') {
         // Key the live-account cache by the full credential revision (not just

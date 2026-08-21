@@ -74,7 +74,7 @@ async function seedEntryHome(page: Page, options?: { locale?: string }) {
 
 async function gotoEntryHome(page: Page, timeout = 10_000) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: 15_000 });
   await expect(page.getByTestId('home-hero')).toBeVisible({ timeout });
   await ensureRailOpen(page);
 }

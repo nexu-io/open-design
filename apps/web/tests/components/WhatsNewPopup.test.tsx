@@ -197,7 +197,7 @@ describe('WhatsNewPopup version resolution', () => {
     expect(screen.getByTestId('whats-new-popup').textContent).not.toContain(PLACEHOLDER_VERSION);
     // The daemon stamps the highlights document with the running version for
     // exactly this display purpose, so it is a real source to name meanwhile.
-    expect(screen.getByText(`Open Design ${SHOW_PAYLOAD.version} is here`)).toBeTruthy();
+    expect(screen.getByText(`OpenDesign ${SHOW_PAYLOAD.version} is here`)).toBeTruthy();
   });
 
   it('keeps the placeholder out of the surface-view analytics too', async () => {
@@ -217,7 +217,7 @@ describe('WhatsNewPopup version resolution', () => {
     const view = renderCard(true);
 
     await waitFor(() => {
-      expect(screen.getByText(`Open Design ${SHOW_PAYLOAD.version} is here`)).toBeTruthy();
+      expect(screen.getByText(`OpenDesign ${SHOW_PAYLOAD.version} is here`)).toBeTruthy();
     });
 
     appVersion.current = RUNNING_APP_VERSION;
@@ -228,9 +228,9 @@ describe('WhatsNewPopup version resolution', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(`Open Design ${RUNNING_APP_VERSION} is here`)).toBeTruthy();
+      expect(screen.getByText(`OpenDesign ${RUNNING_APP_VERSION} is here`)).toBeTruthy();
     });
-    expect(screen.queryByText(`Open Design ${SHOW_PAYLOAD.version} is here`)).toBeNull();
+    expect(screen.queryByText(`OpenDesign ${SHOW_PAYLOAD.version} is here`)).toBeNull();
   });
 
   it('waits instead of inventing one when neither source can name a version', async () => {
@@ -249,7 +249,7 @@ describe('WhatsNewPopup version resolution', () => {
       </I18nProvider>,
     );
     await waitFor(() => {
-      expect(screen.getByText(`Open Design ${RUNNING_APP_VERSION} is here`)).toBeTruthy();
+      expect(screen.getByText(`OpenDesign ${RUNNING_APP_VERSION} is here`)).toBeTruthy();
     });
   });
 });
@@ -265,7 +265,7 @@ describe('WhatsNewPopup content', () => {
     await waitFor(() => {
       expect(screen.getByTestId('whats-new-popup')).toBeTruthy();
     });
-    expect(screen.getByText(`Open Design ${RUNNING_APP_VERSION} is here`)).toBeTruthy();
+    expect(screen.getByText(`OpenDesign ${RUNNING_APP_VERSION} is here`)).toBeTruthy();
     // The highlights payload's own `version` is display-irrelevant here; the
     // running version is the truth source (see contracts/api/whats-new.ts).
     expect(screen.queryByText(/0\.12\.1/)).toBeNull();

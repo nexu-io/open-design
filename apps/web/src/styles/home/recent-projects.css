@@ -139,7 +139,7 @@
 .recent-projects__row--grid .recent-projects__card-thumb {
   flex: 0 0 auto;
   width: 100%;
-  min-height: 108px;
+  min-height: 0;
   margin-top: 0;
 }
 .recent-projects__row--grid .recent-projects__card-meta {
@@ -503,6 +503,10 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+.recent-projects__card-menu[data-placement='up'] {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 .recent-projects__card-menu button {
   appearance: none;

@@ -21,7 +21,7 @@ export const PT_BR_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'agent-browser': {
     description:
-      'CLI de automação de navegador para agentes de IA. Use quando o usuário precisar inspecionar,\ntestar ou automatizar o comportamento do navegador: navegar por páginas, preencher formulários,\nclicar em botões, capturar screenshots, extrair dados de páginas, ler o contexto selecionado\nda aba de navegador do Open Design, testar aplicativos web, fazer dogfooding de pré-visualizações\ndo Open Design, QA, caça a bugs ou revisão da qualidade do aplicativo. Prefira URLs locais de\npré-visualização do Open Design, a menos que o usuário peça explicitamente navegação externa.',
+      'CLI de automação de navegador para agentes de IA. Use quando o usuário precisar inspecionar,\ntestar ou automatizar o comportamento do navegador: navegar por páginas, preencher formulários,\nclicar em botões, capturar screenshots, extrair dados de páginas, ler o contexto selecionado\nda aba de navegador do OpenDesign, testar aplicativos web, fazer dogfooding de pré-visualizações\ndo OpenDesign, QA, caça a bugs ou revisão da qualidade do aplicativo. Prefira URLs locais de\npré-visualização do OpenDesign, a menos que o usuário peça explicitamente navegação externa.',
     examplePrompt:
       'CLI de automação de navegador para agentes de IA.',
   },
@@ -849,7 +849,7 @@ export const PT_BR_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'ui-ux-pro-max': {
     description:
-      'Entrada UI/UX Pro Max somente de catálogo. Os templates upstream completos, os dados e o fluxo de busca não estão incluídos no Open Design.',
+      'Entrada UI/UX Pro Max somente de catálogo. Os templates upstream completos, os dados e o fluxo de busca não estão incluídos no OpenDesign.',
     examplePrompt:
       'Entrada UI/UX Pro Max somente de catálogo.',
   },

@@ -22,6 +22,7 @@ import { resolveAgentLaunch } from '../runtimes/launch.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
 import { getAgentDef } from '../runtimes/registry.js';
 import { resolveAmrProfile } from './vela-profile.js';
+import { resolveEffectiveVelaConsoleOrigin } from './vela-console-origin.js';
 
 export { resolveAmrProfile } from './vela-profile.js';
 
@@ -290,15 +291,15 @@ export interface VelaLoginStatus {
  * Non-prod AMR environments are internal deployments, so their hostnames are
  * not literals in this public repository: packaging injects the origin from a
  * CI secret and the packaged runtime forwards it as `OD_VELA_WEB_URL`. Reporting
- * it on the login status is how the web client learns which console to link to
- * without needing a hostname table of its own. Undefined for prod and fork
- * builds, where the client falls back to the public product console.
+ * it on the login status is how the web client learns which console to link to.
+ * The resolver combines that packaged origin with the settings-selected AMR
+ * profile, so a runtime switch cannot keep linking to the package's backend.
  */
 export function resolveVelaConsoleOrigin(
   env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
 ): string | undefined {
-  const origin = env.OD_VELA_WEB_URL?.trim().replace(/\/+$/, '') ?? '';
-  return origin.length > 0 ? origin : undefined;
+  return resolveEffectiveVelaConsoleOrigin(env, configuredEnv);
 }
 
 export interface VelaLoginAuthStage {
