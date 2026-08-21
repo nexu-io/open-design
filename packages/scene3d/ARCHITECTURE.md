@@ -190,10 +190,24 @@ the reasoning); USD stays the master and the block model is a lowering of it.
   Textures resolve to a flat base colour (a sibling PNG averaged in linear
   space, or an embedded `.bbmodel` data URI; unresolved → a neutral
   placeholder). `import(export(golem))` reproduces the elements exactly — the
-  exporter's strongest regression (`voxel-pipeline.test.ts`). Follow-ups (not
-  yet built): Bedrock export + its rotation rules, per-face atlas UVs,
-  rotated-element round-trip (needs static rotation in the scene.json language,
-  which the solver's AABB invariant does not yet carry).
+  exporter's strongest regression (`voxel-pipeline.test.ts`).
+- **Bedrock export (`src/mc/bedrock-model.ts`, `dialect: "bedrock"`).** Bedrock
+  addons cannot load a Java block model, so a Bedrock author needs
+  `geometry.json` specifically. It shares the Java exporter's validated frame
+  map (`common.ts boxToMc`), so a cube sits exactly where the Java element
+  would; only the container and texture model differ. A Bedrock geometry
+  references ONE texture, so materials pack into a vertical 16×(16·N) atlas and
+  every cube gets modern per-face UVs (format 1.16) into its material's row —
+  no box-UV-net guesswork. One root bone, `format_version 1.16.0`. v1 scope
+  matches Java: axis-aligned cubes emitted exactly, rotated boxes SKIPPED with a
+  reason. (Bedrock permits free per-cube rotation and the census recovers the
+  angle, but the rotation/pivot mapping cannot be verified in-engine from here,
+  so it is a deliberate follow-up, not an unvalidated guess shipped as correct.)
+  Follow-ups (not yet built): rotated-cube export (Bedrock) and rotated-element
+  round-trip (needs static rotation in the scene.json language, which the
+  solver's AABB invariant does not yet carry), per-face atlas UVs for Java,
+  Bedrock bones/animation. Shared exporter helpers (frame map, texture
+  synthesis, atlas tiles) live in `src/mc/common.ts`.
 
 ## The material layer (viewer tweaks channel)
 

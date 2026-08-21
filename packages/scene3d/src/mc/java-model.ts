@@ -1,6 +1,6 @@
-import { Census, CensusMaterial } from "../types.js";
+import { Census } from "../types.js";
 import { NormalizedContract } from "../contract.js";
-import { encodePng } from "../sheet/png.js";
+import { PX, TextureDirective, boxToMc, sanitizeKey, textureDirective } from "./common.js";
 
 /**
  * Lower a compiled scene to a Minecraft **Java block/item model** — the JSON
@@ -40,23 +40,12 @@ export interface JavaModel {
   elements: JavaElement[];
   display?: Record<string, unknown>;
 }
-export interface TextureDirective {
-  /** The model texture variable (`#body`) and file basename (`body.png`). */
-  key: string;
-  /** Absolute/relative census filepath to copy, when the material is textured. */
-  copyFrom?: string;
-  /** A synthesized solid-colour PNG, when the material is a flat colour. */
-  png?: Uint8Array;
-}
 export interface JavaModelBuild {
   model: JavaModel;
   textures: TextureDirective[];
   skipped: Array<{ object: string; reason: string }>;
 }
 
-/** Pixels per block — the vanilla model unit. One block is one metre in the
- *  scene, so a metre maps to 16 model pixels. */
-const PX = 16;
 /** Resource-path prefix for emitted texture references. The modeller re-points
  *  the namespace when they drop the files into their pack; `block/<key>` is the
  *  vanilla-resolvable default. */
@@ -137,69 +126,7 @@ export function buildJavaModel(census: Census, _contract: NormalizedContract): J
   return { model, textures: directives, skipped };
 }
 
-/** Map a Blender-space AABB to a Java element's from/to in pixels. The axis
- *  remap + sign flip reorders extents, so min/max are recomputed after mapping;
- *  the result satisfies from ≤ to componentwise, as the format requires. */
-function boxToMc(
-  min: [number, number, number],
-  max: [number, number, number],
-): [[number, number, number], [number, number, number]] {
-  // Blender (x,y,z) → MC (x, z, −y).
-  const xs = [min[0], max[0]];
-  const ys = [min[2], max[2]]; // MC y from Blender z
-  const zs = [-max[1], -min[1]]; // MC z from −Blender y (flip swaps ends)
-  const from: [number, number, number] = [px(Math.min(...xs)), px(Math.min(...ys)), px(Math.min(...zs))];
-  const to: [number, number, number] = [px(Math.max(...xs)), px(Math.max(...ys)), px(Math.max(...zs))];
-  return [from, to];
-}
 
-/** Metres → model pixels, rounded to the 1/16-pixel MC allows so a
- *  grid-aligned box lands on integer pixels exactly. */
-function px(metres: number): number {
-  return Number((metres * PX).toFixed(4));
-}
-
-function textureDirective(
-  key: string,
-  mat: CensusMaterial | undefined,
-  textureByName: Map<string, { name: string; filepath: string }>,
-): TextureDirective {
-  const texName = mat?.textureNames?.[0];
-  const tex = texName ? textureByName.get(texName) : undefined;
-  if (tex?.filepath) return { key, copyFrom: tex.filepath };
-  // A flat-colour material: synthesise a 16×16 solid so the face renders.
-  const base = mat?.principled.baseColor ?? [0.8, 0.8, 0.8];
-  return { key, png: solidTexture(base) };
-}
-
-/** A 16×16 solid PNG from a LINEAR base colour, sRGB-encoded (Minecraft
- *  textures are sRGB), fully opaque. Deterministic bytes via encodePng. */
-function solidTexture(linear: [number, number, number]): Uint8Array {
-  const r = srgb8(linear[0]);
-  const g = srgb8(linear[1]);
-  const b = srgb8(linear[2]);
-  const data = new Uint8Array(PX * PX * 4);
-  for (let i = 0; i < PX * PX; i++) {
-    data[i * 4] = r;
-    data[i * 4 + 1] = g;
-    data[i * 4 + 2] = b;
-    data[i * 4 + 3] = 255;
-  }
-  return encodePng({ width: PX, height: PX, data });
-}
-
-/** Linear [0,1] → sRGB byte [0,255]. */
-function srgb8(c: number): number {
-  const x = Math.min(1, Math.max(0, c));
-  const s = x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
-  return Math.round(s * 255);
-}
-
-/** MC resource names are `[a-z0-9/._-]`; fold anything else to `_`. */
-function sanitizeKey(name: string): string {
-  const k = name.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
-  return k.length >= 1 ? k : "tex";
-}
 
 /** A sane default item-display block so the model shows in inventory and hand
  *  the moment it is dropped in — the vanilla generated-item baseline. */

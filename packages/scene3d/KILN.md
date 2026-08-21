@@ -83,12 +83,14 @@ work; the load-bearing decisions, so later phases honour them:
   assembly in core (emit model + textures; a thin packager is a separate
   concern — the moment scene3d knows namespaces it is a build system).
 - **Sequencing (DONE = target + facts + rules + Java axis-aligned export +
-  `.bbmodel`/model-JSON import → spec, with the export→import→export round trip
-  as the exporter's strongest regression). Follow-ups in value order:** Bedrock
-  dialect (free-angle cubes, its own rotation rules), per-face atlas UVs,
-  rotated-element round-trip (needs static rotation in the scene.json language —
-  the solver's AABB invariant does not yet carry it, so the importer SKIPS
-  rotated elements rather than importing them wrong). Domain facts corrected
+  `.bbmodel`/model-JSON import → spec with the export→import→export round trip +
+  Bedrock geometry.json export, axis-aligned, per-material atlas). Follow-ups in
+  value order:** rotated-cube export for Bedrock (it permits free angles and the
+  census recovers them, but the rotation/pivot mapping is unverifiable in-engine
+  from here — do NOT ship it unvalidated), rotated-element round-trip (needs
+  static rotation in the scene.json language — the solver's AABB invariant does
+  not yet carry it, so import/export SKIP rotated boxes rather than shipping them
+  wrong), per-face atlas UVs, Bedrock bones/animation. Domain facts corrected
   in-consult:
   Java rotations are the fixed set {−45,−22.5,0,22.5,45}° on ONE axis (not free
   22.5° steps); Bedrock cubes are free-angle; cuboid-only is the contract for

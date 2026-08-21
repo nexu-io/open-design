@@ -79,6 +79,31 @@ describe.skipIf(!hasBlender)("voxel pipeline (real Blender)", () => {
     expect(result.ok).toBe(true);
   }, 400_000);
 
+  it("lowers the golem to a Bedrock geometry.json under the bedrock dialect", async () => {
+    const dir = workDir("minecraft/golem");
+    // Same scene, Bedrock dialect: it must emit geometry.json (not model.json).
+    fs.writeFileSync(
+      path.join(dir, "scene3d.json"),
+      JSON.stringify({ schemaVersion: 1, target: "minecraft", conventions: { minecraft: { dialect: "bedrock" } } }),
+      "utf8",
+    );
+    const result = await compile({ projectDir: dir, stages: ["parse", "build", "lint", "export"], timeoutMs: LONG, noCache: true });
+    expect(result.ok).toBe(true);
+    const geoRel = result.exportedAssets.find((a) => a.endsWith("minecraft/geometry.json"));
+    expect(geoRel).toBeTruthy();
+    expect(result.exportedAssets.some((a) => a.endsWith("minecraft/model.json"))).toBe(false);
+    const geo = JSON.parse(fs.readFileSync(path.join(dir, geoRel!), "utf8"));
+    expect(geo.format_version).toBe("1.16.0");
+    const g = geo["minecraft:geometry"][0];
+    // Four cubes in one root bone; the two materials pack into a 16×32 atlas.
+    expect(g.bones[0].cubes).toHaveLength(4);
+    expect(g.description.texture_height).toBe(32);
+    // The atlas texture was written, and the model stands (a cube reaches y 0).
+    expect(result.exportedAssets.some((a) => a.endsWith("minecraft/textures/texture.png"))).toBe(true);
+    const ys = g.bones[0].cubes.flatMap((c: { origin: number[]; size: number[] }) => [c.origin[1], c.origin[1] + c.size[1]]);
+    expect(Math.min(...ys)).toBe(0);
+  }, 400_000);
+
   it("round-trips a model through import: export → import → export reproduces the geometry", async () => {
     // The strongest exporter regression: lower the golem to model.json, then
     // point a fresh compile at THAT model (mc_model source → scene.json spec →

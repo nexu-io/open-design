@@ -44,7 +44,7 @@ import { emitBlenderScript } from "./solve/emit-bpy.js";
 import type { SceneSpec, SolvedScene } from "./solve/types.js";
 import { validateShaderSpec } from "./shade/validate.js";
 import { packageUsdz } from "./usd/usdz.js";
-import { emitJavaModel } from "./mc/emit.js";
+import { emitMinecraftModel } from "./mc/emit.js";
 import { importJavaModel } from "./mc/import-java.js";
 import { assembleShaderJob } from "./shade/emit.js";
 import { flipbookGrid, type CompiledShaderJob, type ShaderBinding } from "./shade/types.js";
@@ -902,7 +902,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
              other deliverables. */
           if (normalized.minecraft.enabled && census) {
             try {
-              const mc = emitJavaModel(census, normalized, request.projectDir, OUT_DIR);
+              const mc = emitMinecraftModel(census, normalized, request.projectDir, OUT_DIR);
               for (const d of mc.deliverables) {
                 if (!rel.includes(d)) {
                   rel.push(d);
@@ -913,8 +913,8 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
                 issues.push({
                   code: ISSUE_CODES.VOXEL_NOT_CUBOID,
                   severity: "warning",
-                  message: "the Minecraft block model is empty — no part could be expressed as a Java element",
-                  hint: "author from box shapes; spheres, cylinders and rotated imports cannot be block-model elements",
+                  message: "the Minecraft model is empty — no part could be expressed as a cuboid element/cube",
+                  hint: "author from box shapes; spheres, cylinders and rotated imports cannot be Minecraft cuboids",
                 });
               }
             } catch (err: any) {
