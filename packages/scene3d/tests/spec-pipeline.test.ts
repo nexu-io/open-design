@@ -185,4 +185,27 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     const result = await compile({ projectDir: dir, stages: ["parse"], timeoutMs: LONG });
     expect(result.issues.some((i) => i.code === ISSUE_CODES.AMBIGUOUS_SOURCES)).toBe(true);
   });
+
+  it("gates print DfM on a 3d_print target: measures thickness and flags a sub-nozzle wall", async () => {
+    // The 3d_print contract turns on the wall-thickness ray-cast and its
+    // judgment. A 0.6mm shell is under the 0.8mm FDM floor; a 20mm block is not.
+    const dir = workDir("print/thin_shell");
+    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    const byName = new Map(result.census!.meshes.map((m) => [m.object, m]));
+
+    // The ray-cast ran (only because target is 3d_print) and measured the wall
+    // to sub-millimetre accuracy: a 0.6mm box reads ~0.6mm.
+    const shell = byName.get("prp_shell")!;
+    expect(shell.minWallThickness).toBeGreaterThan(0.00055);
+    expect(shell.minWallThickness).toBeLessThan(0.00065);
+    // Overhang is measured for every mesh (it is cheap and always on).
+    expect(typeof shell.overhangAreaFraction).toBe("number");
+
+    // The thin shell is judged too thin; the thick block is fine.
+    const thin = result.issues.filter((i) => i.code === ISSUE_CODES.WALL_TOO_THIN).map((i) => i.target);
+    expect(thin).toContain("prp_shell");
+    expect(thin).not.toContain("prp_block");
+    // Advisory only — a warning, never a compile-blocking error.
+    expect(result.issues.filter((i) => i.severity === "error")).toEqual([]);
+  });
 });

@@ -29,6 +29,10 @@ export const TARGET_PROFILES: Record<EngineTarget, Partial<Conventions>> = {
     units: { upAxis: "Z" },
     uv: { require: "off" },
     geometry: { allowOpenMeshes: false, allowDoubleVertices: false },
+    // FDM defaults (0.4mm nozzle → ~0.8mm reliable wall; support past ~15% of
+    // the surface as overhang is a print worth reconsidering). A project tunes
+    // these per printer/material.
+    print: { minThicknessMm: 0.8, maxOverhangAreaFraction: 0.15 },
   },
 };
 
@@ -164,6 +168,14 @@ export interface NormalizedContract {
   proof: NonNullable<Scene3dContract["proof"]>;
   /** Proof-quality lint thresholds, resolved from `proof` with defaults. */
   proofThresholds: { emptyLuminance: number; sparseCoverage: number; blownRatio: number };
+  /** Print DfM thresholds; null = not printing = the DfM checks are inert.
+   *  `measureThickness` gates the (costly) ray-cast: on only when there is a
+   *  thickness threshold to check against. */
+  print: {
+    minThicknessMm: number | null;
+    maxOverhangAreaFraction: number | null;
+    measureThickness: boolean;
+  };
 }
 
 export function normalizeContract(contract?: Scene3dContract): NormalizedContract {
@@ -183,7 +195,10 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
   const uv = { ...pp.uv, ...c.conventions?.uv };
   const tex = { ...pp.textures, ...c.conventions?.textures };
   const geo = { ...pp.geometry, ...c.conventions?.geometry };
+  const pr = { ...pp.print, ...c.conventions?.print };
   const proof = { ...DEFAULT_CONTRACT.proof, ...(c.proof ?? {}) };
+  const minThicknessMm = finiteOrNull(pr.minThicknessMm);
+  const maxOverhangAreaFraction = finiteOrNull(pr.maxOverhangAreaFraction);
   return {
     objectPattern: safePattern(n.objectPattern, DEFAULT_CONTRACT.conventions!.naming!.objectPattern!),
     collectionPattern: safePattern(
@@ -286,6 +301,12 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
     // per-bound numbers inside are validated where they are consumed.
     roleBudgets: asBudgetMap((b as { roles?: unknown }).roles),
     partBudgets: asBudgetMap((b as { parts?: unknown }).parts),
+    print: {
+      minThicknessMm,
+      maxOverhangAreaFraction,
+      // Only pay for the ray-cast when a thickness gate will read it.
+      measureThickness: minThicknessMm !== null,
+    },
     proof: proof as NonNullable<Scene3dContract["proof"]>,
     proofThresholds: {
       // Defensive `?? default` also guards a wrong-typed programmatic value,

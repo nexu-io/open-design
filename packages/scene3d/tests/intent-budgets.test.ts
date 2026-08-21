@@ -284,6 +284,45 @@ describe("lintIntent — material realism (W-350 dark metal), no role needed", (
   });
 });
 
+describe("lintIntent — print DfM, gated on a 3d_print contract (W-333/334)", () => {
+  const printContract = normalizeContract({ schemaVersion: 1, target: "3d_print" });
+  const runMesh = (m: Partial<CensusMesh>, contract = printContract) => {
+    const issues: Issue[] = [];
+    lintIntent(census([mesh("prp_part", m)]), contract, undefined, issues);
+    return issues.map((i) => i.code);
+  };
+
+  it("flags an overhang past the print budget", () => {
+    // 3d_print maxOverhangAreaFraction = 0.15; give it 40%.
+    expect(runMesh({ overhangAreaFraction: 0.4 })).toContain(ISSUE_CODES.OVERHANG_UNSUPPORTED);
+  });
+
+  it("flags a wall thinner than the print minimum", () => {
+    // 3d_print minThicknessMm = 0.8; a 0.5mm wall = 0.0005 m.
+    expect(runMesh({ minWallThickness: 0.0005 })).toContain(ISSUE_CODES.WALL_TOO_THIN);
+  });
+
+  it("does NOT flag a printable part (thick wall, little overhang)", () => {
+    expect(runMesh({ overhangAreaFraction: 0.02, minWallThickness: 0.003 })).not.toContain(
+      ISSUE_CODES.OVERHANG_UNSUPPORTED,
+    );
+    expect(runMesh({ overhangAreaFraction: 0.02, minWallThickness: 0.003 })).not.toContain(
+      ISSUE_CODES.WALL_TOO_THIN,
+    );
+  });
+
+  it("is INERT on a non-print contract, even with a thin wall and big overhang", () => {
+    const codes = runMesh({ overhangAreaFraction: 0.9, minWallThickness: 0.0001 }, normalizeContract());
+    expect(codes).not.toContain(ISSUE_CODES.OVERHANG_UNSUPPORTED);
+    expect(codes).not.toContain(ISSUE_CODES.WALL_TOO_THIN);
+  });
+
+  it("does not measure thickness for a non-print contract", () => {
+    expect(normalizeContract().print.measureThickness).toBe(false);
+    expect(normalizeContract({ schemaVersion: 1, target: "3d_print" }).print.measureThickness).toBe(true);
+  });
+});
+
 describe("resolveBudgets — clone inherits family + role", () => {
   it("resolves a clone's family to its base and shares its role", () => {
     const s = scene(part("prp_rock", { role: "background" }), part("prp_rock_2", { role: "background", from: "prp_rock" }));

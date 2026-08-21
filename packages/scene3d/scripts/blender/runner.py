@@ -1055,7 +1055,7 @@ def action_has_curves(action):
     return False
 
 
-def census(scene):
+def census(scene, measure_thickness=False):
     import bpy
     import bmesh
     import mathutils
@@ -1189,6 +1189,10 @@ def census(scene):
                     aspect = (longest * longest) / (2.0 * area)
                     if aspect > worst_aspect:
                         worst_aspect = aspect
+        # Print DfM (build direction +Z, gravity -Z). These are census FACTS;
+        # only a 3d_print contract judges them, so they are cheap-always for
+        # overhang and gated for the ray-cast thickness.
+        overhang_area, min_thickness = dfm_facts(bm, world_area, measure_thickness)
         # Bilateral symmetry error about the mesh's own bbox-centre X plane:
         # nearest-mirror distance via kd-tree, stride-sampled. Renders hide
         # asymmetry ruthlessly (Kiln measured an 8.9mm asymmetry that looked
@@ -1220,6 +1224,8 @@ def census(scene):
             "facesWithoutMaterial": faces_no_mat,
             "surfaceArea": R6(world_area),
             "worstAspectRatio": R6(worst_aspect) if worst_aspect > 0 else None,
+            "overhangAreaFraction": R6(overhang_area / world_area) if world_area > 1e-9 else None,
+            **({} if min_thickness is None else {"minWallThickness": R6(min_thickness)}),
             # Triangles per m^2 of actual surface — the density-allocation
             # number. A 500-tri crate and a 500-tri thimble spend the same
             # budget very differently; this is the fact that says so.
@@ -1813,6 +1819,74 @@ class provenance(object):
         chain.reverse()
         self.last_stack = chain
         return self._line
+
+
+# Overhang steeper than 45deg from vertical needs support on an FDM/SLA
+# printer; a face's downwardness is -normal.z, and sin(45deg) ~= 0.7071.
+OVERHANG_COS = 0.70710678
+# Thickness ray-casting is O(faces) BVH queries; capped like every heavy pass.
+THICKNESS_FACE_CAP = 40000
+
+
+def dfm_facts(bm, world_area, measure_thickness):
+    """Design-for-manufacture facts for 3D printing, in WORLD space.
+
+    Overhang: the area of downward-facing faces steeper than 45deg from
+    vertical, EXCLUDING the faces resting on the build plate (the object's
+    lowest band) — those are supported by the plate, not an overhang. This is
+    the same normal-angle metric a slicer shades, returned as an area so the
+    contract can judge a fraction.
+
+    Thickness: the thinnest wall, found by casting a ray from just inside each
+    face straight into the material (-normal) and taking the nearest hit on a
+    genuinely OPPOSITE wall (its normal anti-parallel to the cast, which filters
+    the adjacent/corner hits a raw nearest-hit would mistake for a thin wall).
+    An open surface with no wall behind it contributes nothing. Deterministic:
+    face centroids, no random sampling. Returns (overhang_area, min_thickness),
+    min_thickness None when unmeasured.
+    """
+    if not bm.faces:
+        return 0.0, None
+    min_z = min((v.co.z for v in bm.verts), default=0.0)
+    max_z = max((v.co.z for v in bm.verts), default=0.0)
+    # The plate band: a slice above the lowest point, scaled to the object so a
+    # tall print and a coaster both exempt only their true footprint.
+    plate_eps = max(1e-4, (max_z - min_z) * 0.01)
+
+    overhang_area = 0.0
+    for f in bm.faces:
+        n = f.normal
+        if n.length_squared < 1e-12 or -n.z < OVERHANG_COS:
+            continue
+        if f.calc_center_median().z <= min_z + plate_eps:
+            continue  # resting on the plate — supported, not an overhang
+        overhang_area += f.calc_area()
+
+    min_thickness = None
+    if measure_thickness and len(bm.faces) <= THICKNESS_FACE_CAP:
+        try:
+            from mathutils.bvhtree import BVHTree
+            bvh = BVHTree.FromBMesh(bm)
+            for f in bm.faces:
+                n = f.normal
+                if n.length_squared < 1e-12:
+                    continue
+                origin = f.calc_center_median() - n * 1e-5
+                hit = bvh.ray_cast(origin, -n)
+                if hit[0] is None or hit[3] is None or hit[3] <= 1e-6:
+                    continue
+                # Keep only a genuinely opposite wall: its face normal points
+                # back against the cast direction (anti-parallel to -n, i.e.
+                # hit_normal . n < 0). A corner/adjacent hit fails this.
+                if hit[1] is not None and hit[1].dot(n) < -0.5:
+                    # Add back the 1e-5 the origin was pushed inside, so a 0.5mm
+                    # wall reads 0.5mm, not 0.49mm.
+                    thick = hit[3] + 1e-5
+                    if min_thickness is None or thick < min_thickness:
+                        min_thickness = thick
+        except Exception:
+            min_thickness = None
+    return overhang_area, min_thickness
 
 
 def face_connected_world_points(o):
@@ -2771,7 +2845,7 @@ def main(argv):
         reset_scene()
         if mode == "build":
             load_scene(job)
-            emit({"ok": True, "data": census(bpy.context.scene)})
+            emit({"ok": True, "data": census(bpy.context.scene, bool(job.get("measureThickness")))})
         elif mode == "proof":
             load_scene(job)
             proof(job)

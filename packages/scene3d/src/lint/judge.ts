@@ -268,6 +268,48 @@ const MATERIAL_DESCRIPTORS: Descriptor<MaterialCtx>[] = [
   },
 ];
 
+/* ---- subject: a mesh (print design-for-manufacture) ---------------------- */
+
+interface MeshCtx {
+  contract: NormalizedContract;
+  mesh: Census["meshes"][number];
+}
+
+const MESH_DESCRIPTORS: Descriptor<MeshCtx>[] = [
+  // A support-needing overhang covering more of the surface than a print
+  // tolerates. Inert unless the contract carries a print threshold (target
+  // "3d_print"), so a non-print asset is never judged for manufacturability.
+  {
+    code: ISSUE_CODES.OVERHANG_UNSUPPORTED,
+    severity: "warning",
+    target: (cx) => cx.mesh.object,
+    fact: (cx) =>
+      typeof cx.mesh.overhangAreaFraction === "number" ? cx.mesh.overhangAreaFraction : undefined,
+    bound: (cx) => cx.contract.print.maxOverhangAreaFraction ?? undefined,
+    fails: (f, b) => f > b,
+    message: (cx, f, b) =>
+      `'${cx.mesh.object}' is ${pct(f)} steep-downward overhang, over the ${pct(b)} the print budgets — it needs support`,
+    hint: () => "add a chamfer/fillet under the overhang, reorient for the build plate, or accept support",
+    detail: (cx, f, b) => ({ overhangAreaFraction: f, budget: b }),
+  },
+
+  // A wall thinner than the printer can lay down (nozzle diameter). Census is
+  // metres; the threshold is millimetres.
+  {
+    code: ISSUE_CODES.WALL_TOO_THIN,
+    severity: "warning",
+    target: (cx) => cx.mesh.object,
+    fact: (cx) => (typeof cx.mesh.minWallThickness === "number" ? cx.mesh.minWallThickness : undefined),
+    bound: (cx) =>
+      cx.contract.print.minThicknessMm !== null ? cx.contract.print.minThicknessMm / 1000 : undefined,
+    fails: (f, b) => f < b,
+    message: (cx, f, b) =>
+      `'${cx.mesh.object}' has a wall ${Number((f * 1000).toFixed(2))}mm thick, under the ${Number((b * 1000).toFixed(2))}mm the print needs`,
+    hint: () => "thicken the wall (add a Solidify), or print with a finer nozzle",
+    detail: (cx, f, b) => ({ minWallThicknessMm: Number((f * 1000).toFixed(3)), budgetMm: Number((b * 1000).toFixed(3)) }),
+  },
+];
+
 /** Deterministic issue order: by code, then target. */
 function sortIssues(issues: Issue[]): Issue[] {
   return issues.sort((a, b) =>
@@ -291,6 +333,7 @@ export function lintIntent(
   const out: Issue[] = [];
 
   out.push(...judge(MATERIAL_DESCRIPTORS, census.materials.map((material) => ({ contract, material }))));
+  out.push(...judge(MESH_DESCRIPTORS, census.meshes.map((mesh) => ({ contract, mesh }))));
 
   if (solved && solved.parts.length > 0) {
     const budgets = resolveBudgets(solved, contract);

@@ -56,6 +56,8 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-330': 'Unapplied object scale',
   'S3D-W-331': 'Duplicate-vertex check skipped',
   'S3D-W-332': 'Hidden mesh still exports',
+  'S3D-W-333': 'Unsupported print overhang',
+  'S3D-W-334': 'Wall too thin to print',
 
   /* lint: world placement + budgets */
   'S3D-W-325': 'Part floats above support',

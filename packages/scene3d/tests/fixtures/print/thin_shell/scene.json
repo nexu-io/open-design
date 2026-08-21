@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "parts": [
+    { "id": "prp_shell", "size": [0.04, 0.03, 0.0006] },
+    { "id": "prp_block", "size": [0.02, 0.02, 0.02] }
+  ],
+  "relations": [
+    { "type": "at", "part": "prp_shell", "center": [0, 0, 0.0003] },
+    { "type": "at", "part": "prp_block", "center": [0.05, 0, 0.01] }
+  ]
+}

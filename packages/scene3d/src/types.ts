@@ -119,6 +119,17 @@ export interface Scene3dContract {
       parts?: Record<string, Budget>;
     };
     /**
+     * Design-for-manufacture gates for 3D printing. Set (by `target:"3d_print"`
+     * or explicitly) they turn on the print census facts and their judgments;
+     * absent, the compiler measures overhang cheaply but judges nothing.
+     */
+    print?: {
+      /** Thinnest printable wall (mm) — under this a wall fails to form. */
+      minThicknessMm?: number;
+      /** Fraction of surface allowed to be a support-needing overhang. */
+      maxOverhangAreaFraction?: number;
+    };
+    /**
      * UV discipline. Everything is measured by the census; these knobs are
      * the project's policy about the measurements. `require` is the core:
      * "textured" (default) demands UVs wherever an image texture is bound,
@@ -392,6 +403,12 @@ export interface CensusMesh {
   /** Worst world-space triangle aspect ratio (longest_edge²/2·area): ~1.15
    *  equilateral, unbounded as a triangle degenerates into a sliver. */
   worstAspectRatio?: number | null;
+  /** Fraction of surface area that is a support-needing print overhang (a
+   *  downward face steeper than 45° from vertical, excluding the plate band). */
+  overhangAreaFraction?: number | null;
+  /** Thinnest wall (m), by inward ray-cast; absent when not measured (a
+   *  non-print compile) or when the mesh has no opposing walls. */
+  minWallThickness?: number;
   /** Vertex pairs within merge distance (1e-6 m) — split seams in disguise. */
   doubleVertices?: number;
   /**

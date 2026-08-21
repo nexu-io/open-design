@@ -489,6 +489,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             ...(meshFiles ? { meshFiles } : {}),
             outDir: path.join(request.projectDir, ".scene3d", "work"),
             ...(tweaks ? { tweaks } : {}),
+            ...(normalized.print.measureThickness ? { measureThickness: true } : {}),
             ...shaderPayload,
           };
           const result = await runRunner(probe, job, timeoutMs, request.env);

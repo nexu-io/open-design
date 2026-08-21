@@ -79,6 +79,12 @@ export const ISSUE_CODES = {
      and can z-fight — yet the master exporter may drop it, so a hidden mesh
      is both a silent shipper and a likely parity-loss source. */
   HIDDEN_MESH: "S3D-W-332",
+  /* Print DfM (target:"3d_print"): manufacturability the geometry rules cannot
+     see. A support-needing overhang past the contract's fraction, and a wall
+     thinner than the nozzle can lay down. Both advisory — the author may print
+     with support or a finer nozzle. */
+  OVERHANG_UNSUPPORTED: "S3D-W-333",
+  WALL_TOO_THIN: "S3D-W-334",
   /* The coplanar search hit a cap, so silence about z-fighting is not
      evidence of its absence for this scene. */
   Z_FIGHTING_UNCHECKED: "S3D-W-323",

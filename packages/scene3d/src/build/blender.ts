@@ -133,6 +133,9 @@ export interface RunnerJob {
   blendFile?: string;
   /** Real asset files (.glb/.gltf/.obj/.fbx) imported as the scene. */
   meshFiles?: string[];
+  /** Run the (costly) wall-thickness ray-cast during the census — on only for
+   *  a 3d_print contract that will judge it. */
+  measureThickness?: boolean;
   /** Assembled GPU kernels to compile, execute, and bake at load time. */
   shaders?: Array<{
     name: string;
