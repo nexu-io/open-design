@@ -178,6 +178,23 @@ const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
     hint: () => "check this part's units (metres vs millimetres) against the rest of the scene",
     detail: (cx, f) => ({ sizeRatio: f, medianMaxDim: cx.facts.medianMaxDim }),
   },
+
+  // The part's worst triangle is a sliver beyond what its role tolerates — a
+  // long thin triangle that passes every manifold check yet shades and (for a
+  // rig) skins badly. The role sets the ceiling: tight for a hero, loose for a
+  // background filler.
+  {
+    code: ISSUE_CODES.SLIVER_TRIANGLES,
+    severity: "warning",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.aspectRatioByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => cx.part.budget.maxAspectRatio,
+    fails: (f, b) => f > b,
+    message: (cx, f, b) =>
+      `'${cx.part.familyId}' (role ${cx.part.role}) has a triangle with aspect ratio ${Number(f.toFixed(1))}:1, over the ${b}:1 its role tolerates`,
+    hint: () => "remesh or re-topologise the slivers — they shade and (on a rig) skin poorly",
+    detail: (cx, f, b) => ({ worstAspectRatio: f, budget: b }),
+  },
 ];
 
 /* ---- subject: a material (the PBR-combo heatmap, one line) ---------------- */

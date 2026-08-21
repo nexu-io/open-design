@@ -169,6 +169,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-952': 'Hero less detailed than background',
   'S3D-W-953': 'Part over its role texture budget',
   'S3D-W-954': 'Part scale incoherent with the scene',
+  'S3D-W-955': 'Sliver triangles for the role',
 };
 
 /** The human phrase for a code, or null for a code this build predates. */

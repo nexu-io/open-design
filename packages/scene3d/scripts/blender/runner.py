@@ -1172,6 +1172,23 @@ def census(scene):
                 uv_block = None
         # Total world-space surface area, for triangle-density allocation.
         world_area = sum(f.calc_area() for f in bm.faces)
+        # Worst triangle aspect ratio in WORLD space (the shape that ships): a
+        # sliver — a long, thin triangle — passes every manifold/ngon check yet
+        # shades and rasterises badly, and is the signature of AI-generated
+        # slop. Measured as longest_edge^2 / (2*area) per fan triangle: ~1.15
+        # for equilateral, unbounded as a triangle degenerates. Zero-area faces
+        # are the ZERO_AREA_FACES rule's business and are skipped here.
+        worst_aspect = 0.0
+        for f in bm.faces:
+            vs = [v.co for v in f.verts]
+            for k in range(1, len(vs) - 1):
+                a, b, c = vs[0], vs[k], vs[k + 1]
+                longest = max((b - a).length, (c - b).length, (a - c).length)
+                area = ((b - a).cross(c - a)).length / 2.0
+                if area > 1e-9 and longest > 0.0:
+                    aspect = (longest * longest) / (2.0 * area)
+                    if aspect > worst_aspect:
+                        worst_aspect = aspect
         # Bilateral symmetry error about the mesh's own bbox-centre X plane:
         # nearest-mirror distance via kd-tree, stride-sampled. Renders hide
         # asymmetry ruthlessly (Kiln measured an 8.9mm asymmetry that looked
@@ -1202,6 +1219,7 @@ def census(scene):
             "inconsistentWindingEdges": winding,
             "facesWithoutMaterial": faces_no_mat,
             "surfaceArea": R6(world_area),
+            "worstAspectRatio": R6(worst_aspect) if worst_aspect > 0 else None,
             # Triangles per m^2 of actual surface — the density-allocation
             # number. A 500-tri crate and a 500-tri thimble spend the same
             # budget very differently; this is the fact that says so.

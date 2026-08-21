@@ -30,6 +30,8 @@ export interface DerivedFacts {
   textureBytesByPart: Map<string, number>;
   /** Distinct textures across the whole scene (bytes) — each counted once. */
   totalTextureBytes: number;
+  /** Worst triangle aspect ratio measured for each part's mesh. */
+  aspectRatioByPart: Map<string, number>;
 }
 
 /** RGBA8 decoded size of one texture. */
@@ -116,6 +118,12 @@ export function deriveFacts(
   let totalTextureBytes = 0;
   for (const texName of sceneTextures) totalTextureBytes += bytesByTexture.get(texName) ?? 0;
 
+  // ---- sliver / aspect ratio (indexed straight from the census) ----
+  const aspectRatioByPart = new Map<string, number>();
+  for (const m of census.meshes) {
+    if (typeof m.worstAspectRatio === "number") aspectRatioByPart.set(m.object, m.worstAspectRatio);
+  }
+
   return {
     sceneTris,
     trisByFamily,
@@ -125,5 +133,6 @@ export function deriveFacts(
     sizeRatioByPart,
     textureBytesByPart,
     totalTextureBytes,
+    aspectRatioByPart,
   };
 }

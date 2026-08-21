@@ -334,6 +334,8 @@ export interface Budget {
   sizeRatio?: { min?: number; max?: number };
   /** Texel-density (px/m) window for the role. */
   texelDensity?: { min?: number; max?: number };
+  /** Worst allowed triangle aspect ratio (sliver ceiling) for the role. */
+  maxAspectRatio?: number;
   /** Ordinal detail tier, so ranks can be compared between parts. */
   rank?: 1 | 2 | 3;
 }
@@ -387,6 +389,9 @@ export interface CensusMesh {
   looseVerts?: number;
   /** Edges belonging to no face. */
   looseEdges?: number;
+  /** Worst world-space triangle aspect ratio (longest_edge²/2·area): ~1.15
+   *  equilateral, unbounded as a triangle degenerates into a sliver. */
+  worstAspectRatio?: number | null;
   /** Vertex pairs within merge distance (1e-6 m) — split seams in disguise. */
   doubleVertices?: number;
   /**

@@ -120,6 +120,27 @@ describe("lintIntent — relative judgments over the census (W-951/952/953)", ()
   });
 });
 
+describe("lintIntent — sliver triangles by role (W-955)", () => {
+  it("flags a hero mesh whose worst triangle is a sliver", () => {
+    // hero maxAspectRatio = 20; give it a 50:1 sliver.
+    const s = scene(part("prp_hero", { role: "hero" }));
+    const c = census([mesh("prp_hero", { worstAspectRatio: 50 })]);
+    expect(run(c, s).some((i) => i.code === ISSUE_CODES.SLIVER_TRIANGLES)).toBe(true);
+  });
+
+  it("does NOT flag a background mesh (no sliver ceiling for that role)", () => {
+    const s = scene(part("prp_wall", { role: "background" }));
+    const c = census([mesh("prp_wall", { worstAspectRatio: 500 })]);
+    expect(run(c, s).some((i) => i.code === ISSUE_CODES.SLIVER_TRIANGLES)).toBe(false);
+  });
+
+  it("does NOT flag a clean hero mesh under the ceiling", () => {
+    const s = scene(part("prp_hero", { role: "hero" }));
+    const c = census([mesh("prp_hero", { worstAspectRatio: 8 })]);
+    expect(run(c, s).some((i) => i.code === ISSUE_CODES.SLIVER_TRIANGLES)).toBe(false);
+  });
+});
+
 describe("lintIntent — size coherence is opt-in (W-954)", () => {
   it("stays silent without a sizeRatio bound, even for an outlier", () => {
     const s = scene(part("prp_big", { role: "prop" }), part("prp_small", { role: "prop" }));

@@ -32,9 +32,11 @@ export type { Budget };
  * rank-1 background is a misallocated budget) with no absolute number.
  */
 export const ROLE_PROFILES: Readonly<Record<string, Budget>> = {
-  hero: { rank: 3, texelDensity: { min: 512 } },
-  character: { rank: 3, texelDensity: { min: 512 } },
-  prop: { rank: 2, triShare: { softMax: 0.5 }, texelDensity: { min: 256 } },
+  // A hero/character is looked at closely and often deforms — slivers there
+  // shade and skin badly, so the sliver ceiling is tightest.
+  hero: { rank: 3, texelDensity: { min: 512 }, maxAspectRatio: 20 },
+  character: { rank: 3, texelDensity: { min: 512 }, maxAspectRatio: 20 },
+  prop: { rank: 2, triShare: { softMax: 0.5 }, texelDensity: { min: 256 }, maxAspectRatio: 60 },
   background: {
     rank: 1,
     triShare: { softMax: 0.15 },

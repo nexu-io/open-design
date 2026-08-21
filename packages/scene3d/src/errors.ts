@@ -232,6 +232,7 @@ export const ISSUE_CODES = {
   ROLE_RANK_INVERSION: "S3D-W-952",
   PART_TEXTURE_BUDGET: "S3D-W-953",
   SIZE_INCOHERENT: "S3D-W-954",
+  SLIVER_TRIANGLES: "S3D-W-955",
 
   /* lint: external conformance oracles (500-519) — verdicts adopted from the
      industry-standard validators run against the EXPORTED deliverable, not
