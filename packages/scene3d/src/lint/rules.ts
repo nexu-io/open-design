@@ -48,7 +48,7 @@ export function runLint(input: LintInput): Issue[] {
   lintUnits(ctx, issues);
   lintIntegrity(ctx, issues);
   lintWorld(input.contract, input.census, issues);
-  lintVoxel(input.contract, input.census, issues);
+  lintVoxel(input.contract, input.census, issues, input.solved);
   if (input.sheets) lintSheets(input.sheets, issues);
   if (input.claims) {
     lintClaims(input.claims, input.census, issues, {

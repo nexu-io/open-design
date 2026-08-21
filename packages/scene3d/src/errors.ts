@@ -251,6 +251,11 @@ export const ISSUE_CODES = {
   VOXEL_NOT_CUBOID: "S3D-W-971",
   VOXEL_ILLEGAL_ROTATION: "S3D-W-972",
   VOXEL_OUT_OF_BOUNDS: "S3D-W-973",
+  /* A mesh larger than the whole element space is not an element at all — it
+     is multi-block structure/terrain. The element-format rules do not apply;
+     this is the info that says so, so the author is not told to "fit" a floor
+     into a block. */
+  VOXEL_STRUCTURE_SCALE: "S3D-I-970",
 
   /* lint: external conformance oracles (500-519) — verdicts adopted from the
      industry-standard validators run against the EXPORTED deliverable, not

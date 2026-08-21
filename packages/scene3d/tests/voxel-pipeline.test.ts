@@ -203,12 +203,16 @@ describe.skipIf(!hasBlender)("voxel pipeline (real Blender)", () => {
         parts: [
           { id: "prp_orb", size: [0.5, 0.5, 0.5], shape: "sphere", material: "mtl_a" },
           { id: "prp_nub", size: [0.1, 0.1, 0.1], shape: "box", material: "mtl_a" },
-          { id: "prp_beam", size: [5, 1, 1], shape: "box", material: "mtl_a" },
+          // Element-scale (0.5 block) but positioned out of the −1..2 space → W-973.
+          { id: "prp_far", size: [0.5, 0.5, 0.5], shape: "box", material: "mtl_a" },
+          // Larger than the whole element space → structure (I-970), not W-973.
+          { id: "prp_wall", size: [5, 1, 0.25], shape: "box", material: "mtl_a" },
         ],
         relations: [
           { type: "at", part: "prp_orb", center: [0, 1, 0] },
           { type: "at", part: "prp_nub", center: [1, 0.05, 0] },
-          { type: "at", part: "prp_beam", center: [0, 2.5, 0] },
+          { type: "at", part: "prp_far", center: [2.75, 0.25, 0] },
+          { type: "at", part: "prp_wall", center: [0, 3.5, 0.125] },
         ],
       }),
       "utf8",
@@ -217,7 +221,9 @@ describe.skipIf(!hasBlender)("voxel pipeline (real Blender)", () => {
     const byCode = (code: string) => result.issues.filter((i) => i.code === code).map((i) => i.target);
     expect(byCode("S3D-W-971")).toContain("prp_orb"); // a sphere is not a cuboid
     expect(byCode("S3D-W-970")).toContain("prp_nub"); // 0.1m box is off the 1/16 grid
-    expect(byCode("S3D-W-973")).toContain("prp_beam"); // 5m beam overruns the element space
+    expect(byCode("S3D-W-973")).toContain("prp_far"); // element-scale, positioned past the space
+    expect(byCode("S3D-I-970")).toContain("prp_wall"); // 5-block wall is structure, not an element
+    expect(byCode("S3D-W-973")).not.toContain("prp_wall"); // structure is exempt from element bounds
     // Advisory only — the linter never blocks a compile on voxel format facts.
     expect(result.issues.filter((i) => /S3D-W-97\d/.test(i.code)).every((i) => i.severity === "warning")).toBe(true);
   }, 400_000);

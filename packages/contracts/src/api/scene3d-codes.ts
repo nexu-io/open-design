@@ -180,6 +180,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-971': 'Not a single cuboid element',
   'S3D-W-972': 'Rotation not allowed in this format',
   'S3D-W-973': 'Outside the model element bounds',
+  'S3D-I-970': 'Multi-block structure, not one element',
 };
 
 /** The human phrase for a code, or null for a code this build predates. */

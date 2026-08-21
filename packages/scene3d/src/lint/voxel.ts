@@ -1,6 +1,7 @@
-import { Census, Issue } from "../types.js";
+import { Census, CensusMesh, CensusObject, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import { NormalizedContract } from "../contract.js";
+import type { SolvedScene } from "../solve/types.js";
 
 /**
  * Voxel / Minecraft format discipline.
@@ -10,122 +11,195 @@ import { NormalizedContract } from "../contract.js";
  * represent. These rules catch, deterministically and before the game does,
  * the specific ways a voxel model is *wrong*:
  *
- *  - **Off-grid vertices** (W-970). A vertex that does not land on the pixel
- *    grid looks perfect in Blender and shimmers in-game. The single most
- *    common real-world Minecraft-model bug.
- *  - **Not a single cuboid** (W-971). A vanilla Java block model is built from
- *    `element` cuboids; a subdivided, bevelled, or arbitrary mesh cannot be
- *    expressed as one. (The exporter hard-refuses the same condition — the
- *    linter only warns so iteration is not blocked.)
- *  - **Illegal rotation** (W-972). Java permits exactly one rotation axis at
- *    one of {−45, −22.5, 0, 22.5, 45}°; anything else the game clamps or drops.
- *    Bedrock allows free per-cube angles, so the rule is dialect-scoped.
- *  - **Out of element bounds** (W-973). A model reaching past the format's
- *    element space (vanilla Java: −1..2 blocks) the game refuses to load.
+ *  - **Off-grid vertices** (W-970). A vertex not on the pixel grid looks
+ *    perfect in Blender and shimmers in-game — the most common MC-model bug.
+ *  - **Not a single cuboid** (W-971). A vanilla Java element is a cuboid.
+ *  - **Illegal rotation** (W-972). Java permits one rotation axis at a fixed
+ *    angle set; Bedrock allows free per-cube angles (dialect-scoped).
+ *  - **Out of element bounds** (W-973). Positioned outside the element space
+ *    (vanilla Java: −1..2 blocks) the game refuses to load it — but only a
+ *    thing that IS an element. A mesh larger than the whole element space is
+ *    not an element at all; it is multi-block **structure** (I-970), and the
+ *    element-format rules (cuboid/rotation/bounds) do not apply to it.
  *
- * Every threshold is contract data (grid size, tolerance, legal angles are a
- * format constant, element bounds), every fact is measured in Blender (census
- * `voxel`), and the whole module is inert unless the contract opts in
- * (`target:"minecraft"` or a `minecraft` block). It never opines on what to
- * build — only on whether the game can load and render it faithfully.
+ * Two emergent properties (fable-5 Mechanism 4):
+ *  - **Family aggregation.** A repeat/scatter grid of N instances shares one
+ *    identity (the base part's `from`), so it is judged and reported ONCE,
+ *    carrying the instance count — never N warnings for one authored choice.
+ *  - **Representability classes.** The element-space extent (a contract datum,
+ *    `maxBlocks − minBlocks`) classifies every family: element-scale meshes get
+ *    the format rules; a larger mesh is structure and is exempt from them.
+ *
+ * Inert unless the contract opts in (`target:"minecraft"` or a `minecraft`
+ * block). It never opines on what to build — only on whether the game can load
+ * and render it faithfully.
  */
 
-/** Java's permitted element rotation angles (degrees). A format constant, not
- *  a tunable: these are the only values the vanilla loader accepts. */
+/** Java's permitted element rotation angles (degrees) — a format constant. */
 const JAVA_LEGAL_ANGLES = [-45, -22.5, 0, 22.5, 45];
-/** Forgiven drift (deg) from a legal angle — float noise from the round-trip,
- *  not a real illegal rotation. */
+/** Forgiven drift (deg) from a legal angle — float noise, not a real rotation. */
 const ANGLE_TOLERANCE = 0.05;
 
 export function lintVoxel(
   contract: NormalizedContract,
   census: Census | undefined,
   issues: Issue[],
+  /** The solved scene, when authored from a spec — its `from` links let a
+   *  repeat/scatter grid be judged once per family. Absent for imported meshes,
+   *  where each mesh is its own family. */
+  solved?: SolvedScene,
 ): void {
   const mc = contract.minecraft;
   if (!mc.enabled || !census) return;
 
   const grid = mc.gridSize > 0 ? mc.gridSize : 1 / 16;
   const worldByName = new Map(census.objects.map((o) => [o.name, o]));
+  const elementExtent = mc.elementMaxBlocks - mc.elementMinBlocks;
 
+  // A clone (repeat/scatter instance) is judged under its base part's identity.
+  const familyOf = new Map<string, string>();
+  if (solved) for (const p of solved.parts) familyOf.set(p.id, p.from ?? p.id);
+  const familyId = (name: string) => familyOf.get(name) ?? name;
+
+  const families = new Map<string, CensusMesh[]>();
   for (const mesh of census.meshes) {
-    const v = mesh.voxel;
-    if (!v) continue;
+    if (!mesh.voxel) continue;
+    const fid = familyId(mesh.object);
+    const list = families.get(fid);
+    if (list) list.push(mesh);
+    else families.set(fid, [mesh]);
+  }
 
-    /* ---- off-grid vertices (W-970) -------------------------------- */
-    if (v.gridDeviation > mc.gridTolerance) {
-      const px = v.gridDeviation / grid;
+  for (const [fid, members] of families) {
+    const n = members.length;
+
+    /* ---- off-grid vertices (W-970): worst across the family ------- */
+    let worstDev: { dev: number; object: string } | null = null;
+    let offGridCount = 0;
+    for (const m of members) {
+      const dev = m.voxel!.gridDeviation;
+      if (dev > mc.gridTolerance) offGridCount++;
+      if (!worstDev || dev > worstDev.dev) worstDev = { dev, object: m.object };
+    }
+    if (worstDev && worstDev.dev > mc.gridTolerance) {
+      const px = worstDev.dev / grid;
+      const across = n > 1 ? ` (worst of ${offGridCount}/${n} instances)` : "";
       issues.push({
         code: ISSUE_CODES.VOXEL_OFF_GRID,
         severity: "warning",
-        message: `'${mesh.object}' has a vertex ${fmtPx(px)} off the ${fmtGrid(grid)} grid (${fmtMm(v.gridDeviation)}) — it will shimmer in-game`,
+        message: `'${fid}' has a vertex ${fmtPx(px)} off the ${fmtGrid(grid)} grid (${fmtMm(worstDev.dev)})${across} — it will shimmer in-game`,
         hint: `snap vertices to the ${fmtGrid(grid)} grid, or widen conventions.minecraft.grid.tolerance if this drift is intended`,
-        target: mesh.object,
-        detail: { gridDeviation: v.gridDeviation, tolerance: mc.gridTolerance, offGridPx: round(px, 3) },
+        target: fid,
+        detail: { gridDeviation: worstDev.dev, tolerance: mc.gridTolerance, offGridPx: round(px, 3), instanceCount: n, offGridCount },
       });
     }
 
-    /* ---- cuboid representability (W-971) -------------------------- */
-    if (!v.isBox) {
+    /* ---- structure vs element (I-970) ----------------------------- */
+    // A mesh larger than the entire element space cannot be an element by
+    // translation OR by any placement — it is multi-block structure. The
+    // element-format rules below do not apply; only grid alignment (above) did.
+    const spanBlocks = familyMaxExtent(members, worldByName);
+    if (spanBlocks !== null && spanBlocks > elementExtent + 1e-6) {
+      issues.push({
+        code: ISSUE_CODES.VOXEL_STRUCTURE_SCALE,
+        severity: "info",
+        message: `'${fid}' spans ${round(spanBlocks, 2)} blocks — beyond a single block-model element (the element space is ${elementExtent} blocks); treat it as a multi-block structure`,
+        hint: "structure/terrain is fine as-is; split it into block-sized elements only if it must ship as one block model",
+        target: fid,
+        detail: { spanBlocks: round(spanBlocks, 3), elementExtent, instanceCount: n },
+      });
+      continue; // not an element — the element-format rules do not apply
+    }
+
+    /* ---- cuboid representability (W-971): any non-box member ------ */
+    const notBox = members.find((m) => !m.voxel!.isBox);
+    if (notBox) {
       issues.push({
         code: ISSUE_CODES.VOXEL_NOT_CUBOID,
         severity: "warning",
-        message: `'${mesh.object}' is not a single cuboid (${mesh.verts} verts, ${mesh.faces} faces) — a Java block-model element cannot express it`,
+        message: `'${fid}' is not a single cuboid (${notBox.verts} verts, ${notBox.faces} faces) — a Java block-model element cannot express it`,
         hint:
           mc.dialect === "bedrock"
             ? "a Bedrock cube must still be a box; split this into cuboids, or opt into poly_mesh for this part"
             : "build the part from box elements, switch to conventions.minecraft.dialect \"bedrock\", or keep it as a mesh-loader asset",
-        target: mesh.object,
-        detail: { isBox: false, verts: mesh.verts, faces: mesh.faces, dialect: mc.dialect },
+        target: fid,
+        detail: { isBox: false, verts: notBox.verts, faces: notBox.faces, dialect: mc.dialect, instanceCount: n },
       });
       continue; // a non-box has no meaningful rotation to judge
     }
 
-    /* ---- rotation legality (W-972), Java only --------------------- */
+    /* ---- rotation legality (W-972), Java only: worst across family - */
     if (mc.dialect === "java") {
-      if (v.rotationAxis !== null && v.rotationDeg !== null) {
-        // A recovered single-axis rotation: legal only at a fixed set of angles.
-        const nearest = nearestLegalAngle(v.rotationDeg);
-        if (Math.abs(v.rotationDeg - nearest) > ANGLE_TOLERANCE) {
-          issues.push({
-            code: ISSUE_CODES.VOXEL_ILLEGAL_ROTATION,
-            severity: "warning",
-            message: `'${mesh.object}' is rotated ${fmtDeg(v.rotationDeg)} about ${v.rotationAxis.toUpperCase()} — Java elements allow only ${fmtDeg(nearest)} (nearest legal)`,
-            hint: `rotate to ${fmtDeg(nearest)}, or move to conventions.minecraft.dialect \"bedrock\" which permits free angles`,
-            target: mesh.object,
-            detail: { rotationDeg: v.rotationDeg, axis: v.rotationAxis, nearestLegal: nearest },
-          });
+      let worstRot: { deg: number; axis: string; nearest: number; off: number } | null = null;
+      let multiAxis = false;
+      for (const m of members) {
+        const v = m.voxel!;
+        if (v.rotationAxis !== null && v.rotationDeg !== null) {
+          const nearest = nearestLegalAngle(v.rotationDeg);
+          const off = Math.abs(v.rotationDeg - nearest);
+          if (off > ANGLE_TOLERANCE && (!worstRot || off > worstRot.off)) {
+            worstRot = { deg: v.rotationDeg, axis: v.rotationAxis, nearest, off };
+          }
+        } else if (!v.axisAligned) {
+          multiAxis = true;
         }
-      } else if (!v.axisAligned) {
-        // A box that is neither axis-aligned nor single-axis rotated is spun
-        // about more than one axis — a Java element has one rotation, period.
+      }
+      if (worstRot) {
         issues.push({
           code: ISSUE_CODES.VOXEL_ILLEGAL_ROTATION,
           severity: "warning",
-          message: `'${mesh.object}' is rotated about more than one axis — a Java block-model element allows only one`,
-          hint: `align the box to a single-axis rotation, or use conventions.minecraft.dialect \"bedrock\"`,
-          target: mesh.object,
-          detail: { multiAxis: true },
+          message: `'${fid}' is rotated ${fmtDeg(worstRot.deg)} about ${worstRot.axis.toUpperCase()} — Java elements allow only ${fmtDeg(worstRot.nearest)} (nearest legal)`,
+          hint: `rotate to ${fmtDeg(worstRot.nearest)}, or move to conventions.minecraft.dialect \"bedrock\" which permits free angles`,
+          target: fid,
+          detail: { rotationDeg: worstRot.deg, axis: worstRot.axis, nearestLegal: worstRot.nearest, instanceCount: n },
+        });
+      } else if (multiAxis) {
+        issues.push({
+          code: ISSUE_CODES.VOXEL_ILLEGAL_ROTATION,
+          severity: "warning",
+          message: `'${fid}' is rotated about more than one axis — a Java block-model element allows only one`,
+          hint: "align the box to a single-axis rotation, or use conventions.minecraft.dialect \"bedrock\"",
+          target: fid,
+          detail: { multiAxis: true, instanceCount: n },
         });
       }
     }
 
-    /* ---- element bounds (W-973) ----------------------------------- */
-    const world = worldByName.get(mesh.object);
-    if (world?.worldMin && world?.worldMax) {
-      const worst = worstBoundExcursion(world.worldMin, world.worldMax, mc.elementMinBlocks, mc.elementMaxBlocks);
-      if (worst) {
-        issues.push({
-          code: ISSUE_CODES.VOXEL_OUT_OF_BOUNDS,
-          severity: "warning",
-          message: `'${mesh.object}' reaches ${round(worst.value, 3)} blocks on ${worst.axis.toUpperCase()}, past the ${mc.elementMinBlocks}..${mc.elementMaxBlocks}-block element space — the game will refuse the model`,
-          hint: `keep every element within ${mc.elementMinBlocks}..${mc.elementMaxBlocks} blocks, or split the model across multiple parts`,
-          target: mesh.object,
-          detail: { axis: worst.axis, value: worst.value, minBlocks: mc.elementMinBlocks, maxBlocks: mc.elementMaxBlocks },
-        });
-      }
+    /* ---- element bounds (W-973): worst across family -------------- */
+    let worstBound: { axis: string; value: number; over: number } | null = null;
+    for (const m of members) {
+      const world = worldByName.get(m.object);
+      if (!world?.worldMin || !world?.worldMax) continue;
+      const w = worstBoundExcursion(world.worldMin, world.worldMax, mc.elementMinBlocks, mc.elementMaxBlocks);
+      if (w && (!worstBound || w.over > worstBound.over)) worstBound = w;
+    }
+    if (worstBound) {
+      issues.push({
+        code: ISSUE_CODES.VOXEL_OUT_OF_BOUNDS,
+        severity: "warning",
+        message: `'${fid}' reaches ${round(worstBound.value, 3)} blocks on ${worstBound.axis.toUpperCase()}, past the ${mc.elementMinBlocks}..${mc.elementMaxBlocks}-block element space — the game will refuse the model`,
+        hint: `move it into the ${mc.elementMinBlocks}..${mc.elementMaxBlocks}-block element space`,
+        target: fid,
+        detail: { axis: worstBound.axis, value: worstBound.value, minBlocks: mc.elementMinBlocks, maxBlocks: mc.elementMaxBlocks, instanceCount: n },
+      });
     }
   }
+}
+
+/** The largest world-space AABB extent (in blocks = metres) across a family's
+ *  members, or null when no member has bounds. This is what decides whether a
+ *  thing is an element (≤ element space) or structure (larger). */
+function familyMaxExtent(members: CensusMesh[], worldByName: Map<string, CensusObject>): number | null {
+  let max: number | null = null;
+  for (const m of members) {
+    const world = worldByName.get(m.object);
+    if (!world?.worldMin || !world?.worldMax) continue;
+    for (let i = 0; i < 3; i++) {
+      const extent = world.worldMax[i]! - world.worldMin[i]!;
+      if (max === null || extent > max) max = extent;
+    }
+  }
+  return max;
 }
 
 /** The legal Java angle closest to `deg`. */
@@ -137,23 +211,21 @@ function nearestLegalAngle(deg: number): number {
   return best;
 }
 
-/** The single worst axis excursion past the element bounds (blocks), or null
- *  when the whole AABB fits. Both min/max sides are checked on all three axes;
- *  `min`/`max` are Blender-space AABB corners but the ±block bound is symmetric
- *  across axes, so the up-axis convention does not matter here. */
+/** The single worst axis excursion past the element bounds (blocks), carrying
+ *  its overrun for family-worst comparison, or null when the whole AABB fits. */
 function worstBoundExcursion(
   min: number[],
   max: number[],
   minBlocks: number,
   maxBlocks: number,
-): { axis: "x" | "y" | "z"; value: number } | null {
+): { axis: "x" | "y" | "z"; value: number; over: number } | null {
   const axes: Array<"x" | "y" | "z"> = ["x", "y", "z"];
   let worst: { axis: "x" | "y" | "z"; value: number; over: number } | null = null;
   for (let i = 0; i < 3; i++) {
     const lo = min[i]!;
     const hi = max[i]!;
-    const underBy = minBlocks - lo; // >0 when the low corner sinks past the floor
-    const overBy = hi - maxBlocks; // >0 when the high corner reaches past the cap
+    const underBy = minBlocks - lo;
+    const overBy = hi - maxBlocks;
     if (underBy > 1e-6 && (worst === null || underBy > worst.over)) {
       worst = { axis: axes[i]!, value: round(lo, 4), over: underBy };
     }
@@ -161,7 +233,7 @@ function worstBoundExcursion(
       worst = { axis: axes[i]!, value: round(hi, 4), over: overBy };
     }
   }
-  return worst ? { axis: worst.axis, value: worst.value } : null;
+  return worst;
 }
 
 function round(v: number, dp: number): number {

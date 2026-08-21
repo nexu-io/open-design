@@ -105,20 +105,45 @@ describe("lintVoxel", () => {
     expect(run(mc({ dialect: "bedrock" }), census([rot30]))).not.toContain("S3D-W-972");
   });
 
-  it("flags a model past the element bounds (W-973) on the worst axis", () => {
-    const beam = mesh("prp_beam", AXIS_BOX);
-    // x spans -2.5..2.5 — past the -1..2 block space on the low side.
+  it("flags an element-scale part positioned past the bounds (W-973)", () => {
+    // A 1-block box (element-scale, so the format rules apply) whose x reaches
+    // 3.5 — past the −1..2 space by translation. Fixable by moving it.
+    const nub = mesh("prp_nub", AXIS_BOX);
     const issues: Issue[] = [];
-    lintVoxel(mc(), census([beam], { prp_beam: [-2.5, 0, -0.5, 2.5, 1, 0.5] }), issues);
+    lintVoxel(mc(), census([nub], { prp_nub: [2.5, 0, -0.5, 3.5, 1, 0.5] }), issues);
     const w973 = issues.find((i) => i.code === "S3D-W-973")!;
     expect(w973).toBeTruthy();
     expect(w973.message).toContain("X");
-    expect((w973.detail as { value: number }).value).toBeCloseTo(-2.5, 3);
+    expect((w973.detail as { value: number }).value).toBeCloseTo(3.5, 3);
+  });
+
+  it("classifies a mesh larger than the element space as structure (I-970), not out-of-bounds", () => {
+    // A 5-block beam cannot be one element by ANY placement — it is structure.
+    // The element-format rules (bounds/cuboid/rotation) do not apply.
+    const beam = mesh("prp_beam", AXIS_BOX);
+    const codes = run(mc(), census([beam], { prp_beam: [-2.5, 0, -0.5, 2.5, 1, 0.5] }));
+    expect(codes).toContain("S3D-I-970");
+    expect(codes).not.toContain("S3D-W-973");
+  });
+
+  it("aggregates a repeat/scatter family into one warning, not N", () => {
+    // Three off-grid instances of one base part → ONE W-970 carrying the count,
+    // not three. The family is keyed by the solved scene's `from`.
+    const off = (id: string): CensusMesh => mesh(id, { ...AXIS_BOX, gridDeviation: 0.03 });
+    const solved = { parts: [
+      { id: "prp_v", from: undefined }, { id: "prp_v_2", from: "prp_v" }, { id: "prp_v_3", from: "prp_v" },
+    ] } as never;
+    const issues: Issue[] = [];
+    lintVoxel(mc(), census([off("prp_v"), off("prp_v_2"), off("prp_v_3")]), issues, solved);
+    const w970 = issues.filter((i) => i.code === "S3D-W-970");
+    expect(w970).toHaveLength(1);
+    expect(w970[0]!.target).toBe("prp_v");
+    expect((w970[0]!.detail as { instanceCount: number }).instanceCount).toBe(3);
   });
 
   it("respects a widened element bound", () => {
-    const beam = mesh("prp_beam", AXIS_BOX);
+    const nub = mesh("prp_nub", AXIS_BOX);
     const wide = mc({ elementBounds: { minBlocks: -4, maxBlocks: 4 } });
-    expect(run(wide, census([beam], { prp_beam: [-2.5, 0, -0.5, 2.5, 1, 0.5] }))).not.toContain("S3D-W-973");
+    expect(run(wide, census([nub], { prp_nub: [2.5, 0, -0.5, 3.5, 1, 0.5] }))).not.toContain("S3D-W-973");
   });
 });
