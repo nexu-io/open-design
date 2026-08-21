@@ -199,6 +199,11 @@ export interface ActivePlugin {
   // legitimately equal the chip's default plugin id (e.g. the prototype rail's
   // `example-web-prototype`).
   explicitPick: boolean;
+  // Curated example cards are explicit UI selections, but for OD Next task
+  // types they are reference briefs rather than requests to execute the
+  // example's legacy plugin snapshot. Independent Plugin/Community picks leave
+  // this false and continue through the ordinary applied-plugin route.
+  routeThroughAutomaticStrategy: boolean;
 }
 
 // `inlineBacked` distinguishes a context inserted as an inline `@mention` pill
@@ -1394,6 +1399,9 @@ export function HomeView({
       // or Community card / detail modal) rather than a type chip's default
       // plugin. Stored on `active.explicitPick`; gates the chip's clear button.
       explicitPick?: boolean;
+      // Curated task example: preserve the explicit selected-card UI while
+      // allowing supported task types to enter OD Next with example context.
+      routeThroughAutomaticStrategy?: boolean;
     },
     // Resolves true when the bound plugin left the composer submittable
     // (inputs valid, apply not failed/superseded) — callers use this to
@@ -1463,6 +1471,7 @@ export function HomeView({
       preserveInputFields: options?.preserveInputFields === true,
       suppressPromptSync: suppressPromptUpdate,
       explicitPick: options?.explicitPick === true,
+      routeThroughAutomaticStrategy: options?.routeThroughAutomaticStrategy === true,
     });
     setFallbackProjectKind(null);
     setFallbackProjectMetadata(null);
@@ -1935,15 +1944,11 @@ export function HomeView({
       plugin_id: record.sourceMarketplaceEntryName ?? record.id,
       plugin_type: record.marketplaceTrust ?? 'official',
     });
-    // Picking a preset card *binds* the plugin (not just a textarea fill):
-    // active switches to this exact preset so submit resolves its snapshot and
-    // injects the plugin's SKILL.md + example.html as generation context — the
-    // output faithfully recreates the reference. `promptText` is the short,
-    // editable seed; the full build spec rides along in the plugin context.
-    // deferApply mirrors the chip rail: bind now, resolve the snapshot on
-    // submit (submit() already re-resolves), so a preset click stays instant
-    // and doesn't fire an /apply roundtrip per card. The chip is already
-    // active when preset cards are visible, so reuse its project kind/metadata.
+    // Keep the selected preset bound for its title, inputs, project metadata,
+    // and selected-card UI. Supported task types do not execute this legacy
+    // plugin snapshot: submit routes them through OD Next and carries the
+    // preset's reference brief via examplePromptContext instead. Independent
+    // Plugin/Community selections use routePluginUse and stay ordinary.
     void usePlugin(record, promptText, {
       chipId,
       prototypeSubtypeId: active?.prototypeSubtypeId ?? null,
@@ -1951,6 +1956,7 @@ export function HomeView({
       projectMetadata: active?.projectMetadata ?? null,
       deferApply: true,
       explicitPick: true,
+      routeThroughAutomaticStrategy: true,
     }).then((submittable) => {
       if (submittable) inputRef.current?.pulseSend();
     });
@@ -2660,8 +2666,10 @@ export function HomeView({
       prototypeSubChipForSlug(submittedActive?.prototypeSubtypeId ?? null)?.actionChipId
       ?? submittedActive?.chipId
       ?? null;
+    const automaticStrategySelection = submittedActive?.explicitPick !== true
+      || submittedActive?.routeThroughAutomaticStrategy === true;
     const automaticStrategyTaskProfile = sessionMode === 'design'
-      && submittedActive?.explicitPick !== true
+      && automaticStrategySelection
       ? automaticStrategyTaskProfileForRouteId(submittedRouteChipId)
       : null;
     // Pre-empt the run only when the user could actually fix it here. On the
@@ -2804,7 +2812,7 @@ export function HomeView({
         : null;
       const productAutomaticScenario = submittedChip?.action.kind === 'apply-scenario'
         && submittedChip.action.automaticDefault === true
-        && submittedActive?.explicitPick !== true;
+        && automaticStrategySelection;
       const routedPluginId =
         automaticStrategyTaskProfile
           ? null
@@ -2815,14 +2823,10 @@ export function HomeView({
         && (!submittedActive || productAutomaticScenario)
         ? 'automatic-default' as const
         : null;
-      // The example-prompt override is a one-shot marker. Decide whether to
-      // send it now, but defer spending the marker until the create is
-      // accepted — a rejected attempt stays retryable and must resend it.
-      const examplePromptKey = 'od:example-prompt-used';
-      const examplePromptToSend =
-        examplePromptInfoRef.current != null && localStorage.getItem(examplePromptKey) == null
-          ? examplePromptInfoRef.current
-          : null;
+      // Every example run carries its own reference brief. A global one-shot
+      // marker made later examples lose this context, which caused OD Next to
+      // rediscover details the user had already selected on the example card.
+      const examplePromptToSend = examplePromptInfoRef.current;
       const accepted = await onSubmit({
         prompt: trimmed,
         pluginId: routedPluginId,
@@ -2876,8 +2880,6 @@ export function HomeView({
       // Blocked-and-handled (AMR balance gate): the shell already shows its
       // dialog. Keep the composer draft and staged contexts for the retry.
       if (accepted === 'blocked') return;
-      // Create accepted — now it is safe to spend the one-shot marker.
-      if (examplePromptToSend) localStorage.setItem(examplePromptKey, '1');
       // The draft has become a real run; drop it synchronously (before the
       // navigation unmounts us) so the sent prompt + pick don't reappear the
       // next time the Home tab mounts.

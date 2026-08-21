@@ -1334,7 +1334,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('uses example preset cards as plain-text prompt fillers while preserving selected chip inputs', async () => {
+  it('routes supported example preset cards through OD Next with their reference brief', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -1353,6 +1353,8 @@ describe('HomeView prompt handoff', () => {
     vi.stubGlobal('fetch', fetchMock);
     stubAnimationFrame();
     const onSubmit = vi.fn();
+    // A prior example run must not suppress the reference brief for this run.
+    window.localStorage.setItem('od:example-prompt-used', '1');
 
     render(
       <HomeView
@@ -1397,43 +1399,79 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
-    // The inline plugin inputs form was removed from the Home composer; the
-    // preset card still seeds the prompt and keeps the chip's structured inputs
-    // in state (submitted below), but no inputs form renders.
+    // The inline plugin inputs form was removed from the Home composer.
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/plugins/example-web-prototype/apply-local',
-      expect.anything(),
-    ));
-    const applyCall = fetchMock.mock.calls.find(([url]) => (
-      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply-local')
-    ));
-    // The preset card seeds the prompt as plain text while preserving the
-    // chip's structured inputs (artifactKind / fidelity / audience /
-    // designSystem / template all round-trip). Seeding the editor does NOT
-    // re-run the host's prompt-extraction (HomeHero suppresses the seed echo
-    // in onChange), so designSystem keeps the chip/footer default rather than
-    // being re-read from the prompt text.
-    expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
-      inputs: {
-        artifactKind: 'web prototype',
-        audience: 'product evaluators',
-        designSystem: 'Refly Design System',
-        template: 'the bundled web prototype seed',
-      },
-    });
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      pluginId: 'example-web-prototype',
+      pluginId: null,
+      pluginSelectionProvenance: 'automatic-default',
+      automaticStrategyTaskProfile: 'prototype',
+      appliedPluginSnapshotId: null,
+      pluginTitle: null,
+      taskKind: null,
       projectKind: 'prototype',
       prompt: 'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
       designSystemId: 'ds-refly',
       projectMetadata: expect.objectContaining({
         kind: 'prototype',
       }),
+      examplePromptContext: {
+        title: 'Web Prototype',
+        artifactType: 'prototype',
+        brief: expect.objectContaining({
+          artifact_type: 'web prototype',
+          audience: 'product evaluators',
+          template: 'the bundled web prototype seed',
+        }),
+      },
     })));
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('pluginSource');
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('pluginInputs');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply-local'))).toBe(false);
+  });
+
+  it('routes a picked deck example through the ppt OD Next profile', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    await pickHomeTemplate('deck');
+    fireEvent.click((await screen.findAllByTestId('home-hero-plugin-preset'))[0]!);
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: null,
+      automaticStrategyTaskProfile: 'ppt',
+      appliedPluginSnapshotId: null,
+      projectKind: 'deck',
+      examplePromptContext: expect.objectContaining({
+        title: 'Simple Deck',
+        artifactType: 'deck',
+      }),
+    })));
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('pluginInputs');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply-local'))).toBe(false);
   });
 
   it('binds the picked preset plugin on submit while preserving the chip metadata', async () => {

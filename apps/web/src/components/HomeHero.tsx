@@ -885,8 +885,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
   useEffect(() => {
     setSelectedPromptExample(null);
+    onExamplePromptStatusChange?.(null);
     setLocalSelectedSubcategory(null);
-  }, [activeChipId]);
+  }, [activeChipId, onExamplePromptStatusChange]);
 
   useEffect(() => {
     if (!shortcutsOpen) return;

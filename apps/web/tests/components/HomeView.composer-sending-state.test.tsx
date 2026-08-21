@@ -210,19 +210,16 @@ describe('home composer sending state', () => {
     );
   });
 
-  it('does not spend the one-shot example-prompt marker on a failed create', async () => {
-    // The example-prompt override is a one-shot localStorage marker. A
-    // rejected create keeps the composer retryable, so the marker must not
-    // be consumed until the create is accepted — otherwise the retry drops
-    // examplePromptContext and the user loses the example flow they picked.
+  it('keeps example context on a failed create retry without a one-shot marker', async () => {
+    // A rejected create keeps the composer retryable. Both the first attempt
+    // and retry must carry the same reference brief, without globally spending
+    // example context for future example runs.
     const onSubmit = vi
       .fn<(payload: unknown) => Promise<boolean>>()
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
 
     writeHomeGuideStage('done');
-    // The prototype rail binds the example plugin, so its apply roundtrip
-    // must succeed for submit() to reach onSubmit.
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -252,8 +249,7 @@ describe('home composer sending state', () => {
     // #5517 removed the inline template rail; templates are picked from the
     // composer footer's radial Template picker.
     fireEvent.click(await screen.findByTestId('home-hero-template-trigger'));
-    // Seeding through a fallback prompt-example card is what arms the
-    // examplePromptContext marker.
+    // Seed through a fallback prompt-example card.
     fireEvent.click(await screen.findByTestId('home-hero-template-wedge-prototype'));
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     fireEvent.click(exampleCards[0]!);
@@ -265,7 +261,7 @@ describe('home composer sending state', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect((onSubmit.mock.calls[0]![0] as { examplePromptContext?: unknown }).examplePromptContext).toBeTruthy();
 
-    // Create was rejected: the marker stays unspent so the retry resends it.
+    // Create was rejected: the retry resends the same context.
     await waitFor(() => expect(submit.disabled).toBe(false));
     expect(window.localStorage.getItem('od:example-prompt-used')).toBeNull();
 
@@ -273,9 +269,7 @@ describe('home composer sending state', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
     expect((onSubmit.mock.calls[1]![0] as { examplePromptContext?: unknown }).examplePromptContext).toBeTruthy();
 
-    // Only now — after an accepted create — is the one-shot marker spent.
-    await waitFor(() => {
-      expect(window.localStorage.getItem('od:example-prompt-used')).toBe('1');
-    });
+    // An accepted example run must not suppress context for future examples.
+    expect(window.localStorage.getItem('od:example-prompt-used')).toBeNull();
   });
 });

@@ -39,6 +39,7 @@ function activeFor(
     preserveInputFields: false,
     suppressPromptSync: false,
     explicitPick,
+    routeThroughAutomaticStrategy: false,
   };
 }
 
