@@ -22,17 +22,17 @@ export const ja: DeepseekCopyOverride = {
     'ループを閉じる。実際のページに注釈を付け、モーションアセットをコンパイルし、スキルライブラリを引き継ぐ。',
     'ハーネスそのものをデザインワークスペースにする。チャットの隣に並ぶプレビューパネル、ワークベンチ、ボード。',
   ],
-  collectionCloserHeading: 'セットアップは飛ばして、Open Design の中で DeepSeek Harness とデザインする',
+  collectionCloserHeading: 'セットアップは飛ばして、OpenDesign の中で DeepSeek Harness とデザインする',
   filterAll: 'すべて',
   collectionCloserBody:
-    'Open Design は、DeepSeek Harness を包み込むように動くオープンソースのエージェントネイティブなデザインワークスペースです。デザインシステム、スキル、テンプレートの一貫性を保つので、エージェントが仕上げた成果物はあなたのものになります。',
+    'OpenDesign は、DeepSeek Harness を包み込むように動くオープンソースのエージェントネイティブなデザインワークスペースです。デザインシステム、スキル、テンプレートの一貫性を保つので、エージェントが仕上げた成果物はあなたのものになります。',
 
   categoryVision: 'ビジョン & 入力',
   categoryCanvas: 'キャンバス & 生成 UI',
   categoryWorkflow: 'デザインワークフロー',
   categoryWorkspace: 'ワークスペース & プレビュー',
 
-  ctaDownload: 'Open Design をダウンロード',
+  ctaDownload: 'OpenDesign をダウンロード',
   ctaStarList: 'DeepSeek Harness に Star を付ける',
   ctaGuide: 'DeepSeek Harness でデザインする方法を見る',
   ctaBrowseAll: 'すべてのプラグインを見る',
@@ -71,9 +71,9 @@ export const ja: DeepseekCopyOverride = {
   detailMoreOnList: 'DeepSeek Harness リポジトリをもっと見る',
   detailRelated: 'ほかの DeepSeek Harness デザインプラグイン',
   finalEyebrow: '次のステップ',
-  detailCloserHeading: 'セットアップなしで、Open Design とデザインする',
+  detailCloserHeading: 'セットアップなしで、OpenDesign とデザインする',
   detailCloserBody:
-    'このプラグインを自分で入れてもいいし、Open Design でキュレーション済みのデザインレイヤーごと DeepSeek Harness の周りで動かしてもいい。自分の API キーを使い、成果物も自分のものに。',
+    'このプラグインを自分で入れてもいいし、OpenDesign でキュレーション済みのデザインレイヤーごと DeepSeek Harness の周りで動かしてもいい。自分の API キーを使い、成果物も自分のものに。',
 
   skills: {
     modlens: {

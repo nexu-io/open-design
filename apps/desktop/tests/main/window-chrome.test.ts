@@ -7,7 +7,7 @@ const runtimeSource = readFileSync(new URL("../../src/main/runtime.ts", import.m
 /**
  * runtime.ts constructs three BrowserWindows — the brand splash
  * (`createSplashWindow`), the desktop pet, and the main app window — and the
- * splash, declared FIRST, shares the `title: "Open Design"` / `width: 1280`
+ * splash, declared FIRST, shares the `title: "OpenDesign"` / `width: 1280`
  * markers with the main window while intentionally omitting
  * `backgroundThrottling: false`. A loose `new BrowserWindow({` anchor therefore
  * locks onto the splash block. Anchor instead on the `const window =`

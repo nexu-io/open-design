@@ -20,7 +20,7 @@ export interface AmrAccountFailureSignal {
 }
 
 // `source=open_design` tags the console landing page_view so vela analytics can
-// attribute the recharge visit to Open Design.
+// attribute the recharge visit to OpenDesign.
 //
 // The console dashboard, not a wallet page: balance and manual top-up were
 // rehomed onto it (vela #1055) and the wallet route left the product's

@@ -48,10 +48,10 @@ const en: DeepseekCopy = {
   collectionStats: DEEPSEEK_COLLECTION.stats,
   collectionIntro: DEEPSEEK_COLLECTION.intro,
   collectionCategoryBlurbs: DEEPSEEK_COLLECTION.categories.map((c) => c.blurb),
-  collectionCloserHeading: 'Skip the setup. Design with DeepSeek Harness inside Open Design',
+  collectionCloserHeading: 'Skip the setup. Design with DeepSeek Harness inside OpenDesign',
   filterAll: 'All',
   collectionCloserBody:
-    'Open Design is the open-source, agent-native design workspace that runs around DeepSeek Harness. It keeps your systems, skills and templates consistent, so the agent ships work you own.',
+    'OpenDesign is the open-source, agent-native design workspace that runs around DeepSeek Harness. It keeps your systems, skills and templates consistent, so the agent ships work you own.',
 
   categoryVision: 'Vision & Input',
   categoryCanvas: 'Canvas & Generative UI',
@@ -59,7 +59,7 @@ const en: DeepseekCopy = {
   categoryWorkspace: 'Workspace & Preview',
 
 
-  ctaDownload: 'Download Open Design',
+  ctaDownload: 'Download OpenDesign',
   ctaStarList: 'Star DeepSeek Harness',
   ctaGuide: 'See how to design with DeepSeek Harness',
   ctaBrowseAll: 'Browse all plugins',
@@ -98,9 +98,9 @@ const en: DeepseekCopy = {
   detailMoreOnList: 'More in the DeepSeek Harness repo',
   detailRelated: 'More DeepSeek Harness design plugins',
   finalEyebrow: 'Next step',
-  detailCloserHeading: 'Design with Open Design, without the setup',
+  detailCloserHeading: 'Design with OpenDesign, without the setup',
   detailCloserBody:
-    'Install this plugin yourself, or run a whole curated design layer around DeepSeek Harness with Open Design. Bring your own key, own your output.',
+    'Install this plugin yourself, or run a whole curated design layer around DeepSeek Harness with OpenDesign. Bring your own key, own your output.',
 
   skills: Object.fromEntries(
     DEEPSEEK_SKILLS.map((s) => [

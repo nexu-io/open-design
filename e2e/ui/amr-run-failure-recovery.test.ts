@@ -27,7 +27,7 @@ let codexRuntime: Awaited<ReturnType<typeof createFakeAgentRuntimes>>['codex'];
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const AMR_AGENT = {
   id: 'amr',
-  name: 'Open Design AMR',
+  name: 'OpenDesign AMR',
   bin: 'vela',
   available: true,
   version: 'test',
@@ -228,7 +228,7 @@ test('[P0] @critical AMR auth failures return to the existing sign-in gate witho
   await sendPrompt(page, 'AMR auth failure recovery smoke');
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
-  await expect(page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
   expect(loginRequested).toBe(false);
 });
@@ -325,7 +325,7 @@ test('[P0] @critical AMR model catalog invalid-key failures return to sign-in wi
   loggedIn = false;
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
-  await expect(page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
   expect(loginRequested).toBe(false);
 });
@@ -417,14 +417,14 @@ test('[P0] @critical non-AMR model failures stay recoverable while Cloud is sign
 
   await gotoProject(page, projectId);
 
-  const switchAndRetry = page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i }).first();
+  const switchAndRetry = page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i }).first();
   await expect(switchAndRetry).toBeVisible({ timeout: T.long });
   await switchAndRetry.click();
 
   await expect
     .poll(() => new URL(page.url()).pathname, { timeout: T.medium })
     .toBe('/onboarding');
-  await expect(page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i })).toBeVisible();
   await expect
     .poll(async () => {
       const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
@@ -647,7 +647,7 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
 
   await settings.getByTestId('settings-agent-select-codex').click();
   await expect(settings.getByTestId('settings-agent-select-codex')).toHaveAttribute('aria-pressed', 'true');
-  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('Open Design');
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('OpenDesign');
 
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
@@ -701,7 +701,7 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR auth failure before switch smoke');
   await expect(runErrorCard(page)).toContainText(
-    /Open Design agent isn't signed in yet|AMR sign-in is required/i,
+    /OpenDesign agent isn't signed in yet|AMR sign-in is required/i,
     { timeout: T.long },
   );
   const settings = await openExecutionSettingsDialog(page);
@@ -799,7 +799,7 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
 
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible({ timeout: T.long });
   await expect(page.getByText(/Generation service unavailable|model provider is temporarily unavailable/i).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
@@ -882,7 +882,7 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
   await expect(card).toContainText('内容过长', { timeout: T.long });
   await expect(card).toContainText('本轮输入超出了模型的上下文上限');
   await expect(page.getByRole('button', { name: /^重试$/ }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
 
   const sourceToggle = card.getByRole('button', { name: /查看详情/ });
   await expect(sourceToggle).toHaveAttribute('aria-expanded', 'false');
@@ -972,7 +972,7 @@ test('[P0] antigravity rate limits offer terminal model switching without promot
   const launchTerminal = page.getByRole('button', { name: /Switch model in terminal/i }).first();
   await expect(launchTerminal).toBeVisible({ timeout: T.long });
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
 
   await launchTerminal.click();
 

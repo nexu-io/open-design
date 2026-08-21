@@ -16,6 +16,7 @@ import type {
 import { eventsEndedWithUnfinishedWork } from '@open-design/contracts';
 import { migrateCollabSyncSnapshots } from './collab/sync-snapshot-store.js';
 import { migrateCommentRelayOutbox } from './collab/comment-relay-outbox.js';
+import { migratePublicFilePublications } from './collab/public-file-publication-store.js';
 import {
   collapseWorkspaceProjectHomes,
   type WorkspaceProjectHomeRow,
@@ -559,6 +560,7 @@ function migrate(db: SqliteDb): void {
   migratePlugins(db);
   migrateCollabSyncSnapshots(db);
   migrateCommentRelayOutbox(db);
+  migratePublicFilePublications(db);
 }
 
 /**
@@ -2001,7 +2003,7 @@ function normalizeTemplate(row: DbRow) {
 // ---------- conversations ----------
 
 export function listConversations(db: SqliteDb, projectId: string) {
-  return rows(db
+  const listed = rows(db
     .prepare(
       `WITH project_conversations AS (
           SELECT id, project_id AS projectId, title, session_mode AS sessionMode,
@@ -2015,13 +2017,13 @@ export function listConversations(db: SqliteDb, projectId: string) {
                  run_status AS latestRunStatus,
                  started_at AS latestRunStartedAt,
                  ended_at AS latestRunEndedAt,
-                 events_json AS latestRunEventsJson
+                 id AS latestRunMessageId
             FROM (
               SELECT m.conversation_id,
                      m.run_status,
                      m.started_at,
                      m.ended_at,
-                     m.events_json,
+                     m.id,
                      ROW_NUMBER() OVER (
                        PARTITION BY m.conversation_id
                        ORDER BY m.position DESC
@@ -2052,7 +2054,7 @@ export function listConversations(db: SqliteDb, projectId: string) {
         SELECT c.id, c.projectId, c.title, c.sessionMode, c.createdAt, c.updatedAt,
                COALESCE(mc.messageCount, 0) AS messageCount,
                lr.latestRunStatus, lr.latestRunStartedAt,
-               lr.latestRunEndedAt, lr.latestRunEventsJson,
+               lr.latestRunEndedAt, lr.latestRunMessageId,
                trd.totalDurationMs
           FROM project_conversations c
           LEFT JOIN latest_runs lr ON lr.conversationId = c.id
@@ -2060,7 +2062,50 @@ export function listConversations(db: SqliteDb, projectId: string) {
           LEFT JOIN total_run_durations trd ON trd.conversationId = c.id
          ORDER BY c.updatedAt DESC`,
     )
-    .all(projectId)).map(normalizeConversation);
+    .all(projectId));
+  return attachLatestRunEvents(db, listed).map(normalizeConversation);
+}
+
+/**
+ * Resolve `latestRunEventsJson` for the rows that actually need it.
+ *
+ * The summary only reads the event log to recover a `durationMs` from the run's
+ * last `usage` event, and only when the run's timestamps cannot supply one (see
+ * `conversationRunSummaryFromRow`). Selecting `events_json` inside the
+ * `latest_runs` window function instead forces SQLite to materialize the full
+ * event log of every assistant message in the project just to order them —
+ * unbounded work for a field the common path never looks at, since event logs
+ * grow with tool output (image tool results carry inline base64).
+ *
+ * So the query carries only the message id, and the log is fetched here for the
+ * few rows whose timestamps are incomplete. A project whose runs all ended
+ * normally reads no event logs at all.
+ */
+function attachLatestRunEvents(db: SqliteDb, listed: DbRow[]): DbRow[] {
+  // Mirror `conversationRunSummaryFromRow`'s own nullish handling exactly: it
+  // maps a null timestamp to `undefined` before the finiteness check, so a null
+  // column means "no duration available from timestamps". Testing
+  // `Number.isFinite(Number(value))` instead would treat null as 0 — a finite
+  // number — and silently skip the fetch for precisely the rows that need it.
+  const hasBothTimestamps = (row: DbRow) =>
+    row.latestRunStartedAt != null
+    && row.latestRunEndedAt != null
+    && Number.isFinite(Number(row.latestRunStartedAt))
+    && Number.isFinite(Number(row.latestRunEndedAt));
+
+  const pending = listed.filter(
+    (row) => row.latestRunMessageId != null && !hasBothTimestamps(row),
+  );
+  if (pending.length === 0) return listed;
+
+  const statement = db.prepare(
+    `SELECT events_json AS eventsJson FROM messages WHERE id = ?`,
+  );
+  for (const row of pending) {
+    const found = statement.get(row.latestRunMessageId) as DbRow | undefined;
+    row.latestRunEventsJson = found?.eventsJson ?? null;
+  }
+  return listed;
 }
 
 /**
@@ -2514,6 +2559,21 @@ export function clearAgentSession(
 }
 
 // ---------- messages ----------
+
+/**
+ * Number of messages in a conversation.
+ *
+ * For emptiness checks prefer this over `listMessages(...).length`: the latter
+ * loads and parses every message's JSON columns — including the event log,
+ * which grows with tool output — to answer a question `COUNT(*)` answers
+ * without touching them.
+ */
+export function countMessages(db: SqliteDb, conversationId: string): number {
+  const row = db
+    .prepare(`SELECT COUNT(*) AS count FROM messages WHERE conversation_id = ?`)
+    .get(conversationId) as DbRow | undefined;
+  return Number(row?.count ?? 0);
+}
 
 export function listMessages(db: SqliteDb, conversationId: string) {
   const messages = db

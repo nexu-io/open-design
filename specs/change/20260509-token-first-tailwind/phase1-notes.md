@@ -11,7 +11,7 @@
 - `scripts/guard.ts` - allowlisted the exact PostCSS config path with a compatibility-format comment so the residual JavaScript guard continues to fail on unplanned project-owned JavaScript.
 - `apps/web/src/index.css` - added Tailwind theme/utilities layered imports, kept Preflight excluded, added the local base-layer border-style reset, and recorded the cascade policy for retained element/reset rules before component migration.
 
-### Step 2: Open Design Tailwind tokens
+### Step 2: OpenDesign Tailwind tokens
 
 - `apps/web/src/index.css` - added the CSS-first `@theme` block that clears Tailwind default colors and exposes the project-approved color namespace for surfaces, borders, text, accent, semantic status, interaction overlays, radius, shadows, fonts, and exact compact UI text-size aliases.
 - `apps/web/src/index.css` - added missing runtime source variables for `--accent-wash`, `--accent-foreground`, `--warning-border`, modal overlay, selection overlays, and inspect overlays so Tailwind utilities resolve through the same CSS-variable token path as existing styles.
@@ -21,7 +21,7 @@
 ### Step 3: Base style guardrails
 
 - `scripts/guard.ts` - added the `style policy` guard check for app UI files under `apps/web/app/` and `apps/web/src/`.
-- `scripts/guard.ts` - added default Tailwind palette utility rejection for classes such as `text-red-500`, `bg-white`, `border-zinc-200`, `from-orange-500`, and related color utility namespaces so app UI uses Open Design token utilities.
+- `scripts/guard.ts` - added default Tailwind palette utility rejection for classes such as `text-red-500`, `bg-white`, `border-zinc-200`, `from-orange-500`, and related color utility namespaces so app UI uses OpenDesign token utilities.
 - `scripts/guard.ts` - added hardcoded UI color detection scaffolding for hex, `rgb()` / `rgba()`, `hsl()` / `hsla()`, and named colors. Phase 1 enforcement is wired to scoped guard fixtures while existing app hardcoded colors stay classified as migration inventory or explicit exceptions until the relevant migration slices tighten enforcement.
 - `scripts/guard.ts` - added a structured hardcoded-color allowlist with path pattern, value pattern, and reason fields for global token CSS, brand/accent choices, SVG illustrations, sketch/canvas data, file/inspect/user-authored colors, legacy UI fallback colors, and tests/fixtures.
 - `scripts/guard.ts` - exempted CSS-wide and special color keywords `transparent`, `currentColor` / `currentcolor`, `inherit`, `initial`, `unset`, and `revert` by semantics.
@@ -72,7 +72,7 @@
   | `FileViewer`, `ManualEditPanel` | Hex, RGB(A), HSL(A) | User-authored file, inspect, editable style, and runtime content colors; app chrome migrates in Phase 4. |
   | `MemorySection`, `MemoryModelInline`, `MemoryToast` | Hex, RGB(A), HSL(A) | Legacy memory UI fallback colors; migrate or narrow in the settings/project phases. |
   | `apps/web/tests/` | Any | Tests and fixtures may assert rejected colors explicitly. |
-  | Repeated arbitrary app UI colors | Any unregistered hardcoded color after the second real app UI use | Promote to a named Open Design token before migration. One-off brand/user-content/illustration data keeps a reasoned allowlist entry. |
+  | Repeated arbitrary app UI colors | Any unregistered hardcoded color after the second real app UI use | Promote to a named OpenDesign token before migration. One-off brand/user-content/illustration data keeps a reasoned allowlist entry. |
 - Inventory verification: the Step 4 scan produced complete coverage for literal class tokens by cross-checking TSX references against `index.css` class selector definitions. Migration slices remain responsible for dynamic class maps and classes changed after rebase.
 
 ### Step 5: Dual-worktree agent visual comparison workflow
@@ -151,7 +151,7 @@
 - `pnpm install` - passed; pnpm emitted existing workspace bin/link warnings for missing daemon dist CLI during install.
 - `pnpm guard` - passed; residual JavaScript allowlist accepts `apps/web/postcss.config.mjs`.
 - `pnpm --filter @open-design/web build` - passed with Next.js 16/Turbopack.
-- `pnpm --filter @open-design/web build` - passed after adding the Open Design `@theme` token aliases and source variables.
+- `pnpm --filter @open-design/web build` - passed after adding the OpenDesign `@theme` token aliases and source variables.
 - `pnpm guard` - passed after adding the style policy check; known Phase 1 hardcoded color migration inventory remains classified and does not fail the guard.
 - Temporary sample `apps/web/src/__guard_tailwind_palette_sample.tsx` with `className="text-red-500"` plus temporary sample `scripts/guard-style-policy-fixtures/hardcoded-color-sample.tsx` with `color: "#ff0000"` made `pnpm guard` fail with both expected style policy violations; the sample also included `transparent`, `currentColor`, `currentcolor`, `inherit`, `initial`, `unset`, and `revert`, which stayed exempt. Temporary samples were removed.
 - Temporary sample `scripts/guard-style-policy-fixtures/named-color-sample.tsx` with `color: "red"` made `pnpm guard` fail with the expected unregistered named color violation while CSS-wide/special keywords in the same fixture stayed exempt. Temporary sample was removed.

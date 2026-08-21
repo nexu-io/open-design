@@ -8,7 +8,7 @@ export const fr: CodexCopyOverride = {
   collectionEyebrow: 'Sélection éditoriale',
   collectionHeading: 'Les plugins design qui font livrer à Codex de vraies interfaces',
   collectionLede:
-    'OpenAI Codex écrit du code qui fonctionne. Livré à lui-même, il retombe sur des polices sans risque, des espacements moyens et du Helvetica centré. Voici les plugins qui lui donnent du goût : des skills esthétiques et des règles de design system. Installez-en un, ou faites-les tourner tous dans Open Design.',
+    'OpenAI Codex écrit du code qui fonctionne. Livré à lui-même, il retombe sur des polices sans risque, des espacements moyens et du Helvetica centré. Voici les plugins qui lui donnent du goût : des skills esthétiques et des règles de design system. Installez-en un, ou faites-les tourner tous dans OpenDesign.',
   collectionStats: [
     { value: '50', label: 'plugins sélectionnés' },
     { value: '13', label: 'dépôts sources' },
@@ -20,13 +20,13 @@ export const fr: CodexCopyOverride = {
     'Reprenez la main sur les choix esthétiques par défaut de Codex, avant la première ligne de code.',
     'Transformez vos tokens et vos composants en règles que Codex suit au lieu d’improviser.',
   ],
-  collectionCloserHeading: 'Passez la config. Designez avec Codex dans Open Design',
+  collectionCloserHeading: 'Passez la config. Designez avec Codex dans OpenDesign',
   filterAll: 'Tout',
   collectionCloserBody:
-    'Open Design est le workspace de design open source et agent-native qui tourne autour de Codex. Il garde vos systèmes, vos skills et vos templates cohérents pour que l’agent livre un travail qui vous appartient.',
+    'OpenDesign est le workspace de design open source et agent-native qui tourne autour de Codex. Il garde vos systèmes, vos skills et vos templates cohérents pour que l’agent livre un travail qui vous appartient.',
   categoryFrontend: 'Frontend & UI',
   categoryDesignSystems: 'Design systems',
-  ctaDownload: 'Télécharger Open Design',
+  ctaDownload: 'Télécharger OpenDesign',
   ctaStarList: 'Star la liste',
   ctaBrowseAll: 'Parcourir tous les plugins',
   ctaViewSource: 'Voir la source',
@@ -61,9 +61,9 @@ export const fr: CodexCopyOverride = {
   detailMoreOnList: 'En savoir plus sur la liste codex-design',
   detailRelated: 'Autres plugins design pour Codex',
   finalEyebrow: 'Prochaine étape',
-  detailCloserHeading: 'Designez avec Open Design, sans la config',
+  detailCloserHeading: 'Designez avec OpenDesign, sans la config',
   detailCloserBody:
-    'Installez ce plugin vous-même, ou faites tourner toute une couche design sélectionnée autour de Codex avec Open Design. Apportez votre clé, gardez la main sur ce que vous produisez.',
+    'Installez ce plugin vous-même, ou faites tourner toute une couche design sélectionnée autour de Codex avec OpenDesign. Apportez votre clé, gardez la main sur ce que vous produisez.',
   skills: {
     'gpt-taste': {
       tagline: 'Construit des pages primables avec du scroll GSAP et des grilles bento sans trous.',

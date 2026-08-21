@@ -8,7 +8,7 @@ export const ja: CodexCopyOverride = {
   collectionEyebrow: 'キュレーションコレクション',
   collectionHeading: 'Codex に「本物の UI」を作らせるデザインプラグイン',
   collectionLede:
-    'OpenAI Codex は動くコードを書く。ただ放っておけば、無難なフォント、平凡な余白、中央寄せの Helvetica に落ち着く。ここに集めたのは Codex にセンスを与えるプラグイン、つまり美意識のスキルとデザインシステムのルール。ひとつだけ入れてもいいし、Open Design の中でまとめて動かしてもいい。',
+    'OpenAI Codex は動くコードを書く。ただ放っておけば、無難なフォント、平凡な余白、中央寄せの Helvetica に落ち着く。ここに集めたのは Codex にセンスを与えるプラグイン、つまり美意識のスキルとデザインシステムのルール。ひとつだけ入れてもいいし、OpenDesign の中でまとめて動かしてもいい。',
   collectionStats: [
     { value: '50', label: '厳選プラグイン' },
     { value: '13', label: '提供元リポジトリ' },
@@ -20,13 +20,13 @@ export const ja: CodexCopyOverride = {
     '1 行もコードを書かないうちに、Codex のデフォルトの美的判断を上書きする。',
     'トークンとコンポーネントを、Codex が勝手に発明せず従うルールに変える。',
   ],
-  collectionCloserHeading: 'セットアップは飛ばして、Open Design の中で Codex とデザインする',
+  collectionCloserHeading: 'セットアップは飛ばして、OpenDesign の中で Codex とデザインする',
   filterAll: 'すべて',
   collectionCloserBody:
-    'Open Design は、Codex を包み込むように動くオープンソースのエージェントネイティブなデザインワークスペースです。デザインシステム、スキル、テンプレートの一貫性を保つので、エージェントが仕上げた成果物はあなたのものになります。',
+    'OpenDesign は、Codex を包み込むように動くオープンソースのエージェントネイティブなデザインワークスペースです。デザインシステム、スキル、テンプレートの一貫性を保つので、エージェントが仕上げた成果物はあなたのものになります。',
   categoryFrontend: 'フロントエンド & UI',
   categoryDesignSystems: 'デザインシステム',
-  ctaDownload: 'Open Design をダウンロード',
+  ctaDownload: 'OpenDesign をダウンロード',
   ctaStarList: 'リストに Star を付ける',
   ctaBrowseAll: 'すべてのプラグインを見る',
   ctaViewSource: 'ソースを見る',
@@ -61,9 +61,9 @@ export const ja: CodexCopyOverride = {
   detailMoreOnList: 'codex-design リストをもっと見る',
   detailRelated: 'ほかの Codex デザインプラグイン',
   finalEyebrow: '次のステップ',
-  detailCloserHeading: 'セットアップなしで、Open Design とデザインする',
+  detailCloserHeading: 'セットアップなしで、OpenDesign とデザインする',
   detailCloserBody:
-    'このプラグインを自分で入れてもいいし、Open Design でキュレーション済みのデザインレイヤーごと Codex の周りで動かしてもいい。自分の API キーを使い、成果物も自分のものに。',
+    'このプラグインを自分で入れてもいいし、OpenDesign でキュレーション済みのデザインレイヤーごと Codex の周りで動かしてもいい。自分の API キーを使い、成果物も自分のものに。',
   skills: {
     'gpt-taste': {
       tagline:

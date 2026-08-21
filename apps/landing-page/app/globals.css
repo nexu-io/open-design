@@ -452,7 +452,7 @@ body::before {
   .locale-menu { animation: none; }
   .locale-trigger-caret { transition: none; }
 }
-/* ---------- Open Design Cloud header account ---------- */
+/* ---------- OpenDesign Cloud header account ---------- */
 /* The avatar menu stays out of layout until a live cloud session is found. */
 .nav-account {
   display: inline-flex;
@@ -482,7 +482,7 @@ body::before {
   outline-offset: 2px;
 }
 /* Circular avatar — a disc reads unmistakably as a user avatar. Dark tile +
-   single initial mirrors Open Design Cloud's identity styling. */
+   single initial mirrors OpenDesign Cloud's identity styling. */
 .nav-avatar,
 .nav-avatar-fallback {
   width: 32px;
@@ -684,14 +684,14 @@ body::before {
   gap: 24px;
 }
 /*
- * Desktop bar layout (≥1081px, above the hamburger breakpoint): three
+ * Desktop bar layout (≥1367px, above the hamburger breakpoint): three
  * equal-flanked columns — brand logo pinned flush-left, the nav links
  * centred, and the action cluster (download / star / locale) flush-right.
  * The two 1fr side tracks are symmetric, which keeps the centre column
  * optically centred regardless of how wide either side gets. Mobile keeps
  * the base flex layout untouched.
  */
-@media (min-width: 1081px) {
+@media (min-width: 1367px) {
   .nav-inner {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
@@ -716,13 +716,6 @@ body::before {
     white-space: nowrap;
   }
 }
-/* Mid-band desktop (hamburger ends at 1081px): the longest locales need
- * tighter link spacing to hold a single row. The hover bridge width must
- * track the gap so sweeping between triggers keeps a dropdown open. */
-@media (min-width: 1081px) and (max-width: 1366px) {
-  .nav-links { gap: 22px; }
-  .nav-links li.has-dropdown:not(:last-child)::after { width: 22px; }
-}
 .brand {
   display: inline-flex;
   align-items: center;
@@ -735,7 +728,7 @@ body::before {
   font-size: 18px;
 }
 /*
- * Combined brand lockup — the glyph + "Open Design" wordmark as a single
+ * Combined brand lockup — the glyph + "OpenDesign" wordmark as a single
  * SVG (`/logo-lockup.svg`, viewBox 225×83). Sized by height so the glyph
  * keeps roughly its previous 44px optical weight while the wordmark sets
  * its own width. Replaces the old `.brand-mark` glyph + `.brand-name`
@@ -917,7 +910,7 @@ body::before {
  * hides the frost behind itself, so the bar still reads as a clean bar.
  * Desktop only: the mobile nav is a vertical drawer, not a hover panel.
  */
-@media (min-width: 1081px) {
+@media (min-width: 1367px) {
   .site-chrome::after {
     content: '';
     position: absolute;
@@ -1016,7 +1009,34 @@ body::before {
   display: flex;
   gap: 0;
   min-width: 0;
-  max-width: min(94vw, 640px);
+  /* Five columns since the 2026-08 nav consolidation (Plugin + the three
+     former Solution groups + Agent). Anchored at `left: -16px` the wide
+     panel runs off the right viewport edge, so the li goes static and the
+     panel centers against `.container` (the nearest positioned ancestor —
+     NOT `.site-chrome`/the viewport). The mobile drawer resets
+     left/transform via its `position: static` rule. */
+  max-width: min(94vw, 1000px);
+}
+/* Desktop only: the mobile drawer flattens dropdowns to `position: static`,
+   where a centering transform would shift them sideways. The Product li goes
+   static so the wide panel positions against `.container` and centers on it —
+   anchored to the li it overflows narrow desktops. */
+@media (min-width: 1367px) {
+  .nav-links li.nav-item-mega { position: static; }
+  /* With the li static, absolutely-positioned descendants resolve against
+     `.container` (the nearest positioned ancestor), so the shared
+     `left: 100%` hover-bridge ::after would land at the container's right
+     edge — a stray hit target nowhere near the trigger. Drop it here; the
+     full-width mega panel itself bridges the hover. */
+  .nav-links li.nav-item-mega::after { content: none; }
+  .nav-dropdown-mega {
+    left: 50%;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  .nav-links li.has-dropdown:hover .nav-dropdown-mega,
+  .nav-links li.has-dropdown:focus-within .nav-dropdown-mega {
+    transform: translateX(-50%) translateY(0);
+  }
 }
 .nav-dropdown-mega .nav-mega-col {
   display: flex;
@@ -1024,6 +1044,31 @@ body::before {
   flex: 0 0 auto;
   min-width: 216px;
 }
+.nav-dropdown-mega .nav-mega-col-merged { min-width: 164px; }
+
+/* GitHub star chip beside the Download CTA (2026-08 nav consolidation):
+   quiet outline pill so Download stays the bar's only strong CTA. Narrow
+   viewports drop the chip first — Download always survives. */
+.nav-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #595959;
+  border: 1px solid #15140f24;
+  border-radius: 999px;
+  padding: 7px 13px;
+  margin-right: 10px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.nav-star:hover { color: var(--ink); border-color: #15140f4d; }
+@media (max-width: 1160px) {
+  .nav-star { display: none; }
+}
+
 .nav-dropdown-mega .nav-mega-col + .nav-mega-col {
   margin-left: 6px;
   padding-left: 6px;
@@ -1056,6 +1101,18 @@ a.nav-mega-col-head.is-active {
   background: transparent;
   color: var(--ink);
 }
+/* Red "new" dot — marks the currently promoted entry in the mega panel
+   (DeepSeek Harness, 2026-08). Sits superscript-ish next to the name. */
+.nav-new-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: #f53f3f;
+  vertical-align: middle;
+}
 /* A long column (Agent: 21 rows) caps its own height and scrolls so the
    panel never runs off short viewports; shorter columns stay static. */
 .nav-dropdown-mega .nav-mega-list-scroll {
@@ -1064,7 +1121,7 @@ a.nav-mega-col-head.is-active {
 }
 
 /*
- * Hamburger toggle. Hidden at desktop widths (≥1080px). At narrower
+ * Hamburger toggle. Hidden at desktop widths (≥1367px). At narrower
  * viewports it replaces the inline nav-links and toggles a panel
  * underneath the header bar via a small handler in `header-enhancer`.
  */
@@ -1131,6 +1188,162 @@ a.nav-mega-col-head.is-active {
   top: calc(100% + var(--nav-flyout-gap, 12px));
   right: 0;
 }
+/* Icon-only social cluster (community + X) in the action area. */
+.nav-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+/* Phones: the bar keeps brand + hamburger + Download only. The secondary
+   icon cluster (community / X / language) would otherwise squeeze the
+   shrinkable brand to 0px at 320–375px; community lives in the hero button
+   and the footer, and the language switcher lives in the footer. */
+@media (max-width: 640px) {
+  .nav-inner { gap: 10px; }
+  .nav-inner > .brand { flex: 0 0 auto; min-width: 0; }
+  .brand-logo,
+  .site-chrome.is-condensed .brand-logo { height: 32px; }
+  .nav-side { gap: 10px; }
+  .nav-side .nav-social { display: none; }
+  .nav-cta.ghost { padding: 9px 14px; font-size: 13px; }
+}
+
+.nav-social-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.nav-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--ink-mute, #8c8c8c);
+  transition: color 160ms ease, transform 160ms ease;
+}
+.nav-social-link:hover,
+.nav-social-item:focus-within .nav-social-link { color: var(--ink); transform: translateY(-1px); }
+.nav-social-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
+/* Brand marks sit monochrome at rest and light up in brand colour on
+   hover / focus (Feishu via filter on the PNG, Discord via currentColor). */
+.nav-social-icon-feishu {
+  display: block;
+  width: 22px;
+  height: auto;
+  filter: grayscale(1) brightness(0.55) contrast(1.1);
+  opacity: 0.85;
+  transition: filter 160ms ease, opacity 160ms ease;
+}
+.nav-social-link:hover .nav-social-icon-feishu,
+.nav-social-item:focus-within .nav-social-icon-feishu {
+  filter: none;
+  opacity: 1;
+}
+.nav-social-link[data-community-platform='discord']:hover,
+.nav-social-item:focus-within .nav-social-link[data-community-platform='discord'] {
+  color: #5865f2;
+}
+/* Language switcher as a plain icon in the same cluster. */
+.nav-social .nav-locale-switch { display: inline-flex; align-items: center; }
+.nav-social .nav-locale-trigger {
+  padding: 0;
+  border: 0;
+  color: var(--ink-mute, #8c8c8c);
+  list-style: none;
+}
+.nav-social .nav-locale-trigger::-webkit-details-marker { display: none; }
+.nav-social .nav-locale-trigger .locale-trigger-icon { color: inherit; }
+.nav-social .nav-locale-trigger .locale-trigger-icon::before { font-size: 19px; }
+.nav-social .nav-locale-trigger:hover,
+.nav-social .nav-locale-switch[open] > .nav-locale-trigger,
+.nav-social .nav-locale-trigger:hover .locale-trigger-icon,
+.nav-social .nav-locale-switch[open] > .nav-locale-trigger .locale-trigger-icon { color: var(--ink); }
+.nav-social .locale-menu { top: calc(100% + 14px); right: 0; }
+
+/* "Credits inside" nudge: a small pulsing coral dot on the community icon. */
+.nav-social-badge {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--coral);
+  box-shadow: 0 0 0 2px #fff;
+  animation: nav-social-badge-pulse 2.2s ease-in-out infinite;
+}
+.nav-social-item .nav-social-link { position: relative; }
+@keyframes nav-social-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px #fff, 0 0 0 0 color-mix(in srgb, var(--coral) 55%, transparent); }
+  60% { box-shadow: 0 0 0 2px #fff, 0 0 0 6px transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .nav-social-badge { animation: none; } }
+/* Hover card copy: a bold title line ("Join Discord" / scan-to-join) and a
+   quiet one-line perk underneath with a single accent dot. */
+.nav-community-card-title {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.nav-community-card-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-mute, #8c8c8c);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.nav-community-perk-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--coral);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--coral) 22%, transparent);
+}
+/* Feishu group QR — hover / focus card under the icon. */
+.nav-community-qr-card {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 12px);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: max-content;
+  min-width: 168px;
+  max-width: 260px;
+  padding: 12px 16px 11px;
+  border: 1px solid rgba(26, 26, 26, 0.11);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(17, 17, 26, 0.1), 0 2px 5px rgba(17, 17, 26, 0.04);
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
+  pointer-events: none;
+}
+.nav-community-qr-card::before { content: ''; position: absolute; top: -14px; left: 0; right: 0; height: 14px; }
+.nav-community-entry:hover .nav-community-qr-card,
+.nav-community-entry:focus-within .nav-community-qr-card {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.nav-community-qr-img { display: block; width: 168px; height: 168px; margin-bottom: 6px; border-radius: 8px; }
 .nav-cta {
   display: inline-flex;
   align-items: center;
@@ -1400,7 +1613,7 @@ a.nav-mega-col-head.is-active {
   z-index: 1;
 }
 .hero-copy {
-  padding: calc(12vw - 12px) 0 4vh;
+  padding: max(48px, calc(12vw - 52px)) 0 4vh;
   display: flex;
   flex-direction: column;
   /* Centered hero — every first-screen module (eyebrow, manifesto, actions,
@@ -1469,6 +1682,55 @@ a.nav-mega-col-head.is-active {
   border: 1px solid var(--line);
   box-shadow: 0 30px 80px -40px rgba(38, 38, 38, 0.28);
 }
+/* First-screen video facade (YouTube, click-to-play). Same frame treatment
+   as the product shot it replaced; the iframe is injected on demand. */
+.hero-video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #0b0b0b;
+  box-shadow: 0 30px 80px -40px rgba(38, 38, 38, 0.28);
+  cursor: pointer;
+}
+.hero-video-poster {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 400ms ease;
+}
+.hero-video-frame:hover .hero-video-poster { transform: scale(1.015); }
+.hero-video-play {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  transition: transform 160ms ease, background 160ms ease;
+}
+.hero-video-play svg { margin-left: 3px; }
+.hero-video-frame:hover .hero-video-play { transform: scale(1.06); background: #fff; }
+.hero-video-play:focus-visible { outline: 2px solid var(--coral); outline-offset: 4px; }
+.hero-video-frame.is-playing .hero-video-poster,
+.hero-video-frame.is-playing .hero-video-play { display: none; }
+.hero-video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
 .hero-discord-pill {
   align-self: center;
   display: inline-flex;
@@ -1530,7 +1792,7 @@ a.nav-mega-col-head.is-active {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
   /* Shifted down 30px (top margin) to sit lower under the lead line. */
   margin: 30px auto 8px;
   /* Frame hugs the text: shrink-wrap to the widest line (brand vs tagline) plus
@@ -1573,19 +1835,22 @@ a.nav-mega-col-head.is-active {
   text-decoration: none;
 }
 .hero-title-position {
-  /* Canonical product category. It stays visible in every locale, but is a
-     supporting layer so the concrete task line remains the strongest claim. */
+  /* Headline: "The Vibe Design Workspace for your brand." One line on desktop
+     (fluid size keeps the longest locale on a single row); wraps only on phones. */
+  display: block;
   font-family: var(--sans);
-  font-weight: 700;
-  font-size: clamp(18px, 2.8vw, 27px);
+  font-weight: 800;
+  font-size: clamp(26px, 3.3vw, 50px);
   line-height: 1.08;
-  letter-spacing: -0.015em;
-  color: var(--ink-soft);
-  margin-top: 0.12em;
-  text-wrap: balance;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  white-space: nowrap;
   background: none;
   box-shadow: none;
   text-decoration: none;
+}
+@media (max-width: 640px) {
+  .hero-title-position { white-space: normal; text-wrap: balance; }
 }
 .hero-title-main {
   /* Localized task positioning: each active locale supplies two deliberate
@@ -1701,12 +1966,145 @@ a.nav-mega-col-head.is-active {
   .hero-download-attention::after { animation: none; }
 }
 .hero-actions {
+  /* Sits above the video frame below so the community QR hover-card is not
+     clipped by the next sibling's stacking context (data-reveal transforms). */
+  position: relative;
+  z-index: 40;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 14px;
   margin-top: 42px; /* skill --spacing-42 (was 90px) */
   margin-bottom: 0;
+}
+/* Community entry beside the hero download CTA — outlined pill, same 64px
+   height as .hm-dl. zh / zh-tw hover / focus reveals the Feishu group QR. */
+.hero-community {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.hero-community-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 18px;
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1), border-color 0.18s, background 0.18s, box-shadow 0.25s;
+}
+.hero-community-cta:hover,
+.hero-community:focus-within .hero-community-cta {
+  transform: translateY(-3px);
+  border-color: rgba(26, 26, 26, 0.38);
+  background: #fff;
+  box-shadow: 0 16px 30px -16px #26262666;
+}
+.hero-community-cta:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.hero-community-icon { width: 20px; height: 20px; flex: 0 0 20px; color: #3370ff; }
+.hero-community-icon path:first-child {
+  fill: color-mix(in srgb, currentColor 10%, transparent);
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.hero-community-icon path:last-child { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.hero-community-icon-feishu { width: 20px; height: auto; flex-basis: 20px; }
+.hero-community-perk {
+  margin-left: 2px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: #0d2601;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+/* Core-trait chips between the headline and the CTA row. */
+.hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--coral) 26%, #fff);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.hero-tags + .hero-actions { margin-top: 44px; }
+/* Hero CTA pair: one notch smaller than the default .hm-dl treatment. */
+.hero-actions .hm-dl-hero {
+  padding: 11px 24px 11px 11px;
+  font-size: 15px;
+  gap: 11px;
+}
+.hero-actions .hm-dl-hero .hm-di { width: 30px; height: 30px; font-size: 15px; }
+
+.hero-community-icon-discord path { fill: currentColor; stroke: none; }
+.hero-community-qr-card {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 12px);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 200px;
+  padding: 14px 14px 12px;
+  border: 1px solid rgba(26, 26, 26, 0.11);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(17, 17, 26, 0.1), 0 2px 5px rgba(17, 17, 26, 0.04);
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
+  pointer-events: none;
+}
+.hero-community-qr-card::before { content: ''; position: absolute; top: -14px; left: 0; right: 0; height: 14px; }
+.hero-community:hover .hero-community-qr-card,
+.hero-community:focus-within .hero-community-qr-card {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.hero-community-qr-img { display: block; width: 168px; height: 168px; border-radius: 8px; }
+@media (max-width: 640px) {
+  .hero-actions { flex-wrap: wrap; }
+  .hero-community-cta { height: 42px; padding: 0 14px; font-size: 13px; }
 }
 .hero-download-attention {
   position: relative;
@@ -2375,6 +2773,22 @@ section.tight { padding: 90px 0; }
   line-height: 1.5;
   font-weight: 500;
   color: var(--ink);
+}
+/* Panel 1 now shows the real product window (the former hero shot) instead of
+   the painted card, so the caption gets its own white card floated over the
+   bottom of the screenshot rather than sitting in a baked-in blank zone. */
+.about-panel-img-shot img { aspect-ratio: 2508 / 1450; }
+.about-panel-img-captioned.about-panel-img-shot .about-panel-caption {
+  top: auto;
+  bottom: 4.5%;
+  width: 78%;
+  padding: 2cqw 2.6cqw;
+  border-radius: 1.4cqw;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  font-size: 2.1cqw;
 }
 /* The 3rd panel (越用越懂你 / self-evolution) centers the caption in its image's
    white-card blank zone (above the divider + chips row baked into the art). */
@@ -3186,7 +3600,7 @@ section.tight { padding: 90px 0; }
  * bone/paper palette; no dark panels.
  */
 /* ---------- Labs product-window showcase ----------
- * The Open Design deck editor rendered as a static window, sitting on a
+ * The OpenDesign deck editor rendered as a static window, sitting on a
  * full-bleed canvas (`heroImage`). The mode Dock floats over the window's
  * lower edge and swaps the deck preview (`.la-slide img`). All chrome below
  * is purely presentational (SSR/no-JS). */
@@ -4323,7 +4737,7 @@ section.tight { padding: 90px 0; }
   font-family: var(--sans);
   /* Fluid within the 238px safe area: caps at 42px on wide desktop, scales down
      as the two-column copy track narrows so the headline fits without the
-     "Open Design" line wrapping awkwardly on small/medium screens. */
+     "OpenDesign" line wrapping awkwardly on small/medium screens. */
   font-size: clamp(26px, 3vw, 42px);
   font-weight: 700;
   letter-spacing: -0.022em;
@@ -4339,7 +4753,7 @@ section.tight { padding: 90px 0; }
   font-style: italic;
   font-weight: 500;
 }
-/* "正在一起构建 Open Design" stays on its own single line at every breakpoint
+/* "正在一起构建 OpenDesign" stays on its own single line at every breakpoint
    (the content-sized copy track guarantees room, so it no longer overflows). */
 .testimonial-copy h2 .testi-post { white-space: nowrap; }
 .author {
@@ -4723,7 +5137,7 @@ section.tight { padding: 90px 0; }
 .cta-dance.precise-bg-in::before {
   background-image: url('/cta-bg.webp?v=3');
 }
-/* Open Design Home window floating over the mural, centered in the lower half;
+/* OpenDesign Home window floating over the mural, centered in the lower half;
    its bottom is clipped by the block's overflow:hidden (matching the comp). */
 .cta-window {
   position: relative;
@@ -4897,7 +5311,7 @@ section.tight { padding: 90px 0; }
   letter-spacing: -0.022em;
   color: var(--ink);
   margin: 0 0 16px;
-  /* CJK titles ("Open Design 订阅") must wrap at the space, never inside the
+  /* CJK titles ("OpenDesign 订阅") must wrap at the space, never inside the
      CJK word; balance keeps the two lines visually even. */
   word-break: keep-all;
   text-wrap: balance;
@@ -5375,6 +5789,41 @@ footer .container {
   display: inline-flex;
 }
 .foot-social a:hover { color: var(--ink, #262626); }
+.foot-locale {
+  /* Right-aligned next to the social icons (pushes off the legal text). */
+  margin-left: auto;
+  margin-right: 12px;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-soft, #595959);
+}
+.foot-locale .foot-locale-trigger {
+  gap: 7px;
+  padding: 4px 0;
+  border-bottom: 0;
+  color: var(--ink-soft, #595959);
+}
+.foot-locale .locale-trigger-icon { color: var(--ink-mute, #8c8c8c); }
+.foot-locale .locale-trigger-icon::before { font-size: 16px; }
+.foot-locale-label { font-weight: 500; }
+.foot-locale .foot-locale-trigger:hover,
+.foot-locale[open] > .foot-locale-trigger,
+.foot-locale .foot-locale-trigger:hover .locale-trigger-icon,
+.foot-locale[open] > .foot-locale-trigger .locale-trigger-icon {
+  color: var(--ink, #262626);
+}
+/* Opens upward: the switcher sits at the bottom of the page. */
+.foot-locale .locale-menu {
+  top: auto;
+  bottom: calc(100% + 10px);
+  right: 0;
+  left: auto;
+  animation: none;
+}
+.foot-locale .locale-menu::before {
+  top: auto;
+  bottom: -12px;
+}
 
 /* Tablet: 7 columns get cramped — drop to a 4-wide grid. */
 @media (max-width: 1080px) {
@@ -5384,7 +5833,7 @@ footer .container {
 /* ---------- footer masthead ----------
  *
  * Masthead sign-off under the footer link columns: a container-filling
- * two-tone "Open Design." wordmark. One class contract shared by
+ * two-tone "OpenDesign." wordmark. One class contract shared by
  * `site-footer.astro` and the homepage footer in `page.tsx`.
  */
 .foot-masthead {
@@ -5395,7 +5844,7 @@ footer .container {
   font-weight: 800;
   /* Fills the 964px column at the 1440px design width and degrades fluidly.
      The lower bound follows the viewport (10.4vw) rather than a fixed 52px
-     floor: "Open Design." is ~5.75em wide here, so the old 52px floor rendered
+     floor: "OpenDesign." is ~5.75em wide here, so the old 52px floor rendered
      ~299px and overflowed the padded mobile footer box (100vw - 48px ≈ 272px on
      a 320px phone), where the page's global overflow-x:hidden clipped it.
      10.4vw always satisfies 10.4vw·5.75 ≤ 100vw-48, so the sign-off fits at
@@ -5508,6 +5957,7 @@ footer .container {
 /* ---------- responsive ----------
  *
  * Breakpoint ladder:
+ *   1366  — crowded translated headers use the compact hamburger drawer.
  *   1280  — desktop chrome shrinks (drop side rails, slimmer container).
  *   1200  — topbar mid label crowds first, hide it.
  *   1080  — small desktop / large laptop. Smaller hero/section heads.
@@ -5527,29 +5977,26 @@ footer .container {
 @media (max-width: 1200px) {
   .topbar-inner .mid { display: none; }
 }
-/* nav: between 1080 and 1180 the brand tail + nav links + 2 CTAs + dot
- * crowd the row. Drop the brand sub-meta first, then tighten link spacing,
- * so the Star CTA never has to compress. */
-@media (max-width: 1180px) {
+/* The full translated navigation plus community, locale, Star, and Download
+ * actions does not fit safely in the condensed 1280px capsule. Keep a compact
+ * row through 1366px and resume the complete desktop header at 1367px. */
+@media (max-width: 1366px) {
   .nav-inner { gap: 18px; }
   .brand-meta { display: none; }
-  /* Link gap for this band already comes from the 1081–1366px rule next to
-     the desktop grid layout (22px — translated labels need the tighter
-     spacing); restating a larger gap here would override it. */
 }
 
-/* nav: at ≤1080px there's no clean way to fit Product · Skills · Systems ·
+/* nav: at ≤1366px there's no clean way to fit Product · Skills · Systems ·
  * Templates · Craft · Blog · Contact + Download + Star + dot in one row,
  * so swap to a hamburger panel. Star CTA stays visible in the bar (it's
  * the social-proof CTA); Download moves into the panel. The Product
  * submenu flattens from a hover-popup to an always-expanded inline list,
  * since hover doesn't translate to touch.
  */
-@media (max-width: 1080px) {
+@media (max-width: 1366px) {
   .nav-toggle { display: inline-flex; }
   .brand { white-space: nowrap; }
-  /* Hide Download from the bar (Star stays). */
-  .nav-side .nav-cta.ghost { display: none; }
+  /* Download stays in the bar at every width (primary CTA); the drawer
+     only takes the nav links. */
   /* Collapse the nav <ul> into a panel that drops below the header bar.
    * The header is `position: sticky`, so absolute-positioning the panel
    * relative to the header element keeps it pinned correctly. */
@@ -5622,6 +6069,9 @@ footer .container {
     padding: 14px 0;
     font-size: 16px;
   }
+  /* The persistent community entry moves out of the fixed bar and into the
+     drawer. This keeps brand, hamburger, locale, and the remaining actions
+     within one compact row even with long Russian/Ukrainian labels. */
   .nav-links a .num {
     position: static;
     margin-left: 6px;
@@ -5814,11 +6264,10 @@ footer .container {
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
   .foot-bottom .right { flex-wrap: wrap; gap: 12px 20px; }
   /* nav — at ≤880px tighten padding; nav-links stay reachable through
-   * the hamburger panel introduced at ≤1080px. Brand meta and Download
+   * the hamburger panel introduced at ≤1366px. Brand meta and Download
    * stay hidden; Star CTA still pings in the bar. */
   .nav { padding: 16px 0; }
   .brand-meta { display: none; }
-  .nav-side .nav-cta.ghost { display: none; }
 }
 @media (max-width: 640px) {
   .topbar-inner { gap: 14px; }
@@ -6681,4 +7130,71 @@ footer .container {
   .plugin-detail__commands button {
     min-height: 44px;
   }
+}
+
+/* Black-pill download CTA. The hero variant breathes + sheens; every other
+   placement stays static (constant box-shadow animations are scroll-jank
+   fuel on this image-heavy page). */
+.hm-dl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 13px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 15px 30px 15px 15px;
+  font-family: var(--sans);
+  font-size: 17px;
+  font-weight: 750;
+  cursor: pointer;
+  overflow: hidden;
+  text-decoration: none;
+  box-shadow: 0 16px 30px -16px #26262680;
+  transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.25s;
+}
+.hm-dl .hm-di {
+  font-style: normal;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: #0d2601;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 17px;
+  flex: none;
+  transition: transform 0.18s;
+}
+.hm-dl:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 22px 40px -18px #26262699, 0 0 0 5px #63fe1338;
+}
+.hm-dl:hover .hm-di { transform: translateY(2px); }
+.hm-dl:active { transform: translateY(-1px) scale(0.99); }
+.hm-dl .hm-sheen { display: none; }
+.hm-dl-hero { animation: hm-dl-breathe 2.8s ease-in-out infinite; }
+.hm-dl-hero:hover { animation-play-state: paused; }
+.hm-dl-hero .hm-sheen {
+  display: block;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, #ffffff2e 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: hm-dl-sheen 4.2s ease-in-out infinite;
+}
+@keyframes hm-dl-sheen {
+  0%, 62% { transform: translateX(-120%); }
+  82%, 100% { transform: translateX(120%); }
+}
+@keyframes hm-dl-breathe {
+  50% { box-shadow: 0 16px 30px -16px #26262680, 0 0 0 7px #63fe1322; }
+}
+.hm-dl-s { padding: 11px 22px 11px 11px; font-size: 14px; }
+.hm-dl-s .hm-di { width: 28px; height: 28px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) {
+  .hm-dl-hero, .hm-dl-hero .hm-sheen { animation: none; }
 }

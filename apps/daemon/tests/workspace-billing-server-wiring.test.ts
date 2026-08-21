@@ -1,6 +1,6 @@
 import type { Server } from 'node:http';
 import { createServer } from 'node:http';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -29,6 +29,7 @@ const MANAGED_ENV = [
   'OD_RESOURCE_TRANSPORT',
   'OD_TEAM_PROJECTS_TRANSPORT',
   'OD_WORKSPACE_CONTEXT_SOURCE',
+  'OPEN_DESIGN_AMR_PROFILE',
   'VELA_API_URL',
   'VELA_BIN',
   'VELA_CONTROL_KEY',
@@ -75,13 +76,21 @@ describe('server workspace billing runtime wiring', () => {
     scratch = await mkdtemp(join(tmpdir(), 'od-personal-billing-wiring-'));
     const authorityUrl = await startAuthority();
     const velaBin = await writeVelaStub(scratch);
+    const dataDir = join(scratch, 'data');
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(join(dataDir, 'app-config.json'), JSON.stringify({
+      agentCliEnv: {
+        amr: { OPEN_DESIGN_AMR_PROFILE: 'test' },
+      },
+    }), 'utf8');
     setEnv({
       AMR_HOME: join(scratch, 'empty-amr-home'),
       OD_COLLAB_TRANSPORT: 'off',
-      OD_DATA_DIR: join(scratch, 'data'),
+      OD_DATA_DIR: dataDir,
       OD_RESOURCE_TRANSPORT: 'off',
       OD_TEAM_PROJECTS_TRANSPORT: 'off',
       OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
+      OPEN_DESIGN_AMR_PROFILE: 'prod',
       VELA_API_URL: authorityUrl,
       VELA_BIN: velaBin,
       VELA_CONTROL_KEY: 'billing-wiring-control-key',
@@ -92,6 +101,10 @@ describe('server workspace billing runtime wiring', () => {
     const serverModule = (await import('../src/server.js')) as unknown as {
       startServer(options: { port: number; returnServer: true }): Promise<StartedServer>;
     };
+    // RUNTIME_DATA_DIR is resolved during module startup. Later Vela commands
+    // must receive the selected settings explicitly instead of depending on
+    // the launcher-only OD_DATA_DIR environment variable.
+    delete process.env.OD_DATA_DIR;
     daemon = await serverModule.startServer({ port: 0, returnServer: true });
 
     const billingUrl =
@@ -128,6 +141,7 @@ describe('server workspace billing runtime wiring', () => {
       `billing workspace-snapshot --workspace-id ${PERSONAL.workspaceId}`,
     );
     expect(commandLog.match(/billing summary --format json/g)).toHaveLength(1);
+    expect(commandLog).toContain('profile=test billing workspace-snapshot');
   }, 60_000);
 });
 
@@ -176,8 +190,12 @@ async function writeVelaStub(root: string): Promise<string> {
     script,
     `import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
-appendFileSync(process.env.OD_TEST_VELA_LOG, args.join(' ') + '\\n');
+appendFileSync(process.env.OD_TEST_VELA_LOG, 'profile=' + (process.env.OPEN_DESIGN_AMR_PROFILE || '') + ' ' + args.join(' ') + '\\n');
 if (args[0] !== 'billing') process.exit(1);
+if (process.env.OPEN_DESIGN_AMR_PROFILE !== 'test' && args[1] === 'workspace-snapshot') {
+  process.stderr.write('API request failed with status 403: workspace_not_authorized\\n');
+  process.exit(1);
+}
 if (args[1] === 'summary') {
   process.stdout.write(JSON.stringify({
     membershipTier: 'free',

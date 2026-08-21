@@ -1,7 +1,7 @@
 /*
  * youtube-tutorials/lib — shared core for backfilling and the daily cron that
  * keeps `app/content/tutorials/*.md` in sync with the latest community YouTube
- * tutorials about Open Design.
+ * tutorials about OpenDesign.
  *
  * Two entry points consume this module:
  *   - backfill-tutorials.ts      one-off, reads pre-fetched yt-dlp JSON lines
@@ -180,16 +180,16 @@ function extractJson(text: string): unknown {
  * Relevance gate for the cron. YouTube search for "open design" surfaces many
  * lookalikes (OpenCode, OpenClaude, a separate "Open Codesign" repo, generic
  * AI-agent roundups). Returns true only when the video is specifically about
- * nexu-io's Open Design product.
+ * nexu-io's OpenDesign product.
  */
 export async function isAboutOpenDesign(video: VideoInput): Promise<boolean> {
   const system =
-    'You decide whether a YouTube video is specifically about the open-source product "Open Design" ' +
+    'You decide whether a YouTube video is specifically about the open-source product "OpenDesign" ' +
     'by nexu-io (github.com/nexu-io/open-design) — a self-evolving design agent that runs on coding ' +
     'agents (Claude Code, Codex, etc.) and is positioned as a free/open-source alternative to Claude Design. ' +
     'It has ~50k GitHub stars. Reject videos that are actually about different products that merely sound ' +
     'similar: "OpenCode", "OpenClaude", a smaller "Open Codesign" repo (a few thousand stars), Google Stitch, ' +
-    'Figma, or generic "AI agents / AI coding" roundups that do not focus on Open Design. ' +
+    'Figma, or generic "AI agents / AI coding" roundups that do not focus on OpenDesign. ' +
     'Reply with strict JSON: {"isOpenDesign": boolean, "reason": string}.';
   const user = JSON.stringify({
     title: video.title,
@@ -211,7 +211,7 @@ export interface CandidateScore {
   overall: number;
   /** Is it a complete, followable tutorial (5) vs a short/teaser/mention (0-1). */
   completeness: number; // 0-5
-  /** How precisely the video is about Open Design specifically. */
+  /** How precisely the video is about OpenDesign specifically. */
   relevance: number; // 0-5
   /** Audience reach tier derived from view count. */
   reach: number; // 0-5
@@ -223,7 +223,7 @@ export interface CandidateScore {
 
 /**
  * Suggested "add it" verdict: a candidate is worth recommending only when it is
- * an actual (at least partial) tutorial that is squarely about Open Design.
+ * an actual (at least partial) tutorial that is squarely about OpenDesign.
  * Filters out teasers/Shorts (low completeness) and passing mentions (low
  * relevance) regardless of view count. Reach never rescues a non-tutorial.
  */
@@ -249,22 +249,22 @@ const clamp05 = (n: unknown): number => {
 
 /**
  * Gate + score a candidate in a single LLM call. The model judges relevance
- * (is it Open Design) plus two 0-5 axes — completeness (is it a real, followable
- * tutorial) and relevance precision (how squarely it's about Open Design). The
+ * (is it OpenDesign) plus two 0-5 axes — completeness (is it a real, followable
+ * tutorial) and relevance precision (how squarely it's about OpenDesign). The
  * reach axis is computed from view count, not the model. The 0-100 overall is a
  * suggestion to help a maintainer prioritise; final say stays human.
  */
 export async function scoreCandidate(video: VideoInput): Promise<CandidateScore> {
   const system =
-    'You gate and score a YouTube video for the Open Design tutorials catalogue. ' +
-    'Open Design (github.com/nexu-io/open-design, ~50k stars) is an open-source self-evolving design ' +
+    'You gate and score a YouTube video for the OpenDesign tutorials catalogue. ' +
+    'OpenDesign (github.com/nexu-io/open-design, ~50k stars) is an open-source self-evolving design ' +
     'agent that runs on coding agents (Claude Code, Codex, etc.), positioned as a free/open-source ' +
     'alternative to Claude Design. Reject lookalikes that merely sound similar: OpenCode, OpenClaude, a ' +
     'smaller "Open Codesign" repo, Google Stitch, Figma, or generic AI-agent/AI-coding roundups not ' +
-    'focused on Open Design. Score two axes 0-5: ' +
+    'focused on OpenDesign. Score two axes 0-5: ' +
     '"completeness" = is this a complete, followable tutorial (5 = full step-by-step setup/walkthrough/demo; ' +
     '3 = partial or overview; 1 = short/teaser/Shorts/news mention; 0 = not instructional); ' +
-    '"relevance" = how squarely the video is specifically about Open Design (5 = dedicated to it; ' +
+    '"relevance" = how squarely the video is specifically about OpenDesign (5 = dedicated to it; ' +
     '3 = significant segment; 1 = passing mention). ' +
     'Reply with STRICT JSON: {"isOpenDesign": boolean, "completeness": 0-5, "relevance": 0-5, "reason": string (<=120 chars)}.';
   const user = JSON.stringify({
@@ -330,8 +330,8 @@ export function extractYouTubeId(text: string): string | null {
  */
 export async function generateCopy(video: VideoInput): Promise<GeneratedCopy> {
   const system =
-    'You write catalogue entries for the Open Design tutorials page (open-design.ai/tutorials). ' +
-    'Open Design is an open-source self-evolving design agent by nexu-io. Each entry describes one ' +
+    'You write catalogue entries for the OpenDesign tutorials page (open-design.ai/tutorials). ' +
+    'OpenDesign is an open-source self-evolving design agent by nexu-io. Each entry describes one ' +
     'community YouTube video. Match this editorial voice: factual, concise, no hype, no first/second ' +
     'person, no "in this video". Write the summary and body in the SAME language as the video title ' +
     '(English title -> English; Chinese -> Chinese; Portuguese -> Portuguese; etc.). ' +

@@ -1,19 +1,19 @@
 ---
 name: open-design-homepage
-title: Open Design Homepage
+title: OpenDesign Homepage
 description: A pixel-faithful, self-contained mirror of the live open-design.ai homepage — an interactive React Three Fiber / Next.js hero with a real-time 3D wordmark, sticker collage, variable fonts, and scroll-driven motion. First-party showcase of the visual ceiling for interactive web marketing surfaces.
 license: MIT
 ---
 
-# Open Design Homepage
+# OpenDesign Homepage
 
 A first-party **showcase** template that mirrors the live [open-design.ai](https://open-design.ai) homepage, captured as a fully self-contained bundle that renders in the sandboxed preview.
 
-It is here to demonstrate the **visual ceiling** Open Design targets for interactive, WebGL-grade marketing surfaces on the web — not a fill-in-the-blank generator. Treat it as a reference build to study and adapt.
+It is here to demonstrate the **visual ceiling** OpenDesign targets for interactive, WebGL-grade marketing surfaces on the web — not a fill-in-the-blank generator. Treat it as a reference build to study and adapt.
 
 ## What it is
 
-- **Interactive 3D hero** — a real-time `Open Design` script wordmark rendered with **React Three Fiber / Three.js**, plus a cursor-reactive parallax layer and a floating sticker collage.
+- **Interactive 3D hero** — a real-time `OpenDesign` script wordmark rendered with **React Three Fiber / Three.js**, plus a cursor-reactive parallax layer and a floating sticker collage.
 - **Scroll-driven narrative** — the work grid, capabilities copy, and decorative stickers animate as the page scrolls.
 - **Craft details** — custom variable fonts (TikTok Sans, Geist Mono, Departure Mono), a light/dark theme toggle, an optional ambient soundtrack, and a live clock / cursor-coordinate HUD.
 

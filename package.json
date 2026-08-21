@@ -1,6 +1,6 @@
 {
   "name": "open-design",
-  "version": "0.19.2",
+  "version": "0.20.3",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
@@ -65,6 +65,7 @@
       "electron",
       "electron-winstaller",
       "esbuild",
+      "onnxruntime-node",
       "protobufjs",
       "sharp"
     ]

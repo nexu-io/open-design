@@ -35,6 +35,7 @@ function buildDeps(input: {
   insertProject?: ReturnType<typeof vi.fn>;
   insertConversation?: ReturnType<typeof vi.fn>;
   fetchProjectCreationWorkspaceDirectory?: ReturnType<typeof vi.fn>;
+  authorizeProjectRequest?: ReturnType<typeof vi.fn>;
 } = {}) {
   const binding = {
     projectId: PROJECT_ID,
@@ -110,7 +111,7 @@ function buildDeps(input: {
         ?? vi.fn(async (id) => ({ ok: true, id })),
     },
     collabSync: functionProxy(),
-    authorizeProjectRequest: async () => true,
+    authorizeProjectRequest: input.authorizeProjectRequest ?? vi.fn(async () => true),
     verifyWorkspaceRequestAuthority: async () => ({
       ok: true,
       context: workspaceContextFromDirectoryItem({
@@ -173,6 +174,48 @@ function headers() {
 }
 
 describe('project resource selection uses the persisted exact member', () => {
+  it('routes project mutations through the central project authority gate', async () => {
+    const updateProject = vi.fn();
+    const authorizeProjectRequest = vi.fn(async (
+      _req: express.Request,
+      res: express.Response,
+      _projectId: string,
+      options: { mode: string; capability?: string },
+    ) => {
+      if (options.mode === 'write') {
+        res.status(409).json({
+          error: {
+            code: 'PROJECT_MATERIALIZATION_PENDING',
+            message: 'project content is still materializing',
+          },
+        });
+        return false;
+      }
+      return true;
+    });
+    const deps = buildDeps({ authorizeProjectRequest });
+    deps.projectStore.updateProject = updateProject;
+    const baseUrl = await start(deps);
+
+    const response = await fetch(`${baseUrl}/api/projects/${PROJECT_ID}`, {
+      method: 'PATCH',
+      headers: headers(),
+      body: JSON.stringify({ name: 'Must not land' }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'PROJECT_MATERIALIZATION_PENDING' },
+    });
+    expect(authorizeProjectRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      PROJECT_ID,
+      { mode: 'write', capability: 'rename' },
+    );
+    expect(updateProject).not.toHaveBeenCalled();
+  });
+
   it('creates a local-only project without fetching Workspace authority', async () => {
     const fetchProjectCreationWorkspaceDirectory = vi.fn(async () => ({
       ok: false,

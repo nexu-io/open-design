@@ -130,7 +130,7 @@ Every external project this spec leans on. Three questions per entry: what is it
 - **What we don't:**
   - Treating one upstream list as the current catalogue boundary. The bundled
     catalogue now contains 151 packages drawn from multiple attributed sources
-    and Open Design-authored systems.
+    and OpenDesign-authored systems.
   - Their Discord / community layer — not our product.
 
 ### [guizang-ppt-skill][guizang] (op7418)
@@ -140,7 +140,7 @@ Every external project this spec leans on. Three questions per entry: what is it
 - **What it is:** A Claude Code skill producing magazine-style, horizontal-swipe web decks. Structure: `SKILL.md` + `assets/template.html` + `references/{components,layouts,themes,checklist}.md`. 6-step workflow. Single-file HTML output with embedded CSS/WebGL. Keyboard/scroll/touch navigation.
 - **Why it matters:** Reference implementation of a high-quality Claude skill and the source of our bundled guizang deck template.
 - **What we borrow:**
-  - The workflow and assets are bundled under [`design-templates/guizang-ppt/`](../design-templates/guizang-ppt/) with the upstream license preserved and Open Design metadata/file-handoff integration applied.
+  - The workflow and assets are bundled under [`design-templates/guizang-ppt/`](../design-templates/guizang-ppt/) with the upstream license preserved and OpenDesign metadata/file-handoff integration applied.
   - Skill directory convention (`assets/` + `references/` + `SKILL.md`) as the pattern we document for skill authors.
   - The "6-step workflow + quality-checklist rubric" pattern for authoring new skills.
 - **What we don't:** We do not require the retired `od skill add` flow; the rendering template ships in the catalogue and can still be consumed as a portable `SKILL.md` bundle.
@@ -152,7 +152,7 @@ Every external project this spec leans on. Three questions per entry: what is it
 | Project | Relevance |
 |---|---|
 | [Claude Code skills docs](https://docs.anthropic.com/) | Source of the `SKILL.md` format we adopt |
-| [Cursor rules](https://docs.cursor.com/) | Historical format inspiration only; the current Cursor Agent adapter receives Open Design's composed prompt over stdin and uses the same CWD-local resource staging as other runtimes |
+| [Cursor rules](https://docs.cursor.com/) | Historical format inspiration only; the current Cursor Agent adapter receives OpenDesign's composed prompt over stdin and uses the same CWD-local resource staging as other runtimes |
 | [Reveal.js](https://revealjs.com/) / [Marp](https://marp.app/) | Reference for deck HTML navigation patterns |
 | [Shadcn/ui](https://ui.shadcn.com/) | Component and registry reference; the product shell now uses repository-owned primitives from `@open-design/components` |
 | [Vercel AI SDK](https://sdk.vercel.ai/) | Historical API-fallback exploration; current BYOK providers run through the OpenCode adapter rather than a direct SDK adapter |
@@ -184,7 +184,7 @@ The two empty-column crossings where OD lights up and others don't: **Vercel-dep
 
 ## What we explicitly don't borrow (and why)
 
-- **Electron as a separate product architecture.** Open Design now ships thin
+- **Electron as a separate product architecture.** OpenDesign now ships thin
   desktop and packaged Electron hosts, including signing/update work, but the
   product UI remains the same Next.js web app and daemon rather than a second
   desktop-only implementation.

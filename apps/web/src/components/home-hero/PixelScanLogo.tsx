@@ -13,7 +13,7 @@ interface Props {
 // word drawn statically. A ResizeObserver keeps the canvas in sync as the hero
 // column reflows. The engine listens on the HOST (the canvas itself is
 // pointer-events:none via .home-hero__logo--tiles > canvas).
-export function PixelScanLogo({ className, label = 'Open Design' }: Props) {
+export function PixelScanLogo({ className, label = 'OpenDesign' }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 

@@ -31,7 +31,7 @@ interface Props {
   reason: 'insufficient' | 'signed_out';
   /** Raw wallet balance string from the blocking snapshot; null hides the badge. */
   balanceUsd: string | null;
-  /** Open Design Cloud profile from the blocking snapshot; picks the console origin. */
+  /** OpenDesign Cloud profile from the blocking snapshot; picks the console origin. */
   profile: string | null;
   /** Which surface blocked the send — keys the amr_entry attribution. */
   entrySource: 'home_balance_gate_upgrade' | 'chat_balance_gate_upgrade';
@@ -44,7 +44,7 @@ interface Props {
   onResolved: () => void;
 }
 
-// HARD pre-run blocker for Open Design Cloud tasks: the run cannot possibly
+// HARD pre-run blocker for OpenDesign Cloud tasks: the run cannot possibly
 // succeed, so the send is stopped BEFORE any run spawns — unlike the
 // post-failure AMR_INSUFFICIENT_BALANCE error card which appears after a run
 // already burned its startup. It fires at the moment of PEAK intent — the
@@ -57,7 +57,7 @@ interface Props {
 //     `billing=checkout` deep link, which auto-opens the checkout dialog on
 //     arrival. Balance badge shown.
 //
-//   signed_out — Open Design Cloud selected but no account session. The CTA
+//   signed_out — OpenDesign Cloud selected but no account session. The CTA
 //     is the in-app sign-in (AmrLoginPill: spawns vela login, surfaces the
 //     activation link when the browser doesn't auto-open, polls until done);
 //     sending the user to the wallet website would be a dead end.
@@ -95,18 +95,8 @@ export function AmrBalanceDialog({
   // resume the parked task via onResolved. Bounded so an abandoned recharge
   // doesn't poll forever; guarded against double-fires.
   const [watchingWallet, setWatchingWallet] = useState(false);
-  // Where 「升级套餐」 goes. `workspaceUpgradeUrl` is the one decision point for
-  // every upgrade affordance: personal workspace → B's personal plan modal
-  // (`billing=plan`); team → `billing=checkout` vs `billing=plan` by whether
-  // the team ever completed a first checkout. Getting the personal branch wrong
-  // opened an error-state dialog: routing a personal workspace onto the team
-  // `billing=checkout` deep link opened the Upgrade-to-Team dialog with "Team
-  // plan unavailable" / a 3-seat minimum (recvpYEiH019cD, failed acceptance
-  // round). B now resolves `billing=plan` against the workspace's own state, so
-  // the team branch's guess is a hint rather than a requirement. The profile
-  // fallback keeps the CTA alive after a signed-out/no-context read (but not
-  // while that read is pending) — same `billing=plan` deep link every other
-  // Upgrade affordance uses (ChatPane, AvatarMenu, InlineModelSwitcher).
+  // `workspaceUpgradeUrl` keeps every generic upgrade affordance on the public
+  // Pricing comparison surface. A concrete card there owns the Cloud handoff.
   const {
     context: workspaceContext,
     loading: workspaceContextLoading,
@@ -151,7 +141,7 @@ export function AmrBalanceDialog({
   const openUpgrade = () => {
     if (!upgradeUrl) return;
     setWatchingWallet(true);
-    // Same attribution handshake as the other Open Design Cloud handoffs
+    // Same attribution handshake as the other OpenDesign Cloud handoffs
     // (ChatPane recharge, AvatarMenu upgrade): record the amr_entry, forward
     // the consent-gated device id, and open the console for the profile.
     const attribution = recordAmrEntry(analytics.track, entrySource, new Date(), {

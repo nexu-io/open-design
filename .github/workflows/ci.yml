@@ -59,49 +59,60 @@ jobs:
               || vars.OD_CI_RUNNER_MODE }}
         run: python3 .github/scripts/runners.py
 
-  scopes:
-    name: Detect validation scopes
+  plan:
+    name: Plan validation workloads
     needs: [runners]
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     outputs:
-      ci_mode: ${{ steps.detect.outputs.ci_mode }}
-      daemon_tests_required: ${{ steps.detect.outputs.daemon_tests_required }}
-      web_tests_required: ${{ steps.detect.outputs.web_tests_required }}
-      tools_dev_tests_required: ${{ steps.detect.outputs.tools_dev_tests_required }}
-      tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
-      ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}
-      visual_validation_required: ${{ steps.detect.outputs.visual_validation_required }}
-      workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
-      run_e2e_vitest: ${{ steps.detect.outputs.run_e2e_vitest }}
-      run_playwright_critical: ${{ steps.detect.outputs.run_playwright_critical }}
-      run_playwright_visual: ${{ steps.detect.outputs.run_playwright_visual }}
-      run_preflight: ${{ steps.detect.outputs.run_preflight }}
-      run_preflight_typecheck: ${{ steps.detect.outputs.run_preflight_typecheck }}
-      run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}
-      run_web_workspace_tests: ${{ steps.detect.outputs.run_web_workspace_tests }}
-      run_windows_tools_pack_payload_tests: ${{ steps.detect.outputs.run_windows_tools_pack_payload_tests }}
-      run_workspace_unit_tests: ${{ steps.detect.outputs.run_workspace_unit_tests }}
-      ui_p0_matrix: ${{ steps.detect.outputs.ui_p0_matrix }}
-      visual_matrix: ${{ steps.detect.outputs.visual_matrix }}
+      run: ${{ steps.hash.outputs.run }}
+      equal: ${{ steps.hash.outputs.equal }}
+      scopes: ${{ steps.scopes.outputs.scopes }}
+      ui_p0_matrix: ${{ steps.scopes.outputs.ui_p0_matrix }}
+      visual_matrix: ${{ steps.scopes.outputs.visual_matrix }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: package.json
-
-      - name: Detect workspace and app test scopes
-        id: detect
+      - name: Resolve validation scopes
+        id: scopes
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node --experimental-strip-types scripts/scopes.ts github-output
+        run: python3 .github/scripts/scopes.py github-output --output "$RUNNER_TEMP/scope-plan.json"
+
+      - name: Restore previous hash map
+        id: hash_cache
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/hash-state.json
+          key: ci-hash-${{ runner.os }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ci-hash-${{ runner.os }}-${{ github.ref }}-
+
+      - name: Compare and replace hash map
+        id: hash
+        run: >-
+          python3 .github/scripts/hash.py github-output
+          --workflow ci
+          --scope-plan "$RUNNER_TEMP/scope-plan.json"
+          --state "$RUNNER_TEMP/hash-state.json"
+
+      # Carry the freshly computed comparison register to the gate without
+      # publishing it as reusable cache state. A failed gate must leave the
+      # previously successful map in place so an identical retry runs again.
+      - name: Upload pending hash map
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-hash-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/hash-state.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Create visual report handoff
         id: visual_report_handoff
-        if: ${{ github.event_name == 'pull_request' && steps.detect.outputs.run_playwright_visual == 'true' }}
+        if: ${{ github.event_name == 'pull_request' && fromJSON(steps.hash.outputs.run).playwright_visual }}
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -145,7 +156,8 @@ jobs:
 
   static_gate:
     name: Static gate
-    needs: [runners]
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).static_gate }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 10
     env:
@@ -236,8 +248,8 @@ jobs:
 
   preflight:
     name: Preflight
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_preflight == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).preflight }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 45
 
@@ -269,14 +281,14 @@ jobs:
       # If postinstall grows a targeted app type-generation phase covering these
       # three exports without broad app builds, this CI prebuild can be removed.
       - name: Prebuild workspace type declarations
-        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
+        if: ${{ fromJSON(needs.plan.outputs.scopes).run_preflight_typecheck }}
         run: |
           pnpm --filter @open-design/daemon build
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Typecheck workspaces
-        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
+        if: ${{ fromJSON(needs.plan.outputs.scopes).run_preflight_typecheck }}
         run: |
           pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
@@ -289,8 +301,8 @@ jobs:
 
   workspace_unit_tests:
     name: Workspace unit tests
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_workspace_unit_tests == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).workspace_unit_tests }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
     timeout-minutes: 20
 
@@ -313,15 +325,15 @@ jobs:
           pnpm --filter @open-design/platform test
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
-          if [ "${{ needs.scopes.outputs.tools_dev_tests_required }}" = "true" ]; then
+          if [ "${{ fromJSON(needs.plan.outputs.scopes).tools_dev_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-dev test
           fi
-          if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+          if [ "${{ fromJSON(needs.plan.outputs.scopes).tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/desktop build
             pnpm --filter @open-design/desktop test
             pnpm --filter @open-design/packaged test
             pnpm --filter @open-design/tools-pack test
-            if [ "${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
+            if [ "${{ fromJSON(needs.plan.outputs.run).e2e_vitest }}" != "true" ]; then
               pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
             fi
           fi
@@ -329,8 +341,8 @@ jobs:
 
   daemon_unit_tests:
     name: Daemon tests (${{ matrix.shard }}/4)
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).daemon_unit_tests }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
     timeout-minutes: 15
     strategy:
@@ -357,8 +369,8 @@ jobs:
 
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).windows_tools_pack_payload_tests }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).windows_tools }}
     timeout-minutes: 20
 
@@ -372,12 +384,12 @@ jobs:
           runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).windows_tools) }}
 
       - name: Windows launcher payload archive tests
-        run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
+        run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher/windows/payload.test.ts
 
   web_workspace_tests:
     name: Web workspace tests (${{ matrix.shard }}/2)
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).web_workspace_tests }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
     strategy:
@@ -405,8 +417,8 @@ jobs:
 
   e2e_vitest:
     name: E2E Vitest
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_e2e_vitest == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).e2e_vitest }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
 
@@ -440,8 +452,8 @@ jobs:
 
   playwright_critical:
     name: Playwright critical (${{ matrix.group }})
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_playwright_critical == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).playwright_critical }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 30
     strategy:
@@ -488,14 +500,14 @@ jobs:
 
   ui_p0:
     name: UI P0 (${{ matrix.name }})
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).ui_p0 }}
     runs-on: ${{ matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0 }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}
+        include: ${{ fromJSON(needs.plan.outputs.ui_p0_matrix) }}
 
     steps:
       - name: Checkout
@@ -560,14 +572,14 @@ jobs:
 
   playwright_visual:
     name: Playwright visual (${{ matrix.name }})
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_playwright_visual == 'true' }}
+    needs: [plan, runners]
+    if: ${{ fromJSON(needs.plan.outputs.run).playwright_visual }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).visual_hot }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.scopes.outputs.visual_matrix) }}
+        include: ${{ fromJSON(needs.plan.outputs.visual_matrix) }}
 
     steps:
       - name: Checkout
@@ -649,77 +661,29 @@ jobs:
         if: ${{ steps.visual.outcome != 'success' }}
         run: exit 1
 
-  validate:
-    name: Validate workspace
-    needs:
-      - scopes
-      - runners
-      - static_gate
-      - preflight
-      - workspace_unit_tests
-      - daemon_unit_tests
-      - windows_tools_pack_payload_tests
-      - web_workspace_tests
-      - e2e_vitest
-      - playwright_critical
-      - ui_p0
-      - playwright_visual
-    if: ${{ always() }}
+  # This policy is a sibling of the validation workloads, not their prerequisite.
+  # Labeled merge groups still receive the same workload coverage before the
+  # required Validate workspace check rejects the converged result.
+  merge_policy:
+    name: Merge policy
+    needs: [plan, runners]
+    if: ${{ github.event_name == 'merge_group' }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 5
+    # Tells the generic merge-queue failure notice in `validate` whether this job already
+    # announced the ejection, so a label-only ejection gets exactly one comment.
+    outputs:
+      ejection_notice: ${{ steps.merge_blocking_label_gate.outputs.comment_created }}
 
     steps:
-      # The merge-blocking label gate below produces a `handoff/comment` artifact when it ejects a
+      # The merge-blocking label gate produces a `handoff/comment` artifact when it ejects a
       # queued PR, and that production goes through `.github/scripts/handoff.py` (the only
-      # sanctioned source of handoff names and layout). Only the merge_group context can eject,
-      # so pull_request runs skip the checkout entirely.
+      # sanctioned source of handoff names and layout).
       - name: Checkout handoff helper
-        if: ${{ github.event_name == 'merge_group' }}
         uses: actions/checkout@v6.0.2
         with:
           sparse-checkout: .github
           sparse-checkout-cone-mode: true
-
-      - name: Check workspace validation jobs
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        run: |
-          set -euo pipefail
-          echo "$NEEDS_JSON" | jq .
-          failures="$(echo "$NEEDS_JSON" | jq -r '
-            to_entries[]
-            | select(.value.result != "success" and .value.result != "skipped")
-            | "\(.key)=\(.value.result)"')"
-          if [ -n "$failures" ]; then
-            echo "Workspace validation failed:"
-            echo "$failures"
-            exit 1
-          fi
-
-          required_misses="$(echo "$NEEDS_JSON" | jq -r '
-            . as $needs |
-            ($needs.scopes.outputs // {}) as $out |
-            def when($condition; $jobs): if $condition then $jobs else [] end;
-            (
-              ["scopes", "static_gate"]
-              + when($out.run_preflight == "true"; ["preflight"])
-              + when($out.run_workspace_unit_tests == "true"; ["workspace_unit_tests"])
-              + when($out.daemon_tests_required == "true"; ["daemon_unit_tests"])
-              + when($out.run_windows_tools_pack_payload_tests == "true"; ["windows_tools_pack_payload_tests"])
-              + when($out.run_web_workspace_tests == "true"; ["web_workspace_tests"])
-              + when($out.run_e2e_vitest == "true"; ["e2e_vitest"])
-              + when($out.run_playwright_critical == "true"; ["playwright_critical"])
-              + when($out.run_ui_p0 == "true"; ["ui_p0"])
-              + when($out.run_playwright_visual == "true"; ["playwright_visual"])
-            )[]
-            | select(($needs[.].result // "missing") != "success")
-            | "\(.)=\($needs[.].result // "missing")"
-          ')"
-          if [ -n "$required_misses" ]; then
-            echo "Required validation jobs did not succeed:"
-            echo "$required_misses"
-            exit 1
-          fi
 
       - name: Block merge while a merge-blocking label is present
         id: merge_blocking_label_gate
@@ -891,6 +855,258 @@ jobs:
         with:
           name: ${{ steps.merge_blocking_label_gate.outputs.comment_name }}
           path: ${{ steps.merge_blocking_label_gate.outputs.comment_path }}
+
+  validate:
+    name: Validate workspace
+    needs:
+      - plan
+      - runners
+      - merge_policy
+      - static_gate
+      - preflight
+      - workspace_unit_tests
+      - daemon_unit_tests
+      - windows_tools_pack_payload_tests
+      - web_workspace_tests
+      - e2e_vitest
+      - playwright_critical
+      - ui_p0
+      - playwright_visual
+    if: ${{ always() }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Check workspace validation jobs
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS_JSON" | jq .
+          failures="$(echo "$NEEDS_JSON" | jq -r '
+            to_entries[]
+            | select(.value.result != "success" and .value.result != "skipped")
+            | "\(.key)=\(.value.result)"')"
+          if [ -n "$failures" ]; then
+            echo "Workspace validation failed:"
+            echo "$failures"
+            exit 1
+          fi
+
+          required_misses="$(echo "$NEEDS_JSON" | jq -r '
+            . as $needs |
+            (($needs.plan.outputs.run // "{}") | fromjson) as $run |
+            (
+              ["plan"]
+              + [$run | to_entries[] | select(.value) | .key]
+            )[]
+            | select(($needs[.].result // "missing") != "success")
+            | "\(.)=\($needs[.].result // "missing")"
+          ')"
+          if [ -n "$required_misses" ]; then
+            echo "Required validation jobs did not succeed:"
+            echo "$required_misses"
+            exit 1
+          fi
+
+      - name: Download pending hash map
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: ci-hash-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}
+
+      # Publish only after every merge-gating step has passed. The cache still
+      # contains only the identity-to-hash comparison register; successful gate
+      # completion controls publication rather than becoming cache payload.
+      - name: Save successful hash map
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/hash-state.json
+          key: ci-hash-${{ runner.os }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # A failed workload ejects the queued PR just as invisibly as a blocking label does: this
+      # required check fails on the queue's transient ref, the PR's own checks stay green, and
+      # its queue entry silently disappears. The merge-blocking label gate announces its own
+      # ejections; this step announces every other one (failed or cancelled workloads, a
+      # fail-closed policy error) so the author learns which jobs failed and where to look.
+      # Best-effort by construction: it only runs after the gate has already failed and can
+      # never soften, mask, or retry that result.
+      - name: Checkout handoff helper
+        if: ${{ failure() && github.event_name == 'merge_group' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          sparse-checkout: .github
+          sparse-checkout-cone-mode: true
+
+      - name: Produce merge-queue failure notice handoff
+        id: merge_queue_failure_notice
+        if: ${{ failure() && github.event_name == 'merge_group' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          # The queue names the PR that heads this group in its temporary ref
+          # (`gh-readonly-queue/<base>/pr-<N>-<base sha>`); that PR owns this run's result.
+          MERGE_GROUP_REF: ${{ github.event.merge_group.head_ref }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          # `true` when the merge-blocking label gate already produced its own ejection notice.
+          LABEL_NOTICE_EMITTED: ${{ needs.merge_policy.outputs.ejection_notice }}
+          # This job's own display name: it is still in progress while this step runs, but a
+          # replay of a completed run would otherwise list the gate itself as a failed job.
+          SELF_JOB_NAME: Validate workspace
+        run: |
+          set -euo pipefail
+
+          # Which jobs the gate just rejected. Mirrors its two scans: any non-success,
+          # non-skipped result plus any plan-required job that did not succeed. A broken plan
+          # output must not break the notice, so the required-job scan is fault tolerant here.
+          failed_jobs="$(jq -r '
+            . as $needs |
+            (try (($needs.plan.outputs.run // "{}") | fromjson) catch {}) as $run |
+            (
+              [ $needs | to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key ]
+              + [ (["plan"] + [$run | to_entries[] | select(.value) | .key])[]
+                  | select(($needs[.].result // "missing") != "success") ]
+            ) | unique[]' <<< "$NEEDS_JSON")"
+
+          pr="$(printf '%s\n' "$MERGE_GROUP_REF" | grep -oE 'pr-[0-9]+' | head -n 1 | grep -oE '[0-9]+' || true)"
+          if [ -z "$pr" ]; then
+            echo "::warning::merge_group ref '$MERGE_GROUP_REF' names no pull request; skipping the ejection notice."
+            exit 0
+          fi
+          pr_json="$(gh api "repos/$REPO/pulls/$pr")"
+          pr_head="$(jq -r '.head.sha' <<< "$pr_json")"
+          pr_base="$(jq -r '.base.sha' <<< "$pr_json")"
+
+          # A label ejection is already announced by the gate's own notice (and a PR that still
+          # carries a blocking label is about to get one). Drop the policy job from this notice
+          # so a label-only ejection gets exactly one comment; a workload that failed alongside
+          # the label is still reported.
+          label_covered=false
+          if [ "${LABEL_NOTICE_EMITTED:-}" = "true" ]; then
+            label_covered=true
+          elif jq -e '[.labels[]?.name] | any(. == "needs-validation" or . == "needs-maintainer-check")' <<< "$pr_json" >/dev/null; then
+            label_covered=true
+          fi
+          skip_job_name=""
+          if [ "$label_covered" = "true" ]; then
+            skip_job_name="Merge policy"
+            failed_jobs="$(printf '%s\n' "$failed_jobs" | grep -vx 'merge_policy' || true)"
+          fi
+          if [ -z "$failed_jobs" ]; then
+            echo "Only the merge-blocking label gate failed; its own notice covers this ejection."
+            exit 0
+          fi
+          echo "Failed validation jobs: $(printf '%s' "$failed_jobs" | tr '\n' ' ')"
+
+          # Job-level detail straight from the run: display names, the failing step, and a log
+          # link per failed job. Read-only and best-effort; the notice still ships without it.
+          jobs_json="$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" | jq -s '[.[].jobs[]]' || echo '[]')"
+          # Markdown code spans are intentionally literal in these single-quoted strings.
+          # shellcheck disable=SC2016
+          failed_lines="$(jq -r --arg skip "$skip_job_name" --arg self "$SELF_JOB_NAME" '
+            .[]
+            | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped" and .name != $skip and .name != $self)
+            | "- **\(.name)** — \(.conclusion)"
+              + ([.steps[]? | select(.conclusion == "failure") | .name] | if length > 0 then " at `" + join("`, `") + "`" else "" end)
+              + " ([job log](\(.html_url)))"' <<< "$jobs_json")"
+          if [ -z "$failed_lines" ]; then
+            # shellcheck disable=SC2016
+            failed_lines="$(printf '%s\n' "$failed_jobs" | sed -E 's/^/- `/; s/$/`/')"
+          fi
+
+          # Pull the failing assertions out of the job logs (vitest `FAIL` lines, Playwright
+          # `✘` lines, runner error annotations), capped so the comment stays readable.
+          # CI logs are full of terminal escape sequences, and gh >= 2.97 refuses to print such
+          # a body unless told otherwise (GHSA-3m3g-3wcr-px46) while older gh does not know the
+          # flag — probe once so the excerpt works with either runner image.
+          gh --version | head -n 1
+          # Capture the help text first: `gh api --help | grep -q` would let grep exit early and
+          # fail the pipeline under pipefail, silently disabling the flag.
+          api_help="$(gh api --help 2>/dev/null || true)"
+          escape_flag=""
+          if grep -q -- '--allow-escape-sequences' <<< "$api_help"; then
+            escape_flag="--allow-escape-sequences"
+          fi
+          esc="$(printf '\033')"
+          excerpt=""
+          for job_id in $(jq -r --arg skip "$skip_job_name" --arg self "$SELF_JOB_NAME" '.[] | select(.conclusion == "failure" and .name != $skip and .name != $self) | .id' <<< "$jobs_json" | head -n 4); do
+            lines="$(gh api ${escape_flag:+"$escape_flag"} "repos/$REPO/actions/jobs/$job_id/logs" 2>/dev/null \
+              | tr -d '\r' \
+              | sed -E "s/${esc}\[[0-9;]*[A-Za-z]//g; s/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z //" \
+              | grep -E '^ ?FAIL  |^[[:space:]]*[✘×] |^##\[error\]' \
+              | grep -vE '^##\[error\]Process completed with exit code' \
+              | sed -E 's/^##\[error\]//; s/^[[:space:]]+//' \
+              | awk '!seen[$0]++' \
+              | head -n 8 || true)"
+            if [ -n "$lines" ]; then
+              excerpt="${excerpt}${lines}"$'\n'
+            fi
+          done
+          # Shards that fail on the same test would otherwise repeat the same lines per job.
+          if [ -n "$excerpt" ]; then
+            excerpt="$(printf '%s' "$excerpt" | awk '!seen[$0]++')"$'\n'
+          fi
+
+          # Other PRs batched ahead of this one in the same group (their squashed commits sit
+          # between the group base and head), so the author can tell whose change may have failed.
+          group_note=""
+          others="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA" 2>/dev/null \
+            | jq -r '.commits[].commit.message | split("\n")[0]' \
+            | grep -oE '\(#[0-9]+\)$' | grep -oE '[0-9]+' | grep -vx "$pr" | sort -un | sed 's/^/#/' | paste -s -d ',' - | sed 's/,/, /g' || true)"
+          if [ -n "$others" ]; then
+            group_note=" and with the PRs queued ahead of it ($others)"
+          fi
+
+          handoff_id="merge-queue-ci-failure-pr-$pr"
+          marker="<!-- merge-queue-ci-failure -->"
+          handoff_root="$RUNNER_TEMP/handoff-comment-$handoff_id"
+          handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
+          mkdir -p "$handoff_dir"
+          run_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$RUN_ID"
+          # Markdown code spans are intentionally literal in these single-quoted strings.
+          # shellcheck disable=SC2016
+          {
+            printf '%s\n' "$marker"
+            printf 'Ejected from the merge queue: CI failed on the queued merge of this PR.\n\n'
+            printf 'The merge queue gate ([run %s](%s)) failed for the group headed by this PR. That run executes on the queue'"'"'s transient ref, so the failure never shows up in this PR'"'"'s own checks — they stay green, the queue entry simply disappears, and this notice is the only visible trace on the PR.\n\n' "$RUN_ID" "$run_url"
+            printf 'Failed jobs:\n\n%s\n\n' "$failed_lines"
+            if [ -n "$excerpt" ]; then
+              printf 'Failure excerpt (best-effort, from the job logs):\n\n```text\n%s```\n\n' "$excerpt"
+            fi
+            printf 'The queued merge combines this PR with everything that landed on `main` after its last CI run%s. When this PR'"'"'s own checks are green, the failure is usually one of: a conflict with newer `main` (for example a test added or changed since this branch diverged), a PR ahead of it in the queue, or a flaky test.\n\n' "$group_note"
+            printf 'To land this PR: open the run above and check whether the failure is related to this change. If it is, merge or rebase onto the latest `main`, fix, push, and add the PR back to the merge queue. If it is unrelated, add the PR back to the merge queue.\n'
+          } > "$handoff_dir/body.md"
+          jq -n \
+            --arg kind "comment" \
+            --arg id "$handoff_id" \
+            --arg head "$pr_head" \
+            --arg base "$pr_base" \
+            --arg marker "$marker" \
+            --argjson schema_version 1 \
+            --argjson pr_number "$pr" \
+            --argjson run_id "$RUN_ID" \
+            '{schema_version: $schema_version, kind: $kind, id: $id, pr_number: $pr_number, head_sha: $head, base_sha: $base, run_id: $run_id, marker: $marker}' \
+            > "$handoff_dir/metadata.json"
+          python3 .github/scripts/handoff.py validate comment "$handoff_dir" >/dev/null
+          {
+            echo "comment_created=true"
+            echo "comment_name=$(python3 .github/scripts/handoff.py artifact-name comment "$handoff_id")"
+            echo "comment_path=$handoff_root"
+          } >> "$GITHUB_OUTPUT"
+          echo "Produced merge-queue failure notice for PR #$pr."
+
+      - name: Upload merge-queue failure notice handoff
+        if: ${{ failure() && steps.merge_queue_failure_notice.outputs.comment_created == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.merge_queue_failure_notice.outputs.comment_name }}
+          path: ${{ steps.merge_queue_failure_notice.outputs.comment_path }}
 
   runtime_summary:
     name: Runtime summary

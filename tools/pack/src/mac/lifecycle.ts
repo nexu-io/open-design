@@ -28,9 +28,9 @@ import {
   spawnLoggedProcess,
   stopProcesses,
 } from "@open-design/platform";
-import type { ToolPackConfig } from "../config.js";
-import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
-import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { readToolPackLauncherRuntimeSnapshot } from "../launcher/runtime-snapshot.js";
+import { readToolPackUpdateCacheLifecycleSnapshot } from "../updates/cache-lifecycle-snapshot.js";
 import { PACKAGED_CONFIG_PATH_ENV, writeLaunchPackagedConfig } from "./app-config.js";
 import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
 import { pathExists, scrubMacExtendedAttributes } from "./fs.js";

@@ -139,7 +139,7 @@
 .recent-projects__row--grid .recent-projects__card-thumb {
   flex: 0 0 auto;
   width: 100%;
-  min-height: 108px;
+  min-height: 0;
   margin-top: 0;
 }
 .recent-projects__row--grid .recent-projects__card-meta {

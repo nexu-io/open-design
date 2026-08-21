@@ -22,17 +22,17 @@ export const tr: DeepseekCopyOverride = {
     'Döngüyü kapatın: gerçek sayfaları notlayın, hareket varlıkları derleyin, skill kitaplığınızı yanınızda taşıyın.',
     'Harness’in kendisini bir tasarım çalışma alanı yapın: sohbetin yanında önizleme panelleri, çalışma tezgâhları ve panolar.',
   ],
-  collectionCloserHeading: 'Kurulumu atlayın: DeepSeek Harness ile Open Design içinde tasarlayın',
+  collectionCloserHeading: 'Kurulumu atlayın: DeepSeek Harness ile OpenDesign içinde tasarlayın',
   filterAll: 'Tümü',
   collectionCloserBody:
-    'Open Design, DeepSeek Harness’in etrafında çalışan açık kaynaklı, agent-native tasarım çalışma alanıdır. Sistemlerinizi, skill’lerinizi ve şablonlarınızı tutarlı tutar; ajan da sahibi olduğunuz işi çıkarır.',
+    'OpenDesign, DeepSeek Harness’in etrafında çalışan açık kaynaklı, agent-native tasarım çalışma alanıdır. Sistemlerinizi, skill’lerinizi ve şablonlarınızı tutarlı tutar; ajan da sahibi olduğunuz işi çıkarır.',
 
   categoryVision: 'Görüş & Girdi',
   categoryCanvas: 'Canvas & Üretken Arayüz',
   categoryWorkflow: 'Tasarım İş Akışı',
   categoryWorkspace: 'Çalışma Alanı & Önizleme',
 
-  ctaDownload: 'Open Design’ı indir',
+  ctaDownload: 'OpenDesign’ı indir',
   ctaStarList: 'DeepSeek Harness’e yıldız ver',
   ctaGuide: 'DeepSeek Harness ile tasarım nasıl yapılır',
   ctaBrowseAll: 'Tüm eklentilere göz at',
@@ -71,9 +71,9 @@ export const tr: DeepseekCopyOverride = {
   detailMoreOnList: 'DeepSeek Harness deposunda dahası',
   detailRelated: 'Diğer DeepSeek Harness tasarım eklentileri',
   finalEyebrow: 'Sonraki adım',
-  detailCloserHeading: 'Kurulum derdi olmadan Open Design ile tasarlayın',
+  detailCloserHeading: 'Kurulum derdi olmadan OpenDesign ile tasarlayın',
   detailCloserBody:
-    'Bu eklentiyi kendiniz kurun ya da Open Design ile DeepSeek Harness’in etrafına baştan sona küratörlü bir tasarım katmanı geçirin. Kendi anahtarınızı getirin, çıktınızın sahibi olun.',
+    'Bu eklentiyi kendiniz kurun ya da OpenDesign ile DeepSeek Harness’in etrafına baştan sona küratörlü bir tasarım katmanı geçirin. Kendi anahtarınızı getirin, çıktınızın sahibi olun.',
 
   skills: {
     modlens: {

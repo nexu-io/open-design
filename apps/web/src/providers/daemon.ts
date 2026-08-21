@@ -93,7 +93,7 @@ export function latestUserPromptFromHistory(history: ChatMessage[]): string {
 function truncateForTranscript(content: string): string {
   if (content.length <= MAX_TRANSCRIPT_MESSAGE_CHARS) return content;
   const omitted = content.length - MAX_TRANSCRIPT_MESSAGE_CHARS;
-  return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[Open Design truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
+  return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[OpenDesign truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
 }
 
 function escapeTranscriptRoleDelimiters(content: string): string {
@@ -152,7 +152,7 @@ function buildPriorRunContextWarning(history: ChatMessage[]): string | null {
 
   return [
     '## context warning',
-    `Open Design detected ${notes.join(', ')}.`,
+    `OpenDesign detected ${notes.join(', ')}.`,
     'Keep this turn compact: summarize prior tool output, read large references from temp files, and quote only task-relevant lines.',
   ].join('\n');
 }
@@ -272,6 +272,8 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
 
 export interface DaemonStreamHandlers extends StreamHandlers {
   onAgentEvent: (ev: AgentEvent) => void;
+  /** Authoritative artifact count from the daemon's terminal run record. */
+  onArtifactCount?: (count: number) => void;
   /**
    * Live-only incremental tool-input fragment (Claude `input_json_delta`).
    * Kept off `AgentEvent`/`PersistedAgentEvent` because it is ephemeral and
@@ -460,7 +462,7 @@ function shouldSuppressLifecycleExitFallback(
 }
 
 const AMR_OPENCODE_INCOMPLETE_MESSAGE =
-  'Open Design started, but the run did not complete. Please retry or check the run details for the session stream error.';
+  'OpenDesign started, but the run did not complete. Please retry or check the run details for the session stream error.';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -492,7 +494,7 @@ function daemonCreateRunError(response: Response, responseText: string): Error {
   if (!apiError || typeof apiError !== 'object') {
     return new Error(`daemon ${response.status}: ${responseText || 'no body'}`);
   }
-  const error = new Error(apiError.message || `Open Design service returned ${response.status}`) as Error & {
+  const error = new Error(apiError.message || `OpenDesign service returned ${response.status}`) as Error & {
     code?: string;
     requestId?: string;
     retryable?: boolean;
@@ -568,10 +570,10 @@ function formatOpenCodeSessionError(value: unknown): string | null {
     return message;
   }
   if (statusCode === 404) {
-    return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the Open Design link URL or model route.';
+    return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the OpenDesign link URL or model route.';
   }
   if (statusCode === 401 || statusCode === 403) {
-    return 'Open Design authentication failed. Please sign in again or refresh the runtime key.';
+    return 'OpenDesign authentication failed. Please sign in again or refresh the runtime key.';
   }
   if (statusCode === 429) {
     return 'The model service rejected the request due to quota or rate limits. Retry later or check quota and rate limits.';
@@ -1249,6 +1251,7 @@ async function consumeDaemonRun({
   const reportArtifactCount = (value: unknown) => {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return;
     resolvedArtifactCount = value;
+    handlers.onArtifactCount?.(value);
   };
   const reportArtifactPaths = (value: unknown) => {
     if (!Array.isArray(value)) return;

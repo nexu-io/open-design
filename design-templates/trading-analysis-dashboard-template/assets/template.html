@@ -211,7 +211,7 @@
     const clearTimers = () => { if (demoTimer) clearInterval(demoTimer); if (stepTimer) clearTimeout(stepTimer); demoTimer = null; stepTimer = null; };
 
     // Storage access can throw SecurityError inside sandboxed iframes that allow
-    // scripts but not same-origin (Open Design's preview), so persistence is
+    // scripts but not same-origin (OpenDesign's preview), so persistence is
     // strictly best-effort and must never abort initialization.
     const safeGetTheme = () => { try { return localStorage.getItem("od-trading-theme"); } catch { return null; } };
     const safeSetTheme = (t) => { try { localStorage.setItem("od-trading-theme", t); } catch { /* sandbox: persistence unavailable */ } };

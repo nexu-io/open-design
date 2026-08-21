@@ -22,11 +22,16 @@ const directAssets = {
   macArm64: latestRelease?.matrix.macArm64Dmg?.url ?? '',
   macX64: latestRelease?.matrix.macX64Dmg?.url ?? '',
   windows: latestRelease?.matrix.winSetup?.url ?? '',
-  linux: latestRelease?.matrix.linux?.url ?? '',
 };
 
-const ACTIVE_SECONDS_THRESHOLD = 35;
-const PAGE_COUNT_THRESHOLD = 3;
+// Trigger rework (2026-08): the old "35 active seconds / 3 page views" rules
+// fired on cold traffic that closed it 84% of the time, and 66% of the people
+// who did click had already clicked a hero/nav download button. Now the modal
+// only targets hesitant visitors: (a) anyone who clicked ANY download CTA is
+// suppressed for DOWNLOAD_COOLDOWN_MS; (b) it fires on exit intent, or after
+// the visitor scrolled past the first screen and lingered for
+// SCROLL_DWELL_SECONDS of active time without downloading.
+const SCROLL_DWELL_SECONDS = 20;
 const DISMISS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 ---
@@ -93,8 +98,7 @@ const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
     define:vars={{
       pageName,
       locale,
-      ACTIVE_SECONDS_THRESHOLD,
-      PAGE_COUNT_THRESHOLD,
+      SCROLL_DWELL_SECONDS,
       DISMISS_COOLDOWN_MS,
       DOWNLOAD_COOLDOWN_MS,
       directAssets,
@@ -175,9 +179,8 @@ const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
             ? { key: 'macX64', label: 'macOS (Intel)', match: (name) => /mac-x64\.dmg$/i.test(name) }
             : { key: 'macArm64', label: 'macOS (Apple Silicon)', match: (name) => /mac-arm64\.dmg$/i.test(name) };
         }
-        if ((/linux/.test(p) || /linux/.test(ua)) && !/android/.test(ua)) {
-          return { key: 'linux', label: 'Linux', match: (name) => /\.appimage$/i.test(name) };
-        }
+        // No Linux desktop build — Linux visitors keep the /download/
+        // page fallback.
         return null;
       };
       const applyDirectAsset = (url, platformLabel) => {
@@ -247,15 +250,51 @@ const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
       write(sessionStorage, KEYS.pageViews, String(pageViews));
 
       let activeSeconds = Math.max(0, Number(read(sessionStorage, KEYS.activeSeconds) || 0) || 0);
-      if (pageViews >= PAGE_COUNT_THRESHOLD) {
-        window.setTimeout(() => show('page_count'), 1200);
+
+      // (a) Any download click anywhere on the site suppresses the modal.
+      for (const link of document.querySelectorAll('[data-download-cta]')) {
+        if (typeof link.addEventListener !== 'function') continue;
+        if (typeof link.closest === 'function' && link.closest('[data-download-engagement-prompt]')) continue;
+        link.addEventListener('click', () => {
+          write(localStorage, KEYS.downloadedAt, String(Date.now()));
+        });
       }
+
+      // (b1) Scroll past the first screen, then linger: dwell time only counts
+      // once the visitor has left the hero (they saw the primary CTA and kept
+      // reading), so the modal reaches the hesitant, not the just-arrived.
+      let pastFirstScreen = false;
+      const checkScroll = () => {
+        if (pastFirstScreen) return;
+        const y = Number(window.scrollY) || 0;
+        const h = Number(window.innerHeight) || 0;
+        if (h > 0 && y > h * 0.9) {
+          pastFirstScreen = true;
+          if (typeof window.removeEventListener === 'function') {
+            window.removeEventListener('scroll', checkScroll);
+          }
+        }
+      };
+      if (typeof window.addEventListener === 'function') {
+        window.addEventListener('scroll', checkScroll, { passive: true });
+      }
+      checkScroll();
       timer = window.setInterval(() => {
-        if (document.visibilityState !== 'visible' || dialog.open) return;
+        if (!pastFirstScreen || document.visibilityState !== 'visible' || dialog.open) return;
         activeSeconds += 1;
         write(sessionStorage, KEYS.activeSeconds, String(activeSeconds));
-        if (activeSeconds >= ACTIVE_SECONDS_THRESHOLD) show('active_time');
+        if (activeSeconds >= SCROLL_DWELL_SECONDS) show('scroll_dwell');
       }, 1000);
+
+      // (b2) Exit intent: pointer leaves through the top edge (toward the tab
+      // bar / address bar) — the classic "about to leave" signal on desktop.
+      const root = document.documentElement;
+      if (root && typeof root.addEventListener === 'function') {
+        root.addEventListener('mouseleave', (event) => {
+          if (event.clientY > 0) return;
+          show('exit_intent');
+        });
+      }
 
       dialog.addEventListener('click', (event) => {
         const target = event.target instanceof Element ? event.target : null;
@@ -365,7 +404,6 @@ const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
     font-size: 12px;
     font-weight: 750;
     letter-spacing: .12em;
-    text-transform: uppercase;
   }
   .download-prompt-card h2 {
     max-width: 17ch;

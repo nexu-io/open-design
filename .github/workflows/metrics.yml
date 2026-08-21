@@ -17,7 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Generate Open Design bot token
+      - name: Generate OpenDesign bot token
         id: open-design-bot-token
         uses: actions/create-github-app-token@v3.2.0
         with:
@@ -38,7 +38,7 @@ jobs:
           # the git history.
           filename: github-metrics.svg
 
-          # Auth: use the Open Design GitHub App for follow-up metrics
+          # Auth: use the OpenDesign GitHub App for follow-up metrics
           # that need private repository API access, but do not grant write
           # permissions because this workflow publishes to R2 instead of git.
           token: ${{ steps.open-design-bot-token.outputs.token }}

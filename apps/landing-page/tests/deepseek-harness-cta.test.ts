@@ -32,7 +32,7 @@ test('DeepSeek Harness hero CTAs are complete for every active locale', () => {
     if (code !== 'en') {
       assert.notEqual(
         actions[1]?.label,
-        'Join Open Design Discord',
+        'Join OpenDesign Discord',
         `${code}: Discord label fell back to the English sentence`,
       );
       assert.notEqual(
@@ -99,39 +99,61 @@ test('DeepSeek Harness tutorial exposes the official resources and connection wa
       `${code}: missing the official DeepSeek Harness repository`,
     );
 
-    const connectionSection = page.rich?.sections.find(({ id }) => id === 'open-design');
-    assert.ok(connectionSection, `${code}: missing the Open Design connection section`);
-    const connectionSteps = connectionSection.blocks.find((block) => block.kind === 'steps');
-    assert.ok(connectionSteps, `${code}: missing the numbered connection steps`);
+    // The OpenDesign walkthrough is one section per step so the TOC lists
+    // steps 2-5 individually instead of a combined "2-5" entry.
+    const stepSectionIds = ['open-design', 'detect-harness', 'connect-profile', 'first-design-task'];
+    const sectionIds = (page.rich?.sections ?? []).map(({ id }) => id);
+    const stepIndexes = stepSectionIds.map((id) => sectionIds.indexOf(id));
+    assert.ok(
+      stepIndexes.every((index) => index !== -1),
+      `${code}: missing an OpenDesign connection step section`,
+    );
     assert.deepEqual(
-      connectionSteps.items.map(({ label }) => label.match(/^\d/)?.[0]),
-      ['2', '3', '4', '5'],
-      `${code}: connection steps are out of order`,
+      stepIndexes,
+      [...stepIndexes].sort((a, b) => a - b),
+      `${code}: connection step sections are out of order`,
     );
-    assert.match(
-      connectionSteps.items.map(({ label, body }) => `${label} ${body}`).join(' '),
-      /0\.19\.1/,
-      `${code}: missing the minimum Open Design version`,
+    const stepSections = stepSectionIds.map(
+      (id) => page.rich!.sections.find((section) => section.id === id)!,
     );
-    const imageSources = connectionSection.blocks.flatMap((block) =>
-      block.kind === 'image' ? [block.src] : [],
+    stepSections.forEach((section, index) => {
+      assert.match(
+        section.heading,
+        new RegExp(`(^|\\D)${index + 2}(\\D|$)`),
+        `${code}: step section ${section.id} lacks its number in the heading`,
+      );
+    });
+    const walkthroughCopy = JSON.stringify(stepSections);
+    assert.match(walkthroughCopy, /0\.19\.1/, `${code}: missing the minimum OpenDesign version`);
+    const imageSources = stepSections.flatMap((section) =>
+      section.blocks.flatMap((block) => (block.kind === 'image' ? [block.src] : [])),
     );
     for (const src of expectedImages) {
       assert.ok(imageSources.includes(src), `${code}: missing connection tutorial image ${src}`);
     }
     assert.ok(
-      connectionSection.blocks.some(
-        (block) => block.kind === 'code' && block.code.includes('DESIGN.md'),
-      ),
+      stepSections
+        .find((section) => section.id === 'first-design-task')!
+        .blocks.some((block) => block.kind === 'code' && block.code.includes('DESIGN.md')),
       `${code}: missing the design-task prompt`,
     );
 
     const setupSection = page.rich?.sections.find(({ id }) => id === 'setup');
     assert.ok(setupSection, `${code}: missing the local Harness setup section`);
+    // The one-line installers are published (open-design.ai/install-dsh.*
+    // went live 2026-08); the guide must teach them instead of the manual
+    // npm path that required a preinstalled Node.js toolchain.
+    for (const ext of ['sh', 'ps1', 'cmd'] as const) {
+      assert.match(
+        JSON.stringify(page.rich),
+        new RegExp(`open-design\\.ai/install-dsh\\.${ext}\\?version=1`),
+        `${code}: missing the ${ext} one-line installer command`,
+      );
+    }
     assert.doesNotMatch(
       JSON.stringify(page.rich),
-      /open-design\.ai\/install-dsh\.(?:sh|ps1|cmd)/,
-      `${code}: unpublished one-line installer leaked into the public tutorial`,
+      /npm install -g @deepseek-ai\/dsh/,
+      `${code}: manual npm install path resurfaced; the guide teaches the one-line installer`,
     );
     assert.ok(
       !setupSection.blocks.some(
@@ -144,9 +166,9 @@ test('DeepSeek Harness tutorial exposes the official resources and connection wa
     );
     assert.ok(
       setupSection.blocks.some(
-        (block) => block.kind === 'code' && block.code.includes('@deepseek-ai/dsh@0.1.0-rc.6'),
+        (block) => block.kind === 'code' && block.code.includes('install-dsh.sh?version=1'),
       ),
-      `${code}: missing the pinned local dsh install command`,
+      `${code}: missing the macOS/Linux one-line installer code block`,
     );
     const setupSteps = setupSection.blocks.find((block) => block.kind === 'steps');
     assert.equal(setupSteps?.items.length, 3, `${code}: expected three Harness setup steps`);
@@ -164,7 +186,7 @@ test('DeepSeek Harness page leads with the design search intent', () => {
   assert.ok(en?.rich, 'missing English DeepSeek Harness rich guide');
   assert.ok(zh?.rich, 'missing Chinese DeepSeek Harness rich guide');
 
-  assert.match(en.title, /DeepSeek Harness.*UI Design/);
+  assert.match(en.title, /Design with DeepSeek Harness/);
   assert.equal(en.heading, 'Design with DeepSeek Harness.');
   assert.equal(
     en.rich.sections.find(({ id }) => id === 'why-design')?.heading,
@@ -181,15 +203,15 @@ test('DeepSeek Harness page leads with the design search intent', () => {
   const zhSetup = zh.rich.sections.find(({ id }) => id === 'setup');
   assert.equal(enSetup?.heading, 'Step 1: Install and configure DeepSeek Harness');
   assert.equal(zhSetup?.heading, '第 1 步：安装并配置 DeepSeek Harness');
-  assert.match(JSON.stringify(enSetup), /API key and model/);
+  assert.match(JSON.stringify(enSetup), /API-key setup page/);
   assert.match(JSON.stringify(enSetup), /takes effect immediately/);
   assert.match(JSON.stringify(enSetup), /Ctrl\+C/);
-  assert.match(JSON.stringify(zhSetup), /API Key 与模型/);
+  assert.match(JSON.stringify(zhSetup), /API Key 配置页面/);
   assert.match(JSON.stringify(zhSetup), /立即生效/);
   assert.match(JSON.stringify(zhSetup), /Ctrl\+C/);
 
-  const enConnection = en.rich.sections.find(({ id }) => id === 'open-design');
-  const zhConnection = zh.rich.sections.find(({ id }) => id === 'open-design');
-  assert.match(JSON.stringify(enConnection), /click Test/);
-  assert.match(JSON.stringify(zhConnection), /点击“测试”/);
+  const enFirstTask = en.rich.sections.find(({ id }) => id === 'first-design-task');
+  const zhFirstTask = zh.rich.sections.find(({ id }) => id === 'first-design-task');
+  assert.match(JSON.stringify(enFirstTask), /click Test/);
+  assert.match(JSON.stringify(zhFirstTask), /点击“测试”/);
 });

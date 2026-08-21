@@ -35,13 +35,13 @@
     };
 
     // Pull a clean 'v0.3.0'-style label from a GitHub release record.
-    // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+    // We prefer release.name (e.g. 'OpenDesign 0.3.0') because that's
     // what we hand-author; fall back to tag_name (e.g.
     // 'open-design-v0.3.0') with the project prefix stripped.
     //
     // Expected input shapes (release.name / release.tag_name):
-    //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
-    //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+    //   { name: 'OpenDesign 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+    //   { name: 'OpenDesign v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
     //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
     //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
     //   { name: null,                 tag_name: null }                  → null (caller skips)

@@ -10,9 +10,9 @@
   },
   "version": "1.0.0",
   "publishedAt": "2026-06-16T09:32:15Z",
-  "description": "Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Built as a decision-grade B2B sales deck for economic buyer, design VP, procurement.",
+  "description": "OpenDesign as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Built as a decision-grade B2B sales deck for economic buyer, design VP, procurement.",
   "description_i18n": {
-    "en": "Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Built as a decision-grade B2B sales deck for economic buyer, design VP, procurement.",
+    "en": "OpenDesign as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Built as a decision-grade B2B sales deck for economic buyer, design VP, procurement.",
     "zh-CN": "像一线企业客户 AE 一样写 B2B SaaS 销售提案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。",
     "zh-TW": "像一线企业客户 AE 一样写 B2B SaaS 销售提案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。"
   },
@@ -65,8 +65,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Create \"Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Audience: economic buyer, design VP, procurement. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it.",
-        "zh-CN": "像一线企业客户 AE 一样写 B2B SaaS 销售提案。像一线企业客户 AE 一样写 B2B SaaS 销售提案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+        "en": "Create \"Write a B2B SaaS Sales Proposal like a Tier-1 Enterprise AE\" as a decision-grade B2B sales deck in this template's own visual system. Subject: OpenDesign as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. Audience: economic buyer, design VP, procurement. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it.",
+        "zh-CN": "像一线企业客户 AE 一样写 B2B SaaS 销售提案。像一线企业客户 AE 一样写 B2B SaaS 销售提案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。 主题：OpenDesign as an enterprise design platform: a buyer-forwardable proposal for a design-org's economic buyer — pain, value, ROI, rollout. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {

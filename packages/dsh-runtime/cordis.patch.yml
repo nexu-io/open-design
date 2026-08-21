@@ -1,11 +1,11 @@
-# Open Design's stdio profile surface over the official dsh-base composition.
+# OpenDesign's stdio profile surface over the official dsh-base composition.
 # The user's Harness installation owns credentials, settings, tools, sessions,
 # and provider adapters. This bundle adds only the OD protocol boundary.
 
 - id: system-prompt
   config:
     persona: >-
-      You are a coding and design agent running for Open Design. Follow the
+      You are a coding and design agent running for OpenDesign. Follow the
       complete task and project context supplied in the current user message.
 
 - id: hmr

@@ -26,6 +26,16 @@ const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
 const SLOW_RELOAD_HEADING = 'Slow Reload Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
 const MEDIA_ONLY_FILE = 'media-only.png';
+const SERVER_DERIVED_WORKSPACE_HEADERS = {
+  'x-od-workspace-id': 'e2e-server-derived-workspace',
+  'x-od-workspace-type': 'personal',
+  'x-od-workspace-member-id': 'e2e-server-derived-member',
+  'x-od-workspace-role': 'owner',
+  'x-od-workspace-member-status': 'active',
+  'x-od-workspace-lifecycle-state': 'active',
+  'x-od-workspace-can-share-projects': 'true',
+  'x-od-workspace-can-write-synced-files': 'true',
+} as const;
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
 
 function artifactPreview(page: Page) {
@@ -104,6 +114,46 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   await expect(artifactPreview(page)).toBeVisible();
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
+});
+
+test('[P0] bound project reads derive Workspace authority without browser query scope', async ({ page }) => {
+  const projectId = `server-derived-raw-${Date.now()}`;
+  const { conversationId } = await createProjectViaApi(
+    page,
+    projectId,
+    'Server-derived raw authority',
+    SERVER_DERIVED_WORKSPACE_HEADERS,
+  );
+
+  expect(conversationId).toBeTruthy();
+  const conversationsResponse = await page.request.get(
+    `/api/projects/${projectId}/conversations`,
+  );
+  expect(
+    conversationsResponse.ok(),
+    await conversationsResponse.text(),
+  ).toBeTruthy();
+  const messagesResponse = await page.request.get(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages`,
+  );
+  expect(messagesResponse.ok(), await messagesResponse.text()).toBeTruthy();
+
+  const writeResponse = await page.request.post(`/api/projects/${projectId}/files`, {
+    headers: SERVER_DERIVED_WORKSPACE_HEADERS,
+    data: {
+      name: GENERATED_FILE,
+      content: `<!doctype html><html><body><h1>${GENERATED_HEADING}</h1></body></html>`,
+    },
+  });
+  expect(writeResponse.ok(), await writeResponse.text()).toBeTruthy();
+
+  const rawPath = `/api/projects/${projectId}/raw/${GENERATED_FILE}`;
+  const response = await page.goto(rawPath, { waitUntil: 'domcontentloaded' });
+  expect(response?.ok(), await response?.text()).toBeTruthy();
+  expect(new URL(page.url()).searchParams.has('workspaceId')).toBe(false);
+  expect(new URL(page.url()).searchParams.has('workspaceMemberId')).toBe(false);
+  await expect(page.getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('WORKSPACE_CONTEXT_REQUIRED');
 });
 
 test('[P0] real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {
@@ -665,7 +715,7 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await waitForLoadingToClear(page);
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.getByTestId('plugin-create-with-agent').click();
-  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an Open Design plugin for:/);
+  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an OpenDesign plugin for:/);
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   const runRequestPromise = page.waitForRequest(isCreateRunRequest);
@@ -781,8 +831,14 @@ async function createByokOpenCodeProject(page: Page, name: string) {
   await page.getByTestId('create-project').click();
 }
 
-async function createProjectViaApi(page: Page, projectId: string, name: string) {
+async function createProjectViaApi(
+  page: Page,
+  projectId: string,
+  name: string,
+  headers?: Readonly<Record<string, string>>,
+) {
   const response = await page.request.post('/api/projects', {
+    ...(headers ? { headers: { ...headers } } : {}),
     data: {
       id: projectId,
       name,
@@ -851,7 +907,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   await projectsSettled;
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -963,7 +1019,7 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function dismissPrivacyDialog(page: Page) {
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -971,7 +1027,7 @@ async function dismissPrivacyDialog(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function clickVisible(locator: Locator) {

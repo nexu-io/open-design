@@ -145,7 +145,6 @@ function runPromptEnhancer(options: {
     macArm64: 'https://example.com/open-design-mac-arm64.dmg',
     macX64: 'https://example.com/open-design-mac-x64.dmg',
     windows: 'https://example.com/open-design-win-x64-setup.exe',
-    linux: 'https://example.com/open-design-x86_64.AppImage',
   };
   const fetch = async () => ({ ok: true, json: async () => ({ assets: [] }) });
 
@@ -170,8 +169,7 @@ function runPromptEnhancer(options: {
     'localStorage',
     'pageName',
     'locale',
-    'ACTIVE_SECONDS_THRESHOLD',
-    'PAGE_COUNT_THRESHOLD',
+    'SCROLL_DWELL_SECONDS',
     'DISMISS_COOLDOWN_MS',
     'DOWNLOAD_COOLDOWN_MS',
     'directAssets',
@@ -186,8 +184,7 @@ function runPromptEnhancer(options: {
     createMemoryStorage(),
     options.pageName ?? 'solutions_prototype',
     'en',
-    35,
-    3,
+    20,
     7 * 24 * 60 * 60 * 1000,
     30 * 24 * 60 * 60 * 1000,
     directAssets,
@@ -295,11 +292,11 @@ test('homepage hero: every active locale carries the brand-system scenario promi
   assert.match(english, /design system/i);
   assert.equal(
     english,
-    'One design system. Every website, slide, prototype, dashboard, image, and video stays on-brand.',
+    'One design system. Every prototype, slide, marketing image, video, and dashboard stays on-brand.',
   );
   assert.equal(
     getHomeExtra('zh').heroTaskTitle,
-    '一套设计系统，让网页、PPT、原型、数据看板、图像与视频保持品牌一致',
+    '一套设计系统，让原型、演示文稿、营销图片、视频、数据看板保持品牌一致',
   );
   assert.equal(getHomeExtra('en').heroTitleSub, 'Best open-source Claude Design alternative');
   assert.equal(getHomeExtra('zh').heroTitleSub, 'Claude Design最佳开源平替');
@@ -316,7 +313,7 @@ test('homepage hero: every active locale carries the brand-system scenario promi
     homeStylesSource,
     /\.hero-task-emphasis\s*\{[^}]*display:\s*inline-block;[^}]*background:\s*linear-gradient\(/s,
   );
-  assert.match(homePageSource, /hero-download-attention/);
+  assert.match(homePageSource, /hm-dl hm-dl-hero/);
   assert.match(homePageSource, /data-direct-download/);
 });
 
@@ -342,7 +339,7 @@ test('download hero: every active locale explains the agent-led design workflow'
   }
   assert.equal(
     getInfoPageCopy('zh').download.heading,
-    '免费下载 Open Design，用你的 Agent 开始设计。',
+    '免费下载 OpenDesign，用你的 Agent 开始设计。',
   );
   assert.match(downloadPageSource, /hero-product-1280\.webp/);
   assert.match(downloadPageSource, /hero-download-attention/);
@@ -352,8 +349,13 @@ test('download hero: every active locale explains the agent-led design workflow'
 });
 
 test('download prompt: production rules and suppression windows stay explicit', () => {
-  assert.match(componentSource, /ACTIVE_SECONDS_THRESHOLD = 35/);
-  assert.match(componentSource, /PAGE_COUNT_THRESHOLD = 3/);
+  assert.match(componentSource, /SCROLL_DWELL_SECONDS = 20/);
+  assert.doesNotMatch(componentSource, /PAGE_COUNT_THRESHOLD/);
+  // Hesitant-visitor targeting: exit intent + post-hero dwell, and every
+  // download click on the page suppresses the modal.
+  assert.match(componentSource, /show\('exit_intent'\)/);
+  assert.match(componentSource, /show\('scroll_dwell'\)/);
+  assert.match(componentSource, /querySelectorAll\('\[data-download-cta\]'\)/);
   assert.match(componentSource, /DISMISS_COOLDOWN_MS = 7 \* 24 \* 60 \* 60 \* 1000/);
   assert.match(componentSource, /DOWNLOAD_COOLDOWN_MS = 30 \* 24 \* 60 \* 60 \* 1000/);
   assert.match(componentSource, /pageName !== 'download'/);
@@ -423,7 +425,8 @@ test('download prompt: header and prompt keep mobile fallbacks aligned in docume
         platform: 'Linux x86_64',
         maxTouchPoints: 0,
       },
-      expectedHref: 'https://example.com/open-design-x86_64.AppImage',
+      // No Linux desktop build — Linux stays on the neutral /download/ page.
+      expectedHref: '/download/',
     },
   ];
 
@@ -443,7 +446,7 @@ test('download prompt: header and prompt keep mobile fallbacks aligned in docume
   }
 });
 
-test('download prompt: three repeated visits to the same route trigger page-count lifecycle', () => {
+test('download prompt: repeat visits alone never open the modal (page-count trigger is gone)', () => {
   const sessionStorage = createMemoryStorage();
   const first = runPromptEnhancer({ sessionStorage, runPageCountTimeout: true });
   const second = runPromptEnhancer({ sessionStorage, runPageCountTimeout: true });
@@ -451,8 +454,7 @@ test('download prompt: three repeated visits to the same route trigger page-coun
 
   assert.equal(first.dialog.open, false);
   assert.equal(second.dialog.open, false);
-  assert.equal(third.dialog.open, true);
-  assert.equal(third.ctaAttributes.get('data-download-prompt-trigger'), 'page_count');
+  assert.equal(third.dialog.open, false);
   assert.equal(sessionStorage.getItem('od_download_prompt_page_views_v2'), '3');
 });
 

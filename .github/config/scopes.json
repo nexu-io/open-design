@@ -1,0 +1,229 @@
+{
+  "schema": { "version": 1 },
+  "effects": [
+    "daemon_tests_required",
+    "web_tests_required",
+    "tools_dev_tests_required",
+    "tools_pack_tests_required",
+    "windows_tools_pack_payload_tests_required",
+    "ui_critical_validation_required",
+    "ui_p0_validation_required",
+    "visual_validation_required",
+    "workspace_validation_required"
+  ],
+  "matches": {
+    "daemon-runtime-definition": {
+      "prefixes": ["apps/daemon/src/runtimes/defs/"],
+      "exact": [
+        "apps/daemon/src/runtimes/capabilities.ts",
+        "apps/daemon/src/runtimes/local-profiles.ts",
+        "apps/daemon/src/runtimes/metadata.ts",
+        "apps/daemon/src/runtimes/registry.ts",
+        "apps/daemon/tests/runtimes/agent-args.test.ts",
+        "apps/daemon/tests/runtimes/antigravity-model-lock.test.ts",
+        "apps/daemon/tests/runtimes/atomcode.test.ts",
+        "apps/daemon/tests/runtimes/byok-opencode.test.ts",
+        "apps/daemon/tests/runtimes/chat-run-inactivity-timeout.test.ts",
+        "apps/daemon/tests/runtimes/claude-resume-args.test.ts",
+        "apps/daemon/tests/runtimes/codebuddy.test.ts",
+        "apps/daemon/tests/runtimes/codex-resume-args.test.ts",
+        "apps/daemon/tests/runtimes/detection-resilience.test.ts",
+        "apps/daemon/tests/runtimes/opencode-resume-args.test.ts",
+        "apps/daemon/tests/runtimes/registry-and-args.test.ts",
+        "apps/daemon/tests/runtimes/trae-cli.test.ts"
+      ]
+    },
+    "certain-exempt": {
+      "prefixes": [".vscode/", ".idea/", "docs/", "apps/landing-page/", ".github/ISSUE_TEMPLATE/"],
+      "exact": ["LICENSE", ".github/CODEOWNERS"],
+      "exclude": ["match://daemon-doc"]
+    },
+    "daemon-doc": { "exact": ["docs/agent-adapters.md"] },
+    "packaged-leaf": {
+      "prefixes": [
+        "apps/desktop/src/", "apps/desktop/tests/", "apps/packaged/src/", "apps/packaged/tests/",
+        "tools/pack/src/cache/", "tools/pack/src/config/", "tools/pack/src/launcher/",
+        "tools/pack/src/mac/", "tools/pack/src/resources/", "tools/pack/src/updates/",
+        "tools/pack/src/versioning/", "tools/pack/src/win/", "tools/pack/tests/", "tools/pack/resources/"
+      ]
+    },
+    "windows-launcher-payload": {
+      "prefixes": [
+        "tools/pack/src/cache/", "tools/pack/src/config/", "tools/pack/src/launcher/",
+        "tools/pack/src/resources/", "tools/pack/src/updates/", "tools/pack/src/versioning/",
+        "tools/pack/src/win/", "tools/pack/tests/launcher/windows/", "tools/pack/resources/win/",
+        "packages/launcher-proto/src/", "packages/sidecar-proto/src/"
+      ],
+      "exact": [
+        "packages/platform/src/command.ts",
+        "packages/platform/src/index.ts",
+        "packages/release/src/index.ts",
+        "packages/sidecar/src/index.ts",
+        "packages/sidecar/src/paths.ts"
+      ]
+    },
+    "daemon-core": {
+      "prefixes": ["apps/daemon/src/", "apps/daemon/tests/"],
+      "exact": ["docs/agent-adapters.md"],
+      "exclude": ["match://daemon-runtime-definition", "prefix://apps/daemon/src/sidecar/"]
+    },
+    "medium-exempt": {
+      "prefixes": ["nix/"],
+      "exact": [
+        ".gitignore", ".editorconfig", "flake.nix", "flake.lock",
+        ".github/workflows/landing-page-ci.yml", ".github/workflows/landing-page-staging.yml",
+        ".github/workflows/landing-page-production.yml", ".github/workflows/blog-indexing-on-deploy.yml",
+        ".github/workflows/autofix.atom.yml", ".github/workflows/comment.atom.yml",
+        ".github/workflows/report.atom.yml", ".github/workflows/docker-image.yml", ".github/workflows/nix.yml"
+      ],
+      "regexes": ["\\.(?:md|mdx|txt)$"],
+      "exclude": ["match://certain-surface"]
+    },
+    "certain-surface": {
+      "include": ["match://certain-exempt", "match://packaged-leaf", "match://daemon-core"]
+    },
+    "workspace-exempt": {
+      "include": ["match://certain-exempt", "match://medium-exempt", "match://packaged-leaf", "match://daemon-core"]
+    },
+    "ui-critical-exempt": {
+      "include": ["match://certain-exempt", "match://medium-exempt", "match://daemon-core"],
+      "prefixes": ["apps/desktop/", "apps/packaged/", "tools/pack/"]
+    }
+  },
+  "rules": [
+    {
+      "id": "certain-exempt-surface", "match": { "include": ["match://certain-exempt"] },
+      "effects": [], "confidence": "certain"
+    },
+    {
+      "id": "exempt-surface", "match": { "include": ["match://medium-exempt"] },
+      "effects": [], "confidence": "medium"
+    },
+    {
+      "id": "certain-daemon-core", "match": { "include": ["match://daemon-core"] },
+      "effects": ["daemon_tests_required", "ui_critical_validation_required", "ui_p0_validation_required", "workspace_validation_required"],
+      "confidence": "certain"
+    },
+    {
+      "id": "daemon-sources",
+      "match": {
+        "prefixes": ["apps/daemon/", "packages/release/", "packages/contracts/", "packages/platform/", "packages/sidecar/", "packages/sidecar-proto/"],
+        "exclude": ["match://daemon-core"]
+      },
+      "effects": ["daemon_tests_required"], "confidence": "medium"
+    },
+    {
+      "id": "web-sources",
+      "match": { "prefixes": ["apps/web/", "packages/release/", "packages/components/", "packages/contracts/", "packages/host/", "packages/platform/", "packages/sidecar/", "packages/sidecar-proto/"] },
+      "effects": ["web_tests_required"], "confidence": "medium"
+    },
+    {
+      "id": "runtime-content",
+      "match": { "prefixes": ["scripts/", "assets/", "skills/", "prompt-templates/", "design-systems/", "design-templates/", "craft/"] },
+      "effects": ["daemon_tests_required", "web_tests_required"], "confidence": "medium"
+    },
+    {
+      "id": "script-contract-tests", "match": { "prefixes": ["e2e/tests/scripts/"] },
+      "effects": ["daemon_tests_required", "web_tests_required"], "confidence": "medium"
+    },
+    {
+      "id": "tools-dev-sources",
+      "match": { "prefixes": ["tools/dev/", "packages/platform/", "packages/sidecar/", "packages/sidecar-proto/"] },
+      "effects": ["tools_dev_tests_required"], "confidence": "medium"
+    },
+    {
+      "id": "certain-packaged-leaf-sources", "match": { "include": ["match://packaged-leaf"] },
+      "effects": ["tools_dev_tests_required", "tools_pack_tests_required", "workspace_validation_required"],
+      "confidence": "certain"
+    },
+    {
+      "id": "certain-windows-launcher-payload",
+      "match": { "include": ["match://windows-launcher-payload"] },
+      "effects": ["windows_tools_pack_payload_tests_required"],
+      "confidence": "certain"
+    },
+    {
+      "id": "tools-pack-root-source-fallback",
+      "match": { "regexes": ["^tools/pack/src/[^/]+\\.ts$"] },
+      "effects": ["tools_dev_tests_required", "tools_pack_tests_required", "windows_tools_pack_payload_tests_required", "workspace_validation_required"],
+      "confidence": "medium"
+    },
+    {
+      "id": "tools-pack-sources",
+      "match": {
+        "prefixes": ["tools/pack/", "apps/packaged/", "apps/desktop/", "packages/release/", "packages/components/", "packages/host/", "packages/platform/", "packages/sidecar/", "packages/sidecar-proto/"],
+        "exclude": ["match://packaged-leaf"]
+      },
+      "effects": ["tools_pack_tests_required"], "confidence": "medium"
+    },
+    {
+      "id": "workspace-manifests-and-ci",
+      "match": {
+        "exact": ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/ci.yml", "e2e/package.json"],
+        "regexes": ["^apps/[^/]+/package\\.json$", "^packages/[^/]+/package\\.json$", "^tools/[^/]+/package\\.json$"]
+      },
+      "effects": ["daemon_tests_required", "web_tests_required", "tools_dev_tests_required", "tools_pack_tests_required", "windows_tools_pack_payload_tests_required"],
+      "confidence": "medium"
+    },
+    {
+      "id": "ui-p0-surface",
+      "match": {
+        "prefixes": ["apps/web/", "apps/daemon/", "packages/release/", "packages/components/", "packages/contracts/", "packages/host/", "packages/platform/", "packages/sidecar/", "packages/sidecar-proto/", "e2e/ui/", "e2e/lib/", "e2e/resources/", "e2e/scripts/", ".github/actions/setup-playwright/", ".github/actions/setup-workspace/"],
+        "exact": ["e2e/package.json", "e2e/playwright.config.ts", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/ci.yml", ".github/workflows/ui-extended-main.yml"],
+        "exclude": ["match://daemon-core"]
+      },
+      "effects": ["ui_p0_validation_required"], "confidence": "medium"
+    },
+    {
+      "id": "visual-surface",
+      "match": {
+        "prefixes": ["apps/web/", "e2e/lib/playwright/", ".github/actions/setup-playwright/", ".github/actions/setup-workspace/"],
+        "exact": ["e2e/package.json", "e2e/playwright.visual.config.ts", "e2e/scripts/playwright.ts", "e2e/scripts/visual-report.ts", "pnpm-lock.yaml", ".github/scripts/handoff.py", ".github/workflows/ci.yml", ".github/workflows/comment.atom.yml", ".github/workflows/report.atom.yml", ".github/workflows/visual-baseline.yml"],
+        "regexes": ["^e2e/ui/visual-[^/]+\\.test\\.ts$"]
+      },
+      "effects": ["visual_validation_required"], "confidence": "medium"
+    },
+    {
+      "id": "ci-control-plane",
+      "match": {
+        "prefixes": [".github/config/"],
+        "exact": [
+          ".github/scripts/scopes.py", ".github/scripts/hash.py", ".github/scripts/runners.py",
+          ".github/scripts/lib/config.py", ".github/scripts/lib/github.py"
+        ]
+      },
+      "effects": ["web_tests_required", "workspace_validation_required"], "confidence": "medium"
+    },
+    {
+      "id": "ci-rerun-infra-cancel-surface",
+      "match": { "exact": [".github/workflows/rerun.atom.yml", ".github/scripts/rerun_infra_cancel.py", "e2e/tests/packaged-smoke-workflow.test.ts"] },
+      "effects": ["web_tests_required", "workspace_validation_required"], "confidence": "medium"
+    },
+    {
+      "id": "workspace-fallback", "match": { "exclude": ["match://workspace-exempt"] },
+      "effects": ["workspace_validation_required"], "confidence": "medium"
+    },
+    {
+      "id": "ui-critical-fallback", "match": { "exclude": ["match://ui-critical-exempt"] },
+      "effects": ["ui_critical_validation_required"], "confidence": "medium"
+    }
+  ],
+  "matrices": {
+    "ui_p0": [
+      { "name": "entry-settings", "shard": "entry-settings" },
+      { "name": "project-workspace", "shard": "project-workspace" },
+      { "name": "project-workspace-editor", "shard": "project-workspace-editor" },
+      { "name": "project-collab", "shard": "project-collab" },
+      { "name": "project-runtime", "shard": "project-runtime" },
+      { "name": "workspace-restoration", "shard": "workspace-restoration" }
+    ],
+    "visual": [
+      { "name": "entry-navigation", "files": "ui/visual-entry.test.ts ui/visual-navigation.test.ts" },
+      { "name": "settings-workspace", "files": "ui/visual-settings.test.ts ui/visual-workspace.test.ts" }
+    ]
+  },
+  "uiP0Shadow": {
+    "match": "daemon-runtime-definition",
+    "matrixNames": ["entry-settings", "project-workspace", "project-collab", "project-runtime"]
+  }
+}

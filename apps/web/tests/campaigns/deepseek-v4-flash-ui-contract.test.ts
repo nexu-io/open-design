@@ -6,6 +6,18 @@ const entryShellSource = readFileSync(
   resolve(process.cwd(), 'src/components/EntryShell.tsx'),
   'utf8',
 );
+const entryNavRailSource = readFileSync(
+  resolve(process.cwd(), 'src/components/EntryNavRail.tsx'),
+  'utf8',
+);
+const appSource = readFileSync(
+  resolve(process.cwd(), 'src/App.tsx'),
+  'utf8',
+);
+const workbenchCampaignBadgeSource = readFileSync(
+  resolve(process.cwd(), 'src/components/WorkbenchCampaignBadge.tsx'),
+  'utf8',
+);
 const entryLayoutStyles = readFileSync(
   resolve(process.cwd(), 'src/styles/home/entry-layout.css'),
   'utf8',
@@ -22,32 +34,101 @@ const campaignModalSource = readFileSync(
   resolve(process.cwd(), 'src/components/DeepSeekV4FlashCampaign.tsx'),
   'utf8',
 );
+const campaignModalStyles = readFileSync(
+  resolve(process.cwd(), 'src/components/DeepSeekV4FlashCampaign.module.css'),
+  'utf8',
+);
 
 describe('DeepSeek V4 Flash workbench campaign entry', () => {
-  it('shows a top-right pricing badge for explicit campaign audiences', () => {
-    expect(entryShellSource).toContain('deepseek-campaign-pricing-badge');
-    expect(entryShellSource).toContain("t('campaign.deepseekV4Flash.workbenchBadge')");
-    expect(entryShellSource).toContain("t('campaign.deepseekV4Flash.workbenchBadgeAria')");
-    expect(entryShellSource).toContain('deepSeekV4FlashCampaignAudience !== \'unknown\'');
+  it('uses checked-in Go modal model marks without network dependencies', () => {
+    for (const assetPath of [
+      'public/agent-icons/deepseek.svg',
+      'public/agent-icons/kimi.svg',
+      'public/model-icons/minimax.svg',
+      'public/go-plan/mimo-logo-user-CWOWEwG5.png',
+      'public/go-plan/zai-logo-official-Byn-xbrp.png',
+    ]) {
+      expect(readFileSync(resolve(process.cwd(), assetPath)).byteLength).toBeGreaterThan(0);
+    }
+    expect(campaignModalSource).not.toContain('unpkg.com');
+    expect(campaignModalSource).toContain('/agent-icons/deepseek.svg');
+    expect(campaignModalSource).toContain('/agent-icons/kimi.svg');
+    expect(campaignModalSource).toContain('/model-icons/minimax.svg');
+    expect(campaignModalSource).toContain(
+      '/go-plan/mimo-logo-user-CWOWEwG5.png',
+    );
+    expect(campaignModalSource).toContain(
+      '/go-plan/zai-logo-official-Byn-xbrp.png',
+    );
+    expect(campaignModalSource).toContain('styles.goWelcomeMimoLogo');
+    expect(campaignModalSource).toContain('styles.goWelcomeZhipuLogo');
+    expect(campaignModalSource).toContain('styles.goWelcomeBenefitZhipu');
+    expect(campaignModalStyles).toContain('.goWelcomeMimoLogo img');
+    expect(campaignModalStyles).toContain('.goWelcomeZhipuLogo img');
+    expect(campaignModalStyles).toContain(
+      '.goWelcomeBenefitZhipu img',
+    );
+    expect(campaignModalStyles).not.toContain(
+      '.goWelcomeBenefitModel.goWelcomeBenefitZhipu img',
+    );
+    expect(campaignModalStyles).toMatch(
+      /\.goWelcomeBenefitModel img\s*\{[\s\S]*?filter: brightness\(0\) invert\(1\);[\s\S]*?\}/,
+    );
   });
 
-  // The badge lands where the modal's CTA lands: the console's plan surface,
-  // scoped to the caller's workspace. Both are in-product entry points for a
-  // signed-in user, so sending one to the console (where they can actually
-  // subscribe) and the other to the marketing site splits the same funnel
-  // across two destinations — and the marketing URL was additionally pinned to
-  // `/zh/`, so every non-Chinese user landed on a Chinese page.
-  it('opens the console plan surface, matching the modal CTA', () => {
-    expect(entryShellSource).toContain('amrPlansUrlForWorkspace');
-    expect(entryShellSource).toContain("'deepseek_workbench_badge'");
-    expect(entryShellSource).toContain("'noopener,noreferrer'");
-    // No hardcoded marketing URL, and no locale pinned into a link shown to
-    // all 19 locales.
-    expect(entryShellSource).not.toContain('open-design.ai/zh/pricing');
-    expect(entryShellSource).not.toContain('DEEPSEEK_CAMPAIGN_PRICING_URL');
+  it('collapses the Go modal before its fixed tracks overflow and scrolls short viewports', () => {
+    const baseModalRule = campaignModalStyles.match(
+      /\.goWelcomeModal\s*\{([^}]*)\}/,
+    )?.[1];
+
+    expect(baseModalRule).toContain(
+      'min-height: min(430px, calc(100dvh - 48px))',
+    );
+    expect(campaignModalStyles).toMatch(
+      /@media \(max-width: 658px\)[\s\S]*?\.goWelcomeModal\s*\{[\s\S]*?grid-template-columns: 1fr;[\s\S]*?overflow: auto;/,
+    );
+    expect(campaignModalStyles).toMatch(
+      /@media \(max-height: 477px\)[\s\S]*?\.goWelcomeModal\s*\{[\s\S]*?min-height: 0;[\s\S]*?overflow: auto;/,
+    );
   });
 
-  it('uses a restrained green campaign treatment from shared brand tokens', () => {
+  it('reuses the top-right campaign slot for Go and DeepSeek audiences', () => {
+    expect(entryShellSource).toContain('<WorkbenchCampaignBadge');
+    expect(workbenchCampaignBadgeSource).toContain('deepseek-campaign-pricing-badge');
+    expect(workbenchCampaignBadgeSource).toContain("kind === 'go'");
+    expect(workbenchCampaignBadgeSource).toContain('goPlanCopy.workbenchBadge');
+    expect(workbenchCampaignBadgeSource).toContain("t('campaign.deepseekV4Flash.workbenchBadge')");
+    expect(workbenchCampaignBadgeSource).toContain("t('campaign.deepseekV4Flash.workbenchBadgeAria')");
+    expect(entryShellSource).toContain("subscriptionAudience === 'unpaid'");
+    expect(entryShellSource).toContain('goPlanCampaignVisibility.visible');
+  });
+
+  it('keeps the top-right campaign entry visible across entry tabs and project detail', () => {
+    expect(entryShellSource).toMatch(
+      /topRightSlot=\{\s*topRightCampaignKind \? \(/,
+    );
+    expect(entryShellSource).not.toMatch(
+      /topRightSlot=\{\s*view === 'home'/,
+    );
+    expect(entryNavRailSource).toMatch(
+      /export function WorkspaceTopRightAccountCluster[\s\S]*?leadingSlot=\{campaignKind \? \([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?page="project"/,
+    );
+    expect(appSource).toMatch(
+      /<WorkspaceTopRightAccountCluster[\s\S]*?amrLoggedIn=\{amrLoginStatus\?\.loggedIn \?\? null\}[\s\S]*?metricsConsent=\{config\.telemetry\?\.metrics === true\}/,
+    );
+  });
+
+  it('sends both Go and paid DeepSeek badges to public Pricing', () => {
+    expect(entryShellSource).not.toContain('amrPlansUrlForWorkspace');
+    expect(workbenchCampaignBadgeSource).toContain('goPlanPricingUrl(locale)');
+    expect(workbenchCampaignBadgeSource).toContain("'deepseek_workbench_badge'");
+    expect(workbenchCampaignBadgeSource).toContain("'noopener,noreferrer'");
+    // The destination comes from the active app locale rather than pinning one
+    // language into a link shown to every locale.
+    expect(workbenchCampaignBadgeSource).not.toContain('open-design.ai/zh/pricing');
+  });
+
+  it('reuses the existing DeepSeek badge treatment without Go-only chrome', () => {
     const badgeRule = entryLayoutStyles.match(
       /\.entry-deepseek-campaign-badge\s*\{([^}]*)\}/,
     )?.[1];
@@ -59,6 +140,9 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     expect(entryLayoutStyles).toContain('.entry-deepseek-campaign-badge::before');
     expect(entryLayoutStyles).toContain('background: var(--brand-text)');
     expect(entryLayoutStyles).toContain('.entry-deepseek-campaign-badge svg');
+    expect(workbenchCampaignBadgeSource).toContain('className="entry-deepseek-campaign-badge"');
+    expect(entryLayoutStyles).not.toContain('.entry-go-campaign-new');
+    expect(entryLayoutStyles).not.toContain('.entry-go-campaign-badge');
     expect(badgeRule).not.toContain('color: var(--green)');
     expect(badgeRule).not.toContain('background: transparent');
   });
@@ -85,7 +169,7 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     // Leaving home closes the dialog WITHOUT marking it seen; the open
     // effect must therefore re-run on the activity flip, not only on the
     // audience settling.
-    expect(campaignModalSource).toMatch(/\}, \[active, audience\]\);/);
+    expect(campaignModalSource).toMatch(/\}, \[active, activeCampaignId, audience\]\);/);
     expect(campaignModalSource).toMatch(
       /if \(!active \|\| !modalOpen \|\| audience === 'unknown'/,
     );
@@ -127,9 +211,11 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     expect(modelSwitcherSource).toContain('const campaignNeedsUpgrade = false;');
   });
 
-  it('tracks campaign discovery surfaces without replacing model-selection events', () => {
-    expect(entryShellSource).toContain('trackDeepSeekCampaignBadgeSurfaceView');
-    expect(entryShellSource).toContain('trackDeepSeekCampaignBadgeClick');
+  it('keeps existing DeepSeek analytics while the Go pass stays UI-only', () => {
+    expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeSurfaceView');
+    expect(workbenchCampaignBadgeSource).toContain('trackDeepSeekCampaignBadgeClick');
+    expect(workbenchCampaignBadgeSource).toContain("window.open(pricingUrl, '_blank', 'noopener,noreferrer')");
+    expect(workbenchCampaignBadgeSource).toContain("page !== 'home'");
     expect(modelSwitcherSource).toContain('trackDeepSeekCampaignModelBenefitSurfaceView');
     expect(modelSwitcherSource).toContain('trackExecutionSettingsPopoverClick');
   });

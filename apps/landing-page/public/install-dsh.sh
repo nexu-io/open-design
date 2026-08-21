@@ -9,7 +9,7 @@ NO_LAUNCH=0
 
 usage() {
   cat <<'EOF'
-Install the DeepSeek Harness toolchain supported by Open Design.
+Install the DeepSeek Harness toolchain supported by OpenDesign.
 
 Usage:
   install-dsh.sh [--no-launch]
@@ -107,7 +107,7 @@ finish() {
   label=$1
   info "DeepSeek Harness $DSH_VERSION is ready ($label)."
   info "Command: $LAUNCHER"
-  info 'Open Design can discover this command without editing your shell profile.'
+  info 'OpenDesign can discover this command without editing your shell profile.'
   if [ "$NO_LAUNCH" -eq 1 ]; then
     return 0
   fi
@@ -222,7 +222,7 @@ fi
 
 runtime_staging=$INSTALL_ROOT/.runtime-dsh-$DSH_VERSION.$$
 mkdir -p "$runtime_staging"
-info "Installing dsh $DSH_VERSION and pnpm $PNPM_VERSION in Open Design's user toolchain..."
+info "Installing dsh $DSH_VERSION and pnpm $PNPM_VERSION in OpenDesign's user toolchain..."
 PATH="$managed_node_dir/bin:${PATH:-}" "$managed_node_dir/bin/npm" install \
   --prefix "$runtime_staging" \
   --no-save \

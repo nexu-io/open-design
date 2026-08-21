@@ -1,4 +1,4 @@
-# การ contribute ให้ Open Design
+# การ contribute ให้ OpenDesign
 
 ขอบคุณที่คิดจะ contribute. OD ตั้งใจให้เล็ก — คุณค่าส่วนใหญ่อยู่ใน **ไฟล์** (skills, design systems, prompt fragments) มากกว่า framework code. นั่นแปลว่า contribution ที่คุ้มที่สุดมักเป็น folder เดียว, Markdown file เดียว หรือ adapter ขนาดพอดี PR เดียว.
 
@@ -41,7 +41,7 @@ pnpm --filter @open-design/web build  # web package build when needed
 
 ## Docker Setup
 
-รัน Open Design โดยไม่ต้องติดตั้ง Node.js หรือ pnpm.
+รัน OpenDesign โดยไม่ต้องติดตั้ง Node.js หรือ pnpm.
 
 ### Prerequisites
 
@@ -51,7 +51,7 @@ pnpm --filter @open-design/web build  # web package build when needed
 docker compose version
 ```
 
-### Start Open Design
+### Start OpenDesign
 
 ```bash
 cd deploy

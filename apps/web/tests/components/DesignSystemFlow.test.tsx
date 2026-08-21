@@ -18,7 +18,15 @@ import {
   DesignSystemDetailView,
 } from '../../src/components/DesignSystemFlow';
 import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
-import type { AppConfig, Conversation, DesignSystemDetail, DesignSystemSummary, Project, ProjectFile } from '../../src/types';
+import type {
+  AppConfig,
+  ChatMessage,
+  Conversation,
+  DesignSystemDetail,
+  DesignSystemSummary,
+  Project,
+  ProjectFile,
+} from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 
 const mocks = vi.hoisted(() => ({
@@ -62,21 +70,33 @@ vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: ({
     error,
     initialDraft,
+    messages,
     onNewConversation,
+    onSelectConversation,
     onSend,
     projectFileNames,
     onRequestOpenFile,
+    sendDisabled,
   }: {
     error?: string | null;
     initialDraft?: string;
+    messages?: ChatMessage[];
     onNewConversation?: () => void;
+    onSelectConversation?: (conversationId: string) => void;
     onSend: (prompt: string, attachments: unknown[], commentAttachments: unknown[]) => void;
     projectFileNames?: Set<string>;
     onRequestOpenFile?: (name: string) => void;
+    sendDisabled?: boolean;
   }) => (
     <>
       {error ? <div role="alert">{error}</div> : null}
       {initialDraft ? <div data-testid="chat-initial-draft">{initialDraft}</div> : null}
+      <div
+        data-testid="design-system-chat-state"
+        data-send-disabled={sendDisabled ? 'true' : 'false'}
+      >
+        {messages?.map((message) => <span key={message.id}>{message.content}</span>)}
+      </div>
       <div data-testid="chat-file-names">{[...(projectFileNames ?? [])].join(',')}</div>
       <button
         type="button"
@@ -91,6 +111,13 @@ vi.mock('../../src/components/ChatPane', () => ({
         onClick={() => onNewConversation?.()}
       >
         New
+      </button>
+      <button
+        type="button"
+        data-testid="select-other-conversation"
+        onClick={() => onSelectConversation?.('conv-other')}
+      >
+        Select other
       </button>
       <button
         type="button"
@@ -847,7 +874,7 @@ describe('DesignSystemCreationFlow', () => {
     await waitFor(() => expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
-        pendingPrompt: expect.stringContaining('Create this project as a complete Open Design design system workspace.'),
+        pendingPrompt: expect.stringContaining('Create this project as a complete OpenDesign design system workspace.'),
       }),
     ));
     await waitFor(() => expect(onProjectPrepared).toHaveBeenCalledWith(
@@ -934,7 +961,7 @@ describe('DesignSystemCreationFlow', () => {
     expect(mocks.patchProject).toHaveBeenCalledWith(
       project.id,
       expect.objectContaining({
-        pendingPrompt: expect.stringContaining('Create this project as a complete Open Design design system workspace.'),
+        pendingPrompt: expect.stringContaining('Create this project as a complete OpenDesign design system workspace.'),
       }),
     );
     expect(mocks.patchProject).toHaveBeenCalledWith(
@@ -2038,12 +2065,12 @@ describe('DesignSystemCreationFlow', () => {
   it.skip('adds website source links with Enter and keeps them out of GitHub intake', async () => {
     const system: DesignSystemDetail = {
       id: 'user:open-design-website-design-system',
-      title: 'Open Design Website Design System',
+      title: 'OpenDesign Website Design System',
       category: 'Custom',
-      summary: 'Open Design website source.',
+      summary: 'OpenDesign website source.',
       swatches: [],
       surface: 'web',
-      body: '# Open Design Website Design System\n',
+      body: '# OpenDesign Website Design System\n',
       source: 'user',
       status: 'draft',
       isEditable: true,
@@ -2051,7 +2078,7 @@ describe('DesignSystemCreationFlow', () => {
     };
     const project: Project = {
       id: 'ds-open-design-website-design-system',
-      name: 'Open Design Website Design System',
+      name: 'OpenDesign Website Design System',
       skillId: null,
       designSystemId: system.id,
       createdAt: 1,
@@ -2085,7 +2112,7 @@ describe('DesignSystemCreationFlow', () => {
     expect(sourceInput.value).toBe('');
 
     fireEvent.change(screen.getByPlaceholderText(/Mission Impastabowl/i), {
-      target: { value: 'Open Design website source' },
+      target: { value: 'OpenDesign website source' },
     });
     continueToGeneration();
     continueToGeneration();
@@ -2138,7 +2165,7 @@ describe('DesignSystemCreationFlow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show access methods' }));
     expect(screen.getByText('This device')).toBeTruthy();
-    expect(screen.getByText('Open Design account')).toBeTruthy();
+    expect(screen.getByText('OpenDesign account')).toBeTruthy();
     expect(screen.getByText('Connector platform')).toBeTruthy();
     expect(screen.getByText('Coming soon')).toBeTruthy();
     expect(screen.getByText('Not configured')).toBeTruthy();
@@ -2302,7 +2329,7 @@ describe('DesignSystemCreationFlow', () => {
         redirectUrl: 'https://example.com/oauth',
         expiresAt: '2099-05-08T10:00:00.000Z',
       },
-      error: 'Popup blocked. Allow popups for Open Design and try again.',
+      error: 'Popup blocked. Allow popups for OpenDesign and try again.',
     });
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => ({ closed: false } as Window));
     const config = {
@@ -2323,7 +2350,7 @@ describe('DesignSystemCreationFlow', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Connect via Composio' }));
 
       await waitFor(() => expect(screen.getByText('Pending')).toBeTruthy());
-      expect(screen.getByText('Popup blocked. Allow popups for Open Design and try again.')).toBeTruthy();
+      expect(screen.getByText('Popup blocked. Allow popups for OpenDesign and try again.')).toBeTruthy();
 
       fireEvent.click(screen.getByRole('button', { name: 'Open authorization' }));
 
@@ -3545,6 +3572,80 @@ describe('DesignSystemDetailView', () => {
     await waitFor(() =>
       expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id, null),
     );
+  });
+
+  it('does not expose or submit the previous transcript when the selected conversation read fails', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:conversation-read-failure',
+      title: 'Conversation Read Failure',
+      category: 'Custom',
+      summary: 'Conversation switching regression fixture.',
+      swatches: [],
+      surface: 'web',
+      body: '# Conversation Read Failure\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-conversation-read-failure',
+    };
+    const project: Project = {
+      id: system.projectId!,
+      name: system.title,
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const previousConversation: Conversation = {
+      id: 'conv-previous',
+      projectId: project.id,
+      title: 'Previous',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const otherConversation: Conversation = {
+      id: 'conv-other',
+      projectId: project.id,
+      title: 'Other',
+      createdAt: 2,
+      updatedAt: 2,
+    };
+    const previousMessage: ChatMessage = {
+      id: 'previous-message',
+      role: 'assistant',
+      content: 'Previous conversation transcript',
+      createdAt: 1,
+    };
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [] });
+    mocks.listConversations.mockResolvedValue([previousConversation, otherConversation]);
+    mocks.listMessages
+      .mockResolvedValueOnce([previousMessage])
+      .mockRejectedValueOnce(new Error('workspace directory unavailable'));
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={{ mode: 'daemon', agentId: 'codex' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await screen.findByText(previousMessage.content);
+
+    fireEvent.click(screen.getByTestId('select-other-conversation'));
+
+    await waitFor(() => expect(mocks.listMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.queryByText(previousMessage.content)).toBeNull();
+      expect(screen.getByTestId('design-system-chat-state').dataset.sendDisabled).toBe('true');
+    });
+    fireEvent.click(screen.getByTestId('design-system-chat-send'));
+    expect(mocks.streamViaDaemon).not.toHaveBeenCalled();
   });
 
   it('clears a stale creation error after a successful new conversation retry', async () => {

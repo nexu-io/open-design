@@ -594,6 +594,27 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect(env.OPEN_DESIGN_AMR_PROFILE).toBe('test');
   });
 
+  it('forwards the per-profile Vela console origins to the daemon', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      amrProfile: 'prod',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      velaWebUrl: 'https://prod.example.invalid',
+      velaWebUrls: {
+        prod: 'https://prod.example.invalid',
+        test: 'https://test.example.invalid',
+        'feature-test': 'https://feature.example.invalid',
+      },
+    });
+    expect(JSON.parse(env.OD_VELA_WEB_URLS ?? '{}')).toEqual({
+      prod: 'https://prod.example.invalid',
+      test: 'https://test.example.invalid',
+      'feature-test': 'https://feature.example.invalid',
+    });
+  });
+
   it.each(['feature-test', 'test'] as const)(
     'enables the vela-cli workspace-team transport for a %s build with an injected vela web origin',
     (amrProfile) => {

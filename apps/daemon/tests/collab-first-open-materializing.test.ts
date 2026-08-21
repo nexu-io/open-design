@@ -85,11 +85,20 @@ function memberContextProvider(workspaceMemberId: string): WorkspaceContextProvi
  */
 function freshInstallProjectStore() {
   const rows = new Map<string, { name?: string | null; metadata?: unknown }>();
+  const bindings = new Map<string, TeamMirrorPullScope>();
   const store: PulledProjectStore = {
     get: (projectId) => rows.get(projectId) ?? null,
     has: (projectId) => rows.has(projectId),
     register: (input) => {
       rows.set(input.id, { name: input.name ?? null, metadata: rows.get(input.id)?.metadata });
+    },
+    materializeTeamPlaceholder: (input, scope) => {
+      rows.set(input.id, {
+        name: input.name,
+        metadata: { [SHARED_PROJECT_PLACEHOLDER_METADATA_KEY]: Date.now() },
+      });
+      bindings.set(input.id, scope);
+      return { localRecordChanged: true };
     },
   };
   const markSharedProjectPlaceholder = (projectId: string, placeholder: boolean) => {
@@ -100,7 +109,7 @@ function freshInstallProjectStore() {
     else delete metadata[SHARED_PROJECT_PLACEHOLDER_METADATA_KEY];
     rows.set(projectId, { ...row, metadata });
   };
-  return { rows, store, markSharedProjectPlaceholder };
+  return { rows, bindings, store, markSharedProjectPlaceholder };
 }
 
 async function startFirstOpenDaemon(options: {
@@ -110,7 +119,7 @@ async function startFirstOpenDaemon(options: {
     version?: number,
   ) => { id: string };
 }) {
-  const { rows, store, markSharedProjectPlaceholder } = freshInstallProjectStore();
+  const { rows, bindings, store, markSharedProjectPlaceholder } = freshInstallProjectStore();
   const workspaceContext = memberContextProvider('viewer-member');
   const context = await workspaceContext.current({});
   if (!context) throw new Error('test workspace context missing');
@@ -147,6 +156,7 @@ async function startFirstOpenDaemon(options: {
   return {
     base: `http://127.0.0.1:${address.port}`,
     rows,
+    bindings,
     headers: {
       'x-od-workspace-id': context.workspaceId,
       'x-od-workspace-member-id': context.workspaceMemberId,
@@ -155,6 +165,26 @@ async function startFirstOpenDaemon(options: {
 }
 
 describe('first open of an unmaterialized shared project (QA P0: no loading state, nothing downloads)', () => {
+  it('atomically exposes an exact Team-bound placeholder before the background pull finishes', async () => {
+    const { base, rows, bindings, headers } = await startFirstOpenDaemon({});
+
+    const res = await fetch(`${base}/api/projects/shared-from-owner/collab/bootstrap`, {
+      method: 'PUT',
+      headers,
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(202);
+    expect(body).toMatchObject({ ok: true, awaitingFirstMaterialization: true });
+    expect(isUnmaterializedSharedPlaceholder(rows.get('shared-from-owner'))).toBe(true);
+    expect(bindings.get('shared-from-owner')).toEqual({
+      workspaceId: 'ws-1',
+      resourceTeamId: 'team-1',
+      viewerMemberId: 'viewer-member',
+      ownerMemberId: 'owner-1',
+    });
+  });
+
   it('tells the client on the FIRST status response that local files are not the project content yet', async () => {
     const { base, rows, headers } = await startFirstOpenDaemon({});
 

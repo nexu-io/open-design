@@ -169,7 +169,7 @@ const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
   itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Open Design', item: new URL(href('/'), Astro.site).toString() },
+    { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: new URL(href('/'), Astro.site).toString() },
     { '@type': 'ListItem', position: 2, name: ui.catalog.templates.detailLabel, item: new URL(href('/templates/'), Astro.site).toString() },
     { '@type': 'ListItem', position: 3, name: template.name, item: templateUrl },
   ],
@@ -178,7 +178,7 @@ const jsonLd = {
 
 <Layout title={title} description={description} active="templates" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={ui.catalog.breadcrumbLabel}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <a href={href('/templates/')}>{ui.catalog.templates.detailLabel}</a>
     <span>/</span>

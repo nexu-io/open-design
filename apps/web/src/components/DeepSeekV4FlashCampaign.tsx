@@ -6,27 +6,22 @@ import {
   formatDeepSeekV4FlashCampaignCountdown,
   type DeepSeekV4FlashCampaignAudience,
 } from '../campaigns/deepseek-v4-flash';
-import { useWorkspaceContext } from '../collab/useWorkspaceContext';
-import {
-  amrPlansUrlForProfile,
-  amrPlansUrlForWorkspace,
-} from '../runtime/amr-guidance';
+import { getGoPlanCampaignCopy } from '../campaigns/go-plan-content';
+import { GO_PLAN_CAMPAIGN, goPlanPricingUrl } from '../campaigns/go-plan';
 import { useAnalytics } from '../analytics/provider';
-import { getResolvedDeviceId } from '../analytics/client';
-import {
-  amrHandoffDeviceId,
-  attributedAmrUrl,
-  recordAmrEntry,
-} from '../analytics/amr-attribution';
 import {
   trackDeepSeekCampaignModalClick,
   trackDeepSeekCampaignModalSurfaceView,
 } from '../analytics/events';
-import { useT } from '../i18n';
+import { useI18n } from '../i18n';
 import { Icon } from './Icon';
 import styles from './DeepSeekV4FlashCampaign.module.css';
 
-const SEEN_KEY = `open-design:campaign-seen:${campaign.id}`;
+const GO_PLAN_DEEPSEEK_ICON = '/agent-icons/deepseek.svg';
+const GO_PLAN_KIMI_ICON = '/agent-icons/kimi.svg';
+const GO_PLAN_MINIMAX_ICON = '/model-icons/minimax.svg';
+const GO_PLAN_MIMO_ICON = '/go-plan/mimo-logo-user-CWOWEwG5.png';
+const GO_PLAN_ZHIPU_ICON = '/go-plan/zai-logo-official-Byn-xbrp.png';
 
 interface Props {
   /**
@@ -60,10 +55,10 @@ interface Props {
   installationId?: string | null;
 }
 
-function hasSeenCampaign(): boolean {
+function hasSeenCampaign(campaignId: string): boolean {
   if (typeof window === 'undefined') return true;
   try {
-    return window.localStorage.getItem(SEEN_KEY) === '1';
+    return window.localStorage.getItem(`open-design:campaign-seen:${campaignId}`) === '1';
   } catch {
     // Fail closed: when the store is unreadable (private mode, disabled
     // localStorage) `markCampaignSeen` cannot persist either, so answering
@@ -73,9 +68,9 @@ function hasSeenCampaign(): boolean {
   }
 }
 
-function markCampaignSeen(): void {
+function markCampaignSeen(campaignId: string): void {
   try {
-    window.localStorage.setItem(SEEN_KEY, '1');
+    window.localStorage.setItem(`open-design:campaign-seen:${campaignId}`, '1');
   } catch {
     // Campaign frequency control is advisory; storage failures must not block Home.
   }
@@ -103,14 +98,16 @@ export function DeepSeekV4FlashCampaign({
   metricsConsent = false,
   installationId = null,
 }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
+  const goPlanCopy = getGoPlanCampaignCopy(locale);
   const analytics = useAnalytics();
-  const { context: workspaceContext } = useWorkspaceContext();
   const [modalOpen, setModalOpen] = useState(false);
   const [countdownNow, setCountdownNow] = useState(() => Date.now());
   const dialogId = useId();
   const titleId = useId();
   const descriptionId = useId();
+  const paid = audience === 'paid';
+  const activeCampaignId = paid ? campaign.id : GO_PLAN_CAMPAIGN.id;
 
   useEffect(() => {
     if (!active) {
@@ -121,18 +118,20 @@ export function DeepSeekV4FlashCampaign({
       return;
     }
     if (audience === 'unknown') return;
-    if (!hasSeenCampaign()) setModalOpen(true);
-  }, [active, audience]);
+    if (!hasSeenCampaign(activeCampaignId)) setModalOpen(true);
+  }, [active, activeCampaignId, audience]);
 
   useEffect(() => {
     if (!modalOpen) return;
-    trackDeepSeekCampaignModalSurfaceView(analytics.track, {
-      page_name: 'home',
-      area: 'deepseek_campaign_modal',
-      element: 'modal',
-      campaign_id: 'deepseek_v4_pro',
-      user_state: audience === 'paid' ? 'paid' : 'unpaid',
-    });
+    if (paid) {
+      trackDeepSeekCampaignModalSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'deepseek_campaign_modal',
+        element: 'modal',
+        campaign_id: 'deepseek_v4_pro',
+        user_state: 'paid',
+      });
+    }
     const panel = document.getElementById(dialogId);
     if (!panel) return;
     const previouslyFocused =
@@ -145,24 +144,23 @@ export function DeepSeekV4FlashCampaign({
       document.body.style.overflow = previousBodyOverflow;
       if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
-  }, [analytics.track, audience, dialogId, modalOpen]);
+  }, [analytics.track, audience, dialogId, modalOpen, paid]);
 
   useEffect(() => {
-    if (!modalOpen) return;
+    if (!modalOpen || !paid) return;
     // The countdown always runs against the real `window.endAtExclusive`
     // boundary (via formatDeepSeekV4FlashCampaignCountdown) — there is no
     // synthetic per-open countdown.
     setCountdownNow(Date.now());
     const countdownTimer = window.setInterval(() => setCountdownNow(Date.now()), 1_000);
     return () => window.clearInterval(countdownTimer);
-  }, [modalOpen]);
+  }, [modalOpen, paid]);
 
   const dismissModal = () => {
-    markCampaignSeen();
+    markCampaignSeen(activeCampaignId);
     setModalOpen(false);
   };
 
-  const paid = audience === 'paid';
   const presentation = paid
     ? {
         eyebrow: t('campaign.deepseekV4Flash.paid.eyebrow'),
@@ -170,17 +168,18 @@ export function DeepSeekV4FlashCampaign({
         cta: t('campaign.deepseekV4Flash.paid.cta'),
       }
     : {
-        eyebrow: t('campaign.deepseekV4Flash.unpaid.eyebrow'),
-        status: t('campaign.deepseekV4Flash.unpaid.status'),
-        cta: t('campaign.deepseekV4Flash.unpaid.cta'),
+        eyebrow: '',
+        status: '',
+        cta: '',
       };
   const trackModalClick = (element: 'close' | 'later' | 'use_now' | 'upgrade') => {
+    if (!paid) return;
     trackDeepSeekCampaignModalClick(analytics.track, {
       page_name: 'home',
       area: 'deepseek_campaign_modal',
       element,
       campaign_id: 'deepseek_v4_pro',
-      user_state: paid ? 'paid' : 'unpaid',
+      user_state: 'paid',
     });
   };
   const closeModal = () => {
@@ -201,26 +200,8 @@ export function DeepSeekV4FlashCampaign({
       window.setTimeout(highlightModelSwitcher, 0);
       return;
     }
-    const plansUrl =
-      amrPlansUrlForWorkspace(undefined, workspaceContext?.workspaceId)
-      ?? amrPlansUrlForProfile(undefined);
-    const attribution = recordAmrEntry(
-      analytics.track,
-      'deepseek_unpaid_modal',
-      new Date(),
-      {
-        metricsConsent,
-        campaignId: 'deepseek_v4_pro',
-        conversionSource: 'deepseek_unpaid_modal',
-      },
-    );
-    const deviceId = amrHandoffDeviceId({
-      metricsConsent,
-      resolvedDeviceId: getResolvedDeviceId(),
-      installationId,
-    });
     window.open(
-      attributedAmrUrl(plansUrl, attribution, deviceId),
+      goPlanPricingUrl(locale),
       '_blank',
       'noopener,noreferrer',
     );
@@ -228,6 +209,92 @@ export function DeepSeekV4FlashCampaign({
 
   if (!active || !modalOpen || audience === 'unknown' || typeof document === 'undefined') {
     return null;
+  }
+
+  if (!paid) {
+    return createPortal(
+      <Dialog
+        id={dialogId}
+        ariaLabelledBy={titleId}
+        ariaDescribedBy={descriptionId}
+        onClose={closeModal}
+        closeOnEscape
+        className={styles.goWelcomeModal}
+        backdropClassName={styles.goWelcomeBackdrop}
+        data-testid="deepseek-v4-flash-campaign-dialog"
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          className={styles.goWelcomeClose}
+          aria-label={goPlanCopy.closeAria}
+          onClick={closeModal}
+        >
+          <Icon name="close" size={16} />
+        </Button>
+
+        <div className={styles.goWelcomeVisual}>
+          <span>{goPlanCopy.newBadge}</span>
+          <div className={styles.goWelcomeLockup} aria-hidden="true">
+            <strong>GO</strong>
+            <b><small>$</small>5</b>
+          </div>
+          <small>{goPlanCopy.eyebrow}</small>
+        </div>
+
+        <div className={styles.goWelcomeCopy}>
+          <h2 id={titleId}>{goPlanCopy.headline}</h2>
+          <p id={descriptionId} className={styles.goWelcomeSubtitle}>
+            {goPlanCopy.description}
+          </p>
+
+          <div
+            className={styles.goWelcomeModelLogos}
+            role="group"
+            aria-label={goPlanCopy.providersAria}
+          >
+            {[
+              { src: GO_PLAN_DEEPSEEK_ICON, label: 'DeepSeek' },
+              { src: GO_PLAN_ZHIPU_ICON, label: 'GLM', className: styles.goWelcomeZhipuLogo },
+              { src: GO_PLAN_KIMI_ICON, label: 'Kimi' },
+              { src: GO_PLAN_MINIMAX_ICON, label: 'MiniMax' },
+              { src: GO_PLAN_MIMO_ICON, label: 'MiMo', className: styles.goWelcomeMimoLogo },
+            ].map(({ src, label, className }) => (
+              <span key={label} className={className} title={label}><img src={src} alt={label} /></span>
+            ))}
+          </div>
+
+          <div className={styles.goWelcomePlanBenefit}>
+            <strong>{goPlanCopy.benefit}</strong>
+            <ul>
+              {[
+                { src: GO_PLAN_DEEPSEEK_ICON, label: 'DeepSeek V4 Flash' },
+                { src: GO_PLAN_DEEPSEEK_ICON, label: 'DeepSeek V4 Pro' },
+                { src: GO_PLAN_ZHIPU_ICON, label: 'GLM-5.2', className: styles.goWelcomeBenefitZhipu },
+              ].map(({ src, label, className }) => (
+                <li key={label}>
+                  <span className={styles.goWelcomeBenefitModel}>
+                    <i className={className}><img src={src} alt="" /></i>{label}
+                  </span>
+                  <small>{goPlanCopy.status}</small>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <p className={styles.goWelcomeTerms}>
+            <span>{goPlanCopy.renewal}</span>
+            <span>{goPlanCopy.boundary}</span>
+          </p>
+
+          <Button className={styles.goWelcomePrimary} onClick={takeAction}>
+            {goPlanCopy.cta}
+            <Icon name="arrow-right" size={15} />
+          </Button>
+        </div>
+      </Dialog>,
+      document.body,
+    );
   }
 
   return createPortal(
@@ -261,8 +328,8 @@ export function DeepSeekV4FlashCampaign({
           <strong>{t('campaign.deepseekV4Flash.benefit')}</strong>
           <small>{presentation.status}</small>
         </span>
-        <span className={paid ? styles.available : styles.locked}>
-          {paid ? t('campaign.deepseekV4Flash.unlocked') : t('campaign.deepseekV4Flash.locked')}
+        <span className={styles.available}>
+          {t('campaign.deepseekV4Flash.unlocked')}
         </span>
       </div>
 
@@ -277,14 +344,11 @@ export function DeepSeekV4FlashCampaign({
           {t('campaign.deepseekV4Flash.weekFreeSuffix')}
         </small>
       </div>
-
       <p className={styles.boundary}>{t('campaign.deepseekV4Flash.boundary')}</p>
       <div className={styles.actions}>
-        {paid ? (
-          <Button variant="ghost" className={styles.laterAction} onClick={postponeModal}>
-            {t('campaign.deepseekV4Flash.later')}
-          </Button>
-        ) : null}
+        <Button variant="ghost" className={styles.laterAction} onClick={postponeModal}>
+          {t('campaign.deepseekV4Flash.later')}
+        </Button>
         <Button className={styles.primaryAction} onClick={takeAction}>
           {presentation.cta}
         </Button>

@@ -1892,7 +1892,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
 }
 .avatar-popover-head .who { font-weight: 600; font-size: 13px; }
 .avatar-popover-head .where { font-size: 12px; color: var(--text-muted); }
-/* Open Design (AMR) account row.
+/* OpenDesign (AMR) account row.
 
    This row is a container, not a single button: the icon+name+plan+balance
    block is the agent selector, while Upgrade stays a sibling link so it never
@@ -2220,7 +2220,7 @@ a.avatar-item:visited {
   color: var(--accent);
   font-weight: 600;
 }
-/* Plan-gated Open Design models. They stay listed (so users can see what a
+/* Plan-gated OpenDesign models. They stay listed (so users can see what a
    higher plan unlocks) but read as unavailable; clicking one opens the plans
    page instead of selecting a model the run would reject. */
 .avatar-model-option.is-locked {

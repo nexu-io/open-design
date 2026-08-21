@@ -363,8 +363,39 @@
 .entry-nav-rail__footer .entry-rail-actions:empty {
   display: none;
 }
-.entry-nav-rail__footer:has(> .entry-rail-actions:empty) {
-  padding-bottom: 0;
+/* Community/contact links (Discord-or-Feishu / X / mail), the footer's last
+   row. They moved here out of the account menu so the rail's bottom strip
+   carries something instead of reading as a dead white band. */
+.entry-nav-rail__social {
+  order: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% - 18px);
+  margin: 0 auto;
+  padding: 2px 0 2px;
+}
+.entry-nav-rail__social-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  color: var(--text-soft);
+  text-decoration: none;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.entry-nav-rail__social-btn:hover {
+  background: var(--vibrancy-fill-secondary);
+  color: var(--text);
+}
+.entry-nav-rail__social-btn svg,
+.entry-nav-rail__social-btn .od-icon { color: inherit; }
+.entry-nav-rail__social-btn .entry-nav-rail__menu-x {
+  flex: 0 0 auto;
+  color: inherit;
 }
 .entry-nav-rail__footer .entry-nav-rail__account {
   order: 2;
@@ -388,17 +419,18 @@
   flex: 0 0 30px;
 }
 .entry-local-mode-tip {
-  position: absolute;
-  left: var(--spacing-8, 8px);
-  right: var(--spacing-8, 8px);
-  /* Anchored to the footer (position: relative), whose bottom edge sits the
-     panel's 5px bottom padding + 1px ring above the panel's visible edge —
-     3 + 5 + 1 = 9px, matching the sides' 8 + 1px ring inset. */
-  bottom: 3px;
+  /* In flow, not absolute. It used to be anchored to the footer's bottom edge
+     (position: absolute; bottom: 3px; z-index: 2), which was harmless while
+     the footer had nothing else in it. The footer now ends with the social
+     row, and an opaque card pinned over that same bottom strip hid the
+     Discord/Feishu, X and mail links from exactly the signed-out users this
+     card is shown to. Sitting in flow (order 2, above the social row's 3)
+     keeps both reachable and lets the footer size itself. */
+  order: 2;
   display: grid;
   gap: 8px;
-  width: auto;
-  margin: 0;
+  width: calc(100% - var(--spacing-16, 16px));
+  margin: 0 auto;
   padding: 8px;
   box-sizing: border-box;
   border: 1px solid var(--border);
@@ -1180,7 +1212,10 @@
   cursor: pointer;
   pointer-events: auto;
   -webkit-app-region: no-drag;
-  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .entry-deepseek-campaign-badge::before {
@@ -5670,10 +5705,9 @@
   margin: auto 0 0;
   padding-top: var(--spacing-10);
 }
-/* Update-ready slot: rides the floating account row immediately AFTER the
-   avatar chip (per product: 升级提醒按钮跟在头像后边). Earlier homes — the
-   rail footer (#5517) and a strip on its own line above the identity row —
-   both detached the reminder from the avatar.
+/* Update-ready slot: an independent top-right cluster item immediately AFTER
+   the credits/avatar capsule. The rail footer remains the signed-out fallback
+   because that shell has no account capsule.
 
    This stays a global selector next to the rest of the account block rather
    than a CSS Module: its only child is `.entry-updater-menu`, itself a global
@@ -5681,10 +5715,9 @@
    it.
 
    `:empty` is load-bearing, not tidiness. The slot is mounted unconditionally
-   so the row's shape is stable, and the updater host renders nothing until an
-   installer is downloaded and unopened — so without this rule an idle account
-   row would reserve the slot's width plus the container's 6px `gap` next to
-   the avatar, shifting the whole cluster for a control that is not there.
+   so the cluster's shape is stable, and the updater host renders nothing until
+   an installer is downloaded and unopened — so without this rule an idle
+   cluster would reserve its gap for a control that is not there.
    `display: none` (not `width: 0`) is what drops it out of flex layout so the
    `gap` collapses with it. */
 .entry-nav-rail__account-updater {
@@ -6013,11 +6046,8 @@
   top: auto;
   bottom: calc(100% + 4px);
 }
-/* Floating account module (top-right cluster): compact pill trigger that
-   matches the campaign badge's height/material, and a downward,
-   right-aligned menu instead of the rail-bottom upward one. Lays out as a
-   ROW so the update rocket sits inline after the avatar chip instead of
-   stacking above it (the base class is a column for the rail-era layout). */
+/* Floating account module inside the credits/avatar capsule: compact trigger
+   with a downward, right-aligned menu instead of the rail-bottom upward one. */
 .entry-nav-rail__account--floating {
   order: 0;
   margin: 0;
@@ -8227,7 +8257,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
    workspace menu meta, InviteDialog art, InlineModelSwitcher account block.
    Sourced verbatim from pre-integration 37f7510f4. ---- */
 
-/* Account row: Open Design login/plan, lifted out of the agent card so the
+/* Account row: OpenDesign login/plan, lifted out of the agent card so the
    agent name is never truncated. */
 .inline-switcher__account {
   order: 0;
@@ -8243,7 +8273,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
     border-color 120ms var(--ease-out);
 }
 
-/* The Open Design entry is also the agent selector now: hovering the clickable
+/* The OpenDesign entry is also the agent selector now: hovering the clickable
    area previews selectability, and the active agent gets the same accent
    highlight the grid rows use. */
 .inline-switcher__account:has(.inline-switcher__account-select:hover):not(.is-active) {
@@ -8316,7 +8346,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   min-width: 0;
 }
 
-/* Balance shown as a muted subtitle line under the Open Design name. Each
+/* Balance shown as a muted subtitle line under the OpenDesign name. Each
    stat is "label value"; the gap (not a literal separator) keeps them apart. */
 .inline-switcher__account-subtitle {
   display: flex;

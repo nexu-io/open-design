@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // High-fidelity integration test for the onboarding -> home agent-selection
-// bug: the user picks (or accepts the recommended default) Open Design AMR
+// bug: the user picks (or accepts the recommended default) OpenDesign AMR
 // during first-run onboarding, but the home agent picker comes back showing
 // Claude Code. Unlike the component-level EntryShell tests (which mock
 // `onAgentChange` so it never updates config), this mounts the REAL `App`
@@ -262,7 +262,7 @@ describe('onboarding -> home AMR selection (end to end)', () => {
     // default and completes onboarding directly; the removed About-you,
     // Newsletter, and design-system steps must not be part of this witness.
     const hostedSource = await screen.findByRole('radio', {
-      name: /Open Design Hosted/i,
+      name: /OpenDesign Hosted/i,
     });
     expect(hostedSource.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));

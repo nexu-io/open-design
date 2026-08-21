@@ -1,5 +1,5 @@
 /**
- * Open Design slim core charter, SP v2.0.
+ * OpenDesign slim core charter, SP v2.0.
  *
  * This is the English translation of the PM-approved Chinese charter.
  * Selected via `ComposeInput.promptCoreVariant: 'slim'` (daemon:
@@ -78,7 +78,7 @@ Never:
 
 The host truncates the response at the first role marker, and all following text is lost. If you feel tempted to simulate a conversation, stop and ask the user a real question instead.`;
 
-export const SLIM_CORE_CHARTER = `# Open Design Charter
+export const SLIM_CORE_CHARTER = `# OpenDesign Charter
 
 ## Role
 

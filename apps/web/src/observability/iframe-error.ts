@@ -38,6 +38,28 @@ export interface PreviewIframeReportOptions {
   projectId?: string;
 }
 
+export type PreviewTransportRecoverySignal =
+  | 'body_incomplete'
+  | 'host_navigation_abort'
+  | 'probe_timeout'
+  | 'reactivation_unverified';
+
+export interface PreviewTransportDocumentState {
+  readyState?: string;
+  bodyPresent?: boolean;
+  bodyChildCount?: number;
+  documentElementChildCount?: number;
+}
+
+export interface PreviewTransportRecoveryOptions extends PreviewIframeReportOptions {
+  signal: PreviewTransportRecoverySignal;
+  activationAcknowledged: boolean;
+  documentState?: PreviewTransportDocumentState;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  timeoutMs?: number;
+}
+
 interface BufferedPreviewMessage {
   source: MessageEventSource | null;
   data: PreviewObservabilityMessage;
@@ -144,6 +166,8 @@ export function reportPreviewIframeMessage(
       visible_element_count: boundedNumber(message.visible_element_count),
       viewport_width: boundedNumber(message.viewport_width),
       viewport_height: boundedNumber(message.viewport_height),
+      blank_observation_count: boundedNumber(message.blank_observation_count),
+      sample_interval_ms: boundedNumber(message.sample_interval_ms),
     });
     return true;
   }
@@ -168,6 +192,64 @@ export function reportPreviewIframeMessage(
     column: boundedNumber(message.column),
   });
   return true;
+}
+
+/**
+ * Report a host-observed blank preview that the iframe-local paint detector
+ * cannot reliably see. In particular, Chromium may execute the injected head
+ * bridge and then abort the rest of an about:srcdoc navigation. Recovery
+ * replaces that half-document before its five-second white-screen timer can
+ * fire, so the host records the transport witness that caused the remount.
+ *
+ * This deliberately reuses client_preview_white_screen: it is operational
+ * safety telemetry, not a new product analytics event. Only bounded state is
+ * attached; no authored DOM text or source content leaves the client.
+ */
+export function reportPreviewTransportRecovery(
+  options: PreviewTransportRecoveryOptions,
+): void {
+  let transportStage: string;
+  switch (options.signal) {
+    case 'body_incomplete':
+      transportStage = 'head_bridge_alive_body_tail_missing';
+      break;
+    case 'host_navigation_abort':
+      transportStage = 'active_blob_navigation_aborted';
+      break;
+    case 'reactivation_unverified':
+      transportStage = 'retained_frame_unverified_on_reactivation';
+      break;
+    case 'probe_timeout':
+      transportStage = options.activationAcknowledged
+        ? 'head_bridge_lost_after_eager_ack'
+        : 'no_head_bridge_ack';
+      break;
+  }
+  reportSafetyEvent('client_preview_white_screen', {
+    surface: options.surface,
+    render_mode: options.renderMode,
+    artifact_id: options.artifactId,
+    artifact_kind: options.artifactKind,
+    project_id: options.projectId,
+    reason: 'srcdoc_transport_unverified',
+    transport_signal: options.signal,
+    transport_stage: transportStage,
+    activation_acknowledged: options.activationAcknowledged,
+    body_complete: options.signal === 'body_incomplete' ? false : undefined,
+    frame_ready_state: boundedText(options.documentState?.readyState, 32),
+    frame_body_present: options.documentState?.bodyPresent,
+    frame_body_child_count: boundedNumber(options.documentState?.bodyChildCount),
+    frame_document_element_child_count: boundedNumber(
+      options.documentState?.documentElementChildCount,
+    ),
+    recovery_attempted: true,
+    recovery_path: 'lazy_shell_remount',
+    host_visibility_state:
+      typeof document === 'undefined' ? undefined : document.visibilityState,
+    viewport_width: boundedNumber(options.viewportWidth),
+    viewport_height: boundedNumber(options.viewportHeight),
+    timeout_ms: boundedNumber(options.timeoutMs),
+  });
 }
 
 function boundedText(value: unknown, limit: number): string | undefined {

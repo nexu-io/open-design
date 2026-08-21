@@ -116,14 +116,14 @@ const GPT_5_5_SERVICE_TIER_OPTIONS: RuntimeModelOption[] = [
 // Codex applies `shell_environment_policy` again when its shell tool starts a
 // command. That second boundary is independent from the environment the daemon
 // passes to the Codex process itself. In particular, the supported
-// `inherit = "core"` policy removes every Open Design wrapper variable, so a
+// `inherit = "core"` policy removes every OpenDesign wrapper variable, so a
 // prompt can see the documented `$OD_NODE_BIN` / `$OD_BIN` invocation yet the
 // actual command expands both paths to empty strings.
 //
 // Start from the daemon-built process environment, then use Codex's
 // `include_only` policy to retain only the small cross-platform shell baseline
 // plus the run-scoped wrapper contract. Credentials inherited by the daemon
-// remain unavailable unless they are one of the explicit Open Design
+// remain unavailable unless they are one of the explicit OpenDesign
 // capabilities below. `OD_TOOL_TOKEN` stays in the environment channel rather
 // than being copied into argv, process listings, or Codex config files.
 const CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS = [
@@ -148,6 +148,7 @@ const CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS = [
   'HOMEDRIVE',
   'HOMEPATH',
   'OD_BIN',
+  'OD_HYPERFRAMES_BIN',
   'OD_NODE_BIN',
   'OD_DAEMON_URL',
   'OD_TOOL_TOKEN',

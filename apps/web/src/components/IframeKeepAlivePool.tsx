@@ -350,6 +350,12 @@ function syncIframeProps(
   appliedAttributes: Set<string>,
   appliedStyleKeys: Set<string>,
 ) {
+  // A pooled srcDoc frame carries `src="about:blank"` as its parking URL.
+  // Set that URL before srcdoc on a fresh DOM node. Reversing this order starts
+  // the real about:srcdoc navigation and then immediately cancels it with the
+  // parking URL, which Electron reports as ERR_ABORTED and users see as a
+  // white preview when opening or reattaching a file tab.
+  setAttribute(frame, 'src', props.src);
   const nextAttributes = new Set<string>();
   for (const [name, value] of Object.entries(props)) {
     if (
@@ -377,7 +383,6 @@ function syncIframeProps(
   frame.onload = props.onLoad
     ? (event) => props.onLoad?.(event as unknown as SyntheticEvent<HTMLIFrameElement>)
     : null;
-  setAttribute(frame, 'src', props.src);
 }
 
 export const PooledIframe = forwardRef<HTMLIFrameElement, PooledIframeProps>(function PooledIframe({

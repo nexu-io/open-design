@@ -64,6 +64,13 @@ function resolveHeadlessConfig(): PackagedConfig {
     posthogKey: process.env.POSTHOG_KEY?.trim() || null,
     posthogHost: process.env.POSTHOG_HOST?.trim() || null,
     velaWebUrl: process.env.OD_VELA_WEB_URL?.trim() || null,
+    velaWebUrls: (() => {
+      try {
+        return JSON.parse(process.env.OD_VELA_WEB_URLS ?? '{}') as Record<string, string>;
+      } catch {
+        return {};
+      }
+    })(),
     webSidecarEntry: null,
     webStandaloneRoot: null,
     webOutputMode: "server",

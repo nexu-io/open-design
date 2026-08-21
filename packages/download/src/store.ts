@@ -2,7 +2,7 @@
  * @module store
  *
  * Managed-download root ownership and directory lifecycle. Reads/writes the
- * ownership sentinel that marks a base directory as Open Design-owned, refuses to
+ * ownership sentinel that marks a base directory as OpenDesign-owned, refuses to
  * take over foreign/non-empty directories, ensures the `.state`/`.partial`/`.locks`
  * scratch layout exists, and resets an owned base by clearing its contents.
  * Depends on constants, errors, and the fs-io primitives.
@@ -71,7 +71,7 @@ async function ensureStoreDirs(basePath: string): Promise<void> {
 }
 
 /**
- * Ensure `basePath` is an Open Design-owned managed base: create it if missing,
+ * Ensure `basePath` is an OpenDesign-owned managed base: create it if missing,
  * claim an empty unmarked directory, reject foreign/non-empty or invalid-marker
  * directories, and guarantee the scratch layout exists.
  */

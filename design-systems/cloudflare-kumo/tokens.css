@@ -1,4 +1,4 @@
-/* Cloudflare Kumo UI — Open Design semantic bindings.
+/* Cloudflare Kumo UI — OpenDesign semantic bindings.
  * Official sources:
  * - https://kumo-ui.com/colors/
  * - https://github.com/cloudflare/kumo/tree/0c5832575c99988917b81cd752002e10f3dc9c7a
@@ -6,7 +6,7 @@
  *
  * Upstream token values are adapted from @cloudflare/kumo 2.9.2,
  * Copyright (c) 2026 Cloudflare, Inc., licensed under the MIT License.
- * This is an Open Design curated integration, not an official Cloudflare package.
+ * This is an OpenDesign curated integration, not an official Cloudflare package.
  */
 
 :root {
@@ -54,7 +54,7 @@
   --leading-tight: 1.2;
   --tracking-display: 0;
 
-  /* Open Design compatibility bindings aligned to Kumo's 4px utility rhythm. */
+  /* OpenDesign compatibility bindings aligned to Kumo's 4px utility rhythm. */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -84,7 +84,7 @@
   --motion-base: 250ms;
   --ease-standard: cubic-bezier(0.77, 0, 0.175, 1);
 
-  /* Open Design layout bindings preserve Kumo's compact dashboard density. */
+  /* OpenDesign layout bindings preserve Kumo's compact dashboard density. */
   --container-max: 1200px;
   --container-gutter-desktop: 24px;
   --container-gutter-tablet: 16px;

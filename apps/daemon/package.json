@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.19.2",
+  "version": "0.20.3",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -52,6 +52,7 @@
     "cheerio": "1.2.0",
     "chokidar": "3.6.0",
     "express": "5.2.1",
+    "hyperframes": "0.8.1",
     "jszip": "3.10.1",
     "kiwi-schema": "0.5.0",
     "multer": "2.2.0",

@@ -7,7 +7,7 @@
   },
   "fixture": {
     "title": "Cloudflare Kumo UI - reference components",
-    "description": "Reference fixture for the Open Design Cloudflare Kumo UI integration: compact semantic surfaces, precise controls, visible states, and operational data density.",
+    "description": "Reference fixture for the OpenDesign Cloudflare Kumo UI integration: compact semantic surfaces, precise controls, visible states, and operational data density.",
     "styleBlockCount": 1,
     "selectorCount": 59,
     "classCount": 27,

@@ -1,4 +1,8 @@
-import { API_ERROR_CODES, type WorkspaceCollabContext } from '@open-design/contracts';
+import {
+  API_ERROR_CODES,
+  workspaceSeatCapacityState,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 import type {
   TrackingCountBucket,
   TrackingWorkspaceDimensions,
@@ -12,7 +16,6 @@ export function workspaceAnalyticsDimensions(
   if (!context) return {};
   const plan = context.planId?.trim().toLowerCase();
   const planBucket = !plan || plan === 'free' ? 'free' : 'paid';
-  const isSeatFull = context.seatSummary?.isSeatFull;
   return {
     workspace_key: context.workspaceId,
     workspace_type: context.workspaceType,
@@ -21,7 +24,7 @@ export function workspaceAnalyticsDimensions(
     billing_state: context.billingState,
     plan_bucket: planBucket,
     provider_mode: context.providerMode,
-    seat_state: isSeatFull == null ? 'unknown' : isSeatFull ? 'full' : 'available',
+    seat_state: workspaceSeatCapacityState(context.seatSummary),
     $groups: { workspace: context.workspaceId },
   };
 }

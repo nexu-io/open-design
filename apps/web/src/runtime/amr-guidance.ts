@@ -10,7 +10,7 @@ import {
 
 // AMR model-gateway console (account, balance, top-up, plans).
 // `source=open_design` tags the landing page_view so vela analytics can
-// attribute the visit to Open Design (per-product revenue/traffic attribution).
+// attribute the visit to OpenDesign (per-product revenue/traffic attribution).
 //
 // The console's dashboard — not a wallet page — is the account surface every
 // entry here targets. A wallet route still answers on B's side, but it is no
@@ -22,24 +22,11 @@ export const AMR_CONSOLE_URL =
   'https://open-design.ai/amr/dashboard?source=open_design';
 export const DEFAULT_AMR_RECHARGE_URL = AMR_CONSOLE_URL;
 export const AMR_RECHARGE_URL = DEFAULT_AMR_RECHARGE_URL;
+export const OPEN_DESIGN_PRICING_URL = 'https://open-design.ai/pricing/';
 
 // Path + attribution the console is always reached through, so a runtime
 // origin only has to carry the host.
 const AMR_CONSOLE_PATH = '/dashboard?source=open_design';
-
-/**
- * The console's `billing=<intent>` value that means "open the upgrade surface
- * that matches THIS workspace".
- *
- * B's dashboard resolves it against the workspace's own subscription state
- * rather than trusting the caller: a personal owner gets the personal plan
- * modal (the same one the console's 「升级订阅」 hero button opens), a team
- * that never subscribed gets first-checkout, and a subscribed team gets
- * change-plan. That is why this client links one intent for every state
- * instead of guessing a per-state parameter — a wrong guess used to open
- * nothing at all (recvpSQKna0LwR).
- */
-export const AMR_CONSOLE_UPGRADE_INTENT = 'plan';
 
 const AMR_CONSOLE_URL_BY_PROFILE: Record<string, string> = {
   prod: DEFAULT_AMR_RECHARGE_URL,
@@ -77,7 +64,10 @@ export function setRuntimeAmrConsoleOrigin(origin: string | null | undefined): v
   runtimeAmrConsoleOrigin = normalized.length > 0 ? normalized : null;
 }
 
-export function amrConsoleUrlForProfile(profile: string | null | undefined): string {
+export function amrConsoleUrlForProfile(
+  profile: string | null | undefined,
+  consoleOrigin?: string | null,
+): string {
   const normalized = profile?.trim() || 'prod';
   // prod's console is the public product URL and stays pinned to it: a runtime
   // origin must never be able to redirect a production user's account, plan, or
@@ -86,6 +76,8 @@ export function amrConsoleUrlForProfile(profile: string | null | undefined): str
   if (normalized === 'prod' || !KNOWN_AMR_PROFILES.has(normalized)) {
     return DEFAULT_AMR_RECHARGE_URL;
   }
+  const statusOrigin = consoleOrigin?.trim().replace(/\/$/, '') ?? '';
+  if (statusOrigin) return `${statusOrigin}${AMR_CONSOLE_PATH}`;
   if (runtimeAmrConsoleOrigin) return `${runtimeAmrConsoleOrigin}${AMR_CONSOLE_PATH}`;
   return AMR_CONSOLE_URL_BY_PROFILE[normalized] ?? DEFAULT_AMR_RECHARGE_URL;
 }
@@ -97,13 +89,11 @@ export function amrRechargeUrlForProfile(profile: string | null | undefined): st
 function amrWorkspaceUrl(
   profile: string | null | undefined,
   workspaceId: string | null | undefined,
-  intent?: 'plans',
 ): string | null {
   const normalizedWorkspaceId = workspaceId?.trim();
   if (!normalizedWorkspaceId) return null;
   const url = new URL(amrConsoleUrlForProfile(profile));
   url.searchParams.set('workspaceId', normalizedWorkspaceId);
-  if (intent === 'plans') url.searchParams.set('billing', AMR_CONSOLE_UPGRADE_INTENT);
   return url.toString();
 }
 
@@ -115,18 +105,17 @@ export function amrConsoleUrlForWorkspace(
 }
 
 export function amrPlansUrlForWorkspace(
-  profile: string | null | undefined,
+  _profile: string | null | undefined,
   workspaceId: string | null | undefined,
 ): string | null {
-  return amrWorkspaceUrl(profile, workspaceId, 'plans');
+  return workspaceId?.trim() ? OPEN_DESIGN_PRICING_URL : null;
 }
 
-// Console dashboard deep-linked to open the subscription/plans modal, used by
-// the "Upgrade" affordances next to the plan tier.
-export function amrPlansUrlForProfile(profile: string | null | undefined): string {
-  const base = amrConsoleUrlForProfile(profile);
-  const intent = `billing=${AMR_CONSOLE_UPGRADE_INTENT}`;
-  return base.includes('?') ? `${base}&${intent}` : `${base}?${intent}`;
+// Public comparison surface used by every generic Upgrade / View plans entry.
+// A selected Pricing card still carries plan + interval back to Vela for
+// direct checkout; generic discovery never opens the Cloud plan modal.
+export function amrPlansUrlForProfile(_profile: string | null | undefined): string {
+  return OPEN_DESIGN_PRICING_URL;
 }
 
 export function amrProfileBadgeLabel(profile: string | null | undefined): string | null {
@@ -152,7 +141,7 @@ const PROMOTE_AMR_CODES = new Set<string>([
 //   - retry:                       re-run with the current agent.
 //   - authorize:                   AMR sign-in/authorize flow, then auto-retry on success.
 //   - recharge:                    open the AMR console (manual retry afterwards).
-//   - upgrade:                     open the AMR plan modal (manual retry afterwards).
+//   - upgrade:                     open public Pricing (manual retry afterwards).
 //   - launch-terminal-auth:        Antigravity-specific. agy's `-p`
 //                                  print mode cannot complete Google
 //                                  Sign-In on its own (no input field
@@ -464,7 +453,7 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   // The bundled agent binary needs a CPU instruction set (AVX2) this device
   // doesn't have, so it crashes on launch — retrying reproduces the crash and
   // switching hosted models doesn't help (the runtime binary is the problem).
-  // The fix is updating Open Design to a build that bundles a compatible
+  // The fix is updating OpenDesign to a build that bundles a compatible
   // (baseline) runtime, so show guidance copy without a dead Retry button.
   cpu_unsupported: {
     primaryAction: 'none',
@@ -533,7 +522,7 @@ export function resolveRunFailureUi(
         primaryAction: 'authorize',
         // PRD「需要登录」type — shared title with the non-AMR sign-in case.
         titleKey: 'chat.runError.title.signInRequired',
-        // "Open Design 智能体尚未登录，前往登录即可正常使用" — single CTA, no
+        // "OpenDesign 智能体尚未登录，前往登录即可正常使用" — single CTA, no
         // AMR promotion (the agent already IS AMR). The authorize action reuses
         // the inline AmrLoginPill (sign-in + auto-retry on success).
         messageKey: 'chat.runError.signInMessage.amr',

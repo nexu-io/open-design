@@ -3,9 +3,9 @@ name: html-ppt-pitch-deck
 en_name: "Write a Demo Day Pitch like a Top Accelerator Partner"
 zh_name: "像顶级加速器合伙人一样写 Demo Day 路演"
 description: |
-  Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.
+  OpenDesign's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.
 en_description: |
-  Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.
+  OpenDesign's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.
 zh_description: |
   像顶级加速器合伙人一样写 Demo Day 路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -41,7 +41,7 @@ od:
   animations: true
   category: "fundraising-pitch"
   scenario: "finance"
-  example_prompt: "Create \"Write a Demo Day Pitch like a Top Accelerator Partner\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Audience: accelerator partners, angels. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
+  example_prompt: "Create \"Write a Demo Day Pitch like a Top Accelerator Partner\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: OpenDesign's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Audience: accelerator partners, angels. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
 ---
 # HTML PPT · Pitch Deck
 

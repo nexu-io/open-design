@@ -65,6 +65,21 @@ function legacyDeckHtml(): string {
   ].join('\n');
 }
 
+function horizontalTrackDeckHtml(): string {
+  return [
+    '<!doctype html><html><head><style>',
+    '.deck { width: 100vw; height: 100vh; overflow: hidden; }',
+    '.stage { display: flex; transition: transform 480ms ease; }',
+    '.slide { min-width: 100vw; height: 100vh; }',
+    '</style></head><body>',
+    '<div class="deck"><div class="stage" id="stage">',
+    '  <section class="slide">slide 1</section>',
+    '  <section class="slide">slide 2</section>',
+    '</div></div>',
+    '</body></html>',
+  ].join('\n');
+}
+
 describe('injectDeckBridge — framework-deck detection (#deck-stage)', () => {
   it('skips the place-content fix when the deck carries the framework #deck-stage marker', () => {
     const out = buildSrcdoc(frameworkDeckHtml(), { deck: true });
@@ -85,8 +100,16 @@ describe('injectDeckBridge — framework-deck detection (#deck-stage)', () => {
   it('keeps injecting the place-content fix for legacy / non-framework decks', () => {
     const out = buildSrcdoc(legacyDeckHtml(), { deck: true });
     expect(out).toMatch(/<style[^>]*data-od-deck-fix/);
-    expect(out).toContain('.stage, .deck-stage, .deck-shell { place-content: center !important; }');
+    expect(out).toContain('.stage:not(:has(> .slide))');
     expect(out).toMatch(/<script[^>]*data-od-deck-bridge/);
+  });
+
+  it('does not center a horizontal stage whose direct children are slides', () => {
+    const out = buildSrcdoc(horizontalTrackDeckHtml(), { deck: true });
+    const fix = out.match(/<style data-od-deck-fix>([\s\S]*?)<\/style>/)?.[1] ?? '';
+
+    expect(fix).toContain('.stage:not(:has(> .slide))');
+    expect(fix).not.toMatch(/(?:^|,)\s*\.stage\s*(?:,|\{)/);
   });
 
   it('can hide generated deck chrome so host preview chrome owns navigation', () => {

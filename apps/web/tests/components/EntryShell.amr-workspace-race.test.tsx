@@ -90,7 +90,7 @@ function teamContext(workspaceId: string, workspaceMemberId: string): WorkspaceC
 function amrAgent(): AgentInfo {
   return {
     id: 'amr',
-    name: 'Open Design AMR',
+    name: 'OpenDesign AMR',
     bin: 'amr',
     available: true,
     models: [{ id: 'glm-5', label: 'GLM 5' }],
@@ -310,7 +310,9 @@ describe('EntryShell AMR workspace precheck race', () => {
     setHomeHeroPrompt('Create a poster after I sign in.');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
 
-    await waitFor(() => expect(mockedCheckAmrBalanceGate).toHaveBeenCalledWith(undefined));
+    await waitFor(() => {
+      expect(mockedCheckAmrBalanceGate).toHaveBeenCalledWith(undefined, 'glm-5');
+    });
     const dialog = await screen.findByTestId('amr-balance-dialog');
     expect(dialog.getAttribute('data-reason')).toBe('signed_out');
     expect(onCreateProject).not.toHaveBeenCalled();
@@ -393,7 +395,9 @@ describe('EntryShell AMR workspace precheck race', () => {
     setHomeHeroPrompt('Create through the old daemon compatibility lane.');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
 
-    await waitFor(() => expect(mockedCheckAmrBalanceGate).toHaveBeenCalledWith(undefined));
+    await waitFor(() => {
+      expect(mockedCheckAmrBalanceGate).toHaveBeenCalledWith(undefined, 'glm-5');
+    });
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
   });
 
@@ -700,7 +704,7 @@ describe('EntryShell AMR workspace precheck race', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Sign in to Open Design' }),
+      await screen.findByRole('heading', { name: 'Sign in to OpenDesign' }),
     ).toBeTruthy();
     expect(window.location.pathname).toBe('/onboarding');
     expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -792,7 +796,7 @@ describe('EntryShell AMR workspace precheck race', () => {
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
     expect(
-      await screen.findByRole('heading', { name: 'Sign in to Open Design' }),
+      await screen.findByRole('heading', { name: 'Sign in to OpenDesign' }),
     ).toBeTruthy();
     expect(window.localStorage.getItem('open-design:home-composer:prompt')).toBe(
       'Keep this draft through Cloud reauthentication',
@@ -890,7 +894,7 @@ describe('EntryShell AMR workspace precheck race', () => {
         workspaceType: 'team',
         workspaceId: 'workspace-a',
         workspaceMemberId: 'member-a',
-      });
+      }, 'glm-5');
     });
 
     currentContext = workspaceB;
@@ -905,7 +909,7 @@ describe('EntryShell AMR workspace precheck race', () => {
         workspaceType: 'team',
         workspaceId: 'workspace-b',
         workspaceMemberId: 'member-b',
-      });
+      }, 'glm-5');
     });
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
     expect(onCreateProject).toHaveBeenCalledWith(

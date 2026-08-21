@@ -2,8 +2,9 @@
 // daemon's SQLite store. All writes round-trip through HTTP so projects
 // stay coherent across multiple browser tabs and across restarts.
 //
-// These helpers fail soft (returning null / [] on transport errors) so
-// the UI can stay rendered when the daemon is briefly unreachable.
+// Most helpers fail soft (returning null / [] on transport errors) so the UI
+// can stay rendered when the daemon is briefly unreachable. Reads whose empty
+// result changes behavior must preserve failure as a typed error instead.
 
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import { BackoffController, type BackoffOptions } from '../lib/backoff';
@@ -13,6 +14,7 @@ import type {
   AppliedPluginSnapshot,
   ApplyResult,
   ChatSessionMode,
+  CollabProjectBootstrapResponse,
   CreateConversationRequest,
   CreateDesignSystemProjectFromProjectResponse,
   DuplicateProjectResponse,
@@ -370,6 +372,18 @@ export type ProjectRouteBootstrapResult =
   | { kind: 'forbidden' }
   | { kind: 'unavailable' };
 
+export type FirstOpenTeamProjectBootstrapResult =
+  | {
+      kind: 'found';
+      project: Project;
+      scope: ProjectWorkspaceScopeResponse['scope'];
+      resolvedDir: string | null;
+      awaitingFirstMaterialization: boolean;
+    }
+  | { kind: 'not-found' }
+  | { kind: 'forbidden' }
+  | { kind: 'unavailable' };
+
 /**
  * Bootstrap a fresh project deep link without borrowing the shell's ambient
  * Workspace. A card-opening witness goes straight through the scoped endpoint;
@@ -503,6 +517,87 @@ export async function bootstrapProjectRoute(
   });
   if (result.kind === 'unavailable') evictCoalescedGet(key);
   return result;
+}
+
+/**
+ * Progressive first-open lane for a Team project that is present in the hub
+ * but absent from this daemon's local data root.
+ *
+ * `/collab/bootstrap` owns the exact-directory authorization, shared-owner
+ * discovery, placeholder stamp, and background single-flight pull. Its
+ * idempotent PUT is safely replayable by the sidecar proxy after a reused
+ * keep-alive socket resets. A current daemon atomically binds the placeholder
+ * to this exact Team principal before answering; the follow-up route bootstrap
+ * proves that local binding through the ordinary scope/detail gates before
+ * ProjectView may mount.
+ * Older daemons leave the row unbound, which deliberately returns `unavailable`
+ * so App keeps the pre-existing full-materialization fallback.
+ */
+export async function bootstrapFirstOpenTeamProjectRoute(
+  projectId: string,
+  options: {
+    accountGeneration: number;
+    exactContext: WorkspaceCollabContext;
+  },
+): Promise<FirstOpenTeamProjectBootstrapResult> {
+  const { exactContext } = options;
+  if (
+    exactContext.workspaceType !== 'team'
+    || exactContext.memberStatus !== 'active'
+    || exactContext.lifecycleState !== 'active'
+  ) {
+    return { kind: 'not-found' };
+  }
+  let bootstrapResponse: CollabProjectBootstrapResponse;
+  try {
+    const response = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/collab/bootstrap`,
+      {
+        method: 'PUT',
+        cache: 'no-store',
+        headers: workspaceProjectHeaders(exactContext),
+      },
+    );
+    if (!response.ok) {
+      if (response.status === 403) return { kind: 'forbidden' };
+      if (response.status === 404) return { kind: 'not-found' };
+      return { kind: 'unavailable' };
+    }
+    bootstrapResponse = (await response.json()) as CollabProjectBootstrapResponse;
+  } catch {
+    return { kind: 'unavailable' };
+  }
+  // The optimistic route read immediately before this helper may have cached
+  // the expected 404 for the same exact principal. The successful PUT changed
+  // local authority state, so that negative read is no longer reusable.
+  evictCoalescedGet([
+    'project-route-bootstrap',
+    options.accountGeneration,
+    projectId,
+    workspaceIdentityCacheKey(exactContext),
+  ].join(':'));
+  const bootstrap = await bootstrapProjectRoute(projectId, {
+    accountGeneration: options.accountGeneration,
+    exactContext,
+  });
+  if (bootstrap.kind === 'forbidden') return { kind: 'unavailable' };
+  if (bootstrap.kind !== 'found') return bootstrap;
+  if (
+    bootstrap.scope.kind !== 'team'
+    || bootstrap.scope.context?.workspaceType !== 'team'
+    || workspaceIdentityCacheKey(bootstrap.scope.context)
+      !== workspaceIdentityCacheKey(exactContext)
+  ) {
+    // A shared placeholder must never be rendered through an unbound/local or
+    // mismatched principal, including when the web is paired with an older
+    // daemon that only registered a row without its Team binding.
+    return { kind: 'unavailable' };
+  }
+  return {
+    ...bootstrap,
+    awaitingFirstMaterialization:
+      bootstrapResponse.awaitingFirstMaterialization === true,
+  };
 }
 
 export async function getProjectDetail(
@@ -669,7 +764,7 @@ export async function createProject(
   );
   try {
     // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
-    // when `crypto.randomUUID` is unavailable. Open Design served over
+    // when `crypto.randomUUID` is unavailable. OpenDesign served over
     // plain HTTP on a LAN IP (Docker / unRAID self-hosting) is a
     // non-secure context, where `crypto.randomUUID` is undefined and
     // calling it directly throws — the surrounding try/catch then turns
@@ -703,7 +798,7 @@ export async function createProject(
       }
       if (await isLocalDaemonProxyFailure(resp)) {
         throw new ProjectCreateError(
-          'Could not reach the local Open Design service',
+          'Could not reach the local OpenDesign service',
           null,
           null,
           true,
@@ -1251,6 +1346,57 @@ export async function deleteConversation(
 
 // ---------- messages ----------
 
+/**
+ * A failed authoritative transcript read. Callers must not reinterpret this
+ * as an empty conversation: Home auto-send and recovery flows make decisions
+ * from that distinction.
+ */
+export class ProjectMessageListError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+    readonly code: string | null,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = 'ProjectMessageListError';
+  }
+}
+
+async function readProjectMessageListError(resp: Response): Promise<{
+  message: string;
+  code: string | null;
+  retryable: boolean;
+}> {
+  let message = `Could not load messages for this conversation (${resp.status}).`;
+  let code: string | null = null;
+  let retryable = false;
+  try {
+    const payload = await resp.json() as {
+      error?: string | {
+        code?: unknown;
+        message?: unknown;
+        retryable?: unknown;
+      };
+    };
+    if (payload.error && typeof payload.error === 'object') {
+      const rawCode = payload.error.code;
+      code = typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/u.test(rawCode)
+        ? rawCode
+        : null;
+      if (typeof payload.error.message === 'string' && payload.error.message.trim()) {
+        message = payload.error.message;
+      }
+      retryable = payload.error.retryable === true;
+    } else if (typeof payload.error === 'string' && payload.error.trim()) {
+      message = payload.error;
+    }
+  } catch {
+    // Keep the stable HTTP fallback for legacy/non-JSON responses.
+  }
+  return { message, code, retryable };
+}
+
 export async function listMessages(
   projectId: string,
   conversationId: string,
@@ -1263,11 +1409,25 @@ export async function listMessages(
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : undefined,
     );
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      const failure = await readProjectMessageListError(resp);
+      throw new ProjectMessageListError(
+        failure.message,
+        resp.status,
+        failure.code,
+        failure.retryable,
+      );
+    }
     const json = (await resp.json()) as { messages: ChatMessage[] };
     return json.messages ?? [];
-  } catch {
-    return [];
+  } catch (error) {
+    if (error instanceof ProjectMessageListError) throw error;
+    throw new ProjectMessageListError(
+      error instanceof Error ? error.message : 'Could not load messages for this conversation.',
+      null,
+      null,
+      true,
+    );
   }
 }
 

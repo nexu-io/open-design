@@ -3,9 +3,9 @@ name: html-ppt-knowledge-arch-blueprint
 en_name: "Turn an Incident Retro into a Learning Deck like a Platform VP"
 zh_name: "像平台 VP 一样把事故复盘写成学习稿"
 description: |
-  Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Built as a decision-grade product management deck for engineering, SRE, leadership.
+  OpenDesign's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Built as a decision-grade product management deck for engineering, SRE, leadership.
 en_description: |
-  Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Built as a decision-grade product management deck for engineering, SRE, leadership.
+  OpenDesign's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Built as a decision-grade product management deck for engineering, SRE, leadership.
 zh_description: |
   像平台 VP 一样把事故复盘写成学习稿——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -40,7 +40,7 @@ od:
   animations: true
   category: "product-management"
   scenario: "product"
-  example_prompt: "Create \"Turn an Incident Retro into a Learning Deck like a Platform VP\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Audience: engineering, SRE, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
+  example_prompt: "Create \"Turn an Incident Retro into a Learning Deck like a Platform VP\" as a decision-grade Product management deck in this template's own visual system. Subject: OpenDesign's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Audience: engineering, SRE, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
 ---
 # HTML PPT · 奶油蓝图架构
 

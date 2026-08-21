@@ -20,7 +20,7 @@ export type AmrLowBalanceDecision = 'proceed' | 'recharge' | 'dismiss';
 interface Props {
   /** Raw wallet balance string from the warning snapshot. */
   balanceUsd: string | null;
-  /** Open Design Cloud profile from the warning snapshot; picks the console origin. */
+  /** OpenDesign Cloud profile from the warning snapshot; picks the console origin. */
   profile: string | null;
   /** Which surface warned — keys the amr_entry attribution on the recharge click. */
   entrySource: 'home_low_balance_warn_recharge' | 'chat_low_balance_warn_recharge';
@@ -30,7 +30,7 @@ interface Props {
   onDecision: (decision: AmrLowBalanceDecision) => void;
 }
 
-// SOFT pre-run reminder for Open Design Cloud tasks: the balance can still
+// SOFT pre-run reminder for OpenDesign Cloud tasks: the balance can still
 // fund a start but sits at or below the low-balance line, so the run may die
 // mid-flight. Unlike the hard AmrBalanceDialog this never stands between the
 // user and their task — "start anyway" resolves the SAME pending send the
@@ -106,12 +106,16 @@ export function AmrLowBalanceDialog({
           {t('chat.amrLowBalance.dontRemind')}
         </label>
         <div className={styles.footerActions}>
-          <Button onClick={() => decide('proceed')} data-testid="amr-low-balance-dialog-proceed">
+          <Button
+            className={styles.action}
+            onClick={() => decide('proceed')}
+            data-testid="amr-low-balance-dialog-proceed"
+          >
             {t('chat.amrLowBalance.proceedCta')}
           </Button>
           <Button
             variant="primary"
-            className={styles.cta}
+            className={`${styles.action} ${styles.cta}`}
             onClick={openConsoleAndPark}
             data-testid="amr-low-balance-dialog-recharge"
           >

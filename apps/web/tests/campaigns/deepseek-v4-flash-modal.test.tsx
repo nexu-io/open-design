@@ -18,7 +18,9 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getGoPlanCampaignCopy } from '../../src/campaigns/go-plan-content';
 import { DeepSeekV4FlashCampaign } from '../../src/components/DeepSeekV4FlashCampaign';
+import { I18nProvider } from '../../src/i18n';
 
 const trackSpy = vi.fn();
 
@@ -132,11 +134,30 @@ describe('the modal never re-opens for a seen campaign (no URL override left)', 
   });
 });
 
-describe('unpaid upgrade path carries telemetry consent', () => {
-  it('forwards metricsConsent and stamps od_device_id on the plans URL', () => {
-    // The other two campaign touchpoints (workbench badge, model-switcher
-    // upgrade) already record the AMR entry with metricsConsent and attach
-    // the consent-gated device id; the modal must match.
+describe('unpaid Go path opens public Pricing', () => {
+  it('renders the complete modal and accessible labels from the active locale', () => {
+    const copy = getGoPlanCampaignCopy('fr');
+
+    render(
+      <I18nProvider initial="fr">
+        <DeepSeekV4FlashCampaign audience="unpaid" active />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: copy.closeAria })).toBeVisible();
+    expect(screen.getByText(copy.newBadge, { exact: true })).toBeVisible();
+    expect(screen.getByText(copy.eyebrow, { exact: true })).toBeVisible();
+    expect(screen.getByRole('heading', { name: copy.headline })).toBeVisible();
+    expect(screen.getByText(copy.description, { exact: true })).toBeVisible();
+    expect(screen.getByRole('group', { name: copy.providersAria })).toBeVisible();
+    expect(screen.getByText(copy.benefit, { exact: true })).toBeVisible();
+    expect(screen.getAllByText(copy.status, { exact: true })).toHaveLength(3);
+    expect(screen.getByText(copy.renewal, { exact: true })).toBeVisible();
+    expect(screen.getByText(copy.boundary, { exact: true })).toBeVisible();
+    expect(screen.getByRole('button', { name: copy.cta })).toBeVisible();
+  });
+
+  it('opens the locale-neutral comparison page', () => {
     const open = vi.fn();
     vi.stubGlobal('open', open);
     render(
@@ -148,16 +169,15 @@ describe('unpaid upgrade path carries telemetry consent', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Upgrade and use' }));
+    fireEvent.click(screen.getByRole('button', { name: /^View Go plan/ }));
 
     expect(open).toHaveBeenCalledTimes(1);
     const url = new URL(String(open.mock.calls[0]?.[0]));
-    expect(url.searchParams.get('od_campaign_id')).toBe('deepseek_v4_pro');
-    expect(url.searchParams.get('od_conversion_source')).toBe('deepseek_unpaid_modal');
-    expect(url.searchParams.get('od_device_id')).toBe('install-abc123');
+    expect(url.origin + url.pathname).toBe('https://open-design.ai/pricing/');
+    expect(url.searchParams.get('od_locale')).toBe('en');
   });
 
-  it('omits od_device_id without metrics consent', () => {
+  it('keeps the same target without metrics consent', () => {
     const open = vi.fn();
     vi.stubGlobal('open', open);
     render(
@@ -169,13 +189,26 @@ describe('unpaid upgrade path carries telemetry consent', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Upgrade and use' }));
+    fireEvent.click(screen.getByRole('button', { name: /^View Go plan/ }));
 
     expect(open).toHaveBeenCalledTimes(1);
     const url = new URL(String(open.mock.calls[0]?.[0]));
     expect(url.searchParams.get('od_device_id')).toBeNull();
-    // Attribution itself is consent-independent.
-    expect(url.searchParams.get('od_campaign_id')).toBe('deepseek_v4_pro');
+    expect(url.origin + url.pathname).toBe('https://open-design.ai/pricing/');
+  });
+
+  it('uses an independent frequency key from the paid DeepSeek campaign', () => {
+    vi.stubGlobal('open', vi.fn());
+    render(<DeepSeekV4FlashCampaign audience="unpaid" active />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^View Go plan/ }));
+
+    expect(window.localStorage.getItem(
+      'open-design:campaign-seen:go-plan-launch-2026',
+    )).toBe('1');
+    expect(window.localStorage.getItem(
+      'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026',
+    )).toBeNull();
   });
 });
 

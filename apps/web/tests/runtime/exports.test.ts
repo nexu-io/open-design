@@ -1185,7 +1185,9 @@ describe('sandboxed preview Blob exports', () => {
 
     expect(capturedBlob).toBeDefined();
     const wrapper = await capturedBlob!.text();
-    expect(wrapper).toContain('&lt;base href=&quot;https://open-design.test/&quot;&gt;');
+    expect(wrapper).toContain(
+      '&lt;base href=&quot;https://open-design.test/&quot; data-od-project-preview-base&gt;',
+    );
   });
 
   it('passes srcdoc options through the sandboxed new-tab wrapper', async () => {
@@ -1200,7 +1202,9 @@ describe('sandboxed preview Blob exports', () => {
     const wrapper = await capturedBlob!.text();
     expect(wrapper).toContain('sandbox="allow-scripts"');
     expect(wrapper).not.toContain('allow-same-origin');
-    expect(wrapper).toContain('&lt;base href=&quot;/artifacts/project/assets/&quot;&gt;');
+    expect(wrapper).toContain(
+      '&lt;base href=&quot;/artifacts/project/assets/&quot; data-od-project-preview-base&gt;',
+    );
     expect(wrapper).toContain('od:slide');
   });
 

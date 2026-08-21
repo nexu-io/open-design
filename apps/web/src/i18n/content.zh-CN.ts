@@ -21,7 +21,7 @@ export const ZH_CN_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'agent-browser': {
     description:
-      '面向 AI agent 的浏览器自动化 CLI。当用户需要检查、\n测试或自动化浏览器行为时使用：导航页面、填写表单、\n点击按钮、截图、提取页面数据、读取选中的\nOpen Design 浏览器标签页上下文、测试 web 应用、试用 Open Design\n预览、QA、缺陷排查或评审应用质量。除非用户明确要求外部浏览，\n否则优先使用本地 Open Design 预览 URL。',
+      '面向 AI agent 的浏览器自动化 CLI。当用户需要检查、\n测试或自动化浏览器行为时使用：导航页面、填写表单、\n点击按钮、截图、提取页面数据、读取选中的\nOpenDesign 浏览器标签页上下文、测试 web 应用、试用 OpenDesign\n预览、QA、缺陷排查或评审应用质量。除非用户明确要求外部浏览，\n否则优先使用本地 OpenDesign 预览 URL。',
     examplePrompt:
       '面向 AI agent 的浏览器自动化 CLI。',
   },
@@ -849,7 +849,7 @@ export const ZH_CN_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'ui-ux-pro-max': {
     description:
-      '仅目录索引的 UI/UX Pro Max 条目。完整的上游模板、数据和搜索工作流并未打包进 Open Design。',
+      '仅目录索引的 UI/UX Pro Max 条目。完整的上游模板、数据和搜索工作流并未打包进 OpenDesign。',
     examplePrompt:
       '仅目录索引的 UI/UX Pro Max 条目。',
   },

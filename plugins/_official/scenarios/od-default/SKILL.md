@@ -16,7 +16,7 @@ fallback, not a visible catalog entry.
 
 Infer the task type from the user's brief and known conversation context.
 When one route is reasonably clear, bind it and continue directly to that
-Open Design flow. A free-form Home prompt, a first turn, or the presence of a
+OpenDesign flow. A free-form Home prompt, a first turn, or the presence of a
 discovery stage does not by itself require a question form.
 
 Emit the form below only when two or more routes remain materially plausible
@@ -77,7 +77,7 @@ localized label, and continue:
 - `audio` (`Audio`): plan voice/music/SFX intent, then use the OD media generation
   CLI for audio output.
 - `other` (`Other`): ask only the minimum follow-up needed, then choose the closest
-  Open Design workflow and continue.
+  OpenDesign workflow and continue.
 
 Do not automatically emit a second `<question-form id="discovery">` after the
 route answer. Continue with the submitted answer and all existing context.

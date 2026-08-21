@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const ZH: SolutionLocaleCopy = {
   aiWireframeGenerator: {
-    title: 'AI 线框图生成器 —— 用 Open Design 从提示词到线框图',
+    title: 'AI 线框图生成器 —— 用 OpenDesign 从提示词到线框图',
     description:
-      '一个免费开源的 AI 线框图生成器：把一句提示词变成可编辑的多屏线框图，并一路带到可上线的代码。Open Design 跑在你已经在用的编程 agent 里，所以线框图和真实产品共用同一份源。',
+      '一个免费开源的 AI 线框图生成器：把一句提示词变成可编辑的多屏线框图，并一路带到可上线的代码。OpenDesign 跑在你已经在用的编程 agent 里，所以线框图和真实产品共用同一份源。',
     breadcrumb: 'AI 线框图生成器',
     label: '工具 · AI 线框图生成器',
     heading: '一句提示词，生成线框图',
@@ -12,12 +12,12 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑插画：一句提示词变成可编辑线框图、再变成成品 UI，被一个绿色选框框住',
     tldrTitle: '一句话',
     tldrBody:
-      '多数 AI 线框图生成器只给你一张之后还要重做的图。Open Design 在你的编程 agent 里生成线框图，并把它从提示词一路带到可上线代码——没有导出步骤、没有交接断层、没有按席位计费。',
+      '多数 AI 线框图生成器只给你一张之后还要重做的图。OpenDesign 在你的编程 agent 里生成线框图，并把它从提示词一路带到可上线代码——没有导出步骤、没有交接断层、没有按席位计费。',
     stepsTitle: 'AI 线框图生成器怎么用',
     steps: [
       {
         title: '描述屏幕',
-        body: '用大白话告诉 agent 要做什么线框——"一个带侧边栏、统计行和近期动态表格的 dashboard"。Open Design 加载线框 skill，让 agent 排布结构和层级，而不只是出一张静态图。',
+        body: '用大白话告诉 agent 要做什么线框——"一个带侧边栏、统计行和近期动态表格的 dashboard"。OpenDesign 加载线框 skill，让 agent 排布结构和层级，而不只是出一张静态图。',
         imageAlt: '插画：把大白话的屏幕描述敲进终端',
       },
       {
@@ -36,9 +36,9 @@ export const ZH: SolutionLocaleCopy = {
         imageAlt: '插画：线框流入被绿色选框框住的可上线代码',
       },
     ],
-    tableTitle: 'Open Design vs. 一般 AI 线框图生成器',
+    tableTitle: 'OpenDesign vs. 一般 AI 线框图生成器',
     tableColCapability: '你需要的',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '一般 AI 线框图生成器',
     tableRows: [
       { capability: '从提示词生成', withOd: '在你已开着的 agent 里一句提示', without: '另注册一个网页工具、在它云端生成' },
@@ -56,7 +56,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '任意视觉风格', body: '先低保真，再把连贯风格贯穿到底——编辑感、柔和或张扬。', thumb: 'example-gamified-app' },
       { title: '落地与转化', body: 'Hero、定价、waitlist 布局，第一版就接线且贴品牌。', thumb: 'example-kami-landing' },
     ],
-    galleryTitle: '用 Open Design 做出来的线框',
+    galleryTitle: '用 OpenDesign 做出来的线框',
     galleryLead:
       '每一个都始于一句提示、渲染成可编辑可点击的产物。挑一个接近你想法的模板，描述你的变体，agent 帮你改——从线框到可上线代码。',
     gallery: [
@@ -71,7 +71,7 @@ export const ZH: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI 线框图生成器免费吗？',
-        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——线框生成本身没有按席位或按额度计费。',
+        a: '免费。OpenDesign 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——线框生成本身没有按席位或按额度计费。',
       },
       {
         q: '线框是可编辑的还是只是图片？',
@@ -83,24 +83,24 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         q: '支持哪些 agent？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+        a: 'OpenDesign 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
       },
     ],
     ctaTitle: '今晚就生成第一张线框',
     ctaBody:
-      'Star 仓库、装上 Open Design，把你下一个屏幕想法变成可编辑线框——再变成可上线代码——全在你已经在用的 agent 里。',
+      'Star 仓库、装上 OpenDesign，把你下一个屏幕想法变成可编辑线框——再变成可上线代码——全在你已经在用的 agent 里。',
     relatedTitle: '相关工具与指南',
     related: [
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
-      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/solutions/design-to-code/', label: '用 OpenDesign 设计转代码' },
       { href: '/blog/design-to-code-tools/', label: '最佳设计转代码工具' },
-      { href: '/solutions/prototype/', label: '用 Open Design 做原型' },
+      { href: '/solutions/prototype/', label: '用 OpenDesign 做原型' },
     ],
   },
   aiUiGenerator: {
-    title: 'AI UI 生成器 —— 用 Open Design 从提示词到可上线 UI',
+    title: 'AI UI 生成器 —— 用 OpenDesign 从提示词到可上线 UI',
     description:
-      '一个免费开源的 AI UI 生成器：把一句提示词变成真实的、组件化的界面，并一路带到可上线代码。Open Design 跑在你已经在用的编程 agent 里，所以生成的 UI 和生产代码就是同一份产物。',
+      '一个免费开源的 AI UI 生成器：把一句提示词变成真实的、组件化的界面，并一路带到可上线代码。OpenDesign 跑在你已经在用的编程 agent 里，所以生成的 UI 和生产代码就是同一份产物。',
     breadcrumb: 'AI UI 生成器',
     label: '工具 · AI UI 生成器',
     heading: '生成真正能上线的 UI',
@@ -108,12 +108,12 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑插画：一句提示词变成组件化 UI、再变成生产代码，被一个绿色选框框住',
     tldrTitle: '一句话',
     tldrBody:
-      '多数 AI UI 生成器只给你一张 mockup 或一段用完即弃的 React 片段。Open Design 在你的编程 agent 里生成 UI，并把它从提示词一路带到可上线代码——真实组件、你的设计系统、没有导出步骤、没有按席位计费。',
+      '多数 AI UI 生成器只给你一张 mockup 或一段用完即弃的 React 片段。OpenDesign 在你的编程 agent 里生成 UI，并把它从提示词一路带到可上线代码——真实组件、你的设计系统、没有导出步骤、没有按席位计费。',
     stepsTitle: 'AI UI 生成器怎么用',
     steps: [
       {
         title: '描述界面',
-        body: '用大白话告诉 agent 要做什么——"一个带侧边栏、分页区块和保存栏的设置页"。Open Design 加载 UI skill，让 agent 去取真实组件和设计系统，而不是拼一个一次性屏幕。',
+        body: '用大白话告诉 agent 要做什么——"一个带侧边栏、分页区块和保存栏的设置页"。OpenDesign 加载 UI skill，让 agent 去取真实组件和设计系统，而不是拼一个一次性屏幕。',
         imageAlt: '插画：把大白话的 UI 描述敲进终端',
       },
       {
@@ -132,9 +132,9 @@ export const ZH: SolutionLocaleCopy = {
         imageAlt: '插画：生成的 UI 流入被绿色选框框住的可上线代码',
       },
     ],
-    tableTitle: 'Open Design vs. 一般 AI UI 生成器',
+    tableTitle: 'OpenDesign vs. 一般 AI UI 生成器',
     tableColCapability: '你需要的',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '一般 AI UI 生成器',
     tableRows: [
       { capability: '从提示词生成', withOd: '在你已开着的 agent 里一句提示', without: '另注册一个网页工具、在它云端生成' },
@@ -152,7 +152,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '设计系统', body: '生成尊重共享设计系统的 UI——token、组件、间距。', thumb: 'example-gamified-app' },
       { title: '任意视觉风格', body: '编辑感、柔和或张扬——把一种连贯风格贯穿到底。', thumb: 'example-kami-landing' },
     ],
-    galleryTitle: '用 Open Design 做出来的 UI',
+    galleryTitle: '用 OpenDesign 做出来的 UI',
     galleryLead:
       '每一个都始于一句提示、渲染成真实的、组件化的产物。挑一个接近你想法的模板，描述你的变体，agent 帮你改——从 UI 到可上线代码。',
     gallery: [
@@ -167,7 +167,7 @@ export const ZH: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI UI 生成器免费吗？',
-        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——UI 生成本身没有按席位或按额度计费。',
+        a: '免费。OpenDesign 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——UI 生成本身没有按席位或按额度计费。',
       },
       {
         q: '它生成的是真实组件还是只是 mockup？',
@@ -179,22 +179,22 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         q: '支持哪些 agent？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+        a: 'OpenDesign 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
       },
     ],
     ctaTitle: '今晚就生成第一个 UI',
     ctaBody:
-      'Star 仓库、装上 Open Design，把你下一个界面想法变成真实的、组件化的 UI——再变成可上线代码——全在你已经在用的 agent 里。',
+      'Star 仓库、装上 OpenDesign，把你下一个界面想法变成真实的、组件化的 UI——再变成可上线代码——全在你已经在用的 agent 里。',
     relatedTitle: '相关工具与指南',
     related: [
       { href: '/solutions/ai-wireframe-generator/', label: 'AI 线框图生成器' },
-      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/solutions/design-to-code/', label: '用 OpenDesign 设计转代码' },
       { href: '/blog/best-ai-design-tools/', label: '最佳 AI 设计工具' },
-      { href: '/solutions/designer/', label: 'Open Design 给设计师' },
+      { href: '/solutions/designer/', label: 'OpenDesign 给设计师' },
     ],
   },
   designToCode: {
-    title: '设计转代码 —— 用 Open Design 把设计变成可上线代码',
+    title: '设计转代码 —— 用 OpenDesign 把设计变成可上线代码',
     description:
       '一个免费开源的设计转代码工作流：把一句提示词或一份设计变成真实、可编辑的代码——就在你已经在用的编程 agent 里。没有导出、没有交接：设计和生产代码是同一份你拥有、可上线的产物。',
     breadcrumb: '设计转代码',
@@ -204,12 +204,12 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑插画：一份设计变成干净的生产代码，被一个绿色选框框住',
     tldrTitle: '一句话',
     tldrBody:
-      '多数设计转代码工具导出一份一次性快照，之后还要你伺候。Open Design 把设计和代码当成一份活产物放在你的 agent 里——对话式迭代、交付你拥有的代码、没有按席位计费。',
+      '多数设计转代码工具导出一份一次性快照，之后还要你伺候。OpenDesign 把设计和代码当成一份活产物放在你的 agent 里——对话式迭代、交付你拥有的代码、没有按席位计费。',
     stepsTitle: '设计转代码怎么用',
     steps: [
       {
         title: '从提示词或设计开始',
-        body: '用大白话描述屏幕，或给 agent 指一个设计方向。Open Design 加载对应的 skill，让 agent 搭出结构和组件，而不是一次性的脆弱转换。',
+        body: '用大白话描述屏幕，或给 agent 指一个设计方向。OpenDesign 加载对应的 skill，让 agent 搭出结构和组件，而不是一次性的脆弱转换。',
         imageAlt: '插画：一份设计和一句提示词一起喂进终端',
       },
       {
@@ -228,9 +228,9 @@ export const ZH: SolutionLocaleCopy = {
         imageAlt: '插画：完成的代码被绿色选框框住，准备上线',
       },
     ],
-    tableTitle: 'Open Design vs. 一般设计转代码工具',
+    tableTitle: 'OpenDesign vs. 一般设计转代码工具',
     tableColCapability: '你需要的',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '一般设计转代码工具',
     tableRows: [
       { capability: '开始转换', withOd: '在你已开着的 agent 里一句提示', without: '装个插件或上传到另一个网页工具' },
@@ -248,7 +248,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '表单与流程', body: '多步表单和引导接上真实校验与状态。', thumb: 'example-hr-onboarding' },
       { title: '任意视觉风格', body: '编辑感、柔和或张扬——代码把一种连贯风格贯穿到底。', thumb: 'example-gamified-app' },
     ],
-    galleryTitle: '用 Open Design 从设计交付',
+    galleryTitle: '用 OpenDesign 从设计交付',
     galleryLead:
       '每一个都始于一句提示或一份设计、变成你能上线的代码。挑一个接近你想法的模板，描述你的变体，agent 帮你转换——设计转代码，没有交接。',
     gallery: [
@@ -263,7 +263,7 @@ export const ZH: SolutionLocaleCopy = {
     faq: [
       {
         q: '设计转代码工作流免费吗？',
-        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——设计转代码工作流本身没有按席位或按额度计费。',
+        a: '免费。OpenDesign 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——设计转代码工作流本身没有按席位或按额度计费。',
       },
       {
         q: '它产出什么样的代码？',
@@ -275,37 +275,37 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         q: '支持哪些 agent？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+        a: 'OpenDesign 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
       },
     ],
     ctaTitle: '今晚就把你下一份设计变成代码',
     ctaBody:
-      'Star 仓库、装上 Open Design，把你下一个屏幕——提示词、线框或设计——在你已经在用的 agent 里变成干净、可上线的代码。',
+      'Star 仓库、装上 OpenDesign，把你下一个屏幕——提示词、线框或设计——在你已经在用的 agent 里变成干净、可上线的代码。',
     relatedTitle: '相关工具与指南',
     related: [
       { href: '/solutions/ai-wireframe-generator/', label: 'AI 线框图生成器' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
       { href: '/blog/design-to-code-tools/', label: '最佳设计转代码工具' },
-      { href: '/solutions/engineering/', label: 'Open Design 给工程师' },
+      { href: '/solutions/engineering/', label: 'OpenDesign 给工程师' },
     ],
   },
   aiLandingPageGenerator: {
-    title: 'AI 落地页生成器 —— 用 Open Design 从一句话到可上线落地页',
+    title: 'AI 落地页生成器 —— 用 OpenDesign 从一句话到可上线落地页',
     description:
-      '一个免费开源的 AI 落地页生成器：把一句话需求变成真实、响应式的落地页，并一路带到可上线代码。Open Design 在你已经使用的编程助手中运行，生成页面与上线页面是同一份归你所有的产物。',
+      '一个免费开源的 AI 落地页生成器：把一句话需求变成真实、响应式的落地页，并一路带到可上线代码。OpenDesign 在你已经使用的编程助手中运行，生成页面与上线页面是同一份归你所有的产物。',
     breadcrumb: 'AI 落地页生成器',
     label: '工具 · AI 落地页生成器',
     heading: '生成一个能上线的落地页',
     lead: '描述你的卖点，让智能助手生成真实、响应式的落地页——首屏、功能、定价和候补表单都贴合品牌。继续修改同一份文件，就能得到可以直接部署的代码。',
-    heroImageAlt: 'Open Design 生成的真实响应式落地页，展示 Qelora 项目首页',
+    heroImageAlt: 'OpenDesign 生成的真实响应式落地页，展示 Qelora 项目首页',
     tldrTitle: '一句话',
     tldrBody:
-      '多数 AI 落地页工具把页面锁在自己的编辑器里并按席位计费。Open Design 在你的编程助手里生成真实区块和可上线代码，页面归你所有，不需要额外导出。',
+      '多数 AI 落地页工具把页面锁在自己的编辑器里并按席位计费。OpenDesign 在你的编程助手里生成真实区块和可上线代码，页面归你所有，不需要额外导出。',
     stepsTitle: 'AI 落地页生成器怎么用',
     steps: [
       {
         title: '描述页面',
-        body: '用大白话说明需求——“一个笔记应用的发布页：首屏、三个功能、定价和候补表单”。Open Design 会调用落地页能力，排出层级清晰的真实区块。',
+        body: '用大白话说明需求——“一个笔记应用的发布页：首屏、三个功能、定价和候补表单”。OpenDesign 会调用落地页能力，排出层级清晰的真实区块。',
         imageAlt: '插画：把大白话的落地页需求敲进终端',
       },
       {
@@ -324,9 +324,9 @@ export const ZH: SolutionLocaleCopy = {
         imageAlt: '插画：落地页流入被绿色选框框住的可上线代码',
       },
     ],
-    tableTitle: 'Open Design vs. 一般 AI 落地页搭建工具',
+    tableTitle: 'OpenDesign vs. 一般 AI 落地页搭建工具',
     tableColCapability: '你需要的',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '一般 AI 落地页搭建工具',
     tableRows: [
       { capability: '从一句话生成', withOd: '在你已打开的编程助手里直接描述', without: '另注册一个建站工具、在它云端生成' },
@@ -344,7 +344,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '应用下载页', body: '移动优先的页面，展示产品、驱动安装。', thumb: 'example-mobile-app' },
       { title: '任意视觉风格', body: '编辑感、柔和或张扬——把一种连贯风格贯穿到底。', thumb: 'example-gamified-app' },
     ],
-    galleryTitle: '用 Open Design 做出来的落地页',
+    galleryTitle: '用 OpenDesign 做出来的落地页',
     galleryLead:
       '每一个都始于一句话需求，并渲染成真实、响应式的页面。挑一个接近你想法的模板，描述要改的地方，智能助手会一路改到可上线代码。',
     gallery: [
@@ -359,7 +359,7 @@ export const ZH: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI 落地页生成器免费吗？',
-        a: '免费。Open Design 开源，在你已经使用的编程助手里运行；落地页生成本身没有按席位或按页面计费。',
+        a: '免费。OpenDesign 开源，在你已经使用的编程助手里运行；落地页生成本身没有按席位或按页面计费。',
       },
       {
         q: '页面能托管在任何地方吗？',
@@ -371,22 +371,22 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         q: '支持哪些编程助手？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。',
+        a: 'OpenDesign 支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。',
       },
     ],
     ctaTitle: '今晚就生成第一个落地页',
     ctaBody:
-      '下载 Open Design，把下一个发布想法变成真实、响应式的落地页，再继续改成可上线代码。',
+      '下载 OpenDesign，把下一个发布想法变成真实、响应式的落地页，再继续改成可上线代码。',
     relatedTitle: '相关工具与指南',
     related: [
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
-      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
-      { href: '/solutions/marketing/', label: 'Open Design 给市场' },
+      { href: '/solutions/design-to-code/', label: '用 OpenDesign 设计转代码' },
+      { href: '/solutions/marketing/', label: 'OpenDesign 给市场' },
       { href: '/blog/best-ai-design-tools/', label: '最佳 AI 设计工具' },
     ],
   },
   figmaToCode: {
-    title: 'Figma 转代码 —— 用 Open Design 把 Figma 设计变成可上线代码',
+    title: 'Figma 转代码 —— 用 OpenDesign 把 Figma 设计变成可上线代码',
     description:
       '一个免费开源的 Figma 转代码工作流：把一份 Figma 设计变成干净、组件化的代码——就在你已经在用的编程 agent 里，从 Claude Code 到 Codex。通过 Figma MCP 把设计拉进来，让 agent 构建你拥有、可上线的真实代码，没有被锁定的一次性导出。',
     breadcrumb: 'Figma 转代码',
@@ -396,12 +396,12 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑插画：一份 Figma 设计在编程 agent 里变成干净的生产代码，被一个绿色选框框住',
     tldrTitle: '一句话',
     tldrBody:
-      '多数 Figma 转代码插件导出一份绝对定位标记的一次性快照，之后还要你重写。Open Design 把设计和代码当成一份活产物放在你的 agent 里——通过 Figma MCP 拉 frame、对话式迭代、交付你拥有的代码。',
+      '多数 Figma 转代码插件导出一份绝对定位标记的一次性快照，之后还要你重写。OpenDesign 把设计和代码当成一份活产物放在你的 agent 里——通过 Figma MCP 拉 frame、对话式迭代、交付你拥有的代码。',
     stepsTitle: 'Figma 转代码怎么用',
     steps: [
       {
         title: '把 Figma 接上你的 agent',
-        body: '配好 Figma MCP 后，你的编程 agent——Claude Code、Codex、Cursor Agent——就能直接读一个 Figma 文件或选中的 frame。Open Design 加载对应的 skill，让 agent 把设计意图变成结构，而不是脆弱的像素照搬。',
+        body: '配好 Figma MCP 后，你的编程 agent——Claude Code、Codex、Cursor Agent——就能直接读一个 Figma 文件或选中的 frame。OpenDesign 加载对应的 skill，让 agent 把设计意图变成结构，而不是脆弱的像素照搬。',
         imageAlt: '插画：一个 Figma frame 通过 MCP 连线连到终端',
       },
       {
@@ -420,9 +420,9 @@ export const ZH: SolutionLocaleCopy = {
         imageAlt: '插画：完成的代码被绿色选框框住，准备上线',
       },
     ],
-    tableTitle: 'Open Design vs. 一般 Figma 转代码工具',
+    tableTitle: 'OpenDesign vs. 一般 Figma 转代码工具',
     tableColCapability: '你需要的',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '一般 Figma 转代码工具',
     tableRows: [
       { capability: '读取 Figma 设计', withOd: '你的 agent 通过 MCP 实时读 Figma', without: '插件导出一次性快照' },
@@ -440,7 +440,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '表单与流程', body: '多步表单和引导接上真实校验与状态。', thumb: 'example-hr-onboarding' },
       { title: '任意视觉风格', body: '编辑感、柔和或张扬——代码把设计的风格贯穿到底。', thumb: 'example-gamified-app' },
     ],
-    galleryTitle: '用 Open Design 从 Figma 交付',
+    galleryTitle: '用 OpenDesign 从 Figma 交付',
     galleryLead:
       '每一个都始于一个 Figma frame、变成你能上线的代码。挑一个接近你设计的模板，描述你的变体，agent 帮你转换——Figma 转代码，没有被锁定的导出。',
     gallery: [
@@ -454,7 +454,7 @@ export const ZH: SolutionLocaleCopy = {
     faqTitle: 'Figma 转代码常见问题',
     faq: [
       {
-        q: 'Open Design 怎么把 Figma 变成代码？',
+        q: 'OpenDesign 怎么把 Figma 变成代码？',
         a: '通过 Figma MCP，你的编程 agent——Claude Code、Codex、Cursor Agent——直接读 Figma 文件或选中的 frame 并生成干净、组件化的代码，而不是从插件导出一次性快照。',
       },
       {
@@ -463,26 +463,26 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         q: '免费吗？',
-        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——Figma 转代码工作流本身没有按席位或按导出计费。',
+        a: '免费。OpenDesign 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——Figma 转代码工作流本身没有按席位或按导出计费。',
       },
       {
         q: '支持哪些 agent？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥和自己的 Figma MCP 配置，没有任何东西托管在我们这边。',
+        a: 'OpenDesign 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥和自己的 Figma MCP 配置，没有任何东西托管在我们这边。',
       },
     ],
     ctaTitle: '今晚就把你下一个 Figma frame 变成代码',
     ctaBody:
-      'Star 仓库、装上 Open Design、接上 Figma MCP，把你下一份 Figma 设计在你已经在用的 agent 里变成干净、可上线的代码。',
+      'Star 仓库、装上 OpenDesign、接上 Figma MCP，把你下一份 Figma 设计在你已经在用的 agent 里变成干净、可上线的代码。',
     relatedTitle: '相关工具与指南',
     related: [
-      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/solutions/design-to-code/', label: '用 OpenDesign 设计转代码' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
-      { href: '/agents/claude-code-design/', label: 'Open Design 给 Claude Code' },
-      { href: '/solutions/engineering/', label: 'Open Design 给工程师' },
+      { href: '/agents/claude-code-design/', label: 'OpenDesign 给 Claude Code' },
+      { href: '/solutions/engineering/', label: 'OpenDesign 给工程师' },
     ],
   },
   screenshotToCode: {
-    title: '截图转代码 —— 用 Open Design 把截图变成代码',
+    title: '截图转代码 —— 用 OpenDesign 把截图变成代码',
     description:
       '一个免费开源的截图转代码工作流：把任意 UI 的截图变成干净、组件化的代码——就在你已经在用的编程 agent 里。丢进一张图、描述你要什么，agent 就把它重建成你拥有、可上线的真实代码，没有被锁定的导出。',
     breadcrumb: '截图转代码',
@@ -492,12 +492,12 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑插画：一张 UI 截图在编程 agent 里变成干净的生产代码，被一个绿色选框框住',
     tldrTitle: '一句话',
     tldrBody:
-      '多数截图转代码工具吐出一次性的绝对定位标记，之后还要你重写。Open Design 在你的编程 agent 里把截图重建成干净、组件化的代码——真实结构、你的设计系统、没有导出步骤、没有按席位计费。',
+      '多数截图转代码工具吐出一次性的绝对定位标记，之后还要你重写。OpenDesign 在你的编程 agent 里把截图重建成干净、组件化的代码——真实结构、你的设计系统、没有导出步骤、没有按席位计费。',
     stepsTitle: '截图转代码怎么用',
     steps: [
       {
         title: '丢进截图',
-        body: '给你的 agent 一张你想要的屏幕的图——一张 app、网站或设计的截图。Open Design 加载对应的 skill，让 agent 读懂布局和意图，而不只是像素。',
+        body: '给你的 agent 一张你想要的屏幕的图——一张 app、网站或设计的截图。OpenDesign 加载对应的 skill，让 agent 读懂布局和意图，而不只是像素。',
         imageAlt: '插画：一张 UI 截图被丢进终端',
       },
       {
@@ -516,9 +516,9 @@ export const ZH: SolutionLocaleCopy = {
         imageAlt: '插画：完成的代码被绿色选框框住，准备上线',
       },
     ],
-    tableTitle: 'Open Design vs. 一般截图转代码工具',
+    tableTitle: 'OpenDesign vs. 一般截图转代码工具',
     tableColCapability: '你需要的',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '一般截图转代码工具',
     tableRows: [
       { capability: '从一张图开始', withOd: '把截图丢进你已开着的 agent', without: '上传到另一个网页工具、在它云端转换' },
@@ -536,7 +536,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '表单与流程', body: '从截图重建一个表单或多步流程，带真实校验。', thumb: 'example-hr-onboarding' },
       { title: '任意视觉风格', body: '编辑感、柔和或张扬——代码把截图的风格贯穿到底。', thumb: 'example-gamified-app' },
     ],
-    galleryTitle: '用 Open Design 从截图重建',
+    galleryTitle: '用 OpenDesign 从截图重建',
     galleryLead:
       '每一个都始于一张图、变成你能上线的代码。挑一个接近你截图的模板，描述你的变体，agent 帮你重建——截图转代码，没有被锁定的导出。',
     gallery: [
@@ -550,8 +550,8 @@ export const ZH: SolutionLocaleCopy = {
     faqTitle: '截图转代码常见问题',
     faq: [
       {
-        q: 'Open Design 怎么把截图变成代码？',
-        a: '你给编程 agent 一张屏幕的图，Open Design 加载对应的 skill，让 agent 把它重建成干净、组件化的代码——读懂布局和意图，而不只是描摹像素。',
+        q: 'OpenDesign 怎么把截图变成代码？',
+        a: '你给编程 agent 一张屏幕的图，OpenDesign 加载对应的 skill，让 agent 把它重建成干净、组件化的代码——读懂布局和意图，而不只是描摹像素。',
       },
       {
         q: '它产出什么样的代码？',
@@ -559,22 +559,22 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         q: '免费吗？',
-        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——截图转代码工作流本身没有按席位或按额度计费。',
+        a: '免费。OpenDesign 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——截图转代码工作流本身没有按席位或按额度计费。',
       },
       {
         q: '支持哪些 agent？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+        a: 'OpenDesign 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
       },
     ],
     ctaTitle: '今晚就把你下一张截图变成代码',
     ctaBody:
-      'Star 仓库、装上 Open Design，把你想要的屏幕的截图在你已经在用的 agent 里变成干净、可上线的代码。',
+      'Star 仓库、装上 OpenDesign，把你想要的屏幕的截图在你已经在用的 agent 里变成干净、可上线的代码。',
     relatedTitle: '相关工具与指南',
     related: [
-      { href: '/solutions/figma-to-code/', label: '用 Open Design 把 Figma 转代码' },
-      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/solutions/figma-to-code/', label: '用 OpenDesign 把 Figma 转代码' },
+      { href: '/solutions/design-to-code/', label: '用 OpenDesign 设计转代码' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
-      { href: '/solutions/engineering/', label: 'Open Design 给工程师' },
+      { href: '/solutions/engineering/', label: 'OpenDesign 给工程师' },
     ],
   },
   aiPrototypeGenerator: {
@@ -584,16 +584,16 @@ export const ZH: SolutionLocaleCopy = {
     breadcrumb: 'AI 原型生成器',
     label: '工具 · AI 原型生成器',
     heading: '能交付代码的 AI 原型生成器',
-    lead: '描述这个流程，让你的 agent 生成真实、可点击的原型——关联的屏幕、一致的样式、可用的交互。不像那些止步于 mockup 的原型生成器，Open Design 把同一份产物带到可上线代码，全在你已经在用的 agent 里。',
+    lead: '描述这个流程，让你的 agent 生成真实、可点击的原型——关联的屏幕、一致的样式、可用的交互。不像那些止步于 mockup 的原型生成器，OpenDesign 把同一份产物带到可上线代码，全在你已经在用的 agent 里。',
     heroImageAlt: '编辑插画：一句提示词变成可点击的多屏原型、再变成生产代码，被一个绿色选框框住',
     tldrTitle: '一句话',
     tldrBody:
-      '多数 AI 原型生成器（Figma、Cursor、Penpot）止步于一个之后还要重做的可点击 mockup。Open Design 在你的编程 agent 里生成原型，并把它从提示词一路带到可上线代码——没有导出步骤、没有交接断层、没有按席位计费。',
+      '多数 AI 原型生成器（Figma、Cursor、Penpot）止步于一个之后还要重做的可点击 mockup。OpenDesign 在你的编程 agent 里生成原型，并把它从提示词一路带到可上线代码——没有导出步骤、没有交接断层、没有按席位计费。',
     stepsTitle: 'AI 原型生成器怎么用',
     steps: [
       {
         title: '描述流程',
-        body: '用大白话告诉 agent 这段旅程——"一个引导流程：注册、选套餐、一个 dashboard"。Open Design 加载原型 skill，让 agent 排布关联的屏幕，而不是单个静态 frame。',
+        body: '用大白话告诉 agent 这段旅程——"一个引导流程：注册、选套餐、一个 dashboard"。OpenDesign 加载原型 skill，让 agent 排布关联的屏幕，而不是单个静态 frame。',
         imageAlt: '插画：把大白话的流程描述敲进终端',
       },
       {
@@ -612,9 +612,9 @@ export const ZH: SolutionLocaleCopy = {
         imageAlt: '插画：原型流入被绿色选框框住的可上线代码',
       },
     ],
-    tableTitle: 'Open Design vs. 一般 AI 原型生成器',
+    tableTitle: 'OpenDesign vs. 一般 AI 原型生成器',
     tableColCapability: '你需要的',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: 'Figma / Cursor / Penpot 原型生成器',
     tableRows: [
       { capability: '从提示词生成', withOd: '在你已开着的 agent 里一句提示', without: '在它 app 里或另一个网页工具生成' },
@@ -632,7 +632,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '可交互概念', body: '快速拿出一个可点击概念，再把同一份产物带到生产。', thumb: 'example-gamified-app' },
       { title: '任意视觉风格', body: '编辑感、柔和或张扬——把一种连贯风格贯穿每个屏幕。', thumb: 'example-kami-landing' },
     ],
-    galleryTitle: '用 Open Design 做出来的原型',
+    galleryTitle: '用 OpenDesign 做出来的原型',
     galleryLead:
       '每一个都始于一句提示、渲染成可点击、可编辑的产物。挑一个接近你想法的模板，描述你的变体，agent 帮你改——从原型到可上线代码。',
     gallery: [
@@ -647,11 +647,11 @@ export const ZH: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI 原型生成器免费吗？',
-        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——原型生成本身没有按席位或按额度计费。',
+        a: '免费。OpenDesign 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——原型生成本身没有按席位或按额度计费。',
       },
       {
         q: '它跟 Figma、Cursor、Penpot 的原型生成器有什么不同？',
-        a: '那些止步于它们 app 里的一个可点击 mockup。Open Design 在你的编程 agent 里生成原型，并把同一份产物一路带到你拥有的可上线代码——没有导出、不用为生产重做。',
+        a: '那些止步于它们 app 里的一个可点击 mockup。OpenDesign 在你的编程 agent 里生成原型，并把同一份产物一路带到你拥有的可上线代码——没有导出、不用为生产重做。',
       },
       {
         q: '原型是可点击、多屏的吗？',
@@ -659,42 +659,42 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         q: '支持哪些 agent？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+        a: 'OpenDesign 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
       },
     ],
     ctaTitle: '今晚就生成第一个原型',
     ctaBody:
-      'Star 仓库、装上 Open Design，把你下一个流程变成可点击原型——再变成可上线代码——全在你已经在用的 agent 里。',
+      'Star 仓库、装上 OpenDesign，把你下一个流程变成可点击原型——再变成可上线代码——全在你已经在用的 agent 里。',
     relatedTitle: '相关工具与指南',
     related: [
-      { href: '/solutions/prototype/', label: '用 Open Design 做原型' },
+      { href: '/solutions/prototype/', label: '用 OpenDesign 做原型' },
       { href: '/solutions/ai-wireframe-generator/', label: 'AI 线框图生成器' },
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
-      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/solutions/design-to-code/', label: '用 OpenDesign 设计转代码' },
     ],
   },
   prototype: {
-    title: '用 Open Design + Claude Code 做可交互原型',
+    title: '用 OpenDesign + Claude Code 做可交互原型',
     description:
-      '一句话描述，就能生成可点击、多屏的原型。Open Design 把设计能力、模板和设计系统交给你常用的编程助手，直接产出能在浏览器里打开的真实原型。',
+      '一句话描述，就能生成可点击、多屏的原型。OpenDesign 把设计能力、模板和设计系统交给你常用的编程助手，直接产出能在浏览器里打开的真实原型。',
     breadcrumb: '原型',
     label: '使用场景 · 原型',
     heading: '以一句话的速度做原型',
     lead: '把脑子里的流程描述出来，让智能助手拼出真实可点击的原型——多个屏幕、统一样式、可交互——直接渲染成 HTML，能打开、能分享、能交给工程。',
-    heroImageAlt: 'Open Design 生成的真实 Web 原型，展示响应式 Qelora 项目首页',
+    heroImageAlt: 'OpenDesign 生成的真实 Web 原型，展示响应式 Qelora 项目首页',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 是你常用编程助手的设计层。一次对话，就能从一段想法走到可导航、有样式的原型——不用另学设计工具，也不用反复导出和交接。',
-    stepsTitle: '用 Open Design 做原型的流程',
+      'OpenDesign 是你常用编程助手的设计层。一次对话，就能从一段想法走到可导航、有样式的原型——不用另学设计工具，也不用反复导出和交接。',
+    stepsTitle: '用 OpenDesign 做原型的流程',
     steps: [
       {
         title: '描述流程',
-        body: '用大白话说明要做什么——“一个引导流程，包含欢迎页、套餐选择页和确认页”。Open Design 会调用原型能力，生成多个相互关联的屏幕，而不是一个单页。',
+        body: '用大白话说明要做什么——“一个引导流程，包含欢迎页、套餐选择页和确认页”。OpenDesign 会调用原型能力，生成多个相互关联的屏幕，而不是一个单页。',
         imageAlt: '插画：一个人在终端里用自然语言描述应用流程',
       },
       {
         title: '生成带样式的屏幕',
-        body: '智能助手会套用 Open Design 的设计系统和原型模板，让每个屏幕共享字体、间距和组件。你得到的是一套连贯的界面，而不是互不相干的静态示意图。',
+        body: '智能助手会套用 OpenDesign 的设计系统和原型模板，让每个屏幕共享字体、间距和组件。你得到的是一套连贯的界面，而不是互不相干的静态示意图。',
         imageAlt: '插画：多个应用屏幕依次出现，全部共享同一套视觉风格',
       },
       {
@@ -708,9 +708,9 @@ export const ZH: SolutionLocaleCopy = {
         imageAlt: '插画：原型被修改后交给工程师，设计与代码合并成同一个文件',
       },
     ],
-    tableTitle: '用 Open Design 做原型 vs. 老办法',
+    tableTitle: '用 OpenDesign 做原型 vs. 老办法',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '传统原型工具',
     tableRows: [
       {
@@ -753,7 +753,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '等候名单与定价', body: '转化页——等候名单、定价表——接好线、贴合品牌。', thumb: 'example-waitlist-page' },
       { title: '游戏化与趣味', body: '交互密集的概念，动效和状态本身就是卖点。', thumb: 'example-gamified-app' },
     ],
-    galleryTitle: '别人用 Open Design 做出来的原型',
+    galleryTitle: '别人用 OpenDesign 做出来的原型',
     galleryLead:
       '下面每一个都从一句话需求开始，并渲染成可点击的真实产物。挑一个接近你想法的模板，描述要改的地方，智能助手会继续完善。',
     gallery: [
@@ -767,8 +767,8 @@ export const ZH: SolutionLocaleCopy = {
     faqTitle: '原型常见问题',
     faq: [
       {
-        q: '用 Open Design 做原型需要 Figma 这类设计工具吗？',
-        a: '不需要。Open Design 在你的编程助手里运行，把原型渲染成 HTML。你用语言描述流程，它会产出屏幕，不需要另学或购买画布工具。',
+        q: '用 OpenDesign 做原型需要 Figma 这类设计工具吗？',
+        a: '不需要。OpenDesign 在你的编程助手里运行，把原型渲染成 HTML。你用语言描述流程，它会产出屏幕，不需要另学或购买画布工具。',
       },
       {
         q: '产出的是可交互原型还是静态示意图？',
@@ -776,7 +776,7 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         q: '可以用哪些编程助手？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。',
+        a: 'OpenDesign 支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。',
       },
       {
         q: '原型能变成真正的产品吗？',
@@ -785,21 +785,21 @@ export const ZH: SolutionLocaleCopy = {
     ],
     ctaTitle: '今晚就把下一个想法做成原型',
     ctaBody:
-      '下载 Open Design，把下一个“要是……”变成真正能点击、能分享的原型。',
+      '下载 OpenDesign，把下一个“要是……”变成真正能点击、能分享的原型。',
   },
   dashboard: {
-    title: '用 Open Design + Claude Code 生成数据看板',
+    title: '用 OpenDesign + Claude Code 生成数据看板',
     description:
       '描述你要盯的指标，让编码 agent 帮你做出有样式、响应式的看板——图表、KPI 卡片、表格，全部渲染成可随处托管的 HTML。不用 BI 工具席位，不用拖拽搭建。',
     breadcrumb: '看板',
     label: '使用场景 · 看板',
     heading: '看板靠描述生成，不靠拖拽搭建',
-    lead: '告诉 agent 要展示什么、要什么感觉。Open Design 提供图表范式、布局系统和视觉语言，你拿到的是连贯、能拿得出手的看板，而不是一堆默认样式的控件。',
+    lead: '告诉 agent 要展示什么、要什么感觉。OpenDesign 提供图表范式、布局系统和视觉语言，你拿到的是连贯、能拿得出手的看板，而不是一堆默认样式的控件。',
     heroImageAlt: '编辑风插画：左边的原始数字流向右边一个干净的图表 + KPI 卡片看板',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 把你对指标的大白话描述变成有样式的看板，由 agent 渲染成 HTML——在你的 repo 里版本化、随处可托管、无需按席位订阅 BI。',
-    stepsTitle: '用 Open Design 做看板的流程',
+      'OpenDesign 把你对指标的大白话描述变成有样式的看板，由 agent 渲染成 HTML——在你的 repo 里版本化、随处可托管、无需按席位订阅 BI。',
+    stepsTitle: '用 OpenDesign 做看板的流程',
     steps: [
       {
         title: '描述指标',
@@ -808,7 +808,7 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         title: '选择图表范式',
-        body: 'Open Design 自带图表和布局模板，趋势变折线、占比变柱状、比例用对的图——全程字体和间距统一，而不是一堆不搭的默认样式。',
+        body: 'OpenDesign 自带图表和布局模板，趋势变折线、占比变柱状、比例用对的图——全程字体和间距统一，而不是一堆不搭的默认样式。',
         imageAlt: '插画：多种图表类型排成一个连贯的网格',
       },
       {
@@ -822,9 +822,9 @@ export const ZH: SolutionLocaleCopy = {
         imageAlt: '插画：看板被打磨后部署上线',
       },
     ],
-    tableTitle: '用 Open Design 做看板 vs. 老办法',
+    tableTitle: '用 OpenDesign 做看板 vs. 老办法',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: 'BI 工具 / 纯手写',
     tableRows: [
       { capability: '从指标清单到布局', withOd: '一句话，agent 排布卡片、图表、表格', without: '一个个拖控件，或从零写图表代码' },
@@ -843,7 +843,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: "社交与营销", body: "渠道表现和投放追踪汇于一屏。", thumb: "example-social-media-dashboard" },
       { title: "领域报告", body: "任意领域的结构化报告——从临床到交易。", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: '别人用 Open Design 做出来的看板',
+    galleryTitle: '别人用 OpenDesign 做出来的看板',
     galleryLead: '下面是从 prompt + 数据源渲染出的真实看板。挑一个接近你的，描述你要盯的指标。',
     gallery: [
       { thumb: "example-data-report", caption: "数据报告" },
@@ -855,16 +855,16 @@ export const ZH: SolutionLocaleCopy = {
     exampleLinkLabel: '浏览看板模板',
     faqTitle: '看板常见问题',
     faq: [
-      { q: '需要 Tableau、Looker 这类 BI 工具吗？', a: '不需要。Open Design 在你的编码 agent 里把看板渲染成 HTML。你描述指标、指向数据，没有额外的 BI 平台要授权或学习。' },
+      { q: '需要 Tableau、Looker 这类 BI 工具吗？', a: '不需要。OpenDesign 在你的编码 agent 里把看板渲染成 HTML。你描述指标、指向数据，没有额外的 BI 平台要授权或学习。' },
       { q: '数据从哪来？', a: 'CSV、JSON 接口，或你粘贴的行。看板是纯 HTML + JavaScript，你完全控制它从哪读——不经任何托管服务中转。' },
       { q: '非技术同事能看吗？', a: '能。产出是自包含网页，任何人拿到链接或文件就能在浏览器打开——不要账号、不要席位。' },
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配，自带 provider 密钥。' },
     ],
     ctaTitle: '今晚就把看板做出来',
-    ctaBody: '给 repo 点个 star、装上 Open Design，把你的指标变成一个随处可托管的看板——在你本来就用的 agent 里。',
+    ctaBody: '给 repo 点个 star、装上 OpenDesign，把你的指标变成一个随处可托管的看板——在你本来就用的 agent 里。',
   },
   htmlToPpt: {
-    title: 'HTML to PPT——用 Open Design 把 HTML 转成可编辑的 PowerPoint',
+    title: 'HTML to PPT——用 OpenDesign 把 HTML 转成可编辑的 PowerPoint',
     description:
       '一个免费开源的 HTML→PPT 工作流：你的编码 agent 把内容搭成精美的 HTML deck，再导出成真正、可编辑的 .pptx——就在你已经在用的 agent 里。没有云端转换器、没有一页一张截图、没有受限导出。HTML 和 PowerPoint 都是你拥有的文件。',
     breadcrumb: 'HTML to PPT',
@@ -874,17 +874,17 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑风插画：一个 HTML deck 在编码 agent 里转成可编辑的 PowerPoint 文件，被绿色选框框住',
     tldrTitle: '一句话',
     tldrBody:
-      '多数 HTML→PPT 转换器把你的页面压成没法编辑的静态截图。Open Design 在你的编码 agent 里把 deck 搭成 HTML，再导出真正可编辑的 .pptx——原生文字和形状、你的设计系统、没有按席位计费、没有厂商锁定。',
+      '多数 HTML→PPT 转换器把你的页面压成没法编辑的静态截图。OpenDesign 在你的编码 agent 里把 deck 搭成 HTML，再导出真正可编辑的 .pptx——原生文字和形状、你的设计系统、没有按席位计费、没有厂商锁定。',
     stepsTitle: 'HTML 转 PPT 的流程',
     steps: [
-      { title: '从 HTML、文档或一句提示开始', body: '把一个 HTML 页面、一份 markdown 文档丢给 agent，或者直接描述这份 deck。Open Design 加载对应 skill，让 agent 读懂结构和意图——标题、章节、数据——而不只是原始标记。', imageAlt: '插画：HTML 和一份 markdown 文档被交给编码 agent' },
+      { title: '从 HTML、文档或一句提示开始', body: '把一个 HTML 页面、一份 markdown 文档丢给 agent，或者直接描述这份 deck。OpenDesign 加载对应 skill，让 agent 读懂结构和意图——标题、章节、数据——而不只是原始标记。', imageAlt: '插画：HTML 和一份 markdown 文档被交给编码 agent' },
       { title: '搭一个干净的 HTML deck', body: 'agent 把内容排成 HTML deck，基于真实设计系统——一致的字体、网格、配色——用现成主题（路演、产品发布、编辑风、技术风），而不是一堆无标题的框。', imageAlt: '插画：HTML 内容变成一连串有设计感的幻灯片' },
-      { title: '导出可编辑的 .pptx', body: 'Open Design 的 pptx-generator 把 HTML deck 变成真正的 PowerPoint——原生形状、可编辑文字、能改数据的图表——并经 HTML→PPTX 保真审计，不是一页一张截图。', imageAlt: '插画：一个 HTML deck 导出成可编辑的 PowerPoint 文件' },
+      { title: '导出可编辑的 .pptx', body: 'OpenDesign 的 pptx-generator 把 HTML deck 变成真正的 PowerPoint——原生形状、可编辑文字、能改数据的图表——并经 HTML→PPTX 保真审计，不是一页一张截图。', imageAlt: '插画：一个 HTML deck 导出成可编辑的 PowerPoint 文件' },
       { title: '拥有并交付这些幻灯片', body: 'HTML 和 .pptx 都落在你的 repo 里，完全归你。用 PowerPoint 或 Keynote 打开 .pptx、从浏览器演示，或继续在 agent 里迭代——没有云端锁定，HTML 和 deck 之间不用重画。', imageAlt: '插画：成品幻灯片被绿色选框框住，随时可交付' },
     ],
-    tableTitle: 'Open Design vs. 常见 HTML→PPT 转换器',
+    tableTitle: 'OpenDesign vs. 常见 HTML→PPT 转换器',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '常见 HTML→PPT 转换器',
     tableRows: [
       { capability: '起点', withOd: 'HTML、文档或一句提示——在你本来就用的 agent 里', without: '把 HTML 粘进一个单独的云端转换器' },
@@ -904,7 +904,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '任意视觉风格', body: '编辑风、大胆或极简——主题一路带到 .pptx。', thumb: 'example-deck-guizang-editorial' },
     ],
     galleryTitle: '可以直接上手的 slides 模板',
-    galleryLead: '下面是 Open Design 真实渲染的 deck，随时可导出成可编辑的 .pptx。挑一个接近你内容的主题、描述你的变体，agent 就把 deck 搭出来——再把归你的 PowerPoint 交给你。',
+    galleryLead: '下面是 OpenDesign 真实渲染的 deck，随时可导出成可编辑的 .pptx。挑一个接近你内容的主题、描述你的变体，agent 就把 deck 搭出来——再把归你的 PowerPoint 交给你。',
     gallery: [
       { thumb: 'deck-pitch', caption: '路演 deck' },
       { thumb: 'deck-product-launch', caption: '产品发布 deck' },
@@ -917,44 +917,44 @@ export const ZH: SolutionLocaleCopy = {
     exampleLinkLabel: '浏览 deck 模板',
     faqTitle: 'HTML to PPT 常见问题',
     faq: [
-      { q: 'Open Design 怎么把 HTML 转成 PPT？', a: '你的编码 agent 先把内容搭成干净的 HTML deck，再由 Open Design 的 pptx-generator skill 导出成真正、可编辑的 .pptx——原生形状和文字，并经 HTML→PPTX 保真审计，不是一页一张截图。' },
+      { q: 'OpenDesign 怎么把 HTML 转成 PPT？', a: '你的编码 agent 先把内容搭成干净的 HTML deck，再由 OpenDesign 的 pptx-generator skill 导出成真正、可编辑的 .pptx——原生形状和文字，并经 HTML→PPTX 保真审计，不是一页一张截图。' },
       { q: '能把 HTML 转成可编辑的 PowerPoint 吗？', a: '能。这份 .pptx 里是原生、可编辑的文字和形状，能在 PowerPoint 或 Keynote 里继续改，不是截图。你也可以在 agent 里继续迭代源 deck、随时重新导出。' },
       { q: '支持 Claude Code 吗？', a: '支持——"claude html to ppt" 就是这个流程。用 Claude Code，或 Codex、Cursor Agent、Gemini CLI 等都行。自带你的 provider 密钥，什么都不托管在别人那。' },
-      { q: '是免费的吗？', a: '是。Open Design 开源，在你本来就用的编码 agent 里、用你自己的密钥运行——HTML→PPT 这个流程没有按文件或按额度计费。' },
-      { q: '跟"生成幻灯片"有什么区别？', a: '生成 deck 通常从一句提示或大纲开始；HTML to PPT 从你已经有的 HTML 或 markdown 开始，重点是可编辑的 .pptx 导出。两者用的是同一套 Open Design deck 引擎——大纲优先的流程见幻灯片使用场景页。' },
+      { q: '是免费的吗？', a: '是。OpenDesign 开源，在你本来就用的编码 agent 里、用你自己的密钥运行——HTML→PPT 这个流程没有按文件或按额度计费。' },
+      { q: '跟"生成幻灯片"有什么区别？', a: '生成 deck 通常从一句提示或大纲开始；HTML to PPT 从你已经有的 HTML 或 markdown 开始，重点是可编辑的 .pptx 导出。两者用的是同一套 OpenDesign deck 引擎——大纲优先的流程见幻灯片使用场景页。' },
     ],
     ctaTitle: '把你下一个 HTML deck 变成可编辑的 PPT',
-    ctaBody: '给 repo 点个 star、装上 Open Design，把 HTML——或一句提示——变成干净的 deck 和真正可编辑的 .pptx，就在你已经在用的 agent 里。',
+    ctaBody: '给 repo 点个 star、装上 OpenDesign，把 HTML——或一句提示——变成干净的 deck 和真正可编辑的 .pptx，就在你已经在用的 agent 里。',
     relatedTitle: '相关工具与指南',
     related: [
       { href: '/solutions/slides/', label: '生成演示文稿' },
-      { href: '/solutions/design-to-code/', label: '用 Open Design 把设计转成代码' },
+      { href: '/solutions/design-to-code/', label: '用 OpenDesign 把设计转成代码' },
       { href: '/plugins/templates/', label: '浏览 deck 模板' },
-      { href: '/solutions/marketing/', label: 'Open Design 给市场团队' },
+      { href: '/solutions/marketing/', label: 'OpenDesign 给市场团队' },
     ],
   },
   slides: {
-    title: '用 Open Design + Claude Code 生成演示文稿',
+    title: '用 OpenDesign + Claude Code 生成演示文稿',
     description:
-      '把大纲变成有设计感、符合品牌的幻灯片，不用打开任何演示软件。Open Design 为编程助手提供演示模板和视觉系统，把幻灯片渲染成可演示、可导出、可分享的 HTML。',
+      '把大纲变成有设计感、符合品牌的幻灯片，不用打开任何演示软件。OpenDesign 为编程助手提供演示模板和视觉系统，把幻灯片渲染成可演示、可导出、可分享的 HTML。',
     breadcrumb: '幻灯片',
     label: '使用场景 · 幻灯片',
     heading: '用一句话生成精心排版的演示文稿',
-    lead: '把大纲和语气交给智能助手。Open Design 会套用演示模板和视觉系统，让每一页都排好版、配好字、贴合品牌，而不是在空白底上堆一串要点。',
-    heroImageAlt: 'Open Design 正在生成一份真实的十二页演示文稿，包含演讲备注和可编辑的 HTML 源文件',
+    lead: '把大纲和语气交给智能助手。OpenDesign 会套用演示模板和视觉系统，让每一页都排好版、配好字、贴合品牌，而不是在空白底上堆一串要点。',
+    heroImageAlt: 'OpenDesign 正在生成一份真实的十二页演示文稿，包含演讲备注和可编辑的 HTML 源文件',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 把大纲变成有设计感的 HTML 演示文稿，由智能助手一次生成——可在浏览器全屏演示、导出 PDF 或 PPTX，源文件保留在代码仓库中。',
-    stepsTitle: '用 Open Design 做演示文稿的流程',
+      'OpenDesign 把大纲变成有设计感的 HTML 演示文稿，由智能助手一次生成——可在浏览器全屏演示、导出 PDF 或 PPTX，源文件保留在代码仓库中。',
+    stepsTitle: '用 OpenDesign 做演示文稿的流程',
     steps: [
       { title: '给它大纲', body: '粘贴你的要点或粗略结构。智能助手会调用演示文稿能力，产出一连串排好版的幻灯片，而不是一篇长文档。', imageAlt: '插画：一份文字大纲被交给智能助手' },
-      { title: '选一个演示风格', body: 'Open Design 自带多种演示模板——编辑风、瑞士国际主义、深色技术风等。选定后，字体、网格和强调色会在每页之间保持一致。', imageAlt: '插画：几种演示风格并排展示' },
+      { title: '选一个演示风格', body: 'OpenDesign 自带多种演示模板——编辑风、瑞士国际主义、深色技术风等。选定后，字体、网格和强调色会在每页之间保持一致。', imageAlt: '插画：几种演示风格并排展示' },
       { title: '生成幻灯片', body: '每个要点变成一页有层次的幻灯片——标题、辅助视觉、数据高亮。渲染成 HTML，任何浏览器都能全屏演示。', imageAlt: '插画：一连串风格一致的成品幻灯片' },
       { title: '演示、导出、迭代', body: '从浏览器演示，或导出 PDF / PPTX 分享。直接用语言修改——“收紧数据页、增加结尾行动号召”。源文件始终留在你的项目里。', imageAlt: '插画：一份演示文稿被演示并导出成多种格式' },
     ],
-    tableTitle: '用 Open Design 做演示文稿 vs. 老办法',
+    tableTitle: '用 OpenDesign 做演示文稿 vs. 老办法',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: 'PowerPoint / Keynote / AI 幻灯工具',
     tableRows: [
       { capability: '从大纲到幻灯片', withOd: '一句话，智能助手排布每一页', without: '一页页手搭，或跟模板较劲' },
@@ -973,7 +973,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: "演示者模式", body: "专为浏览器现场演示而设计。", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "技术蓝图", body: "用架构图和知识页把复杂系统讲清楚。", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: '别人用 Open Design 做出来的演示文稿',
+    galleryTitle: '别人用 OpenDesign 做出来的演示文稿',
     galleryLead: '下面是从大纲渲染出的真实演示文稿。挑一个接近你演讲风格的，再描述内容。',
     gallery: [
       { thumb: "example-deck-guizang-editorial", caption: "编辑杂志风演示" },
@@ -985,43 +985,43 @@ export const ZH: SolutionLocaleCopy = {
     exampleLinkLabel: '浏览演示文稿模板',
     faqTitle: '幻灯片常见问题',
     faq: [
-      { q: '需要 PowerPoint 或 Keynote 吗？', a: '不需要。Open Design 会把演示文稿渲染成 HTML，还能导出 PDF 或 PPTX。你可以从浏览器演示或直接交付文件。' },
+      { q: '需要 PowerPoint 或 Keynote 吗？', a: '不需要。OpenDesign 会把演示文稿渲染成 HTML，还能导出 PDF 或 PPTX。你可以从浏览器演示或直接交付文件。' },
       { q: '这只是 AI 生成的要点吗？', a: '不是。智能助手会套用带网格、字号体系和视觉层次的真实演示模板，让幻灯片看起来经过设计，而不是自动填充。' },
-      { q: '能导出可编辑的 PowerPoint 吗？', a: '能。Open Design 会导出真正的 .pptx，文字与形状都可编辑，不是一页一张截图；同时保留 PDF 和用于演示的 HTML。' },
+      { q: '能导出可编辑的 PowerPoint 吗？', a: '能。OpenDesign 会导出真正的 .pptx，文字与形状都可编辑，不是一页一张截图；同时保留 PDF 和用于演示的 HTML。' },
       { q: '可以用哪些编程助手？', a: '支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。' },
     ],
     ctaTitle: '今晚就把下一份演示文稿做出来',
-    ctaBody: '下载 Open Design，把你的大纲变成有设计感、可演示也可导出的演示文稿。',
+    ctaBody: '下载 OpenDesign，把你的大纲变成有设计感、可演示也可导出的演示文稿。',
     relatedTitle: '相关工具与指南',
     related: [
-      { href: '/solutions/html-to-ppt/', label: '用 Open Design 把 HTML 转成 PPT' },
-      { href: '/solutions/design-to-code/', label: '用 Open Design 把设计转成代码' },
+      { href: '/solutions/html-to-ppt/', label: '用 OpenDesign 把 HTML 转成 PPT' },
+      { href: '/solutions/design-to-code/', label: '用 OpenDesign 把设计转成代码' },
       { href: '/plugins/templates/', label: '浏览演示文稿模板' },
-      { href: '/solutions/marketing/', label: 'Open Design 给市场团队' },
+      { href: '/solutions/marketing/', label: 'OpenDesign 给市场团队' },
     ],
   },
   image: {
-    title: '用 Open Design + Claude Code 生成贴合品牌的图片',
+    title: '用 OpenDesign + Claude Code 生成贴合品牌的图片',
     description:
       '从一句 prompt 产出社交卡片、文章封面、营销图——用真实排版和你的品牌系统排好版，渲染成可导出 PNG 的清晰 HTML。不用设计软件，不用订阅模板。',
     breadcrumb: '图片',
     label: '使用场景 · 图片',
     heading: '贴合品牌的图片，自动生成并排好版',
-    lead: '描述你要的卡片或封面。Open Design 用真实字体、网格和你的品牌色把它组合出来，再渲染成可导出图片的 HTML——不用跟设计软件或通用模板较劲。',
+    lead: '描述你要的卡片或封面。OpenDesign 用真实字体、网格和你的品牌色把它组合出来，再渲染成可导出图片的 HTML——不用跟设计软件或通用模板较劲。',
     heroImageAlt: '编辑风插画：一句 prompt 变成一组排好版的社交卡片和文章封面',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 把 prompt 变成排好版、贴合品牌的图片，由 agent 渲染成 HTML 并导出 PNG——可复用、可版本化，没有按席位的设计工具。',
-    stepsTitle: '用 Open Design 做图的流程',
+      'OpenDesign 把 prompt 变成排好版、贴合品牌的图片，由 agent 渲染成 HTML 并导出 PNG——可复用、可版本化，没有按席位的设计工具。',
+    stepsTitle: '用 OpenDesign 做图的流程',
     steps: [
       { title: '描述图片', body: '说清它是什么——"一张发布用的 Twitter 卡片，带标题和一句引用"。agent 加载对应 skill，组合出排好版的图片，而不是纯文字块。', imageAlt: '插画：一个人描述自己需要的社交卡片' },
-      { title: '套用品牌系统', body: 'Open Design 从可复用设计系统里取你的颜色、字体和间距，每张卡片都跟品牌其余部分一致，而不是各做各的。', imageAlt: '插画：品牌色和字体被套用到卡片布局上' },
+      { title: '套用品牌系统', body: 'OpenDesign 从可复用设计系统里取你的颜色、字体和间距，每张卡片都跟品牌其余部分一致，而不是各做各的。', imageAlt: '插画：品牌色和字体被套用到卡片布局上' },
       { title: '渲染并导出', body: '图片按你要的精确尺寸渲染成 HTML——社交卡、封面、横幅——再导出 PNG。文字清晰、布局真实、不用手动微调。', imageAlt: '插画：一张图片渲染并导出成图片文件' },
       { title: '复用这套配方', body: '因为它是模板，下一张图只差一句 prompt——换标题、留布局。成系列的卡片完美一致。', imageAlt: '插画：一个卡片模板产出一致的系列图片' },
     ],
-    tableTitle: '用 Open Design 做图 vs. 老办法',
+    tableTitle: '用 OpenDesign 做图 vs. 老办法',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '设计软件 / 通用模板',
     tableRows: [
       { capability: '从想法到排好版的图', withOd: '一句话，agent 组合字体和布局', without: '打开软件、手动摆每个元素' },
@@ -1040,7 +1040,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: "轮播图", body: "多图社交轮播，每帧之间保持一致。", thumb: "example-social-carousel" },
       { title: "UI 示意帧", body: "通知和设备外框，用于产品叙事。", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: '别人用 Open Design 做出来的图',
+    galleryTitle: '别人用 OpenDesign 做出来的图',
     galleryLead: '下面是从 prompt 渲染出的真实卡片和封面。挑一个接近你需要的，换上你的文案。',
     gallery: [
       { thumb: "example-html-ppt-xhs-pastel-card", caption: "粉彩社交卡片" },
@@ -1052,36 +1052,36 @@ export const ZH: SolutionLocaleCopy = {
     exampleLinkLabel: '浏览图片模板',
     faqTitle: '图片常见问题',
     faq: [
-      { q: '这是 Midjourney 那种 AI 生图吗？', a: '不是。Open Design 用真实布局和排版组合图片——你的标题、你的品牌、精确尺寸——渲染成 HTML 再导出 PNG。是设计排版，不是像素生成。' },
+      { q: '这是 Midjourney 那种 AI 生图吗？', a: '不是。OpenDesign 用真实布局和排版组合图片——你的标题、你的品牌、精确尺寸——渲染成 HTML 再导出 PNG。是设计排版，不是像素生成。' },
       { q: '能做风格一致的系列卡片吗？', a: '能。因为每张图都是模板，保留布局换文案，整个系列就完美对齐、贴合品牌。' },
       { q: '能出哪些尺寸？', a: '任意——图片按你指定的精确尺寸渲染，从方形社交卡到宽幅横幅，再导出 PNG。' },
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方适配，自带 provider 密钥。' },
     ],
     ctaTitle: '今晚就把下一张图做出来',
-    ctaBody: '给 repo 点个 star、装上 Open Design，把一句 prompt 变成贴合品牌的图片——在你本来就用的 agent 里。',
+    ctaBody: '给 repo 点个 star、装上 OpenDesign，把一句 prompt 变成贴合品牌的图片——在你本来就用的 agent 里。',
   },
   video: {
-    title: '用 Open Design + Claude Code 生成动态图形和短视频',
+    title: '用 OpenDesign + Claude Code 生成动态图形和短视频',
     description:
       '把脚本变成动画帧和短视频——标题卡、动态背景、片尾，用你的品牌系统组合并从 HTML 渲染。不用动态图形套件，不用在时间轴上拖拽。',
     breadcrumb: '视频',
     label: '使用场景 · 视频',
     heading: '动态图形靠脚本生成，不靠时间轴',
-    lead: '描述你想要的那一刻——标题揭示、数据动画、logo 片尾。Open Design 用你的品牌系统组合动画帧并渲染成视频，不需要动态图形套件。',
+    lead: '描述你想要的那一刻——标题揭示、数据动画、logo 片尾。OpenDesign 用你的品牌系统组合动画帧并渲染成视频，不需要动态图形套件。',
     heroImageAlt: '编辑风插画：一份脚本变成一连串动画视频帧',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 把脚本变成贴合品牌的动画帧，由 agent 渲染成短视频——从 HTML 组合、在 repo 里版本化、不用学时间轴编辑器。',
-    stepsTitle: '用 Open Design 做动效的流程',
+      'OpenDesign 把脚本变成贴合品牌的动画帧，由 agent 渲染成短视频——从 HTML 组合、在 repo 里版本化、不用学时间轴编辑器。',
+    stepsTitle: '用 OpenDesign 做动效的流程',
     steps: [
       { title: '描述那一刻', body: '说清要发生什么——"一个故障感标题化解成我们的 logo，然后一张结尾卡"。agent 加载动效 skill，产出动画帧而不是静态图。', imageAlt: '插画：一个人描述一段动效序列' },
-      { title: '套用品牌与动效风格', body: 'Open Design 提供帧模板——电影感漏光、故障标题、logo 片尾——并套用你的颜色和字体，让动效看起来是有意为之、贴合品牌。', imageAlt: '插画：品牌样式被套用到动画帧上' },
+      { title: '套用品牌与动效风格', body: 'OpenDesign 提供帧模板——电影感漏光、故障标题、logo 片尾——并套用你的颜色和字体，让动效看起来是有意为之、贴合品牌。', imageAlt: '插画：品牌样式被套用到动画帧上' },
       { title: '把帧渲染成视频', body: '帧在 HTML 里组合并渲染成视频，时序和布局精确可复现——不用在时间轴上手动打关键帧。', imageAlt: '插画：HTML 帧渲染成一段视频' },
       { title: '迭代并导出', body: '靠跟 agent 对话来改——"放慢标题揭示、加一行字幕"。导出短视频用于社交或产品。源文件留在你的项目里。', imageAlt: '插画：一段视频被打磨并导出用于社交' },
     ],
-    tableTitle: '用 Open Design 做动效 vs. 老办法',
+    tableTitle: '用 OpenDesign 做动效 vs. 老办法',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: 'After Effects / 动效套件',
     tableRows: [
       { capability: '从脚本到动画帧', withOd: '一句话，agent 组合整段序列', without: '在时间轴上一个个手打关键帧' },
@@ -1100,7 +1100,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: "故障标题", body: "带动效和质感的标题揭示。", thumb: "example-frame-glitch-title" },
       { title: "logo 片尾", body: "任意片子都能用的品牌收尾动画。", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: '别人用 Open Design 做出来的动效',
+    galleryTitle: '别人用 OpenDesign 做出来的动效',
     galleryLead: '下面是从 prompt 渲染出的真实动画帧和短片。挑一个接近你想法的，描述动效。',
     gallery: [
       { thumb: "example-hyperframes", caption: "Hyperframes 序列" },
@@ -1112,36 +1112,36 @@ export const ZH: SolutionLocaleCopy = {
     exampleLinkLabel: '浏览动效模板',
     faqTitle: '视频常见问题',
     faq: [
-      { q: '需要 After Effects 或动效套件吗？', a: '不需要。Open Design 在你的编码 agent 里用 HTML 组合动画帧并渲染成视频。没有时间轴编辑器要学或要授权。' },
+      { q: '需要 After Effects 或动效套件吗？', a: '不需要。OpenDesign 在你的编码 agent 里用 HTML 组合动画帧并渲染成视频。没有时间轴编辑器要学或要授权。' },
       { q: '这适合做什么视频？', a: '短视频动效——标题卡、数据动画、logo 片尾、社交短片。它为品牌和产品动效而生，不是做长片剪辑。' },
       { q: '时序可复现吗？', a: '可以。因为帧是用代码组合、确定性渲染的，每次结果一致，还能用一句 prompt 精确调整。' },
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方适配，自带 provider 密钥。' },
     ],
     ctaTitle: '今晚就把下一个想法做成动效',
-    ctaBody: '给 repo 点个 star、装上 Open Design，把一份脚本变成动效——在你本来就用的 agent 里。',
+    ctaBody: '给 repo 点个 star、装上 OpenDesign，把一份脚本变成动效——在你本来就用的 agent 里。',
   },
   designSystem: {
-    title: '用 Open Design + Claude Code 搭建并套用设计系统',
+    title: '用 OpenDesign + Claude Code 搭建并套用设计系统',
     description:
       '把你的品牌沉淀成一套可复用的设计系统，让编码 agent 套用到每一个产物——颜色、字体、组件、语气，全在一份 DESIGN.md 里。定义一次，每个原型、deck、看板都贴合品牌。',
     breadcrumb: '设计系统',
     label: '使用场景 · 设计系统',
     heading: '一套设计系统，套用到 agent 做的每一样东西',
-    lead: '把你的品牌定义一次，Open Design 就把它带进每个产出——原型、deck、看板、图片。系统作为一份 DESIGN.md 留在你的 repo 里供 agent 读取，一致性是自动的，不靠手动维护。',
+    lead: '把你的品牌定义一次，OpenDesign 就把它带进每个产出——原型、deck、看板、图片。系统作为一份 DESIGN.md 留在你的 repo 里供 agent 读取，一致性是自动的，不靠手动维护。',
     heroImageAlt: '编辑风插画：一套设计系统向外辐射成众多贴合品牌的产物',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 把你的品牌沉淀成一套可移植的设计系统，agent 套用到每个产物——在 repo 里定义一次、处处强制执行，没有中心化设计工具把关。',
-    stepsTitle: '用 Open Design 做设计系统的流程',
+      'OpenDesign 把你的品牌沉淀成一套可移植的设计系统，agent 套用到每个产物——在 repo 里定义一次、处处强制执行，没有中心化设计工具把关。',
+    stepsTitle: '用 OpenDesign 做设计系统的流程',
     steps: [
-      { title: '沉淀系统', body: '描述你的品牌——颜色、字体、间距、语气——或让 agent 指向一个现有站点去提取。Open Design 把它写进一份留在你项目里的 DESIGN.md。', imageAlt: '插画：一个品牌被沉淀进一份设计系统文件' },
-      { title: '从成熟基底起步', body: 'Open Design 自带 140+ 套参考设计系统——从 Apple、Linear 到编辑风、粗野主义。fork 一个接近你品牌的，而不是从白纸开始。', imageAlt: '插画：浏览一排参考设计系统' },
+      { title: '沉淀系统', body: '描述你的品牌——颜色、字体、间距、语气——或让 agent 指向一个现有站点去提取。OpenDesign 把它写进一份留在你项目里的 DESIGN.md。', imageAlt: '插画：一个品牌被沉淀进一份设计系统文件' },
+      { title: '从成熟基底起步', body: 'OpenDesign 自带 140+ 套参考设计系统——从 Apple、Linear 到编辑风、粗野主义。fork 一个接近你品牌的，而不是从白纸开始。', imageAlt: '插画：浏览一排参考设计系统' },
       { title: '处处套用', body: '其他每个 skill 都读同一套系统，所以原型、deck、看板共享一套视觉语言——你不用每次重新指定。', imageAlt: '插画：一套系统一致地套用到多种产物类型' },
       { title: '在一处演进', body: '改一处系统，下一次渲染处处生效。因为它是 repo 里的一个文件，设计决策像代码一样被 review 和版本化。', imageAlt: '插画：一套设计系统被更新并传播到所有产出' },
     ],
-    tableTitle: '用 Open Design 做设计系统 vs. 老办法',
+    tableTitle: '用 OpenDesign 做设计系统 vs. 老办法',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '设计工具组件库 / 风格指南',
     tableRows: [
       { capability: '定义系统', withOd: '一份 agent 读取的 DESIGN.md，从 140+ 参考 fork', without: '一份静态风格指南或锁在工具里的组件库' },
@@ -1160,7 +1160,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: "OpenAI", body: "极简、中性、研究级。", thumb: "design-system-openai" },
       { title: "GitHub", body: "密集、技术、开发者原生。", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Open Design 里的设计系统',
+    galleryTitle: 'OpenDesign 里的设计系统',
     galleryLead: '下面是 140+ 套参考系统里的几个，可作为起点 fork。挑一个接近你品牌的去改。',
     gallery: [
       { thumb: "design-system-airbnb", caption: "Airbnb 风格系统" },
@@ -1172,18 +1172,18 @@ export const ZH: SolutionLocaleCopy = {
     exampleLinkLabel: '浏览设计系统',
     faqTitle: '设计系统常见问题',
     faq: [
-      { q: '这里的设计系统具体是什么？', a: 'repo 里一份 DESIGN.md，沉淀颜色、字体、间距、组件和语气。每个 Open Design skill 都读它，所以 agent 产出的任何东西都自动套用你的品牌。' },
-      { q: '必须从零开始吗？', a: '不必。Open Design 自带 140+ 套参考设计系统可 fork——从 Apple、Linear 到编辑风、粗野主义——再适配你的品牌。' },
+      { q: '这里的设计系统具体是什么？', a: 'repo 里一份 DESIGN.md，沉淀颜色、字体、间距、组件和语气。每个 OpenDesign skill 都读它，所以 agent 产出的任何东西都自动套用你的品牌。' },
+      { q: '必须从零开始吗？', a: '不必。OpenDesign 自带 140+ 套参考设计系统可 fork——从 Apple、Linear 到编辑风、粗野主义——再适配你的品牌。' },
       { q: '怎么在 deck、看板、原型之间保持一致？', a: '因为这些 skill 都读同一份 DESIGN.md。定义一次，一致性就是自动的，而不是靠手动盯着。' },
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方适配，自带 provider 密钥。' },
     ],
     ctaTitle: '今晚就定义你的设计系统',
-    ctaBody: '给 repo 点个 star、装上 Open Design，给你的 agent 一套处处套用的品牌——在你本来就用的 agent 里。',
+    ctaBody: '给 repo 点个 star、装上 OpenDesign，给你的 agent 一套处处套用的品牌——在你本来就用的 agent 里。',
   },
   roleSoloBuilder: {
-    title: 'Open Design 给独立开发者 / 一人公司',
+    title: 'OpenDesign 给独立开发者 / 一人公司',
     description:
-      '一个人也能像一支团队那样出活。Open Design 把你的编码 agent 变成创业的设计那一半——原型、落地页、看板、品牌视觉，全从一句 prompt 来、全贴合品牌、全在你的 repo 里。',
+      '一个人也能像一支团队那样出活。OpenDesign 把你的编码 agent 变成创业的设计那一半——原型、落地页、看板、品牌视觉，全从一句 prompt 来、全贴合品牌、全在你的 repo 里。',
     breadcrumb: '独立开发者',
     label: '适用于 · 独立开发者',
     heading: '你的设计团队，就是你本来就在用的 agent',
@@ -1191,16 +1191,16 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑风插画：一个人在桌前，四周环绕着同一套风格的落地页、应用、看板和社交卡',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 是独立创始人从没有过的设计部门：跨产品需要的每个界面，prompt 出产物，一套品牌、零交接、不用额外工具。',
-    stepsTitle: '独立开发者怎么用 Open Design',
+      'OpenDesign 是独立创始人从没有过的设计部门：跨产品需要的每个界面，prompt 出产物，一套品牌、零交接、不用额外工具。',
+    stepsTitle: '独立开发者怎么用 OpenDesign',
     steps: [
       { title: '先定义一次品牌', body: '把颜色、字体、语气写进一份 DESIGN.md（或从 140+ 参考系统 fork 一个）。之后你生成的每个产物都自动贴合品牌。', imageAlt: '插画：单一品牌定义文件' },
       { title: '接着要什么生成什么', body: '原型、落地页、看板、路演 deck、社交卡——同一个 agent、同一套品牌，每个一句 prompt。不用切工具或再买席位。', imageAlt: '插画：多种产物从一句 prompt 而来' },
       { title: '直接上线——它本就是真的', body: '一切渲染成你 repo 里的 HTML / 代码，原型变产品、落地页能上线。没有用完即弃的 mockup。', imageAlt: '插画：产物从 prompt 直接上线' },
     ],
-    tableTitle: '用 Open Design 单干 vs. 硬扛',
+    tableTitle: '用 OpenDesign 单干 vs. 硬扛',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '今天单干',
     tableRows: [
       { capability: '覆盖所有设计界面', withOd: '一个 agent 搞定原型、落地、看板、品牌', without: '拼凑五个 SaaS 工具和教程' },
@@ -1218,7 +1218,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '移动流程', body: '走出 Web 时的应用屏幕。', thumb: 'example-mobile-app' },
       { title: '社交卡', body: '各渠道的发布和更新卡片。', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: '别人用 Open Design 单干做出来的',
+    galleryTitle: '别人用 OpenDesign 单干做出来的',
     galleryLead: '一人创业需要的每个界面，都从一句 prompt 来。挑一个接近你下一步的，描述它。',
     gallery: [
       { thumb: 'example-saas-landing', caption: 'SaaS 落地页' },
@@ -1236,12 +1236,12 @@ export const ZH: SolutionLocaleCopy = {
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方适配，自带 provider 密钥。' },
     ],
     ctaTitle: '今晚就把整个东西做出来',
-    ctaBody: '给 repo 点个 star、装上 Open Design，让一个 agent 当你的设计团队——在你本来就用的 agent 里。',
+    ctaBody: '给 repo 点个 star、装上 OpenDesign，让一个 agent 当你的设计团队——在你本来就用的 agent 里。',
   },
   roleDesigner: {
-    title: 'Open Design 给设计师',
+    title: 'OpenDesign 给设计师',
     description:
-      '把时间花在品味上，不是苦工上。Open Design 让 agent 处理重复的生产工作——变体、状态、整套设计系统——你来把控样子、保留最终决定权。',
+      '把时间花在品味上，不是苦工上。OpenDesign 让 agent 处理重复的生产工作——变体、状态、整套设计系统——你来把控样子、保留最终决定权。',
     breadcrumb: '设计师',
     label: '适用于 · 设计师',
     heading: '你定方向——让 agent 干生产',
@@ -1249,16 +1249,16 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑风插画：设计师在指挥，agent 填充屏幕、变体和设计系统',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 是不会累的生产助手：你定义设计系统、把控品味；agent 生成其余的，贴合系统、就在你的 repo 里。',
-    stepsTitle: '设计师怎么用 Open Design',
+      'OpenDesign 是不会累的生产助手：你定义设计系统、把控品味；agent 生成其余的，贴合系统、就在你的 repo 里。',
+    stepsTitle: '设计师怎么用 OpenDesign',
     steps: [
       { title: '把系统编码', body: '把品牌变成一份 DESIGN.md——字号体系、颜色、间距、组件、语气。这是 agent 遵守的事实来源。', imageAlt: '插画：设计系统被沉淀为文件' },
       { title: '生成长尾', body: '那些你本来要手搭的屏幕、状态、变体——agent 贴合系统渲染，无聊的 80% 几分钟搞定。', imageAlt: '插画：一次生成多个贴合系统的屏幕' },
       { title: '指挥并打磨', body: '用语言点评——「收紧间距、空状态做暖一点」。你保留最终决定权，agent 做迭代。', imageAlt: '插画：设计师给方向，设计随之更新' },
     ],
-    tableTitle: '用 Open Design 做设计 vs. 纯手工',
+    tableTitle: '用 OpenDesign 做设计 vs. 纯手工',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '手工设计工具',
     tableRows: [
       { capability: '搭建设计系统', withOd: '一份 agent 处处套用的 DESIGN.md', without: '一个每个工具手维护的组件库' },
@@ -1276,7 +1276,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '应用屏幕', body: '高保真的移动和 Web 屏幕。', thumb: 'example-mobile-app' },
       { title: '看板', body: '尊重你系统的数据 UI。', thumb: 'example-dashboard' },
     ],
-    galleryTitle: '别人用 Open Design 指挥出来的',
+    galleryTitle: '别人用 OpenDesign 指挥出来的',
     galleryLead: 'agent 从指挥渲染出的高保真、贴合系统的作品。挑一个接近你风格的，打磨它。',
     gallery: [
       { thumb: 'example-web-prototype-taste-editorial', caption: '编辑风版面' },
@@ -1294,12 +1294,12 @@ export const ZH: SolutionLocaleCopy = {
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方适配，自带 provider 密钥。' },
     ],
     ctaTitle: '今晚就指挥你的下一个设计',
-    ctaBody: '给 repo 点个 star、装上 Open Design，让 agent 干生产、你来把控品味——在你本来就用的 agent 里。',
+    ctaBody: '给 repo 点个 star、装上 OpenDesign，让 agent 干生产、你来把控品味——在你本来就用的 agent 里。',
   },
   roleEngineering: {
-    title: 'Open Design 给工程师',
+    title: 'OpenDesign 给工程师',
     description:
-      '跳过设计交接。Open Design 把一份 DESIGN.md 变成你的编码 agent 直接写的真实前端——贴合系统的 UI、原型、看板，就在 repo 里，不用 Figma 往返。',
+      '跳过设计交接。OpenDesign 把一份 DESIGN.md 变成你的编码 agent 直接写的真实前端——贴合系统的 UI、原型、看板，就在 repo 里，不用 Figma 往返。',
     breadcrumb: '工程',
     label: '适用于 · 工程',
     heading: '从规格到前端，中间没有交接',
@@ -1307,16 +1307,16 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑风插画：一份 DESIGN.md 直接流向前端代码和渲染好的 UI，跳过了交接环节',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 把设计系统变成机器可读，弭平设计到工程的断层：写你代码的同一个 agent 套用系统、渲染出真实 UI。',
-    stepsTitle: '工程师怎么用 Open Design',
+      'OpenDesign 把设计系统变成机器可读，弭平设计到工程的断层：写你代码的同一个 agent 套用系统、渲染出真实 UI。',
+    stepsTitle: '工程师怎么用 OpenDesign',
     steps: [
       { title: '读系统，不读标注', body: 'DESIGN.md 就在 repo 里。agent 像读代码库其余部分一样读它——没有导出的规格要解读。', imageAlt: '插画：agent 在代码旁读一份 DESIGN.md' },
       { title: '生成贴合系统的 UI', body: '描述屏幕或组件，agent 写出已经匹配系统的前端。原型、后台看板、内部工具——几分钟搞定。', imageAlt: '插画：生成的 UI 代码匹配设计系统' },
       { title: '它本就是你的代码', body: '产出是 repo 里的 HTML / 框架代码，能在 PR 里 review。「设计」和「实现」之间没有翻译步骤。', imageAlt: '插画：生成的 UI 作为可 review 的 PR 落地' },
     ],
-    tableTitle: '用 Open Design 做前端 vs. 交接式',
+    tableTitle: '用 OpenDesign 做前端 vs. 交接式',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '设计到开发交接',
     tableRows: [
       { capability: '拿到可开工的设计', withOd: '一份 agent 直接读的 DESIGN.md', without: '一个你手动重新解读的 Figma 文件' },
@@ -1334,7 +1334,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '落地页', body: '不等设计的营销页。', thumb: 'example-saas-landing' },
       { title: 'Kanban / 看板', body: '内部工作流 UI。', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: '别人用 Open Design 在工程里做出来的',
+    galleryTitle: '别人用 OpenDesign 在工程里做出来的',
     galleryLead: '直接在 repo 里生成的、贴合系统的真实前端。挑一个接近你在做的，描述它。',
     gallery: [
       { thumb: 'example-web-prototype', caption: 'Web 应用 UI' },
@@ -1352,29 +1352,29 @@ export const ZH: SolutionLocaleCopy = {
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方适配，自带 provider 密钥。' },
     ],
     ctaTitle: '今晚就生成你的下一个 UI',
-    ctaBody: '给 repo 点个 star、装上 Open Design，把一份 DESIGN.md 变成前端——在你本来就用的 agent 里。',
+    ctaBody: '给 repo 点个 star、装上 OpenDesign，把一份 DESIGN.md 变成前端——在你本来就用的 agent 里。',
   },
   roleProductManagers: {
-    title: 'Open Design 给产品经理',
+    title: 'OpenDesign 给产品经理',
     description:
-      '别再为了讲清一个想法等待设计排期。Open Design 让产品经理把一句话需求变成可点击的原型或线框图，用来对齐干系人、给团队说明需求。',
+      '别再为了讲清一个想法等待设计排期。OpenDesign 让产品经理把一句话需求变成可点击的原型或线框图，用来对齐干系人、给团队说明需求。',
     breadcrumb: '产品经理',
     label: '适用于 · 产品经理',
     heading: '项目启动前，先让想法能点击',
     lead: '描述流程，智能助手会渲染出真实可点击的原型。今天就能拿给干系人体验，让评审讨论真实流程，而不是文档里的一段话。',
-    heroImageAlt: 'Open Design 生成的真实交互式团队看板，可直接用于干系人评审',
+    heroImageAlt: 'OpenDesign 生成的真实交互式团队看板，可直接用于干系人评审',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 让产品经理无需等待设计排期，也能把一句话需求做成可点击原型，用于对齐意见和说明需求。',
-    stepsTitle: '产品经理怎么用 Open Design',
+      'OpenDesign 让产品经理无需等待设计排期，也能把一句话需求做成可点击原型，用于对齐意见和说明需求。',
+    stepsTitle: '产品经理怎么用 OpenDesign',
     steps: [
       { title: '描述流程', body: '用大白话写下用户旅程——屏幕、状态和主要路径，不用线框工具。', imageAlt: '插画：产品经理在描述一段用户流程' },
       { title: '拿到可点击原型', body: '智能助手会渲染出真正可点击、可导航的屏幕。拿给干系人评审，比一张幻灯片或一篇文档清楚得多。', imageAlt: '插画：从描述产出可点击原型' },
       { title: '对齐并交接', body: '分享链接，对着实物收集反馈，再把原型交给设计/工程，作为精确、共享的起点。', imageAlt: '插画：原型用于对齐后交给团队' },
     ],
-    tableTitle: '产品经理用 Open Design vs. 等设计排期',
+    tableTitle: '产品经理用 OpenDesign vs. 等设计排期',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '今天没有它',
     tableRows: [
       { capability: '把想法做实', withOd: '一句话需求 → 可点击原型', without: '提设计需求、等待排期' },
@@ -1392,7 +1392,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: 'Web 原型', body: '可评审的多屏 Web 流程。', thumb: 'example-web-prototype' },
       { title: '趋势视图', body: '近 30 天和趋势快照做背景。', thumb: 'example-last30days' },
     ],
-    galleryTitle: '别人用 Open Design 做 PM 原型',
+    galleryTitle: '别人用 OpenDesign 做 PM 原型',
     galleryLead: '从描述渲染出的可点击流程，可直接用于干系人评审。挑一个接近你想法的，描述它。',
     gallery: [
       { thumb: 'example-mobile-app', caption: '移动流程' },
@@ -1410,12 +1410,12 @@ export const ZH: SolutionLocaleCopy = {
       { q: '可以用哪些编程助手？', a: '支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。' },
     ],
     ctaTitle: '今晚就让你的想法能点击',
-    ctaBody: '下载 Open Design，把下一份产品规格变成团队真正能点击、能评审的原型。',
+    ctaBody: '下载 OpenDesign，把下一份产品规格变成团队真正能点击、能评审的原型。',
   },
   roleMarketing: {
-    title: 'Open Design 给市场团队',
+    title: 'OpenDesign 给市场团队',
     description:
-      '以内容的速度出 campaign。Open Design 让 agent 从一句 prompt 产出落地页、社交卡和 campaign 视觉——贴合品牌、随要随出，不用排设计队。',
+      '以内容的速度出 campaign。OpenDesign 让 agent 从一句 prompt 产出落地页、社交卡和 campaign 视觉——贴合品牌、随要随出，不用排设计队。',
     breadcrumb: '市场',
     label: '适用于 · 市场',
     heading: 'campaign 视觉，一句 prompt 的速度',
@@ -1423,16 +1423,16 @@ export const ZH: SolutionLocaleCopy = {
     heroImageAlt: '编辑风插画：市场人员把一份 brief 变成落地页和一组贴合品牌的社交卡',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 是市场的常驻设计资源：prompt 出落地页和社交素材、贴合品牌，让 campaign 以你写文案的速度上线。',
-    stepsTitle: '市场团队怎么用 Open Design',
+      'OpenDesign 是市场的常驻设计资源：prompt 出落地页和社交素材、贴合品牌，让 campaign 以你写文案的速度上线。',
+    stepsTitle: '市场团队怎么用 OpenDesign',
     steps: [
       { title: '锁定品牌', body: '你的 DESIGN.md 持有颜色、字体和语气。agent 做的每个素材都自动贴合品牌——不用逐个重新调样式。', imageAlt: '插画：品牌系统套用到市场素材' },
       { title: '生成整个 campaign', body: '落地页、社交卡、封面、公告图——每个一句 prompt，跨渠道一致的一整套。', imageAlt: '插画：从 prompt 生成完整 campaign 套图' },
       { title: '上线并迭代', body: '落地页渲染成可部署的 HTML，图导出 PNG。换标题、重渲整套——不用等队列。', imageAlt: '插画：campaign 素材快速上线并迭代' },
     ],
-    tableTitle: '市场用 Open Design vs. 平时的手忙脚乱',
+    tableTitle: '市场用 OpenDesign vs. 平时的手忙脚乱',
     tableColCapability: '你需要什么',
-    tableColWithOd: '用 Open Design',
+    tableColWithOd: '用 OpenDesign',
     tableColWithout: '今天没有它',
     tableRows: [
       { capability: '上一个落地页', withOd: 'prompt → 贴合品牌、可部署的页', without: '给设计 brief 或跟建站工具较劲' },
@@ -1450,7 +1450,7 @@ export const ZH: SolutionLocaleCopy = {
       { title: '文章封面', body: '博客和 newsletter 封面。', thumb: 'example-article-magazine' },
       { title: 'Web 页面', body: '微站和 campaign 页。', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: '别人用 Open Design 做市场素材',
+    galleryTitle: '别人用 OpenDesign 做市场素材',
     galleryLead: '从 prompt 渲染出的贴合品牌 campaign 素材。挑一个接近你 campaign 的，换上你的文案。',
     gallery: [
       { thumb: 'example-saas-landing', caption: 'campaign 落地页' },
@@ -1468,6 +1468,6 @@ export const ZH: SolutionLocaleCopy = {
       { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方适配，自带 provider 密钥。' },
     ],
     ctaTitle: '今晚就上你的下一个 campaign',
-    ctaBody: '给 repo 点个 star、装上 Open Design，把 brief 变成贴合品牌的素材——在你本来就用的 agent 里。',
+    ctaBody: '给 repo 点个 star、装上 OpenDesign，把 brief 变成贴合品牌的素材——在你本来就用的 agent 里。',
   },
 };

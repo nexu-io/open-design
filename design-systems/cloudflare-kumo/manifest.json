@@ -6,7 +6,7 @@
   "description": "Cloudflare's component system for modern web apps, with semantic light and dark tokens, compact typography, layered neutral surfaces, accessible controls, and chart-ready color guidance.",
   "source": {
     "type": "bundled",
-    "origin": "Open Design curated integration of https://github.com/cloudflare/kumo at 0c5832575c99988917b81cd752002e10f3dc9c7a (@cloudflare/kumo 2.9.2, MIT)"
+    "origin": "OpenDesign curated integration of https://github.com/cloudflare/kumo at 0c5832575c99988917b81cd752002e10f3dc9c7a (@cloudflare/kumo 2.9.2, MIT)"
   },
   "files": {
     "design": "DESIGN.md",

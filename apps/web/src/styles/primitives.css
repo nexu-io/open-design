@@ -351,7 +351,7 @@ code {
 }
 
 /* -------- Brand glyph ------------------------------------------------ */
-/* Monochrome Open Design brand mark. The glyph ships as /brand-icon.svg and
+/* Monochrome OpenDesign brand mark. The glyph ships as /brand-icon.svg and
    is masked with --text-strong so it reads as ink in light mode and cream in
    dark mode. Consumers set their own size and placement. */
 .od-brand-glyph {

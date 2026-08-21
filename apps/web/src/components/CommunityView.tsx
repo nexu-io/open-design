@@ -5,15 +5,14 @@ import { useI18n } from '../i18n';
 import { listPlugins } from '../state/projects';
 import {
   buildCommunityTemplates,
-  copyTemplatePrompt,
   isPromptArtifact,
-  templateActionLabel,
   TEMPLATE_TYPE_LABEL_KEY,
   TEMPLATE_TYPE_ORDER,
   type TemplateDemo,
   type TemplateType,
 } from './CommunityTemplatePreview';
 import { MediaSurface } from './plugins-home/cards/MediaSurface';
+import { canDuplicatePluginPreview } from './plugins-home/duplicate';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { useInView } from './plugins-home/useInView';
@@ -100,11 +99,11 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
   // chip (飞书 recvqxDuYM6Uxk). Keep the raw record here: the modal renders
   // from `InstalledPluginRecord`, not from the card view-model.
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
-  const [activeType, setActiveType] = useState<TemplateType>('Slides');
+  const [selectedType, setSelectedType] = useState<TemplateType | null>(null);
   const [activeSubtype, setActiveSubtype] = useState('All');
-  // Remix (and the prompt-artifact copy path it shares) hands off to a
-  // fire-and-forget parent callback (`onRemixTemplate`/`onUsePrompt` return
-  // void) that kicks off a real POST /api/projects — nothing here observes
+  // Remix hands off to a fire-and-forget parent callback
+  // (`onRemixTemplate` returns void) that kicks off a real POST /api/projects
+  // — nothing here observes
   // when it settles. Without a guard, N rapid clicks before the resulting
   // navigation actually leaves this view fired N separate creates,
   // duplicating the project N times ("Community 的模板 remix 点击多次会复制
@@ -147,9 +146,16 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
     () => buildCommunityTemplates(plugins, locale, t, workspaceContext),
     [plugins, locale, t, workspaceContext],
   );
+  const pluginById = useMemo(
+    () => new Map(plugins.map((record) => [record.id, record])),
+    [plugins],
+  );
   const typeOptions = TEMPLATE_TYPE_ORDER.filter((type) =>
     templates.some((template) => template.type === type),
   );
+  const activeType = selectedType && typeOptions.includes(selectedType)
+    ? selectedType
+    : typeOptions[0];
   const subtypeOptions = Array.from(new Set(
     templates
       .filter((template) => template.type === activeType && template.subtype)
@@ -165,19 +171,6 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
     return sourceKind === 'bundled' || sourceKind === 'marketplace' ? 'official' as const : 'personal' as const;
   };
   const handleTemplateAction = (template: TemplateDemo) => {
-    if (isPromptArtifact(template)) {
-      trackCommunityTemplateClick(analytics.track, {
-        page_name: 'community',
-        area: 'community_templates',
-        element: 'copy_prompt',
-        template_key: template.id,
-        template_type: template.type,
-        resource_scope: templateScope(template.id),
-        ...workspaceDimensions,
-      });
-      void copyTemplatePrompt(template);
-      return;
-    }
     // Synchronous check-and-set on the ref: this is what actually decides
     // whether a request goes out. See the remixingIdRef comment above for
     // why the state flag alone cannot gate this.
@@ -194,6 +187,28 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
     remixingIdRef.current = template.id;
     setRemixingId(template.id);
     onRemixTemplate?.({ templateId: template.id, prompt: template.prompt });
+  };
+  const handleCardUse = (template: TemplateDemo) => {
+    const target = templateUseTarget(template);
+    trackCommunityTemplateClick(analytics.track, {
+      page_name: 'community',
+      area: 'community_templates',
+      element: 'use_prompt',
+      template_key: template.id,
+      template_type: template.type,
+      resource_scope: templateScope(template.id),
+      ...workspaceDimensions,
+    });
+    const record = pluginById.get(template.id);
+    if (record && onUsePlugin) {
+      onUsePlugin(record, 'use-with-query', target);
+      return;
+    }
+    onUsePrompt?.(target);
+  };
+  const canRemixTemplate = (template: TemplateDemo) => {
+    const record = pluginById.get(template.id);
+    return !isPromptArtifact(template) && Boolean(record && canDuplicatePluginPreview(record));
   };
   const templateById = useCallback(
     (id: string) => templates.find((template) => template.id === id) ?? null,
@@ -217,7 +232,7 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
   /** The detail modal's Use split action. Shells that own a Home hand-off
    *  route the plugin as the composer's active driver; without one, fall back
    *  to seeding the composer with the template's prompt (same destination the
-   *  card's own prompt button uses). */
+   *  card's own Use button uses). */
   const handleDetailsUse = (record: InstalledPluginRecord, action: PluginUseAction) => {
     setDetailsRecord(null);
     const template = templateById(record.id);
@@ -268,7 +283,7 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
                     filter_value: type,
                     ...workspaceDimensions,
                   });
-                  setActiveType(type);
+                  setSelectedType(type);
                   setActiveSubtype('All');
                 }}
               >
@@ -330,7 +345,7 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
             onClick={() => openTemplateDetails(template)}
           >
             <div
-              className="community-template-card__preview"
+              className={`community-template-card__preview${template.type === 'Slides' ? ' is-deck' : ''}`}
               style={{ '--template-accent': template.accent } as CSSProperties}
               aria-hidden
             >
@@ -339,34 +354,27 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
             <footer className="community-template-card__foot">
               <span>{template.meta}</span>
               <div className="community-template-card__actions">
-                <button
-                  type="button"
-                  disabled={remixingId === template.id}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleTemplateAction(template);
-                  }}
-                >
-                  {remixingId === template.id ? t('common.loading') : templateActionLabel(template)}
-                </button>
+                {canRemixTemplate(template) ? (
+                  <button
+                    type="button"
+                    disabled={remixingId === template.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleTemplateAction(template);
+                    }}
+                  >
+                    {remixingId === template.id ? t('common.loading') : 'Remix'}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="community-template-card__prompt-btn"
                   onClick={(event) => {
                     event.stopPropagation();
-                    trackCommunityTemplateClick(analytics.track, {
-                      page_name: 'community',
-                      area: 'community_templates',
-                      element: 'use_prompt',
-                      template_key: template.id,
-                      template_type: template.type,
-                      resource_scope: templateScope(template.id),
-                      ...workspaceDimensions,
-                    });
-                    onUsePrompt?.(templateUseTarget(template));
+                    handleCardUse(template);
                   }}
                 >
-                  {t('community.usePrompt')}
+                  {t('pluginCard.use')}
                 </button>
               </div>
             </footer>

@@ -138,8 +138,6 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
         planId: null,
       } satisfies Partial<WorkspaceCollabContext>,
       billing: { membershipTier: '', subscriptionStatus: '' } satisfies Partial<WorkspaceBillingSummary>,
-      path: '/console/dashboard',
-      param: ['billing', 'plan'],
     },
     {
       name: 'free team owner',
@@ -149,8 +147,6 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
         planId: null,
       } satisfies Partial<WorkspaceCollabContext>,
       billing: { membershipTier: '', subscriptionStatus: '' } satisfies Partial<WorkspaceBillingSummary>,
-      path: '/console/dashboard',
-      param: ['billing', 'checkout'],
     },
     {
       name: 'paid team owner',
@@ -163,12 +159,10 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
         membershipTier: 'team_plus',
         subscriptionStatus: 'active',
       } satisfies Partial<WorkspaceBillingSummary>,
-      path: '/console/dashboard',
-      param: ['billing', 'plan'],
     },
   ])(
-    'routes a $name through the matching Vela dialog',
-    ({ context: contextOverrides, billing: billingOverrides, path, param }) => {
+    'routes a $name to public Pricing',
+    ({ context: contextOverrides, billing: billingOverrides }) => {
       const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
       renderRail({
         context: context({
@@ -188,9 +182,8 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
 
       expect(openSpy).toHaveBeenCalledTimes(1);
       const target = new URL(String(openSpy.mock.calls[0]![0]));
-      expect(target.pathname).toBe(path);
-      expect(target.searchParams.get(param[0]!)).toBe(param[1]);
-      expect(target.searchParams.get('workspaceId')).toBe('ws-new');
+      expect(`${target.origin}${target.pathname}`).toBe('https://open-design.ai/pricing/');
+      expect(target.searchParams.get('billing')).toBeNull();
     },
   );
 

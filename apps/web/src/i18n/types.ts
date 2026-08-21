@@ -1127,6 +1127,7 @@ export interface Dict {
   'entry.discordAria': string;
   'entry.discordAriaWithOnline': string;
   'entry.discordOnlineLabel': string;
+  'entry.feishuAria': string;
   'entry.mailAria': string;
   'entry.accountSettings': string;
   'chat.collapsePane': string;
@@ -2816,6 +2817,7 @@ export interface Dict {
   'inlineSwitcher.missingApiKey': string;
   'inlineSwitcher.openFullSettings': string;
   'inlineSwitcher.customSuffix': string;
+  'inlineSwitcher.unlimitedBadge': string;
 
   // Project view / chat pane / composer
   'project.backToProjects': string;
@@ -5430,4 +5432,25 @@ export interface Dict {
   'campaign.deepseekV4Flash.restricted.tooltip': string;
   'campaign.deepseekV4Flash.workbenchBadge': string;
   'campaign.deepseekV4Flash.workbenchBadgeAria': string;
+
+  'experienceSurvey.tag': string;
+  'experienceSurvey.close': string;
+  'experienceSurvey.recommendation': string;
+  'experienceSurvey.recommendationLow': string;
+  'experienceSurvey.recommendationHigh': string;
+  'experienceSurvey.improvement': string;
+  'experienceSurvey.improvement.wrongOutput': string;
+  'experienceSurvey.improvement.falseDone': string;
+  'experienceSurvey.improvement.hardToUse': string;
+  'experienceSurvey.improvement.upgradePrompts': string;
+  'experienceSurvey.improvement.stuck': string;
+  'experienceSurvey.improvement.slow': string;
+  'experienceSurvey.improvement.looks': string;
+  'experienceSurvey.improvement.regression': string;
+  'experienceSurvey.improvement.other': string;
+  'experienceSurvey.otherPlaceholder': string;
+  'experienceSurvey.submit': string;
+  'experienceSurvey.skip': string;
+  'experienceSurvey.thanksTitle': string;
+  'experienceSurvey.thanksBody': string;
 }

@@ -1,0 +1,1859 @@
+---
+import {
+  GO_PLAN,
+  PRICING_SNAPSHOT,
+  formatUsd,
+  type PlanTierConfig,
+} from '../_lib/pricing';
+import {
+  CREDIT_BONUS_PCT,
+  fillTemplate,
+  getPricingContent,
+  type PlanTierId,
+} from '../_lib/pricing-content';
+import { getCatalogCounts } from '../_lib/catalog';
+import { localeFromPath } from '../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const content = getPricingContent(locale);
+const L = content.labels;
+const P = content.personal;
+const tiers = PRICING_SNAPSHOT.tiers;
+const catalogCounts = await getCatalogCounts(locale);
+const skillsCount = catalogCounts.skills.toLocaleString('en-US');
+const systemsCount = catalogCounts.systems.toLocaleString('en-US');
+
+type TierId = 'go' | PlanTierId;
+type ModelCategory = 'popular' | 'flagship' | 'image';
+
+interface ModelItem {
+  name: string;
+  icon: string;
+  iconClass?: string;
+}
+
+const DEMO_ASSET_BASE = '/pricing-e-final/assets';
+
+const popularModels: ModelItem[] = [
+  { name: 'DeepSeek V4 Flash Vision Exp', icon: '/agents/deepseek.svg' },
+  { name: 'DeepSeek V4 Flash', icon: '/agents/deepseek.svg' },
+  { name: 'GLM-5.2', icon: `${DEMO_ASSET_BASE}/zai-logo-official-Byn-xbrp.png`, iconClass: 'model-logo-zhipu' },
+  { name: 'Kimi K2.7 Code', icon: '/model-icons/kimi.svg', iconClass: 'model-logo-kimi' },
+  { name: 'DeepSeek V4 Pro', icon: '/agents/deepseek.svg' },
+  { name: 'MiniMax M2.7', icon: '/model-icons/minimax.svg' },
+  { name: 'Kimi K2.6', icon: '/model-icons/kimi.svg', iconClass: 'model-logo-kimi' },
+  { name: 'MiMo V2.5 Pro', icon: `${DEMO_ASSET_BASE}/mimo-logo-user-CWOWEwG5.png`, iconClass: 'model-logo-mimo' },
+  { name: 'GLM-5.1', icon: `${DEMO_ASSET_BASE}/zai-logo-official-Byn-xbrp.png`, iconClass: 'model-logo-zhipu' },
+];
+
+const flagshipModels: ModelItem[] = [
+  { name: 'Claude Fable 5', icon: '/model-icons/claude.svg' },
+  { name: 'Kimi-K3', icon: '/model-icons/kimi.svg', iconClass: 'model-logo-kimi' },
+  { name: 'GPT-5.6-Sol', icon: '/agents/openai.svg' },
+  { name: 'Claude Opus 5', icon: '/model-icons/claude.svg' },
+  { name: 'GPT-5.5-Pro', icon: '/agents/openai.svg' },
+  { name: 'Claude Opus 4.7', icon: '/model-icons/claude.svg' },
+  { name: 'Claude Opus 4.8', icon: '/model-icons/claude.svg' },
+  { name: 'Claude Sonnet 5', icon: '/model-icons/claude.svg' },
+  { name: 'Claude Opus 4.6', icon: '/model-icons/claude.svg' },
+  { name: 'Claude Sonnet 4.6', icon: '/model-icons/claude.svg' },
+  { name: 'GPT-5.5', icon: '/agents/openai.svg' },
+  { name: 'Grok-4.5', icon: '/model-icons/grok.svg' },
+];
+
+const plusFlagshipModels = flagshipModels.filter(
+  (model) => !['Claude Fable 5', 'Claude Opus 5', 'GPT-5.5-Pro'].includes(model.name),
+);
+
+const imageModels: ModelItem[] = [
+  { name: 'Seedream 5 Lite / Pro', icon: '/model-icons/jimeng.svg' },
+  { name: 'Nano Banana 2', icon: '/model-icons/nanobanana.svg', iconClass: 'model-logo-nanobanana' },
+  { name: 'GPT Image 2', icon: '/agents/openai.svg' },
+];
+
+const unlimitedByTier: Record<TierId, Set<string>> = {
+  go: new Set(['DeepSeek V4 Flash Vision Exp', 'DeepSeek V4 Flash', 'DeepSeek V4 Pro', 'GLM-5.2']),
+  plus: new Set(['DeepSeek V4 Flash Vision Exp', 'DeepSeek V4 Flash', 'DeepSeek V4 Pro', 'GLM-5.2', 'Kimi K2.7 Code']),
+  // Pro includes GLM-5.2, not MiniMax M2.7: every tier from Go up carries
+  // GLM-5.2, while MiniMax M2.7 stays metered until Max.
+  pro: new Set([
+    'DeepSeek V4 Flash Vision Exp',
+    'DeepSeek V4 Flash',
+    'DeepSeek V4 Pro',
+    'GLM-5.2',
+    'Kimi K2.7 Code',
+    'MiMo V2.5 Pro',
+  ]),
+  max: new Set(popularModels.map((model) => model.name)),
+};
+
+const popularModelDisplayOrder = [
+  'DeepSeek V4 Flash Vision Exp',
+  'DeepSeek V4 Flash',
+  'DeepSeek V4 Pro',
+  'GLM-5.2',
+  'Kimi K2.7 Code',
+  'MiMo V2.5 Pro',
+  'MiniMax M2.7',
+  'Kimi K2.6',
+  'GLM-5.1',
+];
+
+const orderedPopularModels = () =>
+  popularModelDisplayOrder.map((name) => popularModels.find((model) => model.name === name)!);
+
+const renderCatalogLabel = (label: string) => fillTemplate(label, {
+  skillsCount,
+  systemsCount,
+});
+
+const tierCopy = {
+  go: content.go,
+  ...content.plans,
+};
+const tierTaglines: Record<TierId, string> = {
+  go: content.go.tagline,
+  plus: content.plans.plus.tagline,
+  pro: content.plans.pro.tagline,
+  max: content.plans.max.tagline,
+};
+
+const customDomainsByTier: Record<PlanTierId, number | null> = {
+  plus: 10,
+  pro: 40,
+  max: null,
+};
+const paidTierBenefits = (tier: PlanTierId) => {
+  const config = tiers.find((candidate) => candidate.tier === tier)!;
+  const plan = content.plans[tier];
+  const customDomains = customDomainsByTier[tier];
+  return [
+    fillTemplate(L.creditBenefit, { amount: formatUsd(config.monthly.grantUsd) }),
+    fillTemplate(P.unlimitedPopularModels, { count: String(unlimitedByTier[tier].size) }),
+    customDomains == null
+      ? P.unlimitedCustomDomains
+      : fillTemplate(P.customDomains, { count: String(customDomains) }),
+    plan.concurrency,
+    P.bringYourOwnApiKey,
+    ...plan.features,
+    ...(tier === 'max' ? [P.creatorDeveloperSupport] : []),
+  ].map(renderCatalogLabel);
+};
+const tierBenefits: Record<TierId, string[]> = {
+  go: [
+    content.go.allowance,
+    P.goConcurrency,
+    fillTemplate(P.customDomains, { count: '5' }),
+    ...content.go.features,
+    ...content.plans.plus.features.slice(1),
+  ].map(renderCatalogLabel),
+  plus: paidTierBenefits('plus'),
+  pro: paidTierBenefits('pro'),
+  max: paidTierBenefits('max'),
+};
+
+const compactSavings = (amountUsd: number, interval: 'monthly' | 'yearly') => {
+  const amount = formatUsd(amountUsd);
+  return locale === 'en' && interval === 'monthly' ? `${amount}/mo` : amount;
+};
+const compactBillingTotal = (amountUsd: number) =>
+  locale === 'en' ? formatUsd(amountUsd).replace('$', '') : formatUsd(amountUsd);
+
+function individualView(tier: PlanTierConfig) {
+  const yearlyEquivalent = Math.round(tier.yearly.priceUsd / 12);
+  const yearlySave = tier.monthly.priceUsd * 12 - tier.yearly.priceUsd;
+  const introDiscount = Math.round(
+    (1 - tier.monthly.introPriceUsd / tier.monthly.priceUsd) * 100,
+  );
+  return {
+    monthly: {
+      amount: formatUsd(tier.monthly.introPriceUsd).replace('$', ''),
+      strike: formatUsd(tier.monthly.priceUsd),
+      discount: introDiscount,
+      saving: compactSavings(
+        tier.monthly.priceUsd - tier.monthly.introPriceUsd,
+        'monthly',
+      ),
+      billed: fillTemplate(L.monthlyRenewal, {
+        amountUsd: formatUsd(tier.monthly.priceUsd),
+      }),
+    },
+    yearly: {
+      amount: formatUsd(yearlyEquivalent).replace('$', ''),
+      strike: formatUsd(tier.monthly.priceUsd),
+      discount: tier.yearly.discountPct,
+      saving: compactSavings(yearlySave, 'yearly'),
+      billed: fillTemplate(L.yearlySubline, {
+        totalUsd: compactBillingTotal(tier.yearly.priceUsd),
+        savingsUsd: formatUsd(yearlySave),
+      }),
+    },
+  };
+}
+
+const goYearlyEquivalent = Math.round(GO_PLAN.yearly.priceUsd / 12);
+const goMonthlyDiscount = Math.round(
+  (1 - GO_PLAN.monthly.introPriceUsd / GO_PLAN.monthly.priceUsd) * 100,
+);
+const goYearlyDiscount = Math.round(
+  (1 - goYearlyEquivalent / GO_PLAN.monthly.priceUsd) * 100,
+);
+const goYearlySave = GO_PLAN.monthly.priceUsd * 12 - GO_PLAN.yearly.priceUsd;
+const goView = {
+  monthly: {
+    amount: formatUsd(GO_PLAN.monthly.introPriceUsd).replace('$', ''),
+    strike: formatUsd(GO_PLAN.monthly.priceUsd),
+    discount: goMonthlyDiscount,
+    saving: compactSavings(
+      GO_PLAN.monthly.priceUsd - GO_PLAN.monthly.introPriceUsd,
+      'monthly',
+    ),
+    billed: fillTemplate(L.monthlyRenewal, {
+      amountUsd: formatUsd(GO_PLAN.monthly.priceUsd),
+    }),
+  },
+  yearly: {
+    amount: formatUsd(goYearlyEquivalent).replace('$', ''),
+    strike: formatUsd(GO_PLAN.monthly.priceUsd),
+    discount: goYearlyDiscount,
+    saving: compactSavings(goYearlySave, 'yearly'),
+    billed: fillTemplate(L.yearlySubline, {
+      totalUsd: compactBillingTotal(GO_PLAN.yearly.priceUsd),
+      savingsUsd: formatUsd(goYearlySave),
+    }),
+  },
+};
+
+const cardData = [
+  {
+    tier: 'go' as const,
+    logo: null,
+    view: goView,
+    regularMonthlyPrice: GO_PLAN.monthly.priceUsd,
+  },
+  ...tiers.map((tier) => ({
+    tier: tier.tier as PlanTierId,
+    logo: `/pricing/plan-${tier.tier}.svg`,
+    view: individualView(tier),
+    regularMonthlyPrice: tier.monthly.priceUsd,
+  })),
+];
+
+const popularModel = (name: string) => popularModels.find((model) => model.name === name)!;
+const usageRows = [
+  { ...popularModel('DeepSeek V4 Flash'), value: 13000 },
+  { ...popularModel('MiMo V2.5 Pro'), value: 11000 },
+  { ...popularModel('DeepSeek V4 Flash Vision Exp'), value: 8000 },
+  { ...popularModel('DeepSeek V4 Pro'), value: 4300 },
+  { ...popularModel('MiniMax M2.7'), value: 2800 },
+  { ...popularModel('Kimi K2.6'), value: 1000 },
+  { ...popularModel('Kimi K2.7 Code'), value: 900 },
+  { ...popularModel('GLM-5.2'), value: 670 },
+  { ...popularModel('GLM-5.1'), value: 670 },
+];
+
+const comparisonPopular = orderedPopularModels();
+
+const comparisonFlagship = [
+  'Kimi-K3',
+  'GPT-5.6-Sol',
+  'Claude Opus 4.7',
+  'Claude Opus 4.8',
+  'Claude Sonnet 5',
+  'Claude Opus 4.6',
+  'Claude Sonnet 4.6',
+  'GPT-5.5',
+  'Grok-4.5',
+  'Claude Fable 5',
+  'Claude Opus 5',
+  'GPT-5.5-Pro',
+].map((name) => flagshipModels.find((model) => model.name === name)!);
+
+const categoryCopy: Record<ModelCategory, { title: string; count: string }> = {
+  popular: {
+    title: P.popularModels,
+    count: fillTemplate(P.modelCount, { count: String(comparisonPopular.length) }),
+  },
+  flagship: {
+    title: P.flagshipModels,
+    count: fillTemplate(P.modelCount, { count: '12' }),
+  },
+  image: {
+    title: P.imageModels,
+    count: fillTemplate(P.modelCount, { count: '3' }),
+  },
+};
+
+function popularAccessStatus(modelName: string, tier: TierId) {
+  if (unlimitedByTier[tier].has(modelName)) {
+    return { kind: 'unlimited', text: P.unlimited };
+  }
+  if (tier === 'go') return { kind: 'ample', text: P.ample };
+  return { kind: 'more-ample', text: P.moreAmple };
+}
+
+function accessStatus(category: ModelCategory, modelName: string, tier: TierId) {
+  if (category === 'image') {
+    if (tier === 'go') return { kind: 'unavailable', text: P.notAvailable };
+    return {
+      kind: 'resolution',
+      text: fillTemplate(P.upToResolution, {
+        resolution: tier === 'plus' ? '1K' : tier === 'pro' ? '2K' : '4K',
+      }),
+    };
+  }
+  if (category === 'flagship') {
+    const unavailable = tier === 'go' || (tier === 'plus' && ['Claude Fable 5', 'Claude Opus 5', 'GPT-5.5-Pro'].includes(modelName));
+    return unavailable
+      ? { kind: 'unavailable', text: P.notAvailable }
+      : { kind: 'included', text: P.included };
+  }
+  return popularAccessStatus(modelName, tier);
+}
+
+const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-Max, GPT-5.3-Codex, Gemini 3 Flash, GPT-5.4 mini, GPT-5.6-Luna, Kimi-K2.5, GLM-5';
+---
+
+<section
+  class="demo-individual-pricing"
+  data-demo-pricing
+  data-benefits-expanded="false"
+  data-view-all-label={P.viewAll}
+  data-show-less-label={P.showLess}
+  data-view-more-benefits-label={P.viewMoreBenefits}
+  data-show-fewer-benefits-label={P.showFewerBenefits}
+>
+  <div class="benefits-summary-stage">
+    <div class="four-tier-grid decision-grid">
+      {cardData.map(({ tier, logo, view, regularMonthlyPrice }) => {
+        const popular = orderedPopularModels();
+        const flagship = tier === 'plus' ? plusFlagshipModels : flagshipModels;
+        const imageResolution = tier === 'plus' ? '1K' : tier === 'pro' ? '2K' : '4K';
+        const bonusPct = tier === 'go' ? null : CREDIT_BONUS_PCT[tier];
+        return (
+          <article class:list={['pricing-card', 'decision-card', 'compact-tier-card', `plan-${tier}`, { 'new-plan-card recommended': tier === 'pro' || tier === 'max' }]} data-tier={tier}>
+            {tier === 'pro' && <div class="new-plan-ribbon"><span>{P.mostPopular}</span></div>}
+            {tier === 'max' && <div class="new-plan-ribbon"><span>{P.lowestUnitPrice}</span></div>}
+
+            <header class="plan-top">
+              <div class="plan-title-row">
+                <div class="plan-name-with-status">
+                  {logo ? (
+                    <img class="plan-wordmark-image" src={logo} alt={tier.charAt(0).toUpperCase() + tier.slice(1)} />
+                  ) : (
+                    <svg class="plan-wordmark-image plan-go-wordmark" viewBox="0 0 88 49" role="img" aria-label="Go">
+                      <path d="M1 2.5h63c12 0 21.5 9.8 21.5 22S76 46.5 64 46.5H1" />
+                      <path d="M29 17c-2.4-3.6-6.4-5.5-11.4-5.5C8.8 11.5 2 17 2 24.5s6.8 13 15.6 13c5.7 0 10-2.3 12.3-6.5v-7H17.5" />
+                      <ellipse cx="50.5" cy="24.5" rx="12.5" ry="13" />
+                    </svg>
+                  )}
+                </div>
+                <div class="plan-badges">
+                  <span class="discount-corner-badge" data-when="monthly" data-intro-only>{fillTemplate(L.firstMonthTag, { pct: String(view.monthly.discount) })}</span>
+                  <span class="discount-corner-badge" data-when="yearly">{fillTemplate(L.yearlyDiscountTag, { pct: String(view.yearly.discount) })}</span>
+                </div>
+              </div>
+              <p>{tierTaglines[tier]}</p>
+            </header>
+
+            <div class="price" data-when="monthly">
+              <span>$</span><strong
+                class="rolling-price-number"
+                data-monthly-price
+                data-intro-price={view.monthly.amount}
+                data-regular-price={formatUsd(regularMonthlyPrice).replace('$', '')}
+              >{view.monthly.amount}</strong><small>{L.perMonth}</small><del data-intro-only>{view.monthly.strike}</del>
+            </div>
+            <div class="compact-price-detail" data-when="monthly" data-intro-only>
+              <span class="price-savings-note">{fillTemplate(P.saveAmount, { amount: view.monthly.saving })}</span>
+              <small>{view.monthly.billed}</small>
+            </div>
+            <div class="price" data-when="yearly">
+              <span>$</span><strong class="rolling-price-number">{view.yearly.amount}</strong><small>{L.perMonth}</small><del>{view.yearly.strike}</del>
+            </div>
+            <div class="compact-price-detail" data-when="yearly">
+              <span class="price-savings-note">{fillTemplate(P.saveAmount, { amount: view.yearly.saving })}</span>
+              <small>{view.yearly.billed}</small>
+            </div>
+
+            <a
+              class="pricing-card-cta"
+              data-pricing-cta
+              data-tier={tier}
+              data-plan-name={tier.charAt(0).toUpperCase() + tier.slice(1)}
+              data-default-label={tierCopy[tier].ctaLabel}
+            >
+              <span>{tierCopy[tier].ctaLabel}</span>
+            </a>
+
+            <div class="plan-feature-details">
+              <div class="plan-model-modules">
+                <section class="plan-model-module unlimited-module" data-model-module>
+                  <header>
+                    <div class="plan-model-title-with-help">
+                      <h4>{fillTemplate(P.unlimitedPopularModels, { count: String(unlimitedByTier[tier].size) })}</h4>
+                      <details class="plan-model-help">
+                        <summary aria-label={P.aboutModelEntitlements}>?</summary>
+                        <span class="plan-model-help-copy">{P.modelEntitlementActivationNote}</span>
+                      </details>
+                    </div>
+                  </header>
+                  <ul>
+                    {popular.map((model) => {
+                      const popularStatus = popularAccessStatus(model.name, tier);
+                      return (
+                        <li class="model-with-status">
+                          <span class:list={['model-logo', model.iconClass]}><img src={model.icon} alt="" loading="lazy" /></span>
+                          <span
+                            class:list={{ 'long-model-name': model.name.length > 24 }}
+                            title={model.name}
+                          >{model.name}</span>
+                          {popularStatus.kind === 'unlimited' && <em class={popularStatus.kind}>{popularStatus.text}</em>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <button type="button" class="model-module-toggle" aria-expanded="false" data-module-toggle data-total={popular.length}>
+                    <span>{fillTemplate(P.viewAll, { count: String(popular.length) })}</span><span class="toggle-symbol">+</span>
+                  </button>
+                </section>
+
+                <section class:list={['plan-model-module', { 'unavailable-model-module': tier === 'go', 'recommended-model-module': tier === 'pro' || tier === 'max' }]} data-model-module>
+                  <header>
+                    <h4>{tier === 'go' ? P.flagshipModels : fillTemplate(P.flagshipModelCount, { count: String(flagship.length) })}</h4>
+                    {tier === 'go' && <span>{P.noAccess}</span>}
+                  </header>
+                  <ul>
+                    {flagship.map((model) => (
+                      <li>
+                        <span class:list={['model-logo', model.iconClass]}><img src={model.icon} alt="" loading="lazy" /></span><span>{model.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" class="model-module-toggle" aria-expanded="false" data-module-toggle data-total={flagship.length}>
+                    <span>{fillTemplate(P.viewAll, { count: String(flagship.length) })}</span><span class="toggle-symbol">+</span>
+                  </button>
+                </section>
+
+                <section class:list={['plan-model-module', 'multimodal-model-module', { 'unavailable-model-module': tier === 'go', 'recommended-model-module': tier === 'pro' || tier === 'max' }]}>
+                  <header><h4>{P.imageModels}</h4><span>{tier === 'go' ? P.noAccess : fillTemplate(P.modelCount, { count: '3' })}</span></header>
+                  <ul>
+                    {imageModels.map((model) => (
+                      <li class="model-with-status">
+                        <span class:list={['model-logo', model.iconClass]}><img src={model.icon} alt="" loading="lazy" /></span>
+                        <span>{model.name}</span>
+                        {tier !== 'go' && <em class="multimodal-status">{fillTemplate(P.upToResolution, { resolution: imageResolution })}</em>}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+
+              <ul class="plan-benefit-list">
+                {tierBenefits[tier].map((benefit, index) => (
+                  <li>
+                    <b>✓</b>
+                    <span>
+                      {benefit}
+                      {bonusPct != null && index === 0 && (
+                        <span class="bonus-benefit">
+                          <span>{fillTemplate(L.creditBonus, { pct: String(bonusPct) })}</span>
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+    <div class="shared-benefits-toggle-wrap">
+      <button type="button" class="shared-benefits-toggle" aria-expanded="false" data-benefits-toggle>
+        <span>{P.viewMoreBenefits}</span><span class="shared-benefits-chevron" aria-hidden="true"></span>
+      </button>
+    </div>
+  </div>
+
+  <section class="individual-usage-module" aria-labelledby="individual-usage-title" data-usage-module>
+    <div class="individual-usage-heading">
+      <div>
+        <h2 id="individual-usage-title">{P.usageTitle}</h2>
+        <p>{P.estimatedRequests}</p>
+      </div>
+    </div>
+    <div class="individual-usage-surface">
+      <div class="individual-usage-chart" role="table" aria-label={P.estimatedRequestsAria}>
+        {usageRows.map((row, index) => (
+          <div class="individual-usage-row" role="row">
+            <div class="individual-usage-model" role="cell">
+              <span class:list={['model-logo', row.iconClass]}><img src={row.icon} alt="" loading="lazy" /></span><strong>{row.name}</strong>
+            </div>
+            <div class="individual-usage-meter" role="cell">
+              <i style={`--usage-width:${(row.value / 13000) * 100}%;--usage-delay:${index * 0.045}s`}></i>
+              <b>{row.value.toLocaleString('en-US')}</b>
+            </div>
+          </div>
+        ))}
+        <div class="individual-usage-axis" aria-hidden="true">
+          <span></span><div><b>0</b><b>3.25K</b><b>6.5K</b><b>9.75K</b><b>13K</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="individual-usage-note">
+      <p>{P.usageAllowanceNote}</p>
+      <p>{P.usageEstimatesNote}</p>
+    </div>
+  </section>
+
+  <section class="all-models-comparison" aria-labelledby="all-models-title">
+    <div class="all-models-heading"><h2 id="all-models-title">{P.comparisonTitle}</h2></div>
+    <div class="model-compare-shell">
+      <div class="model-compare-scroll">
+        <table class="model-compare-table">
+          <thead>
+            <tr>
+              <th class="category-column">{P.category}</th>
+              <th class="model-column">{P.model}</th>
+              {(['go', 'plus', 'pro', 'max'] as TierId[]).map((tier) => (
+                <th>
+                  {tier === 'go' ? (
+                    <svg class="comparison-wordmark plan-go-wordmark" viewBox="0 0 88 49" role="img" aria-label="go"><path d="M1 2.5h63c12 0 21.5 9.8 21.5 22S76 46.5 64 46.5H1" /><path d="M29 17c-2.4-3.6-6.4-5.5-11.4-5.5C8.8 11.5 2 17 2 24.5s6.8 13 15.6 13c5.7 0 10-2.3 12.3-6.5v-7H17.5" /><ellipse cx="50.5" cy="24.5" rx="12.5" ry="13" /></svg>
+                  ) : <img src={`/pricing/plan-${tier}.svg`} alt={tier} />}
+                  <small>{P.tierUse[tier]}</small>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {([
+              ['popular', comparisonPopular],
+              ['flagship', comparisonFlagship],
+              ['image', imageModels],
+            ] as [ModelCategory, ModelItem[]][]).flatMap(([category, models]) =>
+              models.map((model, index) => (
+                <tr>
+                  {index === 0 && (
+                    <th class="model-group-cell" rowspan={models.length} scope="rowgroup">
+                      <span class="model-group-title">
+                        <span>{categoryCopy[category].title}</span>
+                        {category === 'popular' && (
+                          <details class="model-group-help">
+                            <summary aria-label={P.aboutPopularAllowance}>?</summary>
+                            <span class="model-group-help-copy">{P.usageAllowanceNote}</span>
+                          </details>
+                        )}
+                      </span>
+                      <small>{categoryCopy[category].count}</small>
+                    </th>
+                  )}
+                  <td class="model-name-cell"><span class:list={['model-logo', model.iconClass]}><img src={model.icon} alt="" loading="lazy" /></span><span>{model.name}</span></td>
+                  {(['go', 'plus', 'pro', 'max'] as TierId[]).map((tier) => {
+                    const status = accessStatus(category, model.name, tier);
+                    const checkOnly = status.kind === 'more-ample' || status.kind === 'ample' || status.kind === 'included';
+                    return checkOnly ? (
+                      <td><span class={`model-access-status ${status.kind}`} aria-label={status.text}><i class="status-icon check"></i></span></td>
+                    ) : (
+                      <td><span class={`model-access-status ${status.kind}`}><i class:list={['status-icon', { infinity: status.kind === 'unlimited' }]}>{status.kind === 'unlimited' ? '∞' : ''}</i>{status.text}</span></td>
+                    );
+                  })}
+                </tr>
+              )),
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div class="other-models-note">
+        <h3>{P.otherModelsTitle}</h3>
+        <p class="other-models-list">{otherModels}</p>
+        <p>{P.otherModelsDescription}</p>
+      </div>
+    </div>
+  </section>
+</section>
+
+<style>
+  .demo-individual-pricing {
+    --pricing-accent: #78ea57;
+    --pricing-ink: #11130f;
+    --pricing-muted: #676c64;
+    color: var(--pricing-ink);
+    position: relative;
+    left: 50%;
+    width: min(1200px, 96vw);
+    padding: 0 !important;
+    transform: translateX(-50%);
+  }
+
+  .demo-individual-pricing,
+  .demo-individual-pricing * {
+    box-sizing: border-box;
+  }
+
+  .demo-individual-pricing p {
+    max-width: none;
+  }
+
+  :global([data-interval='yearly']) .demo-individual-pricing [data-when='monthly'],
+  :global([data-interval='monthly']) .demo-individual-pricing [data-when='yearly'] {
+    display: none !important;
+  }
+
+  .benefits-summary-stage {
+    width: min(1200px, 100%);
+    margin: 0 auto;
+    position: relative;
+  }
+
+  .four-tier-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 16px;
+    width: 100%;
+    margin-top: 76px;
+  }
+
+  .pricing-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: 24px 22px 30px;
+    overflow: visible;
+    color: #30322d;
+    background: #fff;
+    border: 0;
+    border-radius: 12px;
+    animation: pricing-card-enter 0.72s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .pricing-card:nth-child(2) { animation-delay: 0.1s; }
+  .pricing-card:nth-child(3) { animation-delay: 0.2s; }
+  .pricing-card:nth-child(4) { animation-delay: 0.3s; }
+
+  .pricing-card:has(.plan-model-help[open]),
+  .pricing-card:has(.plan-model-help:hover),
+  .pricing-card:has(.plan-model-help:focus-within) {
+    z-index: 20;
+  }
+
+  .pricing-card.plan-max {
+    color: #f7f8f4;
+    background: #11130f;
+    box-shadow: 0 18px 40px rgba(17, 19, 15, 0.16);
+  }
+
+  .pricing-card.new-plan-card {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  .new-plan-ribbon {
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0 12px;
+    overflow: hidden;
+    color: #173111;
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1;
+    letter-spacing: 0.055em;
+    text-align: center;
+    background: var(--pricing-accent);
+    border-radius: 12px 12px 0 0;
+  }
+
+  .new-plan-ribbon span {
+    position: relative;
+    z-index: 1;
+    color: #173111;
+    background: linear-gradient(110deg, #173111 0% 39%, #397f2b 47%, #d8ff70 52%, #397f2b 57%, #173111 65% 100%) 100% 0 / 300% 100%;
+    -webkit-text-fill-color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: pricing-ribbon-text-shimmer 4.2s linear infinite;
+  }
+
+  .plan-top {
+    display: block;
+    min-height: 78px;
+  }
+
+  .plan-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .plan-name-with-status {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    min-height: 32px;
+  }
+
+  .plan-wordmark-image {
+    display: block;
+    width: auto;
+    max-width: 140px;
+    height: 30px;
+    object-fit: contain;
+    object-position: left center;
+  }
+
+  .plan-go-wordmark {
+    width: 54px;
+    fill: none;
+    stroke: #202020;
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .plan-max .plan-wordmark-image {
+    filter: invert(1) brightness(1.08);
+  }
+
+  .plan-badges {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+  }
+
+  .discount-corner-badge {
+    flex: none;
+    padding: 4px 6px;
+    color: var(--pricing-ink);
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background: var(--pricing-accent);
+    border: 0;
+    border-radius: 4px;
+  }
+
+  .plan-top p {
+    max-width: none;
+    min-height: 32px;
+    margin: 8px 0 0;
+    color: #60645c;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .plan-max .plan-top p { color: #aeb5aa; }
+
+  .price {
+    display: flex;
+    align-items: baseline;
+    min-height: 62px;
+    margin: 10px 0 0;
+    overflow: hidden;
+  }
+
+  .price > span {
+    color: #242622;
+    font-size: 17px;
+  }
+
+  .price strong {
+    color: #171914;
+    font-size: 50px;
+    font-weight: 690;
+    line-height: 1;
+    letter-spacing: -0.045em;
+  }
+
+  .price small {
+    margin-left: 5px;
+    color: #73776f;
+    font-size: 10px;
+  }
+
+  .price del {
+    margin-left: 12px;
+    color: #858981;
+    font-size: 16px;
+    text-decoration-thickness: 1.5px;
+  }
+
+  .plan-max .price > span,
+  .plan-max .price strong { color: #fff; }
+  .plan-max .price small { color: #aeb5aa; }
+  .plan-max .price del { color: #8f978b; }
+
+  .compact-price-detail {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 7px;
+    min-height: 46px;
+    color: #555a52;
+  }
+
+  .compact-price-detail > span.price-savings-note {
+    color: #2d9227;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .compact-price-detail > small {
+    min-width: 0;
+    margin-left: 0;
+    color: #51554d;
+    font-size: 12px;
+    font-weight: 400;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .plan-max .compact-price-detail > span.price-savings-note { color: #83d96c; }
+  .plan-max .compact-price-detail > small { color: #aeb5aa; }
+
+  .pricing-card-cta {
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 42px;
+    margin: 18px 0 0;
+    padding: 0 16px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    background: #11120f;
+    border: 0;
+    border-radius: 8px;
+    transition: transform 0.2s, background-color 0.18s;
+    overflow: hidden;
+  }
+
+  .pricing-card-cta:hover,
+  .pricing-card-cta:focus-visible {
+    color: #fff;
+    background: #292b26;
+    transform: scale(1.015);
+  }
+
+  .plan-pro .pricing-card-cta,
+  .plan-max .pricing-card-cta {
+    color: #10140d;
+    background: var(--pricing-accent);
+  }
+
+  .plan-pro .pricing-card-cta:hover,
+  .plan-max .pricing-card-cta:hover {
+    color: #10140d;
+    background: #8cf76c;
+  }
+
+  .pricing-card .pricing-card-cta[aria-disabled='true'],
+  .pricing-card .pricing-card-cta[aria-disabled='true']:hover,
+  .pricing-card .pricing-card-cta[aria-disabled='true']:focus-visible {
+    color: #595d54;
+    background: #d8dad4;
+    border: 0;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .plan-feature-details {
+    margin-top: 14px;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .plan-model-modules {
+    display: grid;
+    gap: 10px;
+  }
+
+  .plan-model-module {
+    display: flex;
+    flex-direction: column;
+    min-height: 155px;
+    padding: 12px;
+    background: #f7f8f3;
+    border: 0;
+    border-radius: 8px;
+    transition: background-color 0.2s;
+  }
+
+  .plan-model-module.unlimited-module {
+    background:
+      radial-gradient(circle at 92% 4%, rgba(120, 234, 87, 0.26), transparent 42%),
+      linear-gradient(135deg, rgba(120, 234, 87, 0.2), rgba(120, 234, 87, 0.07));
+  }
+
+  .plan-go .plan-model-module.unlimited-module,
+  .plan-plus .plan-model-module.unlimited-module {
+    background: #f7f8f3;
+  }
+
+  .plan-go .plan-model-module.unlimited-module h4,
+  .plan-plus .plan-model-module.unlimited-module h4 {
+    color: #30332d;
+  }
+
+  .plan-model-module.recommended-model-module {
+    background: rgba(120, 234, 87, 0.18);
+  }
+
+  .plan-model-module.multimodal-model-module { min-height: 0; }
+  .plan-model-module.unavailable-model-module {
+    opacity: 0.62;
+    background: #f1f2ee;
+  }
+
+  .plan-go .plan-model-module.unavailable-model-module {
+    background: transparent;
+  }
+
+  .plan-model-module header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 0;
+    margin-bottom: 10px;
+  }
+
+  .plan-model-module h4 {
+    margin: 0;
+    color: #30332d;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  .plan-model-title-with-help {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .plan-model-help {
+    position: relative;
+    z-index: 3;
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+  }
+
+  .plan-model-help summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    color: #5f645c;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    list-style: none;
+    cursor: help;
+    background: rgba(255, 255, 255, 0.52);
+    border: 1px solid #8a8f86;
+    border-radius: 50%;
+  }
+
+  .plan-model-help summary::-webkit-details-marker { display: none; }
+  .plan-model-help summary::marker { content: ''; }
+  .plan-model-help summary:focus-visible {
+    outline: 2px solid #1f7e16;
+    outline-offset: 2px;
+  }
+
+  .plan-model-help-copy {
+    position: absolute;
+    z-index: 5;
+    top: 23px;
+    left: -8px;
+    display: block;
+    width: min(250px, calc(100vw - 32px));
+    padding: 10px 12px;
+    color: #30342e;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+    text-align: left;
+    white-space: normal;
+    background: #fff;
+    border: 1px solid rgba(65, 72, 61, 0.16);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(28, 35, 24, 0.12);
+  }
+
+  .plan-model-help:not([open]):not(:hover):not(:focus-within) > .plan-model-help-copy {
+    display: none;
+  }
+
+  .plan-model-module.unlimited-module h4,
+  .plan-model-module.recommended-model-module h4 { color: #1f7e16; }
+
+  .plan-model-module header > span {
+    flex: none;
+    color: #696d65;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .plan-model-module ul,
+  .plan-benefit-list {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    list-style: none;
+  }
+
+  .plan-model-module ul {
+    display: grid;
+    gap: 7px;
+  }
+
+  .plan-model-module li {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    margin: 0;
+    color: #30322d;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .plan-model-module li.model-with-status {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+  }
+
+  .plan-model-module li > span:nth-child(2) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .plan-model-module li > span.long-model-name {
+    font-size: 10.5px;
+    letter-spacing: -0.015em;
+  }
+
+  .plan-model-module li:nth-child(n + 4) { display: none; }
+  .plan-model-module.is-expanded li:nth-child(n + 4) { display: grid; }
+
+  .plan-model-module.is-expanded {
+    padding: 12px;
+  }
+
+  .plan-model-module.is-expanded ul {
+    gap: 9px;
+    padding-bottom: 6px;
+  }
+
+  .plan-model-module.is-expanded .model-module-toggle {
+    margin-top: 10px;
+    padding: 12px 0 4px;
+  }
+
+  .model-logo {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 18px;
+    height: 18px;
+    overflow: hidden;
+    vertical-align: middle;
+    background: #20211e;
+    border-radius: 5px;
+  }
+
+  .model-logo img {
+    display: block;
+    width: 12px;
+    height: 12px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+  }
+
+  .model-logo-mimo img {
+    width: 17px;
+    height: 15px;
+    object-fit: contain;
+    object-position: center;
+  }
+
+  .model-logo-zhipu img {
+    width: 18px;
+    height: 18px;
+    object-fit: cover;
+    filter: none;
+  }
+
+  .model-logo-nanobanana img {
+    width: 15px;
+    height: 15px;
+  }
+
+  .plan-model-module li.model-with-status em {
+    padding: 4px 6px;
+    color: #1f7e16;
+    font-size: 8px;
+    font-style: normal;
+    font-weight: 750;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background: linear-gradient(135deg, rgba(120, 234, 87, 0.3), rgba(120, 234, 87, 0.13));
+    border-radius: 999px;
+  }
+
+  .plan-model-module li.model-with-status em.multimodal-status {
+    color: #287b1d;
+    background: #dcfac7;
+  }
+
+  .plan-model-module li.model-with-status em.ample,
+  .plan-model-module li.model-with-status em.more-ample {
+    color: #5f655c;
+    background: rgba(95, 101, 92, 0.1);
+  }
+
+  .model-module-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-top: auto;
+    padding: 9px 0 1px;
+    color: #555950;
+    font-size: 9px;
+    font-weight: 450;
+    line-height: 1.2;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid rgba(48, 51, 45, 0.1);
+  }
+
+  .model-module-toggle:disabled { cursor: default; }
+  .model-module-toggle:hover:not(:disabled) { color: #171914; }
+  .model-module-toggle .toggle-symbol { transition: transform 0.24s; }
+  .model-module-toggle[aria-expanded='true'] .toggle-symbol {
+    font-size: 0;
+    transform: none;
+  }
+  .model-module-toggle[aria-expanded='true'] .toggle-symbol::after {
+    content: '−';
+    font-size: 9px;
+  }
+
+  .plan-benefit-list {
+    display: grid;
+    align-content: start;
+    gap: 0;
+    height: auto;
+    min-height: 0;
+    padding: 18px 0 4px;
+  }
+
+  .plan-benefit-list li {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: start;
+    gap: 7px;
+    margin: 0;
+    color: #30322d;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .plan-benefit-list li + li { margin-top: 12px; }
+  .plan-benefit-list li > b {
+    color: #4a9c2f;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .plan-benefit-list .bonus-benefit {
+    display: block;
+    margin: 7px 0 1px;
+  }
+
+  .plan-benefit-list .bonus-benefit > span {
+    display: inline-flex;
+    align-items: center;
+    width: max-content;
+    max-width: 100%;
+    padding: 3px 7px;
+    color: #31571f;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+    background: #dcfac7;
+    border-radius: 999px;
+  }
+
+  .plan-max .plan-model-module,
+  .plan-max .plan-model-module.recommended-model-module,
+  .plan-max .plan-model-module.unlimited-module {
+    background: #192318;
+  }
+
+  .plan-max .plan-model-module h4 { color: var(--pricing-accent); }
+  .plan-max .plan-model-help summary {
+    color: #a8e697;
+    background: rgba(120, 234, 87, 0.08);
+    border-color: rgba(168, 230, 151, 0.62);
+  }
+  .plan-max .plan-model-help-copy {
+    right: -8px;
+    left: auto;
+    color: #eef2eb;
+    background: #253024;
+    border-color: rgba(223, 239, 218, 0.16);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  }
+  .plan-max .plan-model-module header > span { color: #9caa97; }
+  .plan-max .plan-model-module li,
+  .plan-max .plan-benefit-list li { color: #eef2eb; }
+  .plan-max .model-module-toggle {
+    color: #c9d1c5;
+    border-color: rgba(223, 239, 218, 0.16);
+  }
+  .plan-max .model-module-toggle:hover:not(:disabled) { color: var(--pricing-accent); }
+  .plan-max .model-logo { background: #f3f5f0; }
+  .plan-max .model-logo img,
+  .plan-max .model-logo-mimo img { filter: none; }
+  .plan-max .plan-model-module li.model-with-status em.unlimited,
+  .plan-max .plan-model-module li.model-with-status em.multimodal-status,
+  .plan-max .plan-benefit-list .bonus-benefit > span {
+    color: #91dc7b;
+    background: rgba(120, 234, 87, 0.14);
+    border: 1px solid rgba(120, 234, 87, 0.14);
+  }
+  .plan-max .plan-benefit-list li > b { color: var(--pricing-accent); }
+
+  .demo-individual-pricing[data-benefits-expanded='false'] .plan-benefit-list li:nth-child(n + 4) {
+    display: none;
+  }
+
+  .shared-benefits-toggle-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: auto;
+    margin: 16px 0 0;
+    padding: 0;
+  }
+
+  .shared-benefits-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: auto;
+    height: auto;
+    padding: 8px 5px;
+    color: #565b53;
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    transition: color 0.18s;
+  }
+
+  .shared-benefits-toggle:hover { color: #23831b; }
+
+  .shared-benefits-chevron {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    color: inherit;
+    border-right: 1px solid;
+    border-bottom: 1px solid;
+    transition: transform 0.2s;
+    transform: translateY(2px) rotate(225deg);
+  }
+
+  .shared-benefits-toggle[aria-expanded='false'] .shared-benefits-chevron {
+    transform: translateY(-2px) rotate(45deg);
+  }
+
+  .individual-usage-module {
+    width: min(1200px, 100%);
+    margin: 64px auto 0;
+    padding: 0;
+  }
+
+  .individual-usage-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 36px;
+    width: min(960px, 100%);
+    margin: 0 auto 24px;
+    text-align: center;
+  }
+
+  .individual-usage-heading h2,
+  .all-models-heading h2 {
+    margin: 0;
+    color: #11130f;
+    font-size: clamp(30px, 3.2vw, 46px);
+    font-weight: 560;
+    line-height: 1.08;
+    letter-spacing: -0.035em;
+  }
+
+  .individual-usage-heading p {
+    margin: 10px 0 0;
+    color: #7b8177;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.4;
+  }
+
+  .individual-usage-surface {
+    padding: 28px 28px 22px;
+    background: #fff;
+    border-radius: 12px;
+  }
+
+  .individual-usage-chart {
+    width: min(960px, 100%);
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 9px;
+  }
+
+  .individual-usage-row {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    align-items: center;
+    min-height: 48px;
+    padding: 0 16px;
+  }
+
+  .individual-usage-model {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .individual-usage-model strong {
+    overflow: hidden;
+    color: #30332e;
+    font-size: 11px;
+    font-weight: 550;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .individual-usage-meter {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    height: 48px;
+    overflow: visible;
+  }
+
+  .individual-usage-meter::before {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    content: '';
+    background-image:
+      repeating-linear-gradient(rgba(103, 110, 100, 0.18) 0 3px, transparent 3px 7px),
+      repeating-linear-gradient(rgba(103, 110, 100, 0.18) 0 3px, transparent 3px 7px),
+      repeating-linear-gradient(rgba(103, 110, 100, 0.18) 0 3px, transparent 3px 7px);
+    background-repeat: no-repeat;
+    background-position: 25% 0, 50% 0, 75% 0;
+    background-size: 1px 100%, 1px 100%, 1px 100%;
+  }
+
+  .individual-usage-meter i {
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: 0;
+    width: var(--usage-width);
+    min-width: 10px;
+    background: #dcfac7;
+    border-radius: 6px;
+    transform-origin: left;
+    opacity: 1;
+    transform: scaleX(0);
+  }
+
+  .individual-usage-module.is-visible .individual-usage-meter i {
+    animation: usage-meter-in 0.78s var(--usage-delay) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .individual-usage-meter b {
+    position: absolute;
+    left: clamp(4px, calc(2.5769% - 10px), 16px);
+    z-index: 1;
+    width: max-content;
+    color: #287b1d;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .individual-usage-axis {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    align-items: start;
+    min-height: 38px;
+    padding: 0 16px;
+  }
+
+  .individual-usage-axis > div {
+    position: relative;
+    height: 12px;
+    color: #9a9e97;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1;
+  }
+
+  .individual-usage-axis b {
+    position: absolute;
+    top: 0;
+    font-weight: 400;
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+
+  .individual-usage-axis b:first-child { left: 0; transform: none; }
+  .individual-usage-axis b:nth-child(2) { left: 25%; }
+  .individual-usage-axis b:nth-child(3) { left: 50%; }
+  .individual-usage-axis b:nth-child(4) { left: 75%; }
+  .individual-usage-axis b:nth-child(5) { right: 0; transform: none; }
+
+  .individual-usage-note {
+    width: min(800px, calc(100% - 56px));
+    margin: 20px auto 0;
+    padding: 0;
+    color: #858a82;
+    text-align: center;
+  }
+
+  .individual-usage-note p {
+    margin: 0;
+    font-size: 10.5px;
+    line-height: 1.6;
+  }
+  .individual-usage-note p + p { margin-top: 5px; }
+
+  .all-models-comparison {
+    width: min(1160px, calc(100vw - 48px));
+    margin: 92px auto 110px;
+    padding: 0;
+  }
+
+  .all-models-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 28px;
+    margin: 0 8px 38px;
+    text-align: center;
+  }
+
+  .model-compare-shell {
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.86);
+    border: 1px solid rgba(70, 78, 66, 0.08);
+    border-radius: 22px;
+    box-shadow: 0 16px 44px rgba(28, 35, 24, 0.035);
+  }
+
+  .model-compare-scroll { overflow-x: auto; }
+
+  .model-compare-table {
+    width: 100%;
+    min-width: 1040px;
+    table-layout: fixed;
+    border-spacing: 0;
+    border-collapse: separate;
+  }
+
+  .model-compare-table th,
+  .model-compare-table td {
+    padding: 19px 20px;
+    color: #343832;
+    line-height: normal;
+    text-align: center;
+    border-bottom: 1px solid rgba(65, 72, 61, 0.07);
+  }
+
+  .model-compare-table tbody tr:nth-child(-n + 8) { height: 65.5px; }
+  .model-compare-table tbody tr:nth-child(n + 9):nth-child(-n + 20) { height: 66px; }
+  .model-compare-table tbody tr:nth-child(n + 21) { height: 65px; }
+
+  .model-compare-table thead th {
+    height: 132px;
+    color: #161914;
+    font-size: 13px;
+    vertical-align: middle;
+    background: rgba(250, 251, 248, 0.72);
+    border-bottom-color: rgba(65, 72, 61, 0.09);
+  }
+
+  .model-compare-table thead .category-column {
+    width: 150px;
+    text-align: left;
+  }
+  .model-compare-table thead .model-column {
+    width: 270px;
+    text-align: left;
+  }
+
+  .model-compare-table thead img,
+  .comparison-wordmark {
+    display: block;
+    width: auto;
+    max-width: 92px;
+    height: 29px;
+    margin: 0 auto 12px;
+    object-fit: contain;
+    filter: none;
+  }
+
+  .model-compare-table thead small {
+    display: block;
+    color: #73786f;
+    font-size: 12px;
+    font-weight: 520;
+  }
+
+  .model-group-cell {
+    padding-top: 25px !important;
+    text-align: left !important;
+    vertical-align: top;
+    background: linear-gradient(90deg, rgba(112, 231, 85, 0.055), rgba(247, 248, 245, 0.46));
+  }
+
+  .model-group-cell > span > span:first-child,
+  .model-group-cell > span:first-child {
+    display: block;
+    color: #1c201a;
+    font-size: 16px;
+    font-weight: 650;
+  }
+
+  .model-group-cell small {
+    display: block;
+    margin-top: 7px;
+    color: #7a8076;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .model-group-title {
+    position: relative;
+    display: inline-flex !important;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 7px;
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .model-group-help {
+    position: relative;
+    flex: 0 0 17px;
+    width: 17px;
+    height: 17px;
+    align-items: center;
+    margin-top: 2px;
+  }
+
+  .model-group-help summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    height: 17px;
+    padding: 0;
+    color: #555a52;
+    font-size: 10px;
+    line-height: 1;
+    list-style: none;
+    cursor: help;
+    background: transparent;
+    border: 1px solid #777c74;
+    border-radius: 50%;
+  }
+
+  .model-group-help summary::-webkit-details-marker { display: none; }
+  .model-group-help summary::marker { content: ''; }
+  .model-group-help summary:focus-visible {
+    outline: 2px solid #1f7e16;
+    outline-offset: 2px;
+  }
+
+  .model-group-help-copy {
+    position: absolute;
+    z-index: 4;
+    top: 25px;
+    left: 0;
+    display: block;
+    width: 280px;
+    padding: 10px 12px;
+    color: #30342e;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+    text-align: left;
+    background: #fff;
+    border: 1px solid rgba(65, 72, 61, 0.16);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(28, 35, 24, 0.12);
+  }
+
+  .model-name-cell {
+    color: #30342e !important;
+    font-size: 15px;
+    font-weight: 520;
+    text-align: left !important;
+  }
+  .model-name-cell > .model-logo { margin-right: 9px; }
+
+  .model-access-status {
+    display: inline-grid;
+    grid-template-columns: 23px max-content;
+    align-items: center;
+    justify-content: start;
+    gap: 8px;
+    width: 104px;
+    margin: 0 auto;
+    color: #1f7e16;
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .model-access-status.more-ample,
+  .model-access-status.ample,
+  .model-access-status.included {
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    width: 104px;
+    height: 23px;
+  }
+  .model-access-status.resolution { font-weight: 500; }
+
+  .status-icon {
+    display: inline-grid;
+    flex: 0 0 12px;
+    place-items: center;
+    width: 12px;
+    height: 12px;
+    color: currentColor;
+    font-style: normal;
+    line-height: 1;
+  }
+
+  .status-icon.infinity {
+    flex-basis: 23px;
+    width: 23px;
+    height: 23px;
+    font-size: 22px;
+    font-weight: 500;
+  }
+
+  .status-icon.check::before {
+    width: 5px;
+    height: 9px;
+    content: '';
+    border: 2px solid;
+    border-width: 0 2px 2px 0;
+    transform: translateY(-1px) rotate(45deg);
+  }
+
+  .model-access-status.unavailable {
+    position: relative;
+    width: 104px;
+    height: 23px;
+    overflow: hidden;
+    color: #a5aaa1;
+    font-size: 0;
+  }
+  .model-access-status.unavailable::before,
+  .model-access-status.unavailable::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 9px;
+    height: 1.5px;
+    content: '';
+    background: currentColor;
+    border-radius: 999px;
+  }
+  .model-access-status.unavailable::before { transform: translate(-50%, -50%) rotate(45deg); }
+  .model-access-status.unavailable::after { transform: translate(-50%, -50%) rotate(-45deg); }
+
+  .model-compare-table tbody tr:hover td,
+  .model-compare-table tbody tr:hover th { background-color: rgba(112, 231, 85, 0.03); }
+
+  .other-models-note {
+    padding: 25px 28px 27px;
+    background: rgba(250, 251, 248, 0.68);
+    border-top: 1px solid rgba(65, 72, 61, 0.09);
+  }
+  .other-models-note h3 {
+    margin: 0 0 10px;
+    color: #30342e;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .other-models-note p {
+    max-width: 940px;
+    margin: 0;
+    color: #5f655c;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.55;
+  }
+  .other-models-note .other-models-list { margin-bottom: 9px; }
+
+  @keyframes pricing-card-enter {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes usage-meter-in {
+    from { opacity: 0.4; transform: scaleX(0); }
+    to { opacity: 1; transform: scaleX(1); }
+  }
+  @keyframes pricing-ribbon-text-shimmer {
+    from { background-position: 100% 0; }
+    to { background-position: -100% 0; }
+  }
+
+  @media (max-width: 1080px) {
+    .four-tier-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      row-gap: 56px;
+    }
+    .pricing-card { min-width: 0; }
+  }
+
+  @media (max-width: 720px) {
+    .four-tier-grid {
+      grid-template-columns: 1fr;
+      margin-top: 58px;
+    }
+    .pricing-card { padding: 20px; }
+    .plan-top p { white-space: normal; }
+    .individual-usage-surface { padding: 18px 10px 14px; }
+    .individual-usage-row,
+    .individual-usage-axis {
+      grid-template-columns: 132px minmax(0, 1fr);
+      padding-right: 4px;
+      padding-left: 4px;
+    }
+    .individual-usage-note { width: calc(100% - 24px); }
+    .all-models-comparison { width: 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pricing-card,
+    .individual-usage-meter i {
+      animation: none;
+      transform: none;
+    }
+    .new-plan-ribbon span {
+      color: #173111;
+      -webkit-text-fill-color: #173111;
+      background: none;
+      animation: none;
+    }
+    .pricing-card-cta { transition: none; }
+  }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-demo-pricing]').forEach((root) => {
+    const fillCount = (template: string, count: string) => template.replace('{count}', count);
+    root.querySelectorAll<HTMLButtonElement>('[data-module-toggle]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const module = button.closest<HTMLElement>('[data-model-module]');
+        if (!module || button.disabled) return;
+        const expanded = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', String(expanded));
+        module.classList.toggle('is-expanded', expanded);
+        const label = button.querySelector('span');
+        const total = button.dataset.total ?? '';
+        if (label) label.textContent = expanded
+          ? root.dataset.showLessLabel ?? ''
+          : fillCount(root.dataset.viewAllLabel ?? '', total);
+      });
+    });
+
+    const usageModule = root.querySelector<HTMLElement>('[data-usage-module]');
+    if (usageModule) {
+      if (!('IntersectionObserver' in window)) {
+        usageModule.classList.add('is-visible');
+      } else {
+        const observer = new IntersectionObserver(([entry]) => {
+          if (!entry?.isIntersecting) return;
+          usageModule.classList.add('is-visible');
+          observer.disconnect();
+        }, { threshold: 0.22 });
+        observer.observe(usageModule);
+      }
+    }
+
+    const benefitsToggle = root.querySelector<HTMLButtonElement>('[data-benefits-toggle]');
+    benefitsToggle?.addEventListener('click', () => {
+      const expanded = benefitsToggle.getAttribute('aria-expanded') !== 'true';
+      benefitsToggle.setAttribute('aria-expanded', String(expanded));
+      root.dataset.benefitsExpanded = String(expanded);
+      const label = benefitsToggle.querySelector('span');
+      if (label) label.textContent = expanded
+        ? root.dataset.showFewerBenefitsLabel ?? ''
+        : root.dataset.viewMoreBenefitsLabel ?? '';
+    });
+  });
+</script>

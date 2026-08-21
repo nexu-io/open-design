@@ -23,6 +23,8 @@ import {
   isOpencodeResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
+  resolveAgentResumeFailurePolicy,
+  resolveAgentResumePromptPolicy,
 } from '../src/agent-session-resume.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -255,6 +257,71 @@ describe('computeIncludeStable', () => {
   });
   it('includes the stable block on a resume turn with no stored hash (legacy session)', () => {
     expect(computeIncludeStable(true, null, 'h-1')).toBe(true);
+  });
+});
+
+describe('resolveAgentResumePromptPolicy', () => {
+  it('allows transcript skipping only when a valid native resume handle is selected', () => {
+    expect(
+      resolveAgentResumePromptPolicy({
+        isResuming: true,
+        resumeSessionId: 'sess-A',
+        invalidationReason: null,
+      }),
+    ).toEqual({
+      mode: 'resume-session',
+      resumeSessionId: 'sess-A',
+      skipTranscript: true,
+      requiresFullTranscript: false,
+      invalidationReason: null,
+    });
+  });
+
+  it('requires the full transcript for a fresh create turn with no stored session', () => {
+    expect(
+      resolveAgentResumePromptPolicy({
+        isResuming: false,
+        resumeSessionId: null,
+        invalidationReason: null,
+      }),
+    ).toMatchObject({
+      mode: 'full-transcript',
+      resumeSessionId: null,
+      skipTranscript: false,
+      requiresFullTranscript: true,
+      invalidationReason: null,
+    });
+  });
+
+  it('requires the full transcript for every guard failure', () => {
+    expect(
+      resolveAgentResumePromptPolicy({
+        isResuming: false,
+        resumeSessionId: null,
+        invalidationReason: 'conversation_advanced',
+      }),
+    ).toMatchObject({
+      mode: 'full-transcript',
+      resumeSessionId: null,
+      skipTranscript: false,
+      requiresFullTranscript: true,
+      invalidationReason: 'conversation_advanced',
+    });
+  });
+
+  it('treats inconsistent resume state as full-transcript reseed instead of skipping history', () => {
+    expect(
+      resolveAgentResumePromptPolicy({
+        isResuming: true,
+        resumeSessionId: null,
+        invalidationReason: null,
+      }),
+    ).toMatchObject({
+      mode: 'full-transcript',
+      resumeSessionId: null,
+      skipTranscript: false,
+      requiresFullTranscript: true,
+    });
   });
 });
 
@@ -575,5 +642,41 @@ describe('isAgentResumeFailure dispatch', () => {
   it('never reports a failure for empty output', () => {
     expect(isAgentResumeFailure('codex', '')).toBe(false);
     expect(isAgentResumeFailure('claude', '')).toBe(false);
+  });
+});
+
+describe('resolveAgentResumeFailurePolicy', () => {
+  it('clears stale state and auto-reseeds only for a failed attempted resume', () => {
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'opencode',
+        stderr: 'Error: Session not found',
+        stdout: '',
+        isResuming: true,
+        resumeSessionId: 'ses-old',
+      }),
+    ).toEqual({
+      resumeFailed: true,
+      clearStaleSession: true,
+      autoReseedFullTranscript: true,
+      reason: 'resume_failed',
+    });
+  });
+
+  it('does not clear state on a create turn even if output contains a resume-like phrase', () => {
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'opencode',
+        stderr: 'Error: Session not found',
+        stdout: '',
+        isResuming: false,
+        resumeSessionId: null,
+      }),
+    ).toEqual({
+      resumeFailed: false,
+      clearStaleSession: false,
+      autoReseedFullTranscript: false,
+      reason: null,
+    });
   });
 });

@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { RecentProjectsStrip } from '../../src/components/RecentProjectsStrip';
+import {
+  deckPreviewSrcDoc,
+  RecentProjectsStrip,
+} from '../../src/components/RecentProjectsStrip';
 import {
   fetchProjectFiles,
   fetchProjectFileText,
@@ -212,6 +217,46 @@ class MockWorkspaceEventSource {
 }
 
 describe('RecentProjectsStrip', () => {
+  it('turns a script-activated deck into a deterministic visible first-page cover', () => {
+    const cover = deckPreviewSrcDoc(`<!doctype html>
+      <html><head><style>
+        #stage { position: fixed; top: 50%; left: 50%; width: 1920px; height: 1080px }
+        .slide { display: none; opacity: 0; visibility: hidden }
+        .slide.active,
+        .slide.is-active { display: flex; opacity: 1; visibility: visible }
+        [data-anim] { opacity: 0; transform: translateY(24px) }
+      </style></head><body>
+        <div id="stage">
+          <section class="slide orange"><h1 data-anim="fade-up">Launch</h1></section>
+          <section class="slide dark"><h1>Details</h1></section>
+        </div>
+        <script>document.querySelector('.slide').classList.add('is-active')</script>
+      </body></html>`);
+
+    expect(cover).not.toContain('<script>');
+    expect(cover).toMatch(
+      /<section class="slide orange active is-active" data-od-cover-slide(?:="")?>/,
+    );
+    expect(cover).toContain('[data-od-cover-slide] > *');
+    expect(cover).toContain(':where(body *):has(> [data-od-cover-slide])');
+    expect(cover).toContain('transform-origin: 0 0 !important');
+    expect(cover).toContain('[data-od-cover-slide] [data-anim]');
+    expect(cover).toContain('opacity: 1 !important');
+    expect(cover).toContain('.slide:not([data-od-cover-slide])');
+  });
+
+  it('lets a 16:9 project cover determine its grid-card height without a taller minimum', () => {
+    const css = readFileSync(
+      join(process.cwd(), 'src/styles/home/recent-projects.css'),
+      'utf8',
+    );
+    const gridThumb = css.match(
+      /\.recent-projects__row--grid \.recent-projects__card-thumb\s*\{([^}]*)\}/u,
+    )?.[1];
+    expect(gridThumb).toContain('min-height: 0');
+    expect(gridThumb).not.toContain('min-height: 108px');
+  });
+
   it('scans a shared project cover once after the same card materializes', async () => {
     stubCoverProbe();
     vi.mocked(fetchProjectFiles).mockResolvedValue([{

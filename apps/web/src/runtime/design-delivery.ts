@@ -18,6 +18,8 @@ export interface DesignDeliveryInput {
   events: AgentEvent[] | undefined;
   producedFileCount: number;
   traceObjectFileCount: number;
+  /** Authoritative artifact count reported by the daemon at run finalization. */
+  artifactCount?: number;
   persistenceSucceeded?: boolean;
   persistenceFailed?: boolean;
 }
@@ -83,6 +85,7 @@ export function resolveDesignDeliveryOutcome(
   if (
     input.producedFileCount > 0 ||
     input.traceObjectFileCount > 0 ||
+    (input.artifactCount ?? 0) > 0 ||
     input.persistenceSucceeded ||
     hasLiveArtifactDelivery(input.events)
   ) {

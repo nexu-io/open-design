@@ -146,7 +146,7 @@ function billingResponse(
 function agent(): AgentInfo {
   return {
     id: 'amr',
-    name: 'Open Design AMR',
+    name: 'OpenDesign AMR',
     bin: 'amr',
     available: true,
     models: [{ id: 'glm-5', label: 'GLM 5' }],

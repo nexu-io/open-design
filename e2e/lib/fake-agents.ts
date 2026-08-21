@@ -179,7 +179,7 @@ async function emitRun(promptText) {
     return;
   }
   if (
-    promptText.includes('Create an Open Design plugin for:') &&
+    promptText.includes('Create an OpenDesign plugin for:') &&
     promptText.includes('produce a folder named generated-plugin')
   ) {
     await emitPluginAuthoringRun();

@@ -33,6 +33,7 @@ import {
   liveArtifactPreviewUrl,
   openProjectInEditor,
   projectRawUrl,
+  renewProjectPreviewBaseScope,
   refreshLiveArtifact,
   startDesignSystemGenerationJob,
   startDesignSystemRevisionJob,
@@ -92,14 +93,17 @@ afterEach(() => {
 });
 
 describe('persisted project Workspace transport scope', () => {
-  it('mints a srcDoc preview base under the exact captured Workspace identity', async () => {
+  it('mints a srcDoc preview base without client-supplied Workspace authority', async () => {
     const workspaceA = teamContext('workspace-a', 'member-a');
+    const expiresAt = Date.now() + 60 * 60 * 1000;
+    vi.stubGlobal('location', { href: 'od://app/projects/project-1' });
     const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
       url: '/api/projects/project-1/preview/scope-1/pages/brand.html',
       file: 'pages/brand.html',
       csp: "default-src 'none'",
       iframeSandbox: 'allow-scripts allow-forms',
       opaqueOrigin: true,
+      expiresAt,
     }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -107,17 +111,16 @@ describe('persisted project Workspace transport scope', () => {
       'project-1',
       'pages/brand.html',
       workspaceA,
-    )).resolves.toBe('/api/projects/project-1/preview/scope-1/pages/');
+    )).resolves.toEqual({
+      href: 'od://app/api/projects/project-1/preview/scope-1/pages/',
+      expiresAt,
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/projects/project-1/preview-url?file=pages%2Fbrand.html&workspaceId=workspace-a&workspaceMemberId=member-a',
-      expect.objectContaining({
+      '/api/projects/project-1/preview-url?file=pages%2Fbrand.html',
+      {
         cache: 'no-store',
-        headers: expect.objectContaining({
-          'x-od-workspace-id': 'workspace-a',
-          'x-od-workspace-member-id': 'member-a',
-        }),
-      }),
+      },
     );
   });
 
@@ -129,6 +132,7 @@ describe('persisted project Workspace transport scope', () => {
       csp: "default-src 'none'",
       iframeSandbox: 'allow-scripts allow-forms',
       opaqueOrigin: true,
+      expiresAt: Date.now() + 60 * 60 * 1000,
     })));
 
     await expect(fetchProjectPreviewBaseHref(
@@ -138,7 +142,54 @@ describe('persisted project Workspace transport scope', () => {
     )).resolves.toBeNull();
   });
 
-  it('keeps browser-owned project and SSE URLs on captured A after shell B exists', () => {
+  it('keeps previews working while a new web bundle rolls against an older daemon', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-21T00:00:00Z'));
+    vi.stubGlobal('location', { href: 'od://app/projects/project-1' });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      url: '/api/projects/project-1/preview/legacy-scope/pages/brand.html',
+      file: 'pages/brand.html',
+      csp: "default-src 'none'",
+      iframeSandbox: 'allow-scripts allow-forms',
+      opaqueOrigin: true,
+    })));
+
+    await expect(fetchProjectPreviewBaseHref(
+      'project-1',
+      'pages/brand.html',
+    )).resolves.toEqual({
+      href: 'od://app/api/projects/project-1/preview/legacy-scope/pages/',
+      expiresAt: Date.now() + 45 * 60 * 1000,
+    });
+    vi.useRealTimers();
+  });
+
+  it('renews only a project-matching preview scope through the host-only route', async () => {
+    const expiresAt = Date.now() + 60 * 60 * 1000;
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ expiresAt }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(renewProjectPreviewBaseScope(
+      'project-1',
+      '/api/projects/project-1/preview/scope-0001/pages/',
+    )).resolves.toBe(expiresAt);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/preview/scope-0001/renew',
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'x-od-preview-scope-renewal': '1' },
+      },
+    );
+
+    await expect(renewProjectPreviewBaseScope(
+      'project-2',
+      '/api/projects/project-1/preview/scope-0001/pages/',
+    )).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps raw project URLs server-authoritative while scoped streams retain captured A', () => {
     const workspaceA = teamContext('workspace-a', 'member-a');
     const workspaceB = teamContext('workspace-b', 'member-b');
     const capturedRawUrl = projectRawUrl('project-1', 'index.html', workspaceA);
@@ -147,7 +198,11 @@ describe('persisted project Workspace transport scope', () => {
 
     projectRawUrl('project-1', 'index.html', workspaceB);
 
-    for (const url of [capturedRawUrl, capturedTerminalUrl, capturedEventsUrl]) {
+    const parsedRaw = new URL(capturedRawUrl, 'https://od.local');
+    expect(parsedRaw.searchParams.has('workspaceId')).toBe(false);
+    expect(parsedRaw.searchParams.has('workspaceMemberId')).toBe(false);
+
+    for (const url of [capturedTerminalUrl, capturedEventsUrl]) {
       const parsed = new URL(url, 'https://od.local');
       expect(parsed.searchParams.get('workspaceId')).toBe('workspace-a');
       expect(parsed.searchParams.get('workspaceMemberId')).toBe('member-a');
@@ -234,7 +289,7 @@ describe('persisted project Workspace transport scope', () => {
     );
   });
 
-  it('sends query and headers together when deleting a scoped raw file', async () => {
+  it('keeps write authority in headers without leaking it into the raw URL', async () => {
     const workspaceA = teamContext('workspace-a', 'member-a');
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -242,7 +297,7 @@ describe('persisted project Workspace transport scope', () => {
     await expect(deleteProjectFile('project-1', 'index.html', workspaceA)).resolves.toBe(true);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/projects/project-1/raw/index.html?workspaceId=workspace-a&workspaceMemberId=member-a',
+      '/api/projects/project-1/raw/index.html',
       expect.objectContaining({
         method: 'DELETE',
         headers: expect.objectContaining({

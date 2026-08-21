@@ -99,7 +99,7 @@ export function workspaceResourceReadContext(
 }
 
 /**
- * Whether an Open Design Cloud (AMR) run has a cloud identity that could pay
+ * Whether an OpenDesign Cloud (AMR) run has a cloud identity that could pay
  * for it.
  *
  * AMR bills the caller's OWN wallet — their current workspace. The only state
@@ -417,7 +417,10 @@ export async function resolveCurrentWorkspaceContextReadWitness(
   const requestToken = workspaceContextRequestToken;
   const accountGeneration = currentWorkspaceAccountGeneration();
   const directory = await readWorkspaceDirectoryForCurrentGeneration(options);
-  const selected = chooseWorkspaceForTab(directory.items ?? []);
+  const selected = chooseWorkspaceForTab(
+    directory.items ?? [],
+    directory.activeWorkspaceId,
+  );
   const context = selected ? workspaceContextFromDirectoryItem(selected) : null;
   return createCurrentWorkspaceContextReadWitness(
     context,
@@ -507,7 +510,10 @@ function selectableWorkspaceItems(items: WorkspaceDirectoryItem[]): WorkspaceDir
   );
 }
 
-function chooseWorkspaceForTab(items: WorkspaceDirectoryItem[]): WorkspaceDirectoryItem | null {
+function chooseWorkspaceForTab(
+  items: WorkspaceDirectoryItem[],
+  restartWorkspaceId: string | null = null,
+): WorkspaceDirectoryItem | null {
   const visible = selectableWorkspaceItems(items);
   const selected = readWorkspaceSelection();
   const exact = selected
@@ -517,8 +523,12 @@ function chooseWorkspaceForTab(items: WorkspaceDirectoryItem[]): WorkspaceDirect
           && item.workspaceMemberId === selected.workspaceMemberId,
       )
     : undefined;
+  const restartDefault = restartWorkspaceId
+    ? visible.find((item) => item.workspaceId === restartWorkspaceId)
+    : undefined;
   const chosen =
     exact
+    ?? restartDefault
     ?? visible.find((item) => item.workspaceType === 'personal')
     ?? visible[0]
     ?? null;
@@ -665,7 +675,7 @@ export function useWorkspaceContext(): WorkspaceContextState {
    * hand keeps showing it, which is what stops the rail flashing signed-out.
    *
    * Without it, signing in during onboarding left the bottom-left "sign in to
-   * Open Design Cloud" callout on screen for the whole (vela-backed,
+   * OpenDesign Cloud" callout on screen for the whole (vela-backed,
    * up-to-seconds) re-read, because `loading` had already settled to false on
    * the earlier signed-out read and only `context !== null` gates the callout
    * (#140). It also forces the coalescing entry, whose whole premise — that
@@ -730,7 +740,10 @@ export function useWorkspaceContext(): WorkspaceContextState {
       ) return;
       const selected = exactScopeContext
         ? workspaceDirectoryItemFromContext(exactScopeContext)
-        : chooseWorkspaceForTab(directory?.items ?? []);
+        : chooseWorkspaceForTab(
+            directory?.items ?? [],
+            directory?.activeWorkspaceId ?? null,
+          );
       const exactSessionSelection = requestedSelection && selected
         && selected.workspaceId === requestedSelection.workspaceId
         && selected.workspaceMemberId === requestedSelection.workspaceMemberId
@@ -782,8 +795,9 @@ export function useWorkspaceContext(): WorkspaceContextState {
         // membership directory already carries it. Reuse the name from the
         // exact Workspace/member row selected for THIS tab so label consumers
         // (including plugin context defaults) remain compatible. This is display
-        // metadata only: authority still comes from the explicit ids above, and
-        // no daemon/backend "active workspace" state is consulted or written.
+        // metadata only: authority still comes from the explicit ids above.
+        // The daemon's saved workspace id is only a cold-start preference used
+        // to choose this exact directory row.
         const workspaceName = typeof selected.workspaceName === 'string'
           ? selected.workspaceName.trim()
           : '';

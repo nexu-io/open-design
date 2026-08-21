@@ -2,22 +2,22 @@
 
 ## Context
 
-Open Design needs to show the signed-in AMR wallet balance in the local client.
+OpenDesign needs to show the signed-in AMR wallet balance in the local client.
 The accepted product decision is:
 
-- Open Design displays the Vela API wallet ledger balance.
+- OpenDesign displays the Vela API wallet ledger balance.
 - Link remains the source of truth for runtime admission through
   `CreditGuard.Check()`.
 - A short inconsistency window is acceptable while Link has in-flight pending
   usage in Redis.
-- Open Design must not read Link Redis directly.
+- OpenDesign must not read Link Redis directly.
 - Vela API should not add Redis for this display-only feature.
 
-This handoff is only for the Vela-side dependency needed by Open Design.
+This handoff is only for the Vela-side dependency needed by OpenDesign.
 
 ## Vela-Side Goal
 
-Allow Open Design daemon to call the existing wallet balance endpoint with the
+Allow OpenDesign daemon to call the existing wallet balance endpoint with the
 AMR device-login control key:
 
 ```http
@@ -34,7 +34,7 @@ The response can stay as it is today:
 }
 ```
 
-Open Design does not need subscription/package details for v1.
+OpenDesign does not need subscription/package details for v1.
 
 ## Current Evidence
 
@@ -79,7 +79,7 @@ auth helper into billing route registration, instead of duplicating key auth in
 
 ## Non-Goals
 
-- No package/subscription display for Open Design v1.
+- No package/subscription display for OpenDesign v1.
 - No recharge history, usage history, or checkout changes.
 - No API-to-Link Redis projection read.
 - No API Redis cache.
@@ -108,7 +108,7 @@ that should support control-key auth. For v1, the only required endpoint is
 `GET /api/v1/wallet/balance`.
 
 Be careful before applying control-key auth to billing mutation endpoints such
-as checkout creation. Open Design only needs the read-only balance route.
+as checkout creation. OpenDesign only needs the read-only balance route.
 
 ## Redis and Concurrency Decision
 
@@ -117,7 +117,7 @@ Do not read Link Redis for this feature.
 Reasoning:
 
 - Link Redis includes pending usage and is optimized for runtime admission.
-- The Open Design UI only needs account visibility.
+- The OpenDesign UI only needs account visibility.
 - Reading Link Redis from Vela API would introduce another cross-service data
   path and new failure modes.
 - User accepted the temporary difference between displayed ledger balance and
@@ -127,20 +127,20 @@ Do not add Redis to Vela API for this feature.
 
 Reasoning:
 
-- Open Design daemon will apply a 5-10 second in-memory TTL and singleflight to
+- OpenDesign daemon will apply a 5-10 second in-memory TTL and singleflight to
   reduce API/DB fanout.
 - The Vela route remains a simple ledger read.
 - API DB load risk is bounded by daemon-side coalescing and short cache TTL.
 
-## Failure Semantics Expected by Open Design
+## Failure Semantics Expected by OpenDesign
 
-Open Design will interpret Vela responses as follows:
+OpenDesign will interpret Vela responses as follows:
 
 - `200`: show wallet balance.
 - `401` or `403`: show re-auth / unavailable state, not zero balance.
 - `5xx` or network failure: show "balance temporarily unavailable".
 
-Vela does not need to create a special Open Design error shape. Keeping the
+Vela does not need to create a special OpenDesign error shape. Keeping the
 existing error style is acceptable, but tests should make the status code
 contract explicit.
 
@@ -167,16 +167,16 @@ Good existing starting points:
 If the repo already has control-key helpers in `/me` tests, reuse those instead
 of hand-creating key rows.
 
-## Open Design Compatibility Contract
+## OpenDesign Compatibility Contract
 
-After the Vela change lands, Open Design daemon will call:
+After the Vela change lands, OpenDesign daemon will call:
 
 ```http
 GET {VELA_API_URL}/api/v1/wallet/balance
 Authorization: Bearer <controlKey>
 ```
 
-Open Design expects:
+OpenDesign expects:
 
 ```ts
 {
@@ -185,7 +185,7 @@ Open Design expects:
 }
 ```
 
-No Open Design behavior should depend on Link Redis, pending usage keys, or a
+No OpenDesign behavior should depend on Link Redis, pending usage keys, or a
 new Vela API cache.
 
 ## Suggested Validation
@@ -207,7 +207,7 @@ one concrete local API or smoke proof in addition to unit tests.
 - `GET /api/v1/wallet/balance` accepts browser sessions.
 - `GET /api/v1/wallet/balance` accepts control keys.
 - Runtime keys remain rejected.
-- Response shape remains compatible with Open Design v1.
+- Response shape remains compatible with OpenDesign v1.
 - No Redis dependency added to `services/api`.
 - No Link read path added.
 - Tests cover control-key success and runtime-key rejection.

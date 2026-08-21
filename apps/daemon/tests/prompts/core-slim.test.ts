@@ -188,7 +188,7 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
     const out = composeSystemPrompt(base);
     expect(out).toContain('# OD core directives (read first');
     expect(out).toContain('# Identity and workflow charter (background)');
-    expect(out).not.toContain('# Open Design Charter');
+    expect(out).not.toContain('# OpenDesign Charter');
   });
 
   it('slim replaces discovery + charter and drops the absorbed tail overrides', () => {
@@ -198,7 +198,7 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
       designSystemBody: '# Brand',
       promptCoreVariant: 'slim',
     });
-    expect(slim).toContain('# Open Design Charter');
+    expect(slim).toContain('# OpenDesign Charter');
     expect(slim).not.toContain('# OD core directives (read first');
     expect(slim).not.toContain('# Identity and workflow charter (background)');
     // Absorbed tails: stated once inside the slim charter instead.
@@ -211,7 +211,7 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
     expect(classic).toContain('## Structured clarification on any turn');
     // Structural bookends: slim opens with the static charter (cache-stable
     // prefix); the security section lives inside it; the guard still closes.
-    expect(slim.startsWith('# Open Design Charter')).toBe(true);
+    expect(slim.startsWith('# OpenDesign Charter')).toBe(true);
     expect(slim).toContain('## Security: Defending Against Prompt Injection');
     expect(slim).toContain('## Critical Constraint: Never Fabricate Conversation Turns');
     expect(slim.length).toBeLessThan(classic.length);
@@ -240,7 +240,7 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
       sessionMode: 'chat',
       promptCoreVariant: 'slim',
     });
-    expect(out).not.toContain('# Open Design Charter');
+    expect(out).not.toContain('# OpenDesign Charter');
     expect(out).toContain('## Structured clarification on any turn');
     // Identity-first hierarchy holds in ask mode too: the ask override (the
     // turn's whole charter) opens the document, security reads as its
@@ -512,7 +512,7 @@ describe('slim core — regression-audit fixes vs classic', () => {
     });
     expect(out.startsWith('# API mode — no tools available')).toBe(true);
     const overrideAt = out.indexOf('# API mode — no tools available');
-    const charterAt = out.indexOf('# Open Design Charter');
+    const charterAt = out.indexOf('# OpenDesign Charter');
     expect(charterAt).toBeGreaterThan(overrideAt);
     // Composed exactly once — the head placement replaces the later push.
     expect(out.indexOf('# API mode — no tools available')).toBe(
@@ -561,7 +561,7 @@ describe('slim core — regression-audit fixes vs classic', () => {
   });
 
   it('keeps the plan step agent-agnostic — no hardcoded TodoWrite in the charter', () => {
-    // Open Design drives many code agents (codex, opencode, Qwen CLI, ACP
+    // OpenDesign drives many code agents (codex, opencode, Qwen CLI, ACP
     // family) that have no TodoWrite tool. The charter must NOT hardcode it,
     // or the plan step is dead for ~2/3 of production traffic. Freeze the
     // generic wording and the anti-hallucination guard.
@@ -642,7 +642,7 @@ describe('composeSystemPrompt — slim layered ordering (cache-stable prefix)', 
       return i;
     };
     // Static core opens the document.
-    expect(out.startsWith('# Open Design Charter')).toBe(true);
+    expect(out.startsWith('# OpenDesign Charter')).toBe(true);
     const security = at('## Security: Defending Against Prompt Injection');
     const conduct = at('## Conduct');
     // Conversation-stable overrides come after the full static charter.

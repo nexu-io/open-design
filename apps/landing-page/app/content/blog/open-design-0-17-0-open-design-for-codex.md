@@ -1,5 +1,5 @@
 ---
-title: "Open Design 0.17.0: Open Design for Codex"
+title: "OpenDesign 0.17.0: OpenDesign for Codex"
 date: 2026-08-03
 category: "Product"
 readingTime: 7
@@ -8,25 +8,25 @@ socialImage: "/blog/open-design-0-17-0-open-design-for-codex-cover-v2.webp"
 ctaKind: download-app
 i18n:
   zh:
-    title: 'Open Design 0.17.0：为 Codex 打造的设计工作区'
+    title: 'OpenDesign 0.17.0：为 Codex 打造的设计工作区'
     summary: 'open-design-v0.17.0 —— 11 天内 23 位贡献者提交了 62 个 PR。Codex 现在有了自己的设计工作区：从对话中调用 @open-design，把简报变成真正的 Preview 或 Studio 成果，并直接在画布上完成视觉细节，不必再通过提示词反复描述每一个细微修改。'
     category: '产品'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>，于 2026 年 8 月 3 日发布。<strong>11 天内 23 位贡献者提交了 62 个 PR。</strong>Codex 现在有了自己的设计工作区。从 Codex 对话中调用 <code>@open-design</code>，把一个想法或简报变成真正可编辑的成果，然后无需离开 Codex 工作流，就能在 Open Design Studio 中继续创作和完善。</p>
+      <p><code>open-design-v0.17.0</code>，于 2026 年 8 月 3 日发布。<strong>11 天内 23 位贡献者提交了 62 个 PR。</strong>Codex 现在有了自己的设计工作区。从 Codex 对话中调用 <code>@open-design</code>，把一个想法或简报变成真正可编辑的成果，然后无需离开 Codex 工作流，就能在 OpenDesign Studio 中继续创作和完善。</p>
       <p>想看所有变更？请阅读 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">GitHub 上的完整发布说明</a>。本文讲的是产品故事：Codex 如何从一次对话走向视觉成果、为什么最后 10% 不再需要另一条提示词，以及整个过程如何变得更加可靠。</p>
 
       <h2>Codex 有了自己的设计工作区</h2>
-      <p>编程 Agent 擅长把意图变成文件，但视觉工作始终需要第二个环境：在聊天中解释想法，把结果移到设计工具中，再把每一次修改重新翻译成另一条提示词。在 0.17.0 中，<strong>Codex Desktop 和 CLI 可以把 Open Design 作为一套完整的创作引擎来调用。</strong>对话与设计工作区从此成为一个连续的工作流。</p>
-      <p>从 <code>@open-design</code> 开始。确认一份视觉简报，选择 Open Design Cloud 或受支持的本地运行时，就能获得真正的 Preview 或 Studio 结果。这个结果不是粘贴进对话的一张截图，而是一个可以打开、检查、编辑、导出并持续完善的成果。</p>
+      <p>编程 Agent 擅长把意图变成文件，但视觉工作始终需要第二个环境：在聊天中解释想法，把结果移到设计工具中，再把每一次修改重新翻译成另一条提示词。在 0.17.0 中，<strong>Codex Desktop 和 CLI 可以把 OpenDesign 作为一套完整的创作引擎来调用。</strong>对话与设计工作区从此成为一个连续的工作流。</p>
+      <p>从 <code>@open-design</code> 开始。确认一份视觉简报，选择 OpenDesign Cloud 或受支持的本地运行时，就能获得真正的 Preview 或 Studio 结果。这个结果不是粘贴进对话的一张截图，而是一个可以打开、检查、编辑、导出并持续完善的成果。</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="一次 Agent 对话流入可编辑的设计画布与稳定预览，相连的成果被精准的绿色选区框包围，置于近白色编辑背景上" />
-        <figcaption>从 Codex 调用 Open Design，确认简报，得到真正的 Preview 或 Studio 成果，而不是一张成果的图片。</figcaption>
+        <figcaption>从 Codex 调用 OpenDesign，确认简报，得到真正的 Preview 或 Studio 成果，而不是一张成果的图片。</figcaption>
       </figure>
 
       <h2>创作运行时不再碍事</h2>
-      <p>你不该仅仅为了让集成工作，就必须打开第二个应用。<strong>当 Codex 需要时，已签名的 Open Design 运行时会以无头模式启动</strong>，因此无需盯着额外的窗口，也不用手动把本地技术栈接起来。</p>
+      <p>你不该仅仅为了让集成工作，就必须打开第二个应用。<strong>当 Codex 需要时，已签名的 OpenDesign 运行时会以无头模式启动</strong>，因此无需盯着额外的窗口，也不用手动把本地技术栈接起来。</p>
       <p>失败路径同样务实。如果 Studio 无法在外部宿主中顺利加载，Codex 仍会立即交付稳定预览。你会先拿到成果，需要时再在完整工作区中打开它，而不是因为某个展示界面未能初始化，就眼看着整次运行失败。</p>
-      <p>本地始终留在本地。当你明确选择 Local Codex 时，运行不再绕回插件，也不会把你带入 Cloud 登录流程。Open Design Cloud 与 Local Codex 依旧是两个清晰独立的选项；BYOK 提供商配置会保存在本设备的浏览器存储中，并且只传递给当前的本地运行。</p>
+      <p>本地始终留在本地。当你明确选择 Local Codex 时，运行不再绕回插件，也不会把你带入 Cloud 登录流程。OpenDesign Cloud 与 Local Codex 依旧是两个清晰独立的选项；BYOK 提供商配置会保存在本设备的浏览器存储中，并且只传递给当前的本地运行。</p>
 
       <h2>亲手完成，而不是再写一条提示词</h2>
       <p>视觉工作的最后 10% 通常非常具体：移动这个元素、收紧那段文字、裁剪图片、对齐两个对象。通过聊天传达每一次修改，让小改动变得比应有的更慢。</p>
@@ -38,12 +38,12 @@ i18n:
       <p>导出结果会忠实呈现你的构图。图片导出会遵循当前 Preview 视口，框架式演示文稿也会按其创作尺寸捕获，而不会被桌面框架重新塑形。</p>
 
       <h2>清晰的简报会立即开始执行</h2>
-      <p>只有当答案会改变结果时，Agent 才应该提问，而不是让每个任务都从一场访谈开始。<strong>如果第一条提示词已经包含足够明确的方向，Open Design 现在会立即开始。</strong>当确实缺少关键决定时，它会在该决定真正产生影响的时刻提出一个聚焦的问题。</p>
+      <p>只有当答案会改变结果时，Agent 才应该提问，而不是让每个任务都从一场访谈开始。<strong>如果第一条提示词已经包含足够明确的方向，OpenDesign 现在会立即开始。</strong>当确实缺少关键决定时，它会在该决定真正产生影响的时刻提出一个聚焦的问题。</p>
       <p>这改变了工作的节奏。一份有力的简报会立刻变成实际成果。模糊的简报依然会获得必要的澄清，但问题会附着在流程中的具体分岔点，而不是横在你与第一个有用结果之间。</p>
 
       <h2>不合适的模型选择会在浪费一次运行前失败</h2>
       <p>有些 Codex 模型与 CLI 组合已知无法协同工作。0.17.0 会在启动前识别这些组合，提供实用的切换模型路径，并更准确地诊断工具调用后的超时，避免让你陷入误导性的重试。</p>
-      <p>其余模型能力继续扩展，同时保持清晰边界：GPT-5.5 Fast 作为明确的速度优先选项加入，Raven 支持一键 MCP 设置，Open Design 也能在 Windows 上自动发现 Grok Build 的官方安装。</p>
+      <p>其余模型能力继续扩展，同时保持清晰边界：GPT-5.5 Fast 作为明确的速度优先选项加入，Raven 支持一键 MCP 设置，OpenDesign 也能在 Windows 上自动发现 Grok Build 的官方安装。</p>
 
       <h2>卡住的更新不再是死路</h2>
       <p>更新问题应当有一条恢复路径，而不是要求你手动寻找缓存目录。现在可以在设置中清除损坏的更新缓存，在已安装版本被确认不安全时重新安装，并从下载载荷导致的崩溃中恢复。<strong>应用会回滚到最后一个可用版本，并在下一次健康更新时自行修复。</strong>感谢 <a href="https://github.com/PerishCode">@PerishCode</a> 在这方面持续投入。</p>
@@ -70,7 +70,7 @@ i18n:
           <tr><th>如果你……</th><th>从这里开始</th></tr>
         </thead>
         <tbody>
-          <tr><td>已经在使用 Codex</td><td>安装 Open Design 插件，用一份具体的视觉简报调用 <code>@open-design</code>，并在 Preview 或 Studio 中打开结果</td></tr>
+          <tr><td>已经在使用 Codex</td><td>安装 OpenDesign 插件，用一份具体的视觉简报调用 <code>@open-design</code>，并在 Preview 或 Studio 中打开结果</td></tr>
           <tr><td>正在完善生成的成果</td><td>选择一个元素，直接完成最后的视觉修改，而不是再用另一条提示词描述它们</td></tr>
           <tr><td>在本地工作</td><td>明确选择 Local Codex，并确认运行使用设备中保存的 BYOK 配置保持在本地</td></tr>
           <tr><td>制作演示文稿</td><td>尝试用 Codex Slides 完成从简报到大纲、编辑再到导出的完整工作流</td></tr>
@@ -79,36 +79,36 @@ i18n:
       </table>
 
       <h2>接下来做什么</h2>
-      <p>Codex 已经是一个可以描述你想构建什么的地方。0.17.0 又为它提供了一个看见并塑造成果的地方。从真实对话中调用 Open Design，让清晰的简报立即启动，然后亲手完成一次小修改，不必再写一整段提示词。</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">下载 Open Design</a>。</p>
+      <p>Codex 已经是一个可以描述你想构建什么的地方。0.17.0 又为它提供了一个看见并塑造成果的地方。从真实对话中调用 OpenDesign，让清晰的简报立即启动，然后亲手完成一次小修改，不必再写一整段提示词。</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">下载 OpenDesign</a>。</p>
       <p>11 天内 62 个 PR，来自 23 位贡献者。他们把对话、成果与画布连接成一条工作流。设计工作区不再只是位于 Codex 旁边，Codex 已经可以直接触达它。我们看见你。🚀</p>
 
       <h2>相关阅读</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0：可靠交付</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1：更清晰的视野，更持久的心流</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0：更低成本，更快交付</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0：可靠交付</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1：更清晰的视野，更持久的心流</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0：更低成本，更快交付</a></li>
       </ul>
   ja:
-    title: 'Open Design 0.17.0：Codex のための Open Design'
+    title: 'OpenDesign 0.17.0：Codex のための OpenDesign'
     summary: 'open-design-v0.17.0 — 11 日間で 23 人のコントリビューターから 62 件の PR。Codex に専用のデザインワークスペースが加わりました。会話から @open-design を呼び出し、ブリーフを実際の Preview または Studio アーティファクトに変え、細かな修正のたびにプロンプトを書くことなく、キャンバス上でビジュアルの仕上げまで行えます。'
     category: 'プロダクト'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>、2026 年 8 月 3 日公開。<strong>11 日間で、23 人のコントリビューターから 62 件の PR が寄せられました。</strong>Codex に専用のデザインワークスペースが加わりました。Codex の会話から <code>@open-design</code> を呼び出し、アイデアやブリーフを実際に編集できるアーティファクトへ変え、そのまま Codex のワークフローを離れることなく Open Design Studio で制作と改善を続けられます。</p>
+      <p><code>open-design-v0.17.0</code>、2026 年 8 月 3 日公開。<strong>11 日間で、23 人のコントリビューターから 62 件の PR が寄せられました。</strong>Codex に専用のデザインワークスペースが加わりました。Codex の会話から <code>@open-design</code> を呼び出し、アイデアやブリーフを実際に編集できるアーティファクトへ変え、そのまま Codex のワークフローを離れることなく OpenDesign Studio で制作と改善を続けられます。</p>
       <p>すべての変更を確認したいですか？<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">GitHub の完全なリリースノート</a>をご覧ください。この記事で扱うのはプロダクトの物語です。Codex が会話からビジュアルアーティファクトへどう進むのか、なぜ最後の 10% に新たなプロンプトが要らなくなったのか、そしてその過程で何がより安定したのかを紹介します。</p>
 
       <h2>Codex に専用のデザインワークスペース</h2>
-      <p>コーディング Agent は意図をファイルに変えることに長けていますが、ビジュアル制作には常に二つ目の環境が必要でした。チャットでアイデアを説明し、結果をデザインツールへ移し、修正のたびに内容を別のプロンプトへ翻訳し直す必要があったのです。0.17.0 では、<strong>Codex Desktop と CLI が Open Design を完全なクリエイティブエンジンとして呼び出せます。</strong>会話とデザインワークスペースが、一続きのワークフローになります。</p>
-      <p><code>@open-design</code> から始めましょう。ビジュアルブリーフを確認し、Open Design Cloud または対応するローカルランタイムを選ぶと、実際の Preview または Studio の結果が届きます。それは会話に貼り付けられたスクリーンショットではありません。開いて確認し、編集し、書き出し、さらに改善を続けられるアーティファクトです。</p>
+      <p>コーディング Agent は意図をファイルに変えることに長けていますが、ビジュアル制作には常に二つ目の環境が必要でした。チャットでアイデアを説明し、結果をデザインツールへ移し、修正のたびに内容を別のプロンプトへ翻訳し直す必要があったのです。0.17.0 では、<strong>Codex Desktop と CLI が OpenDesign を完全なクリエイティブエンジンとして呼び出せます。</strong>会話とデザインワークスペースが、一続きのワークフローになります。</p>
+      <p><code>@open-design</code> から始めましょう。ビジュアルブリーフを確認し、OpenDesign Cloud または対応するローカルランタイムを選ぶと、実際の Preview または Studio の結果が届きます。それは会話に貼り付けられたスクリーンショットではありません。開いて確認し、編集し、書き出し、さらに改善を続けられるアーティファクトです。</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="Agent との会話が編集可能なデザインキャンバスと安定したプレビューへ流れ、つながったアーティファクトがほぼ白い編集背景の上で精密な緑の選択枠に収められている様子" />
-        <figcaption>Codex から Open Design を呼び出し、ブリーフに合意して、完成物の画像ではなく実際の Preview または Studio アーティファクトを受け取りましょう。</figcaption>
+        <figcaption>Codex から OpenDesign を呼び出し、ブリーフに合意して、完成物の画像ではなく実際の Preview または Studio アーティファクトを受け取りましょう。</figcaption>
       </figure>
 
       <h2>制作ランタイムが邪魔をしない</h2>
-      <p>連携を動かすためだけに、別のアプリを開いておく必要はありません。<strong>署名済みの Open Design ランタイムは、Codex が必要としたときにヘッドレスで起動します。</strong>見守るための余分なウィンドウも、手作業でつなぐローカルスタックも不要です。</p>
+      <p>連携を動かすためだけに、別のアプリを開いておく必要はありません。<strong>署名済みの OpenDesign ランタイムは、Codex が必要としたときにヘッドレスで起動します。</strong>見守るための余分なウィンドウも、手作業でつなぐローカルスタックも不要です。</p>
       <p>失敗時の経路も実用的です。Studio が外部ホスト内で正常に読み込めない場合でも、Codex は安定したプレビューをすぐに届けます。一つの表示面が初期化できなかったために実行全体が失敗するのを眺めるのではなく、まず成果を受け取り、必要なときに完全なワークスペースで開けます。</p>
-      <p>ローカルはローカルのままです。Local Codex を明示的に選ぶと、実行がプラグインへ戻ったり、Cloud のサインインフローへ送られたりすることはありません。Open Design Cloud と Local Codex は別々の選択肢として維持され、BYOK プロバイダー設定はこのデバイスのブラウザストレージに保存され、実行中のローカル処理にだけ渡されます。</p>
+      <p>ローカルはローカルのままです。Local Codex を明示的に選ぶと、実行がプラグインへ戻ったり、Cloud のサインインフローへ送られたりすることはありません。OpenDesign Cloud と Local Codex は別々の選択肢として維持され、BYOK プロバイダー設定はこのデバイスのブラウザストレージに保存され、実行中のローカル処理にだけ渡されます。</p>
 
       <h2>もう一度プロンプトを書くのではなく、手で仕上げる</h2>
       <p>ビジュアル制作の最後の 10% は、たいてい具体的です。この要素を動かす、そのテキストを詰める、画像を切り抜く、二つのオブジェクトをそろえる。修正のたびにチャットを介すると、小さな変更が必要以上に遅くなっていました。</p>
@@ -120,12 +120,12 @@ i18n:
       <p>書き出しには、構成した結果がそのまま反映されます。画像の書き出しは現在の Preview ビューポートに従い、フレームワーク製のデッキはデスクトップフレームに合わせて変形されるのではなく、制作時のサイズでキャプチャされます。</p>
 
       <h2>明確なブリーフなら、すぐに始まる</h2>
-      <p>Agent が質問すべきなのは、答えによって結果が変わるときです。すべてのタスクを面談から始める必要はありません。<strong>最初のプロンプトに十分な方向性が含まれていれば、Open Design はすぐに開始します。</strong>本当に判断が足りない場合は、その判断が重要になる瞬間に、焦点を絞った質問を一つだけ行います。</p>
+      <p>Agent が質問すべきなのは、答えによって結果が変わるときです。すべてのタスクを面談から始める必要はありません。<strong>最初のプロンプトに十分な方向性が含まれていれば、OpenDesign はすぐに開始します。</strong>本当に判断が足りない場合は、その判断が重要になる瞬間に、焦点を絞った質問を一つだけ行います。</p>
       <p>これによりリズムが変わります。力強いブリーフは、すぐに制作へ移ります。曖昧なブリーフには必要な確認が入りますが、最初の有用な結果を妨げるのではなく、プロセス上の具体的な分岐に結び付いた質問になります。</p>
 
       <h2>適さないモデルの選択は、実行を無駄にする前に失敗する</h2>
       <p>一部の Codex モデルと CLI の組み合わせは、互いに動作しないことが分かっています。0.17.0 は起動前にその組み合わせを検出し、役に立つモデル切り替え経路を提示するとともに、ツール実行後のタイムアウトをより正確に診断します。誤解を招く再試行に送り込まれることはありません。</p>
-      <p>モデルの選択肢は境界を曖昧にすることなく広がります。GPT-5.5 Fast が明確な速度優先の選択肢として加わり、Raven がワンクリックの MCP セットアップに対応し、Open Design は Windows 上の公式 Grok Build インストールを自動検出します。</p>
+      <p>モデルの選択肢は境界を曖昧にすることなく広がります。GPT-5.5 Fast が明確な速度優先の選択肢として加わり、Raven がワンクリックの MCP セットアップに対応し、OpenDesign は Windows 上の公式 Grok Build インストールを自動検出します。</p>
 
       <h2>止まったアップデートが行き止まりにならない</h2>
       <p>アップデートの問題には、キャッシュディレクトリを手作業で探さなくても済む復旧経路が必要です。設定から壊れたアップデートキャッシュを消去し、インストール済みの世代が安全でないと判明した場合は再インストールし、ダウンロード済みペイロードによるクラッシュから復旧できるようになりました。<strong>アプリは最後に動作したバージョンへロールバックし、次の正常なアップデートで自らを修復します。</strong>継続的に取り組んでくれた <a href="https://github.com/PerishCode">@PerishCode</a> に感謝します。</p>
@@ -152,7 +152,7 @@ i18n:
           <tr><th>あなたが……</th><th>ここから始めましょう</th></tr>
         </thead>
         <tbody>
-          <tr><td>すでに Codex を使っている</td><td>Open Design プラグインをインストールし、具体的なビジュアルブリーフで <code>@open-design</code> を呼び出して、結果を Preview または Studio で開く</td></tr>
+          <tr><td>すでに Codex を使っている</td><td>OpenDesign プラグインをインストールし、具体的なビジュアルブリーフで <code>@open-design</code> を呼び出して、結果を Preview または Studio で開く</td></tr>
           <tr><td>生成された成果を仕上げている</td><td>一つの要素を選択し、別のプロンプトで説明する代わりに、最後のビジュアル修正を直接行う</td></tr>
           <tr><td>ローカルで作業している</td><td>Local Codex を明示的に選び、デバイスに保存された BYOK 設定を使って実行がローカルに留まることを確認する</td></tr>
           <tr><td>プレゼンテーションを制作している</td><td>ブリーフからアウトライン、編集、書き出しまでの全ワークフローに Codex Slides を試す</td></tr>
@@ -161,36 +161,36 @@ i18n:
       </table>
 
       <h2>次にすること</h2>
-      <p>Codex はすでに、作りたいものを言葉にできる場所でした。0.17.0 は、その結果を見て形づくる場所を与えます。実際の会話から Open Design を呼び出し、明確なブリーフならすぐに開始し、もう一段落を書く代わりに一つの小さな修正を手で加えてみてください。</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Open Design をダウンロード</a>。</p>
+      <p>Codex はすでに、作りたいものを言葉にできる場所でした。0.17.0 は、その結果を見て形づくる場所を与えます。実際の会話から OpenDesign を呼び出し、明確なブリーフならすぐに開始し、もう一段落を書く代わりに一つの小さな修正を手で加えてみてください。</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">OpenDesign をダウンロード</a>。</p>
       <p>11 日間で 62 件の PR。会話、アーティファクト、キャンバスを一つのワークフローにつないだ 23 人から寄せられました。デザインワークスペースはもう Codex の隣にあるだけではありません。Codex がそこへ到達できます。私たちは見ています。🚀</p>
 
       <h2>関連記事</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0：確実なデリバリー</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1：より鮮明な視界、より長いフロー</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0：コストを抑え、より速く届ける</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0：確実なデリバリー</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1：より鮮明な視界、より長いフロー</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0：コストを抑え、より速く届ける</a></li>
       </ul>
   ko:
-    title: 'Open Design 0.17.0: Codex를 위한 Open Design'
+    title: 'OpenDesign 0.17.0: Codex를 위한 OpenDesign'
     summary: 'open-design-v0.17.0 — 11일 동안 23명의 기여자가 만든 62개 PR. 이제 Codex에 자체 디자인 워크스페이스가 생겼습니다. 대화에서 @open-design을 호출하고, 브리프를 실제 Preview 또는 Studio 아티팩트로 바꾼 뒤, 작은 수정마다 프롬프트를 다시 쓰지 않고 캔버스에서 시각적 디테일을 직접 마무리하세요.'
     category: '제품'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>, 2026년 8월 3일 공개. <strong>11일 동안 23명의 기여자가 62개의 PR을 만들었습니다.</strong> 이제 Codex에 자체 디자인 워크스페이스가 생겼습니다. Codex 대화에서 <code>@open-design</code>을 호출해 아이디어나 브리프를 실제로 편집할 수 있는 아티팩트로 바꾸고, Codex 워크플로를 떠나지 않은 채 Open Design Studio에서 계속 만들고 다듬으세요.</p>
+      <p><code>open-design-v0.17.0</code>, 2026년 8월 3일 공개. <strong>11일 동안 23명의 기여자가 62개의 PR을 만들었습니다.</strong> 이제 Codex에 자체 디자인 워크스페이스가 생겼습니다. Codex 대화에서 <code>@open-design</code>을 호출해 아이디어나 브리프를 실제로 편집할 수 있는 아티팩트로 바꾸고, Codex 워크플로를 떠나지 않은 채 OpenDesign Studio에서 계속 만들고 다듬으세요.</p>
       <p>모든 변경 사항이 궁금한가요? <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">GitHub의 전체 릴리스 노트</a>를 읽어 보세요. 이 글은 제품에 관한 이야기입니다. Codex가 대화에서 시각적 아티팩트까지 어떻게 이어지는지, 마지막 10%를 위해 더는 다른 프롬프트가 필요하지 않은 이유, 그리고 그 과정에서 무엇이 더 안정적으로 바뀌었는지를 살펴봅니다.</p>
 
       <h2>Codex에 자체 디자인 워크스페이스가 생겼습니다</h2>
-      <p>코딩 Agent는 의도를 파일로 바꾸는 데 능하지만, 시각 작업에는 늘 두 번째 환경이 필요했습니다. 채팅에서 아이디어를 설명하고, 결과를 디자인 도구로 옮긴 다음, 수정할 때마다 내용을 다시 다른 프롬프트로 바꿔 전달해야 했습니다. 0.17.0에서는 <strong>Codex Desktop과 CLI가 Open Design을 완전한 크리에이티브 엔진으로 호출할 수 있습니다.</strong> 대화와 디자인 워크스페이스가 하나의 연속된 워크플로가 됩니다.</p>
-      <p><code>@open-design</code>으로 시작하세요. 비주얼 브리프를 확인하고 Open Design Cloud 또는 지원되는 로컬 런타임을 선택하면 실제 Preview 또는 Studio 결과를 받을 수 있습니다. 대화에 붙여 넣은 스크린샷이 아닙니다. 열어서 살펴보고, 편집하고, 내보내고, 계속 다듬을 수 있는 아티팩트입니다.</p>
+      <p>코딩 Agent는 의도를 파일로 바꾸는 데 능하지만, 시각 작업에는 늘 두 번째 환경이 필요했습니다. 채팅에서 아이디어를 설명하고, 결과를 디자인 도구로 옮긴 다음, 수정할 때마다 내용을 다시 다른 프롬프트로 바꿔 전달해야 했습니다. 0.17.0에서는 <strong>Codex Desktop과 CLI가 OpenDesign을 완전한 크리에이티브 엔진으로 호출할 수 있습니다.</strong> 대화와 디자인 워크스페이스가 하나의 연속된 워크플로가 됩니다.</p>
+      <p><code>@open-design</code>으로 시작하세요. 비주얼 브리프를 확인하고 OpenDesign Cloud 또는 지원되는 로컬 런타임을 선택하면 실제 Preview 또는 Studio 결과를 받을 수 있습니다. 대화에 붙여 넣은 스크린샷이 아닙니다. 열어서 살펴보고, 편집하고, 내보내고, 계속 다듬을 수 있는 아티팩트입니다.</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="Agent 대화가 편집 가능한 디자인 캔버스와 안정적인 프리뷰로 이어지고, 연결된 아티팩트가 미색의 편집 배경 위 정밀한 초록색 선택 프레임에 담긴 모습" />
-        <figcaption>Codex에서 Open Design을 호출하고 브리프를 합의한 뒤, 결과물의 그림이 아니라 실제 Preview 또는 Studio 아티팩트를 받으세요.</figcaption>
+        <figcaption>Codex에서 OpenDesign을 호출하고 브리프를 합의한 뒤, 결과물의 그림이 아니라 실제 Preview 또는 Studio 아티팩트를 받으세요.</figcaption>
       </figure>
 
       <h2>크리에이티브 런타임이 방해하지 않습니다</h2>
-      <p>연동을 작동시키기 위해 두 번째 앱을 열어 둘 필요는 없습니다. <strong>Codex가 필요로 할 때 서명된 Open Design 런타임이 헤드리스로 시작됩니다.</strong> 지켜봐야 할 별도 창도 없고, 로컬 스택을 손으로 연결할 일도 없습니다.</p>
+      <p>연동을 작동시키기 위해 두 번째 앱을 열어 둘 필요는 없습니다. <strong>Codex가 필요로 할 때 서명된 OpenDesign 런타임이 헤드리스로 시작됩니다.</strong> 지켜봐야 할 별도 창도 없고, 로컬 스택을 손으로 연결할 일도 없습니다.</p>
       <p>실패 경로도 실용적입니다. Studio가 외부 호스트 안에서 원활히 로드되지 않더라도 Codex는 안정적인 프리뷰를 즉시 전달합니다. 한 표시 화면이 초기화되지 않아 전체 실행이 실패하는 것을 지켜보는 대신, 먼저 결과를 받고 필요할 때 전체 워크스페이스에서 열 수 있습니다.</p>
-      <p>로컬은 로컬로 남습니다. Local Codex를 명시적으로 선택하면 실행이 플러그인으로 되돌아가거나 Cloud 로그인 흐름으로 보내지지 않습니다. Open Design Cloud와 Local Codex는 서로 다른 선택지로 유지되며, BYOK 제공자 설정은 이 기기의 브라우저 저장소에 보관되고 활성 로컬 실행에만 전달됩니다.</p>
+      <p>로컬은 로컬로 남습니다. Local Codex를 명시적으로 선택하면 실행이 플러그인으로 되돌아가거나 Cloud 로그인 흐름으로 보내지지 않습니다. OpenDesign Cloud와 Local Codex는 서로 다른 선택지로 유지되며, BYOK 제공자 설정은 이 기기의 브라우저 저장소에 보관되고 활성 로컬 실행에만 전달됩니다.</p>
 
       <h2>다른 프롬프트가 아니라 손으로 마무리하세요</h2>
       <p>시각 작업의 마지막 10%는 대개 구체적입니다. 이 요소를 옮기고, 저 텍스트를 좁히고, 이미지를 자르고, 두 개체를 정렬하는 일입니다. 수정할 때마다 채팅을 거치면서 작은 변경이 필요 이상으로 느려졌습니다.</p>
@@ -202,12 +202,12 @@ i18n:
       <p>내보내기는 구성한 결과를 그대로 따릅니다. 이미지 내보내기는 활성 Preview 뷰포트를 존중하고, 프레임워크 덱은 데스크톱 프레임에 맞춰 변형되지 않고 제작된 크기로 캡처됩니다.</p>
 
       <h2>명확한 브리프는 즉시 시작됩니다</h2>
-      <p>Agent는 답에 따라 결과가 달라질 때 질문해야 합니다. 모든 작업을 인터뷰로 시작할 필요는 없습니다. <strong>첫 프롬프트에 이미 충분한 방향이 담겨 있다면 이제 Open Design이 즉시 시작합니다.</strong> 실제로 결정이 빠져 있다면, 그 결정이 중요한 순간에 하나의 초점 있는 질문을 합니다.</p>
+      <p>Agent는 답에 따라 결과가 달라질 때 질문해야 합니다. 모든 작업을 인터뷰로 시작할 필요는 없습니다. <strong>첫 프롬프트에 이미 충분한 방향이 담겨 있다면 이제 OpenDesign이 즉시 시작합니다.</strong> 실제로 결정이 빠져 있다면, 그 결정이 중요한 순간에 하나의 초점 있는 질문을 합니다.</p>
       <p>작업의 리듬이 달라집니다. 좋은 브리프는 즉시 작업이 됩니다. 모호한 브리프는 여전히 필요한 확인을 거치지만, 그 질문은 첫 유용한 결과를 가로막는 대신 프로세스의 구체적인 갈림길에 연결됩니다.</p>
 
       <h2>잘못된 모델 선택은 실행을 낭비하기 전에 실패합니다</h2>
       <p>일부 Codex 모델과 CLI 조합은 함께 작동하지 않는 것으로 알려져 있습니다. 0.17.0은 실행 전에 그런 조합을 감지하고, 유용한 모델 전환 경로를 제공하며, 도구 호출 후 발생하는 타임아웃을 더 정확히 진단합니다. 더는 잘못된 재시도로 유도하지 않습니다.</p>
-      <p>나머지 모델 영역은 경계를 흐리지 않으면서 확장됩니다. GPT-5.5 Fast가 명확한 속도 우선 선택지로 추가되고, Raven이 원클릭 MCP 설정에 합류하며, Open Design은 Windows에서 공식 Grok Build 설치를 자동으로 찾습니다.</p>
+      <p>나머지 모델 영역은 경계를 흐리지 않으면서 확장됩니다. GPT-5.5 Fast가 명확한 속도 우선 선택지로 추가되고, Raven이 원클릭 MCP 설정에 합류하며, OpenDesign은 Windows에서 공식 Grok Build 설치를 자동으로 찾습니다.</p>
 
       <h2>멈춘 업데이트가 더는 막다른 길이 아닙니다</h2>
       <p>업데이트 문제에는 캐시 디렉터리를 손으로 찾지 않아도 되는 복구 경로가 있어야 합니다. 이제 설정에서 손상된 업데이트 캐시를 지우고, 설치된 세대가 안전하지 않은 것으로 확인되면 다시 설치하며, 다운로드된 페이로드로 인한 충돌에서 복구할 수 있습니다. <strong>앱은 마지막으로 작동한 버전으로 롤백한 뒤 다음 정상 업데이트에서 스스로 복구합니다.</strong> 이 작업을 꾸준히 이어 온 <a href="https://github.com/PerishCode">@PerishCode</a>에게 감사드립니다.</p>
@@ -234,7 +234,7 @@ i18n:
           <tr><th>당신이……</th><th>여기서 시작하세요</th></tr>
         </thead>
         <tbody>
-          <tr><td>이미 Codex를 사용하고 있다면</td><td>Open Design 플러그인을 설치하고, 구체적인 비주얼 브리프로 <code>@open-design</code>을 호출한 뒤 결과를 Preview 또는 Studio에서 여세요</td></tr>
+          <tr><td>이미 Codex를 사용하고 있다면</td><td>OpenDesign 플러그인을 설치하고, 구체적인 비주얼 브리프로 <code>@open-design</code>을 호출한 뒤 결과를 Preview 또는 Studio에서 여세요</td></tr>
           <tr><td>생성된 작업을 다듬고 있다면</td><td>다른 프롬프트로 설명하는 대신 요소 하나를 선택하고 마지막 시각적 수정을 직접 마무리하세요</td></tr>
           <tr><td>로컬에서 작업한다면</td><td>Local Codex를 명시적으로 선택하고, 기기에 저장된 BYOK 설정으로 실행이 로컬에 머무는지 확인하세요</td></tr>
           <tr><td>프레젠테이션을 만든다면</td><td>브리프에서 개요, 편집, 내보내기까지 전체 워크플로에 Codex Slides를 사용해 보세요</td></tr>
@@ -243,36 +243,36 @@ i18n:
       </table>
 
       <h2>다음에 할 일</h2>
-      <p>Codex는 이미 만들고 싶은 것을 설명하는 곳이었습니다. 0.17.0은 결과를 보고 다듬을 수 있는 공간을 제공합니다. 실제 대화에서 Open Design을 호출하고, 명확한 브리프라면 바로 시작한 뒤, 또 다른 문단을 쓰는 대신 손으로 작은 수정 하나를 해 보세요.</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Open Design 다운로드</a>.</p>
+      <p>Codex는 이미 만들고 싶은 것을 설명하는 곳이었습니다. 0.17.0은 결과를 보고 다듬을 수 있는 공간을 제공합니다. 실제 대화에서 OpenDesign을 호출하고, 명확한 브리프라면 바로 시작한 뒤, 또 다른 문단을 쓰는 대신 손으로 작은 수정 하나를 해 보세요.</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">OpenDesign 다운로드</a>.</p>
       <p>11일 동안 62개의 PR. 대화, 아티팩트, 캔버스를 하나의 워크플로로 연결한 23명이 만들었습니다. 디자인 워크스페이스는 더 이상 Codex 옆에 따로 있지 않습니다. Codex가 그곳에 닿을 수 있습니다. 보고 있습니다. 🚀</p>
 
       <h2>함께 읽기</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0: 확실한 전달</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1: 더 또렷한 시야, 더 긴 몰입</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0: 비용은 줄이고 출시는 빠르게</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0: 확실한 전달</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1: 더 또렷한 시야, 더 긴 몰입</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0: 비용은 줄이고 출시는 빠르게</a></li>
       </ul>
   de:
-    title: 'Open Design 0.17.0: Open Design für Codex'
+    title: 'OpenDesign 0.17.0: OpenDesign für Codex'
     summary: 'open-design-v0.17.0 — 62 PRs von 23 Mitwirkenden in 11 Tagen. Codex hat jetzt einen eigenen Design-Workspace: Rufen Sie @open-design aus einer Unterhaltung auf, verwandeln Sie ein Briefing in ein echtes Preview- oder Studio-Artefakt und vollenden Sie die visuellen Details direkt auf der Canvas, statt jede kleine Korrektur mit einem neuen Prompt zu umschreiben.'
     category: 'Produkt'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>, veröffentlicht am 3. August 2026. <strong>62 PRs von 23 Mitwirkenden in 11 Tagen.</strong> Codex hat jetzt einen eigenen Design-Workspace. Rufen Sie <code>@open-design</code> aus einer Codex-Unterhaltung auf, verwandeln Sie eine Idee oder ein Briefing in ein echtes bearbeitbares Artefakt und gestalten und verfeinern Sie es anschließend in Open Design Studio weiter, ohne den Codex-Workflow zu verlassen.</p>
+      <p><code>open-design-v0.17.0</code>, veröffentlicht am 3. August 2026. <strong>62 PRs von 23 Mitwirkenden in 11 Tagen.</strong> Codex hat jetzt einen eigenen Design-Workspace. Rufen Sie <code>@open-design</code> aus einer Codex-Unterhaltung auf, verwandeln Sie eine Idee oder ein Briefing in ein echtes bearbeitbares Artefakt und gestalten und verfeinern Sie es anschließend in OpenDesign Studio weiter, ohne den Codex-Workflow zu verlassen.</p>
       <p>Sie möchten jede Änderung sehen? Lesen Sie die <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">vollständigen Release Notes auf GitHub</a>. Hier geht es um die Produktgeschichte: wie Codex von einer Unterhaltung zu einem visuellen Artefakt gelangt, warum die letzten 10 % keinen weiteren Prompt mehr brauchen und was auf diesem Weg zuverlässiger geworden ist.</p>
 
       <h2>Codex hat einen eigenen Design-Workspace</h2>
-      <p>Coding-Agents können Absichten gut in Dateien verwandeln, doch visuelle Arbeit verlangte bisher immer nach einer zweiten Umgebung: die Idee im Chat erklären, das Ergebnis in ein Design-Tool übertragen und dann jede Korrektur wieder in einen weiteren Prompt übersetzen. In 0.17.0 <strong>können Codex Desktop und CLI Open Design als vollständige Kreativ-Engine aufrufen.</strong> Die Unterhaltung und der Design-Workspace werden zu einem durchgängigen Workflow.</p>
-      <p>Beginnen Sie mit <code>@open-design</code>. Bestätigen Sie ein visuelles Briefing, wählen Sie Open Design Cloud oder eine unterstützte lokale Runtime und erhalten Sie ein echtes Preview- oder Studio-Ergebnis. Das Ergebnis ist kein Screenshot, der in die Unterhaltung eingefügt wird. Es ist ein Artefakt, das Sie öffnen, prüfen, bearbeiten, exportieren und weiter verfeinern können.</p>
+      <p>Coding-Agents können Absichten gut in Dateien verwandeln, doch visuelle Arbeit verlangte bisher immer nach einer zweiten Umgebung: die Idee im Chat erklären, das Ergebnis in ein Design-Tool übertragen und dann jede Korrektur wieder in einen weiteren Prompt übersetzen. In 0.17.0 <strong>können Codex Desktop und CLI OpenDesign als vollständige Kreativ-Engine aufrufen.</strong> Die Unterhaltung und der Design-Workspace werden zu einem durchgängigen Workflow.</p>
+      <p>Beginnen Sie mit <code>@open-design</code>. Bestätigen Sie ein visuelles Briefing, wählen Sie OpenDesign Cloud oder eine unterstützte lokale Runtime und erhalten Sie ein echtes Preview- oder Studio-Ergebnis. Das Ergebnis ist kein Screenshot, der in die Unterhaltung eingefügt wird. Es ist ein Artefakt, das Sie öffnen, prüfen, bearbeiten, exportieren und weiter verfeinern können.</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="Eine Agent-Unterhaltung geht in eine bearbeitbare Design-Canvas und eine stabile Vorschau über; das verbundene Artefakt liegt in einem präzisen grünen Auswahlrahmen auf nahezu weißem redaktionellem Grund" />
-        <figcaption>Rufen Sie Open Design aus Codex auf, stimmen Sie das Briefing ab und erhalten Sie ein echtes Preview- oder Studio-Artefakt statt eines Bildes davon.</figcaption>
+        <figcaption>Rufen Sie OpenDesign aus Codex auf, stimmen Sie das Briefing ab und erhalten Sie ein echtes Preview- oder Studio-Artefakt statt eines Bildes davon.</figcaption>
       </figure>
 
       <h2>Die Kreativ-Runtime tritt in den Hintergrund</h2>
-      <p>Sie sollten nicht noch eine zweite App geöffnet haben müssen, nur damit die Integration funktioniert. <strong>Die signierte Open Design-Runtime startet ohne Oberfläche, wenn Codex sie braucht</strong>; es gibt also kein zusätzliches Fenster, das beaufsichtigt werden muss, und keinen lokalen Stack, den Sie von Hand verdrahten müssen.</p>
+      <p>Sie sollten nicht noch eine zweite App geöffnet haben müssen, nur damit die Integration funktioniert. <strong>Die signierte OpenDesign-Runtime startet ohne Oberfläche, wenn Codex sie braucht</strong>; es gibt also kein zusätzliches Fenster, das beaufsichtigt werden muss, und keinen lokalen Stack, den Sie von Hand verdrahten müssen.</p>
       <p>Auch der Fehlerpfad ist praktisch. Wenn Studio in einem externen Host nicht sauber geladen werden kann, liefert Codex trotzdem sofort die stabile Vorschau. Sie erhalten zuerst die Arbeit und können sie bei Bedarf im vollständigen Workspace öffnen, statt zuzusehen, wie der gesamte Lauf fehlschlägt, weil eine einzelne Darstellungsoberfläche nicht initialisiert wurde.</p>
-      <p>Lokal bleibt lokal. Wenn Sie ausdrücklich Local Codex wählen, führt der Lauf nicht mehr zurück in das Plugin und schickt Sie nicht in einen Cloud-Anmeldeprozess. Open Design Cloud und Local Codex bleiben klar getrennte Optionen, und die BYOK-Provider-Konfiguration verbleibt im Browser-Speicher dieses Geräts und wird nur an den aktiven lokalen Lauf übergeben.</p>
+      <p>Lokal bleibt lokal. Wenn Sie ausdrücklich Local Codex wählen, führt der Lauf nicht mehr zurück in das Plugin und schickt Sie nicht in einen Cloud-Anmeldeprozess. OpenDesign Cloud und Local Codex bleiben klar getrennte Optionen, und die BYOK-Provider-Konfiguration verbleibt im Browser-Speicher dieses Geräts und wird nur an den aktiven lokalen Lauf übergeben.</p>
 
       <h2>Vollenden Sie die Arbeit mit den Händen, nicht mit einem weiteren Prompt</h2>
       <p>Die letzten 10 % visueller Arbeit sind meist konkret: dieses Element verschieben, jenen Text straffen, das Bild zuschneiden, diese beiden Objekte ausrichten. Jede Korrektur über den Chat zu senden, machte kleine Änderungen langsamer als nötig.</p>
@@ -284,12 +284,12 @@ i18n:
       <p>Exporte folgen dem Ergebnis, das Sie komponiert haben. Der Bildexport berücksichtigt den aktiven Preview-Viewport, und Framework-Decks werden in ihrer vorgesehenen Größe erfasst, statt durch den Desktop-Rahmen umgeformt zu werden.</p>
 
       <h2>Klare Briefings starten sofort</h2>
-      <p>Ein Agent sollte eine Frage stellen, wenn die Antwort das Ergebnis verändert, nicht weil jede Aufgabe mit einem Interview beginnen muss. <strong>Open Design startet jetzt sofort, wenn der erste Prompt bereits genügend Richtung vorgibt.</strong> Fehlt eine echte Entscheidung, stellt es genau in dem Moment eine fokussierte Frage, in dem diese Entscheidung relevant wird.</p>
+      <p>Ein Agent sollte eine Frage stellen, wenn die Antwort das Ergebnis verändert, nicht weil jede Aufgabe mit einem Interview beginnen muss. <strong>OpenDesign startet jetzt sofort, wenn der erste Prompt bereits genügend Richtung vorgibt.</strong> Fehlt eine echte Entscheidung, stellt es genau in dem Moment eine fokussierte Frage, in dem diese Entscheidung relevant wird.</p>
       <p>Das verändert den Rhythmus. Aus einem starken Briefing wird sofort Arbeit. Ein mehrdeutiges Briefing erhält weiterhin die nötige Klärung, doch die Frage ist an eine konkrete Verzweigung im Prozess gebunden, statt zwischen Ihnen und dem ersten nützlichen Ergebnis zu stehen.</p>
 
       <h2>Ungeeignete Modellkombinationen scheitern, bevor sie einen Lauf verschwenden</h2>
       <p>Einige Kombinationen aus Codex-Modell und CLI funktionieren bekanntermaßen nicht miteinander. 0.17.0 erkennt diese Kombinationen vor dem Start, bietet einen hilfreichen Weg zum Modellwechsel und diagnostiziert Timeouts nach Tool-Aufrufen genauer, statt Sie durch irreführende Wiederholungsversuche zu schicken.</p>
-      <p>Die übrige Modelloberfläche wächst, ohne die Grenzen zu verwischen: GPT-5.5 Fast kommt als ausdrücklich geschwindigkeitsorientierte Option hinzu, Raven ergänzt die MCP-Einrichtung mit einem Klick, und Open Design erkennt die offizielle Grok Build-Installation unter Windows automatisch.</p>
+      <p>Die übrige Modelloberfläche wächst, ohne die Grenzen zu verwischen: GPT-5.5 Fast kommt als ausdrücklich geschwindigkeitsorientierte Option hinzu, Raven ergänzt die MCP-Einrichtung mit einem Klick, und OpenDesign erkennt die offizielle Grok Build-Installation unter Windows automatisch.</p>
 
       <h2>Ein festgefahrenes Update ist keine Sackgasse mehr</h2>
       <p>Ein Update-Problem sollte einen Wiederherstellungsweg bieten, bei dem Sie nicht von Hand nach einem Cache-Verzeichnis suchen müssen. In den Einstellungen lässt sich jetzt ein beschädigter Update-Cache leeren, eine bekanntermaßen unsichere installierte Generation neu installieren und nach dem Absturz eines heruntergeladenen Payloads wiederherstellen. <strong>Die App kehrt zur letzten funktionierenden Version zurück und repariert sich beim nächsten fehlerfreien Update selbst.</strong> Danke <a href="https://github.com/PerishCode">@PerishCode</a> für die ausdauernde Arbeit daran.</p>
@@ -316,7 +316,7 @@ i18n:
           <tr><th>Wenn Sie …</th><th>Fangen Sie hier an</th></tr>
         </thead>
         <tbody>
-          <tr><td>Codex bereits verwenden</td><td>Installieren Sie das Open Design-Plugin, rufen Sie <code>@open-design</code> mit einem konkreten visuellen Briefing auf und öffnen Sie das Ergebnis in Preview oder Studio.</td></tr>
+          <tr><td>Codex bereits verwenden</td><td>Installieren Sie das OpenDesign-Plugin, rufen Sie <code>@open-design</code> mit einem konkreten visuellen Briefing auf und öffnen Sie das Ergebnis in Preview oder Studio.</td></tr>
           <tr><td>generierte Arbeit verfeinern</td><td>Wählen Sie ein Element aus und nehmen Sie die letzten visuellen Korrekturen direkt vor, statt sie in einem weiteren Prompt zu beschreiben.</td></tr>
           <tr><td>lokal arbeiten</td><td>Wählen Sie ausdrücklich Local Codex und bestätigen Sie, dass der Lauf mit Ihrer auf dem Gerät gespeicherten BYOK-Konfiguration lokal bleibt.</td></tr>
           <tr><td>Präsentationen erstellen</td><td>Probieren Sie Codex Slides für den vollständigen Workflow vom Briefing über die Gliederung und Bearbeitung bis zum Export aus.</td></tr>
@@ -325,36 +325,36 @@ i18n:
       </table>
 
       <h2>Was als Nächstes zu tun ist</h2>
-      <p>Codex war bereits ein Ort, um zu beschreiben, was Sie bauen wollten. 0.17.0 gibt Codex einen Ort, an dem Sie das Ergebnis sehen und gestalten können. Rufen Sie Open Design aus einer echten Unterhaltung auf, lassen Sie ein klares Briefing sofort starten und nehmen Sie dann eine kleine Korrektur mit den Händen statt mit einem weiteren Absatz vor.</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Open Design herunterladen</a>.</p>
+      <p>Codex war bereits ein Ort, um zu beschreiben, was Sie bauen wollten. 0.17.0 gibt Codex einen Ort, an dem Sie das Ergebnis sehen und gestalten können. Rufen Sie OpenDesign aus einer echten Unterhaltung auf, lassen Sie ein klares Briefing sofort starten und nehmen Sie dann eine kleine Korrektur mit den Händen statt mit einem weiteren Absatz vor.</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">OpenDesign herunterladen</a>.</p>
       <p>62 PRs in 11 Tagen von 23 Menschen, die Unterhaltung, Artefakt und Canvas zu einem Workflow verbunden haben. Der Design-Workspace steht nicht länger neben Codex. Codex kann ihn erreichen. Wir sehen Sie. 🚀</p>
 
       <h2>Weiterführende Lektüre</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0: verlässliche Auslieferung</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1: schärfere Sicht, längerer Flow</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0: weniger Kosten, schneller ausliefern</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0: verlässliche Auslieferung</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1: schärfere Sicht, längerer Flow</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0: weniger Kosten, schneller ausliefern</a></li>
       </ul>
   fr:
-    title: 'Open Design 0.17.0 : Open Design pour Codex'
+    title: 'OpenDesign 0.17.0 : OpenDesign pour Codex'
     summary: 'open-design-v0.17.0 — 62 PR de 23 contributeurs en 11 jours. Codex dispose désormais de son propre espace de design : appelez @open-design depuis une conversation, transformez un brief en véritable artefact Preview ou Studio, puis finalisez les détails visuels directement sur le canvas au lieu de reformuler chaque petite correction dans un nouveau prompt.'
     category: 'Produit'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>, publié le 3 août 2026. <strong>62 PR de 23 contributeurs en 11 jours.</strong> Codex dispose désormais de son propre espace de design. Appelez <code>@open-design</code> depuis une conversation Codex, transformez une idée ou un brief en véritable artefact modifiable, puis continuez à le créer et à l'affiner dans Open Design Studio sans quitter le workflow Codex.</p>
+      <p><code>open-design-v0.17.0</code>, publié le 3 août 2026. <strong>62 PR de 23 contributeurs en 11 jours.</strong> Codex dispose désormais de son propre espace de design. Appelez <code>@open-design</code> depuis une conversation Codex, transformez une idée ou un brief en véritable artefact modifiable, puis continuez à le créer et à l'affiner dans OpenDesign Studio sans quitter le workflow Codex.</p>
       <p>Vous voulez connaître chaque changement ? Consultez les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">notes de version complètes sur GitHub</a>. Voici l'histoire du produit : comment Codex passe d'une conversation à un artefact visuel, pourquoi les derniers 10 % ne nécessitent plus un nouveau prompt et ce qui est devenu plus fiable en chemin.</p>
 
       <h2>Codex dispose de son propre espace de design</h2>
-      <p>Les agents de code savent transformer une intention en fichiers, mais le travail visuel a toujours exigé un second environnement : expliquer l'idée dans le chat, déplacer le résultat dans un outil de design, puis traduire chaque correction en un nouveau prompt. Dans 0.17.0, <strong>Codex Desktop et CLI peuvent appeler Open Design comme un moteur créatif complet.</strong> La conversation et l'espace de design deviennent un seul workflow continu.</p>
-      <p>Commencez avec <code>@open-design</code>. Validez un brief visuel, choisissez Open Design Cloud ou un runtime local pris en charge et obtenez un véritable résultat dans Preview ou Studio. Le résultat n'est pas une capture d'écran collée dans la conversation. C'est un artefact que vous pouvez ouvrir, inspecter, modifier, exporter et continuer à affiner.</p>
+      <p>Les agents de code savent transformer une intention en fichiers, mais le travail visuel a toujours exigé un second environnement : expliquer l'idée dans le chat, déplacer le résultat dans un outil de design, puis traduire chaque correction en un nouveau prompt. Dans 0.17.0, <strong>Codex Desktop et CLI peuvent appeler OpenDesign comme un moteur créatif complet.</strong> La conversation et l'espace de design deviennent un seul workflow continu.</p>
+      <p>Commencez avec <code>@open-design</code>. Validez un brief visuel, choisissez OpenDesign Cloud ou un runtime local pris en charge et obtenez un véritable résultat dans Preview ou Studio. Le résultat n'est pas une capture d'écran collée dans la conversation. C'est un artefact que vous pouvez ouvrir, inspecter, modifier, exporter et continuer à affiner.</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="Une conversation avec un agent se prolonge dans un canvas de design modifiable et un aperçu stable ; l'artefact connecté est contenu dans un cadre de sélection vert précis sur un fond éditorial presque blanc" />
-        <figcaption>Appelez Open Design depuis Codex, mettez-vous d'accord sur le brief et obtenez un véritable artefact Preview ou Studio plutôt qu'une image de celui-ci.</figcaption>
+        <figcaption>Appelez OpenDesign depuis Codex, mettez-vous d'accord sur le brief et obtenez un véritable artefact Preview ou Studio plutôt qu'une image de celui-ci.</figcaption>
       </figure>
 
       <h2>Le runtime créatif sait se faire oublier</h2>
-      <p>Vous ne devriez pas avoir besoin d'ouvrir une deuxième app uniquement pour faire fonctionner l'intégration. <strong>Le runtime Open Design signé démarre sans interface lorsque Codex en a besoin</strong> : aucune fenêtre supplémentaire à surveiller et aucune stack locale à connecter à la main.</p>
+      <p>Vous ne devriez pas avoir besoin d'ouvrir une deuxième app uniquement pour faire fonctionner l'intégration. <strong>Le runtime OpenDesign signé démarre sans interface lorsque Codex en a besoin</strong> : aucune fenêtre supplémentaire à surveiller et aucune stack locale à connecter à la main.</p>
       <p>Le parcours en cas d'échec est lui aussi pragmatique. Si Studio ne peut pas se charger correctement dans un hôte externe, Codex livre tout de même immédiatement l'aperçu stable. Vous obtenez d'abord le travail et pouvez l'ouvrir dans l'espace complet si nécessaire, au lieu de voir toute l'exécution échouer parce qu'une seule surface de présentation ne s'est pas initialisée.</p>
-      <p>Le local reste local. Lorsque vous choisissez explicitement Local Codex, l'exécution ne reboucle plus vers le plugin et ne vous envoie pas dans un parcours de connexion Cloud. Open Design Cloud et Local Codex restent deux choix distincts, et la configuration du fournisseur BYOK demeure dans le stockage du navigateur de cet appareil, transmise uniquement à l'exécution locale active.</p>
+      <p>Le local reste local. Lorsque vous choisissez explicitement Local Codex, l'exécution ne reboucle plus vers le plugin et ne vous envoie pas dans un parcours de connexion Cloud. OpenDesign Cloud et Local Codex restent deux choix distincts, et la configuration du fournisseur BYOK demeure dans le stockage du navigateur de cet appareil, transmise uniquement à l'exécution locale active.</p>
 
       <h2>Finalisez avec vos mains, pas avec un nouveau prompt</h2>
       <p>Les derniers 10 % du travail visuel sont généralement concrets : déplacer cet élément, resserrer ce texte, recadrer l'image, aligner ces deux objets. Envoyer chaque correction via le chat rendait les petits changements plus lents qu'ils ne devraient l'être.</p>
@@ -366,12 +366,12 @@ i18n:
       <p>Les exports respectent le résultat que vous avez composé. L'export d'image suit le viewport Preview actif, et les decks basés sur un framework sont capturés dans leur taille d'origine au lieu d'être remodelés par le cadre du desktop.</p>
 
       <h2>Les briefs clairs démarrent immédiatement</h2>
-      <p>Un agent devrait poser une question lorsque la réponse change le résultat, pas parce que chaque tâche doit commencer par un entretien. <strong>Open Design démarre désormais immédiatement lorsque le premier prompt donne déjà assez de direction.</strong> Lorsqu'une véritable décision manque, il pose une question ciblée au moment où cette décision devient pertinente.</p>
+      <p>Un agent devrait poser une question lorsque la réponse change le résultat, pas parce que chaque tâche doit commencer par un entretien. <strong>OpenDesign démarre désormais immédiatement lorsque le premier prompt donne déjà assez de direction.</strong> Lorsqu'une véritable décision manque, il pose une question ciblée au moment où cette décision devient pertinente.</p>
       <p>Le rythme change. Un brief solide se transforme tout de suite en travail. Un brief ambigu reçoit toujours les précisions nécessaires, mais la question est liée à une bifurcation concrète du processus au lieu de se dresser entre vous et le premier résultat utile.</p>
 
       <h2>Les mauvais choix de modèle échouent avant de gaspiller une exécution</h2>
       <p>Certaines combinaisons de modèle Codex et de CLI sont connues pour être incompatibles. 0.17.0 les détecte avant le lancement, propose un parcours utile pour changer de modèle et diagnostique plus précisément les timeouts après un appel d'outil au lieu de vous entraîner dans des tentatives trompeuses.</p>
-      <p>Le reste de la gamme de modèles s'élargit sans brouiller les frontières : GPT-5.5 Fast arrive comme choix explicite privilégiant la vitesse, Raven rejoint la configuration MCP en un clic, et Open Design détecte automatiquement l'installation officielle de Grok Build sous Windows.</p>
+      <p>Le reste de la gamme de modèles s'élargit sans brouiller les frontières : GPT-5.5 Fast arrive comme choix explicite privilégiant la vitesse, Raven rejoint la configuration MCP en un clic, et OpenDesign détecte automatiquement l'installation officielle de Grok Build sous Windows.</p>
 
       <h2>Une mise à jour bloquée n'est plus une impasse</h2>
       <p>Un problème de mise à jour devrait offrir une voie de récupération qui n'exige pas de trouver un dossier de cache à la main. Les réglages peuvent désormais vider un cache de mise à jour défectueux, réinstaller lorsqu'une génération installée est connue pour être dangereuse et récupérer après le crash d'un payload téléchargé. <strong>L'app revient à la dernière version fonctionnelle et se répare lors de la prochaine mise à jour saine.</strong> Merci à <a href="https://github.com/PerishCode">@PerishCode</a> pour ce travail soutenu.</p>
@@ -398,7 +398,7 @@ i18n:
           <tr><th>Si vous…</th><th>Commencez ici</th></tr>
         </thead>
         <tbody>
-          <tr><td>Utilisez déjà Codex</td><td>Installez le plugin Open Design, appelez <code>@open-design</code> avec un brief visuel concret et ouvrez le résultat dans Preview ou Studio.</td></tr>
+          <tr><td>Utilisez déjà Codex</td><td>Installez le plugin OpenDesign, appelez <code>@open-design</code> avec un brief visuel concret et ouvrez le résultat dans Preview ou Studio.</td></tr>
           <tr><td>Affinez un travail généré</td><td>Sélectionnez un élément et terminez directement les dernières corrections visuelles au lieu de les décrire dans un nouveau prompt.</td></tr>
           <tr><td>Travaillez en local</td><td>Choisissez explicitement Local Codex et vérifiez que l'exécution reste locale avec votre configuration BYOK stockée sur l'appareil.</td></tr>
           <tr><td>Créez des présentations</td><td>Essayez Codex Slides pour le workflow complet, du brief au plan, puis de la modification à l'export.</td></tr>
@@ -407,36 +407,36 @@ i18n:
       </table>
 
       <h2>La suite</h2>
-      <p>Codex était déjà un endroit où décrire ce que vous vouliez créer. 0.17.0 lui offre un endroit où voir et façonner le résultat. Appelez Open Design depuis une vraie conversation, laissez un brief clair démarrer immédiatement, puis effectuez une petite correction avec vos mains plutôt qu'avec un paragraphe supplémentaire.</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Télécharger Open Design</a>.</p>
+      <p>Codex était déjà un endroit où décrire ce que vous vouliez créer. 0.17.0 lui offre un endroit où voir et façonner le résultat. Appelez OpenDesign depuis une vraie conversation, laissez un brief clair démarrer immédiatement, puis effectuez une petite correction avec vos mains plutôt qu'avec un paragraphe supplémentaire.</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Télécharger OpenDesign</a>.</p>
       <p>62 PR en 11 jours, par 23 personnes qui ont relié la conversation, l'artefact et le canvas en un seul workflow. L'espace de design ne se trouve plus à côté de Codex. Codex peut y accéder. Nous vous voyons. 🚀</p>
 
       <h2>À lire aussi</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0 : une livraison fiable</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 : une vision plus nette, un flow plus long</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 : moins de coûts, une livraison plus rapide</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0 : une livraison fiable</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1 : une vision plus nette, un flow plus long</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0 : moins de coûts, une livraison plus rapide</a></li>
       </ul>
   ru:
-    title: 'Open Design 0.17.0: Open Design для Codex'
+    title: 'OpenDesign 0.17.0: OpenDesign для Codex'
     summary: 'open-design-v0.17.0 — 62 PR от 23 участников за 11 дней. Теперь у Codex есть собственное пространство для дизайна: вызовите @open-design из диалога, превратите бриф в настоящий артефакт Preview или Studio и завершите визуальные детали прямо на холсте, вместо того чтобы описывать каждую небольшую правку новым промптом.'
     category: 'Продукт'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>, опубликован 3 августа 2026 года. <strong>62 PR от 23 участников за 11 дней.</strong> Теперь у Codex есть собственное пространство для дизайна. Вызовите <code>@open-design</code> из диалога с Codex, превратите идею или бриф в настоящий редактируемый артефакт, а затем продолжайте создавать и дорабатывать его в Open Design Studio, не покидая рабочий процесс Codex.</p>
+      <p><code>open-design-v0.17.0</code>, опубликован 3 августа 2026 года. <strong>62 PR от 23 участников за 11 дней.</strong> Теперь у Codex есть собственное пространство для дизайна. Вызовите <code>@open-design</code> из диалога с Codex, превратите идею или бриф в настоящий редактируемый артефакт, а затем продолжайте создавать и дорабатывать его в OpenDesign Studio, не покидая рабочий процесс Codex.</p>
       <p>Хотите увидеть все изменения? Прочитайте <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">полные примечания к релизу на GitHub</a>. А здесь — история продукта: как Codex переходит от диалога к визуальному артефакту, почему последние 10 % больше не требуют нового промпта и что по пути стало надёжнее.</p>
 
       <h2>У Codex есть собственное пространство для дизайна</h2>
-      <p>Агенты для программирования хорошо превращают намерения в файлы, но визуальная работа всегда требовала второй среды: объяснить идею в чате, перенести результат в инструмент дизайна, а затем снова переводить каждую правку в очередной промпт. В 0.17.0 <strong>Codex Desktop и CLI могут вызывать Open Design как полноценный творческий движок.</strong> Диалог и пространство для дизайна превращаются в единый непрерывный рабочий процесс.</p>
-      <p>Начните с <code>@open-design</code>. Подтвердите визуальный бриф, выберите Open Design Cloud или поддерживаемый локальный runtime и получите настоящий результат в Preview или Studio. Результат — не скриншот, вставленный в диалог. Это артефакт, который можно открыть, проверить, отредактировать, экспортировать и продолжить дорабатывать.</p>
+      <p>Агенты для программирования хорошо превращают намерения в файлы, но визуальная работа всегда требовала второй среды: объяснить идею в чате, перенести результат в инструмент дизайна, а затем снова переводить каждую правку в очередной промпт. В 0.17.0 <strong>Codex Desktop и CLI могут вызывать OpenDesign как полноценный творческий движок.</strong> Диалог и пространство для дизайна превращаются в единый непрерывный рабочий процесс.</p>
+      <p>Начните с <code>@open-design</code>. Подтвердите визуальный бриф, выберите OpenDesign Cloud или поддерживаемый локальный runtime и получите настоящий результат в Preview или Studio. Результат — не скриншот, вставленный в диалог. Это артефакт, который можно открыть, проверить, отредактировать, экспортировать и продолжить дорабатывать.</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="Диалог с агентом переходит в редактируемый дизайн-холст и стабильный предпросмотр; связанный артефакт заключён в точную зелёную рамку выделения на почти белом редакционном фоне" />
-        <figcaption>Вызовите Open Design из Codex, согласуйте бриф и получите настоящий артефакт Preview или Studio, а не его изображение.</figcaption>
+        <figcaption>Вызовите OpenDesign из Codex, согласуйте бриф и получите настоящий артефакт Preview или Studio, а не его изображение.</figcaption>
       </figure>
 
       <h2>Творческий runtime не мешает работе</h2>
-      <p>Вам не должно требоваться открывать второе приложение только ради работы интеграции. <strong>Подписанный runtime Open Design запускается без интерфейса, когда он нужен Codex</strong>, поэтому следить за лишним окном не приходится, а локальный стек не нужно соединять вручную.</p>
+      <p>Вам не должно требоваться открывать второе приложение только ради работы интеграции. <strong>Подписанный runtime OpenDesign запускается без интерфейса, когда он нужен Codex</strong>, поэтому следить за лишним окном не приходится, а локальный стек не нужно соединять вручную.</p>
       <p>Сценарий сбоя тоже практичен. Если Studio не удаётся корректно загрузить во внешнем хосте, Codex всё равно сразу предоставляет стабильный предпросмотр. Сначала вы получаете результат и при необходимости можете открыть его в полном рабочем пространстве, вместо того чтобы наблюдать, как весь запуск завершается неудачей из-за того, что одна поверхность представления не инициализировалась.</p>
-      <p>Локальное остаётся локальным. Когда вы явно выбираете Local Codex, запуск больше не возвращается в плагин и не перенаправляет вас в процесс входа в Cloud. Open Design Cloud и Local Codex остаются отдельными вариантами, а конфигурация провайдера BYOK хранится в браузере этого устройства и передаётся только активному локальному запуску.</p>
+      <p>Локальное остаётся локальным. Когда вы явно выбираете Local Codex, запуск больше не возвращается в плагин и не перенаправляет вас в процесс входа в Cloud. OpenDesign Cloud и Local Codex остаются отдельными вариантами, а конфигурация провайдера BYOK хранится в браузере этого устройства и передаётся только активному локальному запуску.</p>
 
       <h2>Завершайте работу руками, а не новым промптом</h2>
       <p>Последние 10 % визуальной работы обычно вполне конкретны: передвинуть этот элемент, сделать этот текст плотнее, обрезать изображение, выровнять два объекта. Отправка каждой правки через чат замедляла небольшие изменения сильнее, чем следовало.</p>
@@ -448,12 +448,12 @@ i18n:
       <p>Экспорт следует созданному вами результату. Экспорт изображений учитывает активный viewport Preview, а deck-файлы на основе фреймворков захватываются в авторском размере, а не подгоняются под рамку desktop-приложения.</p>
 
       <h2>Чёткие брифы запускаются сразу</h2>
-      <p>Агент должен задавать вопрос, когда ответ влияет на результат, а не потому, что каждая задача обязана начинаться с интервью. <strong>Теперь Open Design начинает работу сразу, если уже в первом промпте достаточно указаний.</strong> Если важного решения не хватает, он задаёт один конкретный вопрос именно в тот момент, когда это решение становится существенным.</p>
+      <p>Агент должен задавать вопрос, когда ответ влияет на результат, а не потому, что каждая задача обязана начинаться с интервью. <strong>Теперь OpenDesign начинает работу сразу, если уже в первом промпте достаточно указаний.</strong> Если важного решения не хватает, он задаёт один конкретный вопрос именно в тот момент, когда это решение становится существенным.</p>
       <p>Это меняет ритм. Сильный бриф сразу превращается в работу. Неоднозначный бриф по-прежнему получает необходимые уточнения, но вопрос привязан к конкретной развилке процесса, а не стоит между вами и первым полезным результатом.</p>
 
       <h2>Неудачный выбор модели останавливается до того, как запуск будет потрачен впустую</h2>
       <p>Известно, что некоторые сочетания модели Codex и CLI не работают вместе. 0.17.0 выявляет их до запуска, предлагает полезный способ переключить модель и точнее диагностирует таймауты после вызова инструмента, вместо того чтобы направлять вас по кругу ошибочных повторных попыток.</p>
-      <p>Остальная поверхность моделей расширяется, не размывая границы: GPT-5.5 Fast становится отдельным выбором с приоритетом скорости, Raven присоединяется к настройке MCP в один клик, а Open Design автоматически обнаруживает официальную установку Grok Build в Windows.</p>
+      <p>Остальная поверхность моделей расширяется, не размывая границы: GPT-5.5 Fast становится отдельным выбором с приоритетом скорости, Raven присоединяется к настройке MCP в один клик, а OpenDesign автоматически обнаруживает официальную установку Grok Build в Windows.</p>
 
       <h2>Зависшее обновление больше не тупик</h2>
       <p>Проблема с обновлением должна иметь путь восстановления, не требующий вручную искать папку кэша. Теперь в настройках можно очистить повреждённый кэш обновлений, выполнить переустановку, если установленная генерация признана небезопасной, и восстановиться после сбоя загруженного payload. <strong>Приложение откатывается до последней рабочей версии и самостоятельно восстанавливается при следующем исправном обновлении.</strong> Спасибо <a href="https://github.com/PerishCode">@PerishCode</a> за продолжительную работу над этим.</p>
@@ -480,7 +480,7 @@ i18n:
           <tr><th>Если вы…</th><th>Начните здесь</th></tr>
         </thead>
         <tbody>
-          <tr><td>Уже используете Codex</td><td>Установите плагин Open Design, вызовите <code>@open-design</code> с конкретным визуальным брифом и откройте результат в Preview или Studio.</td></tr>
+          <tr><td>Уже используете Codex</td><td>Установите плагин OpenDesign, вызовите <code>@open-design</code> с конкретным визуальным брифом и откройте результат в Preview или Studio.</td></tr>
           <tr><td>Дорабатываете сгенерированный результат</td><td>Выберите один элемент и внесите последние визуальные правки напрямую, вместо того чтобы описывать их в новом промпте.</td></tr>
           <tr><td>Работаете локально</td><td>Явно выберите Local Codex и убедитесь, что запуск остаётся локальным с вашей конфигурацией BYOK, сохранённой на устройстве.</td></tr>
           <tr><td>Создаёте презентации</td><td>Попробуйте Codex Slides для полного процесса: от брифа к структуре, затем к редактированию и экспорту.</td></tr>
@@ -489,36 +489,36 @@ i18n:
       </table>
 
       <h2>Что делать дальше</h2>
-      <p>Codex уже был местом, где можно описать, что вы хотите создать. 0.17.0 даёт ему место, где можно увидеть и сформировать результат. Вызовите Open Design из настоящего диалога, позвольте чёткому брифу запуститься сразу, а затем внесите одну небольшую правку руками, а не ещё одним абзацем.</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Скачать Open Design</a>.</p>
+      <p>Codex уже был местом, где можно описать, что вы хотите создать. 0.17.0 даёт ему место, где можно увидеть и сформировать результат. Вызовите OpenDesign из настоящего диалога, позвольте чёткому брифу запуститься сразу, а затем внесите одну небольшую правку руками, а не ещё одним абзацем.</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Скачать OpenDesign</a>.</p>
       <p>62 PR за 11 дней от 23 человек, которые соединили диалог, артефакт и холст в один рабочий процесс. Пространство для дизайна больше не находится рядом с Codex. Codex может до него дотянуться. Мы вас видим. 🚀</p>
 
       <h2>Дополнительные материалы</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0: надёжная доставка</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1: более чёткое зрение, более длинный поток</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0: меньше затрат, быстрее выпуск</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0: надёжная доставка</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1: более чёткое зрение, более длинный поток</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0: меньше затрат, быстрее выпуск</a></li>
       </ul>
   es:
-    title: 'Open Design 0.17.0: Open Design para Codex'
+    title: 'OpenDesign 0.17.0: OpenDesign para Codex'
     summary: 'open-design-v0.17.0 — 62 PR de 23 personas en 11 días. Codex ya tiene su propio espacio de trabajo de diseño: llama a @open-design desde una conversación, convierte un brief en un artefacto real de Preview o Studio y remata los detalles visuales directamente en el lienzo en lugar de describir cada pequeña corrección en otro prompt.'
     category: 'Producto'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>, publicado el 3 de agosto de 2026. <strong>62 PR de 23 personas en 11 días.</strong> Codex ya tiene su propio espacio de trabajo de diseño. Llama a <code>@open-design</code> desde una conversación de Codex, convierte una idea o un brief en un artefacto real y editable, y sigue creándolo y refinándolo en Open Design Studio sin salir del flujo de trabajo de Codex.</p>
+      <p><code>open-design-v0.17.0</code>, publicado el 3 de agosto de 2026. <strong>62 PR de 23 personas en 11 días.</strong> Codex ya tiene su propio espacio de trabajo de diseño. Llama a <code>@open-design</code> desde una conversación de Codex, convierte una idea o un brief en un artefacto real y editable, y sigue creándolo y refinándolo en OpenDesign Studio sin salir del flujo de trabajo de Codex.</p>
       <p>¿Quieres ver todos los cambios? Lee las <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">notas completas de la versión en GitHub</a>. Esta es la historia del producto: cómo pasa Codex de una conversación a un artefacto visual, por qué el último 10 % ya no necesita otro prompt y qué se ha vuelto más fiable por el camino.</p>
 
       <h2>Codex ya tiene su propio espacio de trabajo de diseño</h2>
-      <p>Los agentes de programación son buenos convirtiendo la intención en archivos, pero el trabajo visual siempre ha exigido un segundo entorno: explicar la idea en el chat, llevar el resultado a una herramienta de diseño y traducir después cada corrección en otro prompt. En 0.17.0, <strong>Codex Desktop y CLI pueden llamar a Open Design como un motor creativo completo.</strong> La conversación y el espacio de trabajo de diseño se convierten en un único flujo continuo.</p>
-      <p>Empieza con <code>@open-design</code>. Confirma un brief visual, elige Open Design Cloud o un runtime local compatible y recibe un resultado real en Preview o Studio. El resultado no es una captura pegada en la conversación. Es un artefacto que puedes abrir, inspeccionar, editar, exportar y seguir refinando.</p>
+      <p>Los agentes de programación son buenos convirtiendo la intención en archivos, pero el trabajo visual siempre ha exigido un segundo entorno: explicar la idea en el chat, llevar el resultado a una herramienta de diseño y traducir después cada corrección en otro prompt. En 0.17.0, <strong>Codex Desktop y CLI pueden llamar a OpenDesign como un motor creativo completo.</strong> La conversación y el espacio de trabajo de diseño se convierten en un único flujo continuo.</p>
+      <p>Empieza con <code>@open-design</code>. Confirma un brief visual, elige OpenDesign Cloud o un runtime local compatible y recibe un resultado real en Preview o Studio. El resultado no es una captura pegada en la conversación. Es un artefacto que puedes abrir, inspeccionar, editar, exportar y seguir refinando.</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="Una conversación con un agente que fluye hacia un lienzo de diseño editable y una vista previa estable, con el artefacto conectado dentro de un marco de selección verde preciso sobre un fondo editorial casi blanco" />
-        <figcaption>Llama a Open Design desde Codex, acuerda el brief y recibe un artefacto real de Preview o Studio en vez de una imagen del mismo.</figcaption>
+        <figcaption>Llama a OpenDesign desde Codex, acuerda el brief y recibe un artefacto real de Preview o Studio en vez de una imagen del mismo.</figcaption>
       </figure>
 
       <h2>El runtime creativo deja de estorbar</h2>
-      <p>No deberías tener que mantener abierta una segunda app solo para que la integración funcione. <strong>El runtime firmado de Open Design arranca sin interfaz cuando Codex lo necesita</strong>, así que no hay otra ventana que vigilar ni un stack local que conectar a mano.</p>
+      <p>No deberías tener que mantener abierta una segunda app solo para que la integración funcione. <strong>El runtime firmado de OpenDesign arranca sin interfaz cuando Codex lo necesita</strong>, así que no hay otra ventana que vigilar ni un stack local que conectar a mano.</p>
       <p>La ruta de error también es práctica. Si Studio no puede cargarse correctamente dentro de un host externo, Codex entrega de inmediato la vista previa estable. Recibes primero el trabajo y puedes abrirlo en el espacio completo cuando lo necesites, en vez de ver fallar toda la ejecución porque una superficie de presentación no se inicializó.</p>
-      <p>Lo local se queda en local. Cuando eliges explícitamente Local Codex, la ejecución deja de volver al plugin o de enviarte a un flujo de inicio de sesión en Cloud. Open Design Cloud y Local Codex siguen siendo opciones diferenciadas, y la configuración del proveedor BYOK permanece en el almacenamiento del navegador de este dispositivo y solo se transmite a la ejecución local activa.</p>
+      <p>Lo local se queda en local. Cuando eliges explícitamente Local Codex, la ejecución deja de volver al plugin o de enviarte a un flujo de inicio de sesión en Cloud. OpenDesign Cloud y Local Codex siguen siendo opciones diferenciadas, y la configuración del proveedor BYOK permanece en el almacenamiento del navegador de este dispositivo y solo se transmite a la ejecución local activa.</p>
 
       <h2>Termina con las manos, no con otro prompt</h2>
       <p>El último 10 % del trabajo visual suele ser concreto: mueve este elemento, ajusta ese texto, recorta la imagen, alinea estos dos objetos. Enviar cada corrección por el chat hacía que los pequeños cambios tardaran más de lo necesario.</p>
@@ -530,12 +530,12 @@ i18n:
       <p>Las exportaciones respetan el resultado que has compuesto. La exportación de imágenes conserva el viewport activo de la vista previa, y las presentaciones basadas en frameworks se capturan en el tamaño con el que fueron creadas en vez de quedar deformadas por el marco del escritorio.</p>
 
       <h2>Los briefs claros empiezan de inmediato</h2>
-      <p>Un agente debería hacer una pregunta cuando la respuesta cambie el resultado, no porque toda tarea deba empezar con una entrevista. <strong>Open Design ahora empieza de inmediato cuando el primer prompt ya contiene suficiente dirección.</strong> Si falta una decisión real, formula una sola pregunta concreta en el momento en que esa decisión importa.</p>
+      <p>Un agente debería hacer una pregunta cuando la respuesta cambie el resultado, no porque toda tarea deba empezar con una entrevista. <strong>OpenDesign ahora empieza de inmediato cuando el primer prompt ya contiene suficiente dirección.</strong> Si falta una decisión real, formula una sola pregunta concreta en el momento en que esa decisión importa.</p>
       <p>Eso cambia el ritmo. Un buen brief se convierte enseguida en trabajo. Un brief ambiguo sigue recibiendo la aclaración que necesita, pero la pregunta queda vinculada a una bifurcación concreta del proceso en vez de interponerse entre tú y el primer resultado útil.</p>
 
       <h2>Las malas elecciones de modelo fallan antes de desperdiciar una ejecución</h2>
       <p>Se sabe que algunas combinaciones de modelo y CLI de Codex no funcionan juntas. 0.17.0 detecta esas combinaciones antes de arrancar, ofrece una vía útil para cambiar de modelo y diagnostica con más precisión los timeouts posteriores a una herramienta en lugar de hacerte pasar por reintentos engañosos.</p>
-      <p>El resto de la oferta de modelos se amplía sin desdibujar los límites: GPT-5.5 Fast llega como una opción explícita que prioriza la velocidad, Raven se incorpora a la configuración MCP con un clic y Open Design detecta automáticamente la instalación oficial de Grok Build en Windows.</p>
+      <p>El resto de la oferta de modelos se amplía sin desdibujar los límites: GPT-5.5 Fast llega como una opción explícita que prioriza la velocidad, Raven se incorpora a la configuración MCP con un clic y OpenDesign detecta automáticamente la instalación oficial de Grok Build en Windows.</p>
 
       <h2>Una actualización bloqueada ya no es un callejón sin salida</h2>
       <p>Un problema de actualización debería tener una vía de recuperación que no obligue a localizar a mano un directorio de caché. Settings ahora puede borrar una caché de actualización dañada, reinstalar cuando se sabe que una generación instalada no es segura y recuperarse si un payload descargado falla. <strong>La app vuelve a la última versión que funcionaba y se repara con la siguiente actualización correcta.</strong> Gracias a <a href="https://github.com/PerishCode">@PerishCode</a> por el trabajo constante en esta área.</p>
@@ -562,7 +562,7 @@ i18n:
           <tr><th>Si eres…</th><th>Empieza aquí</th></tr>
         </thead>
         <tbody>
-          <tr><td>usuario de Codex</td><td>Instala el plugin de Open Design, llama a <code>@open-design</code> con un brief visual concreto y abre el resultado en Preview o Studio</td></tr>
+          <tr><td>usuario de Codex</td><td>Instala el plugin de OpenDesign, llama a <code>@open-design</code> con un brief visual concreto y abre el resultado en Preview o Studio</td></tr>
           <tr><td>alguien que refina trabajo generado</td><td>Selecciona un elemento y termina directamente las últimas correcciones visuales en vez de describirlas en otro prompt</td></tr>
           <tr><td>alguien que trabaja en local</td><td>Elige Local Codex explícitamente y confirma que la ejecución se mantiene local con la configuración BYOK guardada en tu dispositivo</td></tr>
           <tr><td>alguien que crea presentaciones</td><td>Prueba Codex Slides para cubrir todo el flujo de brief, esquema, edición y exportación</td></tr>
@@ -571,36 +571,36 @@ i18n:
       </table>
 
       <h2>Qué hacer ahora</h2>
-      <p>Codex ya era un lugar donde describir lo que querías crear. 0.17.0 le da un lugar donde ver y dar forma al resultado. Llama a Open Design desde una conversación real, deja que un brief claro empiece de inmediato y haz después una pequeña corrección con las manos en lugar de escribir otro párrafo.</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Descargar Open Design</a>.</p>
+      <p>Codex ya era un lugar donde describir lo que querías crear. 0.17.0 le da un lugar donde ver y dar forma al resultado. Llama a OpenDesign desde una conversación real, deja que un brief claro empiece de inmediato y haz después una pequeña corrección con las manos en lugar de escribir otro párrafo.</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Descargar OpenDesign</a>.</p>
       <p>62 PR en 11 días, de 23 personas que conectaron conversación, artefacto y lienzo en un único flujo. El espacio de trabajo de diseño ya no está al lado de Codex. Codex puede acceder a él. Os vemos. 🚀</p>
 
       <h2>Lecturas relacionadas</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0: entrega fiable</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1: visión más nítida, flow más largo</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0: menor coste, entregas más rápidas</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0: entrega fiable</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1: visión más nítida, flow más largo</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0: menor coste, entregas más rápidas</a></li>
       </ul>
   pt-br:
-    title: 'Open Design 0.17.0: Open Design para Codex'
+    title: 'OpenDesign 0.17.0: OpenDesign para Codex'
     summary: 'open-design-v0.17.0 — 62 PRs de 23 pessoas em 11 dias. O Codex agora tem seu próprio workspace de design: chame @open-design em uma conversa, transforme um brief em um artefato real no Preview ou Studio e finalize os detalhes visuais diretamente no canvas em vez de descrever cada pequeno ajuste em outro prompt.'
     category: 'Produto'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>, publicado em 3 de agosto de 2026. <strong>62 PRs de 23 pessoas em 11 dias.</strong> O Codex agora tem seu próprio workspace de design. Chame <code>@open-design</code> em uma conversa do Codex, transforme uma ideia ou um brief em um artefato real e editável e continue criando e refinando no Open Design Studio sem sair do fluxo do Codex.</p>
+      <p><code>open-design-v0.17.0</code>, publicado em 3 de agosto de 2026. <strong>62 PRs de 23 pessoas em 11 dias.</strong> O Codex agora tem seu próprio workspace de design. Chame <code>@open-design</code> em uma conversa do Codex, transforme uma ideia ou um brief em um artefato real e editável e continue criando e refinando no OpenDesign Studio sem sair do fluxo do Codex.</p>
       <p>Quer ver todas as mudanças? Leia as <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">notas completas da versão no GitHub</a>. Esta é a história do produto: como o Codex passa de uma conversa para um artefato visual, por que os últimos 10% já não precisam de outro prompt e o que ficou mais confiável ao longo do caminho.</p>
 
       <h2>O Codex tem seu próprio workspace de design</h2>
-      <p>Agentes de programação são bons em transformar intenção em arquivos, mas o trabalho visual sempre exigiu um segundo ambiente: explicar a ideia no chat, levar o resultado para uma ferramenta de design e então traduzir cada correção em outro prompt. No 0.17.0, <strong>o Codex Desktop e a CLI podem chamar o Open Design como um motor criativo completo.</strong> A conversa e o workspace de design se tornam um único fluxo contínuo.</p>
-      <p>Comece com <code>@open-design</code>. Confirme um brief visual, escolha o Open Design Cloud ou um runtime local compatível e receba um resultado real no Preview ou Studio. O resultado não é uma captura colada na conversa. É um artefato que você pode abrir, inspecionar, editar, exportar e continuar refinando.</p>
+      <p>Agentes de programação são bons em transformar intenção em arquivos, mas o trabalho visual sempre exigiu um segundo ambiente: explicar a ideia no chat, levar o resultado para uma ferramenta de design e então traduzir cada correção em outro prompt. No 0.17.0, <strong>o Codex Desktop e a CLI podem chamar o OpenDesign como um motor criativo completo.</strong> A conversa e o workspace de design se tornam um único fluxo contínuo.</p>
+      <p>Comece com <code>@open-design</code>. Confirme um brief visual, escolha o OpenDesign Cloud ou um runtime local compatível e receba um resultado real no Preview ou Studio. O resultado não é uma captura colada na conversa. É um artefato que você pode abrir, inspecionar, editar, exportar e continuar refinando.</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="Uma conversa com um agente fluindo para um canvas de design editável e uma visualização estável, com o artefato conectado dentro de uma moldura de seleção verde precisa sobre um fundo editorial quase branco" />
-        <figcaption>Chame o Open Design no Codex, alinhe o brief e receba um artefato real no Preview ou Studio em vez de uma imagem dele.</figcaption>
+        <figcaption>Chame o OpenDesign no Codex, alinhe o brief e receba um artefato real no Preview ou Studio em vez de uma imagem dele.</figcaption>
       </figure>
 
       <h2>O runtime criativo sai do caminho</h2>
-      <p>Você não deveria precisar manter um segundo app aberto só para a integração funcionar. <strong>O runtime assinado do Open Design inicia sem interface quando o Codex precisa dele</strong>, então não há uma janela extra para vigiar nem uma stack local para conectar na mão.</p>
+      <p>Você não deveria precisar manter um segundo app aberto só para a integração funcionar. <strong>O runtime assinado do OpenDesign inicia sem interface quando o Codex precisa dele</strong>, então não há uma janela extra para vigiar nem uma stack local para conectar na mão.</p>
       <p>O caminho de falha também é prático. Se o Studio não carregar corretamente dentro de um host externo, o Codex ainda entrega a visualização estável imediatamente. Você recebe o trabalho primeiro e pode abri-lo no workspace completo quando precisar, em vez de ver toda a execução falhar porque uma superfície de apresentação não foi inicializada.</p>
-      <p>O que é local continua local. Quando você escolhe Local Codex explicitamente, a execução não volta mais para o plugin nem leva você a um fluxo de login no Cloud. Open Design Cloud e Local Codex continuam sendo opções distintas, e a configuração do provedor BYOK permanece no armazenamento do navegador deste dispositivo, sendo transmitida somente para a execução local ativa.</p>
+      <p>O que é local continua local. Quando você escolhe Local Codex explicitamente, a execução não volta mais para o plugin nem leva você a um fluxo de login no Cloud. OpenDesign Cloud e Local Codex continuam sendo opções distintas, e a configuração do provedor BYOK permanece no armazenamento do navegador deste dispositivo, sendo transmitida somente para a execução local ativa.</p>
 
       <h2>Finalize com as mãos, não com outro prompt</h2>
       <p>Os últimos 10% do trabalho visual costumam ser concretos: mova este elemento, ajuste aquele texto, recorte a imagem, alinhe estes dois objetos. Enviar cada correção pelo chat tornava pequenas mudanças mais lentas do que precisavam ser.</p>
@@ -612,12 +612,12 @@ i18n:
       <p>As exportações acompanham o resultado que você compôs. A exportação de imagem respeita o viewport ativo da visualização, e apresentações baseadas em frameworks são capturadas no tamanho em que foram criadas, em vez de serem remodeladas pela moldura do desktop.</p>
 
       <h2>Briefs claros começam imediatamente</h2>
-      <p>Um agente deve fazer uma pergunta quando a resposta mudar o resultado, não porque toda tarefa precisa começar com uma entrevista. <strong>O Open Design agora começa imediatamente quando o primeiro prompt já contém direcionamento suficiente.</strong> Quando falta uma decisão real, ele faz uma única pergunta focada no momento em que essa decisão importa.</p>
+      <p>Um agente deve fazer uma pergunta quando a resposta mudar o resultado, não porque toda tarefa precisa começar com uma entrevista. <strong>O OpenDesign agora começa imediatamente quando o primeiro prompt já contém direcionamento suficiente.</strong> Quando falta uma decisão real, ele faz uma única pergunta focada no momento em que essa decisão importa.</p>
       <p>Isso muda o ritmo. Um bom brief vira trabalho na mesma hora. Um brief ambíguo ainda recebe o esclarecimento necessário, mas a pergunta fica ligada a uma bifurcação concreta do processo em vez de ficar entre você e o primeiro resultado útil.</p>
 
       <h2>Escolhas ruins de modelo falham antes de desperdiçar uma execução</h2>
       <p>Algumas combinações de modelo e CLI do Codex são conhecidas por não funcionarem juntas. O 0.17.0 detecta essas combinações antes do início, oferece um caminho útil para trocar de modelo e diagnostica timeouts após ferramentas com mais precisão, em vez de encaminhar você para tentativas enganosas.</p>
-      <p>O restante da oferta de modelos cresce sem confundir os limites: GPT-5.5 Fast chega como uma opção explícita que prioriza velocidade, Raven entra na configuração MCP com um clique e o Open Design encontra automaticamente a instalação oficial do Grok Build no Windows.</p>
+      <p>O restante da oferta de modelos cresce sem confundir os limites: GPT-5.5 Fast chega como uma opção explícita que prioriza velocidade, Raven entra na configuração MCP com um clique e o OpenDesign encontra automaticamente a instalação oficial do Grok Build no Windows.</p>
 
       <h2>Uma atualização travada não é mais um beco sem saída</h2>
       <p>Um problema de atualização deve ter um caminho de recuperação que não exija procurar uma pasta de cache na mão. Settings agora pode limpar um cache de atualização corrompido, reinstalar quando uma geração instalada é conhecida como insegura e se recuperar após a falha de um payload baixado. <strong>O app volta à última versão funcional e se corrige na próxima atualização saudável.</strong> Obrigado a <a href="https://github.com/PerishCode">@PerishCode</a> pelo trabalho contínuo nessa área.</p>
@@ -644,7 +644,7 @@ i18n:
           <tr><th>Se você…</th><th>Comece aqui</th></tr>
         </thead>
         <tbody>
-          <tr><td>já usa o Codex</td><td>Instale o plugin do Open Design, chame <code>@open-design</code> com um brief visual concreto e abra o resultado no Preview ou Studio</td></tr>
+          <tr><td>já usa o Codex</td><td>Instale o plugin do OpenDesign, chame <code>@open-design</code> com um brief visual concreto e abra o resultado no Preview ou Studio</td></tr>
           <tr><td>está refinando um trabalho gerado</td><td>Selecione um elemento e finalize diretamente os últimos ajustes visuais em vez de descrevê-los em outro prompt</td></tr>
           <tr><td>trabalha localmente</td><td>Escolha Local Codex explicitamente e confirme que a execução continua local com sua configuração BYOK armazenada no dispositivo</td></tr>
           <tr><td>está criando apresentações</td><td>Experimente o Codex Slides para o fluxo completo de brief, roteiro, edição e exportação</td></tr>
@@ -653,36 +653,36 @@ i18n:
       </table>
 
       <h2>O que fazer agora</h2>
-      <p>O Codex já era um lugar para descrever o que você queria criar. O 0.17.0 oferece um lugar para ver e dar forma ao resultado. Chame o Open Design em uma conversa real, deixe um brief claro começar imediatamente e faça um pequeno ajuste com as mãos em vez de escrever outro parágrafo.</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Baixe o Open Design</a>.</p>
+      <p>O Codex já era um lugar para descrever o que você queria criar. O 0.17.0 oferece um lugar para ver e dar forma ao resultado. Chame o OpenDesign em uma conversa real, deixe um brief claro começar imediatamente e faça um pequeno ajuste com as mãos em vez de escrever outro parágrafo.</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Baixe o OpenDesign</a>.</p>
       <p>62 PRs em 11 dias, de 23 pessoas que conectaram conversa, artefato e canvas em um único fluxo. O workspace de design não fica mais ao lado do Codex. O Codex consegue acessá-lo. Vemos vocês. 🚀</p>
 
       <h2>Leituras relacionadas</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0: entrega confiável</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1: visão mais nítida, flow mais longo</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0: menos custo, entregas mais rápidas</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0: entrega confiável</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1: visão mais nítida, flow mais longo</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0: menos custo, entregas mais rápidas</a></li>
       </ul>
   it:
-    title: 'Open Design 0.17.0: Open Design per Codex'
+    title: 'OpenDesign 0.17.0: OpenDesign per Codex'
     summary: 'open-design-v0.17.0 — 62 PR da 23 persone in 11 giorni. Codex ora ha il proprio spazio di lavoro per il design: richiama @open-design da una conversazione, trasforma un brief in un vero artefatto Preview o Studio e rifinisci i dettagli visivi direttamente sul canvas invece di descrivere ogni piccola correzione in un altro prompt.'
     category: 'Prodotto'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>, pubblicato il 3 agosto 2026. <strong>62 PR da 23 persone in 11 giorni.</strong> Codex ora ha il proprio spazio di lavoro per il design. Richiama <code>@open-design</code> da una conversazione in Codex, trasforma un'idea o un brief in un vero artefatto modificabile, poi continua a crearlo e rifinirlo in Open Design Studio senza uscire dal flusso di Codex.</p>
+      <p><code>open-design-v0.17.0</code>, pubblicato il 3 agosto 2026. <strong>62 PR da 23 persone in 11 giorni.</strong> Codex ora ha il proprio spazio di lavoro per il design. Richiama <code>@open-design</code> da una conversazione in Codex, trasforma un'idea o un brief in un vero artefatto modificabile, poi continua a crearlo e rifinirlo in OpenDesign Studio senza uscire dal flusso di Codex.</p>
       <p>Vuoi conoscere ogni cambiamento? Leggi le <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">note di rilascio complete su GitHub</a>. Questa è la storia del prodotto: come Codex passa da una conversazione a un artefatto visivo, perché l'ultimo 10% non richiede più un altro prompt e cosa è diventato più affidabile nel frattempo.</p>
 
       <h2>Codex ha il proprio spazio di lavoro per il design</h2>
-      <p>Gli agenti di programmazione sanno trasformare bene l'intento in file, ma il lavoro visivo ha sempre richiesto un secondo ambiente: spiegare l'idea in chat, spostare il risultato in uno strumento di design, quindi tradurre ogni correzione in un altro prompt. In 0.17.0, <strong>Codex Desktop e CLI possono richiamare Open Design come motore creativo completo.</strong> La conversazione e lo spazio di lavoro per il design diventano un unico flusso continuo.</p>
-      <p>Inizia con <code>@open-design</code>. Conferma un brief visivo, scegli Open Design Cloud o un runtime locale supportato e ricevi un vero risultato Preview o Studio. Il risultato non è uno screenshot incollato nella conversazione. È un artefatto che puoi aprire, ispezionare, modificare, esportare e continuare a rifinire.</p>
+      <p>Gli agenti di programmazione sanno trasformare bene l'intento in file, ma il lavoro visivo ha sempre richiesto un secondo ambiente: spiegare l'idea in chat, spostare il risultato in uno strumento di design, quindi tradurre ogni correzione in un altro prompt. In 0.17.0, <strong>Codex Desktop e CLI possono richiamare OpenDesign come motore creativo completo.</strong> La conversazione e lo spazio di lavoro per il design diventano un unico flusso continuo.</p>
+      <p>Inizia con <code>@open-design</code>. Conferma un brief visivo, scegli OpenDesign Cloud o un runtime locale supportato e ricevi un vero risultato Preview o Studio. Il risultato non è uno screenshot incollato nella conversazione. È un artefatto che puoi aprire, ispezionare, modificare, esportare e continuare a rifinire.</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="Una conversazione con un agente che confluisce in un canvas di design modificabile e in un'anteprima stabile, con l'artefatto collegato racchiuso in una precisa cornice di selezione verde su uno sfondo editoriale quasi bianco" />
-        <figcaption>Richiama Open Design da Codex, concorda il brief e ricevi un vero artefatto Preview o Studio invece della sua immagine.</figcaption>
+        <figcaption>Richiama OpenDesign da Codex, concorda il brief e ricevi un vero artefatto Preview o Studio invece della sua immagine.</figcaption>
       </figure>
 
       <h2>Il runtime creativo si toglie di mezzo</h2>
-      <p>Non dovrebbe servire una seconda app aperta solo per far funzionare l'integrazione. <strong>Il runtime firmato di Open Design si avvia senza interfaccia quando Codex ne ha bisogno</strong>, quindi non c'è una finestra aggiuntiva da sorvegliare né uno stack locale da collegare a mano.</p>
+      <p>Non dovrebbe servire una seconda app aperta solo per far funzionare l'integrazione. <strong>Il runtime firmato di OpenDesign si avvia senza interfaccia quando Codex ne ha bisogno</strong>, quindi non c'è una finestra aggiuntiva da sorvegliare né uno stack locale da collegare a mano.</p>
       <p>Anche il percorso in caso di errore è pratico. Se Studio non riesce a caricarsi correttamente dentro un host esterno, Codex consegna comunque subito l'anteprima stabile. Ricevi prima il lavoro e puoi aprirlo nello spazio completo quando serve, invece di vedere fallire l'intera esecuzione perché una superficie di presentazione non si è inizializzata.</p>
-      <p>Ciò che è locale resta locale. Quando scegli esplicitamente Local Codex, l'esecuzione non torna più al plugin né ti porta in un flusso di accesso a Cloud. Open Design Cloud e Local Codex restano opzioni distinte, mentre la configurazione del provider BYOK rimane nello spazio di archiviazione del browser di questo dispositivo e viene passata soltanto all'esecuzione locale attiva.</p>
+      <p>Ciò che è locale resta locale. Quando scegli esplicitamente Local Codex, l'esecuzione non torna più al plugin né ti porta in un flusso di accesso a Cloud. OpenDesign Cloud e Local Codex restano opzioni distinte, mentre la configurazione del provider BYOK rimane nello spazio di archiviazione del browser di questo dispositivo e viene passata soltanto all'esecuzione locale attiva.</p>
 
       <h2>Rifinisci con le mani, non con un altro prompt</h2>
       <p>L'ultimo 10% del lavoro visivo è solitamente concreto: sposta questo elemento, stringi quel testo, ritaglia l'immagine, allinea questi due oggetti. Inviare ogni correzione attraverso la chat rendeva le piccole modifiche più lente del necessario.</p>
@@ -694,12 +694,12 @@ i18n:
       <p>Le esportazioni seguono il risultato che hai composto. L'esportazione delle immagini rispetta il viewport attivo dell'anteprima e le presentazioni basate su framework vengono acquisite nelle dimensioni con cui sono state create, invece di essere rimodellate dalla cornice desktop.</p>
 
       <h2>I brief chiari partono subito</h2>
-      <p>Un agente dovrebbe fare una domanda quando la risposta cambia il risultato, non perché ogni attività debba iniziare con un'intervista. <strong>Open Design ora parte immediatamente quando il primo prompt contiene già indicazioni sufficienti.</strong> Quando manca una vera decisione, pone un'unica domanda mirata nel momento in cui quella decisione conta.</p>
+      <p>Un agente dovrebbe fare una domanda quando la risposta cambia il risultato, non perché ogni attività debba iniziare con un'intervista. <strong>OpenDesign ora parte immediatamente quando il primo prompt contiene già indicazioni sufficienti.</strong> Quando manca una vera decisione, pone un'unica domanda mirata nel momento in cui quella decisione conta.</p>
       <p>Questo cambia il ritmo. Un buon brief diventa subito lavoro. Un brief ambiguo riceve ancora il chiarimento necessario, ma la domanda è legata a un bivio concreto del processo invece di frapporsi tra te e il primo risultato utile.</p>
 
       <h2>Le scelte di modello sbagliate falliscono prima di sprecare un'esecuzione</h2>
       <p>Alcune combinazioni di modello e CLI di Codex sono note per non funzionare insieme. 0.17.0 le intercetta prima dell'avvio, offre un percorso utile per cambiare modello e diagnostica con maggiore precisione i timeout successivi agli strumenti invece di indirizzarti verso tentativi fuorvianti.</p>
-      <p>Il resto dell'offerta di modelli si amplia senza confondere i confini: GPT-5.5 Fast arriva come scelta esplicita orientata alla velocità, Raven entra nella configurazione MCP con un clic e Open Design rileva automaticamente l'installazione ufficiale di Grok Build su Windows.</p>
+      <p>Il resto dell'offerta di modelli si amplia senza confondere i confini: GPT-5.5 Fast arriva come scelta esplicita orientata alla velocità, Raven entra nella configurazione MCP con un clic e OpenDesign rileva automaticamente l'installazione ufficiale di Grok Build su Windows.</p>
 
       <h2>Un aggiornamento bloccato non è più un vicolo cieco</h2>
       <p>Un problema di aggiornamento dovrebbe avere un percorso di ripristino che non richieda di cercare a mano una directory della cache. Settings ora può cancellare una cache di aggiornamento danneggiata, reinstallare quando una generazione installata è nota come non sicura e recuperare dopo il crash di un payload scaricato. <strong>L'app torna all'ultima versione funzionante e si ripara con il successivo aggiornamento corretto.</strong> Grazie a <a href="https://github.com/PerishCode">@PerishCode</a> per il lavoro costante in quest'area.</p>
@@ -726,7 +726,7 @@ i18n:
           <tr><th>Se sei…</th><th>Parti da qui</th></tr>
         </thead>
         <tbody>
-          <tr><td>già su Codex</td><td>Installa il plugin Open Design, richiama <code>@open-design</code> con un brief visivo concreto e apri il risultato in Preview o Studio</td></tr>
+          <tr><td>già su Codex</td><td>Installa il plugin OpenDesign, richiama <code>@open-design</code> con un brief visivo concreto e apri il risultato in Preview o Studio</td></tr>
           <tr><td>impegnato a rifinire un lavoro generato</td><td>Seleziona un elemento e completa direttamente le ultime correzioni visive invece di descriverle in un altro prompt</td></tr>
           <tr><td>al lavoro in locale</td><td>Scegli esplicitamente Local Codex e verifica che l'esecuzione resti locale con la configurazione BYOK memorizzata sul dispositivo</td></tr>
           <tr><td>impegnato a creare presentazioni</td><td>Prova Codex Slides per l'intero flusso da brief a scaletta, modifica ed esportazione</td></tr>
@@ -735,36 +735,36 @@ i18n:
       </table>
 
       <h2>Cosa fare ora</h2>
-      <p>Codex era già un luogo in cui descrivere ciò che volevi creare. 0.17.0 gli dà un luogo in cui vedere e dare forma al risultato. Richiama Open Design da una conversazione reale, lascia che un brief chiaro parta subito, poi apporta una piccola correzione con le mani invece di scrivere un altro paragrafo.</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Scarica Open Design</a>.</p>
+      <p>Codex era già un luogo in cui descrivere ciò che volevi creare. 0.17.0 gli dà un luogo in cui vedere e dare forma al risultato. Richiama OpenDesign da una conversazione reale, lascia che un brief chiaro parta subito, poi apporta una piccola correzione con le mani invece di scrivere un altro paragrafo.</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Scarica OpenDesign</a>.</p>
       <p>62 PR in 11 giorni, da 23 persone che hanno collegato conversazione, artefatto e canvas in un unico flusso. Lo spazio di lavoro per il design non è più accanto a Codex. Codex può raggiungerlo. Vi vediamo. 🚀</p>
 
       <h2>Letture correlate</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0: consegna affidabile</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1: sguardo più nitido, flow più lungo</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0: meno costi, rilasci più rapidi</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0: consegna affidabile</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1: sguardo più nitido, flow più lungo</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0: meno costi, rilasci più rapidi</a></li>
       </ul>
   tr:
-    title: 'Open Design 0.17.0: Codex için Open Design'
+    title: 'OpenDesign 0.17.0: Codex için OpenDesign'
     summary: 'open-design-v0.17.0 — 11 günde 23 katkıcıdan 62 PR. Codex artık kendi tasarım çalışma alanına sahip: bir sohbetten @open-design çağrısı yapın, brief''i gerçek bir Preview veya Studio artefaktına dönüştürün ve her küçük düzeltmeyi yeniden prompt''la tarif etmek yerine görsel ayrıntıları doğrudan tuval üzerinde tamamlayın.'
     category: 'Ürün'
     bodyHtml: |
-      <p><code>open-design-v0.17.0</code>, 3 Ağustos 2026'da yayımlandı. <strong>11 günde 23 katkıcıdan 62 PR.</strong> Codex artık kendi tasarım çalışma alanına sahip. Bir Codex sohbetinden <code>@open-design</code> çağrısı yapın, bir fikri ya da brief'i gerçek ve düzenlenebilir bir artefakta dönüştürün, ardından Codex iş akışından ayrılmadan Open Design Studio'da üretmeye ve iyileştirmeye devam edin.</p>
+      <p><code>open-design-v0.17.0</code>, 3 Ağustos 2026'da yayımlandı. <strong>11 günde 23 katkıcıdan 62 PR.</strong> Codex artık kendi tasarım çalışma alanına sahip. Bir Codex sohbetinden <code>@open-design</code> çağrısı yapın, bir fikri ya da brief'i gerçek ve düzenlenebilir bir artefakta dönüştürün, ardından Codex iş akışından ayrılmadan OpenDesign Studio'da üretmeye ve iyileştirmeye devam edin.</p>
       <p>Her değişikliği görmek ister misiniz? <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0">GitHub'daki tam sürüm notlarını</a> okuyun. Bu, ürünün hikâyesi: Codex'in bir sohbetten görsel artefakta nasıl ulaştığı, son %10'un neden artık başka bir prompt gerektirmediği ve bu sırada nelerin daha güvenilir hâle geldiği.</p>
 
       <h2>Codex kendi tasarım çalışma alanına kavuştu</h2>
-      <p>Kodlama ajanları niyeti dosyalara dönüştürmede iyidir, ancak görsel işler hep ikinci bir ortam gerektirdi: fikri sohbette anlatmak, sonucu bir tasarım aracına taşımak ve ardından her düzeltmeyi başka bir prompt'a çevirmek. 0.17.0'da <strong>Codex Desktop ve CLI, Open Design'ı eksiksiz bir yaratıcı motor olarak çağırabiliyor.</strong> Sohbet ile tasarım çalışma alanı kesintisiz tek bir iş akışına dönüşüyor.</p>
-      <p><code>@open-design</code> ile başlayın. Görsel brief'i onaylayın, Open Design Cloud'u ya da desteklenen yerel bir runtime'ı seçin ve gerçek bir Preview veya Studio sonucu alın. Sonuç, sohbete yapıştırılmış bir ekran görüntüsü değildir. Açabileceğiniz, inceleyebileceğiniz, düzenleyebileceğiniz, dışa aktarabileceğiniz ve geliştirmeyi sürdürebileceğiniz bir artefakttır.</p>
+      <p>Kodlama ajanları niyeti dosyalara dönüştürmede iyidir, ancak görsel işler hep ikinci bir ortam gerektirdi: fikri sohbette anlatmak, sonucu bir tasarım aracına taşımak ve ardından her düzeltmeyi başka bir prompt'a çevirmek. 0.17.0'da <strong>Codex Desktop ve CLI, OpenDesign'ı eksiksiz bir yaratıcı motor olarak çağırabiliyor.</strong> Sohbet ile tasarım çalışma alanı kesintisiz tek bir iş akışına dönüşüyor.</p>
+      <p><code>@open-design</code> ile başlayın. Görsel brief'i onaylayın, OpenDesign Cloud'u ya da desteklenen yerel bir runtime'ı seçin ve gerçek bir Preview veya Studio sonucu alın. Sonuç, sohbete yapıştırılmış bir ekran görüntüsü değildir. Açabileceğiniz, inceleyebileceğiniz, düzenleyebileceğiniz, dışa aktarabileceğiniz ve geliştirmeyi sürdürebileceğiniz bir artefakttır.</p>
       <figure>
         <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="Bir ajan sohbetinin düzenlenebilir tasarım tuvaline ve kararlı önizlemeye aktığı; bağlı artefaktın neredeyse beyaz editoryal zemin üzerinde hassas yeşil bir seçim çerçevesi içinde tutulduğu görünüm" />
-        <figcaption>Open Design'ı Codex içinden çağırın, brief üzerinde anlaşın ve yalnızca bir resim yerine gerçek bir Preview veya Studio artefaktı alın.</figcaption>
+        <figcaption>OpenDesign'ı Codex içinden çağırın, brief üzerinde anlaşın ve yalnızca bir resim yerine gerçek bir Preview veya Studio artefaktı alın.</figcaption>
       </figure>
 
       <h2>Yaratıcı runtime aradan çekiliyor</h2>
-      <p>Yalnızca entegrasyon çalışsın diye ikinci bir uygulamayı açık tutmanız gerekmemeli. <strong>İmzalı Open Design runtime'ı Codex ihtiyaç duyduğunda arayüzsüz olarak başlıyor</strong>; dolayısıyla göz kulak olmanız gereken ek bir pencere veya elle bağlamanız gereken yerel bir stack yok.</p>
+      <p>Yalnızca entegrasyon çalışsın diye ikinci bir uygulamayı açık tutmanız gerekmemeli. <strong>İmzalı OpenDesign runtime'ı Codex ihtiyaç duyduğunda arayüzsüz olarak başlıyor</strong>; dolayısıyla göz kulak olmanız gereken ek bir pencere veya elle bağlamanız gereken yerel bir stack yok.</p>
       <p>Hata yolu da kullanışlı. Studio dış bir host içinde düzgün yüklenemezse Codex kararlı önizlemeyi yine hemen teslim ediyor. Bir sunum yüzeyi başlatılamadığı için tüm çalıştırmanın başarısız olmasını izlemek yerine önce işi alıyor, gerektiğinde tam çalışma alanında açabiliyorsunuz.</p>
-      <p>Yerel, yerelde kalıyor. Local Codex'i açıkça seçtiğinizde çalıştırma artık eklentiye geri dönmüyor veya sizi Cloud oturum açma akışına göndermiyor. Open Design Cloud ve Local Codex ayrı seçenekler olarak kalıyor; BYOK sağlayıcı yapılandırması da bu cihazın tarayıcı depolamasında tutulup yalnızca etkin yerel çalıştırmaya aktarılıyor.</p>
+      <p>Yerel, yerelde kalıyor. Local Codex'i açıkça seçtiğinizde çalıştırma artık eklentiye geri dönmüyor veya sizi Cloud oturum açma akışına göndermiyor. OpenDesign Cloud ve Local Codex ayrı seçenekler olarak kalıyor; BYOK sağlayıcı yapılandırması da bu cihazın tarayıcı depolamasında tutulup yalnızca etkin yerel çalıştırmaya aktarılıyor.</p>
 
       <h2>Başka bir prompt yerine ellerinizle tamamlayın</h2>
       <p>Görsel işlerin son %10'u çoğunlukla somuttur: bu öğeyi taşı, şu metni sıkıştır, görseli kırp, şu iki nesneyi hizala. Her düzeltmeyi sohbet üzerinden göndermek küçük değişiklikleri gerekenden daha yavaş hâle getiriyordu.</p>
@@ -776,12 +776,12 @@ i18n:
       <p>Dışa aktarımlar oluşturduğunuz sonucu izliyor. Görsel dışa aktarımı etkin önizleme viewport'unu koruyor; framework sunumları da masaüstü çerçevesi tarafından yeniden şekillendirilmek yerine oluşturuldukları boyutta yakalanıyor.</p>
 
       <h2>Açık brief'ler hemen başlıyor</h2>
-      <p>Bir ajan, her görev bir görüşmeyle başlamalı diye değil, yanıt sonucu değiştireceğinde soru sormalıdır. <strong>İlk prompt zaten yeterli yönlendirmeyi içerdiğinde Open Design artık hemen başlıyor.</strong> Gerçek bir karar eksikse tam o kararın önem kazandığı anda tek bir odaklı soru soruyor.</p>
+      <p>Bir ajan, her görev bir görüşmeyle başlamalı diye değil, yanıt sonucu değiştireceğinde soru sormalıdır. <strong>İlk prompt zaten yeterli yönlendirmeyi içerdiğinde OpenDesign artık hemen başlıyor.</strong> Gerçek bir karar eksikse tam o kararın önem kazandığı anda tek bir odaklı soru soruyor.</p>
       <p>Bu, ritmi değiştiriyor. Güçlü bir brief hemen işe dönüşüyor. Belirsiz bir brief yine ihtiyaç duyduğu açıklamayı alıyor, ancak soru ilk yararlı sonuçla aranıza girmek yerine süreçteki somut bir yol ayrımına bağlanıyor.</p>
 
       <h2>Kötü model seçimleri bir çalıştırmayı boşa harcamadan önce başarısız oluyor</h2>
       <p>Bazı Codex model ve CLI kombinasyonlarının birlikte çalışmadığı biliniyor. 0.17.0 bu kombinasyonları başlatmadan önce yakalıyor, işe yarar bir model değiştirme yolu sunuyor ve sizi yanıltıcı yeniden denemelere göndermek yerine araç sonrasında oluşan zaman aşımlarını daha doğru teşhis ediyor.</p>
-      <p>Model seçeneklerinin geri kalanı sınırları bulandırmadan genişliyor: GPT-5.5 Fast açıkça hız odaklı bir seçenek olarak geliyor, Raven tek tıklamalı MCP kurulumuna katılıyor ve Open Design Windows'taki resmî Grok Build kurulumunu otomatik olarak keşfediyor.</p>
+      <p>Model seçeneklerinin geri kalanı sınırları bulandırmadan genişliyor: GPT-5.5 Fast açıkça hız odaklı bir seçenek olarak geliyor, Raven tek tıklamalı MCP kurulumuna katılıyor ve OpenDesign Windows'taki resmî Grok Build kurulumunu otomatik olarak keşfediyor.</p>
 
       <h2>Takılan bir güncelleme artık çıkmaz sokak değil</h2>
       <p>Bir güncelleme sorununun, elle önbellek dizini bulmayı gerektirmeyen bir kurtarma yolu olmalı. Settings artık bozuk bir güncelleme önbelleğini temizleyebiliyor, yüklü bir neslin güvenli olmadığı biliniyorsa yeniden kurabiliyor ve indirilen bir payload çöktüğünde kurtarma yapabiliyor. <strong>Uygulama son çalışan sürüme geri dönüyor ve bir sonraki sağlıklı güncellemede kendini iyileştiriyor.</strong> Buradaki sürekli çalışması için <a href="https://github.com/PerishCode">@PerishCode</a>'a teşekkürler.</p>
@@ -808,7 +808,7 @@ i18n:
           <tr><th>Eğer…</th><th>Buradan başlayın</th></tr>
         </thead>
         <tbody>
-          <tr><td>zaten Codex kullanıyorsanız</td><td>Open Design eklentisini yükleyin, somut bir görsel brief ile <code>@open-design</code> çağrısı yapın ve sonucu Preview ya da Studio'da açın</td></tr>
+          <tr><td>zaten Codex kullanıyorsanız</td><td>OpenDesign eklentisini yükleyin, somut bir görsel brief ile <code>@open-design</code> çağrısı yapın ve sonucu Preview ya da Studio'da açın</td></tr>
           <tr><td>üretilmiş işi geliştiriyorsanız</td><td>Bir öğe seçin ve son görsel düzeltmeleri başka bir prompt'ta tarif etmek yerine doğrudan tamamlayın</td></tr>
           <tr><td>yerel olarak çalışıyorsanız</td><td>Local Codex'i açıkça seçin ve cihazınızda saklanan BYOK yapılandırmasıyla çalıştırmanın yerel kaldığını doğrulayın</td></tr>
           <tr><td>sunum hazırlıyorsanız</td><td>Brief'ten taslak, düzenleme ve dışa aktarmaya uzanan eksiksiz akış için Codex Slides'ı deneyin</td></tr>
@@ -817,40 +817,40 @@ i18n:
       </table>
 
       <h2>Sırada ne var</h2>
-      <p>Codex zaten ne üretmek istediğinizi tarif edebileceğiniz bir yerdi. 0.17.0 ona sonucu görüp şekillendirebileceği bir yer veriyor. Open Design'ı gerçek bir sohbetten çağırın, açık bir brief'in hemen başlamasını sağlayın ve ardından başka bir paragraf yerine ellerinizle küçük bir düzeltme yapın.</p>
-      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">Open Design'ı indir</a>.</p>
+      <p>Codex zaten ne üretmek istediğinizi tarif edebileceğiniz bir yerdi. 0.17.0 ona sonucu görüp şekillendirebileceği bir yer veriyor. OpenDesign'ı gerçek bir sohbetten çağırın, açık bir brief'in hemen başlamasını sağlayın ve ardından başka bir paragraf yerine ellerinizle küçük bir düzeltme yapın.</p>
+      <p><a href="/download/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202608_0_17_0&amp;utm_content=official">OpenDesign'ı indir</a>.</p>
       <p>11 günde 62 PR; sohbeti, artefaktı ve tuvali tek bir iş akışında buluşturan 23 kişiden. Tasarım çalışma alanı artık Codex'in yanında durmuyor. Codex ona ulaşabiliyor. Sizi görüyoruz. 🚀</p>
 
       <h2>İlgili okumalar</h2>
       <ul>
-        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">Open Design 0.16.0: güvenilir teslimat</a></li>
-        <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1: daha keskin görüş, daha uzun akış</a></li>
-        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0: daha az maliyet, daha hızlı teslimat</a></li>
+        <li><a href="/blog/open-design-0-16-0-reliable-delivery/">OpenDesign 0.16.0: güvenilir teslimat</a></li>
+        <li><a href="/blog/open-design-0-15-1/">OpenDesign 0.15.1: daha keskin görüş, daha uzun akış</a></li>
+        <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">OpenDesign 0.15.0: daha az maliyet, daha hızlı teslimat</a></li>
       </ul>
 ---
 
-`open-design-v0.17.0`, published on August 3, 2026. **62 PRs from 23 contributors in 11 days.** Codex now has its own design workspace. Call `@open-design` from a Codex conversation, turn an idea or brief into a real editable artifact, then keep creating and refining it in Open Design Studio without leaving the Codex workflow.
+`open-design-v0.17.0`, published on August 3, 2026. **62 PRs from 23 contributors in 11 days.** Codex now has its own design workspace. Call `@open-design` from a Codex conversation, turn an idea or brief into a real editable artifact, then keep creating and refining it in OpenDesign Studio without leaving the Codex workflow.
 
 Want every change? Read the [full release notes on GitHub](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0). This is the product story: how Codex gets from a conversation to a visual artifact, why the last 10% no longer needs another prompt, and what became more reliable along the way.
 
 ## Codex has its own design workspace
 
-Coding agents are good at turning intent into files, but visual work has always asked for a second environment: explain the idea in chat, move the result into a design tool, then translate every correction back into another prompt. In 0.17.0, **Codex Desktop and CLI can call Open Design as a complete creative engine.** The conversation and the design workspace become one continuous workflow.
+Coding agents are good at turning intent into files, but visual work has always asked for a second environment: explain the idea in chat, move the result into a design tool, then translate every correction back into another prompt. In 0.17.0, **Codex Desktop and CLI can call OpenDesign as a complete creative engine.** The conversation and the design workspace become one continuous workflow.
 
-Start with `@open-design`. Confirm a visual brief, choose Open Design Cloud or a supported local runtime, and receive a real Preview or Studio result. The result is not a screenshot pasted into the conversation. It is an artifact you can open, inspect, edit, export, and keep refining.
+Start with `@open-design`. Confirm a visual brief, choose OpenDesign Cloud or a supported local runtime, and receive a real Preview or Studio result. The result is not a screenshot pasted into the conversation. It is an artifact you can open, inspect, edit, export, and keep refining.
 
 <figure>
   <img src="/blog/open-design-0-17-0-open-design-for-codex-workflow.webp" alt="An agent conversation flowing into an editable design canvas and stable preview, with the connected artifact held inside a precise green selection frame on a near-white editorial ground" />
-  <figcaption>Call Open Design from Codex, agree on the brief, and receive a real Preview or Studio artifact instead of a picture of one.</figcaption>
+  <figcaption>Call OpenDesign from Codex, agree on the brief, and receive a real Preview or Studio artifact instead of a picture of one.</figcaption>
 </figure>
 
 ## The creative runtime gets out of the way
 
-You should not need a second app open just to make the integration work. **The signed Open Design runtime starts headlessly when Codex needs it**, so there is no extra window to babysit and no local stack to wire together by hand.
+You should not need a second app open just to make the integration work. **The signed OpenDesign runtime starts headlessly when Codex needs it**, so there is no extra window to babysit and no local stack to wire together by hand.
 
 The failure path is practical too. If Studio cannot load cleanly inside an external host, Codex still delivers the stable preview immediately. You get the work first and can open it in the full workspace when needed, instead of watching the entire run fail because one presentation surface did not initialize.
 
-Local stays local. When you explicitly choose Local Codex, the run no longer loops back into the plugin or sends you into a Cloud sign-in flow. Open Design Cloud and Local Codex remain distinct choices, and BYOK provider configuration stays in this device's browser storage, passed only to the active local run.
+Local stays local. When you explicitly choose Local Codex, the run no longer loops back into the plugin or sends you into a Cloud sign-in flow. OpenDesign Cloud and Local Codex remain distinct choices, and BYOK provider configuration stays in this device's browser storage, passed only to the active local run.
 
 ## Finish with your hands, not another prompt
 
@@ -867,7 +867,7 @@ Exports follow the result you composed. Image export respects the active preview
 
 ## Clear briefs start immediately
 
-An agent should ask a question when the answer changes the result, not because every task must begin with an interview. **Open Design now starts immediately when the first prompt already contains enough direction.** When a real decision is missing, it asks one focused question at the moment that decision matters.
+An agent should ask a question when the answer changes the result, not because every task must begin with an interview. **OpenDesign now starts immediately when the first prompt already contains enough direction.** When a real decision is missing, it asks one focused question at the moment that decision matters.
 
 That changes the rhythm. A strong brief becomes work right away. An ambiguous brief still gets the clarification it needs, but the question is attached to a concrete fork in the process rather than standing between you and the first useful result.
 
@@ -875,7 +875,7 @@ That changes the rhythm. A strong brief becomes work right away. An ambiguous br
 
 Some Codex model and CLI combinations are known not to work together. 0.17.0 catches those combinations before launch, provides a useful switch-model path, and diagnoses post-tool timeouts more accurately instead of sending you through misleading retries.
 
-The rest of the model surface expands without muddying the boundaries: GPT-5.5 Fast arrives as an explicit speed-first choice, Raven joins one-click MCP setup, and Open Design discovers the official Grok Build installation automatically on Windows.
+The rest of the model surface expands without muddying the boundaries: GPT-5.5 Fast arrives as an explicit speed-first choice, Raven joins one-click MCP setup, and OpenDesign discovers the official Grok Build installation automatically on Windows.
 
 ## A stuck update is no longer a dead end
 
@@ -903,7 +903,7 @@ Codex Slides joins the family too, covering the full prompt-to-deck workflow: sc
 
 | If you're… | Start here |
 |---|---|
-| Already using Codex | Install the Open Design plugin, call `@open-design` with a concrete visual brief, and open the result in Preview or Studio |
+| Already using Codex | Install the OpenDesign plugin, call `@open-design` with a concrete visual brief, and open the result in Preview or Studio |
 | Refining generated work | Select one element and finish the last visual corrections directly instead of describing them in another prompt |
 | Working locally | Choose Local Codex explicitly and confirm the run stays local with your device-stored BYOK configuration |
 | Building presentations | Try Codex Slides for the full brief-to-outline-to-edit-to-export workflow |
@@ -911,14 +911,14 @@ Codex Slides joins the family too, covering the full prompt-to-deck workflow: sc
 
 ## What to do next
 
-Codex was already a place to describe what you wanted to build. 0.17.0 gives it a place to see and shape the result. Call Open Design from a real conversation, let a clear brief start immediately, then make one small correction with your hands instead of another paragraph.
+Codex was already a place to describe what you wanted to build. 0.17.0 gives it a place to see and shape the result. Call OpenDesign from a real conversation, let a clear brief start immediately, then make one small correction with your hands instead of another paragraph.
 
-[Download Open Design](/download/?utm_source=blog&utm_medium=docs&utm_campaign=202608_0_17_0&utm_content=official).
+[Download OpenDesign](/download/?utm_source=blog&utm_medium=docs&utm_campaign=202608_0_17_0&utm_content=official).
 
 62 PRs in 11 days, from 23 people who connected conversation, artifact, and canvas into one workflow. The design workspace no longer sits beside Codex. Codex can reach it. We see you. 🚀
 
 ## Related reading
 
-- [Open Design 0.16.0: reliable delivery](/blog/open-design-0-16-0-reliable-delivery/)
-- [Open Design 0.15.1: sharper vision, longer flow](/blog/open-design-0-15-1/)
-- [Open Design 0.15.0: cost less, ship faster](/blog/open-design-0-15-0-cost-less-ship-faster/)
+- [OpenDesign 0.16.0: reliable delivery](/blog/open-design-0-16-0-reliable-delivery/)
+- [OpenDesign 0.15.1: sharper vision, longer flow](/blog/open-design-0-15-1/)
+- [OpenDesign 0.15.0: cost less, ship faster](/blog/open-design-0-15-0-cost-less-ship-faster/)
