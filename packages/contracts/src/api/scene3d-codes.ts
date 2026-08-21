@@ -54,6 +54,8 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-328': 'Duplicate vertices',
   'S3D-W-329': 'Inconsistent face winding',
   'S3D-W-330': 'Unapplied object scale',
+  'S3D-W-331': 'Duplicate-vertex check skipped',
+  'S3D-W-332': 'Hidden mesh still exports',
 
   /* lint: world placement + budgets */
   'S3D-W-325': 'Part floats above support',

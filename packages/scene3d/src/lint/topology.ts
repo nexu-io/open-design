@@ -82,6 +82,18 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
         detail: { doubleVertices: mesh.doubleVertices },
       });
     }
+    // The doubles pass was skipped past the vertex cap: silence is "not
+    // measured", not "clean". Only fires when the runner said so explicitly.
+    if (!geo.allowDoubleVertices && mesh.doublesSampled === false) {
+      issues.push({
+        code: ISSUE_CODES.DOUBLE_VERTICES_UNCHECKED,
+        severity: "warning",
+        message: `mesh '${mesh.object}' is too dense (${mesh.verts.toLocaleString()} verts) to check for double vertices`,
+        hint: "decimate or split the mesh if its seams must be verified",
+        target: mesh.object,
+        detail: { verts: mesh.verts },
+      });
+    }
     if (!geo.allowInconsistentWinding && (mesh.inconsistentWindingEdges ?? 0) > 0) {
       issues.push({
         code: ISSUE_CODES.INCONSISTENT_WINDING,
@@ -114,14 +126,32 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
         target: obj.name,
       });
     }
-    if (obj.scale.some((s) => s === 0)) {
+    // Degeneracy judged on the RAW scale, not the R6-rounded one: a 1e-9 axis
+    // rounds to 0 and would fire (or not) by accident of rounding, and the
+    // reported detail showed 0, hiding the true magnitude. NaN axes are the
+    // NAN_TRANSFORM rule's business above, so null is skipped here.
+    const rawScale = obj.scaleRaw ?? obj.scale;
+    if (rawScale.some((s) => s !== null && Math.abs(s) < 1e-6)) {
       issues.push({
         code: ISSUE_CODES.DEGENERATE_SCALE,
         severity: "error",
-        message: `object '${obj.name}' has a zero scale axis`,
+        message: `object '${obj.name}' has a near-zero scale axis`,
         hint: "apply transforms or set scale to 1",
         target: obj.name,
-        detail: { scale: obj.scale },
+        detail: { scale: rawScale },
+      });
+    }
+    // A hidden mesh object still exports, counts against budget, and can
+    // z-fight — while the master exporter may drop it, causing a parity loss.
+    // Surfaced, never silently excluded from the census.
+    if (obj.hasMeshData && obj.visible === false) {
+      issues.push({
+        code: ISSUE_CODES.HIDDEN_MESH,
+        severity: "warning",
+        message: `mesh object '${obj.name}' is hidden but still ships in the census`,
+        hint: "unhide it, or delete it if it should not exist — a hidden mesh still exports and can drop from the master, causing a parity loss",
+        target: obj.name,
+        detail: { visible: false },
       });
     }
   }

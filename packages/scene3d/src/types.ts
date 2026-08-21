@@ -313,6 +313,13 @@ export interface CensusObject {
   rotation: [number, number, number];
   scale: [number, number, number];
   dimensions: [number, number, number];
+  /**
+   * Unrounded scale, each axis finite or null. The rounded `scale` above
+   * collapses a near-zero axis (1e-9) to exactly 0, hiding the real magnitude
+   * and firing degeneracy only by rounding accident; the linter judges
+   * degeneracy on this.
+   */
+  scaleRaw?: Array<number | null>;
   visible: boolean;
   hasMeshData: boolean;
   /** World-space AABB. Null when the runner could not compute it. */
@@ -345,6 +352,12 @@ export interface CensusMesh {
   looseEdges?: number;
   /** Vertex pairs within merge distance (1e-6 m) — split seams in disguise. */
   doubleVertices?: number;
+  /**
+   * Whether the doubles pass actually ran (false past the vertex cap). Absent
+   * on an older census. `doublesSampled === false` means the count is omitted
+   * because it was not measured, not because the mesh is clean.
+   */
+  doublesSampled?: boolean;
   /**
    * Manifold edges whose two faces disagree in winding. Engines light one
    * side of that seam inside-out; Blender's viewport hides it.

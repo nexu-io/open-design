@@ -1076,6 +1076,11 @@ def census(scene):
         loc = [R6(v) for v in o.location]
         rot = [R6(v) for v in o.rotation_euler]
         scl = [R6(v) for v in o.scale]
+        # RAW scale alongside the rounded one: R6 collapses a near-zero axis
+        # (1e-9) to exactly 0, which both fires DEGENERATE_SCALE only by
+        # accident of rounding and HIDES the true magnitude in the report. The
+        # linter reads scaleRaw to judge degeneracy and to show 1e-9, not 0.
+        scl_raw = [float(v) if math.isfinite(v) else None for v in o.scale]
         dims = [R6(v) for v in o.dimensions]
         try:
             visible = bool(o.visible_get())
@@ -1083,18 +1088,25 @@ def census(scene):
             visible = True
         # World-space bounds: grounding and budget rules need where a part
         # actually sits, which `location` (an origin, often not the base)
-        # cannot answer.
+        # cannot answer. Measured over face-connected vertices for a mesh so a
+        # loose vertex cannot inflate the box (B-11/B-15); bound_box for
+        # non-meshes and as a fallback.
         world_min = None
         world_max = None
         try:
-            corners = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
-            world_min = [R6(min(c[i] for c in corners)) for i in range(3)]
-            world_max = [R6(max(c[i] for c in corners)) for i in range(3)]
+            pts = face_connected_world_points(o) if o.type == "MESH" else None
+            if pts:
+                world_min = [R6(min(p[i] for p in pts)) for i in range(3)]
+                world_max = [R6(max(p[i] for p in pts)) for i in range(3)]
+            else:
+                corners = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
+                world_min = [R6(min(c[i] for c in corners)) for i in range(3)]
+                world_max = [R6(max(c[i] for c in corners)) for i in range(3)]
         except Exception:
             pass
         obj_rows.append({
             "name": o.name, "type": o.type, "parent": o.parent.name if o.parent else None,
-            "location": loc, "rotation": rot, "scale": scl,
+            "location": loc, "rotation": rot, "scale": scl, "scaleRaw": scl_raw,
             "dimensions": dims, "visible": visible, "hasMeshData": o.type == "MESH",
             "worldMin": world_min, "worldMax": world_max,
         })
@@ -1182,6 +1194,11 @@ def census(scene):
             "uv": uv_block,
             "looseVerts": loose_verts, "looseEdges": loose_edges,
             **({} if doubles is None else {"doubleVertices": doubles}),
+            # Whether the doubles pass actually RAN. Past the vert cap the count
+            # is omitted, and "not measured" must never read as "clean" — the
+            # linter turns doublesSampled:false into DOUBLE_VERTICES_UNCHECKED
+            # (the same discipline as the z-fighting/UV caps).
+            "doublesSampled": len(o.data.vertices) <= DOUBLES_VERT_CAP,
             "inconsistentWindingEdges": winding,
             "facesWithoutMaterial": faces_no_mat,
             "surfaceArea": R6(world_area),
@@ -1311,16 +1328,30 @@ def principled_of(node):
         if inp not in node.inputs:
             return default
         return node.inputs[inp].default_value
-    metallic = float(val("Metallic", 0.0))
-    roughness = float(val("Roughness", 0.5))
-    ior = float(val("IOR", 1.45))
-    bc = val("Base Color", (0.8, 0.8, 0.8))
+
+    def scalar(inp, default):
+        # None when the socket is texture/procedural-DRIVEN: the default_value
+        # sitting behind a link is not the rendered value, and reporting it as
+        # a constant fired false METALLIC_VALUE / ROUGHNESS_RANGE / IOR errors
+        # on a channel a map actually controls. The lint gates skip null.
+        if inp in node.inputs and node.inputs[inp].is_linked:
+            return None
+        return float(val(inp, default))
+
+    metallic = scalar("Metallic", 0.0)
+    roughness = scalar("Roughness", 0.5)
+    ior = scalar("IOR", 1.45)
+    # Base Color reports None when a texture drives it, for the same reason.
+    bc = None if ("Base Color" in node.inputs and node.inputs["Base Color"].is_linked) else val("Base Color", (0.8, 0.8, 0.8))
     base_color = [R6(v) for v in bc[:3]] if bc else None
-    has_tex = any(
-        l.from_node and l.from_node.type == "TEX_IMAGE"
-        for l in node.inputs["Base Color"].links) if "Base Color" in node.inputs else False
+    # A material is textured if ANY Principled input is fed by a reachable
+    # TEX_IMAGE — not only Base Color. A normal/roughness/metallic-only map
+    # (ORM packing is routine) still needs UVs, and the old Base-Color-only
+    # test let those meshes skip the UV requirement entirely.
+    has_tex = _reachable_tex_image(node)
     untouched = (not has_tex and base_color == [0.8, 0.8, 0.8]
-                 and abs(roughness - 0.5) < 1e-6 and metallic == 0.0)
+                 and roughness is not None and abs(roughness - 0.5) < 1e-6
+                 and metallic == 0.0)
     # Emission and alpha, for the viewer's material panel. Measured facts,
     # like everything else in the census: the panel's sliders start from
     # what the build actually authored, never from a guessed default.
@@ -1328,11 +1359,38 @@ def principled_of(node):
     emission = [R6(v) for v in em[:3]] if em else [0.0, 0.0, 0.0]
     emission_strength = float(val("Emission Strength", 0.0))
     alpha = float(val("Alpha", 1.0))
-    return {"present": True, "metallic": R6(metallic), "roughness": R6(roughness),
-            "ior": R6(ior), "baseColor": base_color, "hasTexture": has_tex,
+    return {"present": True,
+            "metallic": None if metallic is None else R6(metallic),
+            "roughness": None if roughness is None else R6(roughness),
+            "ior": None if ior is None else R6(ior),
+            "baseColor": base_color, "hasTexture": has_tex,
             "untouchedDefault": untouched,
             "emission": emission, "emissionStrength": R6(emission_strength),
             "alpha": R6(alpha)}
+
+
+def _reachable_tex_image(node):
+    """True when a TEX_IMAGE (with an image) feeds `node` through its input
+    links, directly or through intermediate nodes (a Normal Map, a Mix, a
+    Separate). Only follows input links backward from the Principled, so it
+    reports texture-driven inputs and never an orphaned, disconnected image
+    node the render ignores."""
+    seen = set()
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if id(n) in seen:
+            continue
+        seen.add(id(n))
+        for inp in n.inputs:
+            for link in inp.links:
+                src = link.from_node
+                if src is None:
+                    continue
+                if src.type == "TEX_IMAGE" and src.image is not None:
+                    return True
+                stack.append(src)
+    return False
 
 
 def mat_has_texture(m):
@@ -1383,18 +1441,20 @@ def symmetry_facts(bm):
     ~0; a lumpy scanned or generated half reads in millimetres. Returns
     None (unmeasured, never 'fine') on empty or over-cap meshes."""
     import mathutils.kdtree
-    n = len(bm.verts)
+    # Face-connected vertices only (B-11): a loose vertex shifts the mirror
+    # centre and reports a meaningless metres-large asymmetry. Fall back to all
+    # verts for an all-loose mesh so the block is not silently dropped.
+    bm.verts.ensure_lookup_table()
+    verts = [v for v in bm.verts if v.link_faces] or list(bm.verts)
+    n = len(verts)
     if n == 0 or n > SYMMETRY_VERT_CAP:
         return None
     try:
-        # Index access below requires the lookup table; without it bmesh
-        # raises and the whole block would silently read as unmeasured.
-        bm.verts.ensure_lookup_table()
-        lo = min(v.co.x for v in bm.verts)
-        hi = max(v.co.x for v in bm.verts)
+        lo = min(v.co.x for v in verts)
+        hi = max(v.co.x for v in verts)
         cx = (lo + hi) / 2.0
         kd = mathutils.kdtree.KDTree(n)
-        for i, v in enumerate(bm.verts):
+        for i, v in enumerate(verts):
             kd.insert(v.co, i)
         kd.balance()
         stride = max(1, n // SYMMETRY_PROBES)
@@ -1402,7 +1462,7 @@ def symmetry_facts(bm):
         worst = 0.0
         probes = 0
         for i in range(0, n, stride):
-            co = bm.verts[i].co
+            co = verts[i].co
             mirrored = (2.0 * cx - co.x, co.y, co.z)
             found = kd.find(mirrored)
             dist = found[2] if found and found[2] is not None else None
@@ -1737,12 +1797,38 @@ class provenance(object):
         return self._line
 
 
+def face_connected_world_points(o):
+    """World-space positions of the vertices that belong to at least one face.
+
+    A stray LOOSE vertex — one no face references — otherwise defines the
+    object's bounds: generated assets routinely carry a vert far from the
+    geometry, and a single one at (100,100,100) makes a 1m cube measure 100m,
+    which then wrecks worldSize, symmetry, grounding and proof auto-framing.
+    Loose geometry is still reported by LOOSE_GEOMETRY; it just no longer sets
+    the box. A mesh with NO faces at all (an intentional point cloud, or a
+    broken all-loose mesh) falls back to every vertex so it still reports a
+    box — T-3 / LOOSE_GEOMETRY flag that case separately. Returns [] for a
+    non-mesh or an empty mesh.
+    """
+    import mathutils
+    if o.type != "MESH" or not o.data.vertices:
+        return []
+    mw = o.matrix_world
+    verts = o.data.vertices
+    used = set()
+    for p in o.data.polygons:
+        used.update(p.vertices)
+    idxs = sorted(used) if used else range(len(verts))
+    return [mw @ mathutils.Vector(verts[i].co) for i in idxs]
+
+
 def spatial_facts(o):
     """World-space measurements of one object.
 
     Everything here comes from transformed vertices, not from local data or
     the object's origin — an object whose origin sits far from its geometry
-    would otherwise report a position it does not occupy.
+    would otherwise report a position it does not occupy. Measured over
+    face-connected vertices so a loose vertex cannot inflate the box (B-11).
 
     `centroid` is the mean vertex position, which is the honest thing to
     report: a true centre of mass needs uniform density and a closed
@@ -1750,22 +1836,20 @@ def spatial_facts(o):
     it is rather than borrowing a term it has not earned.
     """
     import mathutils
-    mw = o.matrix_world
-    verts = o.data.vertices
-    if not verts:
+    points = face_connected_world_points(o)
+    if not points:
         return None
     lo = [float("inf")] * 3
     hi = [float("-inf")] * 3
     acc = mathutils.Vector((0.0, 0.0, 0.0))
-    for v in verts:
-        p = mw @ v.co
+    for p in points:
         acc += p
         for a in range(3):
             if p[a] < lo[a]:
                 lo[a] = p[a]
             if p[a] > hi[a]:
                 hi[a] = p[a]
-    n = len(verts)
+    n = len(points)
     centroid = acc / n
     return {
         "worldMin": [R6(c) for c in lo],
@@ -2012,14 +2096,16 @@ def ensure_camera(scene):
 
 
 def scene_bbox(scene):
+    # Face-connected bounds (B-11): a single loose vertex would otherwise pull
+    # the proof camera back to frame a 100m-wide empty box around a 1m subject,
+    # rendering the asset a speck (or losing it entirely).
     import mathutils
     lo = None
     hi = None
     for o in scene.objects:
         if o.type != "MESH":
             continue
-        for c in o.bound_box:
-            wc = o.matrix_world @ mathutils.Vector(c)
+        for wc in face_connected_world_points(o):
             if lo is None:
                 lo = mathutils.Vector(wc)
                 hi = mathutils.Vector(wc)

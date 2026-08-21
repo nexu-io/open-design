@@ -358,6 +358,100 @@ describe("lint: pbr/topology/integrity over census", () => {
     }
   });
 
+  it("judges scale degeneracy on the raw magnitude and reports it (B-2)", () => {
+    // A 1e-9 axis: the rounded scale reads [0,1,1] (hiding the magnitude), but
+    // degeneracy must be judged on — and reported as — the true 1e-9.
+    const issues = runLint({
+      contract: contract(),
+      census: census({
+        objects: [
+          {
+            name: "prp_flat",
+            type: "MESH",
+            parent: null,
+            location: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [0, 1, 1], // R6-collapsed
+            scaleRaw: [1e-9, 1, 1], // true magnitude
+            dimensions: [0, 1, 1],
+            visible: true,
+            hasMeshData: true,
+          },
+        ],
+      }),
+    });
+    const degen = issues.find((i) => i.code === ISSUE_CODES.DEGENERATE_SCALE);
+    expect(degen).toBeDefined();
+    expect((degen!.detail as { scale: number[] }).scale[0]).toBe(1e-9);
+  });
+
+  it("warns that a hidden mesh still ships (B-3)", () => {
+    const issues = runLint({
+      contract: contract(),
+      census: census({
+        objects: [
+          {
+            name: "prp_helper",
+            type: "MESH",
+            parent: null,
+            location: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+            dimensions: [1, 1, 1],
+            visible: false,
+            hasMeshData: true,
+          },
+        ],
+      }),
+    });
+    expect(issues.some((i) => i.code === ISSUE_CODES.HIDDEN_MESH && i.target === "prp_helper")).toBe(true);
+  });
+
+  it("warns that a too-dense mesh's doubles went unchecked (B-5)", () => {
+    const issues = runLint({
+      contract: contract(),
+      census: census({
+        meshes: [
+          {
+            object: "prp_dense",
+            verts: 300000,
+            faces: 100000,
+            ngons: 0,
+            nonManifoldEdges: 0,
+            zeroAreaFaces: 0,
+            nan: false,
+            uvLayers: ["UVMap"],
+            doublesSampled: false, // over the cap — count omitted
+          },
+        ],
+      }),
+    });
+    expect(issues.some((i) => i.code === ISSUE_CODES.DOUBLE_VERTICES_UNCHECKED)).toBe(true);
+  });
+
+  it("does not warn about doubles when the pass DID run (B-5)", () => {
+    const issues = runLint({
+      contract: contract(),
+      census: census({
+        meshes: [
+          {
+            object: "prp_ok",
+            verts: 8,
+            faces: 6,
+            ngons: 0,
+            nonManifoldEdges: 0,
+            zeroAreaFaces: 0,
+            nan: false,
+            uvLayers: ["UVMap"],
+            doublesSampled: true,
+            doubleVertices: 0,
+          },
+        ],
+      }),
+    });
+    expect(issues.some((i) => i.code === ISSUE_CODES.DOUBLE_VERTICES_UNCHECKED)).toBe(false);
+  });
+
   it("flags non-uniform scale", () => {
     const issues = runLint({
       contract: contract(),
