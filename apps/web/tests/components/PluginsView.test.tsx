@@ -13,6 +13,7 @@ import {
   refreshPluginMarketplace,
   removePluginMarketplace,
   setPluginMarketplaceTrust,
+  type PluginInstallOutcome,
   type PluginShareProjectOutcome,
   uploadPluginFolder,
   uploadPluginZip,
@@ -816,9 +817,9 @@ describe('PluginsView', () => {
   });
 
   it('does not apply a stale import result under a tab the user has since switched away from', async () => {
-    let resolveGithubImport!: (value: PluginShareProjectOutcome) => void;
+    let resolveGithubImport!: (value: PluginInstallOutcome) => void;
     mockedInstallPluginSource.mockReturnValueOnce(
-      new Promise<PluginShareProjectOutcome>((resolve) => {
+      new Promise<PluginInstallOutcome>((resolve) => {
         resolveGithubImport = resolve;
       }),
     );
@@ -835,7 +836,7 @@ describe('PluginsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
     await waitFor(() =>
-      expect(mockedInstallPluginSource).toHaveBeenCalledWith(source),
+      expect(mockedInstallPluginSource).toHaveBeenCalledWith(source, null),
     );
 
     // Switch to the zip tab before the GitHub request resolves.
