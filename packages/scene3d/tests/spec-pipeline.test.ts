@@ -101,7 +101,12 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
       timeoutMs: LONG,
       noCache: true,
     });
-    expect(result.issues).toEqual([]);
+    // Clean of DEFECTS. The garden bed is a legitimately large, flat ground
+    // among many small rocks/shoots, so the compositional outlier hints (I-952
+    // size, I-951 tri-density) fire as info — a "verify units" nudge a statistic
+    // cannot suppress without knowing intent. A showcase is clean of errors and
+    // warnings; info hints are FYI, not defects.
+    expect(result.issues.filter((i) => i.severity !== "info")).toEqual([]);
     expect(result.ok).toBe(true);
     expect(result.census!.meshes).toHaveLength(21);
     // The census's own coplanar scan agrees with the solver's guarantee.

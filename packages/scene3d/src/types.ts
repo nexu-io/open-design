@@ -130,6 +130,14 @@ export interface Scene3dContract {
       maxOverhangAreaFraction?: number;
     };
     /**
+     * Scene-coherence tuning. `outlierZ` is the robust z-score (median + MAD,
+     * log scale) beyond which a part's size or triangle density is flagged as a
+     * distribution outlier — a likely unit slip or an LOD absurdity. Default is
+     * the conventional Iglewicz–Hoaglin cutoff 3.5; raise it to quiet a scene
+     * that legitimately mixes scales.
+     */
+    coherence?: { outlierZ?: number };
+    /**
      * Voxel / Minecraft discipline. Set (by `target:"minecraft"` or an
      * explicit block) it turns on the voxel census facts and their judgments;
      * absent, the compiler measures and judges nothing voxel-specific, so

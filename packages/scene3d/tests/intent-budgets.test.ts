@@ -77,6 +77,43 @@ describe("lintIntent — inert by default (byte-identical guarantee)", () => {
   });
 });
 
+describe("lintIntent — distribution outliers (I-952 size / robust-z)", () => {
+  it("flags a gross size outlier as info, sparing the normal parts", () => {
+    const s = scene(part("prp_a"), part("prp_b"), part("prp_c"), part("prp_d"), part("prp_giant"));
+    const c = census([
+      withSpatial("prp_a", 12, 1), withSpatial("prp_b", 12, 1.1), withSpatial("prp_c", 12, 0.9),
+      withSpatial("prp_d", 12, 1.05), withSpatial("prp_giant", 12, 100),
+    ]);
+    const out = run(c, s).filter((i) => i.code === "S3D-I-952");
+    expect(out.map((i) => i.target)).toEqual(["prp_giant"]);
+    expect(out[0]!.severity).toBe("info"); // a heuristic hint, never a defect
+  });
+
+  it("spares a merely-different part when a majority share one size (MAD=0 fallback)", () => {
+    // b,c,d identical (MAD among them is 0); a is a bit smaller; giant is the
+    // real outlier. The mean-AD fallback must not read `a` as Infinity.
+    const s = scene(part("prp_a"), part("prp_b"), part("prp_c"), part("prp_d"), part("prp_giant"));
+    const c = census([
+      withSpatial("prp_a", 12, 0.5), withSpatial("prp_b", 12, 0.6), withSpatial("prp_c", 12, 0.6),
+      withSpatial("prp_d", 12, 0.6), withSpatial("prp_giant", 12, 50),
+    ]);
+    expect(run(c, s).filter((i) => i.code === "S3D-I-952").map((i) => i.target)).toEqual(["prp_giant"]);
+  });
+
+  it("stays silent when the role already declares an explicit sizeRatio", () => {
+    const contract = normalizeContract({ schemaVersion: 1, conventions: { budgets: { roles: { hero: { sizeRatio: { max: 200 } } } } } } as never);
+    const s = scene(part("prp_a"), part("prp_b"), part("prp_c"), part("prp_giant", { role: "hero" }));
+    const c = census([withSpatial("prp_a", 12, 1), withSpatial("prp_b", 12, 1), withSpatial("prp_c", 12, 1), withSpatial("prp_giant", 12, 100)]);
+    expect(run(c, s, contract).filter((i) => i.code === "S3D-I-952").map((i) => i.target)).not.toContain("prp_giant");
+  });
+
+  it("needs at least three measurable parts to have a distribution", () => {
+    const s = scene(part("prp_a"), part("prp_giant"));
+    const c = census([withSpatial("prp_a", 12, 1), withSpatial("prp_giant", 12, 100)]);
+    expect(run(c, s).filter((i) => i.code === "S3D-I-952")).toEqual([]);
+  });
+});
+
 describe("lintIntent — relative judgments over the census (W-951/952/953)", () => {
   it("flags a background family that owns more than its triangle share (W-951)", () => {
     // background budget triShare.softMax = 0.15; give it 90% of the tris.

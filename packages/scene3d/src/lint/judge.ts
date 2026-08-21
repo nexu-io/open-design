@@ -182,6 +182,42 @@ const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
     detail: (cx, f) => ({ sizeRatio: f, medianMaxDim: cx.facts.medianMaxDim }),
   },
 
+  // A part that is a statistical OUTLIER in the scene's own size distribution
+  // (robust z over median + MAD, log scale) — the Fox at 154 m among 1.5 m
+  // parts, an FBX imported 100× too big. Distribution-relative, so it needs no
+  // fixed ratio and fires even when NO role is authored. Silent when the role
+  // already declares an explicit sizeRatio: the author took ownership, and the
+  // W-954 median-ratio rows judge it instead of second-guessing them.
+  {
+    code: ISSUE_CODES.SIZE_OUTLIER,
+    severity: "info",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.sizeOutlierZByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => (cx.part.budget.sizeRatio ? undefined : cx.contract.outlierZ),
+    fails: (f, b) => f > b,
+    message: (cx, f) =>
+      `'${cx.part.familyId}' is a size outlier — ${Number(f.toFixed(1))} robust deviations from the scene's size distribution; verify it is not a unit/scale slip`,
+    hint: () => "check this part's export units (metres vs centimetres, or an FBX 100× scale) against the rest of the scene",
+    detail: (cx, f) => ({ robustZ: f, medianMaxDim: cx.facts.medianMaxDim }),
+  },
+
+  // A part whose TRIANGLE DENSITY (tris/m²) is a distribution outlier — a
+  // 2208-triangle sphere among 12-triangle boxes. Info, not warning: role-
+  // legitimate density variance (hero vs filler) is real and rank-inversion
+  // already polices ordering; this only flags magnitude absurdity as an LOD hint.
+  {
+    code: ISSUE_CODES.TRI_DENSITY_OUTLIER,
+    severity: "info",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.triDensityOutlierZByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => cx.contract.outlierZ,
+    fails: (f, b) => f > b,
+    message: (cx, f) =>
+      `'${cx.part.familyId}' has a triangle density ${Number(f.toFixed(1))} robust deviations from the scene's — a possible LOD / re-topology candidate`,
+    hint: () => "if this part carries far more geometry per m² than its neighbours, an LOD or decimation may be worth it",
+    detail: (cx, f) => ({ robustZ: f }),
+  },
+
   // The part's worst triangle is a sliver beyond what its role tolerates — a
   // long thin triangle that passes every manifold check yet shades and (for a
   // rig) skins badly. The role sets the ceiling: tight for a hero, loose for a

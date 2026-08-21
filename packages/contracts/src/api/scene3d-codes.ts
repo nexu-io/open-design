@@ -174,6 +174,8 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-954': 'Part scale incoherent with the scene',
   'S3D-W-955': 'Sliver triangles for the role',
   'S3D-W-956': 'Under-textured for the role',
+  'S3D-I-952': 'Size outlier — verify units',
+  'S3D-I-951': 'Triangle-density outlier',
 
   /* voxel / minecraft */
   'S3D-W-970': 'Vertices off the voxel grid',

@@ -240,6 +240,14 @@ export const ISSUE_CODES = {
   SIZE_INCOHERENT: "S3D-W-954",
   SLIVER_TRIANGLES: "S3D-W-955",
   UNDER_ROLE_TEXEL: "S3D-W-956",
+  /* Distribution-relative outliers (robust z over the scene's own spread): a
+     part many robust deviations out in SIZE is a likely unit slip (I-952); in
+     TRIANGLE DENSITY it is an LOD-magnitude oddity (I-951). Both are INFO: a
+     statistic cannot tell a real unit slip from a legitimately large ground or
+     a deliberately dense hero, so it hints ("verify this") rather than asserts.
+     No fixed ratio — the scene defines its own normal. */
+  SIZE_OUTLIER: "S3D-I-952",
+  TRI_DENSITY_OUTLIER: "S3D-I-951",
 
   /* lint: voxel / Minecraft (970-979) — format-correctness for the vanilla
      model formats, on only under `target:"minecraft"` (or a `minecraft`

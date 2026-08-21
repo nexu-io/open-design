@@ -205,6 +205,8 @@ export interface NormalizedContract {
     maxOverhangAreaFraction: number | null;
     measureThickness: boolean;
   };
+  /** Robust z cutoff for the size / tri-density outlier facts (default 3.5). */
+  outlierZ: number;
   /** Voxel/Minecraft discipline. `enabled` gates every voxel census fact and
    *  judgment; off, they are inert and the census is byte-identical. Grid in
    *  metres (1 block = 1 m), bounds in blocks. */
@@ -324,6 +326,12 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
     },
     texelDiscipline,
     shade: { bakeMin, bakeMax: 4096 },
+    // Iglewicz–Hoaglin robust-z cutoff — a citable statistical constant, not a
+    // domain threshold; overridable for a scene that mixes scales on purpose.
+    outlierZ: (() => {
+      const z = numOr(c.conventions?.coherence?.outlierZ, 3.5);
+      return z > 0 ? z : 3.5;
+    })(),
     textures: {
       requirePowerOfTwo: tex.requirePowerOfTwo ?? true,
       maxSize: numOr(tex.maxSize, 4096),
