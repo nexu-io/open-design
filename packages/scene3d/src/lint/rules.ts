@@ -47,6 +47,7 @@ export function runLint(input: LintInput): Issue[] {
   if (input.claims) {
     lintClaims(input.claims, input.census, issues, {
       groundTolerance: input.contract.grounding.tolerance,
+      groundExempt: input.contract.grounding.exempt,
     });
   }
   lintProof(input.proofFrames, issues);

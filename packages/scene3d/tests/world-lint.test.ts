@@ -106,6 +106,35 @@ describe("grounding", () => {
       codes(grounded, census([{ name: "lgt_key", min: 6, type: "LIGHT" }])),
     ).toEqual([]);
   });
+
+  it("measures grounding from the vertex-exact spatial, not the object AABB (B-1)", () => {
+    // A rotated plank: its bounding box min-z dips below the floor (the AABB of
+    // an OBB does), but its actual lowest VERTEX rests on it. The vertex-based
+    // claims.grounded passes it, so the AABB-based world grounding must not
+    // contradict by reporting a sink.
+    const c = census([{ name: "prp_plank", min: -0.05 }]);
+    c.meshes[0]!.spatial = {
+      worldMin: [0, 0, 0.001],
+      worldMax: [1, 1, 1],
+      size: [1, 1, 1],
+      bboxCenter: [0.5, 0.5, 0.5],
+      centroid: [0.5, 0.5, 0.5],
+      groundGap: 0.001, // vertices rest on the floor within tolerance
+    };
+    expect(codes(grounded, c)).toEqual([]);
+  });
+
+  it("does not let a bare exempt prefix leak across a word boundary (W-1)", () => {
+    // `exempt: ["mount"]` must cover the `mount_` family but NOT `mountain_`.
+    const contract: Scene3dContract = {
+      schemaVersion: 1,
+      conventions: { grounding: { enabled: true, exempt: ["mount"] } },
+    };
+    // mount_bracket: exempt at the separator boundary — silent.
+    expect(codes(contract, census([{ name: "mount_bracket", min: 1.8 }]))).toEqual([]);
+    // mountain_rock: NOT the mount family — a real float must still surface.
+    expect(codes(contract, census([{ name: "mountain_rock", min: 1.8 }]))).toEqual(["S3D-W-325"]);
+  });
 });
 
 describe("budgets", () => {

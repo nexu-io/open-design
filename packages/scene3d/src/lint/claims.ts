@@ -1,6 +1,7 @@
 import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import type { ClaimsSpec } from "../solve/types.js";
+import { isExempt } from "./exempt.js";
 
 /**
  * Adjudicate a spec's `claims` block against the measured census.
@@ -29,6 +30,14 @@ export function lintClaims(
      * the project's call, not this module's.
      */
     groundTolerance?: number;
+    /**
+     * Parts the grounding convention exempts (bedded rocks, mounts, skyboxes).
+     * lintWorld already skips these; without the same list here a deliberately
+     * bedded, exempted part would still fail a scene-level `grounded` claim as
+     * a hard error — the two grounding authorities disagreeing about the same
+     * part. Matched with the shared segment-boundary predicate.
+     */
+    groundExempt?: readonly string[];
   } = {},
 ): void {
   const fail = (claim: string, message: string, detail: Record<string, unknown>): void => {
@@ -91,7 +100,11 @@ export function lintClaims(
 
   if (claims.grounded === true) {
     const TOLERANCE = options.groundTolerance ?? 0.005;
+    const exempt = options.groundExempt ?? [];
     for (const mesh of census.meshes) {
+      // Honour the same exemptions lintWorld does, so a bedded/mounted part
+      // the project declared exempt does not fail the scene-level claim.
+      if (isExempt(mesh.object, exempt)) continue;
       if (!mesh.spatial) {
         unchecked("grounded", `'${mesh.object}' has no spatial measurements`);
         continue;
@@ -106,6 +119,11 @@ export function lintClaims(
   }
 
   if (claims.maxHeight !== undefined || claims.footprint !== undefined) {
+    // Scope: RENDERABLE mesh geometry only. Non-mesh objects (lights, empties,
+    // armatures) are intentionally excluded — their AABBs are default-sized
+    // gizmos, not silhouette, and folding them in would fail a height/footprint
+    // claim on a light's icon rather than the asset. A tall armature that
+    // genuinely breaks an envelope surfaces through its skinned mesh's spatial.
     const spatials = census.meshes.map((m) => m.spatial).filter((s): s is NonNullable<typeof s> => Boolean(s));
     if (spatials.length === 0) {
       if (claims.maxHeight !== undefined) unchecked("maxHeight", "no spatial measurements in the census");
@@ -152,12 +170,22 @@ export function lintClaims(
   }
 
   if (claims.materialsUsed !== undefined) {
-    const bound = new Set(census.meshes.flatMap((m) => m.materials ?? []));
-    for (const name of claims.materialsUsed) {
-      if (!bound.has(name)) {
-        fail("materialsUsed", `material '${name}' is not bound to any part in the built scene`, {
-          target: name,
-        });
+    // If NO mesh carries a material list, the census could not measure bindings
+    // at all — reporting every claimed material as FAILED would be the exact
+    // "silently turned couldn't-measure into failed" mistake unchecked() exists
+    // to prevent. An empty list on a mesh that HAS the field is a real "no
+    // material bound" and still fails below.
+    const anyMeasured = census.meshes.some((m) => m.materials !== undefined);
+    if (!anyMeasured && census.meshes.length > 0) {
+      unchecked("materialsUsed", "this census does not carry per-mesh material bindings");
+    } else {
+      const bound = new Set(census.meshes.flatMap((m) => m.materials ?? []));
+      for (const name of claims.materialsUsed) {
+        if (!bound.has(name)) {
+          fail("materialsUsed", `material '${name}' is not bound to any part in the built scene`, {
+            target: name,
+          });
+        }
       }
     }
   }

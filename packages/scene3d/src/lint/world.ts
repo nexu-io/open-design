@@ -1,6 +1,7 @@
 import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import { NormalizedContract } from "../contract.js";
+import { isExempt } from "./exempt.js";
 
 /**
  * World placement and budget rules.
@@ -34,12 +35,19 @@ export function lintWorld(
     // Blender is Z-up internally regardless of the export axis, and the
     // census is authored in Blender space, so "down" is Z here.
     const upIndex = 2;
+    // Vertex-exact lowest point per object. The object AABB (worldMin) is the
+    // AABB of the OBB for a ROTATED part, so its min-z sits below the real
+    // geometry — measuring against it here would disagree with the vertex-based
+    // claims.grounded on the very same part (two grounding truths). spatial
+    // (from real vertices) is the shared source of truth.
+    const groundGapByObject = new Map(
+      census.meshes.filter((m) => m.spatial).map((m) => [m.object, m.spatial!.groundGap]),
+    );
     for (const object of census.objects) {
       if (object.type !== "MESH") continue;
       if (isExempt(object.name, grounding.exempt)) continue;
-      const min = object.worldMin;
-      if (!min) continue;
-      const lowest = min[upIndex];
+      const measured = groundGapByObject.get(object.name);
+      const lowest = measured ?? (object.worldMin ? object.worldMin[upIndex] : undefined);
       if (lowest === null || lowest === undefined || !Number.isFinite(lowest)) continue;
 
       if (lowest < -grounding.tolerance) {
@@ -102,11 +110,6 @@ export function lintWorld(
       detail: { tris: total, budget: maxTrianglesTotal },
     });
   }
-}
-
-/** Exemptions match an exact name or a prefix, so `mount_` covers a family. */
-function isExempt(name: string, exempt: readonly string[]): boolean {
-  return exempt.some((entry) => name === entry || name.startsWith(entry));
 }
 
 /**
