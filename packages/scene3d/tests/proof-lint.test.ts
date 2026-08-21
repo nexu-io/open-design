@@ -30,7 +30,9 @@ describe("lintProof", () => {
     expect(result).toEqual(["S3D-E-383"]);
   });
 
-  it("errors per frame when only some angles render empty", () => {
+  it("warns (not errors) per frame when only some angles render empty (PF-3)", () => {
+    // One off-angle where the subject leaves frame is a warning, not the
+    // compile-failing error that EVERY frame black is.
     const issues: Issue[] = [];
     lintProof(
       [
@@ -40,7 +42,8 @@ describe("lintProof", () => {
       ],
       issues,
     );
-    expect(issues.map((i) => i.code)).toEqual(["S3D-E-383", "S3D-E-383"]);
+    expect(issues.map((i) => i.code)).toEqual(["S3D-W-386", "S3D-W-386"]);
+    expect(issues.every((i) => i.severity === "warning")).toBe(true);
     expect(issues.map((i) => i.target)).toEqual(["b.png", "c.png"]);
   });
 
@@ -111,5 +114,32 @@ describe("lintProof", () => {
 
   it("tolerates runners that predate the blownRatio field", () => {
     expect(codes([frame({ path: "a.png", blownRatio: null })])).toEqual([]);
+  });
+
+  it("names both causes of an identical turntable, not just the camera (PF-1)", () => {
+    const same = { meanLuminance: 0.3, coverage: 0.25 };
+    const issues: Issue[] = [];
+    lintProof(
+      [frame({ path: "a.png", ...same }), frame({ path: "b.png", ...same }), frame({ path: "c.png", ...same })],
+      issues,
+    );
+    const hint = issues.find((i) => i.code === "S3D-W-384")?.hint ?? "";
+    expect(hint).toMatch(/rotationally symmetric/);
+    expect(hint).toMatch(/camera is not moving/);
+  });
+
+  it("honours contract-supplied proof-quality thresholds (PF-2)", () => {
+    // A stylized asset the project declares darker-tolerant: a frame at 0.05
+    // luminance is empty under the default 0.002 floor only if we IGNORE the
+    // override. With a stricter 0.1 floor it reads as empty; with the default
+    // it does not.
+    const dim = [frame({ path: "a.png", meanLuminance: 0.05, coverage: 0.4 })];
+    const strict: Issue[] = [];
+    lintProof(dim, strict, { emptyLuminance: 0.1, sparseCoverage: 0.01, blownRatio: 0.6 });
+    expect(strict.some((i) => i.code === "S3D-E-383")).toBe(true);
+
+    const lenient: Issue[] = [];
+    lintProof(dim, lenient, { emptyLuminance: 0.002, sparseCoverage: 0.01, blownRatio: 0.6 });
+    expect(lenient.some((i) => i.code === "S3D-E-383")).toBe(false);
   });
 });

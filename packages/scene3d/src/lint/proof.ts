@@ -16,20 +16,40 @@ import { ISSUE_CODES } from "../errors.js";
  * eight-step turntable emit eight identical frames.
  */
 
-/** Below this mean luminance a frame carries no recoverable detail. */
-const EMPTY_LUMINANCE = 0.002;
+/**
+ * Proof-quality thresholds. Physical defaults, but overridable per project
+ * through `conventions.proof` — a deliberately dark or flat-lit stylized asset
+ * has a legitimately different notion of "too dark" or "blown out", and the
+ * fork's rule is that a lint threshold is the contract's call, not a constant
+ * buried in the module.
+ */
+export interface ProofThresholds {
+  /** Below this mean luminance a frame carries no recoverable detail. */
+  emptyLuminance: number;
+  /** Below this lit-pixel fraction the subject is a speck in an empty frame. */
+  sparseCoverage: number;
+  /** Above this fraction of lit pixels near white, the frame is blown out. */
+  blownRatio: number;
+}
 
-/** Below this lit-pixel fraction the subject is a speck in an empty frame. */
-const SPARSE_COVERAGE = 0.01;
+export const DEFAULT_PROOF_THRESHOLDS: ProofThresholds = {
+  emptyLuminance: 0.002,
+  sparseCoverage: 0.01,
+  blownRatio: 0.6,
+};
 
-export function lintProof(frames: ProofFrameStats[] | undefined, issues: Issue[]): void {
+export function lintProof(
+  frames: ProofFrameStats[] | undefined,
+  issues: Issue[],
+  thresholds: ProofThresholds = DEFAULT_PROOF_THRESHOLDS,
+): void {
   if (!frames || frames.length === 0) return;
 
   const measured = frames.filter((f) => f.meanLuminance !== null && f.coverage !== null);
   if (measured.length === 0) return;
 
   const empty = measured.filter(
-    (f) => f.meanLuminance! <= EMPTY_LUMINANCE || f.coverage! === 0,
+    (f) => f.meanLuminance! <= thresholds.emptyLuminance || f.coverage! === 0,
   );
   if (empty.length === measured.length) {
     issues.push({
@@ -42,8 +62,12 @@ export function lintProof(frames: ProofFrameStats[] | undefined, issues: Issue[]
   } else if (empty.length > 0) {
     for (const frame of empty) {
       issues.push({
-        code: ISSUE_CODES.EMPTY_PROOF,
-        severity: "error",
+        // A single empty angle is a WARNING (its own code), not the
+        // compile-failing EMPTY_PROOF error that EVERY frame black is: 7 of 8
+        // good frames is a materially milder defect than a total render
+        // failure, and one off-angle should not fail the whole compile.
+        code: ISSUE_CODES.PARTIAL_EMPTY_PROOF,
+        severity: "warning",
         message: `proof frame rendered empty: ${basename(frame.path)}`,
         hint: "the subject leaves frame at this turntable angle",
         target: basename(frame.path),
@@ -51,12 +75,12 @@ export function lintProof(frames: ProofFrameStats[] | undefined, issues: Issue[]
       });
     }
   } else {
-    const sparse = measured.filter((f) => f.coverage! < SPARSE_COVERAGE);
+    const sparse = measured.filter((f) => f.coverage! < thresholds.sparseCoverage);
     if (sparse.length === measured.length) {
       issues.push({
         code: ISSUE_CODES.SPARSE_PROOF,
         severity: "warning",
-        message: `the subject fills under ${SPARSE_COVERAGE * 100}% of every proof frame`,
+        message: `the subject fills under ${thresholds.sparseCoverage * 100}% of every proof frame`,
         hint: "the camera is too far out; tighten the framing",
         detail: { coverage: measured[0]!.coverage },
       });
@@ -70,7 +94,7 @@ export function lintProof(frames: ProofFrameStats[] | undefined, issues: Issue[]
   // over lit pixels only: a dark background must not dilute the signal.
   const withBlown = measured.filter((f) => typeof f.blownRatio === "number");
   if (withBlown.length > 0) {
-    const blownFrames = withBlown.filter((f) => f.blownRatio! > 0.6);
+    const blownFrames = withBlown.filter((f) => f.blownRatio! > thresholds.blownRatio);
     if (blownFrames.length === withBlown.length) {
       issues.push({
         code: ISSUE_CODES.OVEREXPOSED_PROOF,
@@ -82,8 +106,12 @@ export function lintProof(frames: ProofFrameStats[] | undefined, issues: Issue[]
     }
   }
 
-  // A turntable whose frames are all identical is not a turntable. This is
-  // the shape a stale transform takes: N renders, one viewpoint.
+  // A turntable whose frames are all identical adds no information. Usually a
+  // stale transform (N renders, one viewpoint), but a rotationally symmetric
+  // subject (a sphere, an on-axis cylinder) genuinely renders the same from
+  // every angle with the sun keyed to the camera's quarter — so the trigger
+  // stays (the stale-transform case is real and worth catching), but the hint
+  // names BOTH causes so an agent does not "fix" a camera that is fine.
   if (measured.length > 2) {
     const identical = measured.every(
       (f) =>
@@ -94,7 +122,7 @@ export function lintProof(frames: ProofFrameStats[] | undefined, issues: Issue[]
         code: ISSUE_CODES.STATIC_TURNTABLE,
         severity: "warning",
         message: `all ${measured.length} turntable frames are identical`,
-        hint: "the camera is not moving between frames — the turntable adds no information",
+        hint: "either the camera is not moving between frames, or the subject is rotationally symmetric about the turntable axis",
         detail: { frames: measured.length },
       });
     }

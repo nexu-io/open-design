@@ -120,6 +120,10 @@ export const ISSUE_CODES = {
   SPARSE_PROOF: "S3D-W-383",
   STATIC_TURNTABLE: "S3D-W-384",
   OVEREXPOSED_PROOF: "S3D-W-385",
+  /* One turntable angle where the subject leaves frame is a warning, not the
+     compile-failing error that EVERY frame black is — 7 of 8 good angles is a
+     materially milder defect. */
+  PARTIAL_EMPTY_PROOF: "S3D-W-386",
 
   /* lint: world placement + budgets (325-339) */
   NOT_GROUNDED: "S3D-W-325",

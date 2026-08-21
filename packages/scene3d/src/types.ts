@@ -190,6 +190,12 @@ export interface Scene3dContract {
     /** World background as a hex colour, authored by the compiler so the
      *  scene never has to defensively build a world node graph itself. */
     background?: string;
+    /** Proof-QUALITY lint thresholds (not render config). Overridable because
+     *  a deliberately dark or flat-lit stylized asset has a legitimately
+     *  different notion of "too dark", "too small", or "blown out". */
+    emptyLuminance?: number;
+    sparseCoverage?: number;
+    blownRatio?: number;
   };
   /**
    * Deliverable formats. This is a *contract* concern: the author writes

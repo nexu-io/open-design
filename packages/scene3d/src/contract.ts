@@ -156,6 +156,8 @@ export interface NormalizedContract {
   lodRatios: number[];
   budgets: { maxTrianglesPerMesh?: number; maxTrianglesTotal?: number };
   proof: NonNullable<Scene3dContract["proof"]>;
+  /** Proof-quality lint thresholds, resolved from `proof` with defaults. */
+  proofThresholds: { emptyLuminance: number; sparseCoverage: number; blownRatio: number };
 }
 
 export function normalizeContract(contract?: Scene3dContract): NormalizedContract {
@@ -256,7 +258,20 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       ...(b.maxTrianglesTotal !== undefined ? { maxTrianglesTotal: b.maxTrianglesTotal } : {}),
     },
     proof: proof as NonNullable<Scene3dContract["proof"]>,
+    proofThresholds: {
+      // Defensive `?? default` also guards a wrong-typed programmatic value,
+      // like the uv/lod fields above.
+      emptyLuminance: pos(proof.emptyLuminance, 0.002),
+      sparseCoverage: pos(proof.sparseCoverage, 0.01),
+      blownRatio: pos(proof.blownRatio, 0.6),
+    },
   };
+}
+
+/** A finite positive number, or the fallback — defensive against a bad
+ *  programmatic value that skipped validateContract. */
+function pos(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 /**
@@ -440,6 +455,12 @@ export function validateContract(value: unknown): string[] {
     }
     if (proof.engine !== undefined && proof.engine !== "BLENDER_EEVEE" && proof.engine !== "CYCLES") {
       problems.push("proof.engine must be 'BLENDER_EEVEE' or 'CYCLES'");
+    }
+    for (const key of ["emptyLuminance", "sparseCoverage", "blownRatio"] as const) {
+      const v = proof[key];
+      if (v !== undefined && (typeof v !== "number" || !(v > 0) || v > 1)) {
+        problems.push(`proof.${key} must be a number in (0, 1]`);
+      }
     }
   }
   return problems;

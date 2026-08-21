@@ -89,6 +89,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-383': 'Proof render sparse',
   'S3D-W-384': 'Turntable shows no motion',
   'S3D-W-385': 'Proof overexposed',
+  'S3D-W-386': 'Some proof angles empty',
 
   /* lint: uv */
   'S3D-E-441': 'UVs missing',

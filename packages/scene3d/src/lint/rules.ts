@@ -50,7 +50,7 @@ export function runLint(input: LintInput): Issue[] {
       groundExempt: input.contract.grounding.exempt,
     });
   }
-  lintProof(input.proofFrames, issues);
+  lintProof(input.proofFrames, issues, input.contract.proofThresholds);
   if (input.exportedUsda) {
     lintExportedStage(
       {
