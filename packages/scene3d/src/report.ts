@@ -160,8 +160,10 @@ function appendVerdict(lines: string[], verdict: Verdict): void {
       const target = a.target ? ` [${a.target}]` : "";
       const where = a.origin ? ` (${a.origin})` : "";
       const more = a.count > 1 ? ` ×${a.count}` : "";
-      const over = a.overrun !== undefined ? ` — ${Number((a.overrun * 100).toFixed(0))}% over` : "";
-      lines.push(`  ${i + 1}. ${a.code}${target}${where}${more}${over} ${a.message}`);
+      // A compact magnitude tag, not prose — so it reads as metadata before the
+      // message rather than colliding with the sentence ("[+563%] 'x' owns…").
+      const mag = a.overrun !== undefined ? ` [+${Number((a.overrun * 100).toFixed(0))}%]` : "";
+      lines.push(`  ${i + 1}. ${a.code}${target}${where}${more}${mag} ${a.message}`);
     });
   }
 

@@ -246,6 +246,18 @@ describe("lintIntent — material realism (W-350 dark metal), no role needed", (
     ).toContain(ISSUE_CODES.UNREALISTIC_DARK_METAL);
   });
 
+  it("carries no nonsense overrun on a below-a-max failure (would render [+-50%])", () => {
+    const issues: Issue[] = [];
+    lintIntent(
+      matScene(material("mtl_void", { baseColor: [0.01, 0.01, 0.01], metallic: 1, roughness: 0.05 })),
+      normalizeContract(),
+      undefined,
+      issues,
+    );
+    const dm = issues.find((i) => i.code === ISSUE_CODES.UNREALISTIC_DARK_METAL);
+    expect(dm?.detail?.overrun).toBeUndefined();
+  });
+
   it("does NOT flag a bright metal (gold)", () => {
     expect(
       runMat([material("mtl_gold", { baseColor: [1, 0.76, 0.33], metallic: 1, roughness: 0.1 })]),

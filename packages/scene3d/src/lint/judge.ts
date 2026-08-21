@@ -50,8 +50,11 @@ interface Descriptor<Ctx> {
 
 function mkIssue<Ctx>(d: Descriptor<Ctx>, cx: Ctx, fact: number, bound: number): Issue {
   // A measured overrun (how far past the budget, as a fraction) lets the
-  // verdict rank "fix this first" by real magnitude, not just frequency.
-  const overrun = bound > 0 ? Number((fact / bound - 1).toFixed(3)) : undefined;
+  // verdict rank "fix this first" by real magnitude. Only meaningful for an
+  // OVERSHOOT (fact > bound); a below-a-max failure (dark metal, an under-texel
+  // floor, a size minimum) has no "overrun" and ranks by reach instead — never
+  // a nonsense negative that would render as "[+-50%]".
+  const overrun = bound > 0 && fact > bound ? Number((fact / bound - 1).toFixed(3)) : undefined;
   const target = d.target(cx);
   return {
     code: d.code,
