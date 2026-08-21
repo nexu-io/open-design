@@ -88,6 +88,7 @@ export const ISSUE_CODES = {
   /* The raster budget was exceeded, so silence about this mesh's UVs is
      not evidence they are fine — same discipline as Z_FIGHTING_UNCHECKED. */
   UV_UNCHECKED: "S3D-W-446",
+  UV_STRETCH: "S3D-W-447",
 
   /* lint: pbr */
   METALLIC_VALUE: "S3D-E-341",
@@ -203,6 +204,23 @@ export const ISSUE_CODES = {
      downstream of what the fingerprint can see. Surfaced so a rigged or
      morph asset is never silently reordered. */
   MASTER_ORDER_DRIFT: "S3D-W-902",
+
+  /* lint: external conformance oracles (500-519) — verdicts adopted from the
+     industry-standard validators run against the EXPORTED deliverable, not
+     from our own parser. The compiler measures nothing here; it maps the
+     oracle's judgement onto stable codes so a second, independent authority
+     signs off on the bytes that ship. */
+  GLTF_INVALID: "S3D-E-501",
+  GLTF_WARNING: "S3D-W-501",
+  /* USD stage judged by OpenUSD's own runtime (pxr): E for a stage that does
+     not compose, W for a material binding that resolves to a missing prim —
+     which USD silently ignores, shipping the surface unshaded. */
+  USD_COMPOSITION_ERROR: "S3D-E-502",
+  USD_BINDING_UNRESOLVED: "S3D-W-502",
+  /* An oracle could not run (validator absent/failed to load). Additive and
+     never fatal: an unrun check is a warning about the check, not the asset. */
+  GLTF_UNCHECKED: "S3D-W-509",
+  USD_UNCHECKED: "S3D-W-508",
 
   /* lint: claims (700-719) — the spec's own contract with reality. A claim
      is adjudicated against the CENSUS, never against the spec that made it:

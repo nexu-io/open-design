@@ -32,6 +32,7 @@ export function validateShaderSpec(
       size: number;
       normalStrength: number;
       frames: number;
+      motionVectors: boolean;
     }
   | undefined {
   const at = `shaders.${name}`;
@@ -94,6 +95,26 @@ export function validateShaderSpec(
     errors.push(
       `${at}: height cannot be baked per-frame yet — normal derivation is per-tile; drop frames or height`,
     );
+  }
+
+  let motionVectors = false;
+  if (doc.motionVectors !== undefined) {
+    if (typeof doc.motionVectors !== "boolean") {
+      errors.push(`${at}.motionVectors must be a boolean`);
+    } else if (doc.motionVectors && frames <= 1) {
+      errors.push(
+        `${at}: motionVectors needs a flipbook to have motion — set "frames" (2, 4, 8, 16, 32, 64)`,
+      );
+    } else if (doc.motionVectors && !outputs.includes("baseColor")) {
+      // The flow is block-matched on the baseColor frames, so without that
+      // output there is nothing to track — fail loudly rather than bake a
+      // silent no-op the author never sees.
+      errors.push(
+        `${at}: motionVectors is derived from the baseColor frames — include "baseColor" in outputs`,
+      );
+    } else {
+      motionVectors = doc.motionVectors;
+    }
   }
 
   let normalStrength = 1;
@@ -206,13 +227,14 @@ export function validateShaderSpec(
     outputs,
     ...(normalStrength !== 1 ? { normalStrength } : {}),
     ...(frames !== 1 ? { frames } : {}),
+    ...(motionVectors ? { motionVectors: true } : {}),
     ...(uniforms.length > 0
       ? { uniforms: Object.fromEntries(uniforms.map((u) => [u.name, u.value.length === 1 ? u.value[0]! : u.value])) }
       : {}),
     ...(ints.size > 0 ? { ints: [...ints].sort() } : {}),
   };
   uniforms.sort((a, b) => (a.name < b.name ? -1 : 1));
-  return { spec, uniforms, outputs, size, normalStrength, frames };
+  return { spec, uniforms, outputs, size, normalStrength, frames, motionVectors };
 }
 
 /**

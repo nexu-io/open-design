@@ -98,6 +98,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-444': 'Uneven texel density',
   'S3D-W-445': 'Texel density off target',
   'S3D-W-446': 'UV check incomplete',
+  'S3D-W-447': 'UV stretch too high',
 
   /* lint: exported stage */
   'S3D-E-401': 'Stage prim missing kind',
@@ -149,6 +150,12 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-801': 'Shader never referenced',
 
   /* master parity */
+  'S3D-E-501': 'glTF failed Khronos validation',
+  'S3D-W-501': 'glTF validation warning',
+  'S3D-E-502': 'USD stage does not compose',
+  'S3D-W-502': 'USD binding resolves to nothing',
+  'S3D-W-508': 'USD conformance unchecked',
+  'S3D-W-509': 'glTF conformance unchecked',
   'S3D-E-901': 'Master stage lost content',
   'S3D-W-901': 'Master parity unchecked',
   'S3D-W-902': 'Joint/morph order drifted in lowering',

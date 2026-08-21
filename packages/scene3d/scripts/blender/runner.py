@@ -526,6 +526,70 @@ def dilate_rgb(px, passes=16, threshold=0.5 / 255.0):
     return px
 
 
+def optical_flow_atlas(frame_lum, cols, rows, size, search=4, block=3):
+    """Block-matching FORWARD optical flow between consecutive flipbook frames,
+    encoded as a motion-vector atlas.
+
+    For each pixel in frame t, search a (2·search+1)² window in frame t+1 (loop-
+    wrapped, so the last frame flows back to the first) for the block-match that
+    minimises summed absolute luminance difference; the winning displacement is
+    that pixel's flow. Flow is RG-encoded around 0.5 (0.5 = no motion, the pixel
+    range maps [-search, +search] px onto [0, 1]); B is 0 and A is 1.
+
+    Fully vectorised over pixels and deterministic — a fixed candidate order and
+    fixed pass structure, no randomness — so the atlas is byte-reproducible like
+    every other bake. Returns (rgba_bytes, width, height, max_flow_px)."""
+    import numpy as np
+    n = len(frame_lum)
+    mv = np.zeros((rows * size, cols * size, 4), dtype=np.float32)
+    mv[:, :, 3] = 1.0
+
+    def box_sum(m):
+        # Sum over a block×block neighbourhood via shifted accumulation. Wrap is
+        # fine: a flipbook cell is a tile, and the border needs a defined block.
+        s = np.zeros_like(m)
+        half = block // 2
+        for oy in range(-half, half + 1):
+            for ox in range(-half, half + 1):
+                s += np.roll(np.roll(m, oy, axis=0), ox, axis=1)
+        return s
+
+    max_flow = 0.0
+    for t in range(n):
+        a = frame_lum[t]
+        b = frame_lum[(t + 1) % n]
+        # Seed with ZERO motion, and only a STRICTLY better match displaces it.
+        # A flat or featureless patch matches every shift equally, so seeding
+        # at zero keeps it at "no motion" instead of drifting to whichever
+        # displacement the scan happened to try first.
+        best_dx = np.zeros((size, size), dtype=np.float32)
+        best_dy = np.zeros((size, size), dtype=np.float32)
+        best_cost = box_sum(np.abs(a - b))
+        for dy in range(-search, search + 1):
+            for dx in range(-search, search + 1):
+                if dx == 0 and dy == 0:
+                    continue
+                shifted = np.roll(np.roll(b, dy, axis=0), dx, axis=1)
+                cost = box_sum(np.abs(a - shifted))
+                better = cost < best_cost
+                best_cost = np.where(better, cost, best_cost)
+                best_dx = np.where(better, float(dx), best_dx)
+                best_dy = np.where(better, float(dy), best_dy)
+        max_flow = max(max_flow, float(np.max(np.sqrt(best_dx * best_dx + best_dy * best_dy))))
+        # Block matching finds the SOURCE shift (where a[x] is found in the next
+        # frame is x - dx), so the FORWARD motion of the feature — the direction
+        # a pixel travels, which is what an engine interpolates along — is the
+        # negation. Encode forward flow around 0.5: a rightward-moving feature
+        # reads red > 0.5, a downward one green > 0.5.
+        r0 = (t // cols) * size
+        c0 = (t % cols) * size
+        mv[r0:r0 + size, c0:c0 + size, 0] = np.clip(0.5 - best_dx / (2.0 * search), 0.0, 1.0)
+        mv[r0:r0 + size, c0:c0 + size, 1] = np.clip(0.5 - best_dy / (2.0 * search), 0.0, 1.0)
+
+    data = (mv * 255.0 + 0.5).astype(np.uint8).tobytes()
+    return data, mv.shape[1], mv.shape[0], max_flow
+
+
 def bake_shaders(job):
     """Compile, execute, scan, bake, and wire every declared shader."""
     shaders = job.get("shaders") or []
@@ -549,6 +613,7 @@ def bake_shaders(job):
         name = spec["name"]
         size = int(spec["size"])
         frames = int(spec.get("frames", 1))
+        want_mv = bool(spec.get("motionVectors")) and frames > 1
         try:
             info = gpu.types.GPUShaderCreateInfo()
             info.vertex_in(0, "VEC2", "pos")
@@ -632,6 +697,9 @@ def bake_shaders(job):
                          "atlas — frames must be one of 2, 4, 8, 16, 32, 64"
                          % (name, frames))
                 px = np.zeros((rows * size, cols * size, 4), dtype=np.float32)
+                # Motion vectors are derived from the BEAUTY frames, so capture
+                # each cell's luminance while baking baseColor.
+                frame_lum = [] if (want_mv and output == "baseColor") else None
                 for cell in range(frames):
                     cell_px = draw_cell(out_index, cell / float(frames))
                     bad = ~np.isfinite(cell_px)
@@ -639,6 +707,8 @@ def bake_shaders(job):
                         fail("S3D-E-804",
                              "shader '%s' output '%s' frame %d produced %d non-finite pixel(s)"
                              % (name, output, cell, int(bad.any(axis=2).sum())))
+                    if frame_lum is not None:
+                        frame_lum.append(cell_px[:, :, :3].mean(axis=2).astype(np.float32))
                     r0 = (cell // cols) * size
                     c0 = (cell % cols) * size
                     px[r0:r0 + size, c0:c0 + size, :] = cell_px
@@ -676,6 +746,16 @@ def bake_shaders(job):
             write_png(path, data, px.shape[1], px.shape[0])
             baked[(name, output)] = path
             log("baked %s/%s (%dpx)" % (name, output, size))
+
+            if output == "baseColor" and want_mv and frame_lum:
+                # The motion-vector companion atlas: the TS side predicts this
+                # path from the shader spec and decodes it to adjudicate flow,
+                # so nothing needs to be reported back — the file IS the record.
+                mv_data, mvw, mvh, max_flow = optical_flow_atlas(frame_lum, cols, rows, size)
+                mv_path = os.path.join(tex_dir, "%s_mv.png" % name)
+                write_png(mv_path, mv_data, mvw, mvh)
+                baked[(name, "mv")] = mv_path
+                log("baked %s/mv (%dpx, max flow %.1fpx)" % (name, mvw, max_flow))
 
             if output == "height":
                 # The TS validator rejects height on flipbooks (normal
@@ -1362,6 +1442,12 @@ def uv_facts(o, bm, uv_layer, slot_tex_px):
     oob_points = 0
     uv_points = 0
     densities = []
+    # Sander 2001 stretch: per-triangle Jacobian singular-value ANISOTROPY
+    # (σmax/σmin), area-weighted. Scale-invariant by construction — a ratio —
+    # so it needs no normalisation and reads directly as "how sheared": 1.0 is
+    # perfectly conformal, higher means the texture is stretched more one way
+    # than the other and details smear along the stretched axis.
+    stretch_vals = []  # (anisotropy, world_area)
     grid = bytearray(UV_GRID * UV_GRID) if len(bm.faces) <= UV_GRID_FACE_CAP else None
     over = bytearray(UV_GRID * UV_GRID) if grid is not None else None
 
@@ -1402,6 +1488,31 @@ def uv_facts(o, bm, uv_layer, slot_tex_px):
         tex_px = slot_tex_px[f.material_index] if 0 <= f.material_index < len(slot_tex_px) else 0
         if tex_px > 0 and world_area > 1e-12 and uv_area > 1e-12:
             densities.append(math.sqrt(uv_area / world_area) * tex_px)
+        # Per sub-triangle stretch: map (u,v) -> 3D, take the affine Jacobian's
+        # singular values. The overall 1/(2A) scale cancels in the ratio, so
+        # the anisotropy is robust to UV and world scale alike.
+        verts = [l.vert.co for l in f.loops]
+        for i in range(1, len(uvs) - 1):
+            q1, q2, q3 = verts[0], verts[i], verts[i + 1]
+            s1, t1 = uvs[0].x, uvs[0].y
+            s2, t2 = uvs[i].x, uvs[i].y
+            s3, t3 = uvs[i + 1].x, uvs[i + 1].y
+            det = (s2 - s1) * (t3 - t1) - (s3 - s1) * (t2 - t1)
+            if abs(det) < 1e-12:
+                continue
+            ss = (q1 * (t2 - t3) + q2 * (t3 - t1) + q3 * (t1 - t2)) / det
+            st = (q1 * (s3 - s2) + q2 * (s1 - s3) + q3 * (s2 - s1)) / det
+            a = ss.dot(ss)
+            b = ss.dot(st)
+            c = st.dot(st)
+            disc = math.sqrt(max(0.0, (a - c) * (a - c) + 4.0 * b * b))
+            smax2 = 0.5 * ((a + c) + disc)
+            smin2 = 0.5 * ((a + c) - disc)
+            if smin2 <= 1e-20:
+                continue
+            tri_area = 0.5 * (q2 - q1).cross(q3 - q1).length
+            if tri_area > 1e-12:
+                stretch_vals.append((math.sqrt(smax2 / smin2), tri_area))
         if grid is not None:
             # Overlap means two different FACES claim a texel. A quad's own
             # fan triangles share a diagonal, and on axis-aligned layouts
@@ -1438,6 +1549,13 @@ def uv_facts(o, bm, uv_layer, slot_tex_px):
             "max": R6(max(densities)),
             "mean": R6(sum(densities) / len(densities)),
         }
+    stretch = None
+    if stretch_vals:
+        total_area = sum(w for _, w in stretch_vals)
+        stretch = {
+            "max": R6(max(v for v, _ in stretch_vals)),
+            "mean": R6(sum(v * w for v, w in stretch_vals) / total_area) if total_area else R6(1.0),
+        }
     return {
         "layer": uv_layer.name if hasattr(uv_layer, "name") else "UVMap",
         "coverage": R6(coverage) if coverage is not None else None,
@@ -1445,6 +1563,7 @@ def uv_facts(o, bm, uv_layer, slot_tex_px):
         "flippedFaces": flipped,
         "outOfBoundsFraction": R6(oob_points / float(uv_points)) if uv_points else 0,
         "texelDensity": density,
+        "stretch": stretch,
         "sampled": grid is not None,
     }
 
@@ -2268,6 +2387,78 @@ def usd_export_resilient(target, kwargs):
     return sorted(set(kwargs) - set(attempt))
 
 
+def export_lods(out_dir, ratios):
+    """Author decimated GLB level-of-detail variants: scene.lod1.glb, ….
+
+    Blender cannot write USD variantSets, so LODs ship as SEPARATE GLB
+    deliverables (a legitimate delivery shape — an engine picks the level by
+    distance). Each level duplicates every mesh, applies a Quadric-Error
+    (COLLAPSE) decimate at the requested ratio to the COPIES, exports only
+    those, then removes them — the master scene is left exactly as every other
+    format saw it, which is why this runs LAST, after parity is measured.
+
+    Returns [(path, ratio, faces)] for each level authored; a level whose
+    export fails is skipped, never fatal to the real deliverables."""
+    import bpy
+    produced = []
+    level = 0  # numbers files by what is actually PRODUCED, so a rejected
+    # ratio never leaves a gap (scene.lod2.glb with no lod1); the TS side
+    # already filters, but the runner stays self-consistent regardless.
+    for ratio in ratios:
+        r = float(ratio)
+        if not (0.0 < r < 1.0):
+            continue  # a LOD must REDUCE; 1.0 is the base, and >1 is nonsense
+        level += 1
+        bpy.ops.object.select_all(action="DESELECT")
+        originals = [o for o in list(bpy.context.scene.objects) if o.type == "MESH"]
+        copies = []
+        for o in originals:
+            c = o.copy()
+            c.data = o.data.copy()
+            bpy.context.scene.collection.objects.link(c)
+            # Shape keys (glTF morph targets) are per-vertex deltas that cannot
+            # survive a vertex-count change, so BOTH modifier_apply and the glTF
+            # exporter refuse to apply a topology-changing DECIMATE to a mesh
+            # that has them — the LOD would silently ship at FULL resolution. A
+            # distance LOD does not carry morphs anyway, so clear them on the
+            # copy; decimation then actually reduces the mesh for every input.
+            if c.data.shape_keys:
+                c.shape_key_clear()
+            mod = c.modifiers.new("s3d_lod", "DECIMATE")
+            mod.decimate_type = "COLLAPSE"
+            mod.ratio = r
+            bpy.context.view_layer.objects.active = c
+            c.select_set(True)
+            try:
+                bpy.ops.object.modifier_apply(modifier="s3d_lod")
+            except Exception:
+                pass  # fall back to export-time apply below
+            copies.append(c)
+        for o in bpy.context.scene.objects:
+            o.select_set(o in copies)
+        # Count faces on the DEPSGRAPH-EVALUATED mesh: shape keys are cleared
+        # above so modifier_apply normally succeeds (evaluated == c.data), but
+        # reading the evaluated mesh keeps the stat correct even if apply fell
+        # back to export-time application, where the decimate is still a live
+        # modifier that `c.data.polygons` would not reflect.
+        bpy.context.view_layer.update()
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        faces = sum(len(c.evaluated_get(depsgraph).data.polygons) for c in copies)
+        target = os.path.join(out_dir, "scene.lod%d.glb" % level)
+        bpy.ops.export_scene.gltf(filepath=target, export_format="GLB",
+                                  use_selection=True, export_apply=True)
+        produced.append((target, r, faces))
+        log("exported LOD%d (ratio %.2f, %d faces) %s" % (level, r, faces, target))
+        for c in copies:
+            data = c.data
+            bpy.data.objects.remove(c, do_unlink=True)
+            try:
+                bpy.data.meshes.remove(data)
+            except Exception:
+                pass
+    return produced
+
+
 def export_scene(job):
     import bpy
     formats = job.get("formats") or ["usda"]
@@ -2431,9 +2622,26 @@ def export_scene(job):
         # and the pipeline turns this into a warning naming what is missing.
         skipped.append({"format": fmt, "reason": "%s: %s" % (type(exc).__name__, exc)})
         log("export %s failed: %s" % (fmt, exc))
+
+    # ---- Phase 4: decimated LOD GLBs (opt-in, isolated, last) -----------
+    # Runs after parity is measured and every real format is written, on
+    # throwaway copies, so it can touch nothing the deliverables depend on.
+    lod_ratios = job.get("lodRatios") or []
+    lods_info = []
+    if lod_ratios and "glb" in formats:
+        try:
+            for target, ratio, faces in export_lods(out_dir, lod_ratios):
+                assets.append(target)
+                lods_info.append({"ratio": ratio, "faces": faces,
+                                  "file": os.path.basename(target)})
+        except Exception as exc:
+            skipped.append({"format": "glb-lod",
+                            "reason": "%s: %s" % (type(exc).__name__, exc)})
+            log("LOD export failed: %s" % exc)
+
     rel_assets = [r for r in (rel_to_project(a, job) for a in assets) if r is not None]
     emit({"ok": True, "data": {"assets": rel_assets, "skipped": skipped,
-                               "lowering": lowering}})
+                               "lowering": lowering, "lods": lods_info}})
 
 
 def rel_to_project(asset_path, job):

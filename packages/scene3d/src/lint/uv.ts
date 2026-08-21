@@ -97,6 +97,17 @@ export function lintUv(ctx: LintContext, issues: Issue[]): void {
       });
     }
 
+    if (rules.maxStretch !== null && uv.stretch && uv.stretch.max > rules.maxStretch) {
+      issues.push({
+        code: ISSUE_CODES.UV_STRETCH,
+        severity: "warning",
+        message: `mesh '${mesh.object}' UV stretch reaches ${uv.stretch.max.toFixed(1)}x (mean ${uv.stretch.mean.toFixed(1)}x) — beyond the ${rules.maxStretch}x limit; the texture smears along the stretched axis`,
+        hint: "relax the parameterization on the stretched faces, or raise conventions.uv.maxStretch if the distortion is acceptable",
+        target: mesh.object,
+        detail: { stretch: uv.stretch, limit: rules.maxStretch },
+      });
+    }
+
     if (uv.texelDensity) {
       densities.push({ object: mesh.object, min: uv.texelDensity.min, max: uv.texelDensity.max });
       if (

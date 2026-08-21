@@ -66,6 +66,14 @@ export interface ShaderSpec {
    * not reference it. Allowed values: 2, 4, 8, 16, 32, 64.
    */
   frames?: number;
+  /**
+   * Bake a MOTION-VECTOR companion atlas beside the beauty flipbook:
+   * `<name>_mv.png`, the per-pixel forward optical flow between consecutive
+   * frames (block-matched on luminance, loop-wrapped last→first), RG-encoded
+   * around 0.5. A real-time engine samples it to interpolate the 16-frame
+   * atlas up to 60fps instead of stepping frames. Requires `frames > 1`.
+   */
+  motionVectors?: boolean;
 }
 
 /** System uniforms the compiler owns; author uniforms may not claim them. */
@@ -93,6 +101,8 @@ export interface CompiledShaderJob {
   normalStrength: number;
   /** Time cells to bake (1 = static texture). */
   frames: number;
+  /** Bake the optical-flow companion atlas beside the beauty flipbook. */
+  motionVectors?: boolean;
   uniforms: TypedUniform[];
   /** Assembled fragment source for Blender's GPUShaderCreateInfo. */
   fragmentSource: string;

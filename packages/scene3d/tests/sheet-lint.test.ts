@@ -348,6 +348,24 @@ describe("sheet rules — every rule catches its defect", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  it("catches a broken cap seam the horizontal ring cannot see", () => {
+    // Every side face is identical, so the vertical ring is seam-perfect —
+    // only the `up` cap is a different colour. A ring-only checker would pass
+    // this; the 12-edge check catches it on a top-cap edge.
+    const dir = tempDir();
+    for (const face of ["ft", "bk", "lf", "rt", "up", "dn"]) {
+      write(dir, `sky_${face}.png`, skyFace(32, face === "up" ? [200, 40, 40] : [90, 120, 180]));
+    }
+    const specs: SheetSpec[] = ["ft", "bk", "lf", "rt", "up", "dn"].map((face) => ({
+      file: `sky_${face}.png`,
+      kind: "sky" as const,
+      face: face as SheetSpec["face"],
+      set: "sky",
+    }));
+    expect(codes(dir, specs)).toContain("S3D-E-615");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   it("reports a declared sheet that does not exist", () => {
     const dir = tempDir();
     expect(codes(dir, [{ file: "ghost.png", kind: "sprite" }])).toContain("S3D-E-601");

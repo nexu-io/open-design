@@ -121,6 +121,7 @@ export interface NormalizedContract {
     maxOverlapFraction: number;
     allowFlipped: boolean;
     maxOutOfBoundsFraction: number;
+    maxStretch: number | null;
     texelDensityTarget: number | null;
     texelDensityMaxRatio: number;
   };
@@ -141,6 +142,8 @@ export interface NormalizedContract {
   sheets: NonNullable<Scene3dContract["sheets"]>;
   /** Deliverable containers the export stage emits. */
   exportFormats: Array<"usda" | "usdz" | "glb" | "obj" | "fbx" | "stl" | "ply">;
+  /** LOD triangle-keep ratios (0,1); empty = no LOD variants. */
+  lodRatios: number[];
   budgets: { maxTrianglesPerMesh?: number; maxTrianglesTotal?: number };
   proof: NonNullable<Scene3dContract["proof"]>;
 }
@@ -193,6 +196,12 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       // Tiling is legitimate, so out-of-bounds is unbounded unless the
       // project says otherwise (trim sheets / atlases set this near 0).
       maxOutOfBoundsFraction: uv.maxOutOfBoundsFraction ?? 1,
+      // Defensive like `lodRatios` below: `?? null` guards only `undefined`,
+      // so a wrong-typed value reaching here via a programmatic `request.
+      // contract` (which skips validateContract) would flow through as a bad
+      // threshold. Sanitise to a positive number or the "off" null.
+      maxStretch:
+        typeof uv.maxStretch === "number" && uv.maxStretch > 0 ? uv.maxStretch : null,
       texelDensityTarget: uv.texelDensity?.target ?? null,
       texelDensityMaxRatio: uv.texelDensity?.maxRatio ?? 4,
     },
@@ -229,6 +238,9 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       c.export?.formats && c.export.formats.length > 0
         ? c.export.formats
         : ["usda", "usdz", "glb", "obj", "fbx"],
+    // Only ratios that actually reduce; a LOD at ≥1 or ≤0 is meaningless and
+    // is dropped rather than shipped as a same-size or empty "LOD".
+    lodRatios: (c.export?.lod ?? []).filter((r) => typeof r === "number" && r > 0 && r < 1),
     budgets: {
       ...(b.maxTrianglesPerMesh !== undefined ? { maxTrianglesPerMesh: b.maxTrianglesPerMesh } : {}),
       ...(b.maxTrianglesTotal !== undefined ? { maxTrianglesTotal: b.maxTrianglesTotal } : {}),
@@ -280,6 +292,9 @@ export function validateContract(value: unknown): string[] {
         problems.push(`conventions.uv.${key} must be a number in [0, 1]`);
       }
     }
+    if (uv.maxStretch !== undefined && (typeof uv.maxStretch !== "number" || uv.maxStretch <= 0)) {
+      problems.push("conventions.uv.maxStretch must be a positive number");
+    }
     const density = uv.texelDensity as Record<string, unknown> | undefined;
     if (density) {
       if (density.target !== undefined && (typeof density.target !== "number" || density.target <= 0)) {
@@ -306,6 +321,15 @@ export function validateContract(value: unknown): string[] {
   // the rule silently instead of surfacing S3D-E-104.
   if (uv && uv.allowFlipped !== undefined && typeof uv.allowFlipped !== "boolean") {
     problems.push("conventions.uv.allowFlipped must be a boolean");
+  }
+  const exportBlock = c.export as Record<string, unknown> | undefined;
+  if (exportBlock?.lod !== undefined) {
+    if (
+      !Array.isArray(exportBlock.lod) ||
+      !exportBlock.lod.every((r) => typeof r === "number" && r > 0 && r < 1)
+    ) {
+      problems.push("export.lod must be an array of triangle-keep ratios in (0, 1)");
+    }
   }
   const geometry = conventions?.geometry as Record<string, unknown> | undefined;
   if (geometry) {

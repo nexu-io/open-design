@@ -118,6 +118,13 @@ export interface Scene3dContract {
        * projects tighten it to ~0.
        */
       maxOutOfBoundsFraction?: number;
+      /**
+       * Max allowed UV stretch anisotropy (σmax/σmin) on a textured mesh.
+       * Opt-in: omitted means unconstrained, because real assets carry a wide
+       * range of legitimate stretch. A trim-sheet or hero-prop project sets it
+       * (e.g. 4) to catch smeared texturing.
+       */
+      maxStretch?: number;
       texelDensity?: {
         /** Target px/m; deviations beyond maxRatio from it are flagged. */
         target?: number;
@@ -191,6 +198,14 @@ export interface Scene3dContract {
    */
   export?: {
     formats?: Array<"usda" | "usdz" | "glb" | "obj" | "fbx" | "stl" | "ply">;
+    /**
+     * Decimated level-of-detail GLB variants, as triangle-keep ratios in
+     * (0, 1) — `[0.5, 0.25]` ships `scene.lod1.glb` at half and
+     * `scene.lod2.glb` at a quarter of the triangles. Opt-in (Blender cannot
+     * author USD variantSets, so LODs are separate deliverables); omitted =
+     * no LODs. Requires `glb` in `formats`.
+     */
+    lod?: number[];
   };
 }
 
@@ -389,6 +404,13 @@ export interface CensusUv {
    * and reporting a made-up number would be worse than none.
    */
   texelDensity: { min: number; max: number; mean: number } | null;
+  /**
+   * Sander-2001 UV stretch as per-triangle Jacobian anisotropy (σmax/σmin),
+   * area-weighted. Scale-invariant: 1.0 is perfectly conformal, higher means
+   * the texture is stretched more along one axis than the other. Null when no
+   * non-degenerate textured triangle exists to measure.
+   */
+  stretch: { max: number; mean: number } | null;
   /** False when the mesh exceeded the raster budget and grid facts are null. */
   sampled: boolean;
 }

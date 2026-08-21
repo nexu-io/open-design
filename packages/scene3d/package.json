@@ -28,5 +28,8 @@
   },
   "engines": {
     "node": "~24"
+  },
+  "dependencies": {
+    "gltf-validator": "2.0.0-dev.3.10"
   }
 }

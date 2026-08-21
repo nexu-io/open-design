@@ -30,6 +30,8 @@ import {
 } from "./build/blender.js";
 import { validateCensus } from "./build/census.js";
 import { runLint } from "./lint/rules.js";
+import { validateGltf } from "./lint/gltf-oracle.js";
+import { validateUsd } from "./lint/usd-oracle.js";
 import { collectSheets } from "./sheet/collect.js";
 import type { SheetSpec } from "./lint/sheet.js";
 import { buildManifest, writeManifest, writeViewer } from "./manifest.js";
@@ -265,6 +267,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           validated.size,
           validated.normalStrength,
           validated.frames,
+          validated.motionVectors,
         ),
       );
     }
@@ -608,7 +611,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         source.kind === "usda"
           ? normalized.exportFormats.filter((f) => f !== "usda")
           : [...normalized.exportFormats];
-      const exportHash = hashJson({ build: buildInputHash, formats });
+      const exportHash = hashJson({ build: buildInputHash, formats, lod: normalized.lodRatios });
       const cached = request.noCache ? null : readCache(request.projectDir, "export", exportHash);
       if (cached && cached.artifacts.every((a) => fs.existsSync(path.join(request.projectDir, a)))) {
         exportedAssets.push(...cached.artifacts);
@@ -632,6 +635,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             blendFile: source.kind === "blend" ? source.files[0] : undefined,
             outDir: path.join(request.projectDir, OUT_DIR),
             formats,
+            ...(normalized.lodRatios.length > 0 ? { lodRatios: normalized.lodRatios } : {}),
             upAxis: normalized.upAxis,
             assetName: path.basename(request.projectDir),
             ...(tweaks ? { tweaks } : {}),
@@ -785,6 +789,28 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       ? tweaks
       : previousManifestBakedTweaks(request.projectDir);
 
+  /* Motion-vector atlases are companion deliverables: a real-time engine
+     needs the `<name>_mv.png` beside the beauty flipbook to interpolate it.
+     The path is derived from the shader spec (the runner lays it out by the
+     same convention), added when the baked file is actually on disk.
+
+     Gated on the EXPORT stage having run, for the same reason the manifest
+     carry-forward below is: the mv atlas is written during BUILD, so a
+     restricted compile (parse,build,lint,manifest — no export) would push it
+     into an otherwise-empty exportedAssets, defeating the carry-forward that
+     restores the previous compile's real deliverables and dropping the GLB /
+     USD / LODs from the manifest. When export DID run, the mv joins the fresh
+     exports; when it did not, the carry-forward restores the prior mv too. */
+  if (wanted.has("export")) {
+    for (const job of shaderJobs) {
+      if (!job.motionVectors || job.frames <= 1) continue;
+      const mvRel = `out/textures/${job.name}_mv.png`;
+      if (fs.existsSync(path.join(request.projectDir, mvRel)) && !exportedAssets.includes(mvRel)) {
+        exportedAssets.push(mvRel);
+      }
+    }
+  }
+
   /* ---- lint ------------------------------------------------------- */
   let lintIssues: Issue[] = [];
   if (wanted.has("lint")) {
@@ -846,6 +872,24 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           detail: { claim: "grounded", amplitude: part.bob.amplitude },
         });
       }
+    }
+    // Hand every exported .glb to Khronos's reference validator — a second,
+    // independent authority on the bytes that ship, in ADDITION to our rules.
+    // The UNCHECKED warning is NOT filtered here (unlike USD below): the
+    // validator is a declared npm dependency, so its failure to load is a real
+    // environment breakage worth surfacing, per the codebase's "unchecked is
+    // never passed silently" rule.
+    for (const glb of exportedAssets.filter((a) => a.toLowerCase().endsWith(".glb"))) {
+      lintIssues.push(...(await validateGltf(request.projectDir, glb)));
+    }
+    // And the exported USD stage to OpenUSD's own runtime. The UNCHECKED
+    // warning IS dropped here: unlike the bundled glTF validator, the USD
+    // oracle is host-optional (needs pxr), so a machine without it should get
+    // silence, not a warning on every compile. Real conformance findings
+    // (E-502/W-502) still surface.
+    if (exportedUsda) {
+      const usdIssues = await validateUsd(request.projectDir, exportedUsda.file);
+      lintIssues.push(...usdIssues.filter((i) => i.code !== ISSUE_CODES.USD_UNCHECKED));
     }
     report("lint", "ran", ms(tl));
   }

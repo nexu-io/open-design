@@ -138,6 +138,8 @@ export interface RunnerJob {
     name: string;
     size: number;
     outputs: string[];
+    frames?: number;
+    motionVectors?: boolean;
     uniforms: Array<{ name: string; type: string; value: number[] }>;
     fragmentSource: string;
     vertexSource: string;
@@ -158,6 +160,8 @@ export interface RunnerJob {
    *  transform deltas plus the absolute material channel. */
   tweaks?: Record<string, PartTweak>;
   formats?: string[];
+  /** LOD triangle-keep ratios (0,1); each authors a scene.lod<N>.glb. */
+  lodRatios?: number[];
   /** Contract up-axis the exporter should rotate the stage to. */
   upAxis?: string;
   /** Asset identity written into the exported stage's assetInfo. */

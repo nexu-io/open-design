@@ -88,6 +88,7 @@ export function assembleShaderJob(
   size: number,
   normalStrength = 1,
   frames = 1,
+  motionVectors = false,
 ): CompiledShaderJob {
   return {
     name,
@@ -95,6 +96,7 @@ export function assembleShaderJob(
     outputs,
     normalStrength,
     frames,
+    ...(motionVectors ? { motionVectors: true } : {}),
     uniforms: [...uniforms].sort((a, b) => (a.name < b.name ? -1 : 1)),
     fragmentSource: assembleBakeFragment(kernelText, outputs, frames, size),
     vertexSource: BAKE_VERTEX_SOURCE,

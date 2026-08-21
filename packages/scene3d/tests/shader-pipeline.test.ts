@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { ISSUE_CODES } from "../src/errors.js";
+import { decodePng, DecodedImage } from "../src/sheet/png.js";
 import { rmForSetup } from "./helpers/fs.js";
 
 /**
@@ -144,6 +145,177 @@ describe.skipIf(!hasBlender)("shader pipeline (real GPU)", () => {
     });
     expect(result.issues.some((i) => i.code === "S3D-W-601")).toBe(true);
   });
+
+  it("tiles periodic noise seamlessly and bleeds RGB into transparent texels", async () => {
+    // Two texture-quality fixes, verified on the real bake:
+    //  - s3d_fbm_tiled wraps the lattice, so its wrap seam is far smaller
+    //    than plain s3d_fbm, which jumps randomly where the tile repeats.
+    //  - dilation floods the disc's colour into the transparent surround, so
+    //    a texel just outside the alpha edge is coloured, not black (the
+    //    dark-fringe fix), while its alpha stays zero.
+    const dir = path.join(__dirname, ".work", `bake-quality-${++workSeq}`);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.cpSync(fixture("good/spec_shaded/scene3d.json"), path.join(dir, "scene3d.json"));
+    fs.writeFileSync(
+      path.join(dir, "tiled.glsl"),
+      "vec4 kernel(vec2 uv) {\n  float v = s3d_fbm_tiled(uv * 4.0, vec2(4.0));\n  return vec4(vec3(v), 1.0);\n}\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(dir, "plain.glsl"),
+      "vec4 kernel(vec2 uv) {\n  float v = s3d_fbm(uv * 4.0);\n  return vec4(vec3(v), 1.0);\n}\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(dir, "disc.glsl"),
+      "vec4 kernel(vec2 uv) {\n  float d = distance(uv, vec2(0.5));\n  float a = step(d, 0.4);\n  return vec4(1.0, 0.4, 0.1, a);\n}\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(dir, "scene.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        shaders: {
+          shd_tiled: { kernel: "tiled.glsl", size: 64, outputs: ["baseColor"] },
+          shd_plain: { kernel: "plain.glsl", size: 64, outputs: ["baseColor"] },
+          shd_disc: { kernel: "disc.glsl", size: 64, outputs: ["baseColor"] },
+        },
+        materials: {
+          mtl_tiled: { shader: "shd_tiled" },
+          mtl_plain: { shader: "shd_plain" },
+          mtl_disc: { shader: "shd_disc" },
+        },
+        parts: [
+          { id: "prp_tiled", size: [0.2, 0.2, 0.2], material: "mtl_tiled" },
+          { id: "prp_plain", size: [0.2, 0.2, 0.2], material: "mtl_plain" },
+          { id: "prp_disc", size: [0.2, 0.2, 0.2], material: "mtl_disc" },
+        ],
+        relations: [
+          { type: "at", part: "prp_tiled", center: [-0.4, 0, 0.1] },
+          { type: "at", part: "prp_plain", center: [0, 0, 0.1] },
+          { type: "at", part: "prp_disc", center: [0.4, 0, 0.1] },
+        ],
+      }),
+      "utf8",
+    );
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
+    expect(result.ok).toBe(true);
+
+    const tex = (n: string) =>
+      decodePng(fs.readFileSync(path.join(dir, "out", "textures", n)));
+    // Mean per-row difference between the first and last column: the seam that
+    // would show when the texture repeats.
+    const wrapSeam = (img: DecodedImage) => {
+      let sum = 0;
+      for (let y = 0; y < img.height; y++) {
+        const a = (y * img.width) * 4;
+        const b = (y * img.width + img.width - 1) * 4;
+        sum += Math.abs(img.data[a]! - img.data[b]!);
+      }
+      return sum / img.height;
+    };
+    const tiledSeam = wrapSeam(tex("shd_tiled_baseColor.png"));
+    const plainSeam = wrapSeam(tex("shd_plain_baseColor.png"));
+    expect(tiledSeam).toBeLessThan(plainSeam * 0.5);
+
+    const disc = tex("shd_disc_baseColor.png");
+    // (x=60, y=32): ~28px right of centre, past the 0.4·64 radius, so
+    // transparent — yet within the dilation band, so its RGB is bled colour.
+    const at = (32 * disc.width + 60) * 4;
+    expect(disc.data[at + 3]!).toBeLessThan(16); // alpha untouched — still transparent
+    expect(Math.max(disc.data[at]!, disc.data[at + 1]!, disc.data[at + 2]!)).toBeGreaterThan(40);
+  }, 400_000);
+
+  it("bakes a motion-vector atlas whose flow tracks the beauty animation", async () => {
+    const dir = path.join(__dirname, ".work", `mv-${++workSeq}`);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.cpSync(fixture("good/spec_flame/scene3d.json"), path.join(dir, "scene3d.json"));
+    // A bright dot that slides steadily to the RIGHT as time advances.
+    fs.writeFileSync(
+      path.join(dir, "slide.glsl"),
+      "vec4 kernel(vec2 uv) {\n  vec2 c = vec2(0.2 + uS3dTime * 0.3, 0.5);\n  float v = smoothstep(0.14, 0.0, distance(uv, c));\n  return vec4(vec3(v), 1.0);\n}\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(dir, "scene.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        shaders: { shd_slide: { kernel: "slide.glsl", size: 64, frames: 8, motionVectors: true } },
+        parts: [{ id: "prp_stub", size: [0.2, 0.2, 0.2] }],
+        relations: [{ type: "at", part: "prp_stub", center: [0, 0, 0.1] }],
+      }),
+      "utf8",
+    );
+    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    expect(result.ok).toBe(true);
+
+    const mvPath = path.join(dir, "out", "textures", "shd_slide_mv.png");
+    expect(fs.existsSync(mvPath)).toBe(true);
+    // It ships as a companion deliverable beside the beauty atlas.
+    expect(result.exportedAssets).toContain("out/textures/shd_slide_mv.png");
+
+    // Frame 0 sits at grid cell (0,0); the dot centre is near (x≈13, y≈32).
+    // The dot moves right, so the flow there encodes positive dx — the red
+    // channel is above the 0.5 (=127) no-motion midpoint.
+    const mv = decodePng(fs.readFileSync(mvPath));
+    let sumR = 0;
+    let count = 0;
+    for (let y = 28; y < 36; y++) {
+      for (let x = 9; x < 18; x++) {
+        sumR += mv.data[(y * mv.width + x) * 4]!;
+        count++;
+      }
+    }
+    expect(sumR / count).toBeGreaterThan(140); // clearly rightward, not the 127 midpoint
+  }, 400_000);
+
+  it("keeps the real deliverables on a restricted recompile of a motion-vector scene", async () => {
+    // Regression: the mv atlas is written during BUILD, so pushing it into
+    // exportedAssets unconditionally made a no-export recompile skip the
+    // manifest carry-forward and clobber the real deliverables down to just
+    // the mv PNG. The push is gated on the export stage; the restricted pass
+    // must still carry scene.glb forward.
+    const dir = path.join(__dirname, ".work", `mv-carry-${++workSeq}`);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.cpSync(fixture("good/spec_flame/scene3d.json"), path.join(dir, "scene3d.json"));
+    fs.writeFileSync(
+      path.join(dir, "slide.glsl"),
+      "vec4 kernel(vec2 uv) {\n  vec2 c = vec2(0.2 + uS3dTime * 0.3, 0.5);\n  float v = smoothstep(0.14, 0.0, distance(uv, c));\n  return vec4(vec3(v), 1.0);\n}\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(dir, "scene.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        shaders: { shd_slide: { kernel: "slide.glsl", size: 64, frames: 8, motionVectors: true } },
+        parts: [{ id: "prp_stub", size: [0.2, 0.2, 0.2] }],
+        relations: [{ type: "at", part: "prp_stub", center: [0, 0, 0.1] }],
+      }),
+      "utf8",
+    );
+    const full = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    expect(full.ok).toBe(true);
+    expect(full.exportedAssets.some((a) => a.endsWith("scene.glb"))).toBe(true);
+    expect(full.exportedAssets).toContain("out/textures/shd_slide_mv.png");
+
+    const restricted = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint", "manifest"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
+    // The manifest carried the real deliverable forward — not clobbered to
+    // just the mv atlas.
+    expect(restricted.exportedAssets.some((a) => a.endsWith("scene.glb"))).toBe(true);
+  }, 400_000);
 
   it("FUZZ: hostile uniform values through the real GPU stay finite", async () => {
     // The bake's own NaN scan is the oracle: every variant compiles into

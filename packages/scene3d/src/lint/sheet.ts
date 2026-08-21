@@ -67,24 +67,38 @@ const DEFAULT_SEAM_TOLERANCE = 6;
 // rectangle once summed additively. Small, but above dither and codec noise.
 const ADDITIVE_BORDER_MAX = 24;
 
+type Edge = "top" | "bottom" | "left" | "right";
+
 /**
- * Standard cube adjacency for the `ft/bk/lf/rt/up/dn` naming, expressed as
- * the pair of edges that must agree.
+ * Cube adjacency for the `ft/bk/lf/rt/up/dn` naming — all TWELVE edges.
  *
- * The horizontal ring is the unambiguous part: looking outward, front's
- * right edge meets right's left edge, and so on around. The top and bottom
- * caps meet each side face's top and bottom row. Real skyboxes in hand are
- * seam-continuous under any orientation convention, so this table is
- * validated by deliberately-broken fixtures rather than by well-formed
- * assets, which cannot discriminate between conventions.
+ * The horizontal ring (4 vertical edges) is unambiguous: looking outward,
+ * front's right edge meets right's left edge, and so on around. The eight cap
+ * edges — each side's top row to the `up` face and its bottom row to the `dn`
+ * face — carry a real orientation ambiguity: which way the shared row runs
+ * differs between the GL/DX/RenderMan conventions, and a flat fixture cannot
+ * tell them apart. So cap seams are matched with `cap: true`, which compares
+ * the two rows under BOTH pixel orderings and keeps the smaller difference:
+ * a genuinely continuous cap passes whatever the convention, and only a face
+ * that meets its neighbour under NEITHER ordering is a real seam. The ring
+ * stays exact, because there the convention is fixed.
  */
-const CUBE_SEAMS: Array<{ a: SheetSpec["face"]; aEdge: "top" | "bottom" | "left" | "right"; b: SheetSpec["face"]; bEdge: "top" | "bottom" | "left" | "right" }> = [
+const CUBE_SEAMS: Array<{ a: SheetSpec["face"]; aEdge: Edge; b: SheetSpec["face"]; bEdge: Edge; cap?: boolean }> = [
+  // Vertical ring — exact.
   { a: "ft", aEdge: "right", b: "rt", bEdge: "left" },
   { a: "rt", aEdge: "right", b: "bk", bEdge: "left" },
   { a: "bk", aEdge: "right", b: "lf", bEdge: "left" },
   { a: "lf", aEdge: "right", b: "ft", bEdge: "left" },
-  { a: "ft", aEdge: "bottom", b: "dn", bEdge: "top" },
-  { a: "bk", aEdge: "bottom", b: "dn", bEdge: "bottom" },
+  // Bottom cap — each side's bottom row meets the `dn` face.
+  { a: "ft", aEdge: "bottom", b: "dn", bEdge: "top", cap: true },
+  { a: "bk", aEdge: "bottom", b: "dn", bEdge: "bottom", cap: true },
+  { a: "rt", aEdge: "bottom", b: "dn", bEdge: "right", cap: true },
+  { a: "lf", aEdge: "bottom", b: "dn", bEdge: "left", cap: true },
+  // Top cap — each side's top row meets the `up` face.
+  { a: "ft", aEdge: "top", b: "up", bEdge: "bottom", cap: true },
+  { a: "bk", aEdge: "top", b: "up", bEdge: "top", cap: true },
+  { a: "rt", aEdge: "top", b: "up", bEdge: "right", cap: true },
+  { a: "lf", aEdge: "top", b: "up", bEdge: "left", cap: true },
 ];
 
 export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
@@ -351,7 +365,13 @@ function lintCubeSets(input: SheetLintInput, issues: Issue[], tolerance: number)
       const imageA = images.get(a.file);
       const imageB = images.get(b.file);
       if (!imageA || !imageB) continue;
-      const difference = edgeDifference(edgeOf(imageA, seam.aEdge), edgeOf(imageB, seam.bEdge));
+      const ea = edgeOf(imageA, seam.aEdge);
+      const eb = edgeOf(imageB, seam.bEdge);
+      // Cap edges carry an orientation ambiguity, so accept the better of the
+      // two pixel orderings; ring edges are exact (forward only).
+      const difference = seam.cap
+        ? Math.min(edgeDifference(ea, eb), edgeDifference(ea, eb, true))
+        : edgeDifference(ea, eb);
       if (difference > tolerance) {
         issues.push({
           code: ISSUE_CODES.SHEET_SEAM_BREAK,

@@ -29,6 +29,124 @@ describe.skipIf(!hasBlender)("real assets (Khronos corpus, real Blender)", () =>
   };
   const LONG = 300_000;
 
+  /** Sum of triangles across a GLB's mesh primitives, from its JSON chunk. */
+  const glbTriangles = (file: string): number => {
+    const buf = fs.readFileSync(file);
+    const jsonLen = buf.readUInt32LE(12);
+    const gltf = JSON.parse(buf.subarray(20, 20 + jsonLen).toString("utf8"));
+    let tris = 0;
+    for (const mesh of gltf.meshes ?? []) {
+      for (const p of mesh.primitives ?? []) {
+        const acc = p.indices !== undefined ? p.indices : p.attributes.POSITION;
+        tris += gltf.accessors[acc].count / 3;
+      }
+    }
+    return tris;
+  };
+
+  it("authors decimated LOD GLBs beside the base export, with the base untouched", async () => {
+    const dir = workDir("real/helmet");
+    fs.writeFileSync(
+      path.join(dir, "scene3d.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        conventions: {
+          naming: { objectPattern: "^.+$", forbidDefaultNames: false },
+          geometry: { allowOpenMeshes: true, requireAppliedScale: false },
+          pbr: { metallicValues: [] },
+          uv: { allowFlipped: true, maxOverlapFraction: 1 },
+        },
+        export: { formats: ["glb"], lod: [0.5, 0.25] },
+      }),
+      "utf8",
+    );
+    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    expect(result.summary.errors).toBe(0);
+    // Base + two LOD levels ship as deliverables.
+    expect(result.exportedAssets).toContain("out/scene.glb");
+    expect(result.exportedAssets).toContain("out/scene.lod1.glb");
+    expect(result.exportedAssets).toContain("out/scene.lod2.glb");
+
+    const base = glbTriangles(path.join(dir, "out", "scene.glb"));
+    const lod1 = glbTriangles(path.join(dir, "out", "scene.lod1.glb"));
+    const lod2 = glbTriangles(path.join(dir, "out", "scene.lod2.glb"));
+    // Monotonic decimation: each level has meaningfully fewer triangles, and
+    // the base is NOT decimated (the master scene was left intact).
+    expect(base).toBeGreaterThan(10_000);
+    expect(lod1).toBeLessThan(base * 0.65); // ~0.5, with decimator slack
+    expect(lod2).toBeLessThan(lod1 * 0.65); // ~0.25 of base
+    // Master parity still holds — LOD ran after it was measured.
+    expect(result.issues.some((i) => i.code === "S3D-E-901")).toBe(false);
+  }, 400_000);
+
+  it("decimates a morph-target (shape-key) mesh instead of shipping it full-res", async () => {
+    // Regression: a topology-changing DECIMATE cannot apply to a mesh with
+    // shape keys (glTF morph targets), so without clearing them the LOD would
+    // silently ship at full resolution. The runner clears shape keys on the
+    // LOD copy; the base keeps its morph, the LOD is genuinely decimated.
+    const dir = path.join(__dirname, ".work", `lod-morph-real-${++workSeq}`);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "build.py"),
+      [
+        "import bpy",
+        "for o in list(bpy.data.objects):",
+        "    bpy.data.objects.remove(o, do_unlink=True)",
+        "bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=5)",
+        "obj = bpy.context.active_object",
+        'obj.name = "prp_morphball"',
+        'obj.data.materials.append(bpy.data.materials.new("mtl_ball"))',
+        'obj.shape_key_add(name="Basis")',
+        'key = obj.shape_key_add(name="Squash")',
+        "for v in key.data:",
+        "    v.co.z *= 0.5",
+        // A bpy scene is authored, not auto-staged: give it a camera and a sun
+        // so it is a complete scene (no S3D-E-381).
+        'cam = bpy.data.objects.new("Camera", bpy.data.cameras.new("Camera"))',
+        "bpy.context.scene.collection.objects.link(cam)",
+        "cam.location = (3.0, -3.0, 2.0)",
+        "bpy.context.scene.camera = cam",
+        'sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", type="SUN"))',
+        "bpy.context.scene.collection.objects.link(sun)",
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(dir, "scene3d.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        conventions: {
+          naming: { objectPattern: "^.+$", forbidDefaultNames: false },
+          geometry: { allowOpenMeshes: true, requireAppliedScale: false },
+          pbr: { metallicValues: [] },
+          uv: { require: "off" },
+        },
+        export: { formats: ["glb"], lod: [0.5] },
+      }),
+      "utf8",
+    );
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "export", "lint"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
+    expect(result.summary.errors).toBe(0);
+
+    const base = glbTriangles(path.join(dir, "out", "scene.glb"));
+    const lod1 = glbTriangles(path.join(dir, "out", "scene.lod1.glb"));
+    expect(base).toBeGreaterThan(4000);
+    // Genuinely decimated — NOT a full-res no-op (which is what the shape key
+    // would have caused before the fix).
+    expect(lod1).toBeLessThan(base * 0.65);
+
+    // The base still carries the morph target; the LOD dropped it to decimate.
+    const buf = fs.readFileSync(path.join(dir, "out", "scene.glb"));
+    const gltf = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString("utf8"));
+    expect((gltf.meshes[0].primitives[0].targets ?? []).length).toBeGreaterThan(0);
+  }, 400_000);
+
   it("compiles the Damaged Helmet from a bare .glb: census, UVs, textures, proof, re-export", async () => {
     const dir = workDir("real/helmet");
     const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
@@ -50,6 +168,12 @@ describe.skipIf(!hasBlender)("real assets (Khronos corpus, real Blender)", () =>
     // A production-unwrapped asset: measured, and measurably sane.
     expect(mesh.uv!.coverage).toBeGreaterThan(0.3);
     expect(mesh.uv!.texelDensity).toBeTruthy();
+    // Sander UV stretch is measured on the real unwrap: anisotropy is a ratio
+    // ≥ 1 (1 = conformal), and a production unwrap keeps it bounded.
+    expect(mesh.uv!.stretch).toBeTruthy();
+    expect(mesh.uv!.stretch!.max).toBeGreaterThanOrEqual(1);
+    expect(mesh.uv!.stretch!.mean).toBeGreaterThanOrEqual(1);
+    expect(mesh.uv!.stretch!.mean).toBeLessThan(mesh.uv!.stretch!.max + 0.001);
     // The deeper analytics measured real statistical metadata: density
     // allocation and bilateral symmetry, both invisible in any render.
     expect(mesh.surfaceArea).toBeGreaterThan(0);

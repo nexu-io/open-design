@@ -25,6 +25,7 @@ const cleanUv: CensusUv = {
   flippedFaces: 0,
   outOfBoundsFraction: 0,
   texelDensity: null,
+  stretch: null,
   sampled: true,
 };
 
@@ -111,6 +112,25 @@ function codes(c: Census, ctr = contract()): string[] {
 }
 
 describe("uv rules", () => {
+  it("flags UV stretch beyond the configured limit, and only when configured", () => {
+    const stretched = census({
+      meshes: [mesh({ uv: { ...cleanUv, stretch: { max: 6, mean: 3 } } })],
+    });
+    // Opt-in: with no maxStretch the census still measured it, but no verdict.
+    expect(codes(stretched)).not.toContain(ISSUE_CODES.UV_STRETCH);
+    // 6x anisotropy exceeds a 4x limit → warned.
+    expect(codes(stretched, contract({ uv: { maxStretch: 4 } }))).toContain(
+      ISSUE_CODES.UV_STRETCH,
+    );
+    // Gentle stretch under the limit stays silent.
+    const gentle = census({
+      meshes: [mesh({ uv: { ...cleanUv, stretch: { max: 2, mean: 1.5 } } })],
+    });
+    expect(codes(gentle, contract({ uv: { maxStretch: 4 } }))).not.toContain(
+      ISSUE_CODES.UV_STRETCH,
+    );
+  });
+
   it("errors on a textured mesh with no UV layer, and only then", () => {
     const bad = census({ meshes: [mesh({ uvLayers: [], uv: null })] });
     expect(codes(bad)).toContain(ISSUE_CODES.UV_MISSING);
