@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   createLauncherRuntimeSyncPowerShellScript,
   createNsisQuotedCommandLiteral,
+  createRunningInstancesScript,
 } from "../src/win/custom-installer.js";
 import { resolveWinInstallIdentity } from "../src/win/identity.js";
 
@@ -134,6 +135,88 @@ describe("resolveWinInstallIdentity", () => {
     expect(silentCheck.indexOf('StrCpy $RunningInstancesInstallRoot "$INSTDIR"')).toBeLessThan(
       silentCheck.indexOf("Call DetectRunningInstances"),
     );
+  });
+
+  it("falls back to .NET process enumeration when CIM is unavailable", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const processScript = source.slice(
+      source.indexOf("function createRunningInstancesScript"),
+      source.indexOf("async function writeInstallerScript"),
+    );
+
+    expect(processScript).toContain("Get-CimInstance Win32_Process");
+    expect(processScript).toContain("Get-Process");
+    expect(processScript).toContain("catch");
+  });
+
+  it.skipIf(process.platform !== "win32")("detects an installed process when CIM is unavailable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-pack-running-fallback-"));
+    const installRoot = join(root, "Open Design");
+    const installedExecutable = join(installRoot, "Open Design.exe");
+    const scriptPath = join(root, "running-instances.ps1");
+    let child: ReturnType<typeof execFile> | undefined;
+
+    try {
+      await mkdir(installRoot, { recursive: true });
+      await copyFile(process.env.ComSpec ?? "C:\\Windows\\System32\\cmd.exe", installedExecutable);
+      await writeFile(scriptPath, createRunningInstancesScript(), "utf8");
+      child = execFile(installedExecutable, ["/d", "/c", "ping.exe -n 30 127.0.0.1 >NUL"]);
+      if (child.pid == null) throw new Error("expected the fixture process to have a pid");
+
+      const { stdout } = await execFileAsync(
+        "powershell.exe",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-Command",
+          'function global:Get-CimInstance { throw "simulated CIM failure" }; & $env:OD_TEST_SCRIPT detect $env:OD_TEST_INSTALL',
+        ],
+        {
+          env: {
+            ...process.env,
+            OD_TEST_INSTALL: installRoot,
+            OD_TEST_SCRIPT: scriptPath,
+          },
+          windowsHide: true,
+        },
+      );
+
+      expect(stdout).toContain(String(child.pid));
+    } finally {
+      child?.kill();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps detection failures distinct from running-process output", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("Var RunningInstancesDetectionFailed");
+    expect(source).not.toContain('StrCpy $RunningInstancesOutput "__detection_failed__"');
+    expect(source).toContain('StrCpy $RunningInstancesDetectionFailed "1"');
+    expect(source).toContain("$(RunningInstancesDetectionFailed)");
+  });
+
+  it("fail-closes when the install-section recheck cannot detect running instances", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const functionStart = source.indexOf("Function GuardRunningInstancesBeforeInstall");
+    const functionEnd = source.indexOf("FunctionEnd", functionStart);
+    const guard = source.slice(functionStart, functionEnd);
+    const closeIndex = guard.indexOf("Call CloseRunningInstances");
+    const recheckIndex = guard.indexOf("Call DetectRunningInstances", closeIndex);
+    const failureIndex = guard.indexOf('\\${If} $RunningInstancesDetectionFailed == "1"', recheckIndex);
+    const outputIndex = guard.indexOf('\\${If} $RunningInstancesOutput != ""', recheckIndex);
+
+    expect(functionStart).toBeGreaterThanOrEqual(0);
+    expect(functionEnd).toBeGreaterThan(functionStart);
+    expect(closeIndex).toBeGreaterThanOrEqual(0);
+    expect(recheckIndex).toBeGreaterThan(closeIndex);
+    expect(failureIndex).toBeGreaterThan(recheckIndex);
+    expect(outputIndex).toBeGreaterThan(failureIndex);
+    expect(guard.slice(failureIndex, outputIndex)).toContain('Abort "$(RunningInstancesDetectionFailed)"');
   });
 
   it("syncs launcher runtime metadata after a successful Windows install", async () => {
