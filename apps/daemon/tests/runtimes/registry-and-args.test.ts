@@ -2,7 +2,10 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
-import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
+import {
+  codexNeedsDangerFullAccessSandbox,
+  codexWorkspaceWriteNetworkAccess,
+} from '../../src/runtimes/defs/codex.js';
 import { isKnownServiceTier } from '../../src/runtimes/models.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
@@ -203,6 +206,78 @@ test('codex args use workspace-write sandbox on macOS and Linux', () => {
       });
     }
   });
+});
+
+test('codex network access keeps the enabled default for unset and unknown values', () => {
+  assert.equal(codexWorkspaceWriteNetworkAccess({}), true);
+  assert.equal(
+    codexWorkspaceWriteNetworkAccess({ OD_CODEX_NETWORK_ACCESS: 'disabled' }),
+    true,
+  );
+  assert.equal(
+    codexWorkspaceWriteNetworkAccess({ OD_CODEX_NETWORK_ACCESS: 'FALSE' }),
+    true,
+  );
+});
+
+test('codex args allow disabling workspace-write network access for create and resume', () => {
+  withEnvSnapshot(
+    ['OD_CODEX_NETWORK_ACCESS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'],
+    () => {
+      process.env.OD_CODEX_NETWORK_ACCESS = 'false';
+      delete process.env.OD_CODEX_SANDBOX;
+      delete process.env.WSL_DISTRO_NAME;
+
+      withPlatform('darwin', () => {
+        const createArgs = codex.buildArgs('', [], [], {}, {
+          cwd: '/tmp/od-project',
+        });
+        const resumeArgs = codex.buildArgs('', [], [], {}, {
+          cwd: '/tmp/od-project',
+          resumeSessionId: 'thread-123',
+        });
+
+        assert.equal(
+          createArgs.includes('sandbox_workspace_write.network_access=false'),
+          true,
+        );
+        assert.equal(
+          resumeArgs.includes('sandbox_workspace_write.network_access=false'),
+          true,
+        );
+        assert.equal(
+          createArgs.includes('sandbox_workspace_write.network_access=true'),
+          false,
+        );
+        assert.equal(
+          resumeArgs.includes('sandbox_workspace_write.network_access=true'),
+          false,
+        );
+      });
+    },
+  );
+});
+
+test('codex network override does not add workspace settings to danger-full-access', () => {
+  withEnvSnapshot(
+    ['OD_CODEX_NETWORK_ACCESS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'],
+    () => {
+      process.env.OD_CODEX_NETWORK_ACCESS = 'false';
+      process.env.OD_CODEX_SANDBOX = 'danger-full-access';
+      delete process.env.WSL_DISTRO_NAME;
+
+      withPlatform('linux', () => {
+        const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+        assert.equal(args.includes('danger-full-access'), true);
+        assert.equal(
+          args.some((arg) =>
+            arg.startsWith('sandbox_workspace_write.network_access='),
+          ),
+          false,
+        );
+      });
+    },
+  );
 });
 
 test('codex args use danger-full-access sandbox on WSL because workspace-write stays read-only', () => {
