@@ -532,16 +532,25 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
 
   // Viewport edits are a source input: they change the geometry that gets
   // built, so they participate in the content hash exactly like build.py.
-  // Corrupt tweaks degrade to "no tweaks" — a bad viewer write must not
-  // wedge every future compile of the scene.
+  // Corrupt tweaks still degrade to "no tweaks" — a bad viewer write must not
+  // wedge every future compile of the scene — but degrading SILENTLY made the
+  // scene quietly snap back to its rest pose with nothing to read, and the
+  // author's only clue was geometry that stopped matching what they dragged.
   let tweaks: Record<string, PartTweak> | undefined;
+  let tweaksRaw: string | null = null;
   const tweaksFile = path.join(request.projectDir, "tweaks.json");
   if (fs.existsSync(tweaksFile)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(tweaksFile, "utf8"));
-      if (parsed && typeof parsed === "object") tweaks = parsed;
-    } catch {
-      /* ignore malformed tweaks */
+    tweaksRaw = fs.readFileSync(tweaksFile, "utf8");
+    const read = readTweaks(tweaksRaw);
+    tweaks = read.tweaks;
+    for (const note of read.notes) {
+      issues.push({
+        code: ISSUE_CODES.TWEAKS_IGNORED,
+        severity: "warning",
+        message: `tweaks.json: ${note}`,
+        hint: "re-apply the edit in the viewer, or delete tweaks.json to compile the authored scene",
+        file: "tweaks.json",
+      });
     }
   }
 
@@ -556,7 +565,11 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     // busts the cache (JSON.stringify would otherwise drop them to `{}`).
     contract: contractCacheKey(normalized),
     sources: hashFiles(sourceFiles),
-    tweaks: tweaks ?? null,
+    // The RAW bytes, not the parsed object: hashing the parse result made
+    // every unreadable version of the file hash as `null`, so corrupting a
+    // valid tweaks.json and then repairing it to a DIFFERENT valid state
+    // could land on a cache entry built from neither.
+    tweaks: tweaksRaw,
     blender: probe?.version ?? null,
     // The generated script hashes the emitter itself: an emitter change
     // must bust the cache even though scene.json is unchanged.
@@ -1266,6 +1279,77 @@ function previousReadModel(projectDir: string): ReadModel | undefined {
  * unchanged scene produce byte-identical files. That is what makes the read
  * model itself diffable, which is most of its value.
  */
+/**
+ * Read the viewer's edit sidecar, naming everything it drops.
+ *
+ * `tweaks.json` is written by an iframe and edited by hand, so it really does
+ * arrive truncated, half-written, or carrying values the runner cannot apply.
+ * Dropping those is right — a bad viewer write must never wedge the scene —
+ * but dropping them QUIETLY made the compile a liar: the geometry reverted to
+ * the rest pose and the report said the scene was clean. Each rejection comes
+ * back as a note so the caller can say which edit was ignored and why.
+ *
+ * Channel validation is here rather than in the runner because "the runner
+ * ignored it" is not observable from the outside: `apply_tweaks` skipped a
+ * non-positive scale with a bare `pass`, so a `[1,1,-1]` mirror silently did
+ * nothing, while the same negative scale authored in a spec is S3D-E-327.
+ */
+export function readTweaks(raw: string): {
+  tweaks: Record<string, PartTweak> | undefined;
+  notes: string[];
+} {
+  const notes: string[] = [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    return { tweaks: undefined, notes: [`not valid JSON (${(err as Error).message}) — viewer edits ignored`] };
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { tweaks: undefined, notes: ["not an object of part edits — viewer edits ignored"] };
+  }
+
+  const triple = (v: unknown): v is [number, number, number] =>
+    Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number" && Number.isFinite(n));
+  const quad = (v: unknown): v is [number, number, number, number] =>
+    Array.isArray(v) && v.length === 4 && v.every((n) => typeof n === "number" && Number.isFinite(n));
+
+  const out: Record<string, PartTweak> = {};
+  for (const [part, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      notes.push(`'${part}' is not an edit object — ignored`);
+      continue;
+    }
+    // Copy first, then reject: an allow-list would silently drop any channel
+    // this reader has not heard of — including `rotate`, which the runner
+    // still honours for sidecars written by an older viewer. Becoming a new
+    // silent dropper while fixing one is not a fix.
+    const tweak = { ...(value as Record<string, unknown>) };
+    const drop = (key: string, why: string) => {
+      notes.push(`'${part}'.${key} ${why} — ignored`);
+      delete tweak[key];
+    };
+    for (const key of ["translate", "rotate"]) {
+      if (tweak[key] !== undefined && !triple(tweak[key])) drop(key, "is not three finite numbers");
+    }
+    if (tweak.quat !== undefined && !quad(tweak.quat)) drop("quat", "is not four finite numbers");
+    if (tweak.scale !== undefined) {
+      if (!triple(tweak.scale)) drop("scale", "is not three finite numbers");
+      // A mirror is a legitimate modelling operation but not a viewport one:
+      // the runner cannot apply it without flipping normals, and shipping a
+      // negative scale is S3D-E-327 anyway. Say so instead of no-op'ing it.
+      else if (tweak.scale.some((n) => n <= 0)) {
+        drop("scale", `${JSON.stringify(tweak.scale)} is not positive (a mirrored scale is not a viewport edit)`);
+      }
+    }
+    if (tweak.material !== undefined && (typeof tweak.material !== "object" || tweak.material === null || Array.isArray(tweak.material))) {
+      drop("material", "is not an object");
+    }
+    if (Object.keys(tweak).length > 0) out[part] = tweak as PartTweak;
+  }
+  return { tweaks: Object.keys(out).length > 0 ? out : undefined, notes };
+}
+
 function writeReadModel(projectDir: string, model: ReadModel): void {
   const dir = path.join(projectDir, OUT_DIR);
   fs.mkdirSync(dir, { recursive: true });

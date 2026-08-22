@@ -81,6 +81,51 @@ plate("prp_plate_b")
     expect(reason).toMatch(/\d+ triangle pairs/);
   });
 
+  it("says so when the viewer edit sidecar is unreadable", async () => {
+    // A truncated tweaks.json used to be swallowed by `catch {}`: the compile
+    // reported a clean scene while the geometry silently reverted to the rest
+    // pose. The author's only signal was that their drag had vanished.
+    const dir = mkProject({
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "tw",
+        parts: [{ id: "prp_box", size: [1, 1, 1] }],
+        relations: [{ type: "at", part: "prp_box", center: [0, 0, 0.5] }],
+      }),
+      "tweaks.json": '{ "prp_box": { "translate": [0, 0, 1] ',
+    });
+    const r = await run(dir);
+    const ignored = r.issues.filter((i) => i.code === "S3D-W-208");
+    expect(ignored).toHaveLength(1);
+    expect(ignored[0]!.message).toMatch(/not valid JSON/);
+    // Still compiles — a bad viewer write must not wedge the scene.
+    expect(r.census!.meshes.some((m) => m.object === "prp_box")).toBe(true);
+  });
+
+  it("names a viewport edit the runner cannot apply instead of no-op'ing it", async () => {
+    // `apply_tweaks` skipped a non-positive scale with a bare `pass`, so a
+    // mirrored scale silently did nothing — while the same negative scale
+    // authored in a spec is S3D-E-327. Two authorities, one silent.
+    const dir = mkProject({
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "tw",
+        parts: [{ id: "prp_box", size: [1, 1, 1] }],
+        relations: [{ type: "at", part: "prp_box", center: [0, 0, 0.5] }],
+      }),
+      "tweaks.json": JSON.stringify({ prp_box: { scale: [1, 1, -1], translate: [0, 0.25, 0] } }),
+    });
+    const r = await run(dir);
+    const ignored = r.issues.filter((i) => i.code === "S3D-W-208");
+    expect(ignored).toHaveLength(1);
+    expect(ignored[0]!.message).toMatch(/scale .* is not positive/);
+    // The VALID channel of the same edit still applies: rejecting one field
+    // must not throw away the whole tweak. (Viewer space is glTF Y-up, so a
+    // +Y drag is +Z in Blender.)
+    const box = r.census!.objects.find((o) => o.name === "prp_box")!;
+    expect(box.worldMin![2]).toBeCloseTo(0.25, 3);
+  });
+
   it("still measures and reports the z-fight when it is under the cap", async () => {
     // The control: the same coincident geometry, cheap enough to compare.
     // A cap that suppressed the finding outright would pass the test above.

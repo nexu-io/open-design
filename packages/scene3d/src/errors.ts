@@ -49,6 +49,12 @@ export const ISSUE_CODES = {
      file with no geometry. Detect-and-name, never mutate-and-guess. */
   IMPORT_DEGRADED: "S3D-W-207",
 
+  /* The viewer edit sidecar (tweaks.json) was unreadable in whole or in
+     part, so those edits were not applied. Dropping a bad viewer write is
+     right; dropping it silently made the scene snap back to its rest pose
+     with nothing in the report to explain why. */
+  TWEAKS_IGNORED: "S3D-W-208",
+
   /* lint: naming */
   NAME_DEFAULT: "S3D-E-301",
   NAME_PATTERN: "S3D-E-302",

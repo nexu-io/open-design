@@ -31,6 +31,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-205': 'Export format unavailable',
   'S3D-E-206': 'Proof render failed',
   'S3D-W-207': 'Imported file degraded',
+  'S3D-W-208': 'Viewer edits ignored',
 
   /* lint: naming */
   'S3D-E-301': 'Default object name',
