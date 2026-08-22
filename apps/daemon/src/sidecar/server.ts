@@ -218,7 +218,11 @@ export async function startDaemonSidecar(
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      void stop().finally(() => process.exit(0));
+      // Packaged beforeShutdown sends SHUTDOWN, then closeManagedChild waits
+      // five seconds and stopProcesses() delivers SIGTERM. Keep that path on
+      // the same hold as SHUTDOWN so a slow handoff journal commit cannot be
+      // cut off mid-write.
+      scheduleHeldDaemonExit(stop, options.exit);
     });
   }
 
