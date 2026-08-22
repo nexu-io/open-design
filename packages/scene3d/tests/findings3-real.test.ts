@@ -141,11 +141,30 @@ plate("prp_plate_b")
     // a downloaded .glb — a documented, first-class workflow — got no
     // relaxation at all and compiled with ok:false. Every fixture in this repo
     // ships a hand-written relaxed scene3d.json, which is exactly what hid it.
+    //
+    // ALL SIX STAGES on purpose. This test used to stop after lint, and the
+    // stage-naming rule (S3D-E-404) fires during EXPORT — so a downloaded
+    // asset could lint perfectly clean and still fail the compile, and neither
+    // this test nor the corpus calibration could see it. A posture that only
+    // holds for the stages you happened to run is not a posture.
     const dir = dropAsset(path.join(REAL, "fox", "Fox.glb"));
-    const r = await run(dir);
+    const r = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
     const blocking = r.issues.filter((i) => i.severity === "error");
     expect(blocking).toEqual([]);
     expect(r.ok).toBe(true);
+  });
+
+  it("keeps a RIGGED downloaded asset clean through export too", async () => {
+    // Blender names an imported armature 'Armature', which the stage linter
+    // reads as an exporter default — an error the author cannot fix without
+    // renaming somebody else's rig. Khronos RiggedFigure and Sponza both
+    // failed this way while linting clean.
+    const dir = dropAsset(path.join(REAL, "cesium", "CesiumMan.glb"));
+    const r = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    expect(r.issues.filter((i) => i.severity === "error")).toEqual([]);
+    // ...and the finding is still SAID, as a note that names its provenance.
+    const named = r.issues.filter((i) => i.code === "S3D-E-404");
+    for (const issue of named) expect(issue.detail?.provenance).toBe("imported");
   });
 
   it("still SAYS what it found — relaxation is reclassification, not silence", async () => {

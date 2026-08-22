@@ -139,6 +139,18 @@ export const IMPORTED_RELAXATIONS: ReadonlyArray<{
   { code: ISSUE_CODES.NAME_DEFAULT_WARN, block: "naming", why: "the asset's author chose these names" },
   { code: ISSUE_CODES.NAME_PATTERN, block: "naming", why: "the asset's author chose these names" },
   {
+    code: ISSUE_CODES.STAGE_PRIM_DEFAULT_NAME,
+    block: "naming",
+    // The SAME smell as NAME_DEFAULT, one surface later: the census judges the
+    // Blender object and this judges the prim the exporter wrote from it.
+    // Relaxing one and not the other gave a downloaded asset two different
+    // verdicts depending on which surface you looked at — and because it fires
+    // during EXPORT, a bare Khronos asset that linted clean still failed the
+    // compile. Found by running the corpus through all six stages after
+    // calibrating only the first three.
+    why: "the asset's author chose these names",
+  },
+  {
     code: ISSUE_CODES.DEPTH_LIMIT,
     block: "hierarchy",
     // A downloaded creature kit's tail is ten bones deep because its rigger
