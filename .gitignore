@@ -75,6 +75,9 @@ docs/superpowers/
 .direnv/
 .envrc
 # Local secrets (PostHog keys, BYOK creds for local testing, etc.)
+# Bare .env included: only the .local variants were listed, so a plain
+# .env holding a live key was one `git add -A` away from history.
+.env
 .env.local
 .env.*.local
 # Local design assistant context
