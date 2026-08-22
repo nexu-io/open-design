@@ -239,7 +239,7 @@ export function attachPiRpcSession({
 
   const fail = (message: string, code?: string): void => {
     if (finished) return;
-    captureSessionPath();
+    if (onSessionPath) captureSessionPath();
     finished = true;
     fatal = true;
     send('error', { message, ...(code ? { code } : {}) });
@@ -349,9 +349,11 @@ export function attachPiRpcSession({
     // acting on the parsed objects.
     if (finished) return;
 
-    // Capture while the run is live so cancellation, failure, and application
-    // restart do not discard the native session handle.
-    captureSessionPath();
+    // Live capture is opt-in for runtimes whose caller supplied a
+    // child-specific directory. Shared-directory runtimes (ordinary Pi) must
+    // wait for terminal conservative resolution so a transient foreign write
+    // cannot become an irreversible candidate.
+    if (onSessionPath) captureSessionPath();
 
     // Extension UI requests: auto-resolve to keep pi unblocked.
     if (raw.type === 'extension_ui_request') {
@@ -429,7 +431,7 @@ export function attachPiRpcSession({
       // (SIGTERM fallback) is owned by the caller (runs.cancel()),
       // not by this method.
       if (finished || child.killed) return;
-      captureSessionPath();
+      if (onSessionPath) captureSessionPath();
       finished = true;
       sendCommand(stdin, 'abort');
     },

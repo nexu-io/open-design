@@ -919,6 +919,40 @@ test('attachPiRpcSession never publishes a foreign shared-directory change befor
   }
 });
 
+test('attachPiRpcSession does not latch a foreign file live for ordinary Pi without a sessionDir override', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-rpc-ordinary-'));
+  const sharedDir = path.join(cwd, '.pi', 'sessions');
+  const child = createMockChild();
+  try {
+    await fs.mkdir(sharedDir, { recursive: true });
+    const session = attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'hello',
+      cwd,
+      model: null,
+      send: () => {},
+    });
+
+    const foreignPath = path.join(sharedDir, 'foreign.jsonl');
+    await fs.writeFile(foreignPath, '{"type":"foreign"}\n');
+    feedStdoutLines(child, [{ type: 'response', id: 1, success: true }]);
+    assert.equal(session.getLastSessionPath(), null, 'foreign first-frame change must not latch');
+
+    const ownPath = path.join(sharedDir, 'own.jsonl');
+    await fs.writeFile(ownPath, '{"type":"session"}\n');
+    feedStdoutLines(child, [{ type: 'agent_start' }, { type: 'agent_end' }]);
+    assert.equal(
+      session.getLastSessionPath(),
+      null,
+      'terminal resolution must reject the now-ambiguous shared-directory changes',
+    );
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test('attachPiRpcSession skips unreadable image paths gracefully', () => {
   const events: TestSentEvent[] = [];
   const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });

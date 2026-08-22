@@ -14388,18 +14388,22 @@ export async function startServer({
         imagePaths: def.supportsImagePaths ? promptImagePaths : [],
         uploadRoot: odNextTaskInputSnapshot?.projectionDir ?? UPLOAD_DIR,
         sessionDir: runPiRpcSessionDir,
-        onSessionPath: (sessionPath) => {
-          persistCapturedAgentSession(db, {
-            conversationId: run.conversationId,
-            agentId: def.id,
-            sessionId: sessionPath,
-            stablePromptHash: currentStableHash,
-            stablePromptSections: currentStableSectionsJson,
-            model: safeModel ?? null,
-            cwd: effectiveCwd,
-            lastMessageId: run.assistantMessageId ?? null,
-          });
-        },
+        ...(def.piRpcResumeViaProcessArgs === true && runPiRpcSessionDir
+          ? {
+              onSessionPath: (sessionPath: string) => {
+                persistCapturedAgentSession(db, {
+                  conversationId: run.conversationId,
+                  agentId: def.id,
+                  sessionId: sessionPath,
+                  stablePromptHash: currentStableHash,
+                  stablePromptSections: currentStableSectionsJson,
+                  model: safeModel ?? null,
+                  cwd: effectiveCwd,
+                  lastMessageId: run.assistantMessageId ?? null,
+                });
+              },
+            }
+          : {}),
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
       const acpStageTimeoutMs = resolveAcpStageTimeoutMs(def.inactivityTimeoutMs);
