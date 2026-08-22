@@ -159,7 +159,12 @@ export function measureSheet(
     borderTouch,
     seamLeftRight,
     longEdgeTouch,
-    clippedRatio: visible === 0 ? 0 : clipped / pixels,
+    // Over VISIBLE pixels, like hueRatio: `clipped` is only counted for
+    // visible ones, so dividing by the total understated it for anything with
+    // transparency. Latent rather than live — the only consumer is a skybox
+    // face, which must be fully opaque anyway, so the two denominators agree
+    // there — but a fact should not be wrong while waiting for a second reader.
+    clippedRatio: visible === 0 ? 0 : clipped / visible,
   };
 
   if (options.grid) {

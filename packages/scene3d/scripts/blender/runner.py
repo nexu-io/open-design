@@ -2856,6 +2856,74 @@ def rebuild_object_animation(known=None):
     log("rebaked %d animated object(s) across frames %d-%d" % (len(movers), start, end))
 
 
+def transcode_stage_textures(master_path):
+    """Rewrite textures the stage references into a format its readers accept.
+
+    `export_textures_mode: NEW` materialises every referenced image beside the
+    stage, and Blender picks the format from the image — which for the ones it
+    synthesises during the export (a flat world or material colour) is OpenEXR.
+    The USDZ package then stores whatever the stage references, and USDZ's
+    readers do not read EXR: Apple Quick Look and AR Quick Look take png and
+    jpeg only, so the packaged asset renders untextured in the one place the
+    format exists to serve. Nothing warned, because from the compiler's side
+    the reference resolved perfectly.
+
+    The images this catches are flat colour swatches, so 8-bit PNG holds them
+    exactly. Conversion happens after the export because that is the only
+    moment they exist: they are the writer's own output, not scene data, and
+    reformatting them beforehand has nothing to reformat.
+
+    Returns the [(old, new)] basenames rewritten.
+    """
+    import bpy
+    tex_dir = os.path.join(os.path.dirname(master_path), "textures")
+    if not os.path.isdir(tex_dir):
+        return []
+    converted = []
+    for name in sorted(os.listdir(tex_dir)):
+        stem, ext = os.path.splitext(name)
+        if ext.lower() in (".png", ".jpg", ".jpeg"):
+            continue
+        src = os.path.join(tex_dir, name)
+        dst = os.path.join(tex_dir, stem + ".png")
+        image = None
+        try:
+            image = bpy.data.images.load(src)
+            image.file_format = "PNG"
+            image.save(filepath=dst)
+        except Exception:
+            # An image that will not convert keeps its original file and its
+            # reference; a half-rewritten stage would be worse than an EXR.
+            if image is not None:
+                try:
+                    bpy.data.images.remove(image)
+                except Exception:
+                    pass
+            continue
+        try:
+            bpy.data.images.remove(image)
+        except Exception:
+            pass
+        try:
+            os.remove(src)
+        except Exception:
+            pass
+        converted.append((name, stem + ".png"))
+
+    if converted:
+        try:
+            with open(master_path, "r", encoding="utf-8") as handle:
+                text = handle.read()
+            for old, new in converted:
+                text = text.replace(old, new)
+            with open(master_path, "w", encoding="utf-8", newline="") as handle:
+                handle.write(text)
+        except Exception:
+            pass
+        log("transcoded %d stage texture(s) to png" % len(converted))
+    return converted
+
+
 def master_usd_kwargs(job, animated):
     """The master stage carries EVERYTHING the writer can author: USD is
     the core format and the only ceiling allowed here is the writer's own.
@@ -3013,6 +3081,7 @@ def export_scene(job):
         try:
             dropped = usd_export_resilient(master_path, master_usd_kwargs(job, animated))
             lowering["droppedExportOptions"] = dropped
+            transcode_stage_textures(master_path)
             post_process_usda(master_path, info, job)
             assets.append(master_path)
             log("authored master %s" % master_path)

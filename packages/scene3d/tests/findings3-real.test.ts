@@ -508,6 +508,41 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     expect(r.ok).toBe(true);
   });
 
+  it("packages only texture formats a USDZ reader accepts", async () => {
+    // export_textures_mode:NEW materialises every referenced image beside the
+    // stage, and for the ones the exporter SYNTHESISES during the export (a
+    // flat world or material colour) Blender chooses OpenEXR. The USDZ then
+    // stored a .exr — and USDZ's readers do not read EXR: Apple Quick Look
+    // takes png and jpeg only, so the packaged asset rendered untextured in
+    // the one place the format exists to serve. Nothing warned, because from
+    // the compiler's side the reference resolved perfectly.
+    const dir = mkProject({
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "usdz",
+        materials: { mtl_flat: { baseColor: [0.6, 0.4, 0.2], roughness: 0.7 } },
+        parts: [{ id: "prp_box", size: [1, 1, 1], material: "mtl_flat" }],
+        relations: [{ type: "at", part: "prp_box", center: [0, 0, 0.5] }],
+      }),
+    });
+    await run(dir, ["parse", "build", "export"]);
+    const usdz = fs.readFileSync(path.join(dir, "out", "scene.usdz"));
+    const entries: string[] = [];
+    for (let i = 0; i < usdz.length - 30; i++) {
+      if (usdz.readUInt32LE(i) === 0x04034b50) {
+        const n = usdz.readUInt16LE(i + 26);
+        entries.push(usdz.subarray(i + 30, i + 30 + n).toString("utf8"));
+      }
+    }
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      expect(entry, `${entry} is not readable inside a USDZ`).toMatch(/\.(usda|usdc|png|jpe?g)$/i);
+    }
+    // ...and the stage does not reference a file that is no longer there.
+    const stage = fs.readFileSync(path.join(dir, "out", "scene.usda"), "utf8");
+    expect(stage).not.toMatch(/\.exr/i);
+  });
+
   it("still measures and reports the z-fight when it is under the cap", async () => {
     // The control: the same coincident geometry, cheap enough to compare.
     // A cap that suppressed the finding outright would pass the test above.
