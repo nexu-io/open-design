@@ -472,6 +472,42 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     expect(colour[2]).toBeGreaterThan(colour[0]!);
   });
 
+  /* ---- master parity: who moves is known, not guessed --------------- */
+
+  const dynamic = (name: string, dyn: Record<string, unknown>) => ({
+    "scene.json": JSON.stringify({
+      schemaVersion: 1,
+      name,
+      materials: { mtl_m: { baseColor: [0.5, 0.5, 0.5], roughness: 0.8 } },
+      parts: [{ id: "prp_box", size: [1, 1, 1], material: "mtl_m", ...dyn }],
+      relations: [{ type: "at", part: "prp_box", center: [0, 0, 1] }],
+    }),
+  });
+
+  it("carries a bobbing part's clip into the master stage", async () => {
+    // The re-import rebuilt keyframes for objects it detected as MOVERS by
+    // comparing three frames — start, middle, end. A bob is keyed
+    // 0, +A, 0, -A, 0 across exactly that range, so all three probes land on
+    // the three zeroes, the part reads as static, no keyframes are rebuilt and
+    // the clip vanishes from the master. Every bobbing scene therefore failed
+    // its own parity check with E-901 while the identical scene SPINNING
+    // passed, because a spin's midpoint (180 degrees) differs from its ends.
+    const r = await run(mkProject(dynamic("bobber", { bob: { amplitude: 0.1 } })), [
+      "parse", "build", "export", "lint",
+    ]);
+    expect(r.census!.animation?.actionNames).toEqual(["prp_boxAction"]);
+    expect(r.issues.filter((i) => i.code === "S3D-E-901")).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("carries a spinning part's clip too", async () => {
+    const r = await run(mkProject(dynamic("spinner", { spin: { seconds: 2 } })), [
+      "parse", "build", "export", "lint",
+    ]);
+    expect(r.issues.filter((i) => i.code === "S3D-E-901")).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
   it("still measures and reports the z-fight when it is under the cap", async () => {
     // The control: the same coincident geometry, cheap enough to compare.
     // A cap that suppressed the finding outright would pass the test above.

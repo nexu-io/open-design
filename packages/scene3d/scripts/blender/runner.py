@@ -2715,30 +2715,55 @@ def scene_fingerprint():
     }
 
 
-def rebuild_object_animation():
+def animated_object_names():
+    """Objects the CURRENT scene animates, by name — the authoritative set."""
+    import bpy
+    return {o.name for o in bpy.context.scene.objects
+            if o.animation_data and o.animation_data.action
+            and action_has_curves(o.animation_data.action)}
+
+
+def rebuild_object_animation(known=None):
     """Bake timeSampled USD transforms back into Blender keyframes.
 
-    Movers are detected first (matrix compared across three probe frames)
-    so static objects stay clean; each mover then gets loc/rot/scale keys
-    on every frame of the stage's range. Deterministic: fixed frame walk,
-    no interpolation guessing — the samples ARE the animation.
+    `known` is the set of object names the BUILD scene animated, captured
+    before the master was authored. It is the authority, because probing
+    cannot be one: the fallback samples three frames (start, middle, end)
+    and calls an object a mover if its matrix differs between them, and a
+    periodic animation can be at rest at exactly those three instants. A
+    `bob` is: its sine is keyed 0, +A, 0, -A, 0 across the range, so the
+    three probes land on the three zeroes, the part reads as static, no
+    keyframes are rebuilt, and the clip vanishes from the master — while
+    a `spin` (0, 180, 360 degrees) survives because its midpoint differs.
+    The result was that every bobbing scene failed its own parity check
+    with S3D-E-901 while the identical scene spinning passed.
+
+    Probing is kept for stages whose animation never existed in Blender
+    (a USDA-authored source), where there is no known set to trust.
+
+    Each mover gets loc/rot/scale keys on every frame of the stage's
+    range. Deterministic: fixed frame walk, no interpolation guessing —
+    the samples ARE the animation.
     """
     import bpy
     scene = bpy.context.scene
     start, end = scene.frame_start, scene.frame_end
     if end <= start:
         return
-    probes = sorted({start, (start + end) // 2, end})
-    snapshots = {}
-    for frame in probes:
-        scene.frame_set(frame)
-        bpy.context.view_layer.update()
-        for o in scene.objects:
-            if o.type not in ("MESH", "EMPTY"):
-                continue
-            snapshots.setdefault(o.name, []).append(tuple(
-                round(v, 6) for row in o.matrix_world for v in row))
-    movers = [name for name, mats in snapshots.items() if len(set(mats)) > 1]
+    present = {o.name for o in scene.objects if o.type in ("MESH", "EMPTY")}
+    movers = sorted(present & set(known)) if known else []
+    if not movers:
+        probes = sorted({start, (start + end) // 2, end})
+        snapshots = {}
+        for frame in probes:
+            scene.frame_set(frame)
+            bpy.context.view_layer.update()
+            for o in scene.objects:
+                if o.type not in ("MESH", "EMPTY"):
+                    continue
+                snapshots.setdefault(o.name, []).append(tuple(
+                    round(v, 6) for row in o.matrix_world for v in row))
+        movers = [name for name, mats in snapshots.items() if len(set(mats)) > 1]
     if not movers:
         return
     for frame in range(start, end + 1):
@@ -2897,6 +2922,9 @@ def export_scene(job):
     # fingerprint reports it and the lint fails the compile.
     build_print = scene_fingerprint()
     animated = len(build_print["actions"]) > 0
+    # WHICH objects animate, not just whether any do — the re-import cannot
+    # rediscover this reliably (see rebuild_object_animation).
+    animated_names = animated_object_names()
     lowering = {"buildFingerprint": build_print, "master": None,
                 "masterFingerprint": None, "droppedExportOptions": []}
 
@@ -2945,7 +2973,7 @@ def export_scene(job):
     # exporters then read real fcurves, and the parity fingerprint sees
     # the clips restored rather than reporting a phantom loss.
     if animated:
-        rebuild_object_animation()
+        rebuild_object_animation(animated_names)
     # Material tweaks must be REAPPLIED on the reimported scene: the tint
     # construct (a Mix-MULTIPLY between a texture and Base Color) has no
     # UsdPreviewSurface translation, so the round trip strips it — the
