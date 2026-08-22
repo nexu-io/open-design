@@ -27,6 +27,11 @@ function fresh(): string {
 const dirLinkType: 'dir' | 'junction' =
   process.platform === 'win32' ? 'junction' : 'dir';
 
+// Permission-bit fixtures are POSIX-only: Windows collapses 0444 to the
+// read-only attribute and does not model owner/group/other bits, so the
+// Nix-store regression test below cannot express its precondition there.
+const itPosix = process.platform === 'win32' ? it.skip : it;
+
 function writeSampleSkill(root: string, folder: string): string {
   const dir = path.join(root, folder);
   mkdirSync(path.join(dir, 'assets'), { recursive: true });
@@ -330,6 +335,49 @@ describe('stageActiveSkill', () => {
     expect(statSync(path.join(result.stagedPath!, 'SKILL.md')).mode & 0o111).toBe(
       0,
     );
+  });
+
+  itPosix('REGRESSION: stages a read-only source (Nix store) as an owner-writable copy that can be replaced', async () => {
+    // Skills bundled into the Nix desktop package live in the read-only
+    // Nix store (files 0444, directories 0555, mtime epoch). Both copy
+    // paths used to preserve those bits verbatim, so the staged copy was
+    // itself read-only: the next turn's wholesale replacement failed
+    // unlink with EACCES and the run degraded to absolute-path skill
+    // delivery — agents then probed for skill files with filesystem-wide
+    // globs that the embedded runtime declines.
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const sourceDir = writeSampleSkill(path.join(fs, 'skills'), 'blog-post');
+    chmodSync(path.join(sourceDir, 'SKILL.md'), 0o444);
+    chmodSync(path.join(sourceDir, 'assets', 'template.html'), 0o444);
+    chmodSync(path.join(sourceDir, 'references', 'checklist.md'), 0o444);
+    chmodSync(path.join(sourceDir, 'assets'), 0o555);
+    chmodSync(path.join(sourceDir, 'references'), 0o555);
+    chmodSync(sourceDir, 0o555);
+    mkdirSync(cwd);
+
+    const first = await stageActiveSkill(cwd, 'blog-post', sourceDir);
+
+    expect(first.staged).toBe(true);
+    const staged = first.stagedPath!;
+    // Files are owner-writable…
+    expect(statSync(path.join(staged, 'SKILL.md')).mode & 0o200).not.toBe(0);
+    expect(
+      statSync(path.join(staged, 'assets', 'template.html')).mode & 0o200,
+    ).not.toBe(0);
+    // …and directories stay traversable AND writable so the next turn
+    // can replace the copy wholesale.
+    expect(statSync(staged).mode & 0o700).toBe(0o700);
+    expect(statSync(path.join(staged, 'assets')).mode & 0o700).toBe(0o700);
+
+    // The replacement itself is the operation that used to fail with
+    // EACCES when the previous copy had been staged from a read-only
+    // source by an earlier daemon build.
+    const second = await stageActiveSkill(cwd, 'blog-post', sourceDir);
+    expect(second.staged).toBe(true);
+    expect(
+      readFileSync(path.join(second.stagedPath!, 'SKILL.md'), 'utf8'),
+    ).toContain('original SKILL');
   });
 
   it('degrades to the absolute-path fallback on a non-recoverable copy error', async () => {

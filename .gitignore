@@ -6,6 +6,7 @@ out/
 .tmp/
 .DS_Store
 *.log
+/result
 /Open Design.exe
 .vite
 .astro/

@@ -63,6 +63,13 @@ export function resolveProcessResourcesPath(): string | null {
   return null;
 }
 
+export function resolveSiblingPackagedResourceRootBase(projectRoot: string): string | null {
+  const resolvedProjectRoot = path.resolve(projectRoot);
+  if (path.basename(resolvedProjectRoot) !== 'open-design') return null;
+  if (path.basename(path.dirname(resolvedProjectRoot)) !== 'lib') return null;
+  return path.resolve(resolvedProjectRoot, '..', '..', 'share', 'open-design');
+}
+
 export interface ResolveDaemonResourceRootOptions {
   configured?: string;
   safeBases?: Array<string | null | undefined>;

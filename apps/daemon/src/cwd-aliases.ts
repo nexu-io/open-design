@@ -85,13 +85,62 @@ async function copyTreeDereferenced(srcDir: string, destDir: string): Promise<vo
       // restore the source's permission bits (notably the exec bit on
       // skill helper scripts) and mtime — `fs.cp` preserves these, and
       // skills shell out to staged scripts. Mask to 0o777 so the
-      // agent-writable staging copy never inherits setuid/setgid/sticky.
-      await chmod(to, entryStat.mode & 0o777);
+      // agent-writable staging copy never inherits setuid/setgid/sticky,
+      // and OR owner-write back on: read-only sources (a Nix store skill
+      // folder is the canonical case) would otherwise stage as an
+      // unwritable dead copy.
+      await chmod(to, (entryStat.mode & 0o777) | 0o200);
       await utimes(to, entryStat.atime, entryStat.mtime);
     }
     // Sockets, FIFOs, and devices can't appear in a sane skill folder and
     // copying them would hang or fail — skip them.
   }
+}
+
+// Read-only skill sources stage too faithfully: both copy paths preserve
+// the source's permission bits, so a skill shipped from a
+// content-addressable store lands as a read-only tree. That breaks this
+// module's own contract twice over — the next turn's wholesale
+// replacement cannot unlink from a read-only directory (EACCES), and
+// agents cannot treat `.od-skills/` as their private working copy.
+// Owner-write is granted additively so exec bits and group/other bits
+// survive untouched, and symlinks are never chmod'd (the staged tree has
+// none, but stay defensive against future callers).
+async function grantOwnerWrite(rootDir: string): Promise<void> {
+  const rootMode = (await lstat(rootDir)).mode & 0o777;
+  await chmod(rootDir, rootMode | 0o700);
+  for (const entry of await readdir(rootDir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) continue;
+    const child = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      await grantOwnerWrite(child);
+    } else {
+      const childMode = (await lstat(child)).mode & 0o777;
+      await chmod(child, childMode | 0o200);
+    }
+  }
+}
+
+// Removes the previous turn's staged copy. `force: true` only ignores
+// ENOENT — a read-only tree left by an earlier daemon build still fails
+// unlink with EACCES/EPERM, so grant owner write (the same defect fresh
+// copies below no longer produce) and retry once before giving up.
+async function removeStaleStagedCopy(
+  stagedPath: string,
+  log: SkillStagingLogger,
+): Promise<void> {
+  try {
+    await rm(stagedPath, { recursive: true, force: true });
+    return;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code ?? '';
+    if (code !== 'EACCES' && code !== 'PERM' && code !== 'EPERM') throw err;
+    log(
+      '[od] skill-stage: stale copy is read-only; granting owner write to replace it',
+    );
+  }
+  await grantOwnerWrite(stagedPath);
+  await rm(stagedPath, { recursive: true, force: true });
 }
 
 /**
@@ -169,7 +218,7 @@ export async function stageActiveSkill(
     // Wipe a stale per-skill copy first so a removed source file is
     // reflected and a partially-failed previous run cannot leave junk
     // behind.
-    await rm(stagedPath, { recursive: true, force: true });
+    await removeStaleStagedCopy(stagedPath, log);
     try {
       await nativeCopy(sourceDir, stagedPath, {
         recursive: true,
@@ -190,6 +239,10 @@ export async function stageActiveSkill(
       await rm(stagedPath, { recursive: true, force: true });
       await copyTreeDereferenced(sourceDir, stagedPath);
     }
+    // Both copy paths preserve the source's permission bits; normalize
+    // the finished tree so read-only sources still stage as an
+    // agent-writable working copy that the next turn can replace.
+    await grantOwnerWrite(stagedPath);
     return { staged: true, stagedPath };
   } catch (err) {
     log(`[od] skill-stage failed: ${(err as Error).message}`);

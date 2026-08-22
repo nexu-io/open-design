@@ -5,6 +5,7 @@ import {
   resolveDaemonPluginPreviewsDir,
   resolveDaemonResourceRoot,
   resolveProjectRoot,
+  resolveSiblingPackagedResourceRootBase,
 } from '../src/server.js';
 
 describe('resolveProjectRoot', () => {
@@ -94,6 +95,14 @@ describe('resolveDaemonResourceRoot', () => {
 
     expect(() => resolveDaemonResourceRoot({ configured, safeBases: [safeBase] })).toThrow(
       /OD_RESOURCE_ROOT must be under/,
+    );
+  });
+
+  it('derives the Nix desktop packaged resource base from a lib/open-design project root', () => {
+    const projectRoot = '/nix/store/hash-open-design-desktop/lib/open-design';
+
+    expect(resolveSiblingPackagedResourceRootBase(projectRoot)).toBe(
+      '/nix/store/hash-open-design-desktop/share/open-design',
     );
   });
 });

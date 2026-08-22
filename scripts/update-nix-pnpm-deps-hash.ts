@@ -21,7 +21,27 @@ const consumers = [
     consumerPath: path.join(repoRoot, "nix/package-web.nix"),
     nixCommand: ["build", ".#web", "--print-build-logs"],
   },
+  {
+    hashKey: "desktopHash",
+    consumerPath: path.join(repoRoot, "nix/package-desktop.nix"),
+    nixCommand: ["build", ".#desktop", "--print-build-logs"],
+    // The desktop derivation is Linux-only (flake exposes packages.desktop
+    // behind linux platforms). Building it unconditionally would abort the
+    // whole refresh on a macOS maintainer machine before the daemon/web
+    // hashes get updated.
+    systems: ["x86_64-linux", "aarch64-linux"],
+  },
 ] as const;
+
+function currentNixSystem(): string | null {
+  const result = spawnSync(
+    "nix",
+    ["eval", "--impure", "--raw", "--expr", "builtins.currentSystem"],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+  if (result.status !== 0) return null;
+  return result.stdout.trim() || null;
+}
 
 function extractExpectedHash(output: string): string | null {
   const matches = [...output.matchAll(/got:\s*(sha256-[A-Za-z0-9+/=]+)/g)];
@@ -30,8 +50,18 @@ function extractExpectedHash(output: string): string | null {
 
 async function main(): Promise<void> {
   const updates: string[] = [];
+  const nixSystem = currentNixSystem();
 
   for (const consumer of consumers) {
+    const allowedSystems = "systems" in consumer ? consumer.systems : undefined;
+    if (allowedSystems && (!nixSystem || !(allowedSystems as readonly string[]).includes(nixSystem))) {
+      process.stdout.write(
+        `Skipping ${consumer.hashKey}: ${consumer.nixCommand[1]} is not buildable on ` +
+          `${nixSystem ?? "<unknown nix system>"} (buildable: ${allowedSystems.join(", ")}).\n`,
+      );
+      continue;
+    }
+
     const originalConsumer = await readFile(consumer.consumerPath, "utf8");
     if (!originalConsumer.includes(consumerHashLine)) {
       throw new Error(

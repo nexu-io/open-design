@@ -48,12 +48,14 @@ import {
   resolveDaemonResourceRoot,
   resolveDataDir,
   resolveProcessResourcesPath,
+  resolveSiblingPackagedResourceRootBase,
 } from './daemon-paths.js';
 export {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
   resolveDaemonResourceRoot,
   resolveDataDir,
+  resolveSiblingPackagedResourceRootBase,
 } from './daemon-paths.js';
 import {
   isStaticSpaFallbackRequest,
@@ -276,6 +278,7 @@ import {
   listSkills,
   resolveSkillId,
   splitDerivedSkillId,
+  withSkillRootPreamble,
 } from './skills.js';
 import {
   activateWorkspaceTeamSkillIfStillShared,
@@ -1050,6 +1053,7 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
     PROJECT_ROOT,
     resolveProcessResourcesPath(),
     process.env.OD_INSTALLATION_DIR,
+    resolveSiblingPackagedResourceRootBase(PROJECT_ROOT),
   ],
 });
 // Built web app lives in `out/` — that's where Next.js writes the static
@@ -9459,9 +9463,27 @@ export async function startServer({
     // object both composes the prompt and feeds section-level drift
     // attribution — a second, hand-maintained copy of these inputs would drift
     // from the real ones and mislabel the telemetry it exists to explain.
+    //
+    // The skill body is wrapped with the skill-root preamble here, at the
+    // single point where every skill source has already resolved into
+    // `skillBody` + `activeSkillDir`. Without the preamble the prompt tells
+    // the agent to read `assets/template.html` "via the path written in the
+    // skill-root preamble" but never actually writes that path, so embedded
+    // runtimes (opencode/ACP family) probe for side files with
+    // filesystem-wide globs (`path: "/"`), their permission layer declines
+    // every call, and the whole run aborts with AGENT_EXECUTION_FAILED.
+    const skillPromptBody =
+      skillBody && skillBody.trim().length > 0 && activeSkillDir
+        ? skillBody.includes('> **Skill root (relative to project):**')
+          // Global skills with side files are preambled upstream by
+          // `listSkills()` (see the `hasAttachments` branch there);
+          // plugin-local SKILL.md bodies reach this point raw.
+          ? skillBody
+          : withSkillRootPreamble(skillBody, activeSkillDir)
+        : skillBody;
     const systemPromptInputs = {
       agentId,
-      skillBody,
+      skillBody: skillPromptBody,
       skillName,
       skillMode,
       skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
@@ -9532,7 +9554,7 @@ export async function startServer({
         digest: designSystemDigest,
       },
       promptTelemetryParts: {
-        skillPrompt: skillBody ?? '',
+        skillPrompt: skillPromptBody ?? '',
         designSystemPrompt: designSystemBody ?? '',
         pluginStagePrompt: [pluginBlock, ...(activeStageBlocks ?? [])]
           .filter((part) => typeof part === 'string' && part.trim().length > 0)

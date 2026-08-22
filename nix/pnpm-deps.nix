@@ -11,4 +11,5 @@
   # 3. Copy the expected hash printed by Nix into the matching field below
   daemonHash = "sha256-ujXjphrP9TvyLvIFaiplOfWMhQEbMsy74KkCmqALkus=";
   webHash = "sha256-OfTksoOcxLu6OairFxQEYLQomj1JFCDEA3maKiH+9bQ=";
+  desktopHash = "sha256-3DWPRmVLcBRc+U3k6NT6bLNYfWbJ306aH+XE7gn5ZIM=";
 }

@@ -30,6 +30,7 @@ export type RawPackagedConfig = {
   daemonSidecarEntryRelative?: string;
   namespace?: string;
   namespaceBaseRoot?: string;
+  nodeCommand?: string;
   nodeCommandRelative?: string;
   resourceRoot?: string;
   // Baked by tools/pack from OPEN_DESIGN_TELEMETRY_RELAY_URL and forwarded to
@@ -194,12 +195,15 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     electronApp.getPath("userData"),
   );
   const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
+  const explicitNodeCommand = resolveOptionalPath(raw.nodeCommand);
   const relativeNodeCommand =
     raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0
       ? join("open-design", "bin", "node")
       : raw.nodeCommandRelative;
   const nodeCommandCandidate = join(process.resourcesPath, relativeNodeCommand);
-  const nodeCommand = (await pathExists(nodeCommandCandidate)) ? nodeCommandCandidate : null;
+  const nodeCommand = explicitNodeCommand != null
+    ? explicitNodeCommand
+    : (await pathExists(nodeCommandCandidate)) ? nodeCommandCandidate : null;
   const allowWebOutputModeOverride = isTruthyEnv(process.env[PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV]);
   const webOutputMode = resolvePackagedWebOutputMode(
     allowWebOutputModeOverride

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { access, appendFile, mkdir, open, rename, type FileHandle } from "node:fs/promises";
+import { access, appendFile, chmod, cp, lstat, mkdir, open, readdir, rename, rm, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -135,6 +135,64 @@ type PackagedDaemonManagedPathEnv = {
 
 function resolveSidecarEntry(packageName: string, exportName: string): string {
   return require.resolve(`${packageName}/${exportName}`);
+}
+
+function resolvePackagedWebDistSource(webSidecarEntry: string): string {
+  // `@open-design/web/sidecar` resolves to `<webPkg>/dist/sidecar/index.js` in
+  // packaged builds. The matching Next output lives under `<webPkg>/.next`.
+  return join(dirname(dirname(dirname(webSidecarEntry))), ".next");
+}
+
+function resolvePackagedWebDistRuntimeRoot(paths: Pick<PackagedNamespacePaths, "runtimeRoot">): string {
+  return join(paths.runtimeRoot, "web-dist");
+}
+
+export async function preparePackagedWebDistDir(
+  paths: Pick<PackagedNamespacePaths, "runtimeRoot">,
+  webSidecarEntry: string,
+): Promise<string> {
+  const target = resolvePackagedWebDistRuntimeRoot(paths);
+  await removeTreeMakingWritable(target);
+  await cp(resolvePackagedWebDistSource(webSidecarEntry), target, {
+    force: true,
+    recursive: true,
+  });
+  await makeTreeUserWritable(target);
+  return target;
+}
+
+// A previous launch can leave runtime/web-dist fully read-only when its
+// process died between the copy step and makeTreeUserWritable (or an older
+// runtime shipped the tree without user write bits, as Nix store modes do).
+// rm({ recursive: true, force: true }) skips missing paths but still reports
+// EACCES/EPERM when it must unlink below a non-writable directory, so widen
+// the stale tree first and retry once; anything else is a real failure.
+async function removeTreeMakingWritable(target: string): Promise<void> {
+  try {
+    await rm(target, { force: true, recursive: true });
+    return;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null | undefined)?.code;
+    if (code !== "EACCES" && code !== "EPERM") throw error;
+  }
+  await makeTreeUserWritable(target).catch(() => undefined);
+  await rm(target, { force: true, recursive: true });
+}
+
+async function makeTreeUserWritable(root: string): Promise<void> {
+  const pending = [root];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current == null) continue;
+    const stats = await lstat(current);
+    if (stats.isSymbolicLink()) continue;
+    await chmod(current, stats.mode | 0o200);
+    if (!stats.isDirectory()) continue;
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      pending.push(join(current, entry.name));
+    }
+  }
 }
 
 function logPathFor(paths: PackagedNamespacePaths, app: AppKey): string {
@@ -929,6 +987,9 @@ export async function startPackagedSidecars(
     options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar");
   const webSidecarEntry =
     options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar");
+  const webDistDir = options.webOutputMode === "server"
+    ? await preparePackagedWebDistDir(paths, webSidecarEntry)
+    : null;
   const prewarmLog = (message: string): void => {
     void appendSidecarLifecycleLog(join(paths.logsRoot, "launcher", "latest.log"), message);
   };
@@ -1019,6 +1080,7 @@ export async function startPackagedSidecars(
         entryPath: webSidecarEntry,
         env: {
           [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
+          ...(webDistDir == null ? {} : { [SIDECAR_ENV.WEB_DIST_DIR]: webDistDir }),
           [SIDECAR_ENV.WEB_PORT]: "0",
           ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
           OD_WEB_OUTPUT_MODE: options.webOutputMode,

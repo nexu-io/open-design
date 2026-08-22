@@ -69,6 +69,26 @@
         "packages/sidecar-proto"
         "apps/web"
       ];
+      desktopWorkspacePaths = [
+        "packages/release"
+        "packages/components"
+        "packages/contracts"
+        "packages/registry-protocol"
+        "packages/agui-adapter"
+        "packages/plugin-runtime"
+        "packages/sidecar-proto"
+        "packages/launcher-proto"
+        "packages/sidecar"
+        "packages/platform"
+        "packages/download"
+        "packages/host"
+        "packages/diagnostics"
+        "packages/dsh-runtime"
+        "apps/daemon"
+        "apps/web"
+        "apps/desktop"
+        "apps/packaged"
+      ];
       daemonSrc = filterProjectSource ([
         "package.json"
         "pnpm-lock.yaml"
@@ -90,6 +110,21 @@
         "tsconfig.json"
       ]
       ++ webWorkspacePaths);
+      desktopSrc = filterProjectSource ([
+        "package.json"
+        "pnpm-lock.yaml"
+        "pnpm-workspace.yaml"
+        "tsconfig.json"
+        "assets"
+        "plugins"
+        "skills"
+        "design-systems"
+        "design-templates"
+        "craft"
+        "prompt-templates"
+        "data"
+      ]
+      ++ desktopWorkspacePaths);
       pnpmDepsBaseInputs = [
         "package.json"
         "pnpm-lock.yaml"
@@ -100,6 +135,9 @@
       );
       webPnpmDepsSrc = filterProjectSource (
         pnpmDepsBaseInputs ++ workspacePackageManifests webWorkspacePaths
+      );
+      desktopPnpmDepsSrc = filterProjectSource (
+        pnpmDepsBaseInputs ++ workspacePackageManifests desktopWorkspacePaths
       );
 
       # nixpkgs ships pnpm 10.33.0; the repo's package.json declares
@@ -134,26 +172,39 @@
         pnpmDepsSrc = webPnpmDepsSrc;
         workspacePaths = webWorkspacePaths;
       };
+      desktop =
+        if pkgs.stdenv.isLinux
+        then pkgs.callPackage ./nix/package-desktop.nix {
+          inherit nodejs pnpm_10;
+          electron = pkgs.electron;
+          src = desktopSrc;
+          pnpmDepsSrc = desktopPnpmDepsSrc;
+          workspacePaths = desktopWorkspacePaths;
+        }
+        else null;
     in {
       packages = {
         inherit daemon web;
         default = daemon;
+      } // nixpkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        inherit desktop;
       };
 
-      # Wrap `od` with `--no-open` for `nix run`: the daemon package
-      # builds the daemon workspace only, not `apps/web/out/`, so the
-      # browser would otherwise auto-open onto an empty static dir.
-      #
-      # Set OD_DATA_DIR to a writable location when unset. The Nix store
-      # is read-only at runtime, so the daemon cannot write to its default
-      # `<projectRoot>/.od` location under `nix run`.
-      apps.default = {
-        type = "app";
-        program = "${pkgs.writeShellScript "od-nix-run" ''
-          export OD_DATA_DIR="''${OD_DATA_DIR:-$HOME/.od}"
-          exec ${daemon}/bin/od --no-open "$@"
-        ''}";
-        meta.description = "OpenDesign local daemon (`od`)";
+      apps = {
+        default = {
+          type = "app";
+          program = "${pkgs.writeShellScript "od-nix-run" ''
+            export OD_DATA_DIR="''${OD_DATA_DIR:-$HOME/.od}"
+            exec ${daemon}/bin/od --no-open "$@"
+          ''}";
+          meta.description = "OpenDesign local daemon (`od`)";
+        };
+      } // nixpkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        desktop = {
+          type = "app";
+          program = "${desktop}/bin/open-design-desktop";
+          meta.description = "OpenDesign desktop runtime";
+        };
       };
 
       devShells.default = pkgs.mkShell {
@@ -178,6 +229,8 @@
       checks = {
         daemon = daemon;
         web = web;
+      } // nixpkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        desktop = desktop;
       };
 
       formatter = pkgs.nixpkgs-fmt;

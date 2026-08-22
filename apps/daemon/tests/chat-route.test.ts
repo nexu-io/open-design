@@ -1664,6 +1664,108 @@ process.stdin.on('end', () => {
     );
   });
 
+  it('wraps plugin-local skill bodies with the skill-root preamble advertising the staged cwd alias', async () => {
+    // REGRESSION: `withSkillRootPreamble()` existed but nothing on the
+    // run path called it for plugin-local SKILL.md bodies (global skills
+    // are preambled upstream by `listSkills()`). Plugin-bound prompts told
+    // agents to open skill side files "via the path written in the
+    // skill-root preamble" without ever writing that path. Embedded
+    // runtimes (opencode/ACP family) then probed for the files with
+    // filesystem-wide globs (`path: "/"`), their permission layer declined
+    // every call, and the run aborted with AGENT_EXECUTION_FAILED /
+    // "Step interrupted".
+    const pluginId = `plugin-preamble-${randomUUID()}`;
+    const pluginFixtureDir = await createPluginFixture({
+      pluginId,
+      dirName: `plugin-preamble-${randomUUID()}`,
+      localSkillPath: './SKILL.md',
+    });
+    const installResponse = await fetch(`${baseUrl}/api/plugins/install`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', accept: 'text/event-stream' },
+      body: JSON.stringify({ source: pluginFixtureDir }),
+    });
+    const installBody = await installResponse.text();
+
+    expect(installResponse.status).toBe(200);
+    expect(installBody).toContain(`"id":"${pluginId}"`);
+
+    const installedPluginResponse = await fetch(`${baseUrl}/api/plugins/${pluginId}`);
+    const installedPluginBody = await installedPluginResponse.json() as { fsPath: string };
+    const pluginAlias = skillCwdAliasSegment(installedPluginBody.fsPath);
+
+    const projectId = `project-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin-local skill preamble project',
+        pluginId,
+        pluginInputs: { topic: 'agentic design' },
+      }),
+    });
+    const createProjectBody = await createProjectResponse.json() as {
+      appliedPluginSnapshotId?: string;
+    };
+
+    expect(createProjectResponse.ok).toBe(true);
+    expect(createProjectBody.appliedPluginSnapshotId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('> **Skill root (relative to project):**')
+      ? 'has-skill-root-relative'
+      : 'missing-skill-root-relative',
+    prompt.includes('.od-skills/${pluginAlias}/')
+      ? 'has-staged-alias-path'
+      : 'missing-staged-alias-path',
+    prompt.includes('> **Skill root (absolute fallback):**')
+      ? 'has-skill-root-absolute'
+      : 'missing-skill-root-absolute',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'build a plugin-backed page',
+            appliedPluginSnapshotId: createProjectBody.appliedPluginSnapshotId,
+          }),
+        });
+        const createRunBody = await createRunResponse.json() as { runId: string };
+
+        expect(createRunResponse.status).toBe(202);
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${createRunBody.runId}/events`);
+        const body = await readSseUntil(eventsResponse, 'event: final');
+
+        expect(body).toContain('has-skill-root-relative');
+        expect(body).toContain('has-staged-alias-path');
+        expect(body).toContain('has-skill-root-absolute');
+        expect(body).not.toContain('missing-skill-root-relative');
+        expect(body).not.toContain('missing-staged-alias-path');
+        expect(body).not.toContain('missing-skill-root-absolute');
+      },
+    );
+  });
+
   it('stages ad-hoc skill side files into the project cwd', async () => {
     const projectId = `project-${randomUUID()}`;
     const stagedRelativePath = `.od-skills/${skillCwdAliasSegment(resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager'))}/references/checklist.md`;

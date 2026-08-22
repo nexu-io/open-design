@@ -16,7 +16,7 @@
  * @see https://github.com/nexu-io/open-design/issues/710
  */
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -30,6 +30,7 @@ import {
   createRestartPolicy,
   createWebSidecarSupervisor,
   openLog,
+  preparePackagedWebDistDir,
   registerPackagedWebUrl,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
@@ -1152,6 +1153,88 @@ describe('packaged sidecar log rotation', () => {
       expect(merged).toContain('incident line that must survive');
       expect(merged).toContain('post-rotation-failure line');
     } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('preparePackagedWebDistDir', () => {
+  it('makes the runtime web-dist copy writable for a later relaunch', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-web-dist-'));
+    const source = join(root, 'webpkg', '.next');
+    const runtimeRoot = join(root, 'runtime');
+    const webSidecarEntry = join(root, 'webpkg', 'dist', 'sidecar', 'index.js');
+    try {
+      mkdirSync(join(source, 'server'), { recursive: true });
+      mkdirSync(dirname(webSidecarEntry), { recursive: true });
+      writeFileSync(join(source, 'BUILD_ID'), 'build-1\n', 'utf8');
+      writeFileSync(join(source, 'server', 'index.js'), 'export {};\n', 'utf8');
+      writeFileSync(webSidecarEntry, 'export {};\n', 'utf8');
+
+      chmodSync(source, 0o555);
+      chmodSync(join(source, 'server'), 0o555);
+      chmodSync(join(source, 'BUILD_ID'), 0o444);
+      chmodSync(join(source, 'server', 'index.js'), 0o444);
+
+      const target = await preparePackagedWebDistDir({ runtimeRoot }, webSidecarEntry);
+      const copiedBuildId = join(target, 'BUILD_ID');
+
+      writeFileSync(copiedBuildId, 'build-2\n', 'utf8');
+      unlinkSync(copiedBuildId);
+      expect(readFileSync(join(target, 'server', 'index.js'), 'utf8')).toContain('export');
+    } finally {
+      for (const dir of [source, join(source, 'server'), join(runtimeRoot, 'web-dist'), join(runtimeRoot, 'web-dist', 'server')]) {
+        try {
+          chmodSync(dir, 0o755);
+        } catch {}
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('recovers when a previous launch left the runtime web-dist copy read-only', async () => {
+    // Regression spec for an interrupted launch: a run that died between the
+    // cp step and makeTreeUserWritable leaves runtime/web-desc fully
+    // read-only (Nix store modes). The next launch must still be able to
+    // replace that tree instead of failing with EACCES before any sidecar
+    // starts.
+    const root = mkdtempSync(join(tmpdir(), 'od-web-dist-ro-'));
+    const source = join(root, 'webpkg', '.next');
+    const runtimeRoot = join(root, 'runtime');
+    const staleTarget = join(runtimeRoot, 'web-dist');
+    const webSidecarEntry = join(root, 'webpkg', 'dist', 'sidecar', 'index.js');
+    try {
+      mkdirSync(join(source, 'server'), { recursive: true });
+      mkdirSync(dirname(webSidecarEntry), { recursive: true });
+      writeFileSync(join(source, 'BUILD_ID'), 'build-2\n', 'utf8');
+      writeFileSync(join(source, 'server', 'index.js'), 'export {};\n', 'utf8');
+      writeFileSync(webSidecarEntry, 'export {};\n', 'utf8');
+
+      // Stale read-only tree from a previous interrupted launch.
+      mkdirSync(join(staleTarget, 'server'), { recursive: true });
+      writeFileSync(join(staleTarget, 'BUILD_ID'), 'build-1\n', 'utf8');
+      writeFileSync(join(staleTarget, 'server', 'index.js'), 'stale;\n', 'utf8');
+      chmodSync(staleTarget, 0o555);
+      chmodSync(join(staleTarget, 'server'), 0o555);
+      chmodSync(join(staleTarget, 'BUILD_ID'), 0o444);
+      chmodSync(join(staleTarget, 'server', 'index.js'), 0o444);
+
+      const target = await preparePackagedWebDistDir({ runtimeRoot }, webSidecarEntry);
+
+      expect(target).toBe(staleTarget);
+      expect(readFileSync(join(target, 'BUILD_ID'), 'utf8')).toContain('build-2');
+      expect(readFileSync(join(target, 'server', 'index.js'), 'utf8')).toContain('export');
+    } finally {
+      for (const dir of [
+        source,
+        join(source, 'server'),
+        staleTarget,
+        join(staleTarget, 'server'),
+      ]) {
+        try {
+          chmodSync(dir, 0o755);
+        } catch {}
+      }
       rmSync(root, { recursive: true, force: true });
     }
   });

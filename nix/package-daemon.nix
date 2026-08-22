@@ -48,6 +48,7 @@ let
 
   pnpmDepsHash = (import ./pnpm-deps.nix).daemonHash;
   pnpmWorkspaceFilters = map (workspacePath: "./${workspacePath}") workspacePaths;
+  rebuildNativeAddons = import ./rebuild-native-addons.nix { inherit lib nodejs; };
 in
   stdenv.mkDerivation (finalAttrs: {
     inherit pname version src;
@@ -59,8 +60,8 @@ in
       pnpm_10
       pnpmConfigHook
       makeWrapper
-      # Required to rebuild better-sqlite3's native binding from source.
-      # node-gyp drives this via Python; gnumake/pkg-config + the C++
+      # Required to rebuild native addons (better-sqlite3, node-pty) from
+      # source. node-gyp drives this via Python; gnumake/pkg-config + the C++
       # compiler from stdenv complete the toolchain.
       python3
       gnumake
@@ -88,60 +89,13 @@ in
     buildPhase = ''
       runHook preBuild
 
-      # Build better-sqlite3's native binding from source.
+      # Build native addons (better-sqlite3, node-pty) from source.
       #
-      # Why from source on Node 24:
-      #   better-sqlite3 (even 12.9.0, latest as of 2026-05) only
-      #   publishes prebuilds up to node-v131 (Node 22). No v137
-      #   (Node 24) prebuild exists. `prebuild-install` would itself
-      #   fail the GitHub fetch and fall through to a compile, so we
-      #   skip the download attempt entirely and compile.
-      #
-      # Why not `pnpm rebuild`:
-      #   In pnpm 10, `onlyBuiltDependencies` interacts with the
-      #   "approve-builds" consent gate; `pnpm rebuild <pkg>` silently
-      #   no-ops in some configurations. Invoke node-gyp directly to
-      #   sidestep all of that.
-      #
-      # Env vars:
-      #   * npm_config_nodedir → use the headers shipped with the
-      #     nixpkgs nodejs we're already building against, so node-gyp
-      #     doesn't try to fetch them from nodejs.org/dist (no network
-      #     in the build sandbox).
-      #   * npm_config_build_from_source → tell better-sqlite3's
-      #     prebuild-install fallback chain to skip the CDN download
-      #     and compile.
-      #
-      # node-gyp lookup:
-      #   nixpkgs nodejs ships node-gyp bundled inside npm at
-      #   ${nodejs}/lib/node_modules/npm/bin/node-gyp-bin. Putting
-      #   that on PATH gives us a `node-gyp` shim without depending
-      #   on pnpm-exec resolving from inside better-sqlite3's tree
-      #   (better-sqlite3 doesn't list node-gyp as a direct dep).
-      export npm_config_nodedir=${nodejs}
-      export npm_config_build_from_source=true
-      export PATH="${nodejs}/lib/node_modules/npm/bin/node-gyp-bin:$PATH"
-
-      bsq_dir=$(find node_modules/.pnpm -mindepth 2 -maxdepth 4 \
-        -type d -path '*/better-sqlite3@*/node_modules/better-sqlite3' \
-        -print -quit)
-      if [ -z "$bsq_dir" ]; then
-        echo "ERROR: better-sqlite3 not found under node_modules/.pnpm — pnpm install may have failed" >&2
-        exit 1
-      fi
-
-      echo "Building better-sqlite3 from source at $bsq_dir"
-      ( cd "$bsq_dir" && node-gyp rebuild --release --build-from-source )
-
-      # Fail fast if the .node file didn't land where bindings.js
-      # looks for it. Without this assertion, a silent skip produces
-      # a "valid" derivation that crashes at runtime with
-      # "Could not locate the bindings file".
-      if [ ! -f "$bsq_dir/build/Release/better_sqlite3.node" ]; then
-        echo "ERROR: better_sqlite3.node was not produced at $bsq_dir/build/Release/" >&2
-        find "$bsq_dir" -name '*.node' -print >&2 || true
-        exit 1
-      fi
+      # Shared with nix/package-desktop.nix via rebuild-native-addons.nix;
+      # that file documents why each addon must be compiled here (no usable
+      # prebuild for our Node target / platform) and why node-gyp is invoked
+      # directly instead of `pnpm rebuild`.
+      ${rebuildNativeAddons { messageSuffix = "pnpm install may have failed"; }}
 
       for target in ${lib.escapeShellArgs workspacePaths}; do
         pnpm -C "$target" run --if-present build
