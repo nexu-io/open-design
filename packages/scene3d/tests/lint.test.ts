@@ -617,4 +617,63 @@ describe("lint: pbr/topology/integrity over census", () => {
     });
     expect(issues.some((i) => i.code === ISSUE_CODES.NON_UNIFORM_SCALE)).toBe(true);
   });
+
+  it("honours requireAppliedScale:false for NON-uniform scale too", () => {
+    // Non-uniform and uniform unapplied scale are one defect with one remedy
+    // ("apply scale before export"), and applied scale reads as (1,1,1) — so
+    // neither can fire on a mesh whose transform IS applied. Gating only the
+    // uniform branch meant a squashed rock in an imported kit still demanded
+    // applied scale 104 times in a project that had said not to ask.
+    const squashed = census({
+      objects: [
+        {
+          name: "prp_rock",
+          type: "MESH",
+          parent: null,
+          location: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 0.45],
+          dimensions: [2, 2, 0.9],
+          visible: true,
+          hasMeshData: true,
+        },
+      ],
+    });
+    const strict = runLint({ contract: contract(), census: squashed });
+    expect(strict.some((i) => i.code === ISSUE_CODES.NON_UNIFORM_SCALE)).toBe(true);
+
+    const relaxed = runLint({
+      contract: normalizeContract({
+        schemaVersion: 1,
+        conventions: { geometry: { requireAppliedScale: false } },
+      }),
+      census: squashed,
+    });
+    expect(relaxed.some((i) => i.code === ISSUE_CODES.NON_UNIFORM_SCALE)).toBe(false);
+    expect(relaxed.some((i) => i.code === ISSUE_CODES.UNAPPLIED_SCALE)).toBe(false);
+
+    // Negative scale keeps its own gate — flipped winding is a worse problem.
+    const mirrored = runLint({
+      contract: normalizeContract({
+        schemaVersion: 1,
+        conventions: { geometry: { requireAppliedScale: false } },
+      }),
+      census: census({
+        objects: [
+          {
+            name: "prp_rock",
+            type: "MESH",
+            parent: null,
+            location: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, -1],
+            dimensions: [2, 2, 2],
+            visible: true,
+            hasMeshData: true,
+          },
+        ],
+      }),
+    });
+    expect(mirrored.some((i) => i.code === ISSUE_CODES.NEGATIVE_SCALE)).toBe(true);
+  });
 });

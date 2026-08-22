@@ -50,7 +50,19 @@ export function lintUnits(ctx: LintContext, issues: Issue[]): void {
   const geo = ctx.contract.geometry;
   for (const obj of census.objects) {
     const [x, y, z] = obj.scale;
-    if (Math.abs(x - y) > 1e-6 || Math.abs(y - z) > 1e-6 || Math.abs(x - z) > 1e-6) {
+    // Both branches below describe ONE defect — scale left unapplied on the
+    // object — with one remedy, and they only differ in whether the factors
+    // match. Applied scale reads as (1, 1, 1), so neither can fire on a mesh
+    // whose transform IS applied. They therefore answer to the same knob: an
+    // author who set `requireAppliedScale: false` has accepted the source's
+    // transforms, and gating only the uniform branch meant a squashed rock in
+    // an imported kit still demanded "apply scale before export" 104 times in
+    // a project that had explicitly said not to ask.
+    //
+    // Negative scale keeps its own gate (`allowNegativeScale`) and its own
+    // severity below: flipped winding is a different, worse problem than an
+    // un-baked factor.
+    if (geo.requireAppliedScale && (Math.abs(x - y) > 1e-6 || Math.abs(y - z) > 1e-6 || Math.abs(x - z) > 1e-6)) {
       issues.push({
         code: ISSUE_CODES.NON_UNIFORM_SCALE,
         severity: "warning",
