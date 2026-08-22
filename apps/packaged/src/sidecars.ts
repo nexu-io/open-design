@@ -570,7 +570,7 @@ type StopStampedWebSidecarOwnerDeps = {
   stopProcesses?: typeof stopProcesses;
 };
 
-type StampedWebSidecarRetirement = "absent" | "stopped" | "still-running";
+type StampedWebSidecarRetirement = "absent" | "stopped" | "still-running" | "discovery-failed";
 
 async function stopStampedWebSidecarOwner(
   ipcPath: string,
@@ -579,7 +579,25 @@ async function stopStampedWebSidecarOwner(
 ): Promise<StampedWebSidecarRetirement> {
   const listSnapshots = deps.listProcessSnapshots ?? listProcessSnapshots;
   const stop = deps.stopProcesses ?? stopProcesses;
-  const processes = await listSnapshots();
+  let processes: Awaited<ReturnType<typeof listProcessSnapshots>>;
+  try {
+    processes = await listSnapshots();
+  } catch (error) {
+    await appendSidecarLifecycleLog(
+      logPath,
+      `[open-design packaged] failed to enumerate processes before web socket takeover ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
+    );
+    return "discovery-failed";
+  }
+  // listProcessSnapshots returns [] on enumeration failure, so an empty table
+  // is not proof that no stamped owner exists. Leave the live socket in place.
+  if (processes.length === 0) {
+    await appendSidecarLifecycleLog(
+      logPath,
+      `[open-design packaged] process discovery failed before web socket takeover ipc=${ipcPath}`,
+    );
+    return "discovery-failed";
+  }
   const rootPids = processes
     .filter((processInfo) =>
       matchesStampedProcess(
@@ -589,9 +607,9 @@ async function stopStampedWebSidecarOwner(
       ),
     )
     .map((processInfo) => processInfo.pid);
-  // No stamped owner: leftover or unstamped hung socket. Unlink remains the
-  // original recovery. A live JsonIpcServer.close() race requires a stamped
-  // sidecar, which this helper would have found.
+  // Successful discovery, no stamped owner: leftover or unstamped hung socket.
+  // Unlink remains the original recovery. A live JsonIpcServer.close() race
+  // requires a stamped sidecar, which this helper would have found.
   if (rootPids.length === 0) return "absent";
 
   // Stop the whole tree before unlinking. A later SIGTERM on the old owner
@@ -644,7 +662,7 @@ export async function retireExistingSidecarEndpoint(
     // daemon beside a hung first owner could put two writers on the same DB.
     if (app !== APP_KEYS.WEB || isWindowsNamedPipePath(ipcPath)) return;
     const retirement = await stopStampedWebSidecarOwner(ipcPath, logPath, deps);
-    if (retirement === "still-running") return;
+    if (retirement === "still-running" || retirement === "discovery-failed") return;
     try {
       const stat = await lstat(ipcPath);
       if (!stat.isSocket()) return;

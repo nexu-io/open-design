@@ -463,6 +463,78 @@ describe.runIf(process.platform !== 'win32')('packaged stale web endpoint recove
     }
   }, 10_000);
 
+  it('does not unlink when process discovery returns no snapshots', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-empty-list-'));
+    const socketPath = join(root, 'web.sock');
+    const logPath = join(root, 'web.log');
+    const sockets = new Set<Socket>();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+      socket.resume();
+    });
+    await new Promise<void>((resolveListen, rejectListen) => {
+      server.once('error', rejectListen);
+      server.listen(socketPath, () => {
+        server.off('error', rejectListen);
+        resolveListen();
+      });
+    });
+    const listProcessSnapshots = vi.fn(async () => []);
+
+    try {
+      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB, { listProcessSnapshots });
+      expect(existsSync(socketPath)).toBe(true);
+      expect(readFileSync(logPath, 'utf8')).toContain(
+        'process discovery failed before web socket takeover',
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it('does not unlink when process discovery throws', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-list-throw-'));
+    const socketPath = join(root, 'web.sock');
+    const logPath = join(root, 'web.log');
+    const sockets = new Set<Socket>();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+      socket.resume();
+    });
+    await new Promise<void>((resolveListen, rejectListen) => {
+      server.once('error', rejectListen);
+      server.listen(socketPath, () => {
+        server.off('error', rejectListen);
+        resolveListen();
+      });
+    });
+    const listProcessSnapshots = vi.fn(async () => {
+      throw new Error('ps-failed');
+    });
+
+    try {
+      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB, { listProcessSnapshots });
+      expect(existsSync(socketPath)).toBe(true);
+      expect(readFileSync(logPath, 'utf8')).toContain(
+        'failed to enumerate processes before web socket takeover',
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it('does not unlink when stopping the stamped web owner throws', async () => {
     const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-stop-throw-'));
     const socketPath = join(root, 'web.sock');
