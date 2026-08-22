@@ -2149,6 +2149,17 @@ def contact_report(objects, limit=60):
     return out, skipped
 
 
+# The coplanar search is O(tris_a * tris_b); above this many pairs it is not
+# run. The cap is enforced by the CALLER so the skip can be reported — see the
+# note there.
+COPLANAR_TRI_PRODUCT_CAP = 200000
+
+
+def tri_count(o):
+    """Triangles an ngon-fanned mesh contributes, without building them."""
+    return sum(max(0, len(p.vertices) - 2) for p in o.data.polygons)
+
+
 def z_fighting_pairs(objects):
     """Coplanar-overlap search, with an honest account of what it skipped.
 
@@ -2166,6 +2177,7 @@ def z_fighting_pairs(objects):
     pairs = []
     truncated = False
     heavy = set()
+    dense = set()
     for i, a in enumerate(meshes):
         if len(pairs) >= 20:
             truncated = True
@@ -2174,7 +2186,22 @@ def z_fighting_pairs(objects):
             if not aabb_overlap(a, b):
                 continue
             if len(a.data.polygons) > 1500 or len(b.data.polygons) > 1500:
-                heavy.add(a.name if len(a.data.polygons) > 1500 else b.name)
+                # Name BOTH when both are over: reporting one hides half the
+                # reason the pair went unexamined.
+                if len(a.data.polygons) > 1500:
+                    heavy.add(a.name)
+                if len(b.data.polygons) > 1500:
+                    heavy.add(b.name)
+                continue
+            # The triangulated-face-product cap lives HERE, where there is a
+            # caller to tell. coplanar_overlap used to apply it internally and
+            # return "no overlaps" — indistinguishable from a clean result, so
+            # two exactly coincident meshes could ship a textbook z-fight with
+            # an empty pairs list AND an empty skipped list. A cap that cannot
+            # be reported is a cap that lies.
+            cost = tri_count(a) * tri_count(b)
+            if cost > COPLANAR_TRI_PRODUCT_CAP:
+                dense.add((a.name, b.name, cost))
                 continue
             count, area, worst = coplanar_overlap(a, b)
             if count > 0:
@@ -2186,6 +2213,11 @@ def z_fighting_pairs(objects):
         skipped.append("stopped after %d reported pairs" % 20)
     for name in sorted(heavy):
         skipped.append("%s exceeds the %d-face per-mesh limit" % (name, 1500))
+    for a_name, b_name, cost in sorted(dense):
+        skipped.append(
+            "%s vs %s is %d triangle pairs, above the %d-pair comparison limit"
+            % (a_name, b_name, cost, COPLANAR_TRI_PRODUCT_CAP)
+        )
     return pairs, skipped
 
 
@@ -2223,8 +2255,6 @@ def coplanar_overlap(a, b):
     import mathutils
     ta = world_tris(a)
     tb = world_tris(b)
-    if len(ta) * len(tb) > 200000:
-        return 0, 0.0, None
     count = 0
     max_area = 0.0
     worst = None
