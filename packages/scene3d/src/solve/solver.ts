@@ -455,14 +455,14 @@ function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDia
       if (depth <= MIN_CONTACT) continue;
       const fa = a.from ?? a.id;
       const fb = b.from ?? b.id;
-      const key = fa < fb ? `${fa} ${fb}` : `${fb} ${fa}`;
+      const key = fa < fb ? `${fa}\u0000${fb}` : `${fb}\u0000${fa}`;
       const seen = worst.get(key);
       if (!seen || depth > seen.depth) worst.set(key, { a: a.id, b: b.id, depth, axis });
     }
   }
 
   for (const [key, hit] of [...worst].sort((x, y) => (x[0] < y[0] ? -1 : 1))) {
-    const [fa, fb] = key.split(" ") as [string, string];
+    const [fa, fb] = key.split("\u0000") as [string, string];
     const same = fa === fb;
     diagnostics.push({
       code: "SOLVE-INTERSECTION",

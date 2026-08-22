@@ -1,6 +1,7 @@
 import { Budget, EngineTarget, Scene3dContract } from "./types.js";
 import { validateFields } from "./contract-schema.js";
 import { SHEET_DEFAULTS } from "./lint/sheet.js";
+import { DEFAULT_PROOF_THRESHOLDS } from "./lint/proof.js";
 
 type Conventions = NonNullable<Scene3dContract["conventions"]>;
 
@@ -445,11 +446,16 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
     },
     proof,
     proofThresholds: {
-      // Defensive `?? default` also guards a wrong-typed programmatic value,
-      // like the uv/lod fields above.
-      emptyLuminance: pos(proof.emptyLuminance, 0.002),
-      sparseCoverage: pos(proof.sparseCoverage, 0.01),
-      blownRatio: pos(proof.blownRatio, 0.6),
+      // Defaults from the rule module that owns their rationale, not a second
+      // copy of the same three numbers. The module's own default argument is
+      // unreachable in production (rules.ts always passes these), so a drift
+      // between the two would have shown up only in tests — which is to say,
+      // as a green suite and a wrong compile.
+      //
+      // `pos` still guards a wrong-typed programmatic value, like uv/lod above.
+      emptyLuminance: pos(proof.emptyLuminance, DEFAULT_PROOF_THRESHOLDS.emptyLuminance),
+      sparseCoverage: pos(proof.sparseCoverage, DEFAULT_PROOF_THRESHOLDS.sparseCoverage),
+      blownRatio: pos(proof.blownRatio, DEFAULT_PROOF_THRESHOLDS.blownRatio),
     },
   };
 }

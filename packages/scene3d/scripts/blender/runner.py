@@ -2489,6 +2489,11 @@ def z_fighting_pairs(objects):
     """
     meshes = [o for o in objects if o.type == "MESH"]
     skipped = []
+    # 40 here against contact_report's 60, because the two searches cost
+    # different things at the same mesh count: contacts compare AABBs (a
+    # handful of floats per pair), this compares TRIANGLES within every
+    # overlapping pair. The asymmetry is the cost difference, not an accident —
+    # and either way the cap reports itself rather than reading as "clean".
     if len(meshes) > 40:
         return [], ["scene has %d meshes, above the %d-mesh search limit" % (len(meshes), 40)]
 
