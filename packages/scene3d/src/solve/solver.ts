@@ -191,6 +191,19 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
         const embed = contact(relation.embed, relation.part, "embed");
         const lo = Math.min(a.max, b.max);
         const hi = Math.max(a.min, b.min);
+        // A span bridges the GAP between two anchors. When they overlap there
+        // is no gap, and the same arithmetic silently returns the overlap
+        // region instead — a beam sitting inside both anchors, at roughly
+        // twice the size the author was picturing, with nothing said. The
+        // construction is degenerate, not merely unusual: say so.
+        if (hi < lo - 1e-9) {
+          diagnostics.push({
+            code: "SOLVE-CONFLICT",
+            message: `span '${relation.part}' has overlapping anchors on ${relation.axis}: '${relation.from}' and '${relation.to}' already intersect, so there is no gap to bridge — move them apart, or place the part directly`,
+            part: relation.part,
+          });
+          return true;
+        }
         // Reach *into* both anchors so the joint is a real intersection.
         const start = Math.min(lo, hi) - embed;
         const end = Math.max(lo, hi) + embed;
@@ -375,7 +388,75 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
   // Sorted by id so a solved scene is byte-stable regardless of authoring
   // order — the property the stage cache and the compile diff both rely on.
   solved.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  reportGeneratedIntersections(solved, diagnostics);
   return { parts: solved, diagnostics };
+}
+
+/**
+ * Report instances the SOLVER placed that landed inside each other.
+ *
+ * The language's promise is that its output is sound by construction — every
+ * contact floored a millimetre off flush so z-fighting is structurally
+ * impossible. That promise held for the offsets and not for the placements: a
+ * `repeat every 0.5` on a 1m box shipped three boxes overlapping by half a
+ * metre each, `ok: true`, diagnostics empty. The coplanar rule stayed silent
+ * because interpenetrating faces are not coplanar, and no rule owned "these
+ * are simply inside each other".
+ *
+ * Scope is deliberate: only parts the solver GENERATED (repeat clones,
+ * scatter samples) are compared. Authored interpenetration is a technique —
+ * overlapping a junction by a pixel is exactly how a careful modeller avoids
+ * z-fighting, and flagging it would fire on every well-built blocky asset. But
+ * a relation that mints N instances is ONE authored decision, and nobody
+ * decides to have their own instances occupy the same space; they would have
+ * authored one larger shape. So the solver owns this, and says so.
+ *
+ * Reported once per pair of families, carrying the deepest overlap.
+ */
+function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDiagnostic[]): void {
+  const generated = parts.filter((p) => p.from !== undefined);
+  if (generated.length < 2) return;
+  const worst = new Map<string, { a: string; b: string; depth: number; axis: Axis }>();
+
+  for (let i = 0; i < generated.length; i++) {
+    for (let j = i + 1; j < generated.length; j++) {
+      const a = generated[i]!;
+      const b = generated[j]!;
+      // Overlap depth is the smallest per-axis penetration: boxes intersect
+      // only when every axis overlaps, and the shallowest axis is how far one
+      // would have to move to separate them.
+      let depth = Infinity;
+      let axis: Axis = "x";
+      for (let k = 0; k < 3; k++) {
+        const penetration =
+          Math.min(a.center[k]! + a.size[k]! / 2, b.center[k]! + b.size[k]! / 2) -
+          Math.max(a.center[k]! - a.size[k]! / 2, b.center[k]! - b.size[k]! / 2);
+        if (penetration < depth) {
+          depth = penetration;
+          axis = AXES[k]!;
+        }
+      }
+      // The contact floor is the boundary between "touching" and "inside".
+      if (depth <= MIN_CONTACT) continue;
+      const fa = a.from ?? a.id;
+      const fb = b.from ?? b.id;
+      const key = fa < fb ? `${fa} ${fb}` : `${fb} ${fa}`;
+      const seen = worst.get(key);
+      if (!seen || depth > seen.depth) worst.set(key, { a: a.id, b: b.id, depth, axis });
+    }
+  }
+
+  for (const [key, hit] of [...worst].sort((x, y) => (x[0] < y[0] ? -1 : 1))) {
+    const [fa, fb] = key.split(" ") as [string, string];
+    const same = fa === fb;
+    diagnostics.push({
+      code: "SOLVE-INTERSECTION",
+      message: same
+        ? `'${fa}' instances overlap each other by ${hit.depth.toFixed(4)}m on ${hit.axis} ('${hit.a}' into '${hit.b}') — the pitch is smaller than the part`
+        : `generated instances of '${fa}' and '${fb}' overlap by ${hit.depth.toFixed(4)}m on ${hit.axis} ('${hit.a}' into '${hit.b}')`,
+      part: fa,
+    });
+  }
 }
 
 /**

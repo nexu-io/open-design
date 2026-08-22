@@ -192,3 +192,97 @@ describe("emitBlenderScript", () => {
     expect(script).toContain("key.data.energy");
   });
 });
+
+describe("the solver's own output is checked, not assumed", () => {
+  /** One part, placed, plus whatever relations the case needs. */
+  const scene = (relations: unknown[], size = [1, 1, 1]): SceneSpec =>
+    ({
+      schemaVersion: 1,
+      parts: [{ id: "prp_block", size }],
+      relations: [{ type: "at", part: "prp_block", center: [0, 0, size[2]! / 2] }, ...relations],
+    }) as SceneSpec;
+
+  it("reports repeat instances that land inside each other", () => {
+    // `every: 0.5` on a 1m box ships three boxes overlapping by half a metre
+    // each. It used to compile ok:true with an empty diagnostics list: the
+    // coplanar rule stays silent because interpenetrating faces are not
+    // coplanar, and no rule owned "these are simply inside each other".
+    const solved = solveScene(
+      scene([{ type: "repeat", part: "prp_block", count: 3, along: "x", every: 0.5 }]),
+    );
+    const hit = solved.diagnostics.filter((d) => d.code === "SOLVE-INTERSECTION");
+    expect(hit).toHaveLength(1);
+    expect(hit[0]!.message).toContain("0.5000");
+    expect(hit[0]!.message).toContain("x");
+    // Still buildable — this is a warning about geometry, not an unsolvable
+    // graph, and the author may be told rather than blocked.
+    expect(solved.parts).toHaveLength(3);
+  });
+
+  it("stays silent when the pitch clears the part", () => {
+    const solved = solveScene(
+      scene([{ type: "repeat", part: "prp_block", count: 3, along: "x", every: 1.5 }]),
+    );
+    expect(solved.diagnostics.filter((d) => d.code === "SOLVE-INTERSECTION")).toEqual([]);
+  });
+
+  it("does not police interpenetration the author wrote by hand", () => {
+    // Overlapping a junction by a pixel is how a careful modeller avoids
+    // z-fighting; the golem fixture is built that way on purpose. Only
+    // instances the SOLVER generated are its responsibility.
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_a", size: [1, 1, 1] },
+        { id: "prp_b", size: [1, 1, 1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_a", center: [0, 0, 0.5] },
+        { type: "at", part: "prp_b", center: [0.5, 0, 0.5] },
+      ],
+    } as SceneSpec);
+    expect(solved.diagnostics).toEqual([]);
+  });
+
+  it("refuses a span whose anchors already overlap", () => {
+    // lo/hi invert when the anchors intersect, and the same arithmetic then
+    // returns the OVERLAP region: a beam inside both anchors at roughly twice
+    // the intended size, silently.
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_a", size: [2, 2, 2] },
+        { id: "prp_b", size: [2, 2, 2] },
+        { id: "prp_span", size: [0.2, 0.2, 0.2] },
+      ],
+      relations: [
+        { type: "at", part: "prp_a", center: [0, 0, 1] },
+        { type: "at", part: "prp_b", center: [0.1, 0, 1] },
+        { type: "span", part: "prp_span", from: "prp_a", to: "prp_b", axis: "x" },
+      ],
+    } as SceneSpec);
+    const conflict = solved.diagnostics.find((d) => d.message.includes("overlapping anchors"));
+    expect(conflict).toBeDefined();
+    expect(conflict!.code).toBe("SOLVE-CONFLICT");
+  });
+
+  it("still spans the gap between separated anchors", () => {
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_a", size: [2, 2, 2] },
+        { id: "prp_b", size: [2, 2, 2] },
+        { id: "prp_span", size: [0.2, 0.2, 0.2] },
+      ],
+      relations: [
+        { type: "at", part: "prp_a", center: [0, 0, 1] },
+        { type: "at", part: "prp_b", center: [5, 0, 1] },
+        { type: "span", part: "prp_span", from: "prp_a", to: "prp_b", axis: "x" },
+      ],
+    } as SceneSpec);
+    expect(solved.diagnostics.filter((d) => d.code === "SOLVE-CONFLICT")).toEqual([]);
+    const span = solved.parts.find((p) => p.id === "prp_span")!;
+    // gap 1..4 plus the 1mm embed at each end.
+    expect(span.size[0]).toBeCloseTo(3 + 2 * MIN_CONTACT, 6);
+  });
+});

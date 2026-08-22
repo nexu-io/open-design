@@ -192,6 +192,14 @@ function measureCells(
       let sumA = 0;
       let sumX = 0;
       let sumY = 0;
+      // Count/mean/centroid are all invariant under ROTATION about the
+      // centroid, which is what most flipbooks animate — so a spinning blade,
+      // a turning gear or an orbiting spark read as one signature and the
+      // atlas was declared a static kernel (W-601) while plainly animating.
+      // A coarse occupancy grid is the missing term: it says WHERE the visible
+      // pixels are, not just how many and how bright.
+      const OCC = 4;
+      const occupancy = new Array<number>(OCC * OCC).fill(0);
       for (let y = 0; y < ch; y++) {
         for (let x = 0; x < cw; x++) {
           const a = data[((r * ch + y) * width + (c * cw + x)) * 4 + 3]!;
@@ -200,6 +208,7 @@ function measureCells(
           sumA += a;
           sumX += x;
           sumY += y;
+          occupancy[Math.floor((y * OCC) / ch) * OCC + Math.floor((x * OCC) / cw)]!++;
           if (x < CELL_BORDER || y < CELL_BORDER || x >= cw - CELL_BORDER || y >= ch - CELL_BORDER) {
             bleed++;
           }
@@ -207,8 +216,13 @@ function measureCells(
       }
       if (any === 0) blank.push(r * cols + c);
       else {
+        // Each bucket as a share of THIS frame's visible pixels, not of the
+        // bucket's area: sprite content is mostly thin and sparse, and against
+        // bucket area every band rounds to zero, which is how the first
+        // attempt at this discriminated nothing at all.
+        const shape = occupancy.map((n) => Math.min(7, Math.round((n / any) * (OCC * OCC)))).join("");
         signatures.add(
-          `${Math.round(sumA / any)}:${Math.round(sumX / any)}:${Math.round(sumY / any)}:${any}`,
+          `${Math.round(sumA / any)}:${Math.round(sumX / any)}:${Math.round(sumY / any)}:${any}:${shape}`,
         );
       }
     }

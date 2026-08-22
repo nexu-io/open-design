@@ -327,16 +327,28 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       // the linter with off-grid vertices. Authored coordinates are untouched.
       solved = solveScene(spec, normalized.voxel.enabled ? { grid: normalized.voxel.gridSize } : {});
       for (const diagnostic of solved.diagnostics) {
-        const adjusted = diagnostic.code === "SOLVE-EPSILON-FLOOR";
+        // Two diagnostics describe a scene that BUILT: one where the solver
+        // adjusted an offset, one where it placed instances inside each other.
+        // Both are warnings about geometry the author should look at; the rest
+        // mean the graph could not be solved at all.
+        const buildable =
+          diagnostic.code === "SOLVE-EPSILON-FLOOR" || diagnostic.code === "SOLVE-INTERSECTION";
         issues.push({
-          code: adjusted ? ISSUE_CODES.SPEC_ADJUSTED : ISSUE_CODES.SPEC_UNRESOLVED,
-          severity: adjusted ? "warning" : "error",
+          code:
+            diagnostic.code === "SOLVE-EPSILON-FLOOR"
+              ? ISSUE_CODES.SPEC_ADJUSTED
+              : diagnostic.code === "SOLVE-INTERSECTION"
+                ? ISSUE_CODES.SPEC_INSTANCES_INTERSECT
+                : ISSUE_CODES.SPEC_UNRESOLVED,
+          severity: buildable ? "warning" : "error",
           message: diagnostic.message,
           file: "scene.json",
           ...(diagnostic.part ? { target: diagnostic.part } : {}),
         });
       }
-      const unresolved = solved.diagnostics.some((d) => d.code !== "SOLVE-EPSILON-FLOOR");
+      const unresolved = solved.diagnostics.some(
+        (d) => d.code !== "SOLVE-EPSILON-FLOOR" && d.code !== "SOLVE-INTERSECTION",
+      );
       if (!unresolved && !missingAssets) {
         specScript = emitBlenderScript(solved, {
           ...(spec.materials ? { materials: spec.materials } : {}),

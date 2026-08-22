@@ -467,4 +467,29 @@ describe("measureSheet", () => {
       measureSheet("f.png", flipbook(64, 2, 2, { static: true }), { grid: [2, 2] }).cells!.distinct,
     ).toBe(1);
   });
+
+  it("sees a shape that ROTATED between frames", () => {
+    // Pixel count, mean alpha and centroid are all invariant under rotation
+    // about the centroid — which is what most flipbooks animate. A spinning
+    // blade therefore read as ONE signature, and the atlas was reported a
+    // static kernel (W-601) while plainly animating. Three arms rotating 90
+    // degrees per cell is the minimal case: same pixels, different picture.
+    const size = 64;
+    const half = size / 2;
+    const img = blank(size, size);
+    const arms = [0, 120, 240].map((d) => (d * Math.PI) / 180);
+    for (let cell = 0; cell < 4; cell++) {
+      const ox = (cell % 2) * half;
+      const oy = Math.floor(cell / 2) * half;
+      const spin = (cell * Math.PI) / 2;
+      for (const arm of arms) {
+        for (let t = 2; t < half / 2 - 2; t++) {
+          const x = Math.round(half / 2 + Math.cos(arm + spin) * t);
+          const y = Math.round(half / 2 + Math.sin(arm + spin) * t);
+          setPixel(img, ox + x, oy + y, [220, 220, 220, 255]);
+        }
+      }
+    }
+    expect(measureSheet("fan.png", img, { grid: [2, 2] }).cells!.distinct).toBe(4);
+  });
 });

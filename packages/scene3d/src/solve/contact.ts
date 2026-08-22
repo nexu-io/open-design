@@ -1,5 +1,5 @@
 import type { Census } from "../types.js";
-import { MIN_CONTACT } from "./types.js";
+
 
 /**
  * The contact model: one definition of what "touching" and "resting" mean.
@@ -27,14 +27,6 @@ import { MIN_CONTACT } from "./types.js";
  * height. Both authorities ask that question here.
  */
 
-/**
- * How far a partner may be embedded into a part and still count as beneath it.
- *
- * The solver's own floor plus a float-noise margin: anything the solver builds
- * on purpose has to read as contact, or the linter contradicts the solver.
- */
-export const EMBED_WINDOW = MIN_CONTACT + 1e-6;
-
 export type GroundVerdict = "grounded" | "sunk" | "floating";
 
 /** Where a part sits relative to the ground plane, within tolerance. */
@@ -48,6 +40,16 @@ export function groundVerdict(groundGap: number, tolerance: number): GroundVerdi
  * The nearest measured contact whose partner sits below `name` — the part a
  * floating object is most plausibly resting on, or meant to. Pure lookup over
  * the census's already-measured contact pairs; no new Blender work.
+ *
+ * "Below" is geometric, not an epsilon. The first attempt at this allowed a
+ * partner to be embedded by at most the solver's own 1mm contact floor, which
+ * is right for what the SOLVER builds and wrong for what MODELLERS build: a
+ * hand-authored blocky asset overlaps its junctions by a whole pixel (1/16 m)
+ * precisely so the faces can never coincide, and every one of those joints
+ * read as "not below me". So the test is that the partner STARTS lower and
+ * overlaps this part's footprint — which covers flush, embedded and deeply
+ * interpenetrating alike, and still excludes a part sitting on top or standing
+ * beside it.
  */
 export function nearestSupportBelow(
   census: Census,
@@ -55,20 +57,32 @@ export function nearestSupportBelow(
 ): { name: string; gap: number } | null {
   const objectByName = new Map(census.objects.map((o) => [o.name, o]));
   const self = objectByName.get(name);
-  if (!self?.worldMin) return null;
+  if (!self?.worldMin || !self.worldMax) return null;
   let best: { name: string; gap: number } | null = null;
   for (const contact of census.contacts ?? []) {
     const otherName = contact.a === name ? contact.b : contact.b === name ? contact.a : null;
     if (otherName === null) continue;
     const other = objectByName.get(otherName);
-    if (!other?.worldMax || other.type !== "MESH") continue;
-    // A support sits below: its top is at, just under, or deliberately
-    // embedded into this part's bottom.
+    if (!other?.worldMax || !other.worldMin || other.type !== "MESH") continue;
+    // It must START lower, or it is sitting ON this part rather than under it.
+    if (other.worldMin[2]! >= self.worldMin[2]! - 1e-9) continue;
+    // ...and be UNDER it, not merely lower and off to one side.
+    if (!overlapsInPlan(self, other)) continue;
     const gap = self.worldMin[2]! - other.worldMax[2]!;
-    if (gap < -EMBED_WINDOW) continue;
-    if (best === null || gap < best.gap) best = { name: otherName, gap };
+    if (best === null || Math.abs(gap) < Math.abs(best.gap)) best = { name: otherName, gap };
   }
   return best;
+}
+
+/** Do two AABBs share any ground footprint (x and y)? */
+function overlapsInPlan(
+  a: { worldMin?: number[] | null; worldMax?: number[] | null },
+  b: { worldMin?: number[] | null; worldMax?: number[] | null },
+): boolean {
+  for (let i = 0; i < 2; i++) {
+    if (a.worldMin![i]! > b.worldMax![i]! || b.worldMin![i]! > a.worldMax![i]!) return false;
+  }
+  return true;
 }
 
 /**
@@ -85,5 +99,9 @@ export function restsOnSomething(
 ): boolean | null {
   if (groundGap === undefined || !Number.isFinite(groundGap)) return null;
   if (groundVerdict(groundGap, tolerance) !== "floating") return true;
-  return nearestSupportBelow(census, name) !== null;
+  const support = nearestSupportBelow(census, name);
+  // Resting means TOUCHING it. A support measured 3cm below is what the part
+  // should have been placed on, which is worth naming in a warning, but it is
+  // not something the part is resting on.
+  return support !== null && support.gap <= tolerance;
 }

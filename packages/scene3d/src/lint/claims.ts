@@ -2,7 +2,7 @@ import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import type { ClaimsSpec } from "../solve/types.js";
 import { isExempt } from "./exempt.js";
-import { groundVerdict, nearestSupportBelow } from "../solve/contact.js";
+import { groundVerdict, restsOnSomething } from "../solve/contact.js";
 
 /**
  * Adjudicate a spec's `claims` block against the measured census.
@@ -127,7 +127,7 @@ export function lintClaims(
       } else if (verdict === "floating" && census.contacts === undefined) {
         // No contact scan, so "is anything under it?" is unanswerable.
         unchecked("grounded", `'${mesh.object}' floats ${gap.toFixed(4)}m up and the census carries no contacts to say what holds it`);
-      } else if (verdict === "floating" && nearestSupportBelow(census, mesh.object) === null) {
+      } else if (verdict === "floating" && restsOnSomething(census, mesh.object, gap, TOLERANCE) === false) {
         fail("grounded", `'${mesh.object}' floats ${gap.toFixed(4)}m above the ground plane with nothing beneath it`, {
           target: mesh.object,
           groundGap: gap,

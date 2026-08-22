@@ -261,6 +261,32 @@ function toRgba(
     return colorType === 3 ? raw : Math.round((raw * 255) / max);
   };
 
+  // The sample at its NATIVE depth, for exact comparison against tRNS — which
+  // stores its key at the image's bit depth. `sample` scales to 8 bits, and
+  // comparing there would make two distinct 16-bit values collide into one
+  // "transparent" colour.
+  const sampleRaw = (row: number, index: number): number => {
+    if (depth === 16) return ((bytes[row + index * 2]! << 8) | bytes[row + index * 2 + 1]!) >>> 0;
+    if (depth === 8) return bytes[row + index]!;
+    const bitsAt = index * depth;
+    const byte = bytes[row + (bitsAt >> 3)]!;
+    const shift = 8 - depth - (bitsAt & 7);
+    return (byte >> shift) & max;
+  };
+  /** A tRNS key sample: two big-endian bytes, masked to the image's depth. */
+  const keyAt = (i: number): number =>
+    (((transparency![i * 2]! << 8) | transparency![i * 2 + 1]!) & (depth === 16 ? 0xffff : max)) >>> 0;
+
+  // Chroma-key transparency. tRNS was parsed but consumed only in the palette
+  // branch, so a spec-legal greyscale or truecolour image with a transparent
+  // colour decoded FULLY OPAQUE — and every alpha-derived sheet fact
+  // (opaqueRatio, maxAlpha, the visible-pixel gate) was wrong for it.
+  const greyKey = colorType === 0 && transparency && transparency.length >= 2 ? keyAt(0) : null;
+  const rgbKey =
+    colorType === 2 && transparency && transparency.length >= 6
+      ? [keyAt(0), keyAt(1), keyAt(2)]
+      : null;
+
   for (let y = 0; y < height; y++) {
     const row = y * bytesPerRow;
     for (let x = 0; x < width; x++) {
@@ -269,12 +295,25 @@ function toRgba(
       if (colorType === 0 || colorType === 4) {
         const grey = sample(row, base);
         out[at] = grey; out[at + 1] = grey; out[at + 2] = grey;
-        out[at + 3] = colorType === 4 ? sample(row, base + 1) : 255;
+        out[at + 3] =
+          colorType === 4
+            ? sample(row, base + 1)
+            : greyKey !== null && sampleRaw(row, base) === greyKey
+              ? 0
+              : 255;
       } else if (colorType === 2 || colorType === 6) {
         out[at] = sample(row, base);
         out[at + 1] = sample(row, base + 1);
         out[at + 2] = sample(row, base + 2);
-        out[at + 3] = colorType === 6 ? sample(row, base + 3) : 255;
+        out[at + 3] =
+          colorType === 6
+            ? sample(row, base + 3)
+            : rgbKey !== null &&
+                sampleRaw(row, base) === rgbKey[0] &&
+                sampleRaw(row, base + 1) === rgbKey[1] &&
+                sampleRaw(row, base + 2) === rgbKey[2]
+              ? 0
+              : 255;
       } else {
         const index = sample(row, base);
         const p = index * 3;
