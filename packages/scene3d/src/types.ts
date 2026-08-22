@@ -629,6 +629,23 @@ export interface CensusMaterial {
   usedByObjectCount: number;
   /** Image names bound in this material's node tree, sorted. */
   textureNames?: string[];
+  /** Structural fingerprint of the material's whole node graph — types,
+   *  operations, unlinked values and link topology, excluding names and screen
+   *  positions. Two materials that shade differently have different graphs;
+   *  enumerating individual properties loses that race by construction, since
+   *  every glTF extension adds a distinction the list does not carry. */
+  graph?: string;
+  /** The alpha CUTOFF a masked surface clips at, or null when it does not
+   *  clip. glTF's alphaMode MASK survives import as a node chain rather than a
+   *  material property, and it round-trips into the shipped GLB — so two
+   *  materials identical in every Principled input can still clip at 0.25 and
+   *  0.75 and render nothing alike. */
+  alphaCutoff?: number | null;
+  /** How the surface resolves alpha ("BLENDED"/"DITHERED" on EEVEE Next,
+   *  "OPAQUE"/"CLIP"/"BLEND" on legacy). Part of the LOOK: two materials
+   *  identical in every Principled input still render differently if one
+   *  masks and the other blends. Empty when this Blender exposes neither. */
+  blendMethod?: string;
   principled: {
     present: boolean;
     metallic: number | null;

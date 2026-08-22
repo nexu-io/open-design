@@ -50,17 +50,60 @@ export type Provenance = "authored" | "imported";
 export function importedObjects(input: {
   sourceKind?: string;
   solved?: { parts: ReadonlyArray<{ id: string; file?: string }> };
-  census?: { objects: ReadonlyArray<{ name: string }> };
+  census?: {
+    objects: ReadonlyArray<{ name: string }>;
+    materials?: ReadonlyArray<{ name: string }>;
+    meshes?: ReadonlyArray<{ object: string; materials?: readonly string[] }>;
+  };
 }): Set<string> {
   const imported = new Set<string>();
+  const whole = input.sourceKind === "mesh";
   // A whole-project mesh source: every object came from somebody's exporter.
-  if (input.sourceKind === "mesh") {
-    for (const object of input.census?.objects ?? []) imported.add(object.name);
-  }
+  if (whole) for (const object of input.census?.objects ?? []) imported.add(object.name);
   for (const part of input.solved?.parts ?? []) {
     if (part.file !== undefined) imported.add(part.id);
   }
+
+  // MATERIALS travel with the geometry that binds them, and rules name them as
+  // their subject. Holding object names alone meant a material-level finding
+  // could never match — the Khronos OrientationTest, whose whole purpose is to
+  // be correct, failed with six metallic errors against materials nobody in
+  // this project authored.
+  //
+  // A material bound to any AUTHORED mesh is the author's, even if an imported
+  // part also uses it (a `material:` override on a `file:` part is exactly
+  // that), so those are excluded rather than assumed.
+  const authoredMaterials = new Set<string>();
+  for (const mesh of input.census?.meshes ?? []) {
+    if (imported.has(mesh.object)) continue;
+    for (const name of mesh.materials ?? []) authoredMaterials.add(name);
+  }
+  if (whole) {
+    for (const material of input.census?.materials ?? []) {
+      if (!authoredMaterials.has(material.name)) imported.add(material.name);
+    }
+  } else {
+    for (const mesh of input.census?.meshes ?? []) {
+      if (!imported.has(mesh.object)) continue;
+      for (const name of mesh.materials ?? []) {
+        if (!authoredMaterials.has(name)) imported.add(name);
+      }
+    }
+  }
   return imported;
+}
+
+/**
+ * Everything an issue names as its subject.
+ *
+ * Most rules name one thing, but a relation rule names a PAIR — z-fighting
+ * reports `"A <-> B"`, because the finding is about the two together. A pair
+ * relaxes only when BOTH sides are imported: a coincident plane between
+ * somebody else's asset and geometry this project authored is this project's
+ * problem, and saying so is the point.
+ */
+function subjectsOf(target: string): string[] {
+  return target.includes(" <-> ") ? target.split(" <-> ").map((s) => s.trim()) : [target];
 }
 
 /**
@@ -78,6 +121,13 @@ export const IMPORTED_RELAXATIONS: ReadonlyArray<{
   { code: ISSUE_CODES.DOUBLE_VERTICES, block: "geometry", why: "split vertices are how UV and normal seams are shipped" },
   { code: ISSUE_CODES.DOUBLE_VERTICES_UNCHECKED, block: "geometry", why: "split vertices are how UV and normal seams are shipped" },
   { code: ISSUE_CODES.INCONSISTENT_WINDING, block: "geometry", why: "winding is the exporter's convention" },
+  // Calibrated against the Khronos sample corpus: each of these fires on
+  // assets the industry treats as correct, and none can be fixed without
+  // editing somebody else's file. Reported, never blocking.
+  { code: ISSUE_CODES.ZERO_AREA_FACES, block: "geometry", why: "degenerate triangles are shipped by real exporters" },
+  { code: ISSUE_CODES.Z_FIGHTING, block: "geometry", why: "coincident faces WITHIN an imported asset are its own" },
+  { code: ISSUE_CODES.UNAPPLIED_SCALE, block: "geometry", why: "the node transform is the source file's" },
+  { code: ISSUE_CODES.NON_UNIFORM_SCALE, block: "geometry", why: "the node transform is the source file's" },
   { code: ISSUE_CODES.UV_MISSING, block: "uv", why: "an imported mesh owns its own unwrap, or deliberately has none" },
   { code: ISSUE_CODES.UV_OVERLAP, block: "uv", why: "mirrored, shared UV islands are a standard texture-budget technique" },
   { code: ISSUE_CODES.UV_FLIPPED, block: "uv", why: "mirrored islands read as flipped by construction" },
@@ -119,8 +169,10 @@ export function applyImportedPosture(
     if (issue.severity === "info") continue;
     const rule = BY_CODE.get(issue.code);
     if (!rule || authoredBlocks.has(rule.block)) continue;
-    const subject = issue.target;
-    if (subject === undefined || !imported.has(subject)) continue;
+    if (issue.target === undefined) continue;
+    const subjects = subjectsOf(issue.target);
+    if (!subjects.every((name) => imported.has(name))) continue;
+    const subject = subjects.length > 1 ? subjects.join(" and ") : subjects[0]!;
     issues[i] = {
       ...issue,
       severity: "info",

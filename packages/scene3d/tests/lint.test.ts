@@ -127,6 +127,7 @@ describe("lint: pbr/topology/integrity over census", () => {
       ngons: 2,
       nonManifoldEdges: 124,
       zeroAreaFaces: 1,
+      materials: ["mtl_imported"],
       nan: false,
       uvLayers: [],
       doubleVertices: 43,
@@ -148,21 +149,90 @@ describe("lint: pbr/topology/integrity over census", () => {
       ISSUE_CODES.NON_MANIFOLD,
       ISSUE_CODES.DOUBLE_VERTICES,
       ISSUE_CODES.INCONSISTENT_WINDING,
+      ISSUE_CODES.ZERO_AREA_FACES,
     ]) {
       const issue = byCode.get(code);
       expect(issue, `${code} must still be reported`).toBeDefined();
       expect(issue!.severity).toBe("info"); // relaxed, and says so
       expect(issue!.detail?.provenance).toBe("imported");
     }
-    // Real defects are untouched: an ngon or a zero-area face is wrong in
-    // anybody's asset, so provenance buys it nothing.
-    for (const code of [ISSUE_CODES.NGONS, ISSUE_CODES.ZERO_AREA_FACES]) {
+    // Not everything relaxes. An ngon is a modelling choice the importing
+    // project can act on (it re-triangulates on export), so provenance buys it
+    // nothing — unlike a zero-area face, which the Khronos corpus showed is
+    // shipped by real exporters in 8 of 23 assets nobody considers broken.
+    for (const code of [ISSUE_CODES.NGONS]) {
       const issue = byCode.get(code);
       expect(issue, `${code} must still fire`).toBeDefined();
       expect(issue!.severity).not.toBe("info");
       expect(issue!.detail?.provenance).toBeUndefined();
     }
     expect(imported.some((i) => i.severity === "error" && i.code === ISSUE_CODES.NON_MANIFOLD)).toBe(false);
+  });
+
+  it("relaxes findings about an imported asset's MATERIALS, not just its objects", () => {
+    // Calibration against the Khronos corpus found this: OrientationTest, a
+    // model whose entire purpose is to be correct, failed with six metallic
+    // errors. The posture held OBJECT names, and metallic is reported against
+    // a MATERIAL — so a material-level finding could never match, and the
+    // relaxation silently covered half the surface it claimed to.
+    const census2 = census({
+      objects: [
+        { name: "Mesh", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [{ object: "Mesh", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["MatX1"] }],
+      materials: [
+        {
+          name: "MatX1",
+          usedByObjectCount: 1,
+          textureNames: [],
+          principled: {
+            present: true,
+            metallic: 0.4, // the value OrientationTest ships, and is correct with
+            roughness: 0.5,
+            ior: 1.45,
+            baseColor: [0.5, 0.5, 0.5],
+            hasTexture: false,
+            untouchedDefault: false,
+          },
+        },
+      ] as never,
+    });
+    const authored = runLint({ contract: contract(), census: census2 });
+    expect(authored.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE)!.severity).toBe("error");
+
+    const imported = runLint({ contract: contract(), census: census2, sourceKind: "mesh" });
+    const metallic = imported.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE)!;
+    expect(metallic.severity).toBe("info");
+    expect(metallic.detail?.provenance).toBe("imported");
+  });
+
+  it("relaxes a z-fight only when BOTH sides are imported", () => {
+    // Relation rules name a PAIR ("A <-> B"), so the posture asks about both.
+    // A coincident plane between somebody else's asset and geometry this
+    // project authored is this project's problem, and saying so is the point.
+    const pair = census({
+      objects: [
+        { name: "imp_a", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+        { name: "imp_b", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [
+        { object: "imp_a", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"] },
+        { object: "imp_b", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"] },
+      ],
+      zFightingPairs: [{ a: "imp_a", b: "imp_b", faceCount: 2, area: 0.01 }],
+    });
+    // Both imported (whole-source import): a note.
+    const both = runLint({ contract: contract(), census: pair, sourceKind: "mesh" });
+    expect(both.find((i) => i.code === ISSUE_CODES.Z_FIGHTING)!.severity).toBe("info");
+
+    // Only one side imported: still an error, because the author put the other
+    // one there.
+    const mixed = runLint({
+      contract: contract(),
+      census: pair,
+      solved: { parts: [{ id: "imp_a", file: "a.glb" }] } as never,
+    });
+    expect(mixed.find((i) => i.code === ISSUE_CODES.Z_FIGHTING)!.severity).toBe("error");
   });
 
   it("relaxes hierarchy depth for a wholly-imported asset", () => {

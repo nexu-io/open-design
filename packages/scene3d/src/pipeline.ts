@@ -5,6 +5,7 @@ import {
   CompileRequest,
   CompileResult,
   Issue,
+  SceneSource,
   IssueSummary,
   ProofFrameStats,
   ProofOptions,
@@ -17,6 +18,7 @@ import { ISSUE_CODES, summarize } from "./errors.js";
 import { DEFAULT_CONTRACT, normalizeContract, validateContract, contractCacheKey } from "./contract.js";
 import { discoverSources, existingSourceFiles } from "./parse/sources.js";
 import { companionFiles } from "./parse/companions.js";
+import { lostShadingCapability } from "./read/gltf-capability.js";
 import { parseUsda, UsdaParseError } from "./parse/usda.js";
 import { authorStageModel } from "./usd/stage-model.js";
 import {
@@ -849,6 +851,16 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           const lowering = payload?.lowering;
           emitMasterParity(lowering, issues);
 
+          /* Parity COUNTS meshes, materials, armatures and bound clips, which
+             catches a material that vanished and is blind to one that survived
+             as a shell. That is the normal outcome of the round trip, because
+             UsdPreviewSurface cannot express most of the modern PBR extension
+             surface — calibration against the Khronos corpus found glass,
+             iridescence, sheen, IOR and volume destroyed end to end with every
+             stage reporting success. Read the capability off both ends and
+             name what the shape of this pipeline costs. */
+          emitMaterialCapabilityParity(request.projectDir, source, solved, rel, issues);
+
           /*
            * Author the model hierarchy onto the stage Blender just wrote.
            *
@@ -1380,6 +1392,54 @@ export function readTweaks(raw: string): {
     if (Object.keys(tweak).length > 0) out[part] = tweak as PartTweak;
   }
   return { tweaks: Object.keys(out).length > 0 ? out : undefined, notes };
+}
+
+
+/**
+ * Report shading capability the sources declared that the shipped glTF does
+ * not carry.
+ *
+ * Per SOURCE file, because that is the granularity the loss happens at: a
+ * scene may import three assets and lose transmission from only one of them.
+ * The message names the extensions rather than a count, since "you lost
+ * KHR_materials_transmission" is actionable and "materials degraded" is not.
+ */
+function emitMaterialCapabilityParity(
+  projectDir: string,
+  source: SceneSource,
+  solved: SolvedScene | undefined,
+  exported: string[],
+  issues: Issue[],
+): void {
+  const shipped = exported.find((a) => a.toLowerCase().endsWith(".glb"));
+  if (shipped === undefined) return;
+  const shippedAbs = path.join(projectDir, shipped);
+
+  // Every glTF container this scene was built from: a bare mesh source, or the
+  // `file:` parts of a spec.
+  const sources = new Set<string>();
+  for (const file of source.files) {
+    if (/\.(glb|gltf)$/i.test(file)) sources.add(path.join(projectDir, file));
+  }
+  for (const part of solved?.parts ?? []) {
+    if (part.file !== undefined && /\.(glb|gltf)$/i.test(part.file)) {
+      sources.add(path.join(projectDir, part.file));
+    }
+  }
+
+  for (const sourceAbs of [...sources].sort()) {
+    const lost = lostShadingCapability(sourceAbs, shippedAbs);
+    if (lost.length === 0) continue;
+    const name = path.relative(projectDir, sourceAbs).split(path.sep).join("/");
+    issues.push({
+      code: ISSUE_CODES.MASTER_MATERIAL_CAPABILITY,
+      severity: "warning",
+      message: `'${name}' declares ${lost.join(", ")}, which the shipped glTF does not carry — those materials render differently than the source`,
+      hint: "USD is the master format and UsdPreviewSurface cannot express these; ship the original file alongside if the effect matters",
+      file: name,
+      detail: { lost, shipped },
+    });
+  }
 }
 
 function writeReadModel(projectDir: string, model: ReadModel): void {

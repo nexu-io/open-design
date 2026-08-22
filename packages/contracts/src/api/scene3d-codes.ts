@@ -169,6 +169,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-E-901': 'Master stage lost content',
   'S3D-W-901': 'Master parity unchecked',
   'S3D-W-902': 'Joint/morph order drifted in lowering',
+  'S3D-W-903': 'Material capability lost in lowering',
 
   /* intent budgets */
   'S3D-W-951': 'Part over its role triangle share',

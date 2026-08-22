@@ -158,13 +158,22 @@ export function lintPbr(ctx: LintContext, issues: Issue[]): void {
     for (const mat of census.materials) {
       if (mat.usedByObjectCount === 0 || !mat.principled.present) continue;
       const p = mat.principled;
-      // Emission and alpha are part of the look: two materials identical in
-      // metallic/roughness/ior/baseColor/textures but where one glows or is
-      // transparent are NOT duplicates, and merging them (the hint's advice)
-      // would visibly change the scene. They were absent from the fingerprint.
+      // Two materials are duplicates only if they SHADE the same, and the
+      // authority on that is the node graph — not a list of properties.
+      // Calibrating against the Khronos corpus caught this rule proposing a
+      // visibly-wrong merge three times in a row, each time over a distinction
+      // the property list did not carry: alpha mode (MASK vs OPAQUE), then the
+      // alpha cutoff (0.25 vs 0.75), then iridescence. Enumerating properties
+      // loses that race by construction — every glTF extension the importer
+      // supports adds another one.
+      //
+      // The properties stay in the fingerprint because they are what the
+      // MESSAGE talks about and they cover materials with no node tree; the
+      // graph signature is what makes the verdict trustworthy.
       const fingerprint = JSON.stringify([
         p.metallic, p.roughness, p.ior, p.baseColor,
         p.emission ?? null, p.emissionStrength ?? null, p.alpha ?? null,
+        mat.blendMethod ?? null, mat.alphaCutoff ?? null, mat.graph ?? null,
         [...(mat.textureNames ?? [])].sort(),
       ]);
       const group = byFingerprint.get(fingerprint) ?? [];

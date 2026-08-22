@@ -1343,9 +1343,29 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
     for m in sorted(bpy.data.materials, key=lambda x: x.name):
         used = sum(1 for o in objects if any(s.material == m for s in o.material_slots))
         p = principled(m)
+        # How the surface resolves alpha. Two materials identical in every
+        # Principled input still render completely differently if one masks
+        # and the other blends, so this is part of the LOOK, not a setting —
+        # calibration against Khronos AlphaBlendModeTest, whose whole purpose
+        # is to vary exactly this, had the duplicate-material rule calling its
+        # five deliberately-different materials identical and advising a merge
+        # that would have visibly broken the asset.
+        # EEVEE Next names it surface_render_method; legacy EEVEE names it
+        # blend_method. Report whichever this Blender has.
+        blend = ""
+        try:
+            if hasattr(m, "surface_render_method"):
+                blend = str(m.surface_render_method)
+            elif hasattr(m, "blend_method"):
+                blend = str(m.blend_method)
+        except Exception:
+            blend = ""
         mat_rows.append({
             "name": m.name, "usedByObjectCount": used, "principled": p,
             "textureNames": mat_texture_names(m),
+            "blendMethod": blend,
+            "alphaCutoff": alpha_clip_threshold(m),
+            "graph": material_graph_signature(m),
         })
 
     tex_rows = []
@@ -1931,6 +1951,101 @@ class provenance(object):
 OVERHANG_COS = 0.70710678
 # Thickness ray-casting is O(faces) BVH queries; capped like every heavy pass.
 THICKNESS_FACE_CAP = 40000
+
+
+def material_graph_signature(mat):
+    """A structural fingerprint of a material's whole node graph.
+
+    The duplicate-material rule compares a hand-picked list of Principled
+    inputs, and that list can never be complete: a Blender material is an
+    arbitrary node graph, and every glTF extension the importer supports adds
+    a distinction the list does not carry. Calibration against the Khronos
+    corpus caught the same bug three times in a row wearing different clothes —
+    alphaMode (MASK vs OPAQUE), then alphaCutoff (0.25 vs 0.75), then
+    iridescence — each time proposing a merge that would visibly change the
+    asset. Enumerating properties loses that race by construction.
+
+    So compare the GRAPH. Two materials that shade differently have different
+    graphs; two that are genuine duplicates have the same one. Structure only —
+    node types, operations, unlinked input values and the link topology —
+    deliberately excluding names and screen positions, which differ for
+    reasons that never reach a pixel.
+
+    A false negative here (two duplicates whose graphs differ cosmetically)
+    costs a missed draw call. A false positive costs an author merging two
+    materials that looked identical only to us. They are not the same mistake.
+    """
+    import hashlib
+    tree = getattr(mat, "node_tree", None)
+    if tree is None:
+        return ""
+    parts = []
+    try:
+        for n in sorted(tree.nodes, key=lambda x: (x.type, x.name)):
+            vals = []
+            for i in n.inputs:
+                if i.links:
+                    vals.append("L")
+                    continue
+                dv = getattr(i, "default_value", None)
+                try:
+                    vals.append(",".join("%.6g" % float(v) for v in dv))
+                except TypeError:
+                    vals.append("%.6g" % dv if isinstance(dv, (int, float)) else str(dv))
+                except Exception:
+                    vals.append("?")
+            op = str(getattr(n, "operation", "") or getattr(n, "blend_type", "") or "")
+            parts.append("%s|%s|%s" % (n.type, op, ";".join(vals)))
+        for l in sorted(
+            tree.links,
+            key=lambda x: (x.from_node.type, x.from_socket.name, x.to_node.type, x.to_socket.name),
+        ):
+            parts.append("%s.%s>%s.%s" % (l.from_node.type, l.from_socket.name,
+                                          l.to_node.type, l.to_socket.name))
+    except Exception:
+        return ""
+    return hashlib.sha256(chr(10).join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def alpha_clip_threshold(mat):
+    """The alpha CUTOFF a masked material clips at, or None.
+
+    glTF's alphaMode MASK survives import as a node chain rather than a
+    material property: Principled Alpha <- MATH(SUBTRACT) <- MATH(LESS_THAN,
+    cutoff) <- the alpha source. Blender's own exporter reads it back, so the
+    cutoff is real and ships in the GLB — but nothing measured it, and the
+    duplicate-material rule therefore called Khronos AlphaBlendModeTest's
+    OPAQUE and three MASK variants identical and advised merging them. Verified
+    by exporting that asset and reading the result: alphaMode and alphaCutoff
+    round-trip exactly, so those materials genuinely differ in what we ship.
+
+    Walks a few hops back from Alpha and takes the comparison operand of the
+    first threshold node it meets. Absent chain, absent verdict: None."""
+    try:
+        tree = mat.node_tree
+        if tree is None:
+            return None
+        bsdf = next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+        if bsdf is None:
+            return None
+        socket = bsdf.inputs.get("Alpha")
+        if socket is None or not socket.links:
+            return None
+        node = socket.links[0].from_node
+        for _ in range(4):
+            if node is None:
+                return None
+            if node.type == "MATH" and node.operation in ("LESS_THAN", "GREATER_THAN"):
+                return R6(float(node.inputs[1].default_value))
+            nxt = None
+            for i in node.inputs:
+                if i.links:
+                    nxt = i.links[0].from_node
+                    break
+            node = nxt
+    except Exception:
+        return None
+    return None
 
 
 def voxel_facts(bm, grid):

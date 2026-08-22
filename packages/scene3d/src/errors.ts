@@ -242,6 +242,13 @@ export const ISSUE_CODES = {
      downstream of what the fingerprint can see. Surfaced so a rigged or
      morph asset is never silently reordered. */
   MASTER_ORDER_DRIFT: "S3D-W-902",
+  /* A material CAPABILITY the source declared is absent from the shipped
+     deliverable. The parity fingerprint counts materials, so a material that
+     survives as a shell — glass that stopped refracting, iridescence that
+     stopped shifting — passes it. UsdPreviewSurface cannot express most of
+     the modern PBR extension surface, and the master round-trip is where the
+     loss happens. Detect and name it; never mutate and never hide it. */
+  MASTER_MATERIAL_CAPABILITY: "S3D-W-903",
 
   /* lint: intent budgets (950-969) — judgment gated on a part's authored
      `role`. Every threshold is data (budgets.ts / the contract), every check

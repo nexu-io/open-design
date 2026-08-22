@@ -205,6 +205,55 @@ describe("uv rules", () => {
     expect(codes(capped)).toContain(ISSUE_CODES.UV_UNCHECKED);
   });
 
+  it("does not call materials identical when only their alpha MODE differs", () => {
+    // Khronos AlphaBlendModeTest exists to vary exactly this, and had all five
+    // of its materials reported as duplicates with the advice to merge them —
+    // which would have visibly broken the asset, since a masked surface and a
+    // blended one render nothing alike. The Principled inputs really are
+    // identical; the difference lives in how alpha resolves, so that is what
+    // the census had to start measuring.
+    const material = (name: string, blendMethod: string, alphaCutoff: number | null = null) => ({
+      name,
+      usedByObjectCount: 1,
+      textureNames: [],
+      blendMethod,
+      alphaCutoff,
+      principled: {
+        present: true,
+        metallic: 0,
+        roughness: 0.5,
+        ior: 1.45,
+        baseColor: [0.8, 0.1, 0.1],
+        hasTexture: false,
+        untouchedDefault: false,
+      },
+    });
+    const varied = census({
+      materials: [material("MatOpaque", "OPAQUE"), material("MatBlend", "BLENDED")] as never,
+    });
+    expect(codes(varied)).not.toContain(ISSUE_CODES.DUPLICATE_MATERIALS);
+
+    // Nor when only the CUTOFF differs. glTF alphaMode MASK survives import as
+    // a node chain rather than a property, so two masked materials look
+    // identical in every Principled input while clipping at 0.25 and 0.75 —
+    // and the exported GLB carries both cutoffs, verified by round-tripping
+    // that asset and reading the result.
+    const cutoffs = census({
+      materials: [
+        material("MatCutoff25", "DITHERED", 0.25),
+        material("MatCutoff75", "DITHERED", 0.75),
+      ] as never,
+    });
+    expect(codes(cutoffs)).not.toContain(ISSUE_CODES.DUPLICATE_MATERIALS);
+
+    // Genuinely identical materials are still reported: the rule pays for
+    // itself on real duplicate draw calls.
+    const same = census({
+      materials: [material("MatA", "OPAQUE"), material("MatB", "OPAQUE")] as never,
+    });
+    expect(codes(same)).toContain(ISSUE_CODES.DUPLICATE_MATERIALS);
+  });
+
   it("measures texel-density spread over the AUTHORED parts only", () => {
     // A downloaded hero's texel budget was somebody else's decision, made
     // before this scene existed. Folding one into the scene's coherence
