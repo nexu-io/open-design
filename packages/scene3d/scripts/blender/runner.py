@@ -1418,7 +1418,6 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
     return {
         "blenderVersion": bpy.app.version_string,
         "sceneName": scene.name,
-        "upAxis": "Y",
         "objects": obj_rows,
         "meshes": mesh_rows,
         "materials": mat_rows,

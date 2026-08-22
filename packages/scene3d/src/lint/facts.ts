@@ -11,6 +11,7 @@
  */
 
 import { Census } from "../types.js";
+import { triangleTotals } from "./triangles.js";
 import type { ResolvedPartBudget } from "./budgets.js";
 
 export interface DerivedFacts {
@@ -103,11 +104,14 @@ export function deriveFacts(
   const familyOf = (object: string): string => budgets.get(object)?.familyId ?? object;
 
   // ---- triangles per family + scene total ----
+  // Shared with the budget rule and the claims adjudicator (lint/triangles.ts):
+  // three copies of this had drifted into three different postures about a
+  // missing count.
+  const triangles = triangleTotals(census);
   const trisByFamily = new Map<string, number>();
-  let sceneTris = 0;
+  const sceneTris = triangles.total;
   for (const mesh of census.meshes) {
-    const t = mesh.tris ?? mesh.faces;
-    sceneTris += t;
+    const t = triangles.byObject.get(mesh.object) ?? 0;
     const fam = familyOf(mesh.object);
     trisByFamily.set(fam, (trisByFamily.get(fam) ?? 0) + t);
   }

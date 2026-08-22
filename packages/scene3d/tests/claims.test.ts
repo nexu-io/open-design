@@ -8,7 +8,6 @@ function census(meshes: Partial<CensusMesh>[]): Census {
   return {
     blenderVersion: "5.0.1",
     sceneName: "Scene",
-    upAxis: "Y",
     objects: [],
     meshes: meshes.map((m) => ({
       object: "prp_x",

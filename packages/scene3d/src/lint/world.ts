@@ -2,6 +2,7 @@ import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import { NormalizedContract } from "../contract.js";
 import { isExempt } from "./exempt.js";
+import { triangleTotals } from "./triangles.js";
 import { groundVerdict, nearestSupportBelow } from "../solve/contact.js";
 
 /**
@@ -95,12 +96,24 @@ export function lintWorld(
   /* ---- budgets ------------------------------------------------------ */
 
   const { maxTrianglesPerMesh, maxTrianglesTotal } = contract.budgets;
-  let total = 0;
+  // One computation of "how many triangles", shared with the intent judge and
+  // the claims adjudicator — see lint/triangles.ts for why they used to differ.
+  const triangles = triangleTotals(census);
+  const total = triangles.total;
+  // A budget measured from face counts UNDER-counts n-gons, so it can pass a
+  // scene that actually breaks it. That is worth running anyway, and worth
+  // saying out loud rather than leaving as a silent approximation.
+  if (triangles.approximated.length > 0 && (maxTrianglesPerMesh !== undefined || maxTrianglesTotal !== undefined)) {
+    issues.push({
+      code: ISSUE_CODES.TRIANGLE_COUNT_APPROXIMATE,
+      severity: "warning",
+      message: `triangle budgets were measured from face counts for ${triangles.approximated.length} mesh(es) — this census carries no triangle counts, so an n-gon mesh reads smaller than it is`,
+      hint: "recompile without --no-cache to remeasure, or ignore if the scene has no n-gons",
+      detail: { meshes: triangles.approximated.slice(0, 12) },
+    });
+  }
   for (const mesh of census.meshes) {
-    // Older runners did not report `tris`; fall back to the face count,
-    // which under-counts n-gons but never invents a violation.
-    const tris = mesh.tris ?? mesh.faces;
-    total += tris;
+    const tris = triangles.byObject.get(mesh.object) ?? 0;
     if (maxTrianglesPerMesh !== undefined && tris > maxTrianglesPerMesh) {
       issues.push({
         code: ISSUE_CODES.MESH_BUDGET,

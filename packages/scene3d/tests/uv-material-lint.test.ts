@@ -55,7 +55,6 @@ function census(over: Partial<Census> = {}): Census {
   return {
     blenderVersion: "5.0.0",
     sceneName: "Scene",
-    upAxis: "Y",
     objects: [
       {
         name: "prp_crate",

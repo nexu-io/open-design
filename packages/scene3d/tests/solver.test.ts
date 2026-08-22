@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { findCoplanarFaces, solveScene } from "../src/solve/solver.js";
 import { emitBlenderScript, frameScene } from "../src/solve/emit-bpy.js";
-import { MIN_CONTACT, SceneSpec } from "../src/solve/types.js";
+import { MAX_PARTS, MIN_CONTACT, SceneSpec } from "../src/solve/types.js";
 
 /**
  * The crate from the real session, expressed as relations instead of
@@ -284,5 +284,49 @@ describe("the solver's own output is checked, not assumed", () => {
     const span = solved.parts.find((p) => p.id === "prp_span")!;
     // gap 1..4 plus the 1mm embed at each end.
     expect(span.size[0]).toBeCloseTo(3 + 2 * MIN_CONTACT, 6);
+  });
+});
+
+describe("the part ceiling applies to every path that mints parts", () => {
+  it("stops a scatter from growing the scene past MAX_PARTS", () => {
+    // The ceiling was checked before REPEAT expansion and nowhere else, so a
+    // scene could pass the documented limit through scatter without a word.
+    // It exists because a runaway generator is a bug, not a world — and a
+    // ceiling that only guards one of two minting paths is not a ceiling.
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_ground", size: [500, 500, 0.1] },
+        { id: "prp_pebble", size: [0.1, 0.1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_ground", center: [0, 0, 0.05] },
+        { type: "scatter", part: "prp_pebble", on: "prp_ground", count: 600, seed: 1 },
+      ],
+    } as SceneSpec;
+    const solved = solveScene(spec);
+    const limit = solved.diagnostics.filter((d) => d.code === "SOLVE-LIMIT");
+    expect(limit.length).toBeGreaterThan(0);
+    expect(limit[0]!.message).toContain("ceiling is");
+    // ...and it is reported ONCE for the one authored decision, not per instance.
+    expect(limit).toHaveLength(1);
+    expect(solved.parts.length).toBeLessThanOrEqual(MAX_PARTS);
+  });
+
+  it("leaves a scatter that fits alone", () => {
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_ground", size: [50, 50, 0.1] },
+        { id: "prp_pebble", size: [0.1, 0.1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_ground", center: [0, 0, 0.05] },
+        { type: "scatter", part: "prp_pebble", on: "prp_ground", count: 12, seed: 1 },
+      ],
+    } as SceneSpec;
+    const solved = solveScene(spec);
+    expect(solved.diagnostics.filter((d) => d.code === "SOLVE-LIMIT")).toEqual([]);
+    expect(solved.parts).toHaveLength(13);
   });
 });

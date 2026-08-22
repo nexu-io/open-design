@@ -7,6 +7,9 @@ import { measureSheet } from "../src/sheet/measure.js";
 import { collectSheets } from "../src/sheet/collect.js";
 import { lintSheets, SheetSpec } from "../src/lint/sheet.js";
 import { Issue } from "../src/types.js";
+import { runLint } from "../src/lint/rules.js";
+import { normalizeContract, validateContract } from "../src/contract.js";
+import { ISSUE_CODES } from "../src/errors.js";
 
 /* ------------------------------------------------------------------ */
 /* Generated fixtures. The corpus is code, not committed binaries, so   */
@@ -491,5 +494,48 @@ describe("measureSheet", () => {
       }
     }
     expect(measureSheet("fan.png", img, { grid: [2, 2] }).cells!.distinct).toBe(4);
+  });
+});
+
+describe("sheet thresholds are contract data", () => {
+  // Every other lint family takes its thresholds from the contract. This one
+  // only LOOKED like it did: `SheetLintInput.maxDimension` existed, the
+  // comment beside the constant invited users to "reach for the override",
+  // and nothing in the pipeline ever set it — there was no contract field to
+  // set it FROM. So the check went through runLint, which is where the wiring
+  // was dead, rather than through lintSheets, which was always fine.
+  const sheetInput = (dir: string, specs: SheetSpec[]) => {
+    const collected = collectSheets(dir, specs);
+    return { ...collected, specs };
+  };
+
+  it("honours a project's own sheet size cap", () => {
+    const dir = tempDir();
+    // 64px: far under the 4096 default, so only a real override can flag it.
+    write(dir, "s.png", skyFace(64, [200, 200, 200]));
+    const specs: SheetSpec[] = [{ file: "s.png", kind: "sprite" }];
+
+    const permissive: Issue[] = runLint({
+      contract: normalizeContract({ schemaVersion: 1 }),
+      sheets: sheetInput(dir, specs),
+    });
+    expect(permissive.map((i) => i.code)).not.toContain(ISSUE_CODES.SHEET_TOO_LARGE);
+
+    const strict: Issue[] = runLint({
+      contract: normalizeContract({
+        schemaVersion: 1,
+        conventions: { sheets: { maxDimension: 32 } },
+      }),
+      sheets: sheetInput(dir, specs),
+    });
+    expect(strict.map((i) => i.code)).toContain(ISSUE_CODES.SHEET_TOO_LARGE);
+    expect(strict.find((i) => i.code === ISSUE_CODES.SHEET_TOO_LARGE)!.message).toContain("32px");
+  });
+
+  it("rejects a malformed sheet threshold rather than silently ignoring it", () => {
+    // The whole point of the field being declared in the schema table.
+    expect(
+      validateContract({ schemaVersion: 1, conventions: { sheets: { maxDimension: "big" } } }),
+    ).toContain("conventions.sheets.maxDimension must be a positive integer");
   });
 });

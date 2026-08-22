@@ -130,6 +130,19 @@ export interface Scene3dContract {
       maxOverhangAreaFraction?: number;
     };
     /**
+     * Thresholds for the 2D sheet rules (S3D-*-6xx). Distinct from the
+     * top-level `sheets` array, which DECLARES the sheets; this tunes how
+     * they are judged. Defaults live in lint/sheet.ts beside their rationale.
+     */
+    sheets?: {
+      /** Largest edge a sheet may have (px). */
+      maxDimension?: number;
+      /** Mean channel difference above which a tiling seam counts as broken. */
+      seamTolerance?: number;
+      /** Brightest channel a dark border may carry on an additive sheet. */
+      additiveBorderMax?: number;
+    };
+    /**
      * Scene-coherence tuning. `outlierZ` is the robust z-score (median + MAD,
      * log scale) beyond which a part's size or triangle density is flagged as a
      * distribution outlier — a likely unit slip or an LOD absurdity. Default is
@@ -733,7 +746,14 @@ export interface ProofFrameStats {
 export interface Census {
   blenderVersion: string;
   sceneName: string;
-  upAxis: "Y" | "Z";
+  /* NOTE: there is deliberately no `upAxis` here. The census is measured in
+     Blender's own space, which is Z-up, always — the field used to exist and
+     was hardcoded to "Y" by the runner while every world-space fact beside it
+     (worldMin/worldMax, groundGap, contacts, z-fighting axes) was raw Z-up.
+     Nothing read it, so nothing was wrong today; a future reader trusting it
+     would have been wrong twice. The real up-axis comparison is against the
+     EXPORTED stage's header (lint/stage.ts, lint/units.ts), which is where a
+     mismatch can actually exist. */
   objects: CensusObject[];
   meshes: CensusMesh[];
   materials: CensusMaterial[];

@@ -48,7 +48,6 @@ describe("lint: pbr/topology/integrity over census", () => {
   const census = (patch: Partial<Census>): Census => ({
     blenderVersion: "5.0.1",
     sceneName: "Scene",
-    upAxis: "Y",
     objects: [
       {
         name: "prp_cube",

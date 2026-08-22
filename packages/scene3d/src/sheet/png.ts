@@ -88,6 +88,25 @@ export function decodePng(buffer: Uint8Array): DecodedImage {
     throw new PngDecodeError("PNG is truncated — no IEND chunk");
   }
   if (width <= 0 || height <= 0) throw new PngDecodeError("PNG has no valid IHDR");
+  // IHDR is UNTRUSTED: width and height are two attacker-chosen uint32s, and
+  // every allocation below is derived from them. Without this, a few hundred
+  // bytes declaring 65535x65535 reserves ~17 GB in `toRgba` alone, and a
+  // decompression bomb in IDAT does the same through `inflateSync` — both
+  // before any rule in this package gets to judge the sheet's size. An
+  // out-of-memory abort is not a catchable exception, so the try/catch below
+  // cannot turn it into SHEET_UNREADABLE the way it does for every other
+  // malformed input; the process simply dies.
+  //
+  // 16384 is the largest edge any target runtime loads (Godot's Basis limit,
+  // and the ceiling `conventions.sheets.maxDimension` is documented against),
+  // so nothing legitimate is refused here. This is a decoder guard, not a
+  // policy: S3D-E-604 still judges whether a loadable sheet is too big.
+  const MAX_EDGE = 16384;
+  if (width > MAX_EDGE || height > MAX_EDGE) {
+    throw new PngDecodeError(
+      `PNG declares ${width}x${height}, over the ${MAX_EDGE}px decoder limit — no runtime loads this`,
+    );
+  }
   if (interlace !== 0) throw new PngDecodeError("interlaced PNG is not supported");
   if (idat.length === 0) throw new PngDecodeError("PNG has no image data");
 
@@ -101,10 +120,19 @@ export function decodePng(buffer: Uint8Array): DecodedImage {
   // a leaked internal error — which keeps SHEET_UNREADABLE the single outcome
   // for any unreadable sheet (found by fuzzing).
   try {
-    const raw = zlib.inflateSync(Buffer.concat(idat.map((chunk) => Buffer.from(chunk))));
     const bitsPerPixel = channels * depth;
     const bytesPerPixel = Math.max(1, bitsPerPixel >> 3);
     const bytesPerRow = Math.ceil((bitsPerPixel * width) / 8);
+    // Bound the inflate by what the declared image can possibly need: one
+    // filter byte per row plus its pixels. A stream that keeps going past that
+    // is a bomb or a corrupt file, and either way the excess would be
+    // discarded — so refuse it instead of allocating it. zlib raises on
+    // overflow, which the catch below turns into SHEET_UNREADABLE like any
+    // other malformed sheet.
+    const maxOutputLength = (bytesPerRow + 1) * height;
+    const raw = zlib.inflateSync(Buffer.concat(idat.map((chunk) => Buffer.from(chunk))), {
+      maxOutputLength,
+    });
 
     const unfiltered = unfilter(raw, height, bytesPerRow, bytesPerPixel);
     return {

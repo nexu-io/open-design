@@ -482,7 +482,6 @@ describe("lintClaims", () => {
     ({
       blenderVersion: "5.0",
       sceneName: "Scene",
-      upAxis: "Z",
       objects: [],
       meshes: [],
       materials: [],

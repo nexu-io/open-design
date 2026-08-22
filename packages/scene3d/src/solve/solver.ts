@@ -365,6 +365,21 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
     const base = solved.find((p) => p.id === plan.relation.part);
     if (!base) continue;
     const declared = new Set(parts.keys());
+    // The scene-wide ceiling applies to every path that MINTS parts, not just
+    // to repeat. It was checked before repeat expansion and nowhere else, so a
+    // scene could pass the documented limit through scatter without a word —
+    // and the limit exists precisely because a runaway generator is a bug, not
+    // a world. Reported once per relation rather than per instance: the author
+    // made one decision.
+    const room = MAX_PARTS - solved.length;
+    if (plan.rest.length > room) {
+      diagnostics.push({
+        code: "SOLVE-LIMIT",
+        message: `scatter on '${plan.relation.part}' would grow the scene to ${solved.length + plan.rest.length} parts — the ceiling is ${MAX_PARTS}`,
+        part: plan.relation.part,
+      });
+      continue;
+    }
     plan.rest.forEach((placement, index) => {
       const id = `${plan.relation.part}_${index + 2}`;
       if (declared.has(id) || solved.some((p) => p.id === id)) {

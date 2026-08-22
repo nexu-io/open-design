@@ -76,6 +76,7 @@ export const CONTRACT_CONTAINERS = [
   "conventions.minecraft",
   "conventions.minecraft.elementBounds",
   "conventions.minecraft.grid",
+  "conventions.sheets",
   "conventions.coherence",
   "proof",
   "export",
@@ -175,6 +176,11 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
   { path: "conventions.minecraft.grid.size", kind: "number", min: 0, exclusiveMin: true },
   { path: "conventions.minecraft.grid.tolerance", kind: "number", min: 0 },
   { path: "conventions.minecraft.pxPerBlock", kind: "number", min: 0, exclusiveMin: true },
+
+  /* 2D sheet rules */
+  { path: "conventions.sheets.maxDimension", kind: "number", min: 1, integer: true },
+  { path: "conventions.sheets.seamTolerance", kind: "number", min: 0, max: 255 },
+  { path: "conventions.sheets.additiveBorderMax", kind: "number", min: 0, max: 255 },
 
   /* coherence — was normalized but never validated */
   { path: "conventions.coherence.outlierZ", kind: "number", min: 0, exclusiveMin: true },

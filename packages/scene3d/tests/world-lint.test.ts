@@ -9,7 +9,6 @@ function census(
   return {
     blenderVersion: "5.0.1",
     sceneName: "Scene",
-    upAxis: "Y",
     objects: objects.map((o) => ({
       name: o.name,
       type: o.type ?? "MESH",

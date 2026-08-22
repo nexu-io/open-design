@@ -52,20 +52,38 @@ export interface SheetLintInput {
   missing?: string[];
   /** Files that were found but failed to decode, with the reason. */
   unreadable?: Map<string, string>;
+  /** Largest edge a sheet may have. From `conventions.sheets` — every other
+   *  lint family takes its thresholds from the contract, and this one only
+   *  looked like it did: the field existed, nothing ever set it. */
   maxDimension?: number;
   /** Mean channel difference above which a seam counts as broken. */
   seamTolerance?: number;
+  /** Brightest channel a dark border may carry before it reads as a lit
+   *  rectangle once summed additively. */
+  additiveBorderMax?: number;
 }
 
-// 4096 is the production ceiling: UE Niagara and Effekseer routinely bake
-// 2048–4096² flipbooks, so a 1024 default flags real work and trains users
-// to reach for the override. 16384 is the hard cap several runtimes impose
-// (Godot's Basis limit); above it the texture simply will not load.
-const DEFAULT_MAX_DIMENSION = 4096;
-const DEFAULT_SEAM_TOLERANCE = 6;
-// Brightest channel a dark border may carry before it reads as a lit
-// rectangle once summed additively. Small, but above dither and codec noise.
-const ADDITIVE_BORDER_MAX = 24;
+/**
+ * Defaults for the 2D sheet rules, in ONE place so the contract and this
+ * module cannot drift apart. `normalizeContract` reads them for
+ * `conventions.sheets`; the `??` below is for direct callers (tests).
+ *
+ * 4096 is the production ceiling: UE Niagara and Effekseer routinely bake
+ * 2048–4096² flipbooks, so a 1024 default would flag real work. 16384 is the
+ * hard cap several runtimes impose (Godot's Basis limit); above it the texture
+ * simply will not load. The additive border max is small but above dither and
+ * codec noise.
+ *
+ * These used to be module constants with an override field nothing ever
+ * populated — the comment invited users to "reach for the override" that did
+ * not exist, and this was the one lint family in the range that judged by a
+ * number the project could not set.
+ */
+export const SHEET_DEFAULTS = {
+  maxDimension: 4096,
+  seamTolerance: 6,
+  additiveBorderMax: 24,
+} as const;
 
 type Edge = "top" | "bottom" | "left" | "right";
 
@@ -102,8 +120,9 @@ const CUBE_SEAMS: Array<{ a: SheetSpec["face"]; aEdge: Edge; b: SheetSpec["face"
 ];
 
 export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
-  const maxDimension = input.maxDimension ?? DEFAULT_MAX_DIMENSION;
-  const seamTolerance = input.seamTolerance ?? DEFAULT_SEAM_TOLERANCE;
+  const maxDimension = input.maxDimension ?? SHEET_DEFAULTS.maxDimension;
+  const seamTolerance = input.seamTolerance ?? SHEET_DEFAULTS.seamTolerance;
+  const additiveBorderMax = input.additiveBorderMax ?? SHEET_DEFAULTS.additiveBorderMax;
 
   for (const file of input.missing ?? []) {
     issues.push({
@@ -193,7 +212,7 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
 
     // The compensating check for the E-606 opt-out: additive summing turns a
     // bright border into a visible lit rectangle at the quad's edge.
-    if (additive && m.borderMaxLuminance > ADDITIVE_BORDER_MAX) {
+    if (additive && m.borderMaxLuminance > additiveBorderMax) {
       issues.push({
         code: ISSUE_CODES.SHEET_ADDITIVE_BRIGHT_BORDER,
         severity: "warning",

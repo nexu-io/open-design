@@ -160,6 +160,11 @@ export const ISSUE_CODES = {
   SUNK_BELOW_GROUND: "S3D-E-325",
   MESH_BUDGET: "S3D-E-326",
   SCENE_BUDGET: "S3D-W-326",
+  /* Triangle budgets were judged from FACE counts because this census carries
+     no triangle counts — an n-gon mesh reads smaller than it is, so a budget
+     can pass a scene that breaks it. The check still runs; it says it
+     approximated rather than leaving that silent. */
+  TRIANGLE_COUNT_APPROXIMATE: "S3D-W-335",
 
   /* lint: exported stage (400-419) — checks the artifact we SHIP, not the
      scene we built. Everything above validates the Blender scene; these

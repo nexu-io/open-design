@@ -30,7 +30,6 @@ function census(meshes: CensusMesh[], extra: Partial<Census> = {}): Census {
   return {
     blenderVersion: "5.0.1",
     sceneName: "Scene",
-    upAxis: "Y",
     objects: [],
     meshes,
     materials: [],

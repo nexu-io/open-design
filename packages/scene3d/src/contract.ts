@@ -1,5 +1,6 @@
 import { Budget, EngineTarget, Scene3dContract } from "./types.js";
 import { validateFields } from "./contract-schema.js";
+import { SHEET_DEFAULTS } from "./lint/sheet.js";
 
 type Conventions = NonNullable<Scene3dContract["conventions"]>;
 
@@ -185,6 +186,9 @@ export interface NormalizedContract {
     requireAppliedScale: boolean;
   };
   sheets: NonNullable<Scene3dContract["sheets"]>;
+  /** Thresholds for the 2D sheet rules — contract data like every other lint
+   *  family's, rather than module constants with a dead override field. */
+  sheetRules: { maxDimension: number; seamTolerance: number; additiveBorderMax: number };
   /** Deliverable containers the export stage emits. */
   exportFormats: Array<"usda" | "usdz" | "glb" | "obj" | "fbx" | "stl" | "ply">;
   /** LOD triangle-keep ratios (0,1); empty = no LOD variants. */
@@ -373,6 +377,14 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       requireAppliedScale: boolOr(geo.requireAppliedScale, true),
     },
     sheets: asArray(c.sheets, []) as NonNullable<Scene3dContract["sheets"]>,
+    sheetRules: {
+      maxDimension: numOr(c.conventions?.sheets?.maxDimension, SHEET_DEFAULTS.maxDimension),
+      seamTolerance: numOr(c.conventions?.sheets?.seamTolerance, SHEET_DEFAULTS.seamTolerance),
+      additiveBorderMax: numOr(
+        c.conventions?.sheets?.additiveBorderMax,
+        SHEET_DEFAULTS.additiveBorderMax,
+      ),
+    },
     // USD is the interchange stage, GLB the web-viewer mesh; both ship by
     // default so neither the author nor the agent ever has to think about
     // containers. Projects with a different delivery policy override here.

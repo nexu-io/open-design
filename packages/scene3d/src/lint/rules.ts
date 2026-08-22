@@ -70,7 +70,9 @@ export function runLint(input: LintInput): Issue[] {
   lintIntegrity(ctx, issues);
   lintWorld(input.contract, input.census, issues);
   lintVoxel(input.contract, input.census, issues, input.solved);
-  if (input.sheets) lintSheets(input.sheets, issues);
+  // Thresholds come from the contract, not from whatever the caller happened
+  // to build, so the sheet family is tunable like every other one.
+  if (input.sheets) lintSheets({ ...input.sheets, ...input.contract.sheetRules }, issues);
   if (input.claims) {
     lintClaims(input.claims, input.census, issues, {
       groundTolerance: input.contract.grounding.tolerance,

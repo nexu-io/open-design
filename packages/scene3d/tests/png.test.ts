@@ -110,3 +110,99 @@ describe("decodePng chroma-key transparency (tRNS)", () => {
     expect(out[7]).toBe(255);
   });
 });
+
+describe("decodePng refuses what it cannot safely allocate", () => {
+  /** A PNG header declaring any dimensions, with a tiny IDAT. */
+  function headerOnly(width: number, height: number): Uint8Array {
+    const crcTable = Array.from({ length: 256 }, (_, n) => {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      return c >>> 0;
+    });
+    const crc = (buf: Buffer): number => {
+      let c = 0xffffffff;
+      for (const b of buf) c = crcTable[(c ^ b) & 0xff]! ^ (c >>> 8);
+      return (c ^ 0xffffffff) >>> 0;
+    };
+    const chunk = (type: string, data: Buffer): Buffer => {
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(data.length);
+      const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+      const tail = Buffer.alloc(4);
+      tail.writeUInt32BE(crc(body));
+      return Buffer.concat([len, body, tail]);
+    };
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr[8] = 8;
+    ihdr[9] = 6; // RGBA
+    return new Uint8Array(
+      Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        chunk("IHDR", ihdr),
+        chunk("IDAT", zlib.deflateSync(Buffer.alloc(16))),
+        chunk("IEND", Buffer.alloc(0)),
+      ]),
+    );
+  }
+
+  it("rejects dimensions no runtime could load, before allocating for them", () => {
+    // IHDR is two attacker-chosen uint32s and every allocation derives from
+    // them: 65535x65535 reserves ~17GB in toRgba alone. An out-of-memory abort
+    // is not a catchable exception, so the decoder's own try/catch cannot turn
+    // it into SHEET_UNREADABLE — the process just dies. A few hundred bytes
+    // should not be able to do that.
+    expect(() => decodePng(headerOnly(65535, 65535))).toThrow(PngDecodeError);
+    expect(() => decodePng(headerOnly(65535, 65535))).toThrow(/decoder limit/);
+  });
+
+  it("still accepts the largest sheet a runtime does load", () => {
+    // The guard must not become a policy: 16384 is Godot's Basis limit and the
+    // ceiling conventions.sheets.maxDimension is documented against, so the
+    // decoder allows it and S3D-E-604 decides whether it is too big.
+    const img = { width: 4, height: 4, data: new Uint8Array(4 * 4 * 4).fill(255) };
+    expect(decodePng(encodePng(img)).width).toBe(4);
+    expect(() => decodePng(headerOnly(16384, 1))).not.toThrow(/decoder limit/);
+  });
+
+  it("refuses an IDAT that inflates past what the image can hold", () => {
+    // A decompression bomb: a small IDAT that expands far beyond the declared
+    // image. The excess would be discarded anyway, so allocating it is pure
+    // loss — and it is exactly how a sheet takes the process down.
+    const bomb = zlib.deflateSync(Buffer.alloc(4 * 1024 * 1024));
+    const crcTable = Array.from({ length: 256 }, (_, n) => {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      return c >>> 0;
+    });
+    const crc = (buf: Buffer): number => {
+      let c = 0xffffffff;
+      for (const b of buf) c = crcTable[(c ^ b) & 0xff]! ^ (c >>> 8);
+      return (c ^ 0xffffffff) >>> 0;
+    };
+    const chunk = (type: string, data: Buffer): Buffer => {
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(data.length);
+      const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+      const tail = Buffer.alloc(4);
+      tail.writeUInt32BE(crc(body));
+      return Buffer.concat([len, body, tail]);
+    };
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(2, 0);
+    ihdr.writeUInt32BE(2, 4);
+    ihdr[8] = 8;
+    ihdr[9] = 6;
+    const png = new Uint8Array(
+      Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        chunk("IHDR", ihdr),
+        chunk("IDAT", bomb),
+        chunk("IEND", Buffer.alloc(0)),
+      ]),
+    );
+    // Reported as an unreadable sheet, like any other malformed input.
+    expect(() => decodePng(png)).toThrow(PngDecodeError);
+  });
+});

@@ -3,6 +3,7 @@ import { ISSUE_CODES } from "../errors.js";
 import type { ClaimsSpec } from "../solve/types.js";
 import { isExempt } from "./exempt.js";
 import { groundVerdict } from "../solve/contact.js";
+import { triangleTotals, trianglesAreExact } from "./triangles.js";
 
 /**
  * Adjudicate a spec's `claims` block against the measured census.
@@ -85,11 +86,13 @@ export function lintClaims(
   }
 
   if (claims.maxTriangles !== undefined) {
-    const measured = census.meshes.map((m) => m.tris);
-    if (measured.some((t) => t === undefined)) {
+    // A CLAIM is the strongest statement a compile makes, so unlike the budget
+    // rule it will not adjudicate on an approximation — but both now ask the
+    // same shared computation whether one was needed (lint/triangles.ts).
+    if (!trianglesAreExact(census)) {
       unchecked("maxTriangles", "this census does not carry triangle counts");
     } else {
-      const total = measured.reduce<number>((sum, t) => sum + (t ?? 0), 0);
+      const total = triangleTotals(census).total;
       if (total > claims.maxTriangles) {
         fail("maxTriangles", `the built scene has ${total} triangles, over the claimed ${claims.maxTriangles}`, {
           expected: claims.maxTriangles,
