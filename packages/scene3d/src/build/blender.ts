@@ -181,6 +181,39 @@ export interface RunnerJob {
   assetName?: string;
 }
 
+/**
+ * What compiled this — package version plus a hash of the runner script.
+ *
+ * A daemon holds `dist` in memory and the runner is read from disk per job,
+ * so a long-lived process can be enforcing rules whose message text no longer
+ * exists in the checkout. An agent reading a report has no way to tell that
+ * from current behaviour, and neither does the next reader of the transcript:
+ * a rule that "vanished next run" reads as flakiness rather than as the stale
+ * process it was. Stamping both numbers makes drift a fact somebody can see.
+ */
+export function compilerIdentity(): { version: string; runner: string } {
+  let version = "unknown";
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(scriptsDir(), "..", "package.json"), "utf8"),
+    ) as { version?: string };
+    if (pkg.version) version = pkg.version;
+  } catch {
+    /* An unreadable manifest is not worth failing a compile over; the runner
+       hash below still identifies the half that actually drifts. */
+  }
+  let runner = "unknown";
+  try {
+    runner = crypto.createHash("sha256")
+      .update(fs.readFileSync(runnerPath()))
+      .digest("hex")
+      .slice(0, 12);
+  } catch {
+    /* Same reasoning. */
+  }
+  return { version: version, runner: runner };
+}
+
 /** Run a job through the headless Blender runner with sentinel framing. */
 export async function runRunner(
   probe: BlenderProbe,

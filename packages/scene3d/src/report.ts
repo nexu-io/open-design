@@ -1,4 +1,8 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { CompileResult, Issue, Severity } from "./types.js";
+import { ISSUE_CODES } from "./errors.js";
+import { formatAsciiFrame, renderAsciiFrame } from "./read/ascii.js";
 import { formatImpact } from "./read/impact.js";
 import { assessVerdict, type Verdict } from "./verdict.js";
 
@@ -20,12 +24,38 @@ import { assessVerdict, type Verdict } from "./verdict.js";
  * byte-stability is what lets the model tell "my edit was a no-op" from "my
  * edit landed", which the `delta:` line then states outright.
  */
-export function renderAgentReport(result: CompileResult): string {
+/** Codes whose whole subject is what the frame LOOKS like. When one of these
+ *  fires, prose has already failed to convey the problem — that is why the
+ *  rule exists — so the report shows the frames instead of describing them. */
+const PROOF_CODES: ReadonlySet<string> = new Set<string>([
+  ISSUE_CODES.EMPTY_PROOF,
+  ISSUE_CODES.PARTIAL_EMPTY_PROOF,
+  ISSUE_CODES.OVEREXPOSED_PROOF,
+  ISSUE_CODES.SPARSE_PROOF,
+  ISSUE_CODES.STATIC_TURNTABLE,
+]);
+
+export interface ReportOptions {
+  /** Where the proof frames live, so they can be rendered as text. Without it
+   *  the report is exactly what it was; frames are an enrichment, never a
+   *  dependency. */
+  projectDir?: string;
+  /** Show the frames even when nothing is wrong with them. */
+  alwaysShowFrames?: boolean;
+}
+
+export function renderAgentReport(result: CompileResult, options: ReportOptions = {}): string {
   const lines: string[] = [];
   const { errors, warnings, infos } = result.summary;
 
   lines.push(`<scene3d-report ok="${result.ok}" errors="${errors}" warnings="${warnings}">`);
   lines.push(`source: ${result.source.kind} (${result.source.files.join(", ") || "none"})`);
+  // WHAT compiled this, on the line above the findings. A stale daemon
+  // enforcing a rule the checkout no longer has is indistinguishable from
+  // current behaviour without it, and an agent that cannot tell those
+  // apart cannot trust any finding it reads.
+  const built = result.manifest.compiler;
+  if (built) lines.push(`compiler: scene3d@${built.version} runner:${built.runner}`);
   // Stage status without durations: `ran`/`cached` carries the only bit the
   // agent decides on (did anything rebuild), and it stays stable across runs
   // where a millisecond count would not — see the determinism note above.
@@ -60,6 +90,7 @@ export function renderAgentReport(result: CompileResult): string {
   if (result.exportedAssets.length > 0) {
     lines.push(`assets: ${result.exportedAssets.join(", ")}`);
   }
+  appendFrames(lines, result, options);
 
   /* The user's viewport edits, surfaced to the agent — the other half of
      the co-studio loop. A human dragging a part or restyling a material in
@@ -123,6 +154,49 @@ export function renderAgentReport(result: CompileResult): string {
  *   - changed → the consequence-first impact block, capped so the broken-
  *     support lines can never be pushed below the fold
  */
+
+/**
+ * The proof frames, as text, when the report is about what they look like.
+ *
+ * A model reading this may have no way to open a PNG — several runtimes have
+ * no image input at all — so "every proof frame rendered empty" is a verdict
+ * about evidence the reader cannot reach. One field run answered that by
+ * writing its own luminance sampler mid-task, which then located a real defect
+ * class the pixel-free report had never mentioned. This puts the same eyes in
+ * the report, from the same decoder the sheet linter already uses.
+ *
+ * Gated on a proof finding by default, because eight ramps in every successful
+ * compile is noise, and the cost is real: each frame is decoded and sampled.
+ * `alwaysShowFrames` is there for a caller who has decided otherwise.
+ *
+ * A frame that cannot be read is SAID, not skipped — a silently absent ramp
+ * would read as "the frame was fine".
+ */
+function appendFrames(lines: string[], result: CompileResult, options: ReportOptions): void {
+  if (!options.projectDir || result.proofImages.length === 0) return;
+  const wanted =
+    options.alwaysShowFrames === true || result.issues.some((i) => PROOF_CODES.has(i.code));
+  if (!wanted) return;
+
+  // Bounded: a turntable is eight frames and a report is a context window.
+  const shown = result.proofImages.slice(0, MAX_ASCII_FRAMES);
+  lines.push("");
+  lines.push(
+    `frames (${shown.length} of ${result.proofImages.length}, ${ASCII_COLUMNS} cols, ' ' dark -> '@' lit):`,
+  );
+  for (const rel of shown) {
+    try {
+      const png = fs.readFileSync(path.join(options.projectDir, rel));
+      lines.push(formatAsciiFrame(path.basename(rel), renderAsciiFrame(png, { columns: ASCII_COLUMNS })));
+    } catch (err: any) {
+      lines.push(`${path.basename(rel)}  could not be read: ${err?.message ?? String(err)}`);
+    }
+  }
+}
+
+const MAX_ASCII_FRAMES = 4;
+const ASCII_COLUMNS = 48;
+
 function appendDelta(lines: string[], result: CompileResult): void {
   const impact = result.impact;
   lines.push("");

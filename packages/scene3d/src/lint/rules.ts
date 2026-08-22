@@ -127,7 +127,18 @@ export function runLint(input: LintInput): Issue[] {
   // Last, over the finished set: a finding about somebody else's asset is a
   // note, not a defect its new owner must fix — but it is still SAID. Runs
   // after every rule so no module has to know about provenance.
-  applyImportedPosture(issues, imported, input.authoredBlocks ?? new Set());
+  // Which objects wear each material, so a material-scoped relaxation can
+  // ask whether everything using it is imported. Built from the census the
+  // rules already read, not from a second source of truth.
+  const materialUsers = new Map<string, Set<string>>();
+  for (const mesh of input.census?.meshes ?? []) {
+    for (const material of mesh.materials ?? []) {
+      const users = materialUsers.get(material) ?? new Set<string>();
+      users.add(mesh.object);
+      materialUsers.set(material, users);
+    }
+  }
+  applyImportedPosture(issues, imported, input.authoredBlocks ?? new Set(), materialUsers);
 
   const seen = new Set<string>();
   const deduped: Issue[] = [];

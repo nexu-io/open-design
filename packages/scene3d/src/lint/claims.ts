@@ -2,7 +2,7 @@ import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import type { ClaimsSpec } from "../solve/types.js";
 import { isExempt } from "./exempt.js";
-import { groundVerdict } from "../solve/contact.js";
+import { groundVerdict, nearestSupportBelow } from "../solve/contact.js";
 import { triangleTotals, trianglesAreExact } from "./triangles.js";
 
 /**
@@ -131,10 +131,26 @@ export function lintClaims(
       // opinion, imposed.
       const gap = mesh.spatial.groundGap;
       if (groundVerdict(gap, TOLERANCE) === "sunk") {
-        fail("grounded", `'${mesh.object}' sinks ${(-gap).toFixed(4)}m below the ground plane`, {
-          target: mesh.object,
-          groundGap: gap,
-        });
+        // Name what is under it. A grounding verdict without the neighbouring
+        // surface tells the author THAT the arithmetic failed and nothing
+        // about which pair produced it, so the next step is reading the
+        // solver's own source to learn what the support predicate even is.
+        // The census already measured every contact; `nearestSupportBelow` is
+        // the one predicate both this and the world linter's S3D-W-325 ask,
+        // so the two agree about what "under" means by construction.
+        const support = nearestSupportBelow(census, mesh.object);
+        const beneath = support
+          ? ` — nearest surface below is '${support.name}', ${support.gap >= 0 ? "a" : "an overlap of"} ${Math.abs(support.gap).toFixed(4)}m ${support.gap >= 0 ? "clear" : "deep"}`
+          : " — nothing measured beneath it";
+        fail(
+          "grounded",
+          `'${mesh.object}' sinks ${(-gap).toFixed(4)}m below the ground plane${beneath}`,
+          {
+            target: mesh.object,
+            groundGap: gap,
+            ...(support ? { supportBelow: support.name, supportGap: support.gap } : {}),
+          },
+        );
       }
     }
   }

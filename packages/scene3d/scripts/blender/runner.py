@@ -655,6 +655,69 @@ def probe_nonfinite_readback():
         return None
 
 
+DRIVER_LOG_LINES = 20
+
+
+def capture_native_output(call):
+    """Run `call`, returning (result, error, text-the-process-printed).
+
+    Blender's GPU module compiles shaders in C and prints the DRIVER's log —
+    the line numbers, the actual GLSL error — to the process's stdout. The
+    Python exception that surfaces says only "Shader Compile Error, see
+    console", so a rejected kernel reported nothing an author could act on:
+    the one thing that would identify the fault was written to a console
+    nobody was reading, and the report carried the useless half.
+
+    Captured at the FILE DESCRIPTOR, not sys.stdout, because the writer is
+    native code that never touches Python's stream objects. The runner's own
+    result payload also travels on fd 1, so the redirect is scoped tightly
+    around the call and restored in a finally — a leaked redirect would eat
+    the compile's output entirely.
+    """
+    import tempfile
+    saved_out = os.dup(1)
+    saved_err = os.dup(2)
+    sink = tempfile.TemporaryFile()
+    result = None
+    error = None
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.dup2(sink.fileno(), 1)
+        os.dup2(sink.fileno(), 2)
+        try:
+            result = call()
+        except Exception as exc:
+            error = exc
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.dup2(saved_out, 1)
+            os.dup2(saved_err, 2)
+    finally:
+        os.close(saved_out)
+        os.close(saved_err)
+    try:
+        sink.seek(0)
+        text = sink.read().decode("utf-8", "replace")
+    except Exception:
+        text = ""
+    finally:
+        sink.close()
+    return result, error, text
+
+
+def driver_log_tail(text):
+    """The part of a driver log worth putting in a report.
+
+    Tail, not head: GLSL logs lead with the source dump and END with the
+    diagnosis. Bounded because a driver can emit the whole shader back."""
+    lines = [ln.rstrip() for ln in (text or "").splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    return "\n".join(lines[-DRIVER_LOG_LINES:])
+
+
 def bake_shaders(job):
     """Compile, execute, scan, bake, and wire every declared shader."""
     shaders = job.get("shaders") or []
@@ -711,9 +774,29 @@ def bake_shaders(job):
                 info.push_constant(push_types[u["type"]], u["name"])
             info.vertex_source(spec["vertexSource"])
             info.fragment_source(spec["fragmentSource"])
-            shader = gpu.shader.create_from_info(info)
+            # Compiled WITHOUT the capture: redirecting the process's file
+            # descriptors is cheap but not free, and a scene with many shaders
+            # (or a fuzz run driving hundreds of compiles) would pay for it on
+            # every success to serve a log only failures need.
+            try:
+                shader = gpu.shader.create_from_info(info)
+            except Exception:
+                # It failed, so the log is now worth having: compile a second
+                # time with the driver's own output captured. The retry costs
+                # a rejected compile on a path that was already failing, and
+                # it is the only way to reach a message the C layer prints to
+                # a console rather than raising.
+                _retry, _err, driver_log = capture_native_output(
+                    lambda: gpu.shader.create_from_info(info))
+                raise
         except Exception as e:
-            fail("S3D-E-802", "shader '%s' failed to compile on the driver: %s" % (name, e))
+            tail = driver_log_tail(locals().get("driver_log", ""))
+            fail("S3D-E-802",
+                 "shader '%s' failed to compile on the driver: %s%s"
+                 % (name, e, ("\n" + tail) if tail else
+                    " (the driver printed no log; the kernel dialect allows "
+                    "straight-line math and the injected s3d_* helpers only — "
+                    "no user-defined functions, no loops)"))
 
         def draw_cell(out_index, t):
             """One GPU execution of the kernel; returns (size, size, 4)
@@ -1072,10 +1155,30 @@ def ensure_staging():
 
 
 def load_scene(job):
+    """Load whatever the job names, with the project directory as cwd ONLY
+    while the author's build script runs.
+
+    The chdir exists for that script: a hand-written `build.py` refers to its
+    own assets by relative path, and the generated `spec.build.py` inherits
+    the convention. It used to be permanent, and that made every runner
+    process hold the project directory open as its cwd for the whole job and
+    for as long as the process object survived afterwards.
+
+    On Windows that is not a theoretical cost. A directory whose cwd handle is
+    held cannot be removed while its FILES delete perfectly well — which is
+    exactly the signature of the "working directory is still locked" setup
+    failures this suite kept producing: every file in the tree deleted, every
+    directory node refused, and the whole thing cleared minutes later once the
+    process was finally reaped. Blaming the scanner, the harness, and a
+    long-dead zombie process all missed that the compiler itself was the one
+    standing in the doorway.
+
+    So the cwd is restored the moment the script is done, in a finally. Every
+    other path in this file is already absolute (`os.path.join(project_dir,
+    ...)`), so nothing else depended on it.
+    """
     import bpy
     project_dir = job.get("projectDir")
-    if project_dir:
-        os.chdir(project_dir)
     build_script = job.get("buildScript")
     usda_files = job.get("usdaFiles") or []
     blend_file = job.get("blendFile")
@@ -1091,12 +1194,26 @@ def load_scene(job):
         source = open(path, "r", encoding="utf-8").read()
         g = {"bpy": bpy, "bmesh": __import__("bmesh"), "mathutils": __import__("mathutils"),
              "math": math, "os": os, "json": json}
+        # The one place the project directory has to BE the cwd, and only for
+        # as long as the author's script is running — see this function's docs.
+        previous_cwd = os.getcwd()
         try:
-            with provenance(path) as origins:
-                exec(compile(source, path, "exec"), g)
-            PROVENANCE.update(origins)
-        except Exception:
-            fail("S3D-E-202", "build script raised: %s" % traceback.format_exc(limit=8))
+            if project_dir:
+                os.chdir(project_dir)
+            try:
+                with provenance(path) as origins:
+                    exec(compile(source, path, "exec"), g)
+                PROVENANCE.update(origins)
+            except Exception:
+                fail("S3D-E-202", "build script raised: %s" % traceback.format_exc(limit=8))
+        finally:
+            try:
+                os.chdir(previous_cwd)
+            except Exception:
+                # Nowhere to go back to is survivable; holding the project
+                # directory open is the thing worth avoiding, and any cwd
+                # other than the project's achieves it.
+                pass
     elif usda_files:
         for rel in usda_files:
             abs_path = os.path.join(project_dir or "", rel)
@@ -4323,5 +4440,34 @@ def main(argv):
         fail("S3D-E-202", "%s: %s\n%s" % (exc[0].__name__, exc[1], traceback.format_exc(limit=10)))
 
 
+def _exit_now(code):
+    """Leave the process, deterministically.
+
+    A job that has emitted its payload is finished, and `emit` flushes before
+    returning — but returning from main() hands control to the interpreter's
+    shutdown, and bpy's teardown (GPU context, worker threads, its own atexit
+    hooks) can take seconds or hang outright. A runner that lingers still owns
+    every handle it opened, which on Windows keeps the project directory
+    undeletable long after the compile the user was waiting for has finished:
+    the next build then fails to clear a working directory whose owner is a
+    process with no work left to do.
+
+    os._exit rather than sys.exit for the same reason — sys.exit unwinds and
+    runs those hooks, which is the part that hangs. Nothing is lost: stdout is
+    already flushed, and every artifact this runner produces is written and
+    closed before the payload announcing it goes out.
+    """
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(code)
+
+
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+    except SystemExit as exc:
+        _exit_now(exc.code if isinstance(exc.code, int) else 0)
+    _exit_now(0)

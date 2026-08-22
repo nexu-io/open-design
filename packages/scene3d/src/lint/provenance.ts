@@ -115,7 +115,26 @@ export const IMPORTED_RELAXATIONS: ReadonlyArray<{
   code: string;
   block: string;
   why: string;
+  /**
+   * What the finding's `target` NAMES. Object by default; a rule that reports
+   * a material has to be resolved through the meshes using it, because the
+   * imported set is a set of objects and a material name is never in it.
+   * Without this the posture silently skipped every material-scoped rule —
+   * not by deciding they should be enforced, but by never matching them.
+   */
+  subject?: "object" | "material";
 }> = [
+  {
+    code: ISSUE_CODES.DUPLICATE_MATERIALS,
+    block: "textures",
+    why: "an exporter's duplicate slots are the file's, not the scene's",
+    subject: "material",
+  },
+  {
+    code: ISSUE_CODES.UV_UNCHECKED,
+    block: "uv",
+    why: "the UV budget stopped short on geometry the author did not lay out",
+  },
   { code: ISSUE_CODES.NON_MANIFOLD, block: "geometry", why: "real game meshes are open by construction" },
   { code: ISSUE_CODES.LOOSE_GEOMETRY, block: "geometry", why: "imported scaffolding is the exporter's, not the author's" },
   { code: ISSUE_CODES.DOUBLE_VERTICES, block: "geometry", why: "split vertices are how UV and normal seams are shipped" },
@@ -174,6 +193,8 @@ export function applyImportedPosture(
   issues: Issue[],
   imported: ReadonlySet<string>,
   authoredBlocks: ReadonlySet<string>,
+  /** Material name -> the objects wearing it, for material-scoped rules. */
+  materialUsers: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
 ): void {
   if (imported.size === 0) return;
   for (let i = 0; i < issues.length; i++) {
@@ -182,9 +203,17 @@ export function applyImportedPosture(
     const rule = BY_CODE.get(issue.code);
     if (!rule || authoredBlocks.has(rule.block)) continue;
     if (issue.target === undefined) continue;
-    const subjects = subjectsOf(issue.target);
+    const named = subjectsOf(issue.target);
+    // A material is imported when everything WEARING it is. A material shared
+    // between an imported mesh and an authored one is the author's to fix —
+    // they chose to reuse it — so it stays a warning.
+    const subjects =
+      rule.subject === "material"
+        ? named.flatMap((m) => [...(materialUsers.get(m) ?? new Set<string>())])
+        : named;
+    if (subjects.length === 0) continue;
     if (!subjects.every((name) => imported.has(name))) continue;
-    const subject = subjects.length > 1 ? subjects.join(" and ") : subjects[0]!;
+    const subject = named.length > 1 ? named.join(" and ") : named[0]!;
     issues[i] = {
       ...issue,
       severity: "info",

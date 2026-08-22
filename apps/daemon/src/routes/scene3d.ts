@@ -159,7 +159,11 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
         proofImages: result.proofImages.map((p) => artifactRef(project.id, scenePath, p)),
         exportedAssets: result.exportedAssets.map((p) => artifactRef(project.id, scenePath, p)),
         blender: { available: probe !== null, version: probe?.version ?? null },
-        agentMessage: renderAgentReport(result),
+        // The scene dir lets the report render its proof frames as text.
+        // A model on this route may have no image input at all, so a
+        // verdict about what a frame looks like is otherwise a verdict
+        // about evidence the reader cannot reach.
+        agentMessage: renderAgentReport(result, { projectDir: sceneDir }),
       };
       res.json(response);
     } catch (err: any) {

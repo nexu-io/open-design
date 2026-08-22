@@ -42,3 +42,9 @@ export { collectSheets, type CollectedSheets } from "./sheet/collect.js";
 export { lintSheets, type SheetSpec, type SheetKind, type SheetLintInput } from "./lint/sheet.js";export { describeScene } from "./read/describe.js";
 export { changeImpact, formatImpact } from "./read/impact.js";
 export { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
+export {
+  renderAsciiFrame,
+  formatAsciiFrame,
+  type AsciiFrame,
+  type AsciiOptions,
+} from "./read/ascii.js";

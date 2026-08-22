@@ -43,9 +43,28 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
 
     // Shapes came out as real geometry, not boxes with labels: the sphere
     // and torus are far past box vertex counts, and every part is closed.
+    //
+    // Compared against a BOX rather than a fixed number. These once asserted
+    // >1000 verts, which was the old fixed 48x24 tessellation written down as
+    // a proxy for "is it curved" — so the assertion failed the moment segment
+    // counts began deriving from part size, while the geometry it was meant
+    // to police was perfectly correct.
     const byName = new Map(result.census!.meshes.map((m) => [m.object, m]));
-    expect(byName.get("prp_lamp")!.verts).toBeGreaterThan(1000);
-    expect(byName.get("prp_ring")!.verts).toBeGreaterThan(1000);
+    // Twice a box, which even the COARSEST curved primitive clears: at the
+    // minSegments floor a cylinder is 12+12 rim verts plus 2 cap centres. Any
+    // higher bound would be a statement about tessellation policy, which is
+    // the next assertion's job, not this one's.
+    const BOX_VERTS = 8;
+    for (const curved of ["prp_lamp", "prp_ring", "prp_column", "prp_finial"]) {
+      expect(byName.get(curved)!.verts, `${curved} should be curved geometry`).toBeGreaterThan(
+        BOX_VERTS * 2,
+      );
+    }
+    // And detail follows SIZE: the 0.5m ring carries more geometry than the
+    // 0.16m lamp, which is the tessellation policy itself — one chord
+    // tolerance, segment counts derived per part — rather than a count
+    // somebody chose. A fixed-segment emitter fails this.
+    expect(byName.get("prp_ring")!.verts).toBeGreaterThan(byName.get("prp_lamp")!.verts);
     for (const mesh of result.census!.meshes) {
       expect(mesh.nonManifoldEdges, `${mesh.object} is not watertight`).toBe(0);
       expect(mesh.ngons, `${mesh.object} has ngons`).toBe(0);

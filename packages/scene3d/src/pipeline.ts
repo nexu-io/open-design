@@ -357,6 +357,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           ...(spec.materials ? { materials: spec.materials } : {}),
           camera: spec.camera ?? true,
           ...(spec.light ? { light: spec.light } : {}),
+          tessellation: normalized.tessellation,
         });
         const generatedDir = path.join(request.projectDir, ".scene3d");
         fs.mkdirSync(generatedDir, { recursive: true });

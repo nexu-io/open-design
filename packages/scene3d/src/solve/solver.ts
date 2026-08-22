@@ -49,6 +49,8 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
   // Working state: centre per axis, plus which axes are pinned down so far.
   const center = new Map<string, [number | null, number | null, number | null]>();
   const size = new Map<string, Vec3>();
+  /** part -> what a `sits_on` placed it on. See SolvedPart.restsOn. */
+  const restsOn = new Map<string, string>();
   for (const part of spec.parts) {
     center.set(part.id, [null, null, null]);
     size.set(part.id, [...part.size] as Vec3);
@@ -123,6 +125,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
         const half = size.get(relation.part)![2] / 2;
         // Sink the part into its support: the faces overlap rather than touch.
         setAxis(relation.part, "z", support.max - embed + half, "sits_on");
+        restsOn.set(relation.part, relation.on);
         return true;
       }
 
@@ -266,6 +269,47 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
     }
   };
 
+  /**
+   * Lateral position for a part that rests on something and has been told
+   * nothing else about where it sits.
+   *
+   * `sits_on` resolves Z alone, which is right — resting says nothing about
+   * position along the surface. But a centred stack is the overwhelmingly
+   * common case, and expressing it meant an `align` beside every `sits_on`.
+   * Omitting one produced a cascade rather than an error: the unplaced part
+   * left everything above it unplaced too, so a single missing relation could
+   * report thirty failures and read as a broken scene.
+   *
+   * Run only when the fixpoint has STALLED, which is what makes it safe. Every
+   * explicit relation that can resolve has already resolved, so this can only
+   * touch an axis no relation constrains — an axis that would otherwise be
+   * null, on a part the compiler is about to reject. A scene that compiles
+   * today cannot reach here with anything left to inherit, and an explicit
+   * relation wins by having run first rather than by outranking anything.
+   */
+  const inheritFromSupport = (): boolean => {
+    let inherited = false;
+    for (const relation of spec.relations) {
+      const support =
+        relation.type === "sits_on" ? relation.on
+        : relation.type === "above" ? relation.over
+        : null;
+      if (support === null) continue;
+      const c = center.get(relation.part);
+      const s = center.get(support);
+      if (!c || !s) continue;
+      // Lateral only: inheriting Z would undo the offset `sits_on` computes,
+      // and `above` leaves its gap deliberately.
+      for (const axis of ["x", "y"] as const) {
+        const ai = AXES.indexOf(axis);
+        if (c[ai] !== null || s[ai] === null) continue;
+        c[ai] = s[ai];
+        inherited = true;
+      }
+    }
+    return inherited;
+  };
+
   /** Axes whose extent a span has already claimed, per part. */
   const spannedAxes = new Set<string>();
   /** Instances 2..N of each applied scatter, minted after the fixpoint. */
@@ -297,7 +341,11 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
         progressed = true;
       }
     }
-    if (!progressed) break;
+    // A stalled fixpoint is the only moment support inheritance may act:
+    // everything explicit has had its chance, so what remains unset is
+    // what nothing was said about. If it fills anything, the loop
+    // continues and the newly-placed support lets its dependents solve.
+    if (!progressed && !inheritFromSupport()) break;
   }
 
   // Post-fixpoint span defaulting (fable-5 Mechanism 3): `span from A to B` IS
@@ -353,6 +401,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
       ...(part.spin !== undefined ? { spin: part.spin } : {}),
       ...(part.bob !== undefined ? { bob: part.bob } : {}),
       ...(part.role !== undefined ? { role: part.role } : {}),
+      ...(restsOn.has(part.id) ? { restsOn: restsOn.get(part.id)! } : {}),
     });
   }
 

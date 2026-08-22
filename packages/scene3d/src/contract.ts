@@ -1,6 +1,7 @@
 import { Budget, EngineTarget, Scene3dContract } from "./types.js";
 import { validateFields } from "./contract-schema.js";
 import { SHEET_DEFAULTS } from "./lint/sheet.js";
+import { TESSELLATION_DEFAULTS, type Tessellation } from "./solve/emit-bpy.js";
 import { DEFAULT_PROOF_THRESHOLDS } from "./lint/proof.js";
 
 type Conventions = NonNullable<Scene3dContract["conventions"]>;
@@ -221,6 +222,8 @@ export interface NormalizedContract {
   /** Thresholds for the 2D sheet rules — contract data like every other lint
    *  family's, rather than module constants with a dead override field. */
   sheetRules: { maxDimension: number; seamTolerance: number; additiveBorderMax: number };
+  /** Chord tolerance and clamps for emitted primitives. */
+  tessellation: Tessellation;
   /** Deliverable containers the export stage emits. */
   exportFormats: Array<"usda" | "usdz" | "glb" | "obj" | "fbx" | "stl" | "ply">;
   /** LOD triangle-keep ratios (0,1); empty = no LOD variants. */
@@ -409,6 +412,18 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       requireAppliedScale: boolOr(geo.requireAppliedScale, true),
     },
     sheets: asArray(c.sheets, []) as NonNullable<Scene3dContract["sheets"]>,
+    tessellation: {
+      chordToleranceM: numOr(
+        c.conventions?.tessellation?.chordToleranceM,
+        TESSELLATION_DEFAULTS.chordToleranceM,
+      ),
+      minSegments: Math.round(
+        numOr(c.conventions?.tessellation?.minSegments, TESSELLATION_DEFAULTS.minSegments),
+      ),
+      maxSegments: Math.round(
+        numOr(c.conventions?.tessellation?.maxSegments, TESSELLATION_DEFAULTS.maxSegments),
+      ),
+    },
     sheetRules: {
       maxDimension: numOr(c.conventions?.sheets?.maxDimension, SHEET_DEFAULTS.maxDimension),
       seamTolerance: numOr(c.conventions?.sheets?.seamTolerance, SHEET_DEFAULTS.seamTolerance),

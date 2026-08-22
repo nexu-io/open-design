@@ -157,6 +157,18 @@ and every shape fills its box exactly, so relations behave identically for
 all of them. `axis` (default `"z"`) orients a cylinder/cone's length or a
 torus's hole; `flip: true` points a cone downward. A torus must be circular
 across its axis and its ring extent must exceed twice its tube extent.
+Curved shapes are tessellated from their own size: the compiler picks a
+segment count that keeps the emitted surface within
+`conventions.tessellation.chordToleranceM` (0.5mm) of the ideal one, so
+an 8mm bead spends a fraction of what a 3m dome does and neither is a
+number you author. Tighten the tolerance for close-up work; the clamps
+`minSegments`/`maxSegments` bound silhouette quality and per-part cost.
+
+For a torus the entry ALONG the axis is the tube diameter, and the two
+across it are the ring's outer diameter — so `size: [0.9, 0.9, 0.06]`
+with `axis: "z"` is a 90cm ring made of 6cm stock, and the compiler
+derives the major radius as `across / 2 - tube`. Every other shape reads
+as plain bbox extents, which is the rule to fall back on.
 
 Or fill the box with a **real asset**: `"file": "assets/helmet.glb"`
 (scene-relative `.glb`/`.gltf`/`.obj`/`.fbx`) imports the file, joins its
@@ -175,10 +187,10 @@ error, not a grey render.
 | Relation | Meaning |
 |---|---|
 | `at` | absolute anchor; every scene needs at least one |
-| `sits_on` (`embed`) | rest on top of a part, sunk in by `embed` so faces overlap |
+| `sits_on` (`embed`) | rest on top of a part, sunk in by `embed` so faces overlap; resolves Z, and takes the support's x/y unless a relation says otherwise |
 | `above` (`clearance`) | float over a part with a measured gap |
 | `align` (`axes`) | centre on another part along the named axes |
-| `inset_from` (`faces`, `by`) | pull named faces in from a reference part's faces |
+| `inset_from` (`faces`, `by`) | pull named faces IN from a reference part's faces; it only insets — to make a part stick out, `span` between two supports or anchor it with `at` |
 | `span` (`from`,`to`,`axis`,`embed`) | stretch between two parts, biting into both |
 | `repeat` (`count`,`along`,`every`) | array into instances at a centre-to-centre pitch |
 | `scatter` (`on`,`count`,`seed`,`minGap`,`sizeJitter`) | strew instances across a part's top — rocks, plants, debris |
@@ -230,7 +242,25 @@ and the kit viewer. Extra outputs are extra kernel functions
 `roughness`, `metallic`, and `height` — height is special: you author the
 height field, the compiler bakes it AND derives a wrap-aware tangent-space
 normal map from it (`normalStrength` 0-10 steers it), wired through a
-Normal Map node. Never write `#version`, `main()`, `uniform` declarations,
+Normal Map node.
+
+**The kernel dialect.** The kernel file is spliced at file scope between the
+stdlib and the compiler's `main()`, so ordinary GLSL applies: helper
+functions are legal (`float ridge(float v) { ... }`) provided they are
+defined before the kernel that calls them, and loops, `const` and structs
+are fine. Uniforms are used bare — the compiler prepends the declarations —
+and float literals need a decimal point. Redefining a stdlib name is
+S3D-E-801. The stdlib signatures:
+
+| function | signature |
+| --- | --- |
+| `s3d_hash21` | `float s3d_hash21(vec2 p)` |
+| `s3d_hash22` | `vec2 s3d_hash22(vec2 p)` |
+| `s3d_vnoise` | `float s3d_vnoise(vec2 p)` |
+| `s3d_fbm` | `float s3d_fbm(vec2 p)` — octave count is fixed, not an argument |
+| `s3d_voronoi` | `float s3d_voronoi(vec2 p)` |
+
+Never write `#version`, `main()`, `uniform` declarations,
 or samplers in a kernel — S3D-E-801 explains each. Driver rejections come
 back as S3D-E-802 with the driver's own log; a kernel that runs but
 produces non-finite pixels fails S3D-E-804 with the count and location.
@@ -258,7 +288,11 @@ are report facts, not DCC archaeology.
 
 **Claims.** The contract with reality, checked against the measured census
 — never against the spec: `parts`, `maxTriangles`, `grounded`, `maxHeight`,
-`footprint` [x,y], `watertight`, `materialsUsed`. A failed claim is
+`footprint` [x,y], `watertight`, `materialsUsed`. The numeric ones are
+UPPER BOUNDS in metres or counts — the measured value must not exceed
+them — except `parts` and `materialsUsed`, which are exact. `grounded`
+is one-sided: nothing may sink through z=0, and floating is a
+composition the compiler has no opinion about. A failed claim is
 `S3D-E-701` with the measured truth; a claim the census cannot adjudicate is
 `S3D-W-701`, reported rather than silently passed. Claim what matters and
 let the compiler prove you honest.
@@ -585,8 +619,8 @@ then restore full resolution for the final pass. `proof.background` is the
 contract's — never write world node-graph code in `build.py`.
 
 The report's `scale:` line echoes the measured world size and the smallest
-part. Read it: a "12mm rivet" that reports as 1.2mm was a unit slip you can
-now catch before rendering.
+part. Read it: a "12mm rivet" that reports as 1.2mm is a unit slip, visible
+before anything renders.
 
 ## 7. Deliverables
 

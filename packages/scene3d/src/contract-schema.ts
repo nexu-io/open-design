@@ -76,6 +76,7 @@ export const CONTRACT_CONTAINERS = [
   "conventions.minecraft",
   "conventions.minecraft.elementBounds",
   "conventions.minecraft.grid",
+  "conventions.tessellation",
   "conventions.sheets",
   "conventions.coherence",
   "proof",
@@ -176,6 +177,11 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
   { path: "conventions.minecraft.grid.size", kind: "number", min: 0, exclusiveMin: true },
   { path: "conventions.minecraft.grid.tolerance", kind: "number", min: 0 },
   { path: "conventions.minecraft.pxPerBlock", kind: "number", min: 0, exclusiveMin: true },
+
+  /* emitted-primitive tessellation */
+  { path: "conventions.tessellation.chordToleranceM", kind: "number", min: 1e-6, max: 1 },
+  { path: "conventions.tessellation.minSegments", kind: "number", min: 3, max: 4096, integer: true },
+  { path: "conventions.tessellation.maxSegments", kind: "number", min: 3, max: 4096, integer: true },
 
   /* 2D sheet rules */
   { path: "conventions.sheets.maxDimension", kind: "number", min: 1, integer: true },

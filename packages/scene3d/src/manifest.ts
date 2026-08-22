@@ -12,6 +12,7 @@ import {
   Scene3dManifest,
   SceneSource,
 } from "./types.js";
+import { compilerIdentity } from "./build/blender.js";
 import { renderKitHtml, type KitEntry } from "./viewer/kit.js";
 import { summariseKit } from "./verdict.js";
 
@@ -176,6 +177,7 @@ export function buildManifest(input: {
     generatedAt: new Date().toISOString(),
     source: input.source,
     blender: { version: input.blenderVersion, used: input.blenderUsed },
+    compiler: compilerIdentity(),
     ...(claims ? { claims } : {}),
     partTree,
     materials:

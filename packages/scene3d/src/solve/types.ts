@@ -264,6 +264,17 @@ export interface SolvedPart {
    * reader at the line that exists rather than one that doesn't.
    */
   from?: string;
+  /**
+   * The part this one was placed to rest ON, when a `sits_on` put it there.
+   *
+   * A solved fact rather than a re-reading of the relation list: the solver
+   * is the one place that decides what rests on what, and consumers that
+   * re-derive it from relations drift from it the moment repeat or scatter
+   * expands an instance the author never wrote. Compiler-owned vertical
+   * motion reads this to know whether the solved position is a contact it
+   * must not descend through.
+   */
+  restsOn?: string;
 }
 
 export interface SolveDiagnostic {

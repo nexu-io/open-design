@@ -149,6 +149,18 @@ export interface Scene3dContract {
      * the conventional Iglewicz–Hoaglin cutoff 3.5; raise it to quiet a scene
      * that legitimately mixes scales.
      */
+    /**
+     * How finely curved primitives are emitted, as a physical tolerance.
+     * `chordToleranceM` is the greatest distance an emitted surface may sit
+     * from the ideal one; segment counts follow from it and each part's own
+     * radius, so size decides detail instead of one number deciding for every
+     * part at once. Clamps bound silhouette quality and per-primitive cost.
+     */
+    tessellation?: {
+      chordToleranceM?: number;
+      minSegments?: number;
+      maxSegments?: number;
+    };
     coherence?: { outlierZ?: number };
     /**
      * Voxel / Minecraft discipline. Set (by `target:"minecraft"` or an
@@ -943,6 +955,12 @@ export interface Scene3dManifest {
   generatedAt: string;
   source: SceneSource;
   blender: { version: string | null; used: boolean };
+  /** What compiled this: package version plus a hash of the runner
+   *  script. A daemon holds dist in memory while the runner is read per
+   *  job, so a long-lived process can enforce rules the checkout no
+   *  longer contains — this makes that drift visible instead of reading
+   *  as a flaky rule that came and went. */
+  compiler?: { version: string; runner: string };
   partTree: ManifestPart[];
   materials: ManifestMaterial[];
   textures: ManifestTexture[];
