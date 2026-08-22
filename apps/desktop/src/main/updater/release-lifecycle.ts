@@ -419,9 +419,17 @@ export async function scanReleaseCleanupEntries(input: {
  * exists. Such an entry is moved to the same terminal `cleanup-removed` state
  * the app's own pruning produces.
  *
+ * A retained release counts as present only when its directory is a plain
+ * directory and its `metadata.json` is still there — the record is what lets
+ * the app identify the release, so a surviving directory with no metadata is
+ * just as unusable as no directory at all. Both land on the same
+ * `metadata-missing` reason `scanReleaseCleanupEntries` already uses.
+ *
  * Only a path that is genuinely gone is downgraded. An entry that merely
  * cannot be read at this moment is left untouched, so a transient filesystem
- * failure never erases the record of a real release.
+ * failure never erases the record of a real release. A directory whose shape
+ * is wrong is not "removed" either: it is marked `unknown`, matching what a
+ * full rescan would record.
  */
 export async function revalidateRetainedReleaseEntries(input: {
   descriptor: ReleaseCleanupDescriptor;
@@ -441,17 +449,46 @@ export async function revalidateRetainedReleaseEntries(input: {
       releases.push(entry);
       continue;
     }
-    // Unreadable counts as present: only a path we positively know is gone
-    // may drop a retained release.
-    const present = await lstat(releaseDir).then(
-      () => true,
-      (error: unknown) => !isVanishedPathError(error),
+    // Unreadable counts as intact: only state we positively know is gone may
+    // drop a retained release.
+    const releaseEntry = await lstat(releaseDir).then(
+      (stats) => stats,
+      (error: unknown) => (isVanishedPathError(error) ? null : "unreadable" as const),
     );
-    if (present) {
+    if (releaseEntry === "unreadable") {
       releases.push(entry);
       continue;
     }
-    logger.warn("[open-design updater] retained release directory vanished; marking it removed", {
+    if (releaseEntry != null && (!releaseEntry.isDirectory() || releaseEntry.isSymbolicLink())) {
+      releases.push({
+        ...entry,
+        error: releaseCleanupError("release-path-invalid", "release entry is not a plain directory", {
+          path: releaseDir,
+        }),
+        reason: "metadata-invalid",
+        state: "unknown",
+        updatedAt: nowIso,
+      });
+      continue;
+    }
+    if (releaseEntry != null) {
+      const metadataPath = entry.metadataPath == null
+        ? join(releaseDir, "metadata.json")
+        : resolve(layout.root, entry.metadataPath);
+      if (!containsPath(layout.releasesRoot, metadataPath)) {
+        releases.push(entry);
+        continue;
+      }
+      const metadataPresent = await lstat(metadataPath).then(
+        () => true,
+        (error: unknown) => !isVanishedPathError(error),
+      );
+      if (metadataPresent) {
+        releases.push(entry);
+        continue;
+      }
+    }
+    logger.warn("[open-design updater] retained release is no longer on disk; marking it removed", {
       key: entry.key,
       path: releaseDir,
     });
