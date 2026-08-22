@@ -39,6 +39,14 @@ export function lintClaims(
      * part. Matched with the shared segment-boundary predicate.
      */
     groundExempt?: readonly string[];
+    /**
+     * Parts the SPEC declares as hanging over something (an `above` relation)
+     * rather than resting on it. A levitating lamp is not a part left in
+     * mid-air by accident, and the difference is stated in the language — so
+     * the claim reads that intent instead of inferring it from coordinates,
+     * which cannot tell the two apart.
+     */
+    suspended?: readonly string[];
   } = {},
 ): void {
   const fail = (claim: string, message: string, detail: Record<string, unknown>): void => {
@@ -127,7 +135,11 @@ export function lintClaims(
       } else if (verdict === "floating" && census.contacts === undefined) {
         // No contact scan, so "is anything under it?" is unanswerable.
         unchecked("grounded", `'${mesh.object}' floats ${gap.toFixed(4)}m up and the census carries no contacts to say what holds it`);
-      } else if (verdict === "floating" && restsOnSomething(census, mesh.object, gap, TOLERANCE) === false) {
+      } else if (
+        verdict === "floating" &&
+        !(options.suspended ?? []).includes(mesh.object) &&
+        restsOnSomething(census, mesh.object, gap, TOLERANCE) === false
+      ) {
         fail("grounded", `'${mesh.object}' floats ${gap.toFixed(4)}m above the ground plane with nothing beneath it`, {
           target: mesh.object,
           groundGap: gap,

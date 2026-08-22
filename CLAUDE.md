@@ -253,6 +253,21 @@ it again; read this, then act.
   changes nothing on screen — Blender's own factory cylinder ships one.
   Rasterise UV occupancy per FACE, never per fan triangle (the quad
   diagonal runs through cell centres and reports self-overlap).
+- **A check never exits without a verdict, and a relaxation is never a
+  suppression.** Every bounded search reports what it skipped (the caller owns
+  the cap, so there is somebody to tell); every sidecar that fails to load
+  reports it (`readTweaks` returns what it rejected); every guarantee that can
+  vary by machine is probed and reported (the E-804 readback). Imported
+  geometry is RECLASSIFIED, not skipped: rules always run, and
+  `lint/provenance.ts` drops the severity to info with `detail.provenance` so
+  the report can explain its own quiet. Turning any of these back into an
+  early `return`/`catch {}` reinstates the exact bug class three audits found.
+- **One predicate per physical relation.** Grounding lives in
+  `solve/contact.ts` and is consumed by both the world linter and the claims
+  adjudicator; the voxel element frame is the census's oriented box
+  (`center`/`localSize`/`rotation`), consumed by grid deviation, extent,
+  bounds and BOTH exporters. Re-deriving either locally is how they last
+  disagreed.
 - **`view_layer.update()` before census.** Background bpy does not refresh
   `matrix_world` for transforms set outside operators (plain
   `rotation_euler =` on a `bpy.data`-made object), so without the explicit

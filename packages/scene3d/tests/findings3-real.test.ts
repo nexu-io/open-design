@@ -411,6 +411,32 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     expect(r.ok).toBe(false);
   });
 
+  it("passes a grounded claim for a part the spec declares as hanging", async () => {
+    // The counterweight to the case above, and the one the atelier capstone
+    // caught: `above ... clearance` is the author saying, in the language,
+    // "this hangs over that". A levitating lamp is not a part left in mid-air
+    // by accident, and coordinates alone cannot tell the two apart — so the
+    // claim reads the intent the solver recorded rather than re-deriving it.
+    const dir = mkProject({
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "hang",
+        parts: [
+          { id: "prp_base", size: [1, 1, 0.2] },
+          { id: "prp_orb", size: [0.3, 0.3, 0.3], shape: "sphere" },
+        ],
+        relations: [
+          { type: "at", part: "prp_base", center: [0, 0, 0.1] },
+          { type: "above", part: "prp_orb", over: "prp_base", clearance: 0.5 },
+          { type: "align", part: "prp_orb", to: "prp_base", axes: ["x", "y"] },
+        ],
+        claims: { grounded: true },
+      }),
+    });
+    const r = await run(dir);
+    expect(r.issues.filter((i) => i.code === "S3D-E-701")).toEqual([]);
+  });
+
   it("passes a grounded claim for a part resting on another part", async () => {
     // The counterpart: resting is a RELATION, not a coordinate. A stacked
     // assembly is grounded even though only its base touches the floor —

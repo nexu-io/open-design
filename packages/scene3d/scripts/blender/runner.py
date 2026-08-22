@@ -1771,7 +1771,20 @@ def off_camera_objects(scene, objects):
     for o in objects:
         if o.type != "MESH":
             continue
-        corners = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
+        # Face-connected corners, like every other bound this compiler
+        # reports: a loose vertex is not something the camera can see, and
+        # letting one define the box makes an in-frame prop read as off-camera
+        # (or the reverse) for geometry that renders as nothing.
+        world = face_connected_world_points(o)
+        if world:
+            lo = [min(p[a] for p in world) for a in range(3)]
+            hi = [max(p[a] for p in world) for a in range(3)]
+            corners = [mathutils.Vector((lo[0] if x else hi[0],
+                                         lo[1] if y else hi[1],
+                                         lo[2] if z else hi[2]))
+                       for x in (0, 1) for y in (0, 1) for z in (0, 1)]
+        else:
+            corners = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
         pts = [world_to_camera_view(scene, cam, c) for c in corners]
         if all(not (0.0 <= p.x <= 1.0 and 0.0 <= p.y <= 1.0 and p.z > 0.0) for p in pts):
             out.append(o.name)
@@ -2253,6 +2266,17 @@ def contact_report(objects, limit=60):
         return [], ["scene has %d meshes, above the %d-mesh contact limit" % (len(meshes), limit)]
 
     def world_aabb(o):
+        # The SAME box the census reports for this object. bound_box includes
+        # loose vertices, which the rest of the compiler deliberately excludes
+        # (see face_connected_world_points) — a single stray vert would
+        # otherwise invent contacts with everything nearby and quote gap
+        # numbers measured against a point that renders as nothing.
+        pts = face_connected_world_points(o)
+        if pts:
+            return (
+                [min(p[a] for p in pts) for a in range(3)],
+                [max(p[a] for p in pts) for a in range(3)],
+            )
         corners = [o.matrix_world @ mathutils.Vector(c) for c in o.bound_box]
         return (
             [min(c[a] for c in corners) for a in range(3)],

@@ -58,7 +58,7 @@ function withPath(path: string, value: unknown): Scene3dContract {
     cur = cur[key] as Record<string, unknown>;
   }
   if (value !== undefined) cur[keys[keys.length - 1]!] = value;
-  return root as Scene3dContract;
+  return root as unknown as Scene3dContract;
 }
 
 /** Leaf paths mentioned by an object literal, e.g. `conventions.units.upAxis`. */

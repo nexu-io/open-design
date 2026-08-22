@@ -143,6 +143,28 @@ Minecraft is one consumer of it with a specific format:
   `contract.minecraft.enabled` (which implies `voxel.enabled`). A bare
   `target:"minecraft"` is pixel-art at 16 px/block.
 
+**The oriented box is the authority.** A block-model element is authored as an
+un-rotated `from`/`to` plus a rotation about an origin, so every element-space
+question is a question about the box's OWN frame. The census recovers exactly
+that (`voxel.center`, `localSize`, `rotationAxis`, `rotationDeg`) — and for a
+long time one consumer read it while grid deviation, element extent, element
+bounds and the Java exporter all reasoned over the world AABB, which for a
+rotated box is its diagonal bound. That produced three wrong answers at once:
+a Java-LEGAL 22.5 degree rotation necessarily read as off-grid, so W-970
+advised "snap the vertices" about the very rotations the format legalises; a
+2.5-block element rotated 45 degrees measured 3.54, filed as multi-block
+structure, and thereby ESCAPED the element rules it was breaking; and the Java
+exporter dropped every rotated box claiming the un-rotated extent was
+unrecoverable. Grid alignment and rotation legality are separate questions,
+asked separately, in the frame the format defines.
+
+**Boxness is measured on positions, not topology.** A real MagicaVoxel or
+Qubicle OBJ exports triangulated, and demanding six quad faces called a
+visually perfect block "not a cuboid" and dropped it from the exporter. An
+offset from a corner is an EDGE exactly when it is not the sum of two others —
+taking the three shortest instead breaks on any elongated box, where a face
+diagonal is shorter than the long edge.
+
 Either way it is opt-in and never a style: every rule is a format or
 consistency fact, silent without a target, so non-voxel scenes are
 byte-identical. Adopted from a fable-5 architecture consult (`KILN.md` records
@@ -316,6 +338,93 @@ assign rebinds the crate lid to wood, assign+override creates
 `mtl_crate_wood__prp_crate_lid` and leaves the body's wood untouched,
 sole-user override mutates in place, and the kit payload carries the
 instance's measured emission.
+
+## Verdict totality (the FINDINGS3 round)
+
+Three blind audits converged on one defect, wearing different clothes each
+time: **a code path can exit a check without producing any of
+{clean, findings, unchecked(reason)}** — and to every consumer that reads as
+clean. The compiler states "silence is not evidence" as philosophy; this
+round is about enforcing it where it had quietly lapsed.
+
+- **A cap that cannot be reported is a cap that lies.** `coplanar_overlap`
+  applied its triangle-pair cap internally and returned "no overlaps", so two
+  exactly coincident 590-triangle meshes shipped a textbook z-fight with an
+  empty pairs list AND an empty `zFightingSkipped`. Caps now live in the
+  caller, which has somebody to tell, and name both meshes and the cost.
+- **A sidecar dropped in a `catch {}` is a check that skipped.** A truncated
+  `tweaks.json` degraded to "no tweaks" and the scene reverted to its rest
+  pose with nothing in the report (S3D-W-208 now). It is read through one
+  reader that returns what it rejected, and which copies-then-rejects rather
+  than allow-listing, so it cannot silently eat a channel it has not heard of.
+- **A relaxation that suppresses is a silence machine.** See provenance below.
+- **A guarantee that varies by machine must say so.** The E-804 non-finite
+  oracle is only as good as the readback, so its reach is now probed (through
+  a uniform, so the answer is about the driver and not its constant folder)
+  and any gap reported as S3D-W-804.
+- **The solver's output is proofed, not assumed.** `repeat every: 0.5` on a
+  1m box shipped three boxes overlapping by half a metre, `ok: true`, no
+  diagnostics — interpenetrating faces are not coplanar, and no rule owned
+  "these are simply inside each other" (S3D-W-107 now). Scope is deliberate:
+  only instances the SOLVER generated are compared, because authored
+  interpenetration is a technique (overlapping a junction by a pixel is how a
+  careful modeller avoids z-fighting), while a relation that mints N instances
+  is one decision nobody makes wanting self-overlap.
+
+Three structural authorities came out of the same round:
+
+**Provenance posture** (`lint/provenance.ts`). A third-party asset is a FACT
+about somebody else's file, not a defect its new owner can fix — real game
+meshes are open, ship welded seams as split vertices, and share mirrored UV
+islands on purpose. That was implemented only for spec parts carrying
+`file:`, so a project whose SOURCE is a bare `.glb` (a first-class workflow)
+got no relaxation and a freshly downloaded Khronos sample compiled `ok:false`;
+every fixture here ships a hand-written relaxed contract, which is what kept
+it hidden. And the relaxation was SUPPRESSION, so nothing could explain why a
+strict contract had gone quiet. Rules now always run and a post-pass
+RECLASSIFIES: same finding, at `info`, carrying `provenance` and the severity
+it was relaxed from. The rules it covers are a table whose rows name their own
+override — writing in a convention block cancels that block's relaxation, and
+only that block's.
+
+**The contact model** (`solve/contact.ts`). Resting is a RELATION, not a
+coordinate. The solver embeds a `sits_on` part by `MIN_CONTACT` so faces can
+never land flush, and the support search rejected negative gaps as "not below
+me", so the rule built to name what a part rests on could never name it. Then
+`claims.grounded` checked only sinking while the world linter checked
+floating, so a part hovering metres up passed the claim and collected the
+warning — the "claims declared, none failed" badge awarded to a floating
+asset. One predicate now answers both. "Below" is geometric rather than an
+epsilon: hand-authored blocky assets overlap junctions by a whole pixel, and
+an embed window sized to the solver's own 1mm called every such joint
+unsupported.
+
+Making the claim two-sided immediately failed the atelier capstone on its
+levitating lava orb, which is the useful half of the lesson: a part suspended
+by an `above` relation is DECLARED to hang, and coordinates alone cannot tell
+that from a part left in mid-air by accident. The solver records the intent
+where it is expressed (`SolvedPart.suspended`) and the claim reads it, rather
+than the adjudicator inferring intent back out of geometry it cannot read.
+
+**The oriented box is the voxel authority** (see the voxel section). The
+census recovered it and one consumer read it; grid deviation, element extent,
+element bounds and the Java exporter all still reasoned over the world AABB,
+which for a rotated box is its diagonal bound.
+
+Two supporting invariants land alongside:
+
+- **The contract's field list is data** (`contract-schema.ts`). Validate and
+  normalize are two behaviours that must agree about which fields exist, and
+  as two hand-maintained cascades they had drifted: four convention blocks
+  were normalized but never validated, so a malformed value coerced to the
+  default and the rule the author meant to enable stayed silently OFF. Both
+  now derive from one table, and a meta-test holds them together from both
+  ends.
+- **The cache key is the dependency closure** (`parse/companions.ts`). glTF
+  legally splits a model across a `.gltf` and an external `.bin`; editing the
+  `.bin` reported `build: cached` and shipped the old mesh. References are
+  resolved rather than hashing the whole folder, which would trade a
+  correctness bug for a precision bug.
 
 ## Diagnostics philosophy
 

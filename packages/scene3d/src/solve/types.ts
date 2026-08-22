@@ -207,9 +207,13 @@ export interface ClaimsSpec {
   parts?: number;
   /** Ceiling on total triangles across all meshes. */
   maxTriangles?: number;
-  /** Every part RESTS on something — the ground plane, or another part directly
-   *  beneath it — and none sinks through the floor. Adjudicated at the rest
-   *  pose; see solve/contact.ts for the shared predicate. */
+  /** Every part RESTS on something — the ground plane, or another part
+   *  directly beneath it — and none sinks through the floor. A part the spec
+   *  declares as hanging (an `above` relation) is exempt, since that is the
+   *  author stating in the language that it does not rest; so is anything in
+   *  `conventions.grounding.exempt`. Adjudicated at the rest pose; the
+   *  predicate is shared with the world linter (see solve/contact.ts), so the
+   *  two can no longer mean different things by "grounded". */
   grounded?: boolean;
   /** Ceiling on the scene's world-space height in metres. */
   maxHeight?: number;
@@ -261,6 +265,10 @@ export interface SolvedPart {
    * reader at the line that exists rather than one that doesn't.
    */
   from?: string;
+  /** The spec placed this part ABOVE another with a gap — it is declared to
+   *  hang, not to rest. Read by the grounded claim so a levitating lamp is
+   *  told apart from a part left in mid-air by accident. */
+  suspended?: boolean;
 }
 
 export interface SolveDiagnostic {
