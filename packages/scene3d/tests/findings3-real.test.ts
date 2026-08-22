@@ -435,6 +435,43 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     expect(r.issues.filter((i) => i.code === "S3D-E-701")).toEqual([]);
   });
 
+  /* ---- the cache key is the dependency closure --------------------- */
+
+  it("busts the build cache when a referenced companion file changes", async () => {
+    // The cache hashed the DECLARED file list. An .obj names its materials in
+    // a sibling .mtl (and glTF splits geometry into an external .bin), so
+    // editing the companion and recompiling reported build:cached and shipped
+    // the previous appearance — with --no-cache as the only way to find out.
+    const dir = mkProject({
+      "box.obj": [
+        "mtllib box.mtl",
+        "o prp_box",
+        "v 0 0 0", "v 1 0 0", "v 1 1 0", "v 0 1 0",
+        "v 0 0 1", "v 1 0 1", "v 1 1 1", "v 0 1 1",
+        "usemtl paint",
+        "f 1 2 3 4", "f 5 8 7 6", "f 1 5 6 2",
+        "f 2 6 7 3", "f 3 7 8 4", "f 4 8 5 1",
+        "",
+      ].join("\n"),
+      "box.mtl": "newmtl paint\nKd 0.800 0.200 0.100\n",
+    });
+    const cached = (dir: string) =>
+      compile({ projectDir: dir, stages: ["parse", "build", "lint"] as never, timeoutMs: LONG });
+
+    const first = await cached(dir);
+    expect(first.stages.find((s) => s.id === "build")?.status).toBe("ran");
+    const second = await cached(dir);
+    expect(second.stages.find((s) => s.id === "build")?.status).toBe("cached");
+
+    // Same .obj, different .mtl: a real input changed.
+    fs.writeFileSync(path.join(dir, "box.mtl"), "newmtl paint\nKd 0.100 0.200 0.800\n", "utf8");
+    const third = await cached(dir);
+    expect(third.stages.find((s) => s.id === "build")?.status).toBe("ran");
+    // ...and the change actually reached the census, not just the hash.
+    const colour = third.census!.materials[0]!.principled.baseColor!;
+    expect(colour[2]).toBeGreaterThan(colour[0]!);
+  });
+
   it("still measures and reports the z-fight when it is under the cap", async () => {
     // The control: the same coincident geometry, cheap enough to compare.
     // A cap that suppressed the finding outright would pass the test above.

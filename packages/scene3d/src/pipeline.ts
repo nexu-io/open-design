@@ -16,6 +16,7 @@ import {
 import { ISSUE_CODES, summarize } from "./errors.js";
 import { DEFAULT_CONTRACT, normalizeContract, validateContract, contractCacheKey } from "./contract.js";
 import { discoverSources, existingSourceFiles } from "./parse/sources.js";
+import { companionFiles } from "./parse/companions.js";
 import { parseUsda, UsdaParseError } from "./parse/usda.js";
 import { authorStageModel } from "./usd/stage-model.js";
 import {
@@ -585,6 +586,11 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     // busts the cache (JSON.stringify would otherwise drop them to `{}`).
     contract: contractCacheKey(normalized),
     sources: hashFiles(sourceFiles),
+    // Files the sources REFERENCE — a .gltf's external .bin, an .obj's .mtl
+    // and its textures. They are geometry and appearance the build reads, and
+    // leaving them out meant editing model.bin and recompiling reported
+    // "cached" while shipping the old mesh.
+    companions: hashFiles(companionFiles(sourceFiles)),
     // The RAW bytes, not the parsed object: hashing the parse result made
     // every unreadable version of the file hash as `null`, so corrupting a
     // valid tweaks.json and then repairing it to a DIFFERENT valid state
