@@ -765,6 +765,20 @@ function loadModel(renderer, buffer) {
           blend: !!(material && material.alphaMode === "BLEND"),
           min: plo,
           max: phi,
+          // The mesh itself, kept for picking. The world AABB above is a
+          // BROAD phase and nothing more: a rotated part's box is up to
+          // sqrt(3) times its own volume, a sphere's box is 91% empty at the
+          // corners, and boxes of neighbouring parts overlap freely. Choosing
+          // the nearest box ENTRY therefore selected whichever box the ray
+          // happened to enter first, which is not the part under the cursor
+          // and is why clicking one thing selected another beside it.
+          //
+          // Local positions plus the world matrix, not pre-transformed
+          // copies: a click transforms three vertices per triangle it
+          // actually tests, and a gizmo drag that moves a part leaves this
+          // valid because its model matrix moves with it.
+          pickPositions: positions,
+          pickIndices: indices || null,
         });
       }
     }
@@ -1103,31 +1117,106 @@ function pickPart(renderer, state, canvas, clientX, clientY) {
     forward[2] + right[2] * ndcX * tan * aspect + up[2] * ndcY * tan,
   ]);
 
+  /* Broad phase: which boxes the ray meets at all, and how far away each
+     box STARTS. Not a verdict — see the note on pickPositions. */
+  const candidates = [];
+  for (const draw of renderer.draws) {
+    const span = rayBoxSpan(cam.eye, dir, draw.min, draw.max);
+    if (span) candidates.push({ draw: draw, near: span });
+  }
+  /* Nearest box first, so the exact test below can stop as soon as a
+     confirmed surface hit is closer than the next box can possibly be. */
+  candidates.sort((a, b) => a.near - b.near);
+
   let best = null;
   let bestT = Infinity;
-  for (const draw of renderer.draws) {
-    let tmin = -Infinity;
-    let tmax = Infinity;
-    let hit = true;
-    for (let a = 0; a < 3; a++) {
-      const o = cam.eye[a];
-      const d = dir[a];
-      if (Math.abs(d) < 1e-9) {
-        if (o < draw.min[a] || o > draw.max[a]) { hit = false; break; }
-        continue;
-      }
-      let t1 = (draw.min[a] - o) / d;
-      let t2 = (draw.max[a] - o) / d;
-      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
-      if (t1 > tmin) tmin = t1;
-      if (t2 < tmax) tmax = t2;
-      if (tmin > tmax) { hit = false; break; }
-    }
-    if (!hit || tmax < 0) continue;
-    const t = tmin >= 0 ? tmin : tmax;
-    if (t < bestT) { bestT = t; best = draw; }
+  for (const candidate of candidates) {
+    if (candidate.near > bestT) break;
+    const t = rayMeshDistance(cam.eye, dir, candidate.draw);
+    if (t !== null && t < bestT) { bestT = t; best = candidate.draw; }
   }
   return best;
+}
+
+/**
+ * Distance at which a ray enters an axis-aligned box, or null when it misses.
+ * Negative spans (camera inside the box) report 0 — the box is under the
+ * cursor from where the viewer stands, which is what the caller is asking.
+ */
+function rayBoxSpan(origin, dir, min, max) {
+  let tmin = -Infinity;
+  let tmax = Infinity;
+  for (let a = 0; a < 3; a++) {
+    const o = origin[a];
+    const d = dir[a];
+    if (Math.abs(d) < 1e-9) {
+      if (o < min[a] || o > max[a]) return null;
+      continue;
+    }
+    let t1 = (min[a] - o) / d;
+    let t2 = (max[a] - o) / d;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return null;
+  }
+  if (tmax < 0) return null;
+  return tmin >= 0 ? tmin : 0;
+}
+
+/**
+ * Distance to the nearest TRIANGLE of a draw along the ray, or null for a
+ * miss. Möller-Trumbore, double-sided on purpose: a part whose winding the
+ * author got backwards is still a part the user can see and click.
+ *
+ * Vertices are transformed on demand. A pick tests one draw's triangles once
+ * per click; caching a world-space copy would cost memory on every part for
+ * a saving nobody can perceive at click rate.
+ */
+function rayMeshDistance(origin, dir, draw) {
+  const positions = draw.pickPositions;
+  if (!positions) {
+    /* No geometry retained: fall back to the box, and say so by returning
+       its entry distance rather than pretending the mesh was tested. */
+    return rayBoxSpan(origin, dir, draw.min, draw.max);
+  }
+  const m = draw.model;
+  const indices = draw.pickIndices;
+  const triangles = indices ? indices.length / 3 : positions.length / 9;
+  const a = [0, 0, 0], b = [0, 0, 0], c = [0, 0, 0];
+  const vertex = (slot, index) => {
+    const o = index * 3;
+    const x = positions[o], y = positions[o + 1], z = positions[o + 2];
+    slot[0] = m[0]*x + m[4]*y + m[8]*z + m[12];
+    slot[1] = m[1]*x + m[5]*y + m[9]*z + m[13];
+    slot[2] = m[2]*x + m[6]*y + m[10]*z + m[14];
+  };
+  let nearest = null;
+  for (let t = 0; t < triangles; t++) {
+    const i0 = indices ? indices[t * 3] : t * 3;
+    const i1 = indices ? indices[t * 3 + 1] : t * 3 + 1;
+    const i2 = indices ? indices[t * 3 + 2] : t * 3 + 2;
+    vertex(a, i0); vertex(b, i1); vertex(c, i2);
+    const e1x = b[0] - a[0], e1y = b[1] - a[1], e1z = b[2] - a[2];
+    const e2x = c[0] - a[0], e2y = c[1] - a[1], e2z = c[2] - a[2];
+    const px = dir[1]*e2z - dir[2]*e2y;
+    const py = dir[2]*e2x - dir[0]*e2z;
+    const pz = dir[0]*e2y - dir[1]*e2x;
+    const det = e1x*px + e1y*py + e1z*pz;
+    if (Math.abs(det) < 1e-12) continue;
+    const inv = 1 / det;
+    const tx = origin[0] - a[0], ty = origin[1] - a[1], tz = origin[2] - a[2];
+    const u = (tx*px + ty*py + tz*pz) * inv;
+    if (u < 0 || u > 1) continue;
+    const qx = ty*e1z - tz*e1y;
+    const qy = tz*e1x - tx*e1z;
+    const qz = tx*e1y - ty*e1x;
+    const v = (dir[0]*qx + dir[1]*qy + dir[2]*qz) * inv;
+    if (v < 0 || u + v > 1) continue;
+    const hit = (e2x*qx + e2y*qy + e2z*qz) * inv;
+    if (hit > 1e-9 && (nearest === null || hit < nearest)) nearest = hit;
+  }
+  return nearest;
 }
 
 /**
