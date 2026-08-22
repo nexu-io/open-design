@@ -2,6 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   Census,
+  CensusMesh,
+  CensusObject,
   CompileRequest,
   Issue,
   IssueSummary,
@@ -78,20 +80,24 @@ export function buildManifest(input: {
         }
       : undefined;
 
+  // Index both collections once. Every part used to cost three linear scans of
+  // `meshes` (a `some` and two `find`s returning the same row) plus a scan per
+  // parent hop; on the full inventory this tree is built from, that is
+  // quadratic work to produce a lookup that is a Map.
+  const objectByName = new Map<string, CensusObject>(census?.objects.map((o) => [o.name, o]) ?? []);
+  const meshByObject = new Map<string, CensusMesh>(census?.meshes.map((m) => [m.object, m]) ?? []);
+
   const partTree =
-    census?.objects.map((obj) => ({
-      name: obj.name,
-      type: obj.type,
-      parent: obj.parent,
-      depth: objectDepth(census, obj.name),
-      mesh:
-        obj.hasMeshData && census.meshes.some((m) => m.object === obj.name)
-          ? {
-              verts: census.meshes.find((m) => m.object === obj.name)!.verts,
-              faces: census.meshes.find((m) => m.object === obj.name)!.faces,
-            }
-          : null,
-    })) ?? [];
+    census?.objects.map((obj) => {
+      const mesh = obj.hasMeshData ? meshByObject.get(obj.name) : undefined;
+      return {
+        name: obj.name,
+        type: obj.type,
+        parent: obj.parent,
+        depth: objectDepth(objectByName, obj.name),
+        mesh: mesh ? { verts: mesh.verts, faces: mesh.faces } : null,
+      };
+    }) ?? [];
 
   // Scale readout: measured extremes so "is that rivet really 12mm?" is a
   // manifest read, not a render inspection.
@@ -230,14 +236,26 @@ function round6(value: number): number {
   return Number(value.toFixed(6));
 }
 
-function objectDepth(census: Census, name: string): number {
+/**
+ * Hierarchy depth, walked through a prebuilt index.
+ *
+ * This used to take the census and `.find()` the parent on every hop, while
+ * the caller invoked it once per object — quadratic in object count, times
+ * depth. The tree payload deliberately carries the WHOLE inventory (the
+ * 4000-part cap is a backstop, not a display limit), so the input size this
+ * runs against is a real scene's part list, not a sample of one.
+ *
+ * The `seen` set is not an optimisation: a parent cycle would otherwise spin
+ * forever, and the census is data crossing a process boundary.
+ */
+function objectDepth(byName: Map<string, CensusObject>, name: string): number {
   let depth = 0;
-  let current = census.objects.find((o) => o.name === name);
+  let current = byName.get(name);
   const seen = new Set<string>();
   while (current?.parent && !seen.has(current.parent)) {
     seen.add(current.parent);
     depth++;
-    current = census.objects.find((o) => o.name === current!.parent);
+    current = byName.get(current.parent);
     if (!current) break;
   }
   return depth;
