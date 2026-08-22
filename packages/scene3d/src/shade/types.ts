@@ -124,7 +124,17 @@ export interface ShaderBinding {
  */
 export const PUSH_CONSTANT_BUDGET = 112;
 
-/** std430 size and alignment per type. vec3 aligns AND sizes as 16. */
+/**
+ * Bytes a uniform occupies in the push-constant block.
+ *
+ * vec3 reports 16, not the 12 a literal std430 reading gives it. That is
+ * deliberate: Blender's push-constant block promotes vec3 to vec4 (std140
+ * rules), so a trailing float does NOT pack into a vec3's tail padding the
+ * way std430 would allow. Rounding it up here matches the layout the driver
+ * actually builds — and if that assumption is ever wrong for some backend,
+ * it is wrong in the safe direction: the budget can refuse a block that would
+ * have fit, never admit one that overflows.
+ */
 export function uniformByteSize(type: ShaderUniformType): number {
   switch (type) {
     case "float":

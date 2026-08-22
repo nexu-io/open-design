@@ -170,6 +170,13 @@ export function lintPbr(ctx: LintContext, issues: Issue[]): void {
       // The properties stay in the fingerprint because they are what the
       // MESSAGE talks about and they cover materials with no node tree; the
       // graph signature is what makes the verdict trustworthy.
+      //
+      // Exact equality is deliberate and is not float-fragile: every scalar
+      // here crosses the census through `R6` (runner.py), so this compares
+      // values already quantized to 1e-6. Loosening it further would need a
+      // bucket, not an epsilon — epsilon equality is not transitive, and this
+      // groups by map key. The failure it protects against is asymmetric: a
+      // missed duplicate costs one draw call, a wrong merge changes the render.
       const fingerprint = JSON.stringify([
         p.metallic, p.roughness, p.ior, p.baseColor,
         p.emission ?? null, p.emissionStrength ?? null, p.alpha ?? null,

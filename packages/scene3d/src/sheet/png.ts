@@ -192,23 +192,11 @@ function chunk(type: string, body: Buffer): Buffer {
   out.writeUInt32BE(body.length, 0);
   out.write(type, 4, "ascii");
   body.copy(out, 8);
-  out.writeUInt32BE(crc32(out.subarray(4, 8 + body.length)), 8 + body.length);
+  // PNG's chunk CRC is plain CRC-32/IEEE — the same function the ZIP central
+  // directory needs, which is why this file used to carry a hand-rolled table
+  // while usdz.ts called the runtime's. One of the two was going to rot.
+  out.writeUInt32BE(zlib.crc32(out.subarray(4, 8 + body.length)), 8 + body.length);
   return out;
-}
-
-let CRC_TABLE: Uint32Array | null = null;
-function crc32(bytes: Buffer): number {
-  if (!CRC_TABLE) {
-    CRC_TABLE = new Uint32Array(256);
-    for (let n = 0; n < 256; n++) {
-      let c = n;
-      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-      CRC_TABLE[n] = c >>> 0;
-    }
-  }
-  let crc = 0xffffffff;
-  for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
-  return (crc ^ 0xffffffff) >>> 0;
 }
 
 /**

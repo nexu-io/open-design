@@ -46,7 +46,21 @@ export function packageUsdz(masterAbs: string, targetAbs: string): void {
     const data = fs.readFileSync(abs);
     const headerOffset = offset;
     const dataStart = headerOffset + 30 + name.length;
-    const pad = (64 - (dataStart % 64)) % 64;
+    // USDZ requires every file's data to begin 64-byte aligned, and ZIP's only
+    // place to absorb that is the local header's extra field. But an extra
+    // field is not free bytes: it is a sequence of (headerId:2, size:2, data)
+    // records, so 1..3 bytes cannot form one. Padding by the raw remainder
+    // shipped structurally malformed headers — three archives in the test
+    // corpus carried 1- and 3-byte extra fields, readable only because every
+    // reader we happened to use ignores the field it cannot parse.
+    //
+    // Rounding up by another 64 keeps the alignment exact (64 % 64 == 0) and
+    // buys room for a real record: id 0, then the remaining bytes as its
+    // payload. Costs at most 64 bytes once per file.
+    let pad = (64 - (dataStart % 64)) % 64;
+    if (pad > 0 && pad < 4) pad += 64;
+    const extra = Buffer.alloc(pad);
+    if (pad > 0) extra.writeUInt16LE(pad - 4, 2); // id stays 0; size is the rest
     const crc = zlib.crc32(data);
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
@@ -58,7 +72,7 @@ export function packageUsdz(masterAbs: string, targetAbs: string): void {
     local.writeUInt16LE(pad, 28);
     write(local);
     write(name);
-    write(Buffer.alloc(pad));
+    write(extra);
     write(data);
     entries.push({ name, crc, size: data.length, headerOffset });
   }
