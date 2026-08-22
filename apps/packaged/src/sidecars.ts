@@ -24,8 +24,11 @@ import {
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 import {
+  collectProcessTreePids,
   createProcessStampArgs,
   isProcessAlive,
+  listProcessSnapshots,
+  matchesStampedProcess,
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
   stopProcesses,
@@ -562,6 +565,37 @@ export async function waitForStatus<T>(
   }
 }
 
+async function stopStampedWebSidecarOwner(ipcPath: string, logPath: string): Promise<void> {
+  const processes = await listProcessSnapshots();
+  const rootPids = processes
+    .filter((processInfo) =>
+      matchesStampedProcess(
+        processInfo,
+        { app: APP_KEYS.WEB, ipc: ipcPath },
+        OPEN_DESIGN_SIDECAR_CONTRACT,
+      ),
+    )
+    .map((processInfo) => processInfo.pid);
+  if (rootPids.length === 0) return;
+
+  // Stop the whole tree before unlinking. A later SIGTERM on the old owner
+  // would run JsonIpcServer.close(), which unconditionally removes this
+  // pathname and can delete the replacement socket after rebind.
+  const pids = collectProcessTreePids(processes, rootPids);
+  await appendSidecarLifecycleLog(
+    logPath,
+    `[open-design packaged] stopping unresponsive stamped web sidecar before socket takeover ipc=${ipcPath} pids=${pids.join(",")}`,
+  );
+  try {
+    await stopProcesses(pids, { killGraceMs: 1_500, termGraceMs: 1_500 });
+  } catch (error) {
+    await appendSidecarLifecycleLog(
+      logPath,
+      `[open-design packaged] failed to stop unresponsive stamped web sidecar ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 export async function retireExistingSidecarEndpoint(
   ipcPath: string,
   logPath: string,
@@ -583,6 +617,7 @@ export async function retireExistingSidecarEndpoint(
     // is safe; daemon recovery remains conservative because starting a second
     // daemon beside a hung first owner could put two writers on the same DB.
     if (app !== APP_KEYS.WEB || isWindowsNamedPipePath(ipcPath)) return;
+    await stopStampedWebSidecarOwner(ipcPath, logPath);
     try {
       const stat = await lstat(ipcPath);
       if (!stat.isSocket()) return;

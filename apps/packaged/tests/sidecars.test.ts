@@ -15,6 +15,7 @@
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
+import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Socket } from 'node:net';
@@ -22,8 +23,15 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createProcessStampArgs, isProcessAlive, waitForProcessExit } from '@open-design/platform';
 import { createJsonIpcServer, resolveAppIpcPath } from '@open-design/sidecar';
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_ENV } from '@open-design/sidecar-proto';
+import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_ENV,
+  SIDECAR_MODES,
+  SIDECAR_SOURCES,
+} from '@open-design/sidecar-proto';
 
 import {
   buildPackagedDaemonSpawnEnv,
@@ -43,6 +51,46 @@ import type { PackagedNamespacePaths } from '../src/paths.js';
 
 function slashPath(value: string): string {
   return value.replaceAll('\\', '/');
+}
+
+async function spawnStampedHungWebOwner(
+  socketPath: string,
+  ipcPath = socketPath,
+): Promise<{ child: ChildProcess; pid: number }> {
+  const stamp = {
+    app: APP_KEYS.WEB,
+    ipc: ipcPath,
+    mode: SIDECAR_MODES.RUNTIME,
+    namespace: 'packaged-stale-web-test',
+    source: SIDECAR_SOURCES.PACKAGED,
+  };
+  const child = spawn(
+    process.execPath,
+    [
+      '-e',
+      "process.on('SIGTERM',()=>{});require('net').createServer(s=>s.resume()).listen(process.env.OD_TEST_SOCK,()=>process.stdout.write('ready\\n'));setInterval(()=>{},1000)",
+      '--',
+      ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
+    ],
+    {
+      env: { ...process.env, OD_TEST_SOCK: socketPath },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const pid = child.pid;
+  if (pid == null) throw new Error('test child did not start');
+  await new Promise<void>((resolve, reject) => {
+    const fail = (error: Error): void => {
+      child.kill('SIGKILL');
+      reject(error);
+    };
+    child.once('error', fail);
+    child.once('exit', (code, signal) => {
+      fail(new Error(`stamped hung web owner exited before ready code=${code} signal=${signal}`));
+    });
+    child.stdout?.once('data', () => resolve());
+  });
+  return { child, pid };
 }
 
 describe('resolveDaemonStatusTimeoutMs', () => {
@@ -359,6 +407,67 @@ describe.runIf(process.platform !== 'win32')('packaged stale web endpoint recove
       rmSync(root, { force: true, recursive: true });
     }
   });
+
+  it('stops the stamped web owner before unlinking its unresponsive socket', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-owner-'));
+    const socketPath = join(root, 'web.sock');
+    const logPath = join(root, 'web.log');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { child, pid } = await spawnStampedHungWebOwner(socketPath);
+
+    try {
+      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB);
+      expect(isProcessAlive(pid)).toBe(false);
+      expect(existsSync(socketPath)).toBe(false);
+      expect(readFileSync(logPath, 'utf8')).toContain(
+        'stopping unresponsive stamped web sidecar before socket takeover',
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('unresponsive web sidecar endpoint removed before relaunch'),
+      );
+    } finally {
+      warn.mockRestore();
+      child.kill('SIGKILL');
+      await waitForProcessExit(pid, 1_000);
+      rmSync(root, { force: true, recursive: true });
+    }
+  }, 10_000);
+
+  it('does not stop a stamped web owner of a different ipc path', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-other-'));
+    const ownerSocketPath = join(root, 'owner.sock');
+    const targetSocketPath = join(root, 'web.sock');
+    const logPath = join(root, 'web.log');
+    const sockets = new Set<Socket>();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { child, pid } = await spawnStampedHungWebOwner(ownerSocketPath);
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+      socket.resume();
+    });
+    await new Promise<void>((resolveListen, rejectListen) => {
+      server.once('error', rejectListen);
+      server.listen(targetSocketPath, () => {
+        server.off('error', rejectListen);
+        resolveListen();
+      });
+    });
+
+    try {
+      await retireExistingSidecarEndpoint(targetSocketPath, logPath, APP_KEYS.WEB);
+      expect(isProcessAlive(pid)).toBe(true);
+      expect(existsSync(ownerSocketPath)).toBe(true);
+      expect(existsSync(targetSocketPath)).toBe(false);
+    } finally {
+      warn.mockRestore();
+      child.kill('SIGKILL');
+      await waitForProcessExit(pid, 1_000);
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      rmSync(root, { force: true, recursive: true });
+    }
+  }, 10_000);
 
   it('does not unlink an unresponsive daemon socket', async () => {
     const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-daemon-'));
