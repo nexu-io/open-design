@@ -45,6 +45,9 @@ export const primeAgentDef = {
   buildArgs: (_prompt, _images, _dirs, options = {}, runtimeContext = {}) => {
     const args = ['--mode', 'rpc'];
     if (runtimeContext.cwd) args.push('--cwd', runtimeContext.cwd);
+    if (runtimeContext.piRpcSessionDir) {
+      args.push('--session-dir', runtimeContext.piRpcSessionDir);
+    }
     if (runtimeContext.resumeSessionId) args.push('--resume', runtimeContext.resumeSessionId);
     if (options.model && options.model !== 'default') {
       const slash = options.model.indexOf('/');

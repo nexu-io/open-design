@@ -66,6 +66,10 @@ export type RuntimeContext = {
   // persists), while capture-style transports report their own id.
   resumeSessionId?: string | null;
   newSessionId?: string;
+  // Daemon-owned directory for pi-compatible runtimes to create this
+  // child's native session. A per-run directory prevents shared-directory
+  // discovery from attributing another process's file to this run.
+  piRpcSessionDir?: string;
   // Per-run plugin isolation for agent subprocesses. External Plugin entry
   // points use this for Local Codex so the child cannot recursively load the
   // same Codex Plugin and route itself into another OpenDesign workflow.

@@ -40,7 +40,7 @@ type RunStatus = {
   resumable?: boolean;
 };
 
-type RunInvocation = { argv: string[]; stdin: string; cwd: string };
+type RunInvocation = { argv: string[]; stdin: string; cwd: string; sessionPath?: string };
 type RunEvent = { event: string; data: unknown };
 
 const SESSION = 'ses_e2e0000resume0000';
@@ -188,7 +188,7 @@ describe('opencode native session resume', () => {
   it('re-seeds Prime with the full transcript when its saved session file is missing', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-prime-resume-bin-'));
     const sessionDir = path.join(binDir, 'sessions');
-    const { bin, logPath, sessionPath } = await writeCapturingPrime(
+    const { bin, logPath } = await writeCapturingPrime(
       binDir,
       'prime-agent-capture',
       sessionDir,
@@ -215,7 +215,9 @@ describe('opencode native session resume', () => {
       'prime-agent',
     );
     expect(turn1, JSON.stringify(turn1)).toMatchObject({ status: 'succeeded' });
-    await rm(sessionPath, { force: true });
+    const [firstInvocation] = await readConversationRuns(logPath, conversationId);
+    expect(firstInvocation?.sessionPath).toContain(`${path.sep}open-design${path.sep}`);
+    await rm(firstInvocation?.sessionPath ?? '', { force: true });
 
     const turn2 = await sendRunAndWait(
       started.url,
@@ -248,16 +250,17 @@ async function writeCapturingPrime(
   dir: string,
   name: string,
   sessionDir: string,
-): Promise<{ bin: string; logPath: string; sessionPath: string }> {
+): Promise<{ bin: string; logPath: string }> {
   const bin = path.join(dir, name);
   const logPath = path.join(dir, `${name}-log.jsonl`);
-  const sessionPath = path.join(sessionDir, 'prime-session.jsonl');
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
 const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
-const sessionPath = ${JSON.stringify(sessionPath)};
+const sessionDirIndex = argv.indexOf('--session-dir');
+const runSessionDir = sessionDirIndex >= 0 ? argv[sessionDirIndex + 1] : ${JSON.stringify(sessionDir)};
+const sessionPath = path.join(runSessionDir, 'prime-session.jsonl');
 if (argv.includes('--version')) { console.log('0.8.0'); process.exit(0); }
 if (argv[0] === 'model' && argv[1] === 'list') { console.log('openai gpt-5'); process.exit(0); }
 let stdin = '';
@@ -270,7 +273,7 @@ process.stdin.on('data', (chunk) => {
     if (command.type !== 'prompt') continue;
     fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
     fs.writeFileSync(sessionPath, JSON.stringify({ type: 'session' }) + '\\n');
-    fs.appendFileSync(logPath, JSON.stringify({ argv, stdin, cwd: process.cwd() }) + '\\n');
+    fs.appendFileSync(logPath, JSON.stringify({ argv, stdin, cwd: process.cwd(), sessionPath }) + '\\n');
     console.log(JSON.stringify({ id: command.id, type: 'response', command: 'prompt', success: true }));
     console.log(JSON.stringify({ type: 'agent_start' }));
     console.log(JSON.stringify({ type: 'turn_start' }));
@@ -283,7 +286,7 @@ process.stdin.on('data', (chunk) => {
 process.stdin.on('end', () => process.exit(0));
 `, 'utf8');
   await chmod(bin, 0o755);
-  return { bin, logPath, sessionPath };
+  return { bin, logPath };
 }
 
 // Fake opencode CLI: stamps a FIXED session id on a create turn and echoes it

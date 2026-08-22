@@ -12628,6 +12628,17 @@ export async function startServer({
       antigravityModelLockRelease = await acquireAntigravityModelLock();
     }
 
+    // Prime's default session directory is shared by every process. Give each
+    // fresh Open Design child its own durable directory before spawn so file
+    // discovery is attributable by construction. Resume turns keep using the
+    // directory containing their already-attributed native session file.
+    const runPiRpcSessionDir =
+      def.piRpcResumeViaProcessArgs === true && def.piRpcSessionDir
+        ? agentResumePromptPolicy.resumeSessionId
+          ? path.dirname(agentResumePromptPolicy.resumeSessionId)
+          : path.join(def.piRpcSessionDir, 'open-design', run.id)
+        : def.piRpcSessionDir;
+
     let args;
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
@@ -12675,6 +12686,7 @@ export async function startServer({
           promptFilePath: promptFile?.path,
           resumeSessionId: agentResumePromptPolicy.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
+          piRpcSessionDir: runPiRpcSessionDir,
           disablePlugins:
             def.id === 'codex'
             && run.externalPluginAnalytics?.externalPluginId
@@ -14375,7 +14387,7 @@ export async function startServer({
         },
         imagePaths: def.supportsImagePaths ? promptImagePaths : [],
         uploadRoot: odNextTaskInputSnapshot?.projectionDir ?? UPLOAD_DIR,
-        sessionDir: def.piRpcSessionDir,
+        sessionDir: runPiRpcSessionDir,
         onSessionPath: (sessionPath) => {
           persistCapturedAgentSession(db, {
             conversationId: run.conversationId,

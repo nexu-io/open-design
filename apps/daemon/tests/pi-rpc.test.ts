@@ -885,6 +885,40 @@ test('attachPiRpcSession retains a live session path when aborted', async () => 
   }
 });
 
+test('attachPiRpcSession never publishes a foreign shared-directory change before its isolated child file', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const sharedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-rpc-shared-'));
+  const childSessionDir = path.join(sharedDir, 'open-design', 'run-child');
+  const child = createMockChild();
+  const captured: string[] = [];
+  try {
+    await fs.mkdir(childSessionDir, { recursive: true });
+    attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'hello',
+      cwd: '/tmp',
+      model: null,
+      send: () => {},
+      sessionDir: childSessionDir,
+      onSessionPath: (sessionPath) => captured.push(sessionPath),
+    });
+
+    const foreignPath = path.join(sharedDir, 'foreign.jsonl');
+    await fs.writeFile(foreignPath, '{"type":"foreign"}\n');
+    feedStdoutLines(child, [{ type: 'response', id: 1, success: true }]);
+    assert.deepEqual(captured, [], 'a foreign file must never become a live candidate');
+
+    const ownPath = path.join(childSessionDir, 'own.jsonl');
+    await fs.writeFile(ownPath, '{"type":"session"}\n');
+    feedStdoutLines(child, [{ type: 'agent_start' }]);
+    assert.deepEqual(captured, [ownPath]);
+    assert.notEqual(captured[0], foreignPath);
+  } finally {
+    await fs.rm(sharedDir, { recursive: true, force: true });
+  }
+});
+
 test('attachPiRpcSession skips unreadable image paths gracefully', () => {
   const events: TestSentEvent[] = [];
   const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });

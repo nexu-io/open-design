@@ -6,8 +6,9 @@ describe('Prime Agent runtime', () => {
     expect(primeAgentDef.buildArgs('', [], [], {
       model: 'openai/gpt-5',
       reasoning: 'high',
-    }, { cwd: '/tmp/design' })).toEqual([
+    }, { cwd: '/tmp/design', piRpcSessionDir: '/tmp/prime/run-1' })).toEqual([
       '--mode', 'rpc', '--cwd', '/tmp/design',
+      '--session-dir', '/tmp/prime/run-1',
       '--provider', 'openai', '--model', 'gpt-5',
       '--thinking', 'high',
     ]);
@@ -19,9 +20,11 @@ describe('Prime Agent runtime', () => {
     expect(primeAgentDef.piRpcResumeViaProcessArgs).toBe(true);
     expect(primeAgentDef.buildArgs('', [], [], {}, {
       cwd: '/tmp/design',
+      piRpcSessionDir: '/tmp/prime/run-1',
       resumeSessionId: '/tmp/prime-session.jsonl',
     })).toEqual([
       '--mode', 'rpc', '--cwd', '/tmp/design',
+      '--session-dir', '/tmp/prime/run-1',
       '--resume', '/tmp/prime-session.jsonl',
     ]);
   });
