@@ -32,7 +32,9 @@ describe('daemon sidecar startup', () => {
 
   afterEach(async () => {
     const { resetDesktopAuthForTests } = await import('../src/desktop-auth.js');
+    const { resetParentMonitorExitHoldForTests } = await import('../src/sidecar/parent-monitor-gate.js');
     resetDesktopAuthForTests();
+    resetParentMonitorExitHoldForTests();
     delete process.env.OD_WEB_PORT;
   });
 
@@ -108,6 +110,45 @@ describe('daemon sidecar startup', () => {
       expect(process.env.OD_WEB_PORT).toBe('53421');
       expect((await handle.status()).trustedWebOriginPort).toBe(53421);
     } finally {
+      await handle.stop();
+      await handle.waitUntilStopped();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('defers explicit SHUTDOWN exit while a handoff journal hold is active', async () => {
+    const { holdParentMonitorExit } = await import('../src/sidecar/parent-monitor-gate.js');
+    const { startDaemonSidecar } = await import('../src/sidecar/server.js');
+    const root = await mkdtemp(join(tmpdir(), 'od-daemon-sidecar-shutdown-hold-'));
+    const ipc = join(root, 'daemon.sock');
+    const exit = vi.fn();
+    const release = holdParentMonitorExit();
+    const handle = await startDaemonSidecar({
+      app: APP_KEYS.DAEMON,
+      base: root,
+      ipc,
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace: 'packaged-shutdown-hold',
+      source: SIDECAR_SOURCES.PACKAGED,
+    }, { exit });
+
+    try {
+      await requestJsonIpc(
+        ipc,
+        { type: SIDECAR_MESSAGES.SHUTDOWN },
+        { timeoutMs: 1_000 },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(exit).not.toHaveBeenCalled();
+      expect(stopRuntime).not.toHaveBeenCalled();
+
+      release();
+      await vi.waitFor(() => {
+        expect(exit).toHaveBeenCalledWith(0);
+      });
+      expect(stopRuntime).toHaveBeenCalled();
+    } finally {
+      release();
       await handle.stop();
       await handle.waitUntilStopped();
       await rm(root, { recursive: true, force: true });

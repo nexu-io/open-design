@@ -522,9 +522,9 @@ export async function executeLegacyPayloadDesktopHandoff(
 
   // Packaged daemons now monitor OD_TOOLS_DEV_PARENT_PID and exit when the
   // outer Electron dies. Desktop SHUTDOWN acks before asynchronously exiting,
-  // so the parent can disappear while these journal writes are still pending.
-  // Hold the parent-death exit from shutdown acceptance through the three
-  // commits so the replacement payload can still resume the armed target.
+  // then beforeShutdown -> sidecars.close() sends daemon SHUTDOWN. Hold both
+  // the parent-death timer and that explicit exit from shutdown acceptance
+  // through the three commits so the replacement payload can still resume.
   const persist = options.writeJsonFile ?? writeJsonFile;
   const releaseParentMonitor = holdParentMonitorExit();
   try {

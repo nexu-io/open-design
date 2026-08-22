@@ -27,6 +27,7 @@ import {
 import {
   attachParentMonitor,
   resetParentMonitorExitHoldForTests,
+  scheduleHeldDaemonExit,
 } from "../../src/sidecar/parent-monitor-gate.js";
 
 describe("legacy payload desktop handoff", () => {
@@ -547,6 +548,80 @@ describe("legacy payload desktop handoff", () => {
       expect(daemonExited).toBe(true);
     } finally {
       disposeMonitor();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("commits the armed journal before packaged sidecar SHUTDOWN can exit the daemon", async () => {
+    const { launcherPaths, prepared, root } = await armedHandoffFixture();
+    try {
+      let daemonExited = false;
+      const child = {
+        once: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
+          if (event === "spawn") queueMicrotask(callback);
+          return child;
+        }),
+        unref: vi.fn(),
+      };
+      const spawn = vi.fn(() => child);
+      const persist = vi.fn(async (filePath: string, payload: unknown) => {
+        expect(daemonExited, "daemon SHUTDOWN exited before journal commit").toBe(false);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        await writeJsonFile(filePath, payload);
+      });
+      const requestDesktop = vi.fn(async (message: "shutdown" | "status") => {
+        if (message === "status") return { pid: 4321, state: "running" };
+        // Packaged desktop acks SHUTDOWN, then beforeShutdown -> sidecars.close()
+        // sends daemon SHUTDOWN. Use the same deferred-exit helper the sidecar
+        // SHUTDOWN handler uses so delayed journal writes still finish first.
+        scheduleHeldDaemonExit(async () => undefined, () => {
+          daemonExited = true;
+        });
+        return { accepted: true };
+      });
+
+      const result = await executeLegacyPayloadDesktopHandoff(prepared, {
+        confirmTimeoutMs: 100,
+        env: { PATH: "/usr/bin" },
+        now: () => new Date("2026-07-15T02:00:00.000Z"),
+        requestDesktop,
+        sleep: async () => undefined,
+        spawn: spawn as never,
+        writeJsonFile: persist,
+      });
+
+      expect(result).toMatchObject({
+        kind: "scheduled",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(persist).toHaveBeenCalledTimes(3);
+      expect(persist.mock.calls.map(([filePath]) => filePath)).toEqual([
+        launcherPaths.handoffPath,
+        launcherPaths.attemptsPath,
+        launcherPaths.runtimePath,
+      ]);
+
+      const handoff = JSON.parse(await readFile(launcherPaths.handoffPath, "utf8"));
+      const attempt = JSON.parse(await readFile(launcherPaths.attemptsPath, "utf8"));
+      const runtime = JSON.parse(await readFile(launcherPaths.runtimePath, "utf8"));
+      expect(handoff).toMatchObject({
+        state: "armed",
+        target: { generation: 2, version: "1.2.3-beta.5" },
+      });
+      expect(selectLauncherRuntimeTarget({
+        attempted: attempt,
+        resume: handoff.target,
+        runtime,
+      })).toEqual({
+        pointer: { generation: 2, version: "1.2.3-beta.5" },
+        reason: "active-resume",
+        selected: true,
+      });
+
+      await vi.waitFor(() => {
+        expect(daemonExited).toBe(true);
+      });
+    } finally {
       await rm(root, { force: true, recursive: true });
     }
   });

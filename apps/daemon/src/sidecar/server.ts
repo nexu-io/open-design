@@ -32,7 +32,7 @@ import {
   setDesktopAuthSecret,
   signDesktopImportToken,
 } from "../desktop-auth.js";
-import { attachParentMonitor } from "./parent-monitor-gate.js";
+import { attachParentMonitor, scheduleHeldDaemonExit } from "./parent-monitor-gate.js";
 
 /**
  * PR #974 round 6 (mrcfps): pure wrapper that overlays the live
@@ -98,7 +98,10 @@ export function mintImportTokenForCli(baseDir: string): MintImportTokenResult {
   };
 }
 
-export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<DaemonSidecarHandle> {
+export async function startDaemonSidecar(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+  options: { exit?: (code?: number) => void } = {},
+): Promise<DaemonSidecarHandle> {
   const serverHandle: StartedDaemonRuntime = await startDaemonRuntime({
     desktopPdfExporter: async (input: DesktopExportPdfInput): Promise<DesktopExportPdfResult> => {
       const desktopIpc = resolveAppIpcPath({
@@ -184,9 +187,7 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
           // (the flag flips after REGISTER_DESKTOP_AUTH and stays sticky).
           return withCurrentDesktopAuthGate(state);
         case SIDECAR_MESSAGES.SHUTDOWN:
-          setImmediate(() => {
-            void stop().finally(() => process.exit(0));
-          });
+          scheduleHeldDaemonExit(stop, options.exit);
           return { accepted: true };
         case SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH:
           // PR #974: the desktop main process registers its per-process
