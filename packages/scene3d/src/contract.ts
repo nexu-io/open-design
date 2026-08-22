@@ -166,16 +166,6 @@ export interface NormalizedContract {
     texelDensityTarget: number | null;
     texelDensityMaxRatio: number;
   };
-  /**
-   * Which density model the scene is judged under, resolved once here so no
-   * downstream module needs an `if (minecraft)`. `"pbr"` = px/m against a
-   * hero/prop/background floor library; `"pixelArt"` = px-per-block (the
-   * texel target came from `voxel.pxPerBlock`, where 1 block = 1 m makes
-   * px/block ≡ px/m numerically). The role texel floors (budgets.ts) apply
-   * only under `"pbr"`; the spread rule (uv.ts W-444) stays armed under both
-   * and becomes the mixel detector under `"pixelArt"`.
-   */
-  texelDiscipline: "pbr" | "pixelArt";
   /** Shader bake resolution bounds (power-of-two, inclusive). The lower bound
    *  is data, not a kernel constant: 64 for pbr, or the author's declared
    *  `pxPerBlock` (pow2-floored) under pixel-art so a 16-px bake is legal. */
@@ -291,11 +281,10 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
   const explicitTexelTarget = finiteOrNull(uv.texelDensity?.target);
   const effectiveTexelTarget =
     explicitTexelTarget ?? (voxelEnabled && voxelPxPerBlock !== null ? voxelPxPerBlock : null);
-  const texelDiscipline: "pbr" | "pixelArt" =
-    explicitTexelTarget === null && voxelEnabled && voxelPxPerBlock !== null ? "pixelArt" : "pbr";
-  // Bake floor is data: 64 for pbr; the declared pxPerBlock (pow2-floored) under
-  // pixel-art, so a 16-px pixel-art bake is legal without a downstream special-case.
-  const bakeMin = texelDiscipline === "pixelArt" && voxelPxPerBlock !== null ? pow2Floor(voxelPxPerBlock) : 64;
+  // The bake floor is data, driven by the declared value rather than by a
+  // discipline enum: a project that says one block is worth 16 px has said a
+  // 16-px bake is legal, and nothing downstream needs to know a mode name.
+  const bakeMin = voxelPxPerBlock !== null ? pow2Floor(voxelPxPerBlock) : 64;
   // Field-by-field, not a spread: this block is not only lint config, it is
   // the RENDER JOB. A wrong-typed `engine` or `resolution` from a programmatic
   // contract used to pass straight through to Blender, where "big" pixels is
@@ -362,7 +351,6 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       texelDensityTarget: effectiveTexelTarget,
       texelDensityMaxRatio: numOr(uv.texelDensity?.maxRatio, 4),
     },
-    texelDiscipline,
     shade: { bakeMin, bakeMax: 4096 },
     // Iglewicz–Hoaglin robust-z cutoff — a citable statistical constant, not a
     // domain threshold; overridable for a scene that mixes scales on purpose.

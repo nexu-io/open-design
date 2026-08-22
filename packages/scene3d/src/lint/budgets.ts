@@ -96,11 +96,16 @@ export function resolveBudgets(
     const familyId = base?.id ?? p.id;
     const role = p.role ?? base?.role;
     let profile = role ? ROLE_PROFILES[role] : undefined;
-    // The role texel FLOOR (px/m: hero 512, prop 256…) is PBR-discipline data.
-    // Under pixel-art discipline the density authority is pxPerBlock, so the
-    // library's floor does not apply — drop it here and the judge's
-    // "no bound ⇒ silent" makes W-956 inert. An explicit override still layers.
-    if (profile && contract.texelDiscipline === "pixelArt" && profile.texelDensity) {
+    // The role texel FLOOR (px/m: hero 512, prop 256…) is the LIBRARY's guess
+    // at a density for a role. A project that declared its own density
+    // authority — an explicit px/m target, or a pxPerBlock that says what one
+    // block is worth — has superseded that guess, so the floor does not apply;
+    // drop it and the judge's "no bound ⇒ silent" makes W-956 inert. That is
+    // ordinary precedence, not a mode: it used to be spelled
+    // `texelDiscipline: "pbr" | "pixelArt"`, an enum whose whole content was
+    // which arm of a `??` had fired two lines earlier in normalizeContract.
+    // An explicit per-role or per-part override still layers on top.
+    if (profile && contract.uv.texelDensityTarget !== null && profile.texelDensity) {
       const { texelDensity: _drop, ...rest } = profile;
       profile = rest;
     }
