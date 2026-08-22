@@ -16,13 +16,14 @@
  * @see https://github.com/nexu-io/open-design/issues/710
  */
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createJsonIpcServer, resolveAppIpcPath } from '@open-design/sidecar';
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-proto';
+import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_ENV } from '@open-design/sidecar-proto';
 
 import {
   buildPackagedDaemonSpawnEnv,
@@ -31,6 +32,7 @@ import {
   createWebSidecarSupervisor,
   openLog,
   registerPackagedWebUrl,
+  retireExistingSidecarEndpoint,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
@@ -146,6 +148,12 @@ describe('packaged web URL registration', () => {
 });
 
 describe('packaged child Vite+ environment forwarding', () => {
+  it('pins packaged sidecars to the packaged desktop parent process', () => {
+    const env = resolvePackagedChildBaseEnv({}, false, {}, false);
+
+    expect(env[SIDECAR_ENV.TOOLS_DEV_PARENT_PID]).toBe(String(process.pid));
+  });
+
   it('forwards CODEX_HOME so isolated and managed Codex installs never fall back to another user config', () => {
     const env = resolvePackagedChildBaseEnv({
       CODEX_HOME: '/tmp/isolated-codex-home',
@@ -314,6 +322,69 @@ describe('packaged child Vite+ environment forwarding', () => {
       if (originalVpHome == null) delete process.env.VP_HOME;
       else process.env.VP_HOME = originalVpHome;
       rmSync(vpHome, { recursive: true, force: true });
+    }
+  });
+});
+
+describe.runIf(process.platform !== 'win32')('packaged stale web endpoint recovery', () => {
+  it('unlinks a web socket whose owner accepts connections but never answers IPC', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-'));
+    const socketPath = join(root, 'web.sock');
+    const logPath = join(root, 'web.log');
+    const sockets = new Set<Socket>();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+      socket.resume();
+    });
+    await new Promise<void>((resolveListen, rejectListen) => {
+      server.once('error', rejectListen);
+      server.listen(socketPath, () => {
+        server.off('error', rejectListen);
+        resolveListen();
+      });
+    });
+
+    try {
+      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB);
+      expect(existsSync(socketPath)).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('unresponsive web sidecar endpoint removed before relaunch'),
+      );
+    } finally {
+      warn.mockRestore();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it('does not unlink an unresponsive daemon socket', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-daemon-'));
+    const socketPath = join(root, 'daemon.sock');
+    const logPath = join(root, 'daemon.log');
+    const sockets = new Set<Socket>();
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+      socket.resume();
+    });
+    await new Promise<void>((resolveListen, rejectListen) => {
+      server.once('error', rejectListen);
+      server.listen(socketPath, () => {
+        server.off('error', rejectListen);
+        resolveListen();
+      });
+    });
+
+    try {
+      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.DAEMON);
+      expect(existsSync(socketPath)).toBe(true);
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      rmSync(root, { force: true, recursive: true });
     }
   });
 });

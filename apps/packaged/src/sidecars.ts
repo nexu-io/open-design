@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { access, appendFile, mkdir, open, rename, type FileHandle } from "node:fs/promises";
+import { access, appendFile, lstat, mkdir, open, rename, rm, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -18,6 +18,7 @@ import {
 } from "@open-design/sidecar-proto";
 import {
   createSidecarLaunchEnv,
+  isWindowsNamedPipePath,
   requestJsonIpc,
   resolveAppIpcPath,
   type SidecarRuntimeContext,
@@ -561,7 +562,11 @@ export async function waitForStatus<T>(
   }
 }
 
-async function retireExistingSidecarEndpoint(ipcPath: string, logPath: string): Promise<void> {
+export async function retireExistingSidecarEndpoint(
+  ipcPath: string,
+  logPath: string,
+  app: AppKey,
+): Promise<void> {
   let status: { pid?: number | null } | null = null;
   try {
     status = await requestJsonIpc<{ pid?: number | null }>(
@@ -569,7 +574,30 @@ async function retireExistingSidecarEndpoint(ipcPath: string, logPath: string): 
       { type: SIDECAR_MESSAGES.STATUS },
       { timeoutMs: 350 },
     );
-  } catch {
+  } catch (error) {
+    // A web sidecar can survive an abruptly-terminated desktop while becoming
+    // too wedged to answer STATUS. A plain connect probe still sees its Unix
+    // socket as live, so the generic JSON-IPC stale-socket cleanup cannot
+    // distinguish it from a healthy endpoint and the replacement dies with
+    // EADDRINUSE. Web is stateless, so taking over this exact namespace socket
+    // is safe; daemon recovery remains conservative because starting a second
+    // daemon beside a hung first owner could put two writers on the same DB.
+    if (app !== APP_KEYS.WEB || isWindowsNamedPipePath(ipcPath)) return;
+    try {
+      const stat = await lstat(ipcPath);
+      if (!stat.isSocket()) return;
+      await rm(ipcPath, { force: true });
+      const message =
+        `[open-design packaged] unresponsive web sidecar endpoint removed before relaunch ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`;
+      await appendSidecarLifecycleLog(logPath, message);
+      // The child log handle is already open and may overwrite a pre-spawn
+      // append from offset zero. Also emit through the packaged desktop logger,
+      // whose append-only file is the durable startup-recovery record.
+      console.warn(message);
+    } catch {
+      // ENOENT means the endpoint disappeared during the probe. Other failures
+      // are left for the real bind to report without deleting an unknown path.
+    }
     return;
   }
 
@@ -630,9 +658,16 @@ export function resolvePackagedChildBaseEnv(
       forwardedEnv[key] = value;
     }
   }
-  return includeSystemProxyEnv
+  const mergedEnv = includeSystemProxyEnv
     ? mergeProxyAwareEnv(process.platform, systemProxyEnv, forwardedEnv)
     : mergeProxyAwareEnv(process.platform, forwardedEnv);
+  return {
+    ...mergedEnv,
+    // Daemon and web already monitor this protocol-owned parent PID. Packaged
+    // launches must provide it too so a SIGKILL/crash of the Electron owner
+    // cannot leave sidecars holding namespace IPC endpoints indefinitely.
+    [SIDECAR_ENV.TOOLS_DEV_PARENT_PID]: String(process.pid),
+  };
 }
 
 function createPackagedDaemonManagedPathEnv(
@@ -778,7 +813,7 @@ async function spawnSidecarChild(options: {
   } satisfies SidecarStamp;
   const logPath = logPathFor(options.paths, options.app);
   const logHandle = await openLog(logPath);
-  await retireExistingSidecarEndpoint(ipcPath, logPath);
+  await retireExistingSidecarEndpoint(ipcPath, logPath, options.app);
   const usesElectronAsNode = options.nodeCommand == null;
   const command = options.nodeCommand
     ?? options.electronNodeCommand
