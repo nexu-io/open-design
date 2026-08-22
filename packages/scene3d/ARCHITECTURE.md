@@ -505,6 +505,7 @@ too coarse to see the thing being judged**:
 | `E-324` failed TransmissionTest | the posture indexed single names; a z-fight names a PAIR (`"A <-> B"`) |
 | `W-348` told AlphaBlendModeTest to merge its five deliberately-different materials | the census measured no alpha mode and no cutoff |
 | `W-903` (new) — glass, iridescence, sheen, IOR and volume destroyed end to end | master parity COUNTS materials, so a material surviving as a shell passes |
+| `E-404` failed RiggedFigure and Sponza AFTER they linted clean | the posture stopped at lint; the stage-naming rule fires during EXPORT |
 
 The third is the instructive one. Adding `blendMethod` fixed one asset; adding
 `alphaCutoff` fixed a second; iridescence would have been a third. **Enumerating
@@ -515,7 +516,17 @@ them. The asymmetry that justifies it: a false negative costs a missed draw
 call, a false positive costs an author merging two materials that looked
 identical only to us.
 
-Two habits the corpus enforces that a fixture suite cannot:
+The last one indicts the METHOD, and is the most useful of the six. The
+calibration ran `parse/build/lint` and never `export/manifest` — and the
+regression test written for exactly this workflow ("compiles a bare downloaded
+asset") stopped after lint too. So the one workflow this round set out to
+protect could pass every check written for it and still fail the compile, in a
+stage neither the probe nor the test ever reached. **A posture that only holds
+for the stages you happened to run is not a posture.** It also means a "23/23
+clean" claim from that harness was measured through lint; through all six
+stages it was 21/23 until the fix.
+
+Three habits the corpus enforces that a fixture suite cannot:
 
 - **Separate instrument error from findings.** The first ground-truth run
   reported eight "metallic declared=1 measured=null" disagreements. All eight
@@ -528,6 +539,10 @@ Two habits the corpus enforces that a fixture suite cannot:
   role each source binds — baseColor/emissive sRGB, normal/occlusion/
   metallicRoughness linear data — with zero disagreements. Knowing a thing is
   RIGHT is worth as much as finding it wrong, and only a real corpus can say so.
+
+- **Run the whole pipeline, not the interesting part of it.** Calibrating the
+  linter is not calibrating the compiler; a stage nobody invokes is a stage
+  whose verdicts nobody has ever read.
 
 Corpus assets are downloaded, never vendored: `tests/fixtures/real/` holds the
 four pinned ones (with LICENSES.md), and the calibration set is fetched on
