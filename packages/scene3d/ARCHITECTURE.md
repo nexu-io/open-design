@@ -126,15 +126,31 @@ kernels, same stdlib, same diagnostics.
   the repair. Upstream importer bugs the compiler absorbs are shimmed
   narrowly and commented (Blender 5.0 FBX-with-lights crash).
 
-## Voxel / Minecraft target (`target: "minecraft"`)
+## Voxel and Minecraft targets (`target: "voxel"` ⊂ `target: "minecraft"`)
 
-The compiler is a tool a Minecraft modder / voxel artist can wield: author a
-`scene.json`, lint it against the vanilla model format's real constraints, and
-emit the JSON the game loads — iterating reliably instead of guessing. It is an
-opt-in dialect of the existing machinery, never a style: every rule is a format
-or consistency fact, silent without the target, so non-voxel scenes are
+Voxel discipline is TWO layers, because voxel art is an ecosystem
+(MagicaVoxel / Goxel / Qubicle → Unity / Godot / Unreal via GLB/OBJ) and
+Minecraft is one consumer of it with a specific format:
+
+- **`voxel`** — engine-agnostic blocky-art discipline: grid alignment (W-970),
+  the solver's grid-snap of `repeat`/`scatter`, and the pixel-art texel-density
+  authority. Ships the normal GLB/OBJ/USD deliverables any engine imports. NO
+  format rule — a voxel sphere or a 3-metre dome is legitimate. Gated on
+  `contract.voxel.enabled`.
+- **`minecraft` ⊃ voxel** — layers the vanilla FORMAT rules (cuboid elements
+  W-971, legal rotation W-972, element bounds W-973, the structure class I-970)
+  and the model.json/geometry.json export on top. Gated on
+  `contract.minecraft.enabled` (which implies `voxel.enabled`). A bare
+  `target:"minecraft"` is pixel-art at 16 px/block.
+
+Either way it is opt-in and never a style: every rule is a format or
+consistency fact, silent without a target, so non-voxel scenes are
 byte-identical. Adopted from a fable-5 architecture consult (`KILN.md` records
 the reasoning); USD stays the master and the block model is a lowering of it.
+The Java block model cannot express a non-cuboid (W-971 says so and the export
+skips it); Bedrock's `poly_mesh` format could carry arbitrary geometry — a
+documented boundary, not yet built (it needs full per-vertex mesh export in the
+census, and the format is niche).
 
 - **Measure (census, `runner.py voxel_facts`, cheap O(verts), gated on the
   target).** Per mesh: `voxel.isBox` (a single rectangular cuboid — a Java
