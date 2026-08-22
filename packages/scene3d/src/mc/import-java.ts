@@ -236,13 +236,41 @@ function sanitizeId(name: string): string {
   if (s.length < 3) s = (s + "___").slice(0, 3);
   return s.slice(0, 60);
 }
+/** The schema's id ceiling; ids longer than this are not valid parts. */
+const MAX_ID = 63;
+
+/**
+ * A unique, schema-valid id for `base`.
+ *
+ * Disambiguation truncates the STEM and then appends the counter — never the
+ * other way round. Slicing the joined string is what makes the search
+ * non-terminating: once the id already fills the budget, `id_2`, `id_3`, … all
+ * slice back to the same value, so the "is it taken?" loop can never find a
+ * free candidate. Model files really do carry 60-character duplicate element
+ * names, and this runs in TypeScript before any Blender watchdog exists, so
+ * the failure was a permanent synchronous wedge of the compile.
+ *
+ * With a stem that leaves room for the widest counter we could need, every
+ * candidate is a distinct string, so one of `used.size + 1` attempts must be
+ * free — termination is structural, not a retry limit.
+ */
 function uniqueId(base: string, used: Set<string>): string {
-  const id = base.startsWith("prp_") || base.startsWith("mtl_") ? base : `prp_${base}`.slice(0, 63);
-  let k = id;
-  let n = 2;
-  while (used.has(k)) k = `${id}_${n++}`.slice(0, 63);
-  used.add(k);
-  return k;
+  const id = (base.startsWith("prp_") || base.startsWith("mtl_") ? base : `prp_${base}`).slice(0, MAX_ID);
+  if (!used.has(id)) {
+    used.add(id);
+    return id;
+  }
+  const last = used.size + 2;
+  const stem = id.slice(0, MAX_ID - 1 - String(last).length);
+  for (let n = 2; n <= last; n++) {
+    const k = `${stem}_${n}`;
+    if (!used.has(k)) {
+      used.add(k);
+      return k;
+    }
+  }
+  /* c8 ignore next -- unreachable: `last - 1` distinct candidates, ≤ used.size taken */
+  throw new Error("uniqueId exhausted");
 }
 function basename(p: string): string {
   return (p.split(/[\\/]/).pop() ?? p).replace(/\.(png|tga)$/i, "");

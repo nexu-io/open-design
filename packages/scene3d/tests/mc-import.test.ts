@@ -92,6 +92,23 @@ describe("importJavaModel", () => {
     expect(importJavaModel({ elements: [{ from: [0, 0, 0], to: [1, 1, 1], rotation: { angle: 22.5, axis: "y" }, faces: {} }] }).spec).toBeNull();
   });
 
+  it("terminates on duplicate names long enough to fill the id budget", () => {
+    // A 58-char element name makes `prp_` + name exactly 62 chars. Appending
+    // `_2` and slicing the JOINED string back to 63 collapses every candidate
+    // onto one value, so the uniquifier used to spin forever — synchronously,
+    // in TypeScript, before any Blender watchdog exists. A dropped-in .bbmodel
+    // could wedge the compile promise (and the daemon route) permanently.
+    const name = "e".repeat(58);
+    const model = {
+      elements: Array.from({ length: 12 }, () => ({ from: [0, 0, 0], to: [16, 16, 16], name, faces: {} })),
+    };
+    const { spec } = importJavaModel(model);
+    const ids = spec!.parts.map((p) => p.id);
+    expect(ids).toHaveLength(12);
+    expect(new Set(ids).size).toBe(12);
+    for (const id of ids) expect(id).toMatch(/^[A-Za-z][A-Za-z0-9_]{2,63}$/);
+  });
+
   it("gives every part a schema-valid unique id", () => {
     const model = {
       elements: [
