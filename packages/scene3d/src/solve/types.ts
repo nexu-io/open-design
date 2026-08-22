@@ -207,7 +207,9 @@ export interface ClaimsSpec {
   parts?: number;
   /** Ceiling on total triangles across all meshes. */
   maxTriangles?: number;
-  /** Every part rests on or above the ground plane (within tolerance). */
+  /** Every part RESTS on something — the ground plane, or another part directly
+   *  beneath it — and none sinks through the floor. Adjudicated at the rest
+   *  pose; see solve/contact.ts for the shared predicate. */
   grounded?: boolean;
   /** Ceiling on the scene's world-space height in metres. */
   maxHeight?: number;
@@ -268,6 +270,7 @@ export interface SolveDiagnostic {
     | "SOLVE-CONFLICT"
     | "SOLVE-UNKNOWN-PART"
     | "SOLVE-EPSILON-FLOOR"
+    | "SOLVE-INTERSECTION"
     | "SOLVE-LIMIT";
   message: string;
   part?: string;

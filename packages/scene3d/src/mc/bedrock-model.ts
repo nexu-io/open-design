@@ -1,7 +1,7 @@
 import { Census } from "../types.js";
 import { NormalizedContract } from "../contract.js";
 import { encodePng } from "../sheet/png.js";
-import { PX, boxToMc, px, sanitizeKey, solidTile } from "./common.js";
+import { PX, boxToMc, px, rotationToMc, sanitizeKey, solidTile } from "./common.js";
 
 /**
  * Lower a compiled scene to a **Minecraft Bedrock** `geometry.json`.
@@ -81,9 +81,11 @@ function rotatedCube(
   const sx = localSize[0];
   const sy = localSize[2];
   const sz = localSize[1];
-  const deg4 = Number(deg.toFixed(4));
+  // The axis/sign mapping is defined once in common.ts and shared with the
+  // Java exporter, so the two cannot disagree about which way a rotation goes.
+  const mapped = rotationToMc(axis, deg);
   const rotation: [number, number, number] =
-    axis === "x" ? [deg4, 0, 0] : axis === "z" ? [0, deg4, 0] : [0, 0, -deg4];
+    mapped.axis === "x" ? [mapped.angle, 0, 0] : mapped.axis === "y" ? [0, mapped.angle, 0] : [0, 0, mapped.angle];
   return {
     origin: [px(cx - sx / 2), px(cy - sy / 2), px(cz - sz / 2)],
     size: [px(sx), px(sy), px(sz)],

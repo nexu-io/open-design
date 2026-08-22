@@ -1844,105 +1844,142 @@ THICKNESS_FACE_CAP = 40000
 def voxel_facts(bm, grid):
     """Voxel/Minecraft geometry facts, WORLD space (bm already transformed).
 
-    Cheap O(verts) arithmetic — measured only when a `minecraft` contract asks
-    for it. Recovers whether the mesh is a single rectangular cuboid (a Java
-    block-model `element` is representable iff so), its single-axis rotation if
-    the box is oriented, and the worst vertex deviation from the authoring grid.
-    Every value is a FACT; the contract does the judging.
+    Cheap O(verts) arithmetic - measured only when a voxel contract asks for
+    it. Recovers the ORIENTED BOX a block-model element is authored as: its
+    centre, its un-rotated extent, its single-axis rotation if it has one, and
+    the worst corner deviation from the authoring grid. Every value is a FACT;
+    the contract does the judging.
 
-    Boxness is deliberately strict: exactly 8 vertices, 6 quad faces, three
-    mutually-orthogonal edges from a corner that closes onto an opposite vertex.
-    A subdivided or bevelled "box" is not one an `element` can carry, and this
-    says so honestly rather than approximating."""
+    Boxness is measured on the mesh's unique vertex POSITIONS, not on its
+    topology. The old test demanded exactly 8 vertices and 6 quad faces, which
+    is how a spec-built cube arrives and is not how anything else does: a real
+    MagicaVoxel/Qubicle OBJ exports triangulated (8 positions, 12 triangles)
+    and was reported "not a single cuboid" for a visually perfect block, then
+    skipped by the exporter. Face count is a fact about somebody's exporter;
+    being a cuboid is a fact about where the corners are.
+
+    Grid deviation is likewise measured in the frame the FORMAT defines: for a
+    recovered box, against its un-rotated corners. A legally rotated element
+    (Java permits 22.5 degrees) necessarily puts its world-space vertices off
+    the axis-aligned grid, so measuring there reported "it will shimmer in
+    engine - snap the vertices to the grid" about exactly the rotations the
+    format legalises, with advice that cannot be followed. Grid alignment and
+    rotation legality are two different questions, asked separately."""
     import math
     import mathutils
 
     bm.verts.ensure_lookup_table()
     coords = [v.co.copy() for v in bm.verts]
-    n = len(coords)
     nf = len(bm.faces)
 
-    # Grid deviation: the farthest any vertex sits from its nearest grid node.
-    grid_dev = 0.0
-    if grid and grid > 0:
-        for co in coords:
-            for comp in co:
-                grid_dev = max(grid_dev, abs(comp - round(comp / grid) * grid))
+    # Unique corner positions, quantised so per-face duplicated vertices (the
+    # common OBJ/FBX spelling of a cube) collapse onto the corners they share.
+    seen = {}
+    for co in coords:
+        seen.setdefault((round(co.x, 6), round(co.y, 6), round(co.z, 6)), co)
+    uniq = list(seen.values())
 
     is_box = False
     axis_aligned = False
     rot_axis = None
     rot_deg = None
+    box_edges = None
 
-    if n == 8 and nf == 6 and all(len(f.verts) == 4 for f in bm.faces):
-        v0 = bm.verts[0]
-        nbrs = [e.other_vert(v0) for e in v0.link_edges]
-        if len(nbrs) == 3:
-            edges = [(nb.co - v0.co) for nb in nbrs]
-            lens = [e.length for e in edges]
-            if all(l > 1e-6 for l in lens):
-                u = [e / l for e, l in zip(edges, lens)]
-                orth = (abs(u[0].dot(u[1])) < 2e-3
-                        and abs(u[0].dot(u[2])) < 2e-3
-                        and abs(u[1].dot(u[2])) < 2e-3)
-                # The three edges must also close the box onto an existing corner.
-                corner = v0.co + edges[0] + edges[1] + edges[2]
-                closes = any((c - corner).length < 1e-5 for c in coords)
-                if orth and closes:
+    # A closed cuboid needs at least six faces however it is triangulated;
+    # eight points alone could be two loose tetrahedra.
+    if len(uniq) == 8 and nf >= 6:
+        p0 = uniq[0]
+        offs = [p - p0 for p in uniq[1:]]
+        # From one corner of a cuboid the seven offsets are the three edges,
+        # the three face diagonals (edge + edge) and the body diagonal (all
+        # three). So an offset is an EDGE exactly when it is not the sum of two
+        # others. Taking the three SHORTEST offsets instead is wrong the moment
+        # the box is elongated: for a 0.2 x 0.2 x 1.0 post the 0.283 face
+        # diagonal is shorter than the 1.0 edge, and the box stops being one.
+        def is_edge(i):
+            v = offs[i]
+            for a in range(len(offs)):
+                if a == i:
+                    continue
+                for b in range(len(offs)):
+                    if b == i or b == a:
+                        continue
+                    if (offs[a] + offs[b] - v).length < 1e-6:
+                        return False
+            return True
+
+        cand = [offs[i] for i in range(len(offs)) if is_edge(i)]
+        lens = [e.length for e in cand] if len(cand) == 3 else []
+        if len(cand) == 3 and all(l > 1e-6 for l in lens):
+            u = [e / l for e, l in zip(cand, lens)]
+            orth = (abs(u[0].dot(u[1])) < 2e-3
+                    and abs(u[0].dot(u[2])) < 2e-3
+                    and abs(u[1].dot(u[2])) < 2e-3)
+            if orth:
+                # The eight points must be exactly the eight corners spanned by
+                # those three edges - that is what makes it a cuboid, rather
+                # than eight points that merely include one right corner.
+                want = [p0 + cand[0] * a + cand[1] * b + cand[2] * c
+                        for a in (0, 1) for b in (0, 1) for c in (0, 1)]
+                if all(any((w - p).length < 1e-5 for p in uniq) for w in want):
                     is_box = True
-                    bases = (mathutils.Vector((1.0, 0.0, 0.0)),
-                             mathutils.Vector((0.0, 1.0, 0.0)),
-                             mathutils.Vector((0.0, 0.0, 1.0)))
+                    box_edges = cand
 
-                    def axis_of(vec):
-                        for ax, base in enumerate(bases):
-                            if abs(abs(vec.dot(base)) - 1.0) < 2e-3:
-                                return ax
-                        return None
+    if is_box:
+        bases = (mathutils.Vector((1.0, 0.0, 0.0)),
+                 mathutils.Vector((0.0, 1.0, 0.0)),
+                 mathutils.Vector((0.0, 0.0, 1.0)))
+        u = [e / e.length for e in box_edges]
 
-                    axes = [axis_of(ui) for ui in u]
-                    if all(a is not None for a in axes) and len(set(axes)) == 3:
-                        axis_aligned = True
-                    else:
-                        # A single-axis-rotated box keeps ONE edge parallel to a
-                        # world axis (the spin axis); recover another edge's angle
-                        # in the perpendicular plane, folded into (-45, 45] because
-                        # a box repeats every 90 degrees. If no edge is world-
-                        # parallel the box is multi-axis rotated (rot_axis stays
-                        # None while is_box is True) — a state the Java rule reads
-                        # as "not representable".
-                        ra = None
-                        ra_i = None
-                        for i, ui in enumerate(u):
-                            a = axis_of(ui)
-                            if a is not None:
-                                ra, ra_i = a, i
-                                break
-                        if ra is not None:
-                            other = next(j for j in range(3) if j != ra_i)
-                            vec = u[other]
-                            if ra == 0:
-                                ang = math.degrees(math.atan2(vec.z, vec.y))
-                            elif ra == 1:
-                                ang = math.degrees(math.atan2(vec.x, vec.z))
-                            else:
-                                ang = math.degrees(math.atan2(vec.y, vec.x))
-                            ang = ((ang + 45.0) % 90.0) - 45.0
-                            rot_axis = "xyz"[ra]
-                            rot_deg = round(ang, 3)
+        def axis_of(vec):
+            for ax, base in enumerate(bases):
+                if abs(abs(vec.dot(base)) - 1.0) < 2e-3:
+                    return ax
+            return None
 
-    # Centre + UN-ROTATED size of the box (world frame). For an oriented cube the
-    # world AABB is the rotated bounding box, not the element — so a rotated
-    # Bedrock cube needs the box's own extent (un-rotate the corners about the
-    # centre by -angle) plus the centre as its pivot. Axis-aligned boxes just get
-    # their world extent. Emitted only for a box; the exporter maps to MC space.
+        axes = [axis_of(ui) for ui in u]
+        if all(a is not None for a in axes) and len(set(axes)) == 3:
+            axis_aligned = True
+        else:
+            # A single-axis-rotated box keeps ONE edge parallel to a world axis
+            # (the spin axis); recover another edge's angle in the
+            # perpendicular plane, folded into (-45, 45] because a box repeats
+            # every 90 degrees. If no edge is world-parallel the box is
+            # multi-axis rotated (rot_axis stays None while is_box is True) - a
+            # state the Java rule reads as "not representable".
+            ra = None
+            ra_i = None
+            for i, ui in enumerate(u):
+                a = axis_of(ui)
+                if a is not None:
+                    ra, ra_i = a, i
+                    break
+            if ra is not None:
+                other = next(j for j in range(3) if j != ra_i)
+                vec = u[other]
+                if ra == 0:
+                    ang = math.degrees(math.atan2(vec.z, vec.y))
+                elif ra == 1:
+                    ang = math.degrees(math.atan2(vec.x, vec.z))
+                else:
+                    ang = math.degrees(math.atan2(vec.y, vec.x))
+                ang = ((ang + 45.0) % 90.0) - 45.0
+                rot_axis = "xyz"[ra]
+                rot_deg = round(ang, 3)
+
+    # Centre + UN-ROTATED size of the box (world frame). For an oriented cube
+    # the world AABB is the rotated bounding box, not the element - so every
+    # element-space question (extent, bounds, grid) needs the box's own frame:
+    # un-rotate the corners about the centre by -angle. Axis-aligned boxes just
+    # get their world extent. Emitted only for a box; the exporter maps it to
+    # MC space and the linter judges in the same frame.
     center_out = None
     local_size = None
-    if is_box and coords:
+    if is_box:
         cen = mathutils.Vector((
-            sum(c.x for c in coords) / len(coords),
-            sum(c.y for c in coords) / len(coords),
-            sum(c.z for c in coords) / len(coords),
+            sum(c.x for c in uniq) / len(uniq),
+            sum(c.y for c in uniq) / len(uniq),
+            sum(c.z for c in uniq) / len(uniq),
         ))
         center_out = [round(cen.x, 6), round(cen.y, 6), round(cen.z, 6)]
         if rot_axis is not None and rot_deg is not None:
@@ -1950,13 +1987,35 @@ def voxel_facts(bm, grid):
                         "y": mathutils.Vector((0, 1, 0)),
                         "z": mathutils.Vector((0, 0, 1))}[rot_axis]
             unrot = mathutils.Matrix.Rotation(math.radians(-rot_deg), 4, axis_vec)
-            pts = [unrot @ (c - cen) for c in coords]
+            pts = [unrot @ (c - cen) for c in uniq]
         else:
-            pts = [c - cen for c in coords]
+            pts = [c - cen for c in uniq]
         xs = [p.x for p in pts]
         ys = [p.y for p in pts]
         zs = [p.z for p in pts]
-        local_size = [round(max(xs) - min(xs), 6), round(max(ys) - min(ys), 6), round(max(zs) - min(zs), 6)]
+        local_size = [round(max(xs) - min(xs), 6),
+                      round(max(ys) - min(ys), 6),
+                      round(max(zs) - min(zs), 6)]
+
+    # Grid deviation: the farthest any corner sits from its nearest grid node,
+    # measured on the ELEMENT (un-rotated corners) when there is one, and on
+    # the raw vertices otherwise.
+    grid_dev = 0.0
+    if grid and grid > 0:
+        if center_out is not None and local_size is not None:
+            probe = [
+                mathutils.Vector((
+                    center_out[0] + sx * local_size[0] / 2.0,
+                    center_out[1] + sy * local_size[1] / 2.0,
+                    center_out[2] + sz * local_size[2] / 2.0,
+                ))
+                for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)
+            ]
+        else:
+            probe = coords
+        for co in probe:
+            for comp in co:
+                grid_dev = max(grid_dev, abs(comp - round(comp / grid) * grid))
 
     return {
         "isBox": is_box,

@@ -207,6 +207,234 @@ plate("prp_plate_b")
     for (const issue of relaxed) expect(issue.target).not.toBe("prp_pedestal");
   });
 
+  /* ---- the oriented box is the authority ---------------------------- */
+
+  const MC = JSON.stringify({ schemaVersion: 1, target: "minecraft" });
+
+  /** A 1-block cube built at `loc`, optionally rotated and/or triangulated. */
+  const cube = (opts: { rot?: string; tri?: boolean; loc?: string; size?: string } = {}) => `
+import bpy, bmesh, math
+
+mesh = bpy.data.meshes.new("prp_block_mesh")
+bm = bmesh.new()
+bmesh.ops.create_cube(bm, size=1.0)
+${opts.tri ? "bmesh.ops.triangulate(bm, faces=bm.faces[:])" : ""}
+bm.to_mesh(mesh)
+bm.free()
+obj = bpy.data.objects.new("prp_block", mesh)
+bpy.context.scene.collection.objects.link(obj)
+obj.scale = (${opts.size ?? "1.0, 1.0, 1.0"})
+obj.location = (${opts.loc ?? "0.5, 0.5, 0.5"})
+${opts.rot ? `obj.rotation_euler = (${opts.rot})` : ""}
+mat = bpy.data.materials.new("mtl_block")
+mat.use_nodes = True
+obj.data.materials.append(mat)
+bpy.context.view_layer.update()
+bpy.ops.object.select_all(action="DESELECT")
+obj.select_set(True)
+bpy.context.view_layer.objects.active = obj
+bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+`;
+
+  it("recognises a triangulated cuboid as a cuboid", async () => {
+    // A real MagicaVoxel/Qubicle OBJ export is triangulated. Boxness used to
+    // demand 6 QUAD faces, so a visually perfect 1-block cube was reported
+    // "not a single cuboid" (W-971) and then skipped by the exporter. Face
+    // count is a fact about somebody's exporter; being a cuboid is a fact
+    // about where the corners are.
+    const dir = mkProject({ "scene3d.json": MC, "build.py": cube({ tri: true }) });
+    const r = await run(dir);
+    const v = r.census!.meshes.find((m) => m.object === "prp_block")!.voxel!;
+    expect(v.isBox).toBe(true);
+    expect(v.axisAligned).toBe(true);
+    expect(v.localSize!.map((n) => Number(n.toFixed(4)))).toEqual([1, 1, 1]);
+    expect(r.issues.map((i) => i.code)).not.toContain("S3D-W-971");
+  });
+
+  it("does not call a legally rotated element off-grid", async () => {
+    // Java legalises 22.5°, and a box rotated 22.5° NECESSARILY has world-space
+    // vertices off the axis-aligned grid. Measuring there fired W-970 — "it
+    // will shimmer in-engine, snap the vertices to the grid" — on exactly the
+    // rotations the format permits, with advice that cannot be followed.
+    // Grid alignment is a question about the UN-ROTATED element.
+    const dir = mkProject({
+      "scene3d.json": MC,
+      "build.py": cube({ rot: "0, 0, math.radians(22.5)" }),
+    });
+    const r = await run(dir);
+    const v = r.census!.meshes.find((m) => m.object === "prp_block")!.voxel!;
+    expect(v.rotationAxis).toBe("z");
+    expect(v.rotationDeg).toBeCloseTo(22.5, 3);
+    expect(r.issues.map((i) => i.code)).not.toContain("S3D-W-970"); // legal
+    expect(r.issues.map((i) => i.code)).not.toContain("S3D-W-972"); // legal
+  });
+
+  it("still catches a genuinely off-grid element, rotated or not", async () => {
+    // The control for the case above: half a pixel off, rotated legally. The
+    // rotation must not become a way to hide from the grid rule.
+    const dir = mkProject({
+      "scene3d.json": MC,
+      "build.py": cube({ rot: "0, 0, math.radians(22.5)", loc: "0.53125, 0.5, 0.5" }),
+    });
+    const r = await run(dir);
+    const offGrid = r.issues.find((i) => i.code === "S3D-W-970");
+    expect(offGrid).toBeDefined();
+    expect(offGrid!.detail?.offGridPx).toBeCloseTo(0.5, 2);
+  });
+
+  it("exports a legally rotated element to Java instead of dropping it", async () => {
+    // The census recovered centre/localSize/rotation and the Bedrock exporter
+    // used them; the Java exporter skipped every rotated box claiming it could
+    // not recover the un-rotated extent. A measured fact with no consumer.
+    const dir = mkProject({
+      "scene3d.json": MC,
+      "build.py": cube({ rot: "0, 0, math.radians(22.5)" }),
+    });
+    await run(dir, ["parse", "build", "export", "lint"]);
+    const model = JSON.parse(fs.readFileSync(path.join(dir, "out", "minecraft", "model.json"), "utf8"));
+    expect(model.elements).toHaveLength(1);
+    const el = model.elements[0];
+    // The un-rotated 1-block box, in element space, on integer pixels.
+    expect(el.from).toEqual([0, 0, -16]);
+    expect(el.to).toEqual([16, 16, 0]);
+    // Blender Z → MC Y, same sign (frame conjugation, defined in mc/common.ts).
+    expect(el.rotation).toMatchObject({ axis: "y", angle: 22.5 });
+    expect(el.rotation.origin).toEqual([8, 8, -8]);
+  });
+
+  it("refuses to round an illegal rotation into a legal one", async () => {
+    // Shipping the author's 30° box as 22.5° would be wrong geometry sold as
+    // success. W-972 says it; the exporter must agree, and say what it dropped.
+    const dir = mkProject({
+      "scene3d.json": MC,
+      "build.py": cube({ rot: "0, 0, math.radians(30)" }),
+    });
+    const r = await run(dir, ["parse", "build", "export", "lint"]);
+    expect(r.issues.map((i) => i.code)).toContain("S3D-W-972");
+    const model = JSON.parse(fs.readFileSync(path.join(dir, "out", "minecraft", "model.json"), "utf8"));
+    expect(model.elements).toHaveLength(0);
+  });
+
+  it("judges element bounds in the element's own frame, not its rotated silhouette", async () => {
+    // A 2.5-block element rotated 45° has a 3.54-block world AABB, so it was
+    // filed as multi-block structure (I-970) — which EXEMPTED it from the
+    // element rules, including the out-of-bounds rule it was breaking.
+    const dir = mkProject({
+      "scene3d.json": MC,
+      "build.py": cube({ rot: "0, 0, math.radians(45)", size: "2.5, 2.5, 0.5", loc: "0, 0, 0.25" }),
+    });
+    const r = await run(dir);
+    const codes = r.issues.map((i) => i.code);
+    expect(codes).not.toContain("S3D-I-970"); // 2.5 blocks IS element-scale
+    expect(codes).toContain("S3D-W-973"); // ...and it really is out of bounds
+  });
+
+  it("recognises an elongated cuboid, where a face diagonal is shorter than an edge", async () => {
+    // From a corner of a 0.2 × 0.2 × 1.0 post the offsets are 0.2, 0.2, 1.0
+    // (edges), 0.283, 1.02, 1.02 (face diagonals) and 1.04 (body). Picking the
+    // three SHORTEST offsets as the edges grabs the 0.283 face diagonal and the
+    // post stops being a box — so every column, beam and limb in a real model
+    // would drop out of the exporter. An offset is an edge exactly when it is
+    // not the sum of two others.
+    const dir = mkProject({
+      "scene3d.json": MC,
+      "build.py": cube({ size: "0.2, 0.2, 1.0", loc: "0.1, 0.1, 0.5" }),
+    });
+    const r = await run(dir);
+    const v = r.census!.meshes.find((m) => m.object === "prp_block")!.voxel!;
+    expect(v.isBox).toBe(true);
+    expect(v.localSize!.map((n) => Number(n.toFixed(4)))).toEqual([0.2, 0.2, 1]);
+  });
+
+  /* ---- one contact model ------------------------------------------- */
+
+  it("names the support a sits_on part is resting on", async () => {
+    // `sits_on` deliberately embeds by MIN_CONTACT so two faces can never
+    // share a plane and z-fight. The support search then rejected any contact
+    // with a negative gap as "not below me" — which is exactly what that
+    // deliberate embed looks like — so the rule built to name what a part
+    // should be resting on could never name it for the one relation that puts
+    // a part on something.
+    const dir = mkProject({
+      "scene3d.json": JSON.stringify({
+        schemaVersion: 1,
+        conventions: { grounding: { enabled: true } },
+      }),
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "stack",
+        parts: [
+          { id: "prp_base", size: [1, 1, 0.2] },
+          { id: "prp_box", size: [0.4, 0.4, 0.4] },
+        ],
+        relations: [
+          { type: "at", part: "prp_base", center: [0, 0, 0.1] },
+          { type: "sits_on", part: "prp_box", on: "prp_base" },
+          { type: "align", part: "prp_box", to: "prp_base", axes: ["x", "y"] },
+        ],
+      }),
+    });
+    const r = await run(dir);
+    const notGrounded = r.issues.find((i) => i.code === "S3D-W-325" && i.target === "prp_box");
+    expect(notGrounded).toBeDefined();
+    expect(notGrounded!.detail?.nearestSupport).toBe("prp_base");
+    // ...and describes a 1mm deliberate embed as resting, not as floating
+    // −0.001m, which is what a negative gap reads as if nobody looks.
+    expect(notGrounded!.message).toContain("rests on 'prp_base'");
+  });
+
+  it("fails a grounded claim for a part resting on nothing", async () => {
+    // claims.grounded checked only the SINK direction, so a part hovering
+    // metres in the air passed it while the world linter warned about the same
+    // part — and the compile awarded its "claims declared, none failed" badge
+    // to a floating asset.
+    const dir = mkProject({
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "float",
+        parts: [
+          { id: "prp_base", size: [1, 1, 0.2] },
+          { id: "prp_float", size: [0.4, 0.4, 0.4] },
+        ],
+        relations: [
+          { type: "at", part: "prp_base", center: [0, 0, 0.1] },
+          { type: "at", part: "prp_float", center: [0, 0, 5] },
+        ],
+        claims: { grounded: true },
+      }),
+    });
+    const r = await run(dir);
+    const failed = r.issues.filter((i) => i.code === "S3D-E-701");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.target).toBe("prp_float");
+    expect(failed[0]!.message).toMatch(/nothing beneath it/);
+    expect(r.ok).toBe(false);
+  });
+
+  it("passes a grounded claim for a part resting on another part", async () => {
+    // The counterpart: resting is a RELATION, not a coordinate. A stacked
+    // assembly is grounded even though only its base touches the floor —
+    // making the claim mean "at z=0" would make it useless for any assembly.
+    const dir = mkProject({
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "stack",
+        parts: [
+          { id: "prp_base", size: [1, 1, 0.2] },
+          { id: "prp_top", size: [0.4, 0.4, 0.4] },
+        ],
+        relations: [
+          { type: "at", part: "prp_base", center: [0, 0, 0.1] },
+          { type: "sits_on", part: "prp_top", on: "prp_base" },
+          { type: "align", part: "prp_top", to: "prp_base", axes: ["x", "y"] },
+        ],
+        claims: { grounded: true },
+      }),
+    });
+    const r = await run(dir);
+    expect(r.issues.filter((i) => i.code === "S3D-E-701")).toEqual([]);
+  });
+
   it("still measures and reports the z-fight when it is under the cap", async () => {
     // The control: the same coincident geometry, cheap enough to compare.
     // A cap that suppressed the finding outright would pass the test above.

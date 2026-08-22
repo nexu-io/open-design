@@ -34,6 +34,11 @@ export const ISSUE_CODES = {
      to keep coplanar faces structurally impossible. The scene builds; this
      names what was changed and why. */
   SPEC_ADJUSTED: "S3D-W-106",
+  /* Instances the SOLVER generated (repeat clones, scatter samples) landed
+     inside each other. The scene builds, so this is not unsolvable — but one
+     authored decision produced geometry that interpenetrates itself, which
+     nobody writes on purpose: they would have authored one larger shape. */
+  SPEC_INSTANCES_INTERSECT: "S3D-W-107",
 
   /* build */
   BLENDER_NOT_FOUND: "S3D-E-201",

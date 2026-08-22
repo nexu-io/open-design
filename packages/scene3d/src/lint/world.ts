@@ -2,6 +2,7 @@ import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import { NormalizedContract } from "../contract.js";
 import { isExempt } from "./exempt.js";
+import { groundVerdict, nearestSupportBelow } from "../solve/contact.js";
 
 /**
  * World placement and budget rules.
@@ -50,7 +51,9 @@ export function lintWorld(
       const lowest = measured ?? (object.worldMin ? object.worldMin[upIndex] : undefined);
       if (lowest === null || lowest === undefined || !Number.isFinite(lowest)) continue;
 
-      if (lowest < -grounding.tolerance) {
+      // One predicate, shared with claims.grounded — see solve/contact.ts.
+      const verdict = groundVerdict(lowest, grounding.tolerance);
+      if (verdict === "sunk") {
         issues.push({
           code: ISSUE_CODES.SUNK_BELOW_GROUND,
           severity: "error",
@@ -59,21 +62,29 @@ export function lintWorld(
           target: object.name,
           detail: { lowest },
         });
-      } else if (lowest > grounding.tolerance) {
+      } else if (verdict === "floating") {
         // "Above the ground plane" is the least useful reference frame —
         // the actionable fact is what the part should be RESTING on. The
         // contact scan already measured every nearby pair; name the
         // nearest support below and the gap to it.
         const support = nearestSupportBelow(census, object.name);
+        // A support in CONTACT is being rested on, not floated above — the
+        // solver embeds a `sits_on` part by MIN_CONTACT on purpose, and
+        // "floats -0.001m above" describes that as a defect it is not.
+        const resting = support !== null && support.gap <= grounding.tolerance;
         issues.push({
           code: ISSUE_CODES.NOT_GROUNDED,
           severity: "warning",
-          message: support
-            ? `'${object.name}' floats ${fmt(support.gap)}m above '${support.name}' (lowest point ${fmt(lowest)}m above the ground plane)`
-            : `'${object.name}' floats ${fmt(lowest)}m above the ground plane`,
-          hint: support
-            ? `drop it onto '${support.name}', or exempt it if it is mounted or airborne`
-            : "drop it onto the ground, or exempt it if it is mounted or airborne",
+          message: resting
+            ? `'${object.name}' rests on '${support!.name}', whose lowest point is ${fmt(lowest)}m above the ground plane`
+            : support
+              ? `'${object.name}' floats ${fmt(support.gap)}m above '${support.name}' (lowest point ${fmt(lowest)}m above the ground plane)`
+              : `'${object.name}' floats ${fmt(lowest)}m above the ground plane`,
+          hint: resting
+            ? `nothing to fix if the stack is intended — exempt '${object.name}' to stop reporting it`
+            : support
+              ? `drop it onto '${support.name}', or exempt it if it is mounted or airborne`
+              : "drop it onto the ground, or exempt it if it is mounted or airborne",
           target: object.name,
           detail: { lowest, ...(support ? { nearestSupport: support.name, gap: support.gap } : {}) },
         });
@@ -110,32 +121,6 @@ export function lintWorld(
       detail: { tris: total, budget: maxTrianglesTotal },
     });
   }
-}
-
-/**
- * The nearest measured contact whose partner sits below `name` — the part
- * a floating object is most plausibly meant to rest on. Pure lookup over
- * the census's already-measured contact pairs; no new Blender work.
- */
-function nearestSupportBelow(
-  census: Census,
-  name: string,
-): { name: string; gap: number } | null {
-  const objectByName = new Map(census.objects.map((o) => [o.name, o]));
-  const self = objectByName.get(name);
-  if (!self?.worldMin) return null;
-  let best: { name: string; gap: number } | null = null;
-  for (const contact of census.contacts ?? []) {
-    const otherName = contact.a === name ? contact.b : contact.b === name ? contact.a : null;
-    if (otherName === null) continue;
-    const other = objectByName.get(otherName);
-    if (!other?.worldMax || other.type !== "MESH") continue;
-    // A support sits below: its top is at or under this part's bottom.
-    const gap = self.worldMin![2] - other.worldMax[2];
-    if (gap < -1e-6) continue;
-    if (best === null || gap < best.gap) best = { name: otherName, gap };
-  }
-  return best;
 }
 
 function fmt(value: number): string {

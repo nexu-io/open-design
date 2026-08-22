@@ -2,6 +2,7 @@ import { Census, CensusMesh, CensusObject, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import { NormalizedContract } from "../contract.js";
 import type { SolvedScene } from "../solve/types.js";
+import { JAVA_ANGLE_TOLERANCE, JAVA_LEGAL_ANGLES, nearestLegalAngle } from "../mc/common.js";
 
 /**
  * Voxel / Minecraft format discipline.
@@ -35,10 +36,6 @@ import type { SolvedScene } from "../solve/types.js";
  * and render it faithfully.
  */
 
-/** Java's permitted element rotation angles (degrees) — a format constant. */
-const JAVA_LEGAL_ANGLES = [-45, -22.5, 0, 22.5, 45];
-/** Forgiven drift (deg) from a legal angle — float noise, not a real rotation. */
-const ANGLE_TOLERANCE = 0.05;
 
 export function lintVoxel(
   contract: NormalizedContract,
@@ -146,7 +143,7 @@ export function lintVoxel(
         if (v.rotationAxis !== null && v.rotationDeg !== null) {
           const nearest = nearestLegalAngle(v.rotationDeg);
           const off = Math.abs(v.rotationDeg - nearest);
-          if (off > ANGLE_TOLERANCE && (!worstRot || off > worstRot.off)) {
+          if (off > JAVA_ANGLE_TOLERANCE && (!worstRot || off > worstRot.off)) {
             worstRot = { deg: v.rotationDeg, axis: v.rotationAxis, nearest, off };
           }
         } else if (!v.axisAligned) {
@@ -235,15 +232,6 @@ function familyMaxExtent(members: CensusMesh[], worldByName: Map<string, CensusO
     }
   }
   return max;
-}
-
-/** The legal Java angle closest to `deg`. */
-function nearestLegalAngle(deg: number): number {
-  let best = JAVA_LEGAL_ANGLES[0]!;
-  for (const a of JAVA_LEGAL_ANGLES) {
-    if (Math.abs(deg - a) < Math.abs(deg - best)) best = a;
-  }
-  return best;
 }
 
 /** The single worst axis excursion past the element bounds (blocks), carrying

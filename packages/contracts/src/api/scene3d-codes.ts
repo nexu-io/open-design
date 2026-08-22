@@ -21,6 +21,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-E-105': 'scene.json fails validation',
   'S3D-E-106': 'Layout constraints unsolvable',
   'S3D-W-106': 'Authored offset auto-adjusted',
+  'S3D-W-107': 'Generated instances intersect',
 
   /* build */
   'S3D-E-201': 'Blender not found',

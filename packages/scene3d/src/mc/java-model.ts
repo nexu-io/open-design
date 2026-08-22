@@ -1,6 +1,18 @@
 import { Census } from "../types.js";
 import { NormalizedContract } from "../contract.js";
-import { PX, TextureDirective, boxToMc, sanitizeKey, textureDirective } from "./common.js";
+import {
+  JAVA_ANGLE_TOLERANCE,
+  JAVA_LEGAL_ANGLES,
+  PX,
+  TextureDirective,
+  boxToMc,
+  elementBounds,
+  nearestLegalAngle,
+  pointToMc,
+  rotationToMc,
+  sanitizeKey,
+  textureDirective,
+} from "./common.js";
 
 /**
  * Lower a compiled scene to a Minecraft **Java block/item model** — the JSON
@@ -12,11 +24,11 @@ import { PX, TextureDirective, boxToMc, sanitizeKey, textureDirective } from "./
  * pure lowering of the census (which is measured from the USD-built scene), on
  * the TS side of the process boundary, exactly like the USDZ packager.
  *
- * v1 is faithful, not exhaustive: it emits every axis-aligned cuboid exactly —
- * which is the whole of what `scene.json` authors, since the solver reasons in
- * boxes — and REPORTS every part it cannot represent as a single vanilla
- * element (a sphere, an imported non-cuboid, a rotated box) rather than
- * emitting wrong geometry. The linter (W-971/972) has already warned about the
+ * It is faithful, not exhaustive: it emits every cuboid exactly — axis-aligned
+ * or rotated to one of the five legal angles, from the oriented box the census
+ * recovers — and REPORTS every part it cannot represent as a single vanilla
+ * element (a sphere, an imported non-cuboid, a multi-axis or illegal rotation)
+ * rather than emitting wrong geometry. The linter (W-971/972) has already warned about the
  * same parts, so the two speak with one voice.
  *
  * Coordinate frame: Blender is Z-up right-handed; Java is Y-up right-handed
@@ -29,10 +41,18 @@ export interface JavaFace {
   uv: [number, number, number, number];
   texture: string;
 }
+/** A block-model element rotation: one axis, one of the five legal angles,
+ *  about a point in element space. */
+export interface JavaRotation {
+  origin: [number, number, number];
+  axis: "x" | "y" | "z";
+  angle: number;
+}
 export interface JavaElement {
   from: [number, number, number];
   to: [number, number, number];
   faces: Record<string, JavaFace>;
+  rotation?: JavaRotation;
 }
 export interface JavaModel {
   credit?: string;
@@ -90,27 +110,51 @@ export function buildJavaModel(census: Census, _contract: NormalizedContract): J
       skipped.push({ object: mesh.object, reason: v ? "not a single cuboid" : "no voxel facts" });
       continue;
     }
+    // A rotated element is authored as an UN-ROTATED from/to plus a rotation
+    // about an origin — exactly the oriented box the census recovers. This
+    // used to skip every rotated box on the grounds that the un-rotated extent
+    // was unrecoverable, while `voxel.center`/`localSize` sat in the census
+    // unread and the Bedrock exporter next door used them.
+    let rotation: JavaRotation | undefined;
     if (!v.axisAligned) {
-      // A rotated box needs its un-rotated extent + an element rotation, which
-      // v1 does not recover; emitting its AABB would ship the wrong shape.
-      skipped.push({
-        object: mesh.object,
-        reason: v.rotationAxis ? `rotated ${v.rotationDeg}° about ${v.rotationAxis}` : "rotated about multiple axes",
-      });
-      continue;
+      if (v.rotationAxis === null || v.rotationAxis === undefined || v.rotationDeg === null || v.rotationDeg === undefined) {
+        skipped.push({ object: mesh.object, reason: "rotated about multiple axes" });
+        continue;
+      }
+      const legal = nearestLegalAngle(v.rotationDeg);
+      if (Math.abs(v.rotationDeg - legal) > JAVA_ANGLE_TOLERANCE) {
+        // W-972 already said this; the exporter must not silently round the
+        // author's 30° to 22.5° and ship a shape they never modelled.
+        skipped.push({
+          object: mesh.object,
+          reason: `rotated ${v.rotationDeg}° about ${v.rotationAxis} — Java allows only ${JAVA_LEGAL_ANGLES.join(", ")}`,
+        });
+        continue;
+      }
+      const mapped = rotationToMc(v.rotationAxis, legal);
+      rotation = { origin: pointToMc(v.center ?? [0, 0, 0]), axis: mapped.axis, angle: mapped.angle };
     }
+
+    // Prefer the recovered element box; fall back to the world AABB only for a
+    // box the census measured before centre/size existed.
     const world = worldByName.get(mesh.object);
-    if (!world?.worldMin || !world?.worldMax) {
+    let min: [number, number, number];
+    let max: [number, number, number];
+    if (v.center && v.localSize) {
+      [min, max] = elementBounds(v.center, v.localSize);
+    } else if (world?.worldMin && world?.worldMax) {
+      [min, max] = [world.worldMin as [number, number, number], world.worldMax as [number, number, number]];
+    } else {
       skipped.push({ object: mesh.object, reason: "no world bounds" });
       continue;
     }
-    const [from, to] = boxToMc(world.worldMin, world.worldMax);
+    const [from, to] = boxToMc(min, max);
     const key = ensureTextureKey(mesh.materials?.[0]);
     const faces: Record<string, JavaFace> = {};
     for (const dir of FACE_DIRS) {
       faces[dir] = { uv: [0, 0, PX, PX], texture: `#${key}` };
     }
-    elements.push({ from, to, faces });
+    elements.push({ from, to, faces, ...(rotation ? { rotation } : {}) });
   }
 
   // `particle` (break/landing particles) points at the first real texture.
