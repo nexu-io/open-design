@@ -254,6 +254,12 @@ export const ISSUE_CODES = {
      the modern PBR extension surface, and the master round-trip is where the
      loss happens. Detect and name it; never mutate and never hide it. */
   MASTER_MATERIAL_CAPABILITY: "S3D-W-903",
+  /* A USDZ was produced from a stage that is not Y-up. USDZ is consumed by
+     ARKit / AR Quick Look and Android Scene Viewer, which take Y as up; a
+     Z-up package arrives rotated onto its back in every one of them. The
+     package is not wrong as USD — the stage says what it is — so this is a
+     warning about the DESTINATION, not a defect in the file. */
+  USDZ_UP_AXIS: "S3D-W-904",
 
   /* lint: intent budgets (950-969) — judgment gated on a part's authored
      `role`. Every threshold is data (budgets.ts / the contract), every check

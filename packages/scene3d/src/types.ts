@@ -950,6 +950,30 @@ export interface Scene3dManifest {
   camera: { present: boolean; name: string | null };
   proofImages: string[];
   exportedAssets: string[];
+  /**
+   * Byte size of each exported asset, keyed by the same project-relative path
+   * that appears in `exportedAssets`.
+   *
+   * The manifest reported triangle counts, texture resolutions, material and
+   * bone counts — and not one file size, which is the number anyone shipping
+   * to a browser or a mobile target answers for first. Measured from the
+   * bytes on disk after export, so it is the delivered size and not an
+   * estimate. An asset that could not be stat'd is absent rather than zero:
+   * "not measured" and "empty" are not the same claim.
+   */
+  exportedAssetBytes?: Record<string, number>;
+  /**
+   * Content restored onto the re-imported stage before the delivery containers
+   * were lowered, because the USD writer cannot author it: animation clips
+   * filed as NLA strips, the occlusion binding (it lives in the importer's
+   * extras group), backface culling, emissive strength.
+   *
+   * A RECORD, not a finding — it reports a repair that succeeded and asks
+   * nothing of the reader, and a repair that FAILS shows up as an E-901 loss
+   * instead. It lives here so an audit of the .usda can tell which of the
+   * shipped capabilities the master does not actually account for.
+   */
+  carried?: { clips?: string[]; occlusion?: string[]; materials?: string[]; emission?: string[] };
   issues: IssueSummary;
   issueCodes: string[];
   /** The subset of issueCodes that fired at error or warning severity —

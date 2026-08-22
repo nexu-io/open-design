@@ -172,6 +172,11 @@ export interface RunnerJob {
   lodRatios?: number[];
   /** Contract up-axis the exporter should rotate the stage to. */
   upAxis?: string;
+  /** Contract metres-per-unit the exported stage must declare. Without this
+   *  the runner always wrote 1, so any project that declared millimetres
+   *  (every 3D print, every centimetre-native engine) failed S3D-E-403 on
+   *  every compile with no way to satisfy it. */
+  metersPerUnit?: number;
   /** Asset identity written into the exported stage's assetInfo. */
   assetName?: string;
 }

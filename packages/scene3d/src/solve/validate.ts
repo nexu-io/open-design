@@ -65,11 +65,17 @@ export function validateSceneSpec(
 
   /* ---- materials -------------------------------------------------- */
   const materials: Record<string, MaterialSpec> = {};
+  // Every name the author WROTE, valid or not. Kept apart from `materials`,
+  // which holds only the ones that survived validation, because "did you
+  // declare this" and "is this declaration well-formed" are different
+  // questions and only the first one belongs in a part's error message.
+  const declaredMaterials = new Set<string>();
   if (doc.materials !== undefined) {
     if (doc.materials === null || typeof doc.materials !== "object" || Array.isArray(doc.materials)) {
       errors.push("materials must be an object of name -> material");
     } else {
       for (const [name, value] of Object.entries(doc.materials as Record<string, unknown>)) {
+        declaredMaterials.add(name);
         if (!/^[A-Za-z][A-Za-z0-9_]{2,63}$/.test(name)) {
           errors.push(`materials.${name}: material names must match [A-Za-z][A-Za-z0-9_]{2,63}`);
           continue;
@@ -90,7 +96,7 @@ export function validateSceneSpec(
       errors.push(`parts has ${doc.parts.length} entries — the ceiling is ${MAX_PARTS}`);
     }
     doc.parts.forEach((value, index) => {
-      const part = validatePart(index, value, materials, errors);
+      const part = validatePart(index, value, materials, declaredMaterials, errors);
       if (part) {
         if (partIds.has(part.id)) {
           errors.push(`parts[${index}].id '${part.id}' is declared twice`);
@@ -167,6 +173,8 @@ function validatePart(
   index: number,
   value: unknown,
   materials: Record<string, MaterialSpec>,
+  /** Names the author wrote, including ones whose declaration was rejected. */
+  declaredMaterials: Set<string>,
   errors: string[],
 ): PartSpec | undefined {
   const at = `parts[${index}]`;
@@ -219,7 +227,12 @@ function validatePart(
   if (part.material !== undefined) {
     if (typeof part.material !== "string") {
       errors.push(`${at}.material must be a string`);
-    } else if (!(part.material in materials)) {
+    } else if (!(part.material in materials) && !declaredMaterials.has(part.material)) {
+      // Only when the name appears NOWHERE. A material that was declared and
+      // then rejected already produced its own precise error; adding "is not
+      // declared in materials — declare it or fix the name" on top of it told
+      // the author to do something they had already done, and pointed away
+      // from the real fault.
       errors.push(
         `${at}.material '${part.material}' is not declared in materials — declare it or fix the name`,
       );

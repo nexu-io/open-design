@@ -42,6 +42,9 @@ export function lintProof(
   frames: ProofFrameStats[] | undefined,
   issues: Issue[],
   thresholds: ProofThresholds = DEFAULT_PROOF_THRESHOLDS,
+  /** Largest dimension of the scene, metres — measured, for the empty-frame
+   *  diagnosis. Absent when there is no census to measure it from. */
+  sceneSizeMetres?: number,
 ): void {
   if (!frames || frames.length === 0) return;
 
@@ -57,7 +60,18 @@ export function lintProof(
       severity: "error",
       message: `every proof frame rendered empty (${measured.length} frame(s))`,
       hint: "check the camera aim, the scene lights, and that the subject is in front of the camera",
-      detail: { frames: measured.length, meanLuminance: measured[0]!.meanLuminance },
+      // Scene size travels with the finding because scale WAS the cause of
+      // every empty-frame report worth investigating here: a fixed camera
+      // distance and Blender's fixed clip planes each blanked one end of the
+      // range, and covered for each other so neither showed alone. Both are
+      // derived now and the proof renders sub-millimetre to kilometre, so an
+      // empty frame is a real framing or lighting fault again — but the
+      // number that led to the diagnosis stays in the record.
+      detail: {
+        frames: measured.length,
+        meanLuminance: measured[0]!.meanLuminance,
+        ...(sceneSizeMetres !== undefined ? { sceneSizeMetres } : {}),
+      },
     });
   } else if (empty.length > 0) {
     for (const frame of empty) {

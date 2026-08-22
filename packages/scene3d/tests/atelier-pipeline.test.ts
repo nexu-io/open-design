@@ -155,6 +155,16 @@ describe.skipIf(!hasBlender)("material atelier (real assets, GPU shaders, animat
       expect(fs.existsSync(tex(file)), `${file} missing`).toBe(true);
     }
 
+    // The lava ORB EMITS. This fixture has declared an emission kernel and
+    // `emissionStrength: 4` since it was written, and shipped a dull sphere
+    // the whole time: the strength never reached the build script, the wired
+    // atlas sat at Blender's default strength of 0, and the glTF exporter
+    // correctly omitted an emissive texture with a black factor. The test
+    // called itself "proves every capability at once" while counting issues,
+    // which is not the same as looking at the asset.
+    const lavaMat = result.census!.materials.find((m) => m.name === "mtl_lava")!;
+    expect(lavaMat.principled.emissionStrength, "the lava must actually emit").toBeGreaterThan(0);
+
     // Real assets landed as parts; the fox's materials were overridden.
     const census = result.census!;
     const fox = census.meshes.find((m) => m.object === "prp_fox")!;

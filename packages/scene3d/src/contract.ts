@@ -19,6 +19,37 @@ type Conventions = NonNullable<Scene3dContract["conventions"]>;
  * - 3d_print: Z-up, watertight mandatory (open/doubled geometry prints as
  *   holes), and UVs irrelevant (a print carries no textures).
  */
+export const DEFAULT_EXPORT_FORMATS: ReadonlyArray<
+  "usda" | "usdz" | "glb" | "obj" | "fbx" | "stl" | "ply"
+> = ["usda", "usdz", "glb", "obj", "fbx"];
+
+/**
+ * Deliverables a target needs that the general default does not carry.
+ *
+ * The general list excludes STL on the grounds that it carries no materials,
+ * which is right everywhere except the one place STL is the whole point. A
+ * `3d_print` project used to compile clean and ship six files, not one of
+ * which a slicer opens — the format was implemented in the runner and simply
+ * never requested.
+ *
+ * A profile ADDS; it never silently removes. USDZ was briefly taken off this
+ * list because a Z-up print contract produced an AR package that arrives on
+ * its back — but that punished every existing project with a deliverable that
+ * quietly disappeared, to work around a defect that was really in the
+ * packaging. The package now gets its own Y-up stage (see the usdz branch in
+ * pipeline.ts), so a print job's USDZ is correct and there is nothing to
+ * remove.
+ */
+export const TARGET_EXPORT_FORMATS: Partial<Record<EngineTarget, ReadonlyArray<
+  "usda" | "usdz" | "glb" | "obj" | "fbx" | "stl" | "ply"
+>>> = {
+  // The default list PLUS stl. A target profile may add a deliverable a
+  // domain needs; it must not quietly take one away, because the projects
+  // that lose it are exactly the ones already relying on it and nothing
+  // announces the removal.
+  "3d_print": [...DEFAULT_EXPORT_FORMATS, "stl"],
+};
+
 export const TARGET_PROFILES: Record<EngineTarget, Partial<Conventions>> = {
   unity: { units: { upAxis: "Y" } },
   unreal: { units: { upAxis: "Z" } },
@@ -405,7 +436,10 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
         c.export?.formats,
         [],
       );
-      return fmts.length > 0 ? fmts : ["usda", "usdz", "glb", "obj", "fbx"];
+      if (fmts.length > 0) return fmts;
+      const preset = (c.target ? TARGET_EXPORT_FORMATS[c.target] : undefined)
+        ?? DEFAULT_EXPORT_FORMATS;
+      return [...preset];
     })(),
     // Only ratios that actually reduce; a LOD at ≥1 or ≤0 is meaningless and
     // is dropped rather than shipped as a same-size or empty "LOD". asArray

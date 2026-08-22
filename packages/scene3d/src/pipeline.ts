@@ -782,6 +782,10 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
      the USD we ship can violate the contract the Blender scene satisfied,
      and only the artifact itself can settle that. */
   const exportedAssets: string[] = [];
+  /** Content restored onto the re-imported stage before lowering, if any.
+   *  Travels to the manifest so an audit of the .usda can tell which
+   *  capabilities the shipped containers do not owe to it. */
+  let carriedRecord: LoweringRecord["carried"];
   if (wanted.has("export")) {
     const te = performance.now();
     if (probe && source.files.length > 0 && (source.kind !== "spec" || buildScriptRel !== undefined)) {
@@ -817,6 +821,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             formats,
             ...(normalized.lodRatios.length > 0 ? { lodRatios: normalized.lodRatios } : {}),
             upAxis: normalized.upAxis,
+            metersPerUnit: normalized.metersPerUnit,
             assetName: path.basename(request.projectDir),
             ...(tweaks ? { tweaks } : {}),
             ...shaderPayload,
@@ -850,6 +855,9 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
              only contain what the master contains. */
           const lowering = payload?.lowering;
           emitMasterParity(lowering, issues);
+          // What the deliverables owe to a repair rather than to the master.
+          // Recorded, not reported — see the note in emitMasterParity.
+          carriedRecord = lowering?.carried ?? carriedRecord;
 
           /* Parity COUNTS meshes, materials, armatures and bound clips, which
              catches a material that vanished and is blind to one that survived
@@ -890,10 +898,62 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
                  deliberately leaves it to us. */
               if (formats.includes("usdz")) {
                 const usdzRel = asset.replace(/\.usda$/i, ".usdz");
-                packageUsdz(abs, path.join(request.projectDir, usdzRel));
-                if (!rel.includes(usdzRel)) {
-                  rel.push(usdzRel);
-                  exportedAssets.push(usdzRel);
+                /* Packaged from the Y-up AR stage when the contract's axis is
+                   not Y — AR Quick Look and Scene Viewer both read a package
+                   as Y-up, so a Z-up contract would otherwise ship an asset
+                   that arrives on its back. The runner authors that stage
+                   beside the master; the master itself keeps the contract's
+                   axis, because that is what the engine targets asked for.
+
+                   Falls back to the master when the AR stage could not be
+                   authored, and W-904 then reports the axis rather than the
+                   compile silently shipping the wrong orientation. */
+                const arRel = lowering?.arMaster;
+                const arAbs = arRel ? path.join(request.projectDir, arRel) : undefined;
+                const packageFrom = arAbs && fs.existsSync(arAbs) ? arAbs : abs;
+                if (packageFrom !== abs) {
+                  /* The AR stage carries the same kind/assetInfo semantics as
+                     the master — it is a delivery of the same asset, and a
+                     package whose stage disagrees with the master's identity
+                     is the exact defect authorStageModel exists to prevent. */
+                  const arAuthored = authorStageModel({
+                    usda: fs.readFileSync(packageFrom, "utf8"),
+                    assetName: path.basename(request.projectDir),
+                    file: arRel!,
+                  });
+                  fs.writeFileSync(packageFrom, arAuthored.usda);
+                }
+                try {
+                  packageUsdz(packageFrom, path.join(request.projectDir, usdzRel));
+                  if (!rel.includes(usdzRel)) {
+                    rel.push(usdzRel);
+                    exportedAssets.push(usdzRel);
+                  }
+                } finally {
+                  if (packageFrom !== abs) {
+                    /* An intermediate, never a deliverable: it exists only to
+                       be packaged, and leaving it beside the master would
+                       offer the user two stages of the same scene that
+                       disagree about which way is up. In a `finally` because a
+                       packaging failure is exactly when a stray stage would be
+                       left behind to confuse the next reader. */
+                    try {
+                      fs.rmSync(packageFrom, { force: true });
+                    } catch {
+                      /* A stage we cannot remove is still listed nowhere; it
+                         costs disk, not correctness. */
+                    }
+                  }
+                }
+                if (packageFrom === abs && normalized.upAxis !== "Y") {
+                  issues.push({
+                    code: ISSUE_CODES.USDZ_UP_AXIS,
+                    severity: "warning",
+                    message: `${usdzRel} is packaged from a ${normalized.upAxis}-up stage — AR Quick Look and Scene Viewer read USDZ as Y-up, so it will arrive rotated onto its back`,
+                    file: usdzRel,
+                    hint: "the Y-up AR stage could not be authored for this compile; set conventions.units.upAxis to Y, or drop usdz from export.formats",
+                    detail: { upAxis: normalized.upAxis, expected: "Y" },
+                  });
                 }
               }
             } catch (err: any) {
@@ -1023,7 +1083,26 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
      USD / LODs from the manifest. When export DID run, the mv joins the fresh
      exports; when it did not, the carry-forward restores the prior mv too. */
   if (wanted.has("export")) {
+    const boundShaders = new Set(shaderBindings.map((b) => b.shader));
     for (const job of shaderJobs) {
+      // The baked maps, but ONLY for a shader that is itself the product.
+      //
+      // A sheet shader — a flipbook, or any kernel no material binds — exists
+      // to produce its atlas, and that atlas was reaching disk without ever
+      // being declared, so the Export menu offered the geometry containers and
+      // not the thing the scene was written to make. A shader bound to a
+      // material is the opposite case: its bakes are INPUTS, already embedded
+      // in the GLB and the USD, and listing them again offers the user the
+      // same pixels twice under a worse name.
+      const isProduct = job.frames > 1 || !boundShaders.has(job.name);
+      if (isProduct) {
+        for (const output of job.outputs) {
+          const rel = `out/textures/${job.name}_${output}.png`;
+          if (fs.existsSync(path.join(request.projectDir, rel)) && !exportedAssets.includes(rel)) {
+            exportedAssets.push(rel);
+          }
+        }
+      }
       if (!job.motionVectors || job.frames <= 1) continue;
       const mvRel = `out/textures/${job.name}_mv.png`;
       if (fs.existsSync(path.join(request.projectDir, mvRel)) && !exportedAssets.includes(mvRel)) {
@@ -1161,6 +1240,8 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
 
     const manifest = buildManifest({
       source,
+      projectDir: request.projectDir,
+      carried: carriedRecord,
       census,
       issues: allIssues,
       summary: summarize(allIssues),
@@ -1193,6 +1274,8 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     primTree,
     manifest: buildManifest({
       source,
+      projectDir: request.projectDir,
+      carried: carriedRecord,
       census,
       issues: allIssues,
       summary,
@@ -1562,6 +1645,16 @@ interface LoweringRecord {
   master: string | null;
   buildFingerprint?: Fingerprint;
   masterFingerprint?: Fingerprint | null;
+  /** A Y-up stage authored alongside the master, for the USDZ package only.
+   *  Present when the contract's axis is not Y. */
+  arMaster?: string;
+  /** What `restore_carry` put back on the re-imported scene, by name. */
+  carried?: {
+    clips?: string[];
+    occlusion?: string[];
+    materials?: string[];
+    emission?: string[];
+  };
   droppedExportOptions?: string[];
 }
 
@@ -1591,6 +1684,38 @@ function emitMasterParity(lowering: LoweringRecord | null | undefined, issues: I
         "master parity could not be measured — the stage was not re-imported; deliverables may be missing",
     });
     return;
+  }
+  // The carry is deliberately NOT an issue.
+  //
+  // It reports a repair that succeeded, which asks nothing of the reader, and
+  // it fires on every scene that declares an emission strength — so as a
+  // finding it was pure noise, and it broke the showcase fixtures whose whole
+  // contract is "compiles with zero issues". The failure case does not need it
+  // either: a carry that does not land leaves the master fingerprint short of
+  // the build's, and E-901 below reports that as the loss it is.
+  //
+  // So it is recorded rather than reported. `manifest.lowering.carried` names
+  // exactly what the deliverables owe to a repair instead of to the master,
+  // which is the question somebody auditing the .usda actually asks.
+  // A build that measured material capabilities against a master that did not
+  // is UNCHECKED, not clean. materialCapabilityLosses skips a material the
+  // master has no entry for — correct per material, and wrong as a verdict
+  // when the master has no entries at all, because then it skips every one of
+  // them and reports nothing. Only a cache entry written before the field
+  // existed can produce that, which is exactly the case that must not read as
+  // a pass.
+  if (
+    lowering.buildFingerprint?.materialCaps &&
+    Object.keys(lowering.buildFingerprint.materialCaps).length > 0 &&
+    Object.keys(lowering.masterFingerprint.materialCaps ?? {}).length === 0
+  ) {
+    issues.push({
+      code: ISSUE_CODES.MASTER_UNCHECKED,
+      severity: "warning",
+      message:
+        "material capabilities could not be compared across lowering — the master fingerprint predates the measurement; recompile with --no-cache to check texture bindings and sidedness",
+      file: lowering.master ?? "scene.usda",
+    });
   }
   if (lowering.buildFingerprint) {
     for (const loss of fingerprintLosses(lowering.buildFingerprint, lowering.masterFingerprint)) {
@@ -1669,6 +1794,16 @@ interface Fingerprint {
    *  Counts cannot see a scene that arrived ROTATED or RESCALED — every mesh,
    *  bone and clip is present when an asset comes back on its side. */
   bounds?: number[] | null;
+  /** Per-material texture-role bindings and surface flags. Names and counts
+   *  cannot see a material that kept its name and lost its occlusion map, or
+   *  a closed mesh that came back two-sided. */
+  materialCaps?: Record<string, MaterialCapability>;
+}
+
+interface MaterialCapability {
+  /** role ("baseColor", "occlusion", …) -> texture identity. */
+  roles?: Record<string, string>;
+  backfaceCulling?: boolean;
 }
 
 /**
@@ -1752,6 +1887,41 @@ export function fingerprintLosses(build: Fingerprint, master: Fingerprint): stri
   const masterMorphs = morphTotal(master.morphs);
   if (masterMorphs < buildMorphs) {
     losses.push(`${buildMorphs - masterMorphs} of ${buildMorphs} morph target(s)`);
+  }
+  losses.push(...materialCapabilityLosses(build, master));
+  return losses;
+}
+
+/**
+ * What each material stopped being able to do.
+ *
+ * Counting materials answers "did they all arrive", which is the question the
+ * fingerprint could already ask — and every one of these losses passes it. The
+ * material keeps its name and its slot; what it loses is a binding. Reported
+ * per material and per role because "the helmet lost its occlusion map" is a
+ * fact somebody can act on, while "materials differ" is not.
+ */
+function materialCapabilityLosses(build: Fingerprint, master: Fingerprint): string[] {
+  const losses: string[] = [];
+  const buildCaps = build.materialCaps ?? {};
+  const masterCaps = master.materialCaps ?? {};
+  // Absent on BOTH sides means a runner that predates the field, not a total
+  // wipe — say nothing rather than invent a loss for every older cache entry.
+  if (Object.keys(buildCaps).length === 0) return losses;
+  for (const [name, buildCap] of Object.entries(buildCaps)) {
+    const masterCap = masterCaps[name];
+    if (!masterCap) continue; // the material itself vanished; counted above.
+    const dropped = Object.keys(buildCap.roles ?? {}).filter(
+      (role) => !(masterCap.roles ?? {})[role],
+    );
+    if (dropped.length > 0) {
+      losses.push(`material '${name}' texture binding(s) ${dropped.sort().join(", ")}`);
+    }
+    // Sidedness is not a texture but it is authored intent, and losing it
+    // doubles the overdraw of every closed mesh in the delivered asset.
+    if (buildCap.backfaceCulling === true && masterCap.backfaceCulling === false) {
+      losses.push(`material '${name}' single-sidedness (came back two-sided)`);
+    }
   }
   return losses;
 }

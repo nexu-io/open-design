@@ -59,7 +59,19 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     '        bsdf.inputs["Metallic"].default_value = spec["metallic"]',
     '        if spec.get("emission") is not None:',
     '            bsdf.inputs["Emission Color"].default_value = spec["emission"]',
-    '            bsdf.inputs["Emission Strength"].default_value = spec["emission_strength"]',
+    "        # Strength is applied whether or not a COLOUR was declared. A",
+    "        # material lit by a baked emission map declares the strength and",
+    "        # gets its colour from the texture, and gating both on the colour",
+    "        # meant `emissionStrength: 4` was read, carried through the spec,",
+    "        # and then dropped on the floor — leaving Blender's default of 0,",
+    "        # which is a surface that emits nothing. The atelier's lava orb",
+    "        # declared 4 and had never once glowed.",
+    '        if spec.get("emission") is not None or spec.get("emission_strength") is not None:',
+    "        # .get with a default, not [\"...\"]: the two keys are written together",
+    "        # today, but this script is DATA that a cache can hand back from an",
+    "        # older writer, and a KeyError here kills the Blender job with a",
+    "        # traceback instead of a diagnostic.",
+    '            bsdf.inputs["Emission Strength"].default_value = spec.get("emission_strength", 1.0)',
     '        if spec.get("alpha") is not None and spec["alpha"] < 1.0:',
     '            bsdf.inputs["Alpha"].default_value = spec["alpha"]',
     "            # EEVEE Next names it surface_render_method; legacy EEVEE",
@@ -266,6 +278,14 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
       ];
       if (spec.emission) {
         entries.push(`"emission": (${[...spec.emission, 1].map(num).join(", ")})`);
+      }
+      // Strength travels whenever the author asked for emission by EITHER
+      // means. It used to ride along with the colour, so a material lit by a
+      // baked emission map — which declares a strength and takes its colour
+      // from the texture — never emitted the key at all, and its declared
+      // value was dropped between the spec and the build script. Absent when
+      // neither is declared, so a plain material is not made to glow.
+      if (spec.emission || spec.emissionStrength !== undefined) {
         entries.push(`"emission_strength": ${num(spec.emissionStrength ?? 1)}`);
       }
       if (spec.alpha !== undefined && spec.alpha < 1) {
@@ -359,11 +379,27 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
       lines.push(
         "# Key light scaled to the subject so exposure does not depend on how",
         "# large the model happens to be.",
+        "#",
+        "# Power goes as radius SQUARED, and neither term is floored. Both of",
+        "# those were wrong before and in the same direction: the lamp sat at",
+        "# a distance proportional to the radius, so irradiance falls as",
+        "# radius^2, while power rose only linearly — leaving the subject lit",
+        "# as 1/radius. Small subjects were therefore lit HARDER, exactly",
+        "# inverting the promise this comment makes. The floors then finished",
+        "# the job: a 1m minimum lamp physically envelops anything under half",
+        "# a metre. Every prop, printed part, product shot and miniature",
+        "# rendered pure white, and the proof reported the frame as EMPTY",
+        "# rather than blown, sending the reader after a framing bug that was",
+        "# not there.",
+        "#",
+        "# Squared power makes irradiance constant, so one calibration holds",
+        "# at every scale: 4000W at a 1m radius, which is what the sizes that",
+        "# always looked right were already getting.",
         `bpy.ops.object.light_add(type="AREA", location=(${num(framing.center[0] + key)}, ${num(framing.center[1] - key)}, ${num(framing.center[2] + key)}))`,
         "key = bpy.context.object",
         'key.name = "lgt_key"',
-        `key.data.energy = ${num(Math.max(200, framing.radius * 4000))}`,
-        `key.data.size = ${num(Math.max(1, framing.radius * 2))}`,
+        `key.data.energy = ${num(KEY_WATTS_AT_ONE_METRE * framing.radius * framing.radius)}`,
+        `key.data.size = ${num(framing.radius * 2)}`,
         "",
       );
     }
@@ -371,6 +407,13 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
 
   return lines.join("\n");
 }
+
+/**
+ * Key-light power for a subject of one metre radius, in watts. Every other
+ * size scales from here by radius squared, which is what keeps the subject's
+ * illumination — not the lamp's number — the thing that stays constant.
+ */
+const KEY_WATTS_AT_ONE_METRE = 4000;
 
 /**
  * Camera placement derived from the solved bounding box.

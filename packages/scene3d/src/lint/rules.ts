@@ -53,6 +53,34 @@ export interface LintInput {
  * Order is fixed; dedupe is by code+target+message so overlapping sources
  * (a Blender object and the same-named USD prim) cannot double-report.
  */
+/**
+ * Largest world dimension of the scene, metres, or undefined when nothing
+ * measurable is present. Reads the same per-object world bounds every other
+ * world-space rule reads rather than re-deriving extents.
+ */
+function sceneSizeMetres(census: Census | undefined): number | undefined {
+  if (!census) return undefined;
+  let lo: number[] | null = null;
+  let hi: number[] | null = null;
+  for (const obj of census.objects) {
+    if (obj.type !== "MESH" || !obj.worldMin || !obj.worldMax) continue;
+    if (!lo || !hi) {
+      lo = [...obj.worldMin];
+      hi = [...obj.worldMax];
+      continue;
+    }
+    for (let axis = 0; axis < 3; axis++) {
+      const mn = obj.worldMin[axis];
+      const mx = obj.worldMax[axis];
+      if (typeof mn === "number" && mn < lo[axis]!) lo[axis] = mn;
+      if (typeof mx === "number" && mx > hi[axis]!) hi[axis] = mx;
+    }
+  }
+  if (!lo || !hi) return undefined;
+  const size = Math.max(hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!);
+  return Number.isFinite(size) && size > 0 ? size : undefined;
+}
+
 export function runLint(input: LintInput): Issue[] {
   const issues: Issue[] = [];
   // Geometry the author did not build: a `file:`-backed spec part, or — when
@@ -79,7 +107,10 @@ export function runLint(input: LintInput): Issue[] {
       groundExempt: input.contract.grounding.exempt,
     });
   }
-  lintProof(input.proofFrames, issues, input.contract.proofThresholds);
+  // Scene size comes from the census the rest of the linter already uses:
+  // the empty-frame error needs it to tell 'aimed wrong' from 'too small
+  // to render'.
+  lintProof(input.proofFrames, issues, input.contract.proofThresholds, sceneSizeMetres(input.census));
   lintIntent(input.census, input.contract, input.solved, issues);
   if (input.exportedUsda) {
     lintExportedStage(

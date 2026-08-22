@@ -16,6 +16,31 @@ import { renderKitHtml, type KitEntry } from "./viewer/kit.js";
 import { summariseKit } from "./verdict.js";
 
 /**
+ * Delivered size of every exported asset, in bytes.
+ *
+ * Stat'd rather than accumulated during export: the export path has several
+ * writers (the runner, the USDZ packager, the sheet baker) and a size summed
+ * across them would be a different number from what the user downloads, which
+ * is the only number worth reporting.
+ */
+function measureExportedBytes(
+  projectDir: string | undefined,
+  assets: string[],
+): Record<string, number> | undefined {
+  if (!projectDir) return undefined;
+  const sizes: Record<string, number> = {};
+  for (const rel of assets) {
+    try {
+      const stat = fs.statSync(path.join(projectDir, rel));
+      if (stat.isFile()) sizes[rel] = stat.size;
+    } catch {
+      // Absent, not zero — see the field's docs.
+    }
+  }
+  return Object.keys(sizes).length > 0 ? sizes : undefined;
+}
+
+/**
  * Emit the scene manifest — the RecordAsset-equivalent for a compiled
  * scene. It is written as `.scene3d/manifest.json` inside the project and
  * mirrors HyperFrames' deterministic artifact output: everything the viewer
@@ -23,6 +48,10 @@ import { summariseKit } from "./verdict.js";
  */
 export function buildManifest(input: {
   source: SceneSource;
+  /** Where the exported assets live, so their delivered size can be measured. */
+  projectDir?: string;
+  /** What the lowering had to restore because the master could not hold it. */
+  carried?: Scene3dManifest["carried"];
   census?: Census;
   issues: Issue[];
   summary: IssueSummary;
@@ -137,6 +166,11 @@ export function buildManifest(input: {
     };
   }
 
+  // Stat'd ONCE: the spread used to call this twice, testing truthiness
+  // with one call and taking the value with another, so every deliverable
+  // was stat'd twice per manifest.
+  const exportedAssetBytes = measureExportedBytes(input.projectDir, input.exportedAssets);
+
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -169,6 +203,14 @@ export function buildManifest(input: {
     camera: census?.camera ?? { present: false, name: null },
     proofImages: input.proofImages,
     exportedAssets: input.exportedAssets,
+    // Present whenever the lowering RECORDED one, empty lists included. An
+    // all-empty carry says "the master held everything"; an absent field says
+    // "nobody measured", which is what a compile from before this existed —
+    // or a cache entry written by one — actually leaves behind. Collapsing
+    // both into absence is the same conflation the rest of this package
+    // refuses to make.
+    ...(input.carried ? { carried: input.carried } : {}),
+    ...(exportedAssetBytes ? { exportedAssetBytes } : {}),
     issues: input.summary,
     issueCodes,
     actionableCodes,

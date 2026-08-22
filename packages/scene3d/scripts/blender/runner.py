@@ -28,6 +28,7 @@ import json
 import math
 import os
 import re
+import struct
 import sys
 import traceback
 
@@ -913,6 +914,22 @@ def bake_shaders(job):
                 socket = socket_for[output]
                 if socket in bsdf.inputs:
                     mat.node_tree.links.new(node.outputs["Color"], bsdf.inputs[socket])
+                if (output == "emission" and "Emission Strength" in bsdf.inputs
+                        and bsdf.inputs["Emission Strength"].default_value == 0.0):
+                    # Emission Color is a COLOUR; Emission Strength decides
+                    # whether any of it leaves the surface, and Blender
+                    # defaults it to 0. A baked emission atlas wired into a
+                    # zero-strength socket is multiplied away: it did not glow
+                    # in the proof, the USD writer correctly declined to author
+                    # an inert emissiveColor, and the shipped glTF carried
+                    # neither an emissive texture nor a factor. Declaring
+                    # `outputs: ["emission"]` bought a bake, a wire, and no
+                    # light.
+                    #
+                    # Only when it is still 0, so a material that declared its
+                    # own strength keeps it — this supplies a missing value,
+                    # it does not overrule one.
+                    bsdf.inputs["Emission Strength"].default_value = 1.0
 
 
 """Degraded-import facts gathered during load, surfaced as lint warnings.
@@ -1143,6 +1160,13 @@ def action_has_curves(action):
     return False
 
 
+# A face whose area is below this fraction of its own longest edge squared
+# has effectively collinear vertices. Equilateral is ~0.43; a millionth of
+# that is unambiguously degenerate and cannot be reached by honest
+# tessellation. Lives here, beside census(), which is its only consumer.
+ZERO_AREA_RATIO = 1e-6
+
+
 def census(scene, measure_thickness=False, voxel_grid=0.0):
     import bpy
     import bmesh
@@ -1236,11 +1260,27 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
             bm.transform(o.matrix_world)
         except Exception:
             pass
-        # Zero-area is a METRIC fact (the 1e-7 threshold is m^2), so it is
-        # measured after the world transform like every other epsilon-bearing
-        # measurement: a healthy face on a 100x-scaled object must not read
-        # as degenerate just because its local area is tiny.
-        zero_area = sum(1 for f in bm.faces if f.calc_area() < 1e-7)
+        # Degenerate means "this face has no area FOR ITS OWN SIZE", which is
+        # a shape fact, not a metric one. The threshold used to be an absolute
+        # 1e-7 m^2 (0.1 mm^2) — so every face of any small part was degenerate
+        # by definition: a 3mm sphere reported all 1152 of its faces, and any
+        # miniature, jewellery piece or small mechanical part flooded. Being
+        # measured in world space made that worse, not better; it is scale
+        # dependence that is wrong here, and world space is where scale lives.
+        #
+        # Compared against the face's own longest edge instead. A healthy
+        # triangle has area ~0.43*e^2 (equilateral); a collinear one has area
+        # that vanishes while its edges stay finite. The ratio is dimensionless,
+        # so it says the same thing about a 3mm part and a 300m one — the same
+        # discipline `worstAspectRatio` twenty lines below already applies, and
+        # the two now agree about what a degenerate triangle is.
+        zero_area = 0
+        for f in bm.faces:
+            longest = max((e.calc_length() for e in f.edges), default=0.0)
+            if longest <= 0.0:
+                zero_area += 1
+            elif f.calc_area() < ZERO_AREA_RATIO * longest * longest:
+                zero_area += 1
         # Doubles via kd-tree; capped like every other heavy measurement in
         # this file. Past the cap the field is OMITTED — "not measured",
         # which readers must never conflate with "fine".
@@ -1382,7 +1422,14 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
         })
 
     tex_rows = []
+    # Blender's own viewer buffers are not scene content. Rendering the proof
+    # creates a `Render Result` datablock, and it was being reported as a
+    # texture — 0x0, no filepath — so a flipbook scene's manifest listed one
+    # "texture" that was the render, and none of the atlases it had baked.
+    VIEWER_IMAGE_TYPES = ("RENDER_RESULT", "COMPOSITING")
     for img in sorted(bpy.data.images, key=lambda x: x.name):
+        if getattr(img, "type", "IMAGE") in VIEWER_IMAGE_TYPES:
+            continue
         try:
             cs = img.colorspace_settings.name
         except Exception:
@@ -1964,6 +2011,159 @@ class provenance(object):
 OVERHANG_COS = 0.70710678
 # Thickness ray-casting is O(faces) BVH queries; capped like every heavy pass.
 THICKNESS_FACE_CAP = 40000
+
+
+def principled_node(m):
+    """The Principled BSDF node itself. `principled()` returns its measured
+    facts; capability probing needs the node to walk backward from."""
+    tree = getattr(m, "node_tree", None)
+    if tree is None:
+        return None
+    return next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+
+
+def _image_behind_socket(socket):
+    """The image feeding a socket, through whatever nodes sit between it and
+    the texture.
+
+    Parity cares about the ROLE — "an image drives base colour" — not the
+    topology that delivers it. A Normal Map, a Separate Color splitting a
+    packed ORM, a Mix carrying a tint are all legitimate ways to reach the
+    same binding, and the USD round trip rebuilds them differently even when
+    nothing was lost. Walking back to the image is the comparison that
+    survives a re-author.
+    """
+    if socket is None or not socket.is_linked:
+        return None
+    seen = set()
+    stack = [l.from_node for l in socket.links]
+    while stack:
+        n = stack.pop()
+        if id(n) in seen:
+            continue
+        seen.add(id(n))
+        if n.type == "TEX_IMAGE" and n.image:
+            return n.image
+        for i in n.inputs:
+            for l in i.links:
+                stack.append(l.from_node)
+    return None
+
+
+IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".exr", ".tga", ".tif", ".tiff",
+                    ".bmp", ".webp")
+
+
+def image_identity(image):
+    """A texture's identity ACROSS a round trip.
+
+    The master materialises packed images to disk, so `Image_3` on the build
+    side arrives as `Image_3.png` on the master side. The extension records
+    that the texture was written down, not that it is a different texture."""
+    if image is None:
+        return None
+    name = image.name
+    lowered = name.lower()
+    for ext in IMAGE_EXTENSIONS:
+        if lowered.endswith(ext):
+            return name[: -len(ext)]
+    return name
+
+
+# The importer's side channel: glTF channels Blender's Principled has no
+# socket for (occlusion, thickness) are routed into this group node.
+GLTF_EXTRAS_GROUP = "glTF Material Output"
+
+
+def gltf_extras_node(mat):
+    tree = getattr(mat, "node_tree", None)
+    if tree is None:
+        return None
+    for n in tree.nodes:
+        if n.type == "GROUP" and n.node_tree and GLTF_EXTRAS_GROUP in n.node_tree.name:
+            return n
+    return None
+
+
+# Principled input -> the role name parity speaks in.
+TEXTURE_ROLE_INPUTS = (
+    ("baseColor", "Base Color"),
+    ("metallic", "Metallic"),
+    ("roughness", "Roughness"),
+    ("normal", "Normal"),
+    ("emission", "Emission Color"),
+    ("alpha", "Alpha"),
+)
+
+
+def material_capability(mat):
+    """What a material DOES, in terms a round trip can be held to.
+
+    Distinct from `material_graph_signature`, which hashes node TOPOLOGY to
+    find duplicates within one scene. Topology legitimately changes when the
+    USD importer re-authors a graph, so a structural hash cannot answer "did
+    the round trip lose anything" — it would answer "yes" every time and
+    therefore never be consulted. This reports the bindings and the surface
+    flags instead: which image drives which role, and whether the surface is
+    one- or two-sided.
+
+    Both were being lost silently. Occlusion lives in the extras group, which
+    the USD writer does not traverse, so the map and its binding vanished from
+    every glTF asset that had one. Backface culling is a plain material flag
+    the round trip resets, which flipped every closed mesh to two-sided. The
+    census measured neither, so the parity check had nothing to compare.
+    """
+    node = principled_node(mat)
+    roles = {}
+    if node is not None:
+        for role, socket_name in TEXTURE_ROLE_INPUTS:
+            if socket_name in node.inputs:
+                ident = image_identity(_image_behind_socket(node.inputs[socket_name]))
+                if ident:
+                    roles[role] = ident
+    extras = gltf_extras_node(mat)
+    if extras is not None and "Occlusion" in extras.inputs:
+        ident = image_identity(_image_behind_socket(extras.inputs["Occlusion"]))
+        if ident:
+            roles["occlusion"] = ident
+    # Emission STRENGTH, not just the binding. UsdPreviewSurface has no
+    # concept of it, so a surface authored to glow at 4 comes back at 1 with
+    # every role still present — a loss no binding comparison can see.
+    strength = None
+    if node is not None and "Emission Strength" in node.inputs:
+        if not node.inputs["Emission Strength"].is_linked:
+            strength = R6(float(node.inputs["Emission Strength"].default_value))
+    return {"roles": roles,
+            "backfaceCulling": bool(getattr(mat, "use_backface_culling", False)),
+            "emissionStrength": strength}
+
+
+def reachable_actions():
+    """Every action the scene can actually deliver, by name.
+
+    NOT just the action bound to an object. Blender's glTF importer binds one
+    clip and files the rest as NLA strips, so a three-clip character reads as
+    one bound action — which is what the parity fingerprint used to compare,
+    on both sides of the round trip, agreeing with itself while two of the
+    three clips were dropped. An action in an NLA strip is scene content: it
+    reaches the exporters and it is what the author shipped.
+
+    Orphan datablocks are still excluded. A deleted rig's leftover clip is
+    reachable from nothing and must not read as a master loss.
+    """
+    import bpy
+    names = set()
+    for o in bpy.context.scene.objects:
+        ad = o.animation_data
+        if not ad:
+            continue
+        if ad.action and action_has_curves(ad.action):
+            names.add(ad.action.name)
+        for track in ad.nla_tracks:
+            for strip in track.strips:
+                if strip.action and action_has_curves(strip.action):
+                    names.add(strip.action.name)
+    return names
 
 
 def material_graph_signature(mat):
@@ -2800,6 +3000,89 @@ def frame_stats(filepath):
             pass
 
 
+# The band EEVEE actually resolves a subject in, measured by bisection: below
+# ~2mm and above ~200m it returns black frames for geometry that is present,
+# framed and lit. Outside it, the proof renders a uniformly rescaled COPY of
+# the scene (see render_scale_guard) rather than reporting a limitation.
+PROOF_RENDERABLE_MIN = 0.002
+PROOF_RENDERABLE_MAX = 200.0
+# What an out-of-band scene is rescaled to. Mid-band, so neither a 200-micron
+# part nor a 2km site lands near an edge.
+PROOF_RENDER_TARGET = 1.0
+
+
+def render_scale_guard(scene):
+    """Put the scene inside the renderer's resolvable band, reversibly.
+
+    A proof frame is a picture of SHAPE. Scaling the geometry, the camera and
+    the lights by one factor produces the same image — the subject fills the
+    same pixels, lit the same way — so the renderer's floor and ceiling stop
+    being the compiler's floor and ceiling. A 200-micron part and a 2km site
+    both get a real turntable instead of eight black frames.
+
+    Reversible because the export stage runs after this one and must see the
+    scene the author built: every world matrix and every lamp power is
+    snapshotted and restored, rather than re-derived by scaling back (which
+    would leave float residue on every transform in the file).
+
+    Lamp power scales with k^2. Distances scale by k, so irradiance falls by
+    k^2; without the compensation a rescaled scene renders at a completely
+    different exposure than the one the lighting was calibrated for.
+
+    Lamp SHAPE needs no compensation, which is worth recording because it
+    reads like an omission: an area light's `data.size` is unchanged by the
+    matrix below, so the solid angle it subtends looks like it should shift
+    and harden every shadow. Blender applies the object's scale to the
+    light's shape at render time, so it does not. Measured rather than
+    assumed - the same scene at 1m and at 0.5mm (where the guard fires and
+    rescales by 2000x) renders to mean luminance 0.9169 vs 0.9089 with
+    identical lit-pixel fraction and shadow-gradient coverage matching to
+    0.0003. Scaling data.size as well would DOUBLE-apply the factor.
+
+    Returns a callable that undoes everything, or None when the scene already
+    sits inside the band and nothing was touched.
+    """
+    import bpy
+    import mathutils
+
+    lo, hi = scene_bbox(scene)
+    size = max(hi.x - lo.x, hi.y - lo.y, hi.z - lo.z)
+    if not math.isfinite(size) or size <= 0:
+        return None
+    if PROOF_RENDERABLE_MIN <= size <= PROOF_RENDERABLE_MAX:
+        return None
+
+    k = PROOF_RENDER_TARGET / size
+    center = (lo + hi) / 2.0
+    objects = list(scene.objects)
+    saved_matrices = [(o, o.matrix_world.copy()) for o in objects]
+    saved_energies = [(o, o.data.energy) for o in objects
+                      if o.type == "LIGHT" and hasattr(o.data, "energy")]
+
+    about_centre = (mathutils.Matrix.Translation(center)
+                    @ mathutils.Matrix.Scale(k, 4)
+                    @ mathutils.Matrix.Translation(-center))
+    for obj in objects:
+        # Roots only: children follow their parent's matrix, and scaling both
+        # would apply the factor twice down every branch of the hierarchy.
+        if obj.parent is None:
+            obj.matrix_world = about_centre @ obj.matrix_world
+    for obj, energy in saved_energies:
+        obj.data.energy = energy * (k * k)
+    bpy.context.view_layer.update()
+    log("proof: scene is %g m across, rendered at %gx to stay inside the "
+        "renderer's %g-%g m band" % (size, k, PROOF_RENDERABLE_MIN, PROOF_RENDERABLE_MAX))
+
+    def restore():
+        for obj, matrix in saved_matrices:
+            obj.matrix_world = matrix
+        for obj, energy in saved_energies:
+            obj.data.energy = energy
+        bpy.context.view_layer.update()
+
+    return restore
+
+
 def proof(job):
     import bpy
     import mathutils
@@ -2838,12 +3121,50 @@ def proof(job):
     if len(filepaths) < steps:
         fail("S3D-E-206", "proof job filepaths (%d) < steps (%d)" % (len(filepaths), steps))
 
+    # Inside the renderer's band before anything is measured from the scene:
+    # the camera distance, the orbit radius and the lamp compensation all read
+    # the bounds below, and they must read the bounds being RENDERED.
+    restore_scale = render_scale_guard(scene)
+    saved_clip = (auto_cam.data.clip_start, auto_cam.data.clip_end)
+    try:
+        return _proof_frames(job, scene, opts, auto_cam, is_auto, steps,
+                             filepaths, turntable_on)
+    finally:
+        auto_cam.data.clip_start, auto_cam.data.clip_end = saved_clip
+        if restore_scale is not None:
+            restore_scale()
+
+
+def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntable_on):
+    import bpy
+    import mathutils
     lo, hi = scene_bbox(scene)
     center = (lo + hi) / 2.0
     diag = (hi - lo).length
     cam_data = auto_cam.data
-    dist = max((diag / 2.0) / math.tan(cam_data.angle / 2.0) * 1.25, 0.1)
+    # Framing distance is the subject's, with no floor. A fixed 0.1m minimum
+    # used to sit here: for anything smaller than about a hand it parked the
+    # camera further away than the framing asked for, so a 2mm part rendered
+    # as a speck and a 200-micron one as nothing at all — a constant metre
+    # value inside the one calculation whose entire job is to scale with the
+    # subject. A degenerate (zero-extent) scene has no distance to derive, and
+    # only that case falls back to a fixed one.
+    span = (diag / 2.0) / math.tan(cam_data.angle / 2.0) * 1.25
+    dist = span if span > 0 else 1.0
     elevation = math.radians(30.0)
+
+    # Clip planes derived from the framing distance, for the same reason the
+    # distance itself is derived: Blender's defaults are 0.1m and 100m, two
+    # absolute metre values in a shot whose every other quantity scales with
+    # the subject. They were invisible while the distance floor above held the
+    # camera at 0.1m — removing that floor let the camera reach the framing it
+    # had always asked for, and put every subject under ~4cm INSIDE the near
+    # plane. The two constants were covering for each other.
+    #
+    # Restored afterwards: the proof owns how it renders, not what the file
+    # says about the author's camera.
+    cam_data.clip_start = max(dist * 1e-3, 1e-7)
+    cam_data.clip_end = max(dist * 1e3, diag * 10.0)
 
     frames = []
     for i in range(steps):
@@ -2927,16 +3248,28 @@ def usd_orientation_kwargs(job):
     about which way is up, which is the kind of difference nobody notices
     until an import lands on its side.
     """
+    kwargs = {}
+    scale = job.get("metersPerUnit")
+    if isinstance(scale, (int, float)) and scale > 0 and abs(scale - 1.0) > 1e-9:
+        # The stage's declared unit. Blender works in metres, so a stage that
+        # must read as millimetres is the same geometry with metersPerUnit
+        # 0.001 — the exporter's own scale option, not a resize of the scene.
+        # Without this the contract could ASK for millimetres and nothing
+        # could answer: S3D-E-403 fired on every compile of every project
+        # that declared anything but metres, and no authoring path existed.
+        kwargs["convert_scene_units"] = "CUSTOM"
+        kwargs["meters_per_unit"] = float(scale)
     up_axis = (job.get("upAxis") or "").upper()
     if up_axis not in ("X", "Y", "Z"):
-        return {}
-    return {
+        return kwargs
+    kwargs.update({
         "convert_orientation": True,
         "export_global_up_selection": up_axis,
         # Forward must not be parallel to up; -Z is USD's convention for a
         # Y-up stage, and -Y for a Z-up one.
         "export_global_forward_selection": "NEGATIVE_Z" if up_axis == "Y" else "NEGATIVE_Y",
-    }
+    })
+    return kwargs
 
 
 def scene_fingerprint():
@@ -2996,13 +3329,14 @@ def scene_fingerprint():
                       for o in bpy.context.scene.objects if o.type == "ARMATURE"},
         "boneOrder": bone_order,
         "morphs": morphs,
-        # Only actions BOUND to scene objects: an orphan datablock (say, a
-        # deleted rig's leftover clips) is not scene content, cannot reach
-        # any exporter, and must not read as a master loss.
-        "actions": sorted({o.animation_data.action.name
-                           for o in bpy.context.scene.objects
-                           if o.animation_data and o.animation_data.action
-                           and action_has_curves(o.animation_data.action)}),
+        # Every action the scene can DELIVER, not merely the one bound to an
+        # object — see reachable_actions(). Orphans are still excluded.
+        "actions": sorted(reachable_actions()),
+        # What each material does, so a lost texture binding or a flipped
+        # sidedness is a finding rather than a surprise in the shipped file.
+        # Keyed by material name, which survives the round trip.
+        "materialCaps": {m.name: material_capability(m)
+                         for m in bpy.data.materials if m.users > 0},
     }
 
 
@@ -3258,7 +3592,370 @@ def export_lods(out_dir, ratios):
     return produced
 
 
+def _save_image_copy(image, scratch):
+    """Write an image to disk without disturbing the scene that owns it.
+
+    The occlusion map is usually PACKED inside an imported GLB, so it exists
+    nowhere on disk — and the master materialises only the textures its own
+    graph references, which by definition excludes this one. Copy the
+    datablock, save the copy, drop it: the build scene is untouched and the
+    pixels survive the scene reset."""
+    import bpy
+    safe = "".join(c if (c.isalnum() or c in "._-") else "_" for c in image.name)
+    target = os.path.join(scratch, "%s.png" % safe)
+    tmp = image.copy()
+    try:
+        tmp.filepath_raw = target
+        tmp.file_format = "PNG"
+        tmp.save()
+    finally:
+        try:
+            bpy.data.images.remove(tmp)
+        except Exception:
+            pass
+    return target
+
+
+def capture_carry(scratch):
+    """Everything the USD round trip demonstrably cannot carry, saved so the
+    lowered containers can be made whole again.
+
+    This is the same shape as `rebuild_object_animation` and the material
+    tweak replay: the master is still the only source the deliverables are
+    lowered FROM, and anything the writer could author is authored. What is
+    collected here is strictly what was MEASURED to be lost — probe results,
+    not assumptions:
+
+      - actions   3 clips in, 1 out. Blender's glTF importer binds one clip
+                  and files the rest as NLA strips; USD carries a single
+                  baked timeline, so the strips are gone after the re-import.
+      - occlusion the importer routes it into a `glTF Material Output` group
+                  node, which the USD writer does not traverse. Both the
+                  binding and the image vanish.
+      - sidedness `use_backface_culling` is a plain material flag that comes
+                  back False, turning every closed mesh two-sided.
+
+    Nothing here is silent: `restore_carry` returns what it put back, and the
+    caller reports it.
+    """
+    import bpy
+    carry = {"materials": {}, "objects": {}, "blend": None}
+
+    for m in bpy.data.materials:
+        if m.users == 0:
+            continue
+        cap = material_capability(m)
+        entry = {"backfaceCulling": bool(getattr(m, "use_backface_culling", False)),
+                 "emissionStrength": cap.get("emissionStrength"),
+                 "occlusion": None}
+        extras = gltf_extras_node(m)
+        if extras is not None and "Occlusion" in extras.inputs:
+            img = _image_behind_socket(extras.inputs["Occlusion"])
+            if img is not None:
+                try:
+                    entry["occlusion"] = {"file": _save_image_copy(img, scratch),
+                                          "name": img.name}
+                except Exception as exc:
+                    entry["occlusion"] = {"file": None, "name": img.name,
+                                          "error": str(exc)}
+        # Only a strength that actually EMITS and differs from the round
+        # trip's own answer of 1. Zero is the absence of emission, not a
+        # value to restore: carrying it put a "restored emission strength"
+        # note on every ordinary material in the scene, which is both untrue
+        # and noisy — a report of a repair that repaired nothing.
+        keeps_strength = (entry["emissionStrength"] is not None
+                          and entry["emissionStrength"] > 0.0
+                          and abs(entry["emissionStrength"] - 1.0) > 1e-6)
+        if entry["backfaceCulling"] or entry["occlusion"] or keeps_strength:
+            carry["materials"][m.name] = entry
+
+    # Which clips belong to which object, and which one was active. Recorded
+    # by NAME: the datablocks themselves cannot survive the scene reset, so
+    # they ride in a .blend and are appended back by name afterwards.
+    for o in bpy.context.scene.objects:
+        ad = o.animation_data
+        if not ad:
+            continue
+        names = []
+        for track in ad.nla_tracks:
+            for strip in track.strips:
+                if strip.action and action_has_curves(strip.action):
+                    names.append(strip.action.name)
+        active = ad.action.name if (ad.action and action_has_curves(ad.action)) else None
+        if active and active not in names:
+            names.append(active)
+        if len(names) > 1 or (names and active is None):
+            # One clip that is simply the active action needs no carrying —
+            # the master holds it and rebuild_object_animation restores it.
+            carry["objects"][o.name] = {"actions": names, "active": active}
+
+    if carry["objects"]:
+        blend = os.path.join(scratch, "carry.blend")
+        try:
+            bpy.ops.wm.save_as_mainfile(filepath=blend, copy=True, check_existing=False)
+            carry["blend"] = blend
+        except Exception as exc:
+            carry["blendError"] = str(exc)
+            carry["objects"] = {}
+    return carry
+
+
+def ensure_gltf_extras_group():
+    """The node group the glTF exporter reads occlusion out of.
+
+    Recreated rather than assumed: after the round trip the group does not
+    exist, because the importer that made it is not the importer that ran."""
+    import bpy
+    ng = bpy.data.node_groups.get(GLTF_EXTRAS_GROUP)
+    if ng is not None:
+        return ng
+    ng = bpy.data.node_groups.new(GLTF_EXTRAS_GROUP, "ShaderNodeTree")
+    try:
+        ng.interface.new_socket("Occlusion", in_out="INPUT",
+                                socket_type="NodeSocketFloat")
+    except AttributeError:
+        ng.inputs.new("NodeSocketFloat", "Occlusion")
+    ng.nodes.new("NodeGroupInput")
+    return ng
+
+
+def _restore_occlusion(mat, spec):
+    """Rebuild the occlusion binding exactly as the glTF importer builds it:
+    image -> Separate Color -> Red -> the extras group's Occlusion input. The
+    exporter recognises that shape; a direct image link is not guaranteed to
+    round-trip through it."""
+    import bpy
+    if not spec or not spec.get("file") or not os.path.exists(spec["file"]):
+        return False
+    tree = getattr(mat, "node_tree", None)
+    if tree is None:
+        return False
+    img = bpy.data.images.load(spec["file"], check_existing=True)
+    img.colorspace_settings.name = "Non-Color"
+    tex = tree.nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    tex.location = (-900, -600)
+    sep = tree.nodes.new("ShaderNodeSeparateColor")
+    sep.location = (-650, -600)
+    grp = tree.nodes.new("ShaderNodeGroup")
+    grp.node_tree = ensure_gltf_extras_group()
+    grp.location = (-400, -600)
+    tree.links.new(sep.inputs["Color"], tex.outputs["Color"])
+    if "Occlusion" in grp.inputs:
+        tree.links.new(grp.inputs["Occlusion"], sep.outputs["Red"])
+    return True
+
+
+def restore_carry(carry):
+    """Put back what `capture_carry` saved, and say what was put back."""
+    import bpy
+    # `clipObjects` is the caller's exclusion set for the animation rebuild.
+    # It must be what was RESTORED, not what was planned: a restore that
+    # throws half way leaves some objects with their clips back and the rest
+    # without, and either reading of the plan is wrong for one of those
+    # groups — bake everything and the restored clips gain a duplicate, bake
+    # nothing and the unrestored objects lose their animation entirely.
+    notes = {"materials": [], "occlusion": [], "clips": [], "emission": [],
+             "clipObjects": []}
+    if not carry:
+        return notes
+
+    for name, entry in (carry.get("materials") or {}).items():
+        mat = bpy.data.materials.get(name)
+        if mat is None:
+            continue
+        if entry.get("backfaceCulling"):
+            try:
+                mat.use_backface_culling = True
+                notes["materials"].append(name)
+            except Exception:
+                pass
+        if entry.get("occlusion"):
+            try:
+                if _restore_occlusion(mat, entry["occlusion"]):
+                    notes["occlusion"].append(name)
+            except Exception:
+                pass
+        strength = entry.get("emissionStrength")
+        if strength is not None and abs(strength - 1.0) > 1e-6:
+            try:
+                node = principled_node(mat)
+                if (node is not None and "Emission Strength" in node.inputs
+                        and not node.inputs["Emission Strength"].is_linked):
+                    node.inputs["Emission Strength"].default_value = float(strength)
+                    notes["emission"].append(name)
+            except Exception:
+                pass
+
+    plan = carry.get("objects") or {}
+    blend = carry.get("blend")
+    if plan and blend and os.path.exists(blend):
+        wanted = set()
+        for spec in plan.values():
+            wanted.update(spec.get("actions") or [])
+        # Free the names first. The USD importer rebuilds the master's single
+        # baked timeline as an action carrying the ACTIVE clip's name, so
+        # appending the real clip of that name collided and arrived as
+        # `Survey.001` — and the exporter then wrote both, shipping a phantom
+        # fourth animation that was a lower-fidelity copy of the third. The
+        # baked action is exactly what is being restored in full, so it has no
+        # claim on the name.
+        for name in sorted(wanted):
+            existing = bpy.data.actions.get(name)
+            if existing is None:
+                continue
+            for o in bpy.context.scene.objects:
+                ad = o.animation_data
+                if ad and ad.action == existing:
+                    ad.action = None
+            try:
+                bpy.data.actions.remove(existing)
+            except Exception:
+                pass
+        try:
+            with bpy.data.libraries.load(blend, link=False) as (src, dst):
+                dst.actions = [n for n in src.actions if n in wanted]
+        except Exception:
+            return notes
+        for obj_name, spec in plan.items():
+            obj = bpy.context.scene.objects.get(obj_name)
+            if obj is None:
+                continue
+            if obj.animation_data is None:
+                obj.animation_data_create()
+            ad = obj.animation_data
+            # Rebuilt as one track per clip, mirroring what the glTF importer
+            # produces — that is the arrangement the exporter turns back into
+            # one glTF animation per clip.
+            for action_name in spec.get("actions") or []:
+                action = bpy.data.actions.get(action_name)
+                if action is None:
+                    continue
+                if any(s.action == action for t in ad.nla_tracks for s in t.strips):
+                    continue
+                track = ad.nla_tracks.new()
+                track.name = action_name
+                try:
+                    track.strips.new(action_name, int(action.frame_range[0]), action)
+                except Exception:
+                    continue
+                notes["clips"].append(action_name)
+                if obj_name not in notes["clipObjects"]:
+                    notes["clipObjects"].append(obj_name)
+            active = spec.get("active")
+            if active and bpy.data.actions.get(active) is not None and ad.action is None:
+                ad.action = bpy.data.actions.get(active)
+    return notes
+
+
+# STL is unitless by format and millimetres by universal convention.
+MM_PER_METRE = 1000.0
+# How far the written STL may differ from the scene's own bounds before the
+# file is judged wrongly scaled. Generous: this is catching factor-of-1000
+# errors, not float drift.
+STL_SCALE_TOLERANCE = 0.01
+
+
+def stl_bbox_mm(path):
+    """Extents of an STL, in whatever unit its numbers are written in.
+
+    Read back rather than assumed, because the only thing an export flag
+    proves is that the exporter accepted the keyword.
+
+    BOTH encodings. The check was binary-only, and the legacy exporter this
+    falls back to can write ASCII — where the reader returned None, the
+    caller skipped the comparison, and the scale guarantee this function
+    exists to enforce quietly stopped applying on exactly the Blender builds
+    that need it most."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(84)
+            if len(head) < 84:
+                return None
+            if head[:5].lower() == b"solid" and b"facet" in head[:84].lower():
+                return _stl_bbox_ascii(path)
+            count = struct.unpack("<I", head[80:84])[0]
+            if count <= 0:
+                return _stl_bbox_ascii(path)
+            lo = [float("inf")] * 3
+            hi = [float("-inf")] * 3
+            for _ in range(count):
+                tri = fh.read(50)
+                if len(tri) < 50:
+                    break
+                for v in range(3):
+                    xyz = struct.unpack("<fff", tri[12 + v * 12:24 + v * 12])
+                    for axis in range(3):
+                        lo[axis] = min(lo[axis], xyz[axis])
+                        hi[axis] = max(hi[axis], xyz[axis])
+            if lo[0] == float("inf"):
+                return None
+            return [hi[i] - lo[i] for i in range(3)]
+    except Exception:
+        return None
+
+
+def _stl_bbox_ascii(path):
+    """Same extents, for the ASCII encoding the legacy exporter may emit."""
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                parts = line.split()
+                if len(parts) != 4 or parts[0] != "vertex":
+                    continue
+                for axis in range(3):
+                    v = float(parts[axis + 1])
+                    lo[axis] = min(lo[axis], v)
+                    hi[axis] = max(hi[axis], v)
+    except Exception:
+        return None
+    if lo[0] == float("inf"):
+        return None
+    return [hi[i] - lo[i] for i in range(3)]
+
+
+def cleanup_carry(carry_dir):
+    """Delete the carry scratch once every container has been written.
+
+    The scratch holds a copy of the pre-master .blend and any occlusion maps
+    that had to be unpacked — hundreds of KB for a small scene and far more
+    for a rigged one, written into `out/` on EVERY compile. Leaving it there
+    grows a project's output without bound and puts a stray .blend beside the
+    deliverables, which is exactly the kind of thing somebody later mistakes
+    for an artifact.
+
+    Safe at this point: the lowered containers embed their textures and the
+    clips are already fcurves in the scene, so nothing still reads these
+    files. Failure to delete is not worth failing an otherwise complete
+    export over, but it IS worth saying, so it lands in the log.
+    """
+    if not carry_dir or not os.path.isdir(carry_dir):
+        return
+    import shutil
+    try:
+        shutil.rmtree(carry_dir)
+    except Exception as exc:
+        log("could not remove carry scratch %s: %s" % (carry_dir, exc))
+
+
 def export_scene(job):
+    """Author the master, lower every container from it, and never
+    leave the carry scratch behind — including on a path nobody
+    predicted. The three explicit cleanups cover the returns this
+    function makes on purpose; this wrapper covers the ones it does
+    not, because a scratch directory that survives an exception grows
+    the project every time the failure repeats."""
+    carry_dir_ref = []
+    try:
+        return _export_scene(job, carry_dir_ref)
+    finally:
+        if carry_dir_ref:
+            cleanup_carry(carry_dir_ref[0])
+
+
+def _export_scene(job, carry_dir_ref):
     import bpy
     formats = job.get("formats") or ["usda"]
     out_dir = job.get("outDir") or "."
@@ -3286,6 +3983,21 @@ def export_scene(job):
     animated_names = animated_object_names()
     lowering = {"buildFingerprint": build_print, "master": None,
                 "masterFingerprint": None, "droppedExportOptions": []}
+    # Save what the round trip is KNOWN to drop, before authoring the master.
+    # Measured losses only — see capture_carry.
+    carry_dir = os.path.join(out_dir, ".carry")
+    os.makedirs(carry_dir, exist_ok=True)
+    carry_dir_ref.append(carry_dir)
+    try:
+        carry = capture_carry(carry_dir)
+    except Exception as exc:
+        carry = None
+        # Distinct keys for the two halves. Both used to write
+        # `carryError`, so a compile where capture failed AND restore
+        # then raised reported only the second — and the second is the
+        # less informative one, since a restore given nothing to
+        # restore fails for a reason that is really the first failure.
+        lowering["captureError"] = str(exc)
 
     source_usda = job.get("usdaFiles") or []
     if source_usda and "usda" not in formats:
@@ -3300,6 +4012,36 @@ def export_scene(job):
             post_process_usda(master_path, info, job)
             assets.append(master_path)
             log("authored master %s" % master_path)
+            # USDZ is consumed by AR Quick Look and Scene Viewer, and both
+            # read a package as Y-up. A Z-up contract — every Unreal and every
+            # 3d_print project — therefore produced an AR file that arrives on
+            # its back, and the only choices on offer were to ship it wrong or
+            # to stop shipping it. Both are avoidable: the package gets its own
+            # stage, authored Y-up by the exporter's own conversion, while the
+            # master keeps the axis the contract asked for.
+            #
+            # An intermediate, not a deliverable: it is packaged and deleted,
+            # and never joins `assets`.
+            if "usdz" in formats and (job.get("upAxis") or "Y").upper() != "Y":
+                ar_path = os.path.join(out_dir, "scene.ar.usda")
+                ar_kwargs = master_usd_kwargs(job, animated)
+                ar_kwargs.update({
+                    "convert_orientation": True,
+                    "export_global_up_selection": "Y",
+                    "export_global_forward_selection": "NEGATIVE_Z",
+                })
+                try:
+                    usd_export_resilient(ar_path, ar_kwargs)
+                    transcode_stage_textures(ar_path)
+                    post_process_usda(ar_path, info, job)
+                    lowering["arMaster"] = rel_to_project(ar_path, job)
+                    log("authored Y-up AR stage %s" % ar_path)
+                except Exception as exc:
+                    # The package still gets built from the master below; it
+                    # will be the wrong way up and W-905 will say so, which is
+                    # the outcome this block exists to improve on, not a new
+                    # failure introduced by it.
+                    lowering["arMasterError"] = str(exc)
         except Exception as exc:
             # No master, no deliverables: emit the failure for every
             # requested format rather than silently falling back to
@@ -3307,6 +4049,7 @@ def export_scene(job):
             for fmt in formats:
                 skipped.append({"format": fmt,
                                 "reason": "master stage failed to author: %s" % exc})
+            cleanup_carry(carry_dir)
             emit({"ok": True, "data": {"assets": [], "skipped": skipped,
                                        "lowering": lowering}})
             return
@@ -3321,6 +4064,7 @@ def export_scene(job):
             if fmt != "usda":
                 skipped.append({"format": fmt,
                                 "reason": "master could not be re-imported: %s" % exc})
+        cleanup_carry(carry_dir)
         emit({"ok": True, "data": {
             "assets": [r for r in (rel_to_project(a, job) for a in assets) if r is not None],
             "skipped": skipped, "lowering": lowering}})
@@ -3332,8 +4076,25 @@ def export_scene(job):
     # bake keyframes onto every object that actually moves. The lowered
     # exporters then read real fcurves, and the parity fingerprint sees
     # the clips restored rather than reporting a phantom loss.
+    # Put back the clips, occlusion maps and sidedness the master could not
+    # hold. Reported, never silent: `carried` reaches the manifest and the
+    # lint so the master's real ceiling stays visible.
+    #
+    # BEFORE the rebuild, and the rebuild then skips whatever was carried.
+    # An object whose clips came back in full does not also want the master's
+    # single baked timeline: baking it produced a fourth animation that was a
+    # duplicate of the active clip under a `.001` name.
+    carried_objects = set()
+    try:
+        carried = restore_carry(carry)
+        lowering["carried"] = carried
+        # What actually came back, so a partial restore excludes exactly the
+        # objects it repaired and the rebuild still covers the others.
+        carried_objects = set(carried.get("clipObjects") or [])
+    except Exception as exc:
+        lowering["carryError"] = str(exc)
     if animated:
-        rebuild_object_animation(animated_names)
+        rebuild_object_animation(animated_names - carried_objects)
     # Material tweaks must be REAPPLIED on the reimported scene: the tint
     # construct (a Mix-MULTIPLY between a texture and Base Color) has no
     # UsdPreviewSurface translation, so the round trip strips it — the
@@ -3404,10 +4165,76 @@ def export_scene(job):
             log("exported %s" % target)
         elif fmt == "stl":
             target = os.path.join(out_dir, "scene.stl")
-            try:
-                bpy.ops.wm.stl_export(filepath=target)
-            except AttributeError:
-                bpy.ops.export_mesh.stl(filepath=target)
+            # STL carries NO unit declaration, and every slicer in use — Cura,
+            # PrusaSlicer, Bambu, Simplify3D — reads the numbers as
+            # millimetres. Blender works in metres, so writing coordinates
+            # straight out shipped an 80mm part as 0.08mm: a speck, silently,
+            # from a compile that reported success.
+            #
+            # Millimetres unconditionally, therefore, rather than following
+            # the contract's metersPerUnit. That is not this rule ignoring the
+            # contract: metersPerUnit says how to READ the stage's numbers,
+            # and STL has no field to record the answer in. The only way the
+            # geometry survives the trip is to write the unit the reader is
+            # guaranteed to assume.
+            # If NEITHER exporter takes the scale, the file is not written.
+            # The bare call used to be the last fallback, and it shipped the
+            # metre-scale geometry this rule exists to prevent — a green
+            # compile handing a slicer a 0.1%-size object, which is the exact
+            # failure the comment above describes. A missing deliverable with
+            # a reason beats a present one that is silently wrong by 1000x.
+            scaled = False
+            for op in (getattr(bpy.ops.wm, "stl_export", None),
+                       getattr(bpy.ops.export_mesh, "stl", None)):
+                if op is None:
+                    continue
+                try:
+                    op(filepath=target, global_scale=MM_PER_METRE)
+                    scaled = True
+                    break
+                except (AttributeError, TypeError):
+                    continue
+            if not scaled:
+                skipped.append({"format": fmt,
+                                "reason": "this Blender's STL exporter does not accept "
+                                          "global_scale, and STL carries no unit; writing "
+                                          "it would ship metres where every slicer reads "
+                                          "millimetres"})
+                continue
+            # Measure the file, do not trust the flag. `global_scale` was
+            # ACCEPTED, which is not the same as applied the way this rule
+            # needs — a build whose exporter interpreted it differently would
+            # ship a part wrong by three orders of magnitude with a green
+            # compile, which is the failure this whole branch exists to stop.
+            # The scene's own bounds are known, so the answer is checkable.
+            wrote = stl_bbox_mm(target)
+            lo, hi = scene_bbox(bpy.context.scene)
+            expect = [(hi[i] - lo[i]) * MM_PER_METRE for i in range(3)]
+            # `default=None` rather than a bare max(): a scene whose every
+            # extent is under a picometre yields an empty generator and the
+            # guard above lets it through, which raised ValueError out of the
+            # whole export instead of degrading to the skipped path.
+            measurable = [i for i in range(3) if expect[i] > 1e-9]
+            if wrote is None:
+                # Unreadable, therefore UNVERIFIED — not verified-clean. The
+                # comment above promises the file is measured; when it cannot
+                # be, that has to be visible rather than assumed away.
+                log("stl scale unverified: could not read back %s" % target)
+            elif measurable:
+                worst = max(abs(wrote[i] - expect[i]) / expect[i] for i in measurable)
+                if worst > STL_SCALE_TOLERANCE:
+                    try:
+                        os.remove(target)
+                    except Exception:
+                        pass
+                    skipped.append({
+                        "format": fmt,
+                        "reason": "STL wrote %s mm for a %s mm subject — this Blender's "
+                                  "exporter does not apply global_scale as millimetres, "
+                                  "and a wrongly scaled print file is worse than none"
+                                  % ([round(v, 3) for v in wrote],
+                                     [round(v, 3) for v in expect])})
+                    continue
             assets.append(target)
             log("exported %s" % target)
         elif fmt == "ply":
@@ -3443,6 +4270,7 @@ def export_scene(job):
             log("LOD export failed: %s" % exc)
 
     rel_assets = [r for r in (rel_to_project(a, job) for a in assets) if r is not None]
+    cleanup_carry(carry_dir)
     emit({"ok": True, "data": {"assets": rel_assets, "skipped": skipped,
                                "lowering": lowering, "lods": lods_info}})
 
