@@ -1226,6 +1226,7 @@ export const TRACKING_HANDOFF_TARGET_IDS = [
   'amr', 'claude', 'codex', 'opencode', 'cursor-agent', 'gemini', 'qwen',
   'copilot', 'grok-build', 'deepseek', 'kimi', 'hermes', 'devin', 'kiro',
   'kilo', 'vibe', 'aider', 'trae-cli', 'pi', 'reasonix',
+  'prime-agent',
 ] as const;
 
 export type TrackingHandoffTargetId =

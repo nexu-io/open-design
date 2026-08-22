@@ -31,6 +31,7 @@ export type PiRpcSessionOptions = {
   imagePaths?: string[];
   uploadRoot?: string;
   parentSession?: string;
+  sessionDir?: string;
 };
 /** Handle returned by `attachPiRpcSession` for querying run state and requesting abort. */
 export type PiRpcSession = {
@@ -100,9 +101,9 @@ export type PiSessionFileSnapshot = Map<string, { mtimeMs: number; size: number 
  *
  * @param cwd - Absolute path to the pi working directory; may be undefined.
  */
-export function readPiSessionFiles(cwd: string | undefined): Array<{ path: string; mtimeMs: number; size: number }> {
-  if (typeof cwd !== 'string' || cwd.length === 0) return [];
-  const sessionsDir = path.join(cwd, '.pi', 'sessions');
+export function readPiSessionFiles(cwd: string | undefined, sessionDir?: string): Array<{ path: string; mtimeMs: number; size: number }> {
+  if (!sessionDir && (typeof cwd !== 'string' || cwd.length === 0)) return [];
+  const sessionsDir = sessionDir ?? path.join(cwd as string, '.pi', 'sessions');
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
@@ -128,9 +129,9 @@ export function readPiSessionFiles(cwd: string | undefined): Array<{ path: strin
  *
  * @param cwd - Absolute path to the pi working directory; may be undefined.
  */
-export function snapshotPiSessionFiles(cwd: string | undefined): PiSessionFileSnapshot {
+export function snapshotPiSessionFiles(cwd: string | undefined, sessionDir?: string): PiSessionFileSnapshot {
   const snapshot: PiSessionFileSnapshot = new Map();
-  for (const file of readPiSessionFiles(cwd)) {
+  for (const file of readPiSessionFiles(cwd, sessionDir)) {
     snapshot.set(file.path, { mtimeMs: file.mtimeMs, size: file.size });
   }
   return snapshot;
@@ -148,8 +149,9 @@ export function snapshotPiSessionFiles(cwd: string | undefined): PiSessionFileSn
 export function resolveSessionPathChangedSince(
   cwd: string | undefined,
   before: PiSessionFileSnapshot,
+  sessionDir?: string,
 ): string | null {
-  const changed = readPiSessionFiles(cwd).filter((file) => {
+  const changed = readPiSessionFiles(cwd, sessionDir).filter((file) => {
     const previous = before.get(file.path);
     return !previous || file.mtimeMs > previous.mtimeMs || file.size !== previous.size;
   });
@@ -187,6 +189,7 @@ export function attachPiRpcSession({
   imagePaths,
   uploadRoot,
   parentSession,
+  sessionDir,
 }: PiRpcSessionOptions): PiRpcSession {
   const stdin = child.stdin;
   const stdout = child.stdout;
@@ -198,11 +201,20 @@ export function attachPiRpcSession({
   }
 
   const runStartedAt = Date.now();
-  const sessionFilesBeforePrompt = snapshotPiSessionFiles(cwd);
+  const sessionFilesBeforePrompt = snapshotPiSessionFiles(cwd, sessionDir);
   let finished = false;
   let fatal = false;
   const sentFirstToken = { value: false };
   let capturedSessionPath: string | null = null;
+
+  const captureSessionPath = (): void => {
+    if (capturedSessionPath) return;
+    capturedSessionPath = resolveSessionPathChangedSince(
+      cwd,
+      sessionFilesBeforePrompt,
+      sessionDir,
+    );
+  };
 
   let nextRpcId = 1;
   let stdinOpen = true;
@@ -222,6 +234,7 @@ export function attachPiRpcSession({
 
   const fail = (message: string, code?: string): void => {
     if (finished) return;
+    captureSessionPath();
     finished = true;
     fatal = true;
     send('error', { message, ...(code ? { code } : {}) });
@@ -331,6 +344,10 @@ export function attachPiRpcSession({
     // acting on the parsed objects.
     if (finished) return;
 
+    // Capture while the run is live so cancellation, failure, and application
+    // restart do not discard the native session handle.
+    captureSessionPath();
+
     // Extension UI requests: auto-resolve to keep pi unblocked.
     if (raw.type === 'extension_ui_request') {
       replyExtensionUi(stdin, raw);
@@ -365,7 +382,7 @@ export function attachPiRpcSession({
       // Capture only the session file changed by this run. If another pi
       // process wrote to the shared session directory concurrently, the
       // resolver returns null instead of risking cross-conversation resume.
-      capturedSessionPath = resolveSessionPathChangedSince(cwd, sessionFilesBeforePrompt);
+      captureSessionPath();
       // pi's RPC process stays alive after agent_end (designed for
       // multi-prompt sessions). The daemon's /api/chat is single-shot,
       // so close stdin and let the process exit naturally, or kill it
@@ -407,6 +424,7 @@ export function attachPiRpcSession({
       // (SIGTERM fallback) is owned by the caller (runs.cancel()),
       // not by this method.
       if (finished || child.killed) return;
+      captureSessionPath();
       finished = true;
       sendCommand(stdin, 'abort');
     },

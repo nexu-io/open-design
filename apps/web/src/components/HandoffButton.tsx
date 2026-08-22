@@ -78,6 +78,7 @@ const CLI_ORDER = [
   'trae-cli',
   'pi',
   'reasonix',
+  'prime-agent',
 ];
 
 const FALLBACK_CLI_TARGETS: CliTarget[] = [
@@ -102,6 +103,7 @@ const FALLBACK_CLI_TARGETS: CliTarget[] = [
   { id: 'trae-cli', name: 'Trae CLI', bin: 'traecli', available: false },
   { id: 'pi', name: 'Pi', bin: 'pi', available: false },
   { id: 'reasonix', name: 'DeepSeek Reasonix', bin: 'reasonix', available: false },
+  { id: 'prime-agent', name: 'Prime Agent', bin: 'prime-agent', available: false },
 ];
 
 interface Props {

@@ -570,6 +570,7 @@ const CANONICAL_AGENT_ORDER = [
   'aider',
   'antigravity',
   'reasonix',
+  'prime-agent',
 ] as const;
 
 const CANONICAL_AGENT_ORDER_INDEX = new Map<string, number>(

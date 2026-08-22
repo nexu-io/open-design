@@ -14308,7 +14308,7 @@ export async function startServer({
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
-        parentSession: agentResumePromptPolicy.resumeSessionId
+        parentSession: !def.piRpcResumeViaProcessArgs && agentResumePromptPolicy.resumeSessionId
           ? agentResumePromptPolicy.resumeSessionId
           : undefined,
         send: (channel, payload) => {
@@ -14342,6 +14342,7 @@ export async function startServer({
         },
         imagePaths: def.supportsImagePaths ? promptImagePaths : [],
         uploadRoot: odNextTaskInputSnapshot?.projectionDir ?? UPLOAD_DIR,
+        sessionDir: def.piRpcSessionDir,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
       const acpStageTimeoutMs = resolveAcpStageTimeoutMs(def.inactivityTimeoutMs);
@@ -15276,7 +15277,7 @@ export async function startServer({
       // another conversation in the same cwd cannot inherit this history.
       if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
         const sessionPath = acpSession.getLastSessionPath();
-        if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
+        if (sessionPath && def.streamFormat === 'pi-rpc') {
           persistCapturedAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,

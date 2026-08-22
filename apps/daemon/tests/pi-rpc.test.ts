@@ -859,6 +859,29 @@ test('attachPiRpcSession sends prompt without images when imagePaths is empty', 
   assert.equal(parsed.images, undefined, 'prompt should not include images when none provided');
 });
 
+test('attachPiRpcSession retains a live session path when aborted', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const sessionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-rpc-abort-'));
+  const child = createMockChild();
+  try {
+    const session = attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'hello',
+      cwd: '/tmp',
+      model: null,
+      send: () => {},
+      sessionDir,
+    });
+    const sessionPath = path.join(sessionDir, 'session.jsonl');
+    await fs.writeFile(sessionPath, '{"type":"session"}\n');
+    session.abort();
+    assert.equal(session.getLastSessionPath(), sessionPath);
+  } finally {
+    await fs.rm(sessionDir, { recursive: true, force: true });
+  }
+});
+
 test('attachPiRpcSession skips unreadable image paths gracefully', () => {
   const events: TestSentEvent[] = [];
   const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });

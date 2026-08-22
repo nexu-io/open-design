@@ -868,6 +868,7 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   hermes: 'ACP agent CLI',
   'grok-build': 'xAI coding CLI',
   reasonix: 'DeepSeek native coding CLI',
+  'prime-agent': 'Prime Intellect coding agent',
 };
 
 function cleanAgentVersionLabel(

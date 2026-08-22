@@ -32,6 +32,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['opencode', 'OPENCODE_BIN'],
   ['byok-opencode', 'OPENCODE_BIN'],
   ['pi', 'PI_BIN'],
+  ['prime-agent', 'PRIME_AGENT_BIN'],
   ['qoder', 'QODER_BIN'],
   ['qwen', 'QWEN_BIN'],
   ['reasonix', 'REASONIX_BIN'],

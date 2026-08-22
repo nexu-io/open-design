@@ -254,6 +254,14 @@ export type RuntimeAgentDef = {
   // path and `agent-cli-session-resume.md`. Profile-stdio transports can also
   // capture the id from a validated protocol status frame.
   capturesSessionIdFromStream?: boolean;
+  // Override the native session directory inspected by the pi-compatible RPC
+  // adapter. Plain pi defaults to <cwd>/.pi/sessions; Prime Agent stores its
+  // compatible JSONL sessions under ~/.prime/agent/sessions instead.
+  piRpcSessionDir?: string;
+  // Some pi-compatible runtimes can resume the same native session file via
+  // a process argument. This avoids `new_session(parentSession)`, whose
+  // semantics intentionally fork a new JSONL session on every turn.
+  piRpcResumeViaProcessArgs?: boolean;
   // ACP-runtime analogue of capture-style resume: the agent talks `acp-json-rpc`
   // (today only AMR/vela) and supports resuming via `session/load`. The daemon
   // captures the durable upstream session handle from the ACP session
@@ -345,6 +353,7 @@ export type DetectedAgent = Omit<
   // def directly, the registry payload stays unchanged.
   | 'inactivityTimeoutMs'
   | 'firstOutputTimeoutMs'
+  | 'piRpcResumeViaProcessArgs'
   | 'authProbe'
 > & {
   models: RuntimeModelOption[];
