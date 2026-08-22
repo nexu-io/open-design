@@ -157,6 +157,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-E-803': 'Shader bake failed',
   'S3D-E-804': 'Shader produced NaN/Inf',
   'S3D-W-801': 'Shader never referenced',
+  'S3D-W-804': 'Non-finite pixel oracle unchecked',
 
   /* master parity */
   'S3D-E-501': 'glTF failed Khronos validation',

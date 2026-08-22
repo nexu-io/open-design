@@ -16,11 +16,14 @@ import { PX, boxToMc, px, rotationToMc, sanitizeKey, solidTile } from "./common.
  * (format 1.16+) into its material's row — the same per-face model Java uses,
  * so there is no box-UV-net guesswork.
  *
- * v1 scope matches the Java exporter: axis-aligned cubes are emitted exactly;
- * a rotated box is SKIPPED with a reason rather than emitted wrong. Bedrock
- * DOES allow free per-cube rotation (the census even recovers the angle), but
- * the rotation/pivot mapping cannot be verified in-engine from here, so it is a
- * deliberate follow-up rather than an unvalidated guess shipped as correct.
+ * Scope matches the Java exporter: every cuboid is emitted exactly, axis-
+ * aligned or rotated about a single axis, from the oriented box the census
+ * recovers (centre + un-rotated extent + angle). Bedrock allows free per-cube
+ * angles, so unlike Java there is no legal-angle set to honour. A box rotated
+ * about MORE than one axis is skipped with a reason rather than emitted wrong.
+ * The axis and sign mapping is defined once in `common.ts` and shared with the
+ * Java exporter, so the two formats cannot disagree about which way a rotation
+ * goes.
  */
 
 export interface BedrockBuild {

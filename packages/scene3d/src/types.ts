@@ -759,6 +759,10 @@ export interface Census {
    * never mutate or guess.
    */
   importNotes?: string[];
+  /** What the GPU oracle could not see on the machine that baked, if
+   *  anything — a platform limit reported rather than silently narrowing
+   *  the S3D-E-804 guarantee. */
+  shaderNotes?: string[];
   offCameraObjects: string[];
 }
 

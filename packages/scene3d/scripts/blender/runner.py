@@ -590,6 +590,65 @@ def optical_flow_atlas(frame_lum, cols, rows, size, search=4, block=3):
     return data, mv.shape[1], mv.shape[0], max_flow
 
 
+
+# Notes about what the GPU oracle could and could not see on THIS machine.
+# Populated by the readback probe below; surfaced through the census so a
+# platform limit is reported rather than silently narrowing a guarantee.
+SHADER_NOTES = []
+
+
+def probe_nonfinite_readback():
+    """Can this driver deliver NaN and Inf through an RGBA32F readback?
+
+    S3D-E-804 promises that a kernel producing non-finite pixels is caught.
+    That promise is only as good as the readback: some drivers flush NaN to
+    zero on write, and this one does. When that happens the scan sees a
+    clean, all-zero image and reports nothing — which is indistinguishable
+    from a kernel that was fine. A guarantee that silently varies by machine
+    is exactly the failure this compiler exists to prevent, so the coverage
+    is measured once and reported as a fact.
+
+    Returns {"nan": bool, "inf": bool}, or None when the probe itself could
+    not run (no numpy, no GPU) — also a fact, and also not a pass.
+    """
+    import gpu
+    from gpu_extras.batch import batch_for_shader
+    try:
+        import numpy as np
+    except ImportError:
+        return None
+    try:
+        info = gpu.types.GPUShaderCreateInfo()
+        info.vertex_in(0, "VEC2", "pos")
+        info.fragment_out(0, "VEC4", "fragColor")
+        # Through a uniform, so the compiler cannot fold the division away
+        # and answer a question about its optimiser instead of the driver.
+        info.push_constant("FLOAT", "uS3dZero")
+        info.vertex_source(
+            "void main() { gl_Position = vec4(pos, 0.0, 1.0); }")
+        info.fragment_source(
+            "void main() { float z = uS3dZero;"
+            " fragColor = vec4(z / z, 1.0 / z, 0.0, 1.0); }")
+        shader = gpu.shader.create_from_info(info)
+        off = gpu.types.GPUOffScreen(2, 2, format="RGBA32F")
+        with off.bind():
+            fb = gpu.state.active_framebuffer_get()
+            fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+            shader.bind()
+            try:
+                shader.uniform_float("uS3dZero", 0.0)
+            except Exception:
+                pass
+            batch_for_shader(shader, "TRIS", {"pos": [(-1, -1), (3, -1), (-1, 3)]}).draw(shader)
+            buf = fb.read_color(0, 0, 2, 2, 4, 0, "FLOAT")
+        off.free()
+        px = np.array(buf.to_list(), dtype=np.float32)
+        return {"nan": bool(np.isnan(px[:, :, 0]).any()),
+                "inf": bool(np.isinf(px[:, :, 1]).any())}
+    except Exception:
+        return None
+
+
 def bake_shaders(job):
     """Compile, execute, scan, bake, and wire every declared shader."""
     shaders = job.get("shaders") or []
@@ -608,6 +667,22 @@ def bake_shaders(job):
 
     push_types = {"float": "FLOAT", "int": "INT", "vec2": "VEC2", "vec3": "VEC3", "vec4": "VEC4"}
     baked = {}  # (shader, output) -> abs png path
+
+    # Measure the oracle's reach on this machine BEFORE trusting it.
+    coverage = probe_nonfinite_readback()
+    if coverage is None:
+        SHADER_NOTES.append(
+            "the non-finite pixel oracle (S3D-E-804) could not be probed on this "
+            "machine, so NaN and Inf in a kernel are unchecked, not clean")
+    else:
+        missing = [k for k in ("nan", "inf") if not coverage[k]]
+        if missing:
+            SHADER_NOTES.append(
+                "this driver flushes %s through an RGBA32F readback, so the "
+                "non-finite pixel oracle (S3D-E-804) cannot see %s in a kernel "
+                "here — unchecked, not clean"
+                % ("/".join(m.upper() for m in missing),
+                   " or ".join(m.upper() for m in missing)))
 
     for spec in shaders:
         name = spec["name"]
@@ -1345,6 +1420,7 @@ def census(scene, measure_thickness=False, measure_voxel=False, voxel_grid=0.0):
         },
         "armatures": armature_rows,
         "importNotes": list(IMPORT_NOTES),
+        "shaderNotes": list(SHADER_NOTES),
         "offCameraObjects": off_camera_objects(scene, finite_objects),
     }
 

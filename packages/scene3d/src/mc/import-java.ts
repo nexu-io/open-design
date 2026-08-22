@@ -104,9 +104,32 @@ export function importJavaModel(
   }
 
   // Resolve every referenced material's colour once.
+  //
+  // References that do NOT resolve all collapse onto ONE material. Minting a
+  // separate neutral grey per unresolved reference produced a set of
+  // byte-identical materials and a DUPLICATE_MATERIALS warning about the
+  // importer's own guess rather than about anything in the author's model.
+  // The compiler genuinely cannot tell these surfaces apart, so it says so
+  // once instead of inventing distinctions it does not have.
   const materials: RawSpec["materials"] = {};
+  const remap = new Map<string, string>();
+  let placeholderId: string | null = null;
   for (const [ref, matId] of materialRefs) {
-    materials[matId] = { baseColor: resolveColour(ref, textureMap, opts.resolveTexture, warnings), roughness: 0.85 };
+    const resolved = resolveColour(ref, textureMap, opts.resolveTexture, warnings);
+    if (!resolved.resolved) {
+      if (placeholderId === null) placeholderId = matId;
+      else {
+        remap.set(matId, placeholderId);
+        continue;
+      }
+    }
+    materials[matId] = { baseColor: resolved.color, roughness: 0.85 };
+  }
+  if (remap.size > 0) {
+    for (const part of parts) {
+      const to = part.material ? remap.get(part.material) : undefined;
+      if (to) part.material = to;
+    }
   }
 
   return {
@@ -171,11 +194,11 @@ function resolveColour(
   textureMap: Map<string, string>,
   resolver: TextureResolver | undefined,
   warnings: string[],
-): [number, number, number] {
+): { color: [number, number, number]; resolved: boolean } {
   const bytes = resolveBytes(ref, textureMap, resolver);
   if (!bytes) {
     warnings.push(`texture '${ref}' could not be resolved; using a neutral placeholder colour`);
-    return [0.6, 0.6, 0.6];
+    return { color: [0.6, 0.6, 0.6], resolved: false };
   }
   try {
     const img = decodePng(bytes);
@@ -188,10 +211,10 @@ function resolveColour(
       g += srgbToLinear(img.data[i * 4 + 1]! / 255);
       b += srgbToLinear(img.data[i * 4 + 2]! / 255);
     }
-    return [clamp01(r / n), clamp01(g / n), clamp01(b / n)];
+    return { color: [clamp01(r / n), clamp01(g / n), clamp01(b / n)], resolved: true };
   } catch {
     warnings.push(`texture '${ref}' is not a decodable PNG; using a neutral placeholder colour`);
-    return [0.6, 0.6, 0.6];
+    return { color: [0.6, 0.6, 0.6], resolved: false };
   }
 }
 

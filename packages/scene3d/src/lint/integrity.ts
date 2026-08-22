@@ -22,6 +22,20 @@ export function lintIntegrity(ctx: LintContext, issues: Issue[]): void {
     });
   }
 
+  // What the GPU oracle could NOT see on the machine that baked. E-804
+  // promises a kernel producing non-finite pixels is caught, and that promise
+  // is only as good as the readback — some drivers flush NaN to zero on write,
+  // and the scan then sees a clean image. A guarantee that silently varies by
+  // machine is worse than one that admits its reach.
+  for (const note of census.shaderNotes ?? []) {
+    issues.push({
+      code: ISSUE_CODES.SHADER_ORACLE_UNCHECKED,
+      severity: "warning",
+      message: note,
+      hint: "bake on a machine whose driver preserves non-finite floats to get the full guarantee",
+    });
+  }
+
   if (!census.camera.present) {
     issues.push({
       code: ISSUE_CODES.MISSING_CAMERA,

@@ -128,6 +128,11 @@ export const BLENDER_DEFAULT_NAMES = new Set([
   // DEFAULT_PRIM_NAME already covers the mesh ones, and these keep the census
   // naming rule in step for the object-level check.
   "Icosphere",
+  // The bare data-block name a glTF import lands on when the source named
+  // nothing. It was in the stage linter's DEFAULT_PRIM_NAME but not here, so
+  // one smell was an error in the exported stage and silent in the census —
+  // the same name, two verdicts, depending on which surface you looked at.
+  "Mesh",
   "Grid",
   "Circle",
   "Suzanne",

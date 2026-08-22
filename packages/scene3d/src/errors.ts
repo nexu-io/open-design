@@ -220,6 +220,10 @@ export const ISSUE_CODES = {
   SHADER_NONFINITE: "S3D-E-804",
   /* A declared shader no material references — authored but unreachable. */
   SHADER_UNUSED: "S3D-W-801",
+  /* The GPU could not deliver non-finite pixels through the readback on
+     THIS machine (drivers differ in whether they flush NaN), so E-804's
+     guarantee does not hold here. Unchecked is not clean. */
+  SHADER_ORACLE_UNCHECKED: "S3D-W-804",
 
   /* master parity (900-919) — USD is the core format: the stage is
      authored first and every delivery container is lowered from a
