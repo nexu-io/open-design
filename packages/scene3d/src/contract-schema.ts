@@ -1,0 +1,307 @@
+/**
+ * The single declaration of every author-writable contract field.
+ *
+ * A contract is read by two layers that must agree about which fields exist:
+ * `validateContract` rejects a malformed value loudly (S3D-E-104) and
+ * `normalizeContract` degrades safely so a programmatic contract can never
+ * crash a downstream comparison. Both behaviours are correct; what is not
+ * correct is for them to disagree, and as two hand-maintained cascades they
+ * had drifted. The `print`, `voxel`, `minecraft` and `coherence` blocks were
+ * normalized but never validated, so
+ *
+ *     { conventions: { print: { minThicknessMm: "big" } } }
+ *
+ * passed validation with zero problems and then coerced to the default — the
+ * thin-wall rule the author believed they had just enabled was silently OFF.
+ * A check that is inert because nobody could read the author's value is
+ * exactly the "silence is not evidence" failure this compiler exists to catch,
+ * and the compiler was committing it against its own configuration.
+ *
+ * So the field list is data, declared once. `validateContract` walks it, and
+ * `contract-schema.test.ts` holds the two layers together from both ends: for
+ * every declared field a wrong-typed value must be REJECTED and must normalize
+ * to exactly the same contract as omitting it, and every leaf the defaults or
+ * target profiles mention must appear here. Adding a normalized field without
+ * declaring it is a red test now, not a silently disabled rule an audit finds
+ * months later.
+ */
+
+/** How a leaf is allowed to be spelled, and how to say so when it is not. */
+export type FieldSpec = {
+  /** Dotted path from the contract root, e.g. `conventions.uv.maxStretch`. */
+  path: string;
+  /**
+   * Overrides the generated "must be …" tail. Used where the long-standing
+   * wording reads better than anything derivable (`'Y' or 'Z'`), never to
+   * describe a different rule than the constraints below.
+   */
+  expected?: string;
+} & (
+  | { kind: "boolean" }
+  | { kind: "string" }
+  | { kind: "enum"; values: readonly string[] }
+  | { kind: "object" }
+  | ({ kind: "number" } & Range)
+  | ({ kind: "numberArray" } & Range)
+  | { kind: "stringArray" }
+);
+
+type Range = {
+  min?: number;
+  max?: number;
+  exclusiveMin?: boolean;
+  exclusiveMax?: boolean;
+  integer?: boolean;
+};
+
+/** Containers whose contents this table describes; a non-object here would
+ *  make every leaf below it read as "absent" and disable those rules. */
+export const CONTRACT_CONTAINERS = [
+  "conventions",
+  "conventions.naming",
+  "conventions.hierarchy",
+  "conventions.units",
+  "conventions.pbr",
+  "conventions.pbr.realism",
+  "conventions.animation",
+  "conventions.grounding",
+  "conventions.budgets",
+  "conventions.uv",
+  "conventions.uv.texelDensity",
+  "conventions.textures",
+  "conventions.geometry",
+  "conventions.print",
+  "conventions.voxel",
+  "conventions.voxel.grid",
+  "conventions.minecraft",
+  "conventions.minecraft.elementBounds",
+  "conventions.minecraft.grid",
+  "conventions.coherence",
+  "proof",
+  "export",
+] as const;
+
+export const ENGINE_TARGETS = [
+  "unity",
+  "unreal",
+  "godot",
+  "web",
+  "3d_print",
+  "voxel",
+  "minecraft",
+] as const;
+
+export const CONTRACT_FIELDS: readonly FieldSpec[] = [
+  { path: "target", kind: "enum", values: ENGINE_TARGETS },
+
+  /* naming */
+  { path: "conventions.naming.objectPattern", kind: "string" },
+  { path: "conventions.naming.collectionPattern", kind: "string" },
+  { path: "conventions.naming.forbidDefaultNames", kind: "boolean" },
+  { path: "conventions.naming.partPrefixes", kind: "stringArray" },
+
+  /* hierarchy / units */
+  { path: "conventions.hierarchy.maxDepth", kind: "number", min: 1, integer: true },
+  { path: "conventions.units.metersPerUnit", kind: "number", expected: "a number" },
+  { path: "conventions.units.upAxis", kind: "enum", values: ["Y", "Z"], expected: "'Y' or 'Z'" },
+
+  /* pbr */
+  { path: "conventions.pbr.metallicValues", kind: "numberArray" },
+  { path: "conventions.pbr.roughnessRange", kind: "numberArray" },
+  { path: "conventions.pbr.iorRange", kind: "numberArray" },
+  { path: "conventions.pbr.realism.enabled", kind: "boolean" },
+  { path: "conventions.pbr.realism.darkLuminanceMax", kind: "number", min: 0 },
+  { path: "conventions.pbr.realism.metalMin", kind: "number", min: 0, max: 1 },
+  { path: "conventions.pbr.realism.roughMax", kind: "number", min: 0, max: 1 },
+
+  /* animation */
+  { path: "conventions.animation.fps", kind: "number", min: 0, exclusiveMin: true },
+  { path: "conventions.animation.maxFrames", kind: "number", min: 1, integer: true },
+
+  /* grounding */
+  { path: "conventions.grounding.enabled", kind: "boolean" },
+  { path: "conventions.grounding.tolerance", kind: "number", min: 0 },
+  { path: "conventions.grounding.exempt", kind: "stringArray" },
+
+  /* budgets */
+  { path: "conventions.budgets.maxTrianglesPerMesh", kind: "number", min: 1, integer: true },
+  { path: "conventions.budgets.maxTrianglesTotal", kind: "number", min: 1, integer: true },
+  { path: "conventions.budgets.roles", kind: "object" },
+  { path: "conventions.budgets.parts", kind: "object" },
+
+  /* uv */
+  { path: "conventions.uv.require", kind: "enum", values: ["textured", "all", "off"] },
+  { path: "conventions.uv.maxOverlapFraction", kind: "number", min: 0, max: 1 },
+  { path: "conventions.uv.maxOutOfBoundsFraction", kind: "number", min: 0, max: 1 },
+  { path: "conventions.uv.maxStretch", kind: "number", min: 0, exclusiveMin: true },
+  { path: "conventions.uv.allowFlipped", kind: "boolean" },
+  { path: "conventions.uv.texelDensity.target", kind: "number", min: 0, exclusiveMin: true },
+  {
+    path: "conventions.uv.texelDensity.maxRatio",
+    kind: "number",
+    min: 1,
+    expected: "a number >= 1",
+  },
+
+  /* textures */
+  { path: "conventions.textures.maxSize", kind: "number", min: 1, expected: "a positive number" },
+  { path: "conventions.textures.requirePowerOfTwo", kind: "boolean" },
+  { path: "conventions.textures.flagDuplicateMaterials", kind: "boolean" },
+  { path: "conventions.textures.requireFaceAssignment", kind: "boolean" },
+
+  /* geometry */
+  { path: "conventions.geometry.allowOpenMeshes", kind: "boolean" },
+  { path: "conventions.geometry.allowLooseGeometry", kind: "boolean" },
+  { path: "conventions.geometry.allowDoubleVertices", kind: "boolean" },
+  { path: "conventions.geometry.allowInconsistentWinding", kind: "boolean" },
+  { path: "conventions.geometry.allowNegativeScale", kind: "boolean" },
+  { path: "conventions.geometry.requireAppliedScale", kind: "boolean" },
+
+  /* print (DfM) — was normalized but never validated */
+  { path: "conventions.print.minThicknessMm", kind: "number", min: 0, exclusiveMin: true },
+  { path: "conventions.print.maxOverhangAreaFraction", kind: "number", min: 0, max: 1 },
+
+  /* voxel — was normalized but never validated */
+  { path: "conventions.voxel.grid.size", kind: "number", min: 0, exclusiveMin: true },
+  { path: "conventions.voxel.grid.tolerance", kind: "number", min: 0 },
+  { path: "conventions.voxel.pxPerBlock", kind: "number", min: 0, exclusiveMin: true },
+
+  /* minecraft — was normalized but never validated. `grid`/`pxPerBlock` here
+   * are the deprecated pre-split spellings kept for back-compat; they are read
+   * by normalize, so they are declared and validated like any other field. */
+  { path: "conventions.minecraft.dialect", kind: "enum", values: ["java", "bedrock"] },
+  { path: "conventions.minecraft.elementBounds.minBlocks", kind: "number" },
+  { path: "conventions.minecraft.elementBounds.maxBlocks", kind: "number" },
+  { path: "conventions.minecraft.grid.size", kind: "number", min: 0, exclusiveMin: true },
+  { path: "conventions.minecraft.grid.tolerance", kind: "number", min: 0 },
+  { path: "conventions.minecraft.pxPerBlock", kind: "number", min: 0, exclusiveMin: true },
+
+  /* coherence — was normalized but never validated */
+  { path: "conventions.coherence.outlierZ", kind: "number", min: 0, exclusiveMin: true },
+
+  /* proof */
+  { path: "proof.engine", kind: "enum", values: ["BLENDER_EEVEE", "CYCLES"] },
+  { path: "proof.resolution", kind: "number", min: 64, max: 8192, integer: true },
+  { path: "proof.turntable", kind: "boolean" },
+  { path: "proof.turntableSteps", kind: "number", min: 1, max: 360, integer: true },
+  { path: "proof.respectSceneCamera", kind: "boolean" },
+  { path: "proof.background", kind: "string" },
+  { path: "proof.emptyLuminance", kind: "number", min: 0, max: 1, exclusiveMin: true },
+  { path: "proof.sparseCoverage", kind: "number", min: 0, max: 1, exclusiveMin: true },
+  { path: "proof.blownRatio", kind: "number", min: 0, max: 1, exclusiveMin: true },
+
+  /* export */
+  {
+    path: "export.lod",
+    kind: "numberArray",
+    min: 0,
+    max: 1,
+    exclusiveMin: true,
+    exclusiveMax: true,
+    expected: "an array of triangle-keep ratios in (0, 1)",
+  },
+  { path: "export.formats", kind: "stringArray" },
+];
+
+/** Walk a dotted path; returns `undefined` when any step is missing or is not
+ *  a plain object (the container itself is reported by `CONTRACT_CONTAINERS`). */
+function at(root: unknown, path: string): unknown {
+  let cur: unknown = root;
+  for (const key of path.split(".")) {
+    if (!isPlainObject(cur)) return undefined;
+    cur = (cur as Record<string, unknown>)[key];
+  }
+  return cur;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function inRange(v: number, r: Range): boolean {
+  if (r.integer && !Number.isInteger(v)) return false;
+  if (r.min !== undefined && (r.exclusiveMin ? !(v > r.min) : !(v >= r.min))) return false;
+  if (r.max !== undefined && (r.exclusiveMax ? !(v < r.max) : !(v <= r.max))) return false;
+  return true;
+}
+
+/** The "must be …" tail for a spec, derived from its own constraints so the
+ *  message can never describe a rule the validator does not apply. */
+export function describeField(spec: FieldSpec): string {
+  if (spec.expected) return spec.expected;
+  switch (spec.kind) {
+    case "boolean":
+      return "a boolean";
+    case "string":
+      return "a string";
+    case "object":
+      return "an object";
+    case "stringArray":
+      return "an array of strings";
+    case "enum":
+      return `one of ${spec.values.map((v) => `'${v}'`).join(", ")}`;
+    case "numberArray":
+      return `an array of numbers${rangeTail(spec)}`;
+    case "number":
+      return numberTail(spec);
+  }
+}
+
+function numberTail(r: Range): string {
+  const noun = r.integer ? "integer" : "number";
+  if (r.min !== undefined && r.max === undefined) {
+    if (r.min === 0 && r.exclusiveMin) return `a positive ${noun}`;
+    if (r.min === 1 && r.integer) return "a positive integer";
+    if (r.min === 0 && !r.exclusiveMin) return `a non-negative ${noun}`;
+    return `a ${noun} ${r.exclusiveMin ? ">" : ">="} ${r.min}`;
+  }
+  if (r.min !== undefined && r.max !== undefined) return `an ${noun} in ${interval(r)}`.replace("an number", "a number");
+  return `a ${noun}`;
+}
+
+function rangeTail(r: Range): string {
+  return r.min === undefined && r.max === undefined ? "" : ` in ${interval(r)}`;
+}
+
+function interval(r: Range): string {
+  const lo = r.exclusiveMin ? "(" : "[";
+  const hi = r.exclusiveMax ? ")" : "]";
+  return `${lo}${r.min}, ${r.max}${hi}`;
+}
+
+/** Validate every declared field present in `raw`. Absent is always fine —
+ *  omission means "use the default", which is a legitimate authoring choice. */
+export function validateFields(raw: unknown): string[] {
+  const problems: string[] = [];
+  for (const container of CONTRACT_CONTAINERS) {
+    const v = at(raw, container);
+    if (v !== undefined && !isPlainObject(v)) problems.push(`${container} must be an object`);
+  }
+  for (const spec of CONTRACT_FIELDS) {
+    const v = at(raw, spec.path);
+    if (v === undefined) continue;
+    if (!satisfies(v, spec)) problems.push(`${spec.path} must be ${describeField(spec)}`);
+  }
+  return problems;
+}
+
+function satisfies(v: unknown, spec: FieldSpec): boolean {
+  switch (spec.kind) {
+    case "boolean":
+      return typeof v === "boolean";
+    case "string":
+      return typeof v === "string";
+    case "object":
+      return isPlainObject(v);
+    case "enum":
+      return typeof v === "string" && spec.values.includes(v);
+    case "stringArray":
+      return Array.isArray(v) && v.every((e) => typeof e === "string");
+    case "numberArray":
+      return (
+        Array.isArray(v) && v.every((e) => typeof e === "number" && Number.isFinite(e) && inRange(e, spec))
+      );
+    case "number":
+      return typeof v === "number" && Number.isFinite(v) && inRange(v, spec);
+  }
+}

@@ -1,4 +1,5 @@
 import { Budget, EngineTarget, Scene3dContract } from "./types.js";
+import { validateFields } from "./contract-schema.js";
 
 type Conventions = NonNullable<Scene3dContract["conventions"]>;
 
@@ -290,7 +291,23 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
   // Bake floor is data: 64 for pbr; the declared pxPerBlock (pow2-floored) under
   // pixel-art, so a 16-px pixel-art bake is legal without a downstream special-case.
   const bakeMin = texelDiscipline === "pixelArt" && voxelPxPerBlock !== null ? pow2Floor(voxelPxPerBlock) : 64;
-  const proof = { ...DEFAULT_CONTRACT.proof, ...(c.proof ?? {}) };
+  // Field-by-field, not a spread: this block is not only lint config, it is
+  // the RENDER JOB. A wrong-typed `engine` or `resolution` from a programmatic
+  // contract used to pass straight through to Blender, where "big" pixels is
+  // not a threshold that silently disables a rule but a render that fails.
+  const rawProof = (c.proof ?? {}) as Record<string, unknown>;
+  const dp = DEFAULT_CONTRACT.proof!;
+  const proof: NonNullable<Scene3dContract["proof"]> = {
+    engine: rawProof.engine === "CYCLES" ? "CYCLES" : dp.engine,
+    resolution: intIn(rawProof.resolution, 64, 8192, dp.resolution!),
+    turntable: boolOr(rawProof.turntable, dp.turntable!),
+    turntableSteps: intIn(rawProof.turntableSteps, 1, 360, dp.turntableSteps!),
+    respectSceneCamera: boolOr(rawProof.respectSceneCamera, dp.respectSceneCamera!),
+    ...(typeof rawProof.background === "string" ? { background: rawProof.background } : {}),
+    ...(finiteOrNull(rawProof.emptyLuminance) !== null ? { emptyLuminance: rawProof.emptyLuminance as number } : {}),
+    ...(finiteOrNull(rawProof.sparseCoverage) !== null ? { sparseCoverage: rawProof.sparseCoverage as number } : {}),
+    ...(finiteOrNull(rawProof.blownRatio) !== null ? { blownRatio: rawProof.blownRatio as number } : {}),
+  };
   const minThicknessMm = finiteOrNull(pr.minThicknessMm);
   const maxOverhangAreaFraction = finiteOrNull(pr.maxOverhangAreaFraction);
   return {
@@ -299,7 +316,7 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       n.collectionPattern,
       DEFAULT_CONTRACT.conventions!.naming!.collectionPattern!,
     ),
-    forbidDefaultNames: n.forbidDefaultNames ?? true,
+    forbidDefaultNames: boolOr(n.forbidDefaultNames, true),
     partPrefixes: asArray<string>(n.partPrefixes, []),
     // Every numeric field is coerced to a finite value: `?? default` guards
     // only null/undefined, so a NaN/Infinity/string reaching here via a
@@ -312,7 +329,7 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
     roughnessRange: asArray<number>(p.roughnessRange, [0, 1]) as [number, number],
     iorRange: asArray<number>(p.iorRange, [1, 2.5]) as [number, number],
     pbrRealism: {
-      enabled: p.realism?.enabled ?? true,
+      enabled: boolOr(p.realism?.enabled, true),
       darkLuminanceMax: numOr(p.realism?.darkLuminanceMax, 0.02),
       metalMin: numOr(p.realism?.metalMin, 0.9),
       roughMax: numOr(p.realism?.roughMax, 0.1),
@@ -322,14 +339,14 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
     grounding: {
       // Off by default: grounding is meaningful for props and wrong for a
       // scene composed in world space, so it is opted into per project.
-      enabled: g.enabled ?? false,
+      enabled: boolOr(g.enabled, false),
       tolerance: numOr(g.tolerance, 0.005),
       exempt: asArray<string>(g.exempt, []),
     },
     uv: {
-      require: uv.require ?? "textured",
+      require: uv.require === "all" || uv.require === "off" ? uv.require : "textured",
       maxOverlapFraction: numOr(uv.maxOverlapFraction, 0.05),
-      allowFlipped: uv.allowFlipped ?? false,
+      allowFlipped: boolOr(uv.allowFlipped, false),
       // Tiling is legitimate, so out-of-bounds is unbounded unless the
       // project says otherwise (trim sheets / atlases set this near 0).
       maxOutOfBoundsFraction: numOr(uv.maxOutOfBoundsFraction, 1),
@@ -349,18 +366,18 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       return z > 0 ? z : 3.5;
     })(),
     textures: {
-      requirePowerOfTwo: tex.requirePowerOfTwo ?? true,
+      requirePowerOfTwo: boolOr(tex.requirePowerOfTwo, true),
       maxSize: numOr(tex.maxSize, 4096),
-      flagDuplicateMaterials: tex.flagDuplicateMaterials ?? true,
-      requireFaceAssignment: tex.requireFaceAssignment ?? true,
+      flagDuplicateMaterials: boolOr(tex.flagDuplicateMaterials, true),
+      requireFaceAssignment: boolOr(tex.requireFaceAssignment, true),
     },
     geometry: {
-      allowOpenMeshes: geo.allowOpenMeshes ?? false,
-      allowLooseGeometry: geo.allowLooseGeometry ?? false,
-      allowDoubleVertices: geo.allowDoubleVertices ?? false,
-      allowInconsistentWinding: geo.allowInconsistentWinding ?? false,
-      allowNegativeScale: geo.allowNegativeScale ?? false,
-      requireAppliedScale: geo.requireAppliedScale ?? true,
+      allowOpenMeshes: boolOr(geo.allowOpenMeshes, false),
+      allowLooseGeometry: boolOr(geo.allowLooseGeometry, false),
+      allowDoubleVertices: boolOr(geo.allowDoubleVertices, false),
+      allowInconsistentWinding: boolOr(geo.allowInconsistentWinding, false),
+      allowNegativeScale: boolOr(geo.allowNegativeScale, false),
+      requireAppliedScale: boolOr(geo.requireAppliedScale, true),
     },
     sheets: asArray(c.sheets, []) as NonNullable<Scene3dContract["sheets"]>,
     // USD is the interchange stage, GLB the web-viewer mesh; both ship by
@@ -421,7 +438,7 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       elementMinBlocks: mcElementMin,
       elementMaxBlocks: mcElementMax,
     },
-    proof: proof as NonNullable<Scene3dContract["proof"]>,
+    proof,
     proofThresholds: {
       // Defensive `?? default` also guards a wrong-typed programmatic value,
       // like the uv/lod fields above.
@@ -443,6 +460,21 @@ function pow2Floor(n: number): number {
  *  programmatic value that skipped validateContract. */
 function pos(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/** A boolean, or the fallback. `?? default` guards only null/undefined, so a
+ *  truthy string like "yes" from a programmatic contract would be adopted as
+ *  the value and flip the rule — the mirror of the numeric `numOr` guard. */
+function boolOr(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+/** An integer inside [lo, hi], or the fallback. Guards the fields that are
+ *  render JOB parameters rather than thresholds. */
+function intIn(value: unknown, lo: number, hi: number, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= lo && value <= hi
+    ? value
+    : fallback;
 }
 
 /** A finite number, or the fallback. A NaN/Infinity/string budget must never
@@ -501,8 +533,10 @@ export function contractCacheKey(n: NormalizedContract): unknown {
   };
 }
 
-function safePattern(pattern: string | undefined, fallback: string): RegExp {
-  const src = pattern ?? fallback;
+function safePattern(pattern: unknown, fallback: string): RegExp {
+  // Only a STRING is a pattern. A programmatic contract carrying a number
+  // would otherwise become `new RegExp(123)` — a live rule nobody authored.
+  const src = typeof pattern === "string" ? pattern : fallback;
   // Prefer Unicode mode so a `\p{L}`-style pattern — the standard way to allow
   // international prim names — compiles as a Unicode property escape instead of
   // silently degrading to the literal class `[p{L}]` and rejecting the very
@@ -521,155 +555,21 @@ function safePattern(pattern: string | undefined, fallback: string): RegExp {
   }
 }
 
-/** Validate a contract file's shape; returns human-readable problems. */
+/**
+ * Validate a contract file's shape; returns human-readable problems.
+ *
+ * Every field rule lives in `CONTRACT_FIELDS` (contract-schema.ts) — the same
+ * table the normalize-coverage meta-test replays `normalizeContract` against.
+ * This function used to be a hand-written cascade parallel to
+ * `normalizeContract`, and the two had drifted: the print, voxel, minecraft
+ * and coherence blocks were normalized but never validated, so a malformed
+ * value in them was coerced to the default and the rule the author meant to
+ * enable stayed silently off. Keep new field rules in the table, not here.
+ */
 export function validateContract(value: unknown): string[] {
-  const problems: string[] = [];
   if (typeof value !== "object" || value === null) return ["contract must be an object"];
-  const c = value as Record<string, unknown>;
-  if (c.schemaVersion !== 1) problems.push("schemaVersion must be 1");
-  if (
-    c.target !== undefined &&
-    !["unity", "unreal", "godot", "web", "3d_print", "voxel", "minecraft"].includes(c.target as string)
-  ) {
-    problems.push("target must be one of 'unity', 'unreal', 'godot', 'web', '3d_print', 'voxel', 'minecraft'");
-  }
-  const units = (c.conventions as Record<string, unknown> | undefined)?.units as
-    | Record<string, unknown>
-    | undefined;
-  if (units) {
-    if (units.upAxis !== undefined && units.upAxis !== "Y" && units.upAxis !== "Z") {
-      problems.push("conventions.units.upAxis must be 'Y' or 'Z'");
-    }
-    if (units.metersPerUnit !== undefined && typeof units.metersPerUnit !== "number") {
-      problems.push("conventions.units.metersPerUnit must be a number");
-    }
-  }
-  const conventions = c.conventions as Record<string, unknown> | undefined;
-  const uv = conventions?.uv as Record<string, unknown> | undefined;
-  if (uv) {
-    if (uv.require !== undefined && uv.require !== "textured" && uv.require !== "all" && uv.require !== "off") {
-      problems.push("conventions.uv.require must be 'textured', 'all', or 'off'");
-    }
-    for (const key of ["maxOverlapFraction", "maxOutOfBoundsFraction"] as const) {
-      const v = uv[key];
-      if (v !== undefined && (typeof v !== "number" || v < 0 || v > 1)) {
-        problems.push(`conventions.uv.${key} must be a number in [0, 1]`);
-      }
-    }
-    if (uv.maxStretch !== undefined && (typeof uv.maxStretch !== "number" || uv.maxStretch <= 0)) {
-      problems.push("conventions.uv.maxStretch must be a positive number");
-    }
-    const density = uv.texelDensity as Record<string, unknown> | undefined;
-    if (density) {
-      if (density.target !== undefined && (typeof density.target !== "number" || density.target <= 0)) {
-        problems.push("conventions.uv.texelDensity.target must be a positive number");
-      }
-      if (density.maxRatio !== undefined && (typeof density.maxRatio !== "number" || density.maxRatio < 1)) {
-        problems.push("conventions.uv.texelDensity.maxRatio must be a number >= 1");
-      }
-    }
-  }
-  const textures = conventions?.textures as Record<string, unknown> | undefined;
-  if (textures) {
-    if (textures.maxSize !== undefined && (typeof textures.maxSize !== "number" || textures.maxSize < 1)) {
-      problems.push("conventions.textures.maxSize must be a positive number");
-    }
-    for (const key of ["requirePowerOfTwo", "flagDuplicateMaterials", "requireFaceAssignment"] as const) {
-      if (textures[key] !== undefined && typeof textures[key] !== "boolean") {
-        problems.push(`conventions.textures.${key} must be a boolean`);
-      }
-    }
-  }
-  // Boolean knobs must be booleans: a truthy string like "yes" would
-  // otherwise sail through the `?? default` in normalizeContract and flip
-  // the rule silently instead of surfacing S3D-E-104.
-  if (uv && uv.allowFlipped !== undefined && typeof uv.allowFlipped !== "boolean") {
-    problems.push("conventions.uv.allowFlipped must be a boolean");
-  }
-  const exportBlock = c.export as Record<string, unknown> | undefined;
-  if (exportBlock?.lod !== undefined) {
-    if (
-      !Array.isArray(exportBlock.lod) ||
-      !exportBlock.lod.every((r) => typeof r === "number" && r > 0 && r < 1)
-    ) {
-      problems.push("export.lod must be an array of triangle-keep ratios in (0, 1)");
-    }
-  }
-  const geometry = conventions?.geometry as Record<string, unknown> | undefined;
-  if (geometry) {
-    for (const key of [
-      "allowOpenMeshes",
-      "allowLooseGeometry",
-      "allowDoubleVertices",
-      "allowInconsistentWinding",
-      "allowNegativeScale",
-      "requireAppliedScale",
-    ] as const) {
-      if (geometry[key] !== undefined && typeof geometry[key] !== "boolean") {
-        problems.push(`conventions.geometry.${key} must be a boolean`);
-      }
-    }
-  }
-  // Budget/grounding/proof numerics were unchecked, so a string budget
-  // (`"big"`) reached `tris > "big"` -> NaN -> false and silently disabled the
-  // rule, and `proof.resolution: 100000` / `turntableSteps: 99999` would have
-  // driven an OOM render or 99k frames. Validate them up front so a malformed
-  // contract is rejected (S3D-E-104) rather than half-honoured.
-  const budgets = conventions?.budgets as Record<string, unknown> | undefined;
-  if (budgets) {
-    for (const key of ["maxTrianglesPerMesh", "maxTrianglesTotal"] as const) {
-      const v = budgets[key];
-      if (v !== undefined && (typeof v !== "number" || !Number.isInteger(v) || v < 1)) {
-        problems.push(`conventions.budgets.${key} must be a positive integer`);
-      }
-    }
-  }
-  const grounding = conventions?.grounding as Record<string, unknown> | undefined;
-  if (grounding) {
-    if (grounding.enabled !== undefined && typeof grounding.enabled !== "boolean") {
-      problems.push("conventions.grounding.enabled must be a boolean");
-    }
-    if (
-      grounding.tolerance !== undefined &&
-      (typeof grounding.tolerance !== "number" || !Number.isFinite(grounding.tolerance) || grounding.tolerance < 0)
-    ) {
-      problems.push("conventions.grounding.tolerance must be a non-negative number");
-    }
-    if (
-      grounding.exempt !== undefined &&
-      (!Array.isArray(grounding.exempt) || !grounding.exempt.every((e) => typeof e === "string"))
-    ) {
-      problems.push("conventions.grounding.exempt must be an array of strings");
-    }
-  }
-  const proof = c.proof as Record<string, unknown> | undefined;
-  if (proof) {
-    if (
-      proof.resolution !== undefined &&
-      (typeof proof.resolution !== "number" || !Number.isInteger(proof.resolution) || proof.resolution < 64 || proof.resolution > 8192)
-    ) {
-      problems.push("proof.resolution must be an integer in [64, 8192]");
-    }
-    if (
-      proof.turntableSteps !== undefined &&
-      (typeof proof.turntableSteps !== "number" || !Number.isInteger(proof.turntableSteps) || proof.turntableSteps < 1 || proof.turntableSteps > 360)
-    ) {
-      problems.push("proof.turntableSteps must be an integer in [1, 360]");
-    }
-    for (const key of ["turntable", "respectSceneCamera"] as const) {
-      if (proof[key] !== undefined && typeof proof[key] !== "boolean") {
-        problems.push(`proof.${key} must be a boolean`);
-      }
-    }
-    if (proof.engine !== undefined && proof.engine !== "BLENDER_EEVEE" && proof.engine !== "CYCLES") {
-      problems.push("proof.engine must be 'BLENDER_EEVEE' or 'CYCLES'");
-    }
-    for (const key of ["emptyLuminance", "sparseCoverage", "blownRatio"] as const) {
-      const v = proof[key];
-      if (v !== undefined && (typeof v !== "number" || !(v > 0) || v > 1)) {
-        problems.push(`proof.${key} must be a number in (0, 1]`);
-      }
-    }
-  }
+  const problems: string[] = [];
+  if ((value as Record<string, unknown>).schemaVersion !== 1) problems.push("schemaVersion must be 1");
+  problems.push(...validateFields(value));
   return problems;
 }
