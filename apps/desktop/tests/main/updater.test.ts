@@ -396,6 +396,65 @@ describe("desktop updater", () => {
     expect(isVanishedPathError(null)).toBe(false);
   });
 
+  // lstat() only proves a directory entry exists. A retained release whose
+  // metadata is a dangling symlink or unparseable JSON is just as unusable as
+  // one with no metadata at all, and the full rescan already says so; the
+  // per-check pass must not disagree with it.
+  it.each([
+    { expectedReason: "metadata-missing", expectedState: "cleanup-removed", label: "dangling symlink" },
+    { expectedReason: "metadata-invalid", expectedState: "unknown", label: "malformed json" },
+  ])("drops a retained cleanup entry whose metadata is a $label", async ({ expectedReason, expectedState, label }) => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      expect((await updater.checkForUpdates()).state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      const staleDir = join(layout.releasesRoot, staleKey);
+      await mkdir(staleDir, { recursive: true });
+      const metadataPath = join(staleDir, "metadata.json");
+      if (label === "dangling symlink") {
+        symlinkSync(join(staleDir, "gone.json"), metadataPath);
+      } else {
+        await writeFile(metadataPath, "{ not json", "utf8");
+      }
+
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        metadataPath: `releases/${staleKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+
+      expect((await updater.checkForUpdates()).state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; reason?: string; state: string }[];
+      };
+      const stale = descriptor.releases.find((entry) => entry.key === staleKey);
+      expect(stale?.state).toBe(expectedState);
+      expect(stale?.reason).toBe(expectedReason);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   // A retained path that is no longer a plain directory was not "removed", so
   // it is flagged rather than claimed as cleaned — the same call a full rescan
   // would make.

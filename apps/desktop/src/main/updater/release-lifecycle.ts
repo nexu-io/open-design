@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, realpath, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 
 import type {
@@ -408,6 +408,49 @@ export async function scanReleaseCleanupEntries(input: {
   return nextEntries;
 }
 
+type RetainedMetadataVerdict = "intact" | "invalid" | "missing";
+
+/**
+ * Decide whether a retained release's metadata record is still usable.
+ *
+ * `lstat` only proves a directory entry exists — it succeeds for a dangling
+ * symlink and for a file holding unparseable bytes. `scanReleaseCleanupEntries`
+ * already reads and validates the record, so the per-check pass has to reach
+ * the same verdict or the two paths disagree about whether a release is usable.
+ *
+ * Anything we cannot positively fault is reported `intact`: a metadata file
+ * that is merely unreadable at this moment must never cost a real release its
+ * record.
+ */
+async function inspectRetainedMetadata(metadataPath: string): Promise<RetainedMetadataVerdict> {
+  const link = await lstat(metadataPath).then(
+    (stats) => stats,
+    (error: unknown) => (isVanishedPathError(error) ? null : "unreadable" as const),
+  );
+  if (link === "unreadable") return "intact";
+  if (link == null) return "missing";
+  if (link.isSymbolicLink()) {
+    // A dangling link is a missing record; a live one still is not the regular
+    // file this store is supposed to hold.
+    const target = await stat(metadataPath).then(
+      () => "present" as const,
+      (error: unknown) => (isVanishedPathError(error) ? null : "unreadable" as const),
+    );
+    if (target === "unreadable") return "intact";
+    return target == null ? "missing" : "invalid";
+  }
+  if (!link.isFile()) return "invalid";
+  let metadata: unknown;
+  try {
+    metadata = await readJsonStrict<unknown>(metadataPath);
+  } catch (error) {
+    if (isVanishedPathError(error)) return "missing";
+    // Unparseable bytes are a fault we can name; any other read failure is not.
+    return error instanceof SyntaxError ? "invalid" : "intact";
+  }
+  return isRecord(metadata) ? "intact" : "invalid";
+}
+
 /**
  * Downgrade retained entries whose backing release directory is gone.
  *
@@ -420,7 +463,7 @@ export async function scanReleaseCleanupEntries(input: {
  * the app's own pruning produces.
  *
  * A retained release counts as present only when its directory is a plain
- * directory and its `metadata.json` is still there — the record is what lets
+ * directory and its `metadata.json` is still a readable record — the record is what lets
  * the app identify the release, so a surviving directory with no metadata is
  * just as unusable as no directory at all. Both land on the same
  * `metadata-missing` reason `scanReleaseCleanupEntries` already uses.
@@ -479,12 +522,21 @@ export async function revalidateRetainedReleaseEntries(input: {
         releases.push(entry);
         continue;
       }
-      const metadataPresent = await lstat(metadataPath).then(
-        () => true,
-        (error: unknown) => !isVanishedPathError(error),
-      );
-      if (metadataPresent) {
+      const verdict = await inspectRetainedMetadata(metadataPath);
+      if (verdict === "intact") {
         releases.push(entry);
+        continue;
+      }
+      if (verdict === "invalid") {
+        releases.push({
+          ...entry,
+          error: releaseCleanupError("release-metadata-invalid", "retained release metadata.json is not a usable record", {
+            path: metadataPath,
+          }),
+          reason: "metadata-invalid",
+          state: "unknown",
+          updatedAt: nowIso,
+        });
         continue;
       }
     }
