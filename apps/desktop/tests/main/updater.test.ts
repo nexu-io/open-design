@@ -30,6 +30,7 @@ import {
   resolveInstalledOuterVersion,
 } from "../../src/main/updater.js";
 import { installerObservationSummaryPath } from "../../src/main/installer-observations.js";
+import { isVanishedPathError } from "../../src/main/updater/store.js";
 
 type FixtureServer = {
   artifactRequests: () => number;
@@ -377,6 +378,71 @@ describe("desktop updater", () => {
         sessionId: "2026-06-09T07:50:51.000Z-12345",
         source: SIDECAR_SOURCES.PACKAGED,
       }));
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("treats only a vanished path as recoverable, keeping unreadable stores fatal", () => {
+    expect(isVanishedPathError(Object.assign(new Error("gone"), { code: "ENOENT" }))).toBe(true);
+    expect(isVanishedPathError(Object.assign(new Error("not a directory"), { code: "ENOTDIR" }))).toBe(true);
+
+    // A release we merely cannot read right now must not be discarded.
+    expect(isVanishedPathError(Object.assign(new Error("denied"), { code: "EACCES" }))).toBe(false);
+    expect(isVanishedPathError(Object.assign(new Error("busy"), { code: "EBUSY" }))).toBe(false);
+    expect(isVanishedPathError(Object.assign(new Error("io"), { code: "EIO" }))).toBe(false);
+    expect(isVanishedPathError(new Error("no code"))).toBe(false);
+    expect(isVanishedPathError(null)).toBe(false);
+  });
+
+  // A downloaded release can vanish from disk without the updater's own cleanup
+  // having run: manual pruning of the data directory, disk-space tooling, AV
+  // quarantine, or a partial write after a crash. The stored active pointer
+  // then names files that will never come back, so trusting it must not be
+  // able to wedge the version check.
+  it("recovers the version check when a downloaded release disappears from disk", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const downloaded = await createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      }).checkForUpdates();
+      expect(downloaded.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      // Remove the release payload the way an outside cleanup would, leaving
+      // the store's active pointer behind.
+      await rm(join(root, "releases"), { force: true, recursive: true });
+
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const checked = await updater.checkForUpdates();
+      expect(checked.state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(checked.error).toBeUndefined();
+      expect(checked.availableVersion).toBe("1.0.1");
+
+      // Retrying must not replay the same terminal failure forever.
+      const rechecked = await updater.checkForUpdates();
+      expect(rechecked.state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(rechecked.error).toBeUndefined();
+
+      // The stale pointer does not survive: whatever the store points at after
+      // recovery must be a release that actually exists on disk.
+      const persisted = JSON.parse(await readFile(join(root, "metadata.json"), "utf8")) as {
+        active?: { artifactPath?: string };
+      };
+      const persistedArtifact = persisted.active?.artifactPath;
+      if (persistedArtifact != null) {
+        expect(existsSync(join(root, persistedArtifact))).toBe(true);
+      }
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });

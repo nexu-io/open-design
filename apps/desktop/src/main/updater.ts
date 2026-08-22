@@ -124,6 +124,7 @@ import {
   ensureOwnedUpdateRoot,
   isResolvedChecksumSnapshot,
   isUpdateStoreMetadata,
+  isVanishedPathError,
   logStoreError,
   rebuildOwnedUpdateRootForManualClear,
   storeShapeError,
@@ -344,6 +345,19 @@ async function loadActiveRelease(
       return { ok: false, error };
     }
   } catch (error) {
+    // The artifact is gone rather than unreadable: an outside cleanup, disk
+    // tooling, AV quarantine, or a partial write after a crash removed it.
+    // There is no downloaded release any more, and no retry will bring one
+    // back, so report "nothing downloaded" and let the caller drop the stale
+    // pointer instead of wedging every future check behind a store error.
+    if (isVanishedPathError(error)) {
+      logger.warn("[open-design updater] active release artifact vanished; discarding stale pointer", {
+        artifactPath,
+        key: active.key,
+        version: active.version,
+      });
+      return { ok: true, active: null };
+    }
     const storeError = storeShapeError(root.realRoot, "active release artifact is missing", {
       artifactPath,
       reason: error instanceof Error ? error.message : String(error),
