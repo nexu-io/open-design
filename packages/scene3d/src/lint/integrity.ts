@@ -22,6 +22,19 @@ export function lintIntegrity(ctx: LintContext, issues: Issue[]): void {
     });
   }
 
+  // Viewer edits that did not survive the replay. Same code as an unreadable
+  // tweaks.json (S3D-W-208): from the author's side both are "the edit I made
+  // is not in the build", and the message says which half failed.
+  for (const note of census.tweakNotes ?? []) {
+    issues.push({
+      code: ISSUE_CODES.TWEAKS_IGNORED,
+      severity: "warning",
+      message: `tweaks.json: ${note}`,
+      hint: "re-apply the edit in the viewer, or delete tweaks.json to compile the authored scene",
+      file: "tweaks.json",
+    });
+  }
+
   // What the GPU oracle could NOT see on the machine that baked. E-804
   // promises a kernel producing non-finite pixels is caught, and that promise
   // is only as good as the readback — some drivers flush NaN to zero on write,

@@ -125,8 +125,9 @@ def apply_tweaks(job):
                     mw = obj.matrix_world.copy()
                     mw.translation += delta
                     obj.matrix_world = mw
-            except Exception:
-                pass
+            except Exception as exc:
+                TWEAK_NOTES.append(
+                    "'%s' %s could not be applied: %s" % (name, "translate", exc))
 
         # Rotation, as a quaternion in the same viewer (glTF Y-up) space as
         # the translate. The viewer composes rotations as quaternions and
@@ -149,8 +150,9 @@ def apply_tweaks(job):
                 obj.rotation_quaternion = delta @ obj.rotation_quaternion
                 if mode != "QUATERNION":
                     obj.rotation_mode = mode
-            except Exception:
-                pass
+            except Exception as exc:
+                TWEAK_NOTES.append(
+                    "'%s' %s could not be applied: %s" % (name, "quat", exc))
 
         # Legacy Euler channel, still honoured so a tweaks.json written by
         # an earlier viewer keeps working.
@@ -165,8 +167,9 @@ def apply_tweaks(job):
                 obj.rotation_quaternion = delta @ obj.rotation_quaternion
                 if mode != "QUATERNION":
                     obj.rotation_mode = mode
-            except Exception:
-                pass
+            except Exception as exc:
+                TWEAK_NOTES.append(
+                    "'%s' %s could not be applied: %s" % (name, "rotate", exc))
 
         # Scale is a multiplier, not a delta: 1 means unchanged, so a
         # missing or malformed value can never silently flatten a part.
@@ -178,15 +181,17 @@ def apply_tweaks(job):
                     obj.scale.x *= sx
                     obj.scale.y *= sz
                     obj.scale.z *= sy
-            except Exception:
-                pass
+            except Exception as exc:
+                TWEAK_NOTES.append(
+                    "'%s' %s could not be applied: %s" % (name, "scale", exc))
 
         m = t.get("material")
         if isinstance(m, dict) and m:
             try:
                 apply_material_tweak(obj, m)
-            except Exception:
-                pass
+            except Exception as exc:
+                TWEAK_NOTES.append(
+                    "'%s' %s could not be applied: %s" % (name, "material", exc))
 
 
 def apply_material_tweak(obj, mt):
@@ -918,6 +923,14 @@ the fix, so the author (or the agent) repairs the source. A silent grey
 import is the worst outcome; a named missing .mtl is a one-line fix."""
 IMPORT_NOTES = []
 
+# Viewer edits that could not be replayed. The bare `except: pass` around
+# each channel below is right — a stale part name or a value this Blender
+# will not take must never wedge a compile — but silence is not: the same
+# catch also hides a malformed tweaks.json and an API break, and this file
+# already has IMPORT_NOTES and SHADER_NOTES for exactly this "detect and
+# name" job.
+TWEAK_NOTES = []
+
 
 def shim_fbx_importer_bugs():
     """Blender 5.0's own FBX importer still assigns
@@ -1442,6 +1455,7 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
         },
         "armatures": armature_rows,
         "importNotes": list(IMPORT_NOTES),
+        "tweakNotes": list(TWEAK_NOTES),
         "shaderNotes": list(SHADER_NOTES),
         "offCameraObjects": off_camera_objects(scene, finite_objects),
     }
@@ -3441,6 +3455,11 @@ def rel_to_project(asset_path, job):
 # ------------------------------------------------------------------
 
 def main(argv):
+    # Local, like every other function here. This used to read a module-level
+    # `bpy` that existed only because the import sits under __main__ below, so
+    # main() alone would NameError the moment this file was imported as a
+    # module rather than run as a script.
+    import bpy
     job_file = find_job_file(argv)
     if job_file is None:
         emit({"ok": False, "errorCode": "S3D-E-202", "error": "no job file in argv: %r" % argv})
@@ -3472,5 +3491,4 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    import bpy
     main(sys.argv[1:])

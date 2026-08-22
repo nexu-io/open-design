@@ -451,7 +451,7 @@ parts.push(t.value);
     }
   };
 
-  const parsePrim = (parent: UsdaPrim, parentPath: string, parentLine: number, depth: number): void => {
+  const parsePrim = (parent: UsdaPrim, parentPath: string, defLine: number, depth: number): void => {
     // Bound the recursion so a pathological or malicious file — thousands of
     // nested `def`s — fails as a controlled parse error instead of a stack
     // overflow. An overflow is uncatchable enough to crash the worker (and the
@@ -459,7 +459,7 @@ parts.push(t.value);
     // lint stage. The floor is far above any real scene: the DEPTH_LIMIT lint
     // rule flags a hierarchy past single digits, so nothing legitimate is near.
     if (depth > MAX_PRIM_NESTING) {
-      throw new UsdaParseError(`prim nesting deeper than ${MAX_PRIM_NESTING}`, parentLine, file);
+      throw new UsdaParseError(`prim nesting deeper than ${MAX_PRIM_NESTING}`, defLine, file);
     }
     const specTok = tokens[i];
     if (!specTok || specTok.kind === "eof") return;
@@ -550,7 +550,7 @@ const prim: UsdaPrim = {
       metadata,
       references: collectRefs(primMeta),
       payloads: [],
-      line: parentLine,
+      line: defLine,
       sourceFile: file,
     };
     parent.children.push(prim);
@@ -561,7 +561,7 @@ const prim: UsdaPrim = {
       i++;
       for (;;) {
         const t = tokens[i];
-        if (!t || t.kind === "eof") throw new UsdaParseError(`unterminated prim '${path}'`, parentLine, file);
+        if (!t || t.kind === "eof") throw new UsdaParseError(`unterminated prim '${path}'`, defLine, file);
         if (t.kind === "punct" && t.value === "}") {
           i++;
           return;
@@ -583,7 +583,7 @@ const prim: UsdaPrim = {
           if (i === before) {
             throw new UsdaParseError(
               `unexpected '${tokens[i]?.value ?? "?"}' in prim body '${path}'`,
-              tokens[i]?.line ?? parentLine,
+              tokens[i]?.line ?? defLine,
               file,
             );
           }

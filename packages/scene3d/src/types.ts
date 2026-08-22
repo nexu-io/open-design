@@ -801,6 +801,11 @@ export interface Census {
    * never mutate or guess.
    */
   importNotes?: string[];
+  /** Viewer edits the runner could not replay — a stale part name, or a value
+   *  this Blender would not take. Dropping them is right (a bad edit must not
+   *  wedge a compile); dropping them silently is not, which is what the bare
+   *  catches around each channel used to do. */
+  tweakNotes?: string[];
   /** What the GPU oracle could not see on the machine that baked, if
    *  anything — a platform limit reported rather than silently narrowing
    *  the S3D-E-804 guarantee. */

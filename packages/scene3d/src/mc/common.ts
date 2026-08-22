@@ -74,8 +74,16 @@ export function textureDirective(
   return { key, png: solidTexture(base) };
 }
 
-/** Metres → model pixels, rounded to the 1/16-pixel Minecraft allows so a
- *  grid-aligned box lands on integer pixels exactly. */
+/**
+ * Metres → model pixels (1 block = 1 m = 16 px).
+ *
+ * Rounds to 4 decimal places, which is float-noise cleanup, NOT grid snapping:
+ * it is ~600x finer than the 1/16-pixel resolution the formats accept. A
+ * grid-aligned box lands on integer pixels here because it was already
+ * grid-aligned, not because this made it so — the comment used to claim the
+ * credit, which would mislead anyone reaching for this to fix an off-grid box.
+ * That is W-970's job, and the author's.
+ */
 export function px(metres: number): number {
   return Number((metres * PX).toFixed(4));
 }
