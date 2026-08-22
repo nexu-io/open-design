@@ -52,6 +52,7 @@ import {
   probeAgentAuthStatus,
 } from './runtimes/auth.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
+import { resolveAgentStdinMode } from './runtimes/launch.js';
 import {
   buildLegacyMaxTokensParam,
   buildMaxCompletionTokensParam,
@@ -2611,10 +2612,7 @@ async function testAgentConnectionInternal(
         diagnostics: buildDiagnostics(),
       };
     }
-    const stdinMode =
-      def.promptViaStdin || def.streamFormat === 'acp-json-rpc' || def.streamFormat === 'dsh-profile-jsonl'
-        ? 'pipe'
-        : 'ignore';
+    const stdinMode = resolveAgentStdinMode(def);
     const baseEnv = spawnEnvForAgent(
       input.agentId,
       {

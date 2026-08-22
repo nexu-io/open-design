@@ -142,6 +142,7 @@ import {
   resolveChatRunShutdownGraceMs,
 } from './runtimes/chat-run-lifecycle.js';
 import { assertOdNextSemanticRequestFactProducerCoverage } from './runtimes/od-next-exact-input.js';
+import { resolveAgentStdinMode } from './runtimes/launch.js';
 import {
   normalizeRunContextSelection,
   renderRunContextPrompt,
@@ -13214,12 +13215,7 @@ export async function startServer({
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
-      const stdinMode =
-        def.promptViaStdin ||
-        def.streamFormat === 'acp-json-rpc' ||
-        def.streamFormat === 'dsh-profile-jsonl'
-          ? 'pipe'
-          : 'ignore';
+      const stdinMode = resolveAgentStdinMode(def);
       const env = applyAgentLaunchEnv({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),

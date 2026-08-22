@@ -1,6 +1,7 @@
 import { delimiter, join } from 'node:path';
 import { realpathSync, symlinkSync } from 'node:fs';
 import { test } from 'vitest';
+import { resolveAgentStdinMode } from '../../src/runtimes/launch.js';
 import {
   applyAgentLaunchEnv,
   assert,
@@ -18,6 +19,21 @@ import {
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
 const winTest = process.platform === 'win32' ? test : test.skip;
+
+test('resolveAgentStdinMode pipes every interactive stream protocol', () => {
+  for (const streamFormat of ['acp-json-rpc', 'pi-rpc', 'dsh-profile-jsonl'] as const) {
+    assert.equal(
+      resolveAgentStdinMode({ streamFormat }),
+      'pipe',
+      `${streamFormat} requires a writable command channel`,
+    );
+  }
+});
+
+test('resolveAgentStdinMode preserves explicit prompt stdin and ignores plain output-only runs', () => {
+  assert.equal(resolveAgentStdinMode({ promptViaStdin: true }), 'pipe');
+  assert.equal(resolveAgentStdinMode({ streamFormat: 'plain' }), 'ignore');
+});
 
 test('applyAgentLaunchEnv prepends nodeBinDir and wrapper dir, deduping PATH', () => {
   const launch = {
