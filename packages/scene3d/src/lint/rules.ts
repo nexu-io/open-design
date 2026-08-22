@@ -13,7 +13,7 @@ import { lintVoxel } from "./voxel.js";
 import { lintSheets, type SheetLintInput } from "./sheet.js";
 import { lintClaims } from "./claims.js";
 import { lintIntent } from "./judge.js";
-import { applyImportedPosture } from "./provenance.js";
+import { applyImportedPosture, importedObjects } from "./provenance.js";
 import type { ClaimsSpec, SolvedScene } from "../solve/types.js";
 
 export interface LintInput {
@@ -32,13 +32,13 @@ export interface LintInput {
    *  `role`, the intent the budget judge resolves to a standard. */
   solved?: SolvedScene;
   /**
-   * Every object in the scene is imported third-party geometry — the whole
-   * source is a bare `.glb`/`.gltf`/`.obj`/`.fbx`. Spec parts carrying `file:`
-   * are derived from `solved`; this covers the case where there is no spec to
-   * derive from, which is why a freshly downloaded sample asset used to
-   * compile with `ok: false`. See lint/provenance.ts.
+   * How the scene's sources were discovered. Provenance is read from it —
+   * a bare mesh file is imported in its entirety — alongside the `file:` parts
+   * in `solved`; both rules live in lint/provenance.ts. It is a FACT about the
+   * input, not a switch: a new source kind states its provenance here rather
+   * than growing another boolean.
    */
-  allImported?: boolean;
+  sourceKind?: string;
   /**
    * Convention blocks the author wrote EXPLICITLY in scene3d.json (`geometry`,
    * `uv`, …) — not blocks a target preset filled in. Writing in a block is a
@@ -59,10 +59,7 @@ export function runLint(input: LintInput): Issue[] {
   // the whole source IS an imported asset — every mesh in the scene. The rules
   // still RUN over it; `applyImportedPosture` below reclassifies what they find
   // rather than suppressing it, so the report can always explain itself.
-  const imported = new Set(
-    (input.solved?.parts ?? []).filter((p) => p.file !== undefined).map((p) => p.id),
-  );
-  if (input.allImported) for (const o of input.census?.objects ?? []) imported.add(o.name);
+  const imported = importedObjects(input);
   const ctx = { ...input, imported };
   lintNaming(ctx, issues);
   lintTopology(ctx, issues);

@@ -484,8 +484,13 @@ export interface CensusMesh {
     rotationAxis: "x" | "y" | "z" | null;
     rotationDeg: number | null;
     /** Largest distance (m) any vertex sits from the nearest point of the
-     *  contract's voxel grid — the off-grid shimmer measured, not judged. */
-    gridDeviation: number;
+     *  contract's voxel grid — the off-grid shimmer measured, not judged.
+     *
+     *  `null` when no grid was declared: this is the one fact here that is not
+     *  intrinsic, since "off-grid" is meaningless without a grid to be off.
+     *  Null rather than 0, because 0 reads as "perfectly aligned" — a verdict
+     *  nobody measured. */
+    gridDeviation: number | null;
     /** World-space centre of the box (its rotation pivot). Present for a box. */
     center?: [number, number, number];
     /** The box's OWN (un-rotated) extent, m — the world AABB for an axis-aligned

@@ -190,7 +190,7 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(authored.some((i) => i.code === ISSUE_CODES.DEPTH_LIMIT)).toBe(true);
 
     // The same objects, when the whole source IS the imported asset.
-    const imported = runLint({ ...args, allImported: true });
+    const imported = runLint({ ...args, sourceKind: "mesh" });
     const depth = imported.filter((i) => i.code === ISSUE_CODES.DEPTH_LIMIT);
     expect(depth.length).toBeGreaterThan(0);
     for (const issue of depth) {
@@ -199,7 +199,7 @@ describe("lint: pbr/topology/integrity over census", () => {
     }
 
     // ...unless the project stated an opinion about hierarchy.
-    const strict = runLint({ ...args, allImported: true, authoredBlocks: new Set(["hierarchy"]) });
+    const strict = runLint({ ...args, sourceKind: "mesh", authoredBlocks: new Set(["hierarchy"]) });
     expect(strict.filter((i) => i.code === ISSUE_CODES.DEPTH_LIMIT).every((i) => i.severity === "error")).toBe(true);
   });
 

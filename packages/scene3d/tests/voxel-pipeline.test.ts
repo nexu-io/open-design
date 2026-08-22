@@ -179,14 +179,30 @@ describe.skipIf(!hasBlender)("voxel pipeline (real Blender)", () => {
     ).toBe(true);
   }, 400_000);
 
-  it("does NOT measure voxel facts without the minecraft target", async () => {
-    // The same geometry under a neutral contract carries no voxel block — the
-    // census is byte-identical to what every non-Minecraft scene has always got.
+  it("measures the oriented box without a target, and judges none of it", async () => {
+    // "Is this mesh a single cuboid, and what is its un-rotated extent" is a
+    // fact about a SHAPE, not a Minecraft opinion — so it is measured for every
+    // mesh, exactly like symmetry beside it. Gating it on the target had the
+    // compiler's own doctrine backwards: a scene had to declare itself blocky
+    // before the compiler would say what shape its meshes were, and no other
+    // consumer could use box recovery at all.
+    //
+    // What the target still decides is JUDGEMENT — and the grid-relative half
+    // of the measurement, which is meaningless without a declared grid.
     const dir = workDir("minecraft/golem");
     fs.writeFileSync(path.join(dir, "scene3d.json"), JSON.stringify({ schemaVersion: 1 }), "utf8");
     const result = await compile({ projectDir: dir, stages: ["parse", "build", "lint"], timeoutMs: LONG, noCache: true });
-    expect(result.issues.filter((i) => /S3D-W-97\d/.test(i.code))).toEqual([]);
-    expect(result.census!.meshes.every((m) => m.voxel === undefined)).toBe(true);
+
+    expect(result.issues.filter((i) => /S3D-[WI]-97\d/.test(i.code))).toEqual([]);
+    const boxes = result.census!.meshes.filter((m) => m.voxel?.isBox);
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const mesh of boxes) {
+      expect(mesh.voxel!.localSize).toBeDefined();
+      expect(mesh.voxel!.center).toBeDefined();
+      // No grid was declared, so nothing was measured against one. Null, not
+      // zero — zero would read as "perfectly aligned", a verdict nobody made.
+      expect(mesh.voxel!.gridDeviation).toBeNull();
+    }
   }, 400_000);
 
   it("fires the voxel rules on real broken geometry (sphere, off-grid, oversized)", async () => {

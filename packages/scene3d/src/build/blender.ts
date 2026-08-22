@@ -136,11 +136,10 @@ export interface RunnerJob {
   /** Run the (costly) wall-thickness ray-cast during the census — on only for
    *  a 3d_print contract that will judge it. */
   measureThickness?: boolean;
-  /** Measure the voxel/Minecraft facts (boxness, grid deviation, per-face
-   *  texel spread) during the census — on only for a `minecraft` contract. */
-  measureVoxel?: boolean;
   /** The voxel authoring grid in metres (1 pixel of a block), against which
-   *  grid deviation is measured. Present only when `measureVoxel`. */
+   *  grid deviation is measured. Absent = no grid was declared, so that one
+   *  fact is not measured; the oriented box itself is measured for every mesh
+   *  regardless, being a fact about a shape rather than about Minecraft. */
   voxelGrid?: number;
   /** Assembled GPU kernels to compile, execute, and bake at load time. */
   shaders?: Array<{

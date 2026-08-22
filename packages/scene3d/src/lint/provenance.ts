@@ -38,6 +38,32 @@ import { ISSUE_CODES } from "../errors.js";
 export type Provenance = "authored" | "imported";
 
 /**
+ * The objects in a scene the author did not build.
+ *
+ * Both ways geometry arrives are the same statement about provenance, so they
+ * are decided in one place: a spec part carrying `file:` is an imported asset
+ * fitted into a declared box, and a project whose SOURCE is a bare mesh file
+ * is imported in its entirety. Splitting this across a set built here and a
+ * boolean passed from the pipeline meant one concept arriving as two inputs,
+ * and the second could only ever mean "also add everything".
+ */
+export function importedObjects(input: {
+  sourceKind?: string;
+  solved?: { parts: ReadonlyArray<{ id: string; file?: string }> };
+  census?: { objects: ReadonlyArray<{ name: string }> };
+}): Set<string> {
+  const imported = new Set<string>();
+  // A whole-project mesh source: every object came from somebody's exporter.
+  if (input.sourceKind === "mesh") {
+    for (const object of input.census?.objects ?? []) imported.add(object.name);
+  }
+  for (const part of input.solved?.parts ?? []) {
+    if (part.file !== undefined) imported.add(part.id);
+  }
+  return imported;
+}
+
+/**
  * The rules a third-party asset legitimately trips, each paired with the
  * convention block that governs it. Data, not a cascade of `if`s: adding a
  * rule to the posture is a row, and the row names its own override.

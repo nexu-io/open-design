@@ -1130,7 +1130,7 @@ def action_has_curves(action):
     return False
 
 
-def census(scene, measure_thickness=False, measure_voxel=False, voxel_grid=0.0):
+def census(scene, measure_thickness=False, voxel_grid=0.0):
     import bpy
     import bmesh
     import mathutils
@@ -1276,9 +1276,12 @@ def census(scene, measure_thickness=False, measure_voxel=False, voxel_grid=0.0):
         # a deliberately asymmetric part simply reads high, which is a fact,
         # not a verdict — no lint judges it unless a contract someday does.
         symmetry = symmetry_facts(bm)
-        # Voxel/Minecraft facts, world space, before the bmesh is freed. Only a
-        # `minecraft` contract asks for them, so a non-voxel census is unchanged.
-        voxel = voxel_facts(bm, voxel_grid) if measure_voxel else None
+        # The oriented box, world space, before the bmesh is freed. Measured for
+        # every mesh: it is a shape fact, and gating it on a target meant no
+        # consumer could ask "is this a box" without the project first calling
+        # itself blocky. `voxel_grid` (0 when none is declared) decides only
+        # whether the grid-relative half is measured.
+        voxel = voxel_facts(bm, voxel_grid)
         bm.free()
         # Triangle count as an engine would see it after triangulation —
         # the number a per-mesh budget is actually expressed in.
@@ -1931,13 +1934,18 @@ THICKNESS_FACE_CAP = 40000
 
 
 def voxel_facts(bm, grid):
-    """Voxel/Minecraft geometry facts, WORLD space (bm already transformed).
+    """The ORIENTED BOX a mesh occupies, WORLD space (bm already transformed).
 
-    Cheap O(verts) arithmetic - measured only when a voxel contract asks for
-    it. Recovers the ORIENTED BOX a block-model element is authored as: its
-    centre, its un-rotated extent, its single-axis rotation if it has one, and
-    the worst corner deviation from the authoring grid. Every value is a FACT;
-    the contract does the judging.
+    Measured for EVERY mesh, like symmetry_facts beside it, because "is this a
+    single cuboid, and what is its un-rotated extent and orientation" is an
+    intrinsic fact about a shape - not a Minecraft opinion. It used to be
+    gated on the voxel contract, which put the compiler's own doctrine
+    ("measure in Blender, judge in the contract") the wrong way round: a scene
+    had to declare itself blocky before the compiler would tell it what shape
+    its meshes were. Nothing downstream could use box recovery unless the
+    author had already decided they were making Minecraft models.
+
+    Every value is a FACT; the contract does the judging.
 
     Boxness is measured on the mesh's unique vertex POSITIONS, not on its
     topology. The old test demanded exactly 8 vertices and 6 quad faces, which
@@ -1958,15 +1966,25 @@ def voxel_facts(bm, grid):
     import mathutils
 
     bm.verts.ensure_lookup_table()
-    coords = [v.co.copy() for v in bm.verts]
     nf = len(bm.faces)
 
     # Unique corner positions, quantised so per-face duplicated vertices (the
     # common OBJ/FBX spelling of a cube) collapse onto the corners they share.
+    # A cuboid has exactly eight, so the scan STOPS at the ninth: that early
+    # exit is what makes measuring this for every mesh in every scene free —
+    # a 14k-vertex helmet is disqualified within its first nine vertices.
     seen = {}
-    for co in coords:
-        seen.setdefault((round(co.x, 6), round(co.y, 6), round(co.z, 6)), co)
-    uniq = list(seen.values())
+    too_many = False
+    for v in bm.verts:
+        co = v.co
+        key = (round(co.x, 6), round(co.y, 6), round(co.z, 6))
+        if key in seen:
+            continue
+        if len(seen) == 8:
+            too_many = True
+            break
+        seen[key] = co.copy()
+    uniq = [] if too_many else list(seen.values())
 
     is_box = False
     axis_aligned = False
@@ -2086,12 +2104,21 @@ def voxel_facts(bm, grid):
                       round(max(ys) - min(ys), 6),
                       round(max(zs) - min(zs), 6)]
 
-    # Grid deviation: the farthest any corner sits from its nearest grid node,
-    # measured on the ELEMENT (un-rotated corners) when there is one, and on
-    # the raw vertices otherwise.
-    grid_dev = 0.0
+    # Grid deviation is the one fact here that is NOT intrinsic: it is measured
+    # against a grid somebody declared, and means nothing without one. So it is
+    # gated on the VALUE existing — the same "is there a threshold that will
+    # read this" test dfm_facts applies to its thickness ray-cast — and reports
+    # null, not zero, when no grid was declared. Zero would read as "perfectly
+    # on-grid", which is a verdict nobody measured.
+    #
+    # It is also the only O(verts) part, which is why gating it and not the box
+    # recovery is what keeps this affordable for every mesh in every scene.
+    grid_dev = None
     if grid and grid > 0:
+        grid_dev = 0.0
         if center_out is not None and local_size is not None:
+            # The ELEMENT's corners: a rotated box is authored un-rotated, so
+            # its grid alignment is a question about the un-rotated corners.
             probe = [
                 mathutils.Vector((
                     center_out[0] + sx * local_size[0] / 2.0,
@@ -2101,7 +2128,7 @@ def voxel_facts(bm, grid):
                 for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)
             ]
         else:
-            probe = coords
+            probe = [v.co for v in bm.verts]
         for co in probe:
             for comp in co:
                 grid_dev = max(grid_dev, abs(comp - round(comp / grid) * grid))
@@ -2111,7 +2138,7 @@ def voxel_facts(bm, grid):
         "axisAligned": axis_aligned,
         "rotationAxis": rot_axis,
         "rotationDeg": rot_deg,
-        "gridDeviation": round(grid_dev, 7),
+        "gridDeviation": None if grid_dev is None else round(grid_dev, 7),
         **({} if center_out is None else {"center": center_out}),
         **({} if local_size is None else {"localSize": local_size}),
     }
@@ -3282,7 +3309,6 @@ def main(argv):
             emit({"ok": True, "data": census(
                 bpy.context.scene,
                 bool(job.get("measureThickness")),
-                bool(job.get("measureVoxel")),
                 float(job.get("voxelGrid") or 0.0),
             )})
         elif mode == "proof":

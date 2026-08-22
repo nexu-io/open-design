@@ -638,9 +638,10 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             outDir: path.join(request.projectDir, ".scene3d", "work"),
             ...(tweaks ? { tweaks } : {}),
             ...(normalized.print.measureThickness ? { measureThickness: true } : {}),
-            ...(normalized.voxel.enabled
-              ? { measureVoxel: true, voxelGrid: normalized.voxel.gridSize }
-              : {}),
+            // The grid VALUE, not a mode: the oriented box is measured for
+            // every mesh regardless, and this decides only whether the
+            // grid-relative half of that measurement runs.
+            ...(normalized.voxel.enabled ? { voxelGrid: normalized.voxel.gridSize } : {}),
             ...shaderPayload,
           };
           const result = await runRunner(probe, job, timeoutMs, request.env);
@@ -1067,10 +1068,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       ...(sheets ? { sheets } : {}),
       ...(spec?.claims ? { claims: spec.claims } : {}),
       ...(solved ? { solved } : {}),
-      // A project whose SOURCE is a bare mesh file is wholly imported: every
-      // object in it came from somebody else's exporter. Same provenance as a
-      // spec part carrying `file:`, so the same posture — see lint/provenance.
-      ...(source.kind === "mesh" ? { allImported: true } : {}),
+      sourceKind: source.kind,
       // Only what the author actually wrote. A target preset fills in
       // conventions too, but a preset is a default, not a statement of intent,
       // and must not cancel the relaxation on their behalf.

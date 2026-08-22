@@ -78,7 +78,10 @@ export function lintVoxel(
     let worstDev: { dev: number; object: string } | null = null;
     let offGridCount = 0;
     for (const m of members) {
+      // Null = no grid was declared, so nothing was measured to judge. The
+      // box facts beside it are measured for every mesh either way.
       const dev = m.voxel!.gridDeviation;
+      if (dev === null) continue;
       if (dev > vx.gridTolerance) offGridCount++;
       if (!worstDev || dev > worstDev.dev) worstDev = { dev, object: m.object };
     }
