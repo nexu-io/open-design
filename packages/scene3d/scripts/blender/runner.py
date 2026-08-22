@@ -2186,7 +2186,11 @@ def voxel_facts(bm, grid):
                     ang = math.degrees(math.atan2(vec.y, vec.x))
                 ang = ((ang + 45.0) % 90.0) - 45.0
                 rot_axis = "xyz"[ra]
-                rot_deg = round(ang, 3)
+                # R6, not round(): a non-finite value must become None here
+                # or json.dumps(allow_nan=False) kills the whole compile as
+                # an undiagnosable S3D-E-202. This is the file's rule for
+                # every float that reaches emit(); these were plain round().
+                rot_deg = R6(ang)
 
     # Centre + UN-ROTATED size of the box (world frame). For an oriented cube
     # the world AABB is the rotated bounding box, not the element - so every
@@ -2202,7 +2206,7 @@ def voxel_facts(bm, grid):
             sum(c.y for c in uniq) / len(uniq),
             sum(c.z for c in uniq) / len(uniq),
         ))
-        center_out = [round(cen.x, 6), round(cen.y, 6), round(cen.z, 6)]
+        center_out = [R6(cen.x), R6(cen.y), R6(cen.z)]
         if rot_axis is not None and rot_deg is not None:
             axis_vec = {"x": mathutils.Vector((1, 0, 0)),
                         "y": mathutils.Vector((0, 1, 0)),
@@ -2214,9 +2218,9 @@ def voxel_facts(bm, grid):
         xs = [p.x for p in pts]
         ys = [p.y for p in pts]
         zs = [p.z for p in pts]
-        local_size = [round(max(xs) - min(xs), 6),
-                      round(max(ys) - min(ys), 6),
-                      round(max(zs) - min(zs), 6)]
+        local_size = [R6(max(xs) - min(xs)),
+                      R6(max(ys) - min(ys)),
+                      R6(max(zs) - min(zs))]
 
     # Grid deviation is the one fact here that is NOT intrinsic: it is measured
     # against a grid somebody declared, and means nothing without one. So it is
@@ -2252,7 +2256,7 @@ def voxel_facts(bm, grid):
         "axisAligned": axis_aligned,
         "rotationAxis": rot_axis,
         "rotationDeg": rot_deg,
-        "gridDeviation": None if grid_dev is None else round(grid_dev, 7),
+        "gridDeviation": None if grid_dev is None else R6(grid_dev),
         **({} if center_out is None else {"center": center_out}),
         **({} if local_size is None else {"localSize": local_size}),
     }

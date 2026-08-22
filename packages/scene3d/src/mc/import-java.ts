@@ -91,8 +91,14 @@ export function importJavaModel(
     const size: [number, number, number] = [nz(dims[0] / PX), nz(dims[2] / PX), nz(dims[1] / PX)];
     const center: [number, number, number] = [nz(centre[0] / PX), nz(-centre[2] / PX), nz(centre[1] / PX)];
 
-    const texRef = dominantTexture(raw.faces);
-    const material = ensureMaterial(texRef, materialRefs);
+    const faceTextures = dominantTexture(raw.faces);
+    if (faceTextures.dropped.length > 0) {
+      warnings.push(
+        `'${label}' has a different texture per face (${[faceTextures.ref, ...faceTextures.dropped].join(", ")}); ` +
+          `scene.json binds one material per part, so it imports with '${faceTextures.ref}' and the rest are dropped`,
+      );
+    }
+    const material = ensureMaterial(faceTextures.ref, materialRefs);
     const id = uniqueId(sanitizeId(isObject(raw) && typeof raw.name === "string" ? raw.name : `elem_${i}`), usedIds);
 
     parts.push({ id, size, shape: "box", material });
@@ -165,8 +171,8 @@ function normaliseTextures(textures: unknown): Map<string, string> {
 }
 
 /** The texture reference most of an element's faces use (its material). */
-function dominantTexture(faces: unknown): string {
-  if (!isObject(faces)) return "undyed";
+function dominantTexture(faces: unknown): { ref: string; dropped: string[] } {
+  if (!isObject(faces)) return { ref: "undyed", dropped: [] };
   const counts = new Map<string, number>();
   for (const face of Object.values(faces)) {
     if (!isObject(face) || typeof face.texture !== "string") continue;
@@ -176,7 +182,14 @@ function dominantTexture(faces: unknown): string {
   let best = "undyed";
   let n = 0;
   for (const [ref, c] of counts) if (c > n) ((best = ref), (n = c));
-  return best;
+  // A cube with a different texture per face is ordinary Minecraft — a
+  // furnace, a crafting table, any block with a distinct top. scene.json binds
+  // ONE material per part, so the other faces cannot come along. That is a
+  // real limit and fine; losing them without a word is not, and this module's
+  // own docblock promises otherwise ("faithful, not lossy-silent") right
+  // beside the rotated-element skip that does say so.
+  const dropped = [...counts.keys()].filter((ref) => ref !== best).sort();
+  return { ref: best, dropped };
 }
 
 function ensureMaterial(texRef: string, refs: Map<string, string>): string {

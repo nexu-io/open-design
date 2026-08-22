@@ -96,6 +96,31 @@ const isBase = (cx: PartCtx): boolean => cx.part.partId === cx.part.familyId;
 const pct = (v: number): string => `${Number((v * 100).toFixed(1))}%`;
 const mib = (bytes: number): string => `${Number((bytes / (1024 * 1024)).toFixed(1))} MiB`;
 
+
+/**
+ * Is this part in the scene's MOST important tier?
+ *
+ * The rule only speaks about the top tier — a hero with fewer triangles than a
+ * background is a misallocated budget, while a mid-tier part being lighter than
+ * a lower one is ordinary. That scoping used to be spelled `rank >= 3`, which
+ * is the built-in library's top rank hardcoded into the judge, even though
+ * `rank` is documented as a project-relative ordinal the judge only ever
+ * compares BETWEEN parts. On any other scale the constant is wrong in both
+ * directions: a project whose top tier is 2 got the check silently inert, and
+ * one using 1..10 got every part from 3 up judged as though it were a hero.
+ *
+ * The scene's own highest rank is the same answer on the default scale and the
+ * right one on every other.
+ */
+function isTopTier(cx: PartCtx): boolean {
+  if (cx.part.rank === undefined) return false;
+  let top: number | undefined;
+  for (const rank of cx.facts.rankByFamily.values()) {
+    if (top === undefined || rank > top) top = rank;
+  }
+  return top !== undefined && cx.part.rank >= top;
+}
+
 const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
   // A prototype family spends more of the scene's triangle budget than its
   // role should — a RELATIVE judgment no per-part ceiling could make.
@@ -119,7 +144,7 @@ const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
     severity: "warning",
     target: (cx) => cx.part.partId,
     fact: (cx) => {
-      if (!isBase(cx) || cx.part.rank === undefined || cx.part.rank < 3) return undefined;
+      if (!isBase(cx) || cx.part.rank === undefined || !isTopTier(cx)) return undefined;
       const mine = cx.facts.trisByFamily.get(cx.part.familyId) ?? 0;
       let worst: number | undefined;
       for (const [fam, rank] of cx.facts.rankByFamily) {
@@ -129,7 +154,7 @@ const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
       }
       return worst;
     },
-    bound: (cx) => (cx.part.rank !== undefined && cx.part.rank >= 3 ? 0 : undefined),
+    bound: (cx) => (cx.part.rank !== undefined && isTopTier(cx) ? 0 : undefined),
     fails: (f) => f > 0,
     message: (cx, f) => {
       const mine = cx.facts.trisByFamily.get(cx.part.familyId) ?? 0;

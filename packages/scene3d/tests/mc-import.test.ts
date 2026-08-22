@@ -121,4 +121,55 @@ describe("importJavaModel", () => {
     expect(new Set(ids).size).toBe(2); // unique
     for (const id of ids) expect(id).toMatch(/^[A-Za-z][A-Za-z0-9_]{2,63}$/);
   });
+
+  it("names the faces it could not bring across", () => {
+    // A furnace, a crafting table, any block with a distinct top: different
+    // texture per face is ordinary Minecraft. scene.json binds ONE material
+    // per part, so the others genuinely cannot come along — but this module's
+    // docblock promises "faithful, not lossy-silent", and it was dropping five
+    // of six faces without a word, right beside a rotated-element skip that
+    // reports itself properly.
+    const model = {
+      textures: { top: "block/furnace_top", side: "block/furnace_side", front: "block/furnace_front" },
+      elements: [
+        {
+          name: "furnace",
+          from: [0, 0, 0],
+          to: [16, 16, 16],
+          faces: {
+            up: { texture: "#top" },
+            down: { texture: "#top" },
+            north: { texture: "#front" },
+            south: { texture: "#side" },
+            east: { texture: "#side" },
+            west: { texture: "#side" },
+          },
+        },
+      ],
+    };
+    const { spec, warnings } = importJavaModel(model);
+    expect(spec).not.toBeNull();
+    const note = warnings.find((w) => w.includes("texture per face"));
+    expect(note, "the loss must be reported").toBeDefined();
+    expect(note).toContain("furnace");
+    // Names what survived AND what did not, so the reader can act on it.
+    expect(note).toContain("side");
+    expect(note).toContain("front");
+    expect(note).toContain("top");
+  });
+
+  it("says nothing when every face shares one texture", () => {
+    const model = {
+      textures: { all: "block/stone" },
+      elements: [
+        {
+          name: "stone",
+          from: [0, 0, 0],
+          to: [16, 16, 16],
+          faces: { up: { texture: "#all" }, down: { texture: "#all" }, north: { texture: "#all" } },
+        },
+      ],
+    };
+    expect(importJavaModel(model).warnings.filter((w) => w.includes("texture per face"))).toEqual([]);
+  });
 });
