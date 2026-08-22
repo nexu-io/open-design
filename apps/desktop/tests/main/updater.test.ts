@@ -30,7 +30,7 @@ import {
   resolveInstalledOuterVersion,
 } from "../../src/main/updater.js";
 import { installerObservationSummaryPath } from "../../src/main/installer-observations.js";
-import { isVanishedPathError } from "../../src/main/updater/store.js";
+import { isVanishedPathError, resolveDesktopUpdaterStoreLayout } from "../../src/main/updater/store.js";
 
 type FixtureServer = {
   artifactRequests: () => number;
@@ -394,6 +394,71 @@ describe("desktop updater", () => {
     expect(isVanishedPathError(Object.assign(new Error("io"), { code: "EIO" }))).toBe(false);
     expect(isVanishedPathError(new Error("no code"))).toBe(false);
     expect(isVanishedPathError(null)).toBe(false);
+  });
+
+  // The reported shape of #7258: a release the app itself decided to keep
+  // (state "retained") whose backing directory was removed from outside. The
+  // cold-start lifecycle carries the descriptor forward without rescanning, so
+  // without revalidation the store keeps advertising a local release that is
+  // not there.
+  it("drops a retained cleanup entry whose backing release directory is gone", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      // Let the updater build and own the store the normal way first.
+      const seeded = await createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      }).checkForUpdates();
+      expect(seeded.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      // Record a retained release whose directory is not on disk, the way an
+      // outside cleanup leaves the descriptor behind.
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        metadataPath: `releases/${staleKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+      expect(existsSync(join(layout.releasesRoot, staleKey))).toBe(false);
+
+      // Cold start: this is the path that currently carries the descriptor
+      // forward without ever revalidating it.
+      const checked = await createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      }).checkForUpdates();
+      expect(checked.state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; reason?: string; removedAt?: string; state: string }[];
+      };
+      const stale = descriptor.releases.find((entry) => entry.key === staleKey);
+      expect(stale?.state).toBe("cleanup-removed");
+      expect(stale?.reason).toBe("metadata-missing");
+      expect(stale?.removedAt).toEqual(expect.any(String));
+
+      // The real downloaded release is still retained and untouched.
+      expect(existsSync(join(layout.releasesRoot, seeded.active?.key ?? ""))).toBe(true);
+      expect(checked.cache?.lifecycle?.releases.retained).toBe(1);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 
   // A downloaded release can vanish from disk without the updater's own cleanup

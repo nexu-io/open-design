@@ -12,6 +12,7 @@ import type {
 import type { DesktopUpdaterConfig } from "./config.js";
 import {
   BACK_DIR,
+  isVanishedPathError,
   LOCK_OWNER_FILE,
   type DesktopUpdaterStoreLayout,
 } from "./store.js";
@@ -407,6 +408,65 @@ export async function scanReleaseCleanupEntries(input: {
   return nextEntries;
 }
 
+/**
+ * Downgrade retained entries whose backing release directory is gone.
+ *
+ * Only `next-version-ready` and `manual` rescan the releases directory; every
+ * other trigger carries `cleanup.json` forward as written. A retained entry is
+ * therefore trusted indefinitely, so a release removed from outside the app —
+ * disk-space tooling, antivirus quarantine, a partial write after a crash, or
+ * manual pruning — keeps being counted as a local release that no longer
+ * exists. Such an entry is moved to the same terminal `cleanup-removed` state
+ * the app's own pruning produces.
+ *
+ * Only a path that is genuinely gone is downgraded. An entry that merely
+ * cannot be read at this moment is left untouched, so a transient filesystem
+ * failure never erases the record of a real release.
+ */
+export async function revalidateRetainedReleaseEntries(input: {
+  descriptor: ReleaseCleanupDescriptor;
+  layout: DesktopUpdaterStoreLayout;
+  logger: DesktopUpdaterLogger;
+  nowIso: string;
+}): Promise<ReleaseCleanupDescriptor> {
+  const { descriptor, layout, logger, nowIso } = input;
+  const releases: ReleaseCleanupEntry[] = [];
+  for (const entry of descriptor.releases) {
+    if (entry.state !== "retained") {
+      releases.push(entry);
+      continue;
+    }
+    const releaseDir = resolve(layout.root, entry.path);
+    if (!containsPath(layout.releasesRoot, releaseDir)) {
+      releases.push(entry);
+      continue;
+    }
+    // Unreadable counts as present: only a path we positively know is gone
+    // may drop a retained release.
+    const present = await lstat(releaseDir).then(
+      () => true,
+      (error: unknown) => !isVanishedPathError(error),
+    );
+    if (present) {
+      releases.push(entry);
+      continue;
+    }
+    logger.warn("[open-design updater] retained release directory vanished; marking it removed", {
+      key: entry.key,
+      path: releaseDir,
+    });
+    releases.push({
+      ...entry,
+      error: undefined,
+      reason: "metadata-missing",
+      removedAt: entry.removedAt ?? nowIso,
+      state: "cleanup-removed",
+      updatedAt: nowIso,
+    });
+  }
+  return { ...descriptor, releases, updatedAt: nowIso };
+}
+
 export async function cleanupDeprecatedReleaseEntries(input: {
   descriptor: ReleaseCleanupDescriptor;
   layout: DesktopUpdaterStoreLayout;
@@ -517,7 +577,7 @@ export async function runUpdateReleaseLifecycle(input: {
       };
     }
 
-    const cleaned = await cleanupDeprecatedReleaseEntries({
+    const revalidated = await revalidateRetainedReleaseEntries({
       descriptor: {
         ...next,
         currentVersion: config.currentVersion,
@@ -525,6 +585,12 @@ export async function runUpdateReleaseLifecycle(input: {
         trigger,
         updatedAt: startedAt,
       },
+      layout,
+      logger,
+      nowIso: now().toISOString(),
+    });
+    const cleaned = await cleanupDeprecatedReleaseEntries({
+      descriptor: revalidated,
       layout,
       logger,
       nowIso: now().toISOString(),
