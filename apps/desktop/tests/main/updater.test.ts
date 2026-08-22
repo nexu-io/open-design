@@ -396,6 +396,64 @@ describe("desktop updater", () => {
     expect(isVanishedPathError(null)).toBe(false);
   });
 
+  // #7258 deletes the release while the app is running, so the recovery has to
+  // hold on the retry path too: restoreStoreState() runs at most once per
+  // process, and checkForCandidate() only reaches it while the updater is
+  // still IDLE. A second "Check again" on the same instance therefore never
+  // revisits the store, and the in-memory active release is trusted as-is.
+  it("recovers on a retry with the same updater instance after the release is deleted", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const first = await updater.checkForUpdates();
+      expect(first.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(existsSync(first.downloadPath ?? "")).toBe(true);
+
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        metadataPath: `releases/${staleKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+
+      // The app keeps running; the release is removed underneath it.
+      await rm(layout.releasesRoot, { force: true, recursive: true });
+
+      const retried = await updater.checkForUpdates();
+      expect(retried.state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(retried.error).toBeUndefined();
+      // Must not keep advertising a ready install whose file is gone.
+      if (retried.state === DESKTOP_UPDATE_STATES.DOWNLOADED) {
+        expect(existsSync(retried.downloadPath ?? "")).toBe(true);
+      }
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; state: string }[];
+      };
+      expect(descriptor.releases.find((entry) => entry.key === staleKey)?.state).toBe("cleanup-removed");
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   // The reported shape of #7258: a release the app itself decided to keep
   // (state "retained") whose backing directory was removed from outside. The
   // cold-start lifecycle carries the descriptor forward without rescanning, so

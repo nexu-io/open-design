@@ -111,6 +111,7 @@ export type {
   DeferredLaunchResult,
 } from "./updater/deferred-launch.js";
 import {
+  revalidateReleaseCleanupState,
   runUpdateReleaseLifecycle,
   scheduleBackCleanup,
 } from "./updater/release-lifecycle.js";
@@ -744,6 +745,40 @@ export function createDesktopUpdater(
     return opened.root;
   }
 
+  /**
+   * Drop a release we verified earlier in this process but that is no longer
+   * on disk.
+   *
+   * `restoreStoreState()` runs at most once per process and only while the
+   * updater is still idle, so after the first successful check the in-memory
+   * `activeRelease` is never re-examined. A release deleted while the app is
+   * open would keep being offered as a ready install pointing at a file that
+   * is gone. Forgetting it here lets the check fall through to re-adoption or
+   * a fresh download instead.
+   */
+  async function discardVanishedActiveRelease(): Promise<void> {
+    const current = activeRelease;
+    if (current == null) return;
+    const present = await stat(current.path).then(
+      (entry) => entry.isFile(),
+      (error: unknown) => !isVanishedPathError(error),
+    );
+    if (present) return;
+    logUpdateEvent("active-release-vanished", {
+      key: current.ref.key,
+      version: current.ref.version,
+    });
+    activeRelease = null;
+    metadata = null;
+    reinstallRequirement = undefined;
+    await writeMetadataPatch((stored) => ({
+      ...stored,
+      active: undefined,
+      incoming: undefined,
+      version: STORE_METADATA_VERSION,
+    }));
+  }
+
   async function checkForCandidate(options: ActionOptions = {}): Promise<DesktopUpdateStatusSnapshot> {
     const unsupported = unsupportedStatus();
     if (unsupported != null) return unsupported;
@@ -753,6 +788,7 @@ export function createDesktopUpdater(
       if (restored?.state === DESKTOP_UPDATE_STATES.ERROR) return restored;
       if (installFrozen || installResult != null) return snapshot();
     }
+    await discardVanishedActiveRelease();
     const keepDownloadedVisible = activeRelease != null;
     if (!keepDownloadedVisible) setState(DESKTOP_UPDATE_STATES.CHECKING);
     try {
@@ -765,6 +801,20 @@ export function createDesktopUpdater(
         lastCheckedAt,
       }));
       if (root != null) scheduleBackCleanup(root.realRoot, logger);
+      // Descriptor bookkeeping only, so it runs after the network round-trip
+      // and never delays the check itself.
+      if (root != null) {
+        const revalidatedLifecycle = await revalidateReleaseCleanupState({
+          config,
+          layout: root.layout,
+          logger,
+          now,
+        }).catch((lifecycleError: unknown) => {
+          logger.warn("[open-design updater] failed to revalidate release cleanup state", lifecycleError);
+          return null;
+        });
+        if (revalidatedLifecycle != null) lifecycleSummary = revalidatedLifecycle;
+      }
       const launcherPayloadContextValid = await hasValidLauncherPayloadContext(config);
       const installedOuterVersion = launcherPayloadContextValid ? await resolveInstalledOuterVersion(config) : null;
       reinstallRequirement = launcherPayloadContextValid

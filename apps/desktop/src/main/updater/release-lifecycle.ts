@@ -534,6 +534,42 @@ export async function cleanupDeprecatedReleaseEntries(input: {
   };
 }
 
+/**
+ * Cheap descriptor revalidation, safe to run on every version check.
+ *
+ * The full lifecycle only runs on cold start, when a new version becomes
+ * ready, and on manual clear. A long-running app that merely re-checks would
+ * otherwise keep trusting a descriptor written when it launched, so a release
+ * deleted while the app is open stays `retained` for the rest of the session.
+ * This takes the same lock and drops only entries whose directory has
+ * vanished; it never rescans, deprecates, or removes anything, and it leaves
+ * the recorded trigger alone so lifecycle telemetry still reports what last
+ * performed a real pass.
+ */
+export async function revalidateReleaseCleanupState(input: {
+  config: DesktopUpdaterConfig;
+  layout: DesktopUpdaterStoreLayout;
+  logger: DesktopUpdaterLogger;
+  now: () => Date;
+}): Promise<DesktopUpdateCacheLifecycleSummary | null> {
+  const { config, layout, logger, now } = input;
+  return await withUpdaterLifecycleLock(layout, logger, async () => {
+    const current = await readReleaseCleanupDescriptor(layout);
+    if (current == null) return null;
+    const revalidated = await revalidateRetainedReleaseEntries({
+      descriptor: current,
+      layout,
+      logger,
+      nowIso: now().toISOString(),
+    });
+    const unchanged = revalidated.releases.length === current.releases.length
+      && revalidated.releases.every((entry, index) => entry === current.releases[index]);
+    if (unchanged) return summarizeReleaseCleanupDescriptor(current, config.platform);
+    await writeJson(layout.cleanupPath, revalidated);
+    return summarizeReleaseCleanupDescriptor(revalidated, config.platform);
+  });
+}
+
 export async function runUpdateReleaseLifecycle(input: {
   config: DesktopUpdaterConfig;
   layout: DesktopUpdaterStoreLayout;
