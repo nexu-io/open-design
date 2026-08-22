@@ -113,9 +113,13 @@ describe("lint: pbr/topology/integrity over census", () => {
 
   it("relaxes the inspection-posture gates for a file:-imported mesh, not the real defects", () => {
     // The SAME open/doubled/wound mesh — but marked as a `file:` import via the
-    // solved scene — no longer errors on non-manifold/doubles/winding (imported
-    // provenance = inspect, don't judge), while ngons and zero-area (genuine
-    // defects, not inspection-relaxable) still fire.
+    // solved scene — is no longer BLOCKING on non-manifold/doubles/winding
+    // (imported provenance = inspect, don't judge), while ngons and zero-area
+    // (genuine defects, not inspection-relaxable) still fire at full severity.
+    //
+    // The relaxation reclassifies; it does not suppress. Rules that simply did
+    // not fire left nothing in the report to explain why a strict contract had
+    // gone quiet on a mesh — silence standing in for a judgement.
     const meshRow = {
       object: "prp_helm",
       verts: 200,
@@ -139,12 +143,50 @@ describe("lint: pbr/topology/integrity over census", () => {
       census: census({ meshes: [meshRow] }),
       solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
     });
-    const importedCodes = new Set(imported.map((i) => i.code));
-    expect(importedCodes.has(ISSUE_CODES.NON_MANIFOLD)).toBe(false); // relaxed
-    expect(importedCodes.has(ISSUE_CODES.DOUBLE_VERTICES)).toBe(false); // relaxed
-    expect(importedCodes.has(ISSUE_CODES.INCONSISTENT_WINDING)).toBe(false); // relaxed
-    expect(importedCodes.has(ISSUE_CODES.NGONS)).toBe(true); // a real defect, still fires
-    expect(importedCodes.has(ISSUE_CODES.ZERO_AREA_FACES)).toBe(true); // real defect, still fires
+    const byCode = new Map(imported.map((i) => [i.code, i]));
+    for (const code of [
+      ISSUE_CODES.NON_MANIFOLD,
+      ISSUE_CODES.DOUBLE_VERTICES,
+      ISSUE_CODES.INCONSISTENT_WINDING,
+    ]) {
+      const issue = byCode.get(code);
+      expect(issue, `${code} must still be reported`).toBeDefined();
+      expect(issue!.severity).toBe("info"); // relaxed, and says so
+      expect(issue!.detail?.provenance).toBe("imported");
+    }
+    // Real defects are untouched: an ngon or a zero-area face is wrong in
+    // anybody's asset, so provenance buys it nothing.
+    for (const code of [ISSUE_CODES.NGONS, ISSUE_CODES.ZERO_AREA_FACES]) {
+      const issue = byCode.get(code);
+      expect(issue, `${code} must still fire`).toBeDefined();
+      expect(issue!.severity).not.toBe("info");
+      expect(issue!.detail?.provenance).toBeUndefined();
+    }
+    expect(imported.some((i) => i.severity === "error" && i.code === ISSUE_CODES.NON_MANIFOLD)).toBe(false);
+  });
+
+  it("lets an explicit convention block cancel the relaxation it governs", () => {
+    const meshRow = {
+      object: "prp_helm",
+      verts: 200,
+      faces: 300,
+      ngons: 0,
+      nonManifoldEdges: 124,
+      zeroAreaFaces: 0,
+      nan: false,
+      uvLayers: [],
+    };
+    const args = {
+      contract: contract(),
+      census: census({ meshes: [meshRow] }),
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
+    };
+    // Writing in `geometry` says you meant its rules — for this asset too.
+    const strict = runLint({ ...args, authoredBlocks: new Set(["geometry"]) });
+    expect(strict.find((i) => i.code === ISSUE_CODES.NON_MANIFOLD)!.severity).toBe("error");
+    // ...and ONLY its rules: an unrelated block leaves geometry relaxed.
+    const unrelated = runLint({ ...args, authoredBlocks: new Set(["print"]) });
+    expect(unrelated.find((i) => i.code === ISSUE_CODES.NON_MANIFOLD)!.severity).toBe("info");
   });
 
   it("reports z-fighting pairs and empty meshes", () => {

@@ -20,14 +20,13 @@ export function lintUv(ctx: LintContext, issues: Issue[]): void {
 
   const textured = texturedObjects(census);
   const densities: Array<{ object: string; min: number; max: number }> = [];
-  // A `file:`-imported mesh owns its own unwrap (or deliberately has none —
-  // vertex-coloured, or a shader that needs no UVs); requiring one is the
-  // author's call for authored geometry, not for a downloaded asset.
-  const isImported = (name: string): boolean => ctx.imported?.has(name) ?? false;
+  // An imported mesh owns its own unwrap (or deliberately has none — vertex-
+  // coloured, or a shader that needs no UVs). That is handled by provenance
+  // reclassification after the fact, not by skipping the measurement here.
 
   for (const mesh of census.meshes) {
     const hasUv = mesh.uvLayers.length > 0;
-    const needsUv = (rules.require === "all" || textured.has(mesh.object)) && !isImported(mesh.object);
+    const needsUv = rules.require === "all" || textured.has(mesh.object);
 
     if (!hasUv) {
       if (needsUv) {

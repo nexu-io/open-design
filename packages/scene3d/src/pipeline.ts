@@ -99,6 +99,11 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   const source = discoverSources(request.projectDir);
   let contract: Scene3dContract = request.contract ?? DEFAULT_CONTRACT;
   let contractIssues: string[] = [];
+  /* Convention blocks the AUTHOR wrote, as opposed to the ones DEFAULT_CONTRACT
+     and the target presets fill in. Only an explicit block is a statement of
+     intent, and only an explicit block cancels the imported-provenance
+     relaxation for its rules (lint/provenance.ts). */
+  let authoredBlocks = new Set<string>();
   if (request.contract) {
     // A programmatically-supplied contract (od CLI --contract, daemon route,
     // an embedded agent) skips the file-load path but must NOT skip validation:
@@ -114,6 +119,8 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         file: "(request.contract)",
       });
       contract = DEFAULT_CONTRACT;
+    } else {
+      authoredBlocks = new Set(Object.keys(request.contract.conventions ?? {}));
     }
   } else {
     const contractFile = path.join(request.projectDir, "scene3d.json");
@@ -130,6 +137,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           });
         } else {
           contract = raw as Scene3dContract;
+          authoredBlocks = new Set(Object.keys(contract.conventions ?? {}));
         }
       } catch (err) {
         issues.push({
@@ -1041,6 +1049,14 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       ...(sheets ? { sheets } : {}),
       ...(spec?.claims ? { claims: spec.claims } : {}),
       ...(solved ? { solved } : {}),
+      // A project whose SOURCE is a bare mesh file is wholly imported: every
+      // object in it came from somebody else's exporter. Same provenance as a
+      // spec part carrying `file:`, so the same posture — see lint/provenance.
+      ...(source.kind === "mesh" ? { allImported: true } : {}),
+      // Only what the author actually wrote. A target preset fills in
+      // conventions too, but a preset is a default, not a statement of intent,
+      // and must not cancel the relaxation on their behalf.
+      authoredBlocks,
     });
     // A claim is adjudicated at the rest pose; a bobbing part leaves that
     // pose every cycle. Unchecked-never-passed applies across TIME too.

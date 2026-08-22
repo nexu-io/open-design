@@ -126,6 +126,87 @@ plate("prp_plate_b")
     expect(box.worldMin![2]).toBeCloseTo(0.25, 3);
   });
 
+  /* ---- provenance posture: somebody else's asset ------------------- */
+
+  const REAL = path.join(__dirname, "fixtures", "real");
+  const dropAsset = (glb: string, extra: Record<string, string> = {}): string => {
+    const dir = mkProject(extra);
+    fs.copyFileSync(glb, path.join(dir, path.basename(glb)));
+    return dir;
+  };
+
+  it("compiles a bare downloaded asset with no hand-written contract", async () => {
+    // The damning case from the audit: the inspection posture was implemented
+    // only for spec parts carrying `file:`, so a whole project whose source IS
+    // a downloaded .glb — a documented, first-class workflow — got no
+    // relaxation at all and compiled with ok:false. Every fixture in this repo
+    // ships a hand-written relaxed scene3d.json, which is exactly what hid it.
+    const dir = dropAsset(path.join(REAL, "fox", "Fox.glb"));
+    const r = await run(dir);
+    const blocking = r.issues.filter((i) => i.severity === "error");
+    expect(blocking).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("still SAYS what it found — relaxation is reclassification, not silence", async () => {
+    // The old mechanism suppressed the rule outright, so nothing in the report
+    // could explain why a strict contract had gone quiet. Fox is ~100%
+    // boundary edges: the finding must still be present, as a note that names
+    // its own provenance.
+    const dir = dropAsset(path.join(REAL, "fox", "Fox.glb"));
+    const r = await run(dir);
+    const open = r.issues.filter((i) => i.code === "S3D-E-321");
+    expect(open.length).toBeGreaterThan(0);
+    for (const issue of open) {
+      expect(issue.severity).toBe("info");
+      expect(issue.detail?.provenance).toBe("imported");
+      expect(issue.detail?.relaxedFrom).toBe("error");
+      expect(issue.hint).toMatch(/imported geometry/);
+    }
+  });
+
+  it("lets an explicit convention block cancel the relaxation it governs", async () => {
+    // Writing in a block is a statement that you meant its rules. It must
+    // cancel that block's relaxation — and ONLY that block's: demanding
+    // printable walls says nothing about how you feel about a downloaded
+    // mesh's UVs.
+    const dir = dropAsset(path.join(REAL, "fox", "Fox.glb"), {
+      "scene3d.json": JSON.stringify({
+        schemaVersion: 1,
+        conventions: { geometry: { allowOpenMeshes: false } },
+      }),
+    });
+    const r = await run(dir);
+    const open = r.issues.filter((i) => i.code === "S3D-E-321");
+    expect(open.length).toBeGreaterThan(0);
+    expect(open.every((i) => i.severity === "error")).toBe(true);
+    expect(r.ok).toBe(false);
+  });
+
+  it("keeps judging the author's own geometry strictly in the same scene", async () => {
+    // Provenance is per-object, not per-scene: a spec that imports a real
+    // asset next to authored boxes must still hold the boxes to the contract.
+    const dir = mkProject({
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "mixed",
+        parts: [
+          { id: "prp_pedestal", size: [1, 1, 0.2] },
+          { id: "prp_fox", size: [1, 1, 1], file: "Fox.glb" },
+        ],
+        relations: [
+          { type: "at", part: "prp_pedestal", center: [0, 0, 0.1] },
+          { type: "sits_on", part: "prp_fox", on: "prp_pedestal" },
+        ],
+      }),
+    });
+    fs.copyFileSync(path.join(REAL, "fox", "Fox.glb"), path.join(dir, "Fox.glb"));
+    const r = await run(dir);
+    const relaxed = r.issues.filter((i) => i.detail?.provenance === "imported");
+    // Whatever was relaxed belongs to the imported part, never the authored one.
+    for (const issue of relaxed) expect(issue.target).not.toBe("prp_pedestal");
+  });
+
   it("still measures and reports the z-fight when it is under the cap", async () => {
     // The control: the same coincident geometry, cheap enough to compare.
     // A cap that suppressed the finding outright would pass the test above.

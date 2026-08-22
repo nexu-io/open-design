@@ -177,9 +177,11 @@ export function lintVoxel(
     /* ---- element bounds (W-973): worst across family -------------- */
     let worstBound: { axis: string; value: number; over: number } | null = null;
     for (const m of members) {
-      const world = worldByName.get(m.object);
-      if (!world?.worldMin || !world?.worldMax) continue;
-      const w = worstBoundExcursion(world.worldMin, world.worldMax, mc.elementMinBlocks, mc.elementMaxBlocks);
+      // The element space bounds the AUTHORED from/to, not the rotated
+      // silhouette — same frame as the extent above.
+      const box = elementBox(m, worldByName.get(m.object));
+      if (!box) continue;
+      const w = worstBoundExcursion(box.min, box.max, mc.elementMinBlocks, mc.elementMaxBlocks);
       if (w && (!worstBound || w.over > worstBound.over)) worstBound = w;
     }
     if (worstBound) {
@@ -195,16 +197,40 @@ export function lintVoxel(
   }
 }
 
-/** The largest world-space AABB extent (in blocks = metres) across a family's
+/**
+ * The box a mesh occupies IN THE FRAME THE FORMAT DEFINES IT IN: min/max of
+ * the un-rotated element for a recovered oriented box, world AABB otherwise.
+ *
+ * A block-model element is authored as an axis-aligned `from`/`to` pair plus a
+ * rotation about an origin — so every element-space question (how big is it,
+ * does it fit the −1..2 space) is a question about the UN-ROTATED box. The
+ * world AABB of a rotated box is its diagonal bound, up to √2 larger, and
+ * judging with it produced exactly the wrong answers: a 2.5-block element
+ * rotated 45° measured 3.54 blocks, got filed as multi-block structure, and
+ * was thereby exempted from the element rules it was actually breaking.
+ */
+function elementBox(m: CensusMesh, world: CensusObject | undefined): { min: number[]; max: number[] } | null {
+  const v = m.voxel;
+  if (v?.isBox && v.center && v.localSize) {
+    return {
+      min: v.center.map((c, i) => c - v.localSize![i]! / 2),
+      max: v.center.map((c, i) => c + v.localSize![i]! / 2),
+    };
+  }
+  if (world?.worldMin && world?.worldMax) return { min: world.worldMin, max: world.worldMax };
+  return null;
+}
+
+/** The largest element-space extent (in blocks = metres) across a family's
  *  members, or null when no member has bounds. This is what decides whether a
  *  thing is an element (≤ element space) or structure (larger). */
 function familyMaxExtent(members: CensusMesh[], worldByName: Map<string, CensusObject>): number | null {
   let max: number | null = null;
   for (const m of members) {
-    const world = worldByName.get(m.object);
-    if (!world?.worldMin || !world?.worldMax) continue;
+    const box = elementBox(m, worldByName.get(m.object));
+    if (!box) continue;
     for (let i = 0; i < 3; i++) {
-      const extent = world.worldMax[i]! - world.worldMin[i]!;
+      const extent = box.max[i]! - box.min[i]!;
       if (max === null || extent > max) max = extent;
     }
   }

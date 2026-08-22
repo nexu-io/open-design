@@ -11,10 +11,10 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
   const census = ctx.census;
   if (!census) return;
 
-  // A `file:`-imported mesh carries "imported" provenance: open edges, doubled
-  // verts, and odd winding are the norm in a downloaded asset, so those gates
-  // relax for it exactly as they would under a scene-wide inspection contract.
-  const isImported = (name: string): boolean => ctx.imported?.has(name) ?? false;
+  // Imported geometry is NOT special-cased here. These rules measure and
+  // report on every mesh; lint/provenance.ts reclassifies findings about
+  // third-party assets afterwards, so the relaxation is visible in the report
+  // instead of being a rule that silently never fired.
 
   for (const mesh of census.meshes) {
     if (mesh.nan) {
@@ -32,7 +32,7 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
     // ingest third-party assets opt out. A `watertight` claim still
     // enforces closure regardless, because a claim is the author's own
     // assertion about a specific artifact.
-    if (mesh.nonManifoldEdges > 0 && !ctx.contract.geometry.allowOpenMeshes && !isImported(mesh.object)) {
+    if (mesh.nonManifoldEdges > 0 && !ctx.contract.geometry.allowOpenMeshes) {
       issues.push({
         code: ISSUE_CODES.NON_MANIFOLD,
         severity: "error",
@@ -67,7 +67,7 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
        import, which is exactly why they are compiler rules. */
     const geo = ctx.contract.geometry;
     const loose = (mesh.looseVerts ?? 0) + (mesh.looseEdges ?? 0);
-    if (!geo.allowLooseGeometry && loose > 0 && !isImported(mesh.object)) {
+    if (!geo.allowLooseGeometry && loose > 0) {
       issues.push({
         code: ISSUE_CODES.LOOSE_GEOMETRY,
         severity: "warning",
@@ -77,7 +77,7 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
         detail: { looseVerts: mesh.looseVerts ?? 0, looseEdges: mesh.looseEdges ?? 0 },
       });
     }
-    if (!geo.allowDoubleVertices && (mesh.doubleVertices ?? 0) > 0 && !isImported(mesh.object)) {
+    if (!geo.allowDoubleVertices && (mesh.doubleVertices ?? 0) > 0) {
       issues.push({
         code: ISSUE_CODES.DOUBLE_VERTICES,
         severity: "warning",
@@ -89,7 +89,7 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
     }
     // The doubles pass was skipped past the vertex cap: silence is "not
     // measured", not "clean". Only fires when the runner said so explicitly.
-    if (!geo.allowDoubleVertices && mesh.doublesSampled === false && !isImported(mesh.object)) {
+    if (!geo.allowDoubleVertices && mesh.doublesSampled === false) {
       issues.push({
         code: ISSUE_CODES.DOUBLE_VERTICES_UNCHECKED,
         severity: "warning",
@@ -99,7 +99,7 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
         detail: { verts: mesh.verts },
       });
     }
-    if (!geo.allowInconsistentWinding && (mesh.inconsistentWindingEdges ?? 0) > 0 && !isImported(mesh.object)) {
+    if (!geo.allowInconsistentWinding && (mesh.inconsistentWindingEdges ?? 0) > 0) {
       issues.push({
         code: ISSUE_CODES.INCONSISTENT_WINDING,
         severity: "warning",
