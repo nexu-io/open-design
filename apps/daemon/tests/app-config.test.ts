@@ -452,6 +452,9 @@ describe('app-config', () => {
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
           },
+          'prime-agent': {
+            PRIME_AGENT_BIN: '  ~/bin/prime-agent  ',
+          },
           __proto__: {
             CLAUDE_CONFIG_DIR: 'bad',
           },
@@ -471,6 +474,7 @@ describe('app-config', () => {
         },
         opencode: { OPENCODE_BIN: '~/bin/opencode' },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
+        'prime-agent': { PRIME_AGENT_BIN: '~/bin/prime-agent' },
       });
       expect(agentCliEnvForAgent(cfg.agentCliEnv, 'byok-opencode')).toEqual({
         OPENCODE_BIN: '~/bin/opencode',

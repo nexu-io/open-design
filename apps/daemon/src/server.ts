@@ -11186,7 +11186,7 @@ export async function startServer({
         // the probe failure and applies the identical fallback.
       }
     }
-    const resolvedAgentResumeCtx =
+    let resolvedAgentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
@@ -11196,6 +11196,39 @@ export async function startServer({
             currentAssistantMessageId: run.assistantMessageId ?? null,
           })
         : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, storedStableSections: null as StableSectionHashes | null, invalidationReason: null };
+    // Prime 0.8.0 silently creates a new session at a missing `--resume` path
+    // instead of reporting a resume failure. Reject a stale local file handle
+    // before prompt composition so this turn keeps the full DB transcript.
+    if (
+      def.piRpcResumeViaProcessArgs === true &&
+      run.conversationId &&
+      resolvedAgentResumeCtx.resumeSessionId
+    ) {
+      let resumeFileExists = false;
+      try {
+        resumeFileExists = fs.statSync(resolvedAgentResumeCtx.resumeSessionId).isFile();
+      } catch {
+        resumeFileExists = false;
+      }
+      if (!resumeFileExists) {
+        const staleSessionId = resolvedAgentResumeCtx.resumeSessionId;
+        clearAgentSession(db, run.conversationId, def.id);
+        resolvedAgentResumeCtx = resolveAgentResumeContext(db, {
+          conversationId: run.conversationId,
+          agentId: def.id,
+          currentModel: safeModel ?? null,
+          currentCwd: effectiveCwd,
+          currentAssistantMessageId: run.assistantMessageId ?? null,
+        });
+        design.runs.emit(run, 'diagnostic', {
+          type: 'agent_resume_auto_reseed',
+          agent_id: def.id,
+          reason: 'resume_failed',
+          previous_session_id: staleSessionId,
+          stale_session_cleared: true,
+        });
+      }
+    }
     // A same-run post-tool recovery resumes the exact session id captured from
     // the interrupted attempt. The ordinary cross-turn cursor guard cannot
     // admit it yet because the current assistant placeholder is still in
@@ -14343,6 +14376,18 @@ export async function startServer({
         imagePaths: def.supportsImagePaths ? promptImagePaths : [],
         uploadRoot: odNextTaskInputSnapshot?.projectionDir ?? UPLOAD_DIR,
         sessionDir: def.piRpcSessionDir,
+        onSessionPath: (sessionPath) => {
+          persistCapturedAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: sessionPath,
+            stablePromptHash: currentStableHash,
+            stablePromptSections: currentStableSectionsJson,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
+          });
+        },
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
       const acpStageTimeoutMs = resolveAcpStageTimeoutMs(def.inactivityTimeoutMs);

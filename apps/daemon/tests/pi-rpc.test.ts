@@ -864,6 +864,7 @@ test('attachPiRpcSession retains a live session path when aborted', async () => 
   const os = await import('node:os');
   const sessionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-rpc-abort-'));
   const child = createMockChild();
+  const captured: string[] = [];
   try {
     const session = attachPiRpcSession({
       child: child as unknown as ChildProcess,
@@ -872,11 +873,13 @@ test('attachPiRpcSession retains a live session path when aborted', async () => 
       model: null,
       send: () => {},
       sessionDir,
+      onSessionPath: (sessionPath) => captured.push(sessionPath),
     });
     const sessionPath = path.join(sessionDir, 'session.jsonl');
     await fs.writeFile(sessionPath, '{"type":"session"}\n');
     session.abort();
     assert.equal(session.getLastSessionPath(), sessionPath);
+    assert.deepEqual(captured, [sessionPath]);
   } finally {
     await fs.rm(sessionDir, { recursive: true, force: true });
   }

@@ -32,6 +32,7 @@ export type PiRpcSessionOptions = {
   uploadRoot?: string;
   parentSession?: string;
   sessionDir?: string;
+  onSessionPath?: (sessionPath: string) => void;
 };
 /** Handle returned by `attachPiRpcSession` for querying run state and requesting abort. */
 export type PiRpcSession = {
@@ -190,6 +191,7 @@ export function attachPiRpcSession({
   uploadRoot,
   parentSession,
   sessionDir,
+  onSessionPath,
 }: PiRpcSessionOptions): PiRpcSession {
   const stdin = child.stdin;
   const stdout = child.stdout;
@@ -209,11 +211,14 @@ export function attachPiRpcSession({
 
   const captureSessionPath = (): void => {
     if (capturedSessionPath) return;
-    capturedSessionPath = resolveSessionPathChangedSince(
+    const sessionPath = resolveSessionPathChangedSince(
       cwd,
       sessionFilesBeforePrompt,
       sessionDir,
     );
+    if (!sessionPath) return;
+    capturedSessionPath = sessionPath;
+    onSessionPath?.(sessionPath);
   };
 
   let nextRpcId = 1;

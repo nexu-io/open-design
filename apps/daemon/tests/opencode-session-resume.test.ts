@@ -6,6 +6,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { primeAgentDef } from '../src/runtimes/defs/prime-agent.js';
+import type { RuntimeAgentDef } from '../src/runtimes/types.js';
 
 // End-to-end coverage for OpenCode native (capture-style) session resume.
 //
@@ -46,6 +48,8 @@ const FIRST_REPLY_SENTINEL = 'FIRST_TURN_REPLY_SENTINEL_0c7d2';
 
 describe('opencode native session resume', () => {
   const originalEnv = snapshotEnv();
+  const originalPrimeSessionDir = primeAgentDef.piRpcSessionDir;
+  const originalPrimePromptViaStdin = (primeAgentDef as RuntimeAgentDef).promptViaStdin;
   let started: StartedServer | null = null;
   let binDir: string | null = null;
 
@@ -58,6 +62,12 @@ describe('opencode native session resume', () => {
     if (binDir) await removeTempDir(binDir);
     binDir = null;
     restoreEnv(originalEnv);
+    primeAgentDef.piRpcSessionDir = originalPrimeSessionDir;
+    if (originalPrimePromptViaStdin === undefined) {
+      delete (primeAgentDef as RuntimeAgentDef).promptViaStdin;
+    } else {
+      (primeAgentDef as RuntimeAgentDef).promptViaStdin = originalPrimePromptViaStdin;
+    }
   });
 
   it('captures the session id on turn 1 and resumes it (without resending history) on turn 2', async () => {
@@ -174,7 +184,107 @@ describe('opencode native session resume', () => {
     expect(turn2.argv[0]).toBe('run');
     expect(turn2.argv).not.toContain('-s');
   });
+
+  it('re-seeds Prime with the full transcript when its saved session file is missing', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-prime-resume-bin-'));
+    const sessionDir = path.join(binDir, 'sessions');
+    const { bin, logPath, sessionPath } = await writeCapturingPrime(
+      binDir,
+      'prime-agent-capture',
+      sessionDir,
+    );
+    primeAgentDef.piRpcSessionDir = sessionDir;
+    // PR #7263 owns the generic pi-rpc stdin invariant. Keep this lifecycle
+    // test independent while that focused prerequisite is reviewed.
+    (primeAgentDef as RuntimeAgentDef).promptViaStdin = true;
+
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'prime-agent',
+      agentCliEnv: { 'prime-agent': { PRIME_AGENT_BIN: bin } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const conversationId = await createConversation(started.url);
+    const turn1 = await sendRunAndWait(
+      started.url,
+      conversationId,
+      'first request',
+      'prime-agent',
+    );
+    expect(turn1, JSON.stringify(turn1)).toMatchObject({ status: 'succeeded' });
+    await rm(sessionPath, { force: true });
+
+    const turn2 = await sendRunAndWait(
+      started.url,
+      conversationId,
+      '## user\nfirst request\n\n## assistant\n'
+        + `${FIRST_REPLY_SENTINEL}\n\n## user\nsecond request`,
+      'prime-agent',
+      'second request',
+    );
+    expect(turn2.status).toBe('succeeded');
+
+    const events = await readRunEvents(turn2.eventsLogPath);
+    expect(hasDiagnostic(events, {
+      type: 'agent_resume_auto_reseed',
+      reason: 'resume_failed',
+      stale_session_cleared: true,
+    })).toBe(true);
+
+    const runs = await readConversationRuns(logPath, conversationId);
+    expect(runs).toHaveLength(2);
+    const [create, reseed] = runs as [RunInvocation, RunInvocation];
+    expect(create.argv).not.toContain('--resume');
+    expect(reseed.argv).not.toContain('--resume');
+    expect(reseed.stdin).toContain('first request');
+    expect(reseed.stdin).toContain('second request');
+  });
 });
+
+async function writeCapturingPrime(
+  dir: string,
+  name: string,
+  sessionDir: string,
+): Promise<{ bin: string; logPath: string; sessionPath: string }> {
+  const bin = path.join(dir, name);
+  const logPath = path.join(dir, `${name}-log.jsonl`);
+  const sessionPath = path.join(sessionDir, 'prime-session.jsonl');
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const argv = process.argv.slice(2);
+const logPath = ${JSON.stringify(logPath)};
+const sessionPath = ${JSON.stringify(sessionPath)};
+if (argv.includes('--version')) { console.log('0.8.0'); process.exit(0); }
+if (argv[0] === 'model' && argv[1] === 'list') { console.log('openai gpt-5'); process.exit(0); }
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  stdin += chunk;
+  for (const line of chunk.trim().split('\\n')) {
+    if (!line.trim()) continue;
+    const command = JSON.parse(line);
+    if (command.type !== 'prompt') continue;
+    fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+    fs.writeFileSync(sessionPath, JSON.stringify({ type: 'session' }) + '\\n');
+    fs.appendFileSync(logPath, JSON.stringify({ argv, stdin, cwd: process.cwd() }) + '\\n');
+    console.log(JSON.stringify({ id: command.id, type: 'response', command: 'prompt', success: true }));
+    console.log(JSON.stringify({ type: 'agent_start' }));
+    console.log(JSON.stringify({ type: 'turn_start' }));
+    console.log(JSON.stringify({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: ${JSON.stringify(FIRST_REPLY_SENTINEL)} } }));
+    console.log(JSON.stringify({ type: 'turn_end', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(FIRST_REPLY_SENTINEL)} }], usage: { input: 10, output: 2, totalTokens: 12 } } }));
+    console.log(JSON.stringify({ type: 'agent_end', messages: [] }));
+    setTimeout(() => process.exit(0), 50);
+  }
+});
+process.stdin.on('end', () => process.exit(0));
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return { bin, logPath, sessionPath };
+}
 
 // Fake opencode CLI: stamps a FIXED session id on a create turn and echoes it
 // on a resume turn. Logs `{argv, stdin}` per invocation.
@@ -342,6 +452,8 @@ async function sendRunAndWait(
   url: string,
   encoded: string,
   message: string,
+  agentId = 'opencode',
+  currentPrompt = message,
 ): Promise<RunStatus> {
   const [projectId, conversationId] = encoded.split('::');
   const assistantMessageId = `assistant_opencode_${randomUUID()}`;
@@ -358,9 +470,9 @@ async function sendRunAndWait(
       conversationId,
       assistantMessageId,
       clientRequestId: `client_opencode_${randomUUID()}`,
-      agentId: 'opencode',
+      agentId,
       message,
-      currentPrompt: message,
+      currentPrompt,
     }),
   });
   expect(runResponse.status).toBe(202);
@@ -370,16 +482,18 @@ async function sendRunAndWait(
 
 async function waitForRun(url: string, runId: string): Promise<RunStatus> {
   const startedAt = Date.now();
+  let lastRun: RunStatus | null = null;
   while (Date.now() - startedAt < 10_000) {
     const response = await fetch(`${url}/api/runs/${encodeURIComponent(runId)}`);
     expect(response.status).toBe(200);
     const run = (await response.json()) as RunStatus;
+    lastRun = run;
     if (run.status === 'failed' || run.status === 'succeeded' || run.status === 'canceled') {
       return run;
     }
     await delay(100);
   }
-  throw new Error(`run ${runId} did not finish`);
+  throw new Error(`run ${runId} did not finish: ${JSON.stringify(lastRun)}`);
 }
 
 // Chat-turn `run` invocations for this conversation, in call order. OpenCode is
@@ -409,6 +523,25 @@ async function readChatTurnRuns(
         typeof rec.cwd === 'string' &&
         rec.cwd.includes(projectId),
     );
+}
+
+async function readConversationRuns(
+  logPath: string,
+  encoded: string,
+): Promise<RunInvocation[]> {
+  const projectId = encoded.split('::')[0] ?? encoded;
+  let raw = '';
+  try {
+    raw = await readFile(logPath, 'utf8');
+  } catch {
+    return [];
+  }
+  return raw
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as RunInvocation)
+    .filter((rec) => typeof rec.cwd === 'string' && rec.cwd.includes(projectId));
 }
 
 async function readRunEvents(eventsLogPath: string): Promise<RunEvent[]> {
