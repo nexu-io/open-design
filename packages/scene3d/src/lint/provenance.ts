@@ -62,6 +62,14 @@ export const IMPORTED_RELAXATIONS: ReadonlyArray<{
   { code: ISSUE_CODES.NAME_DEFAULT, block: "naming", why: "the asset's author chose these names" },
   { code: ISSUE_CODES.NAME_DEFAULT_WARN, block: "naming", why: "the asset's author chose these names" },
   { code: ISSUE_CODES.NAME_PATTERN, block: "naming", why: "the asset's author chose these names" },
+  {
+    code: ISSUE_CODES.DEPTH_LIMIT,
+    block: "hierarchy",
+    // A downloaded creature kit's tail is ten bones deep because its rigger
+    // built it that way. Restructuring it means editing somebody else's asset,
+    // which is exactly the demand this posture exists to stop making.
+    why: "the rig's depth is the asset author's structure, not this project's",
+  },
   { code: ISSUE_CODES.METALLIC_VALUE, block: "pbr", why: "real kits ship fractional metallic" },
 ];
 

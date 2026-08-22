@@ -165,6 +165,44 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(imported.some((i) => i.severity === "error" && i.code === ISSUE_CODES.NON_MANIFOLD)).toBe(false);
   });
 
+  it("relaxes hierarchy depth for a wholly-imported asset", () => {
+    // A downloaded creature kit's tail is ten bones deep because its rigger
+    // built it that way; restructuring it means editing somebody else's file.
+    // Found on a real kit, where three E-306s failed the compile of an asset
+    // the project had only dropped in.
+    const chain = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+    const objects = chain.map((name, i) => ({
+      name,
+      type: "MESH",
+      parent: i === 0 ? null : chain[i - 1]!,
+      location: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      dimensions: [1, 1, 1],
+      visible: true,
+      hasMeshData: true,
+    }));
+    const args = { contract: contract(), census: census({ objects: objects as never }) };
+
+    // Authored: still a hard error, unchanged.
+    const authored = runLint(args);
+    expect(authored.filter((i) => i.code === ISSUE_CODES.DEPTH_LIMIT).every((i) => i.severity === "error")).toBe(true);
+    expect(authored.some((i) => i.code === ISSUE_CODES.DEPTH_LIMIT)).toBe(true);
+
+    // The same objects, when the whole source IS the imported asset.
+    const imported = runLint({ ...args, allImported: true });
+    const depth = imported.filter((i) => i.code === ISSUE_CODES.DEPTH_LIMIT);
+    expect(depth.length).toBeGreaterThan(0);
+    for (const issue of depth) {
+      expect(issue.severity).toBe("info");
+      expect(issue.detail?.provenance).toBe("imported");
+    }
+
+    // ...unless the project stated an opinion about hierarchy.
+    const strict = runLint({ ...args, allImported: true, authoredBlocks: new Set(["hierarchy"]) });
+    expect(strict.filter((i) => i.code === ISSUE_CODES.DEPTH_LIMIT).every((i) => i.severity === "error")).toBe(true);
+  });
+
   it("lets an explicit convention block cancel the relaxation it governs", () => {
     const meshRow = {
       object: "prp_helm",
