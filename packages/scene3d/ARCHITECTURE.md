@@ -426,6 +426,40 @@ Two supporting invariants land alongside:
   resolved rather than hashing the whole folder, which would trade a
   correctness bug for a precision bug.
 
+## Three strata: measure, judge, emit
+
+The compiler has exactly three kinds of conditional, and confusing them is how
+modes grow:
+
+1. **Measurement is unconditional.** If a fact is intrinsic to a shape, it is
+   measured for every mesh in every scene — `symmetry_facts`, and the oriented
+   box (`isBox`, `axisAligned`, `rotationAxis/Deg`, `center`, `localSize`). The
+   one exception is COST, and the gate is then on a value proving somebody will
+   read the result: `dfm_facts` runs its thickness ray-cast only when
+   `minThicknessMm` exists, and `gridDeviation` is measured only when a grid was
+   declared. Never on a mode. "Is this mesh a box" was gated on
+   `target: "minecraft"` for a while, which put the doctrine exactly backwards —
+   a project had to declare itself blocky before the compiler would say what
+   shape its meshes were, and no other consumer could ask at all. That is the
+   flag equivalent of setting TypeScript to "web mode" to use it outside a
+   browser. Ungating it cost nothing measurable: the box scan stops at the
+   ninth distinct vertex position, because a cuboid has eight.
+2. **Judgement is keyed on presence of policy.** `contract.voxel.enabled` and
+   `contract.minecraft.enabled` are not switches an author sets — they are not
+   in the contract schema at all. They are the cached answer to "did anyone
+   declare this policy" (`target === "minecraft" || conventions.minecraft !==
+   undefined`). A rule with no bound is silent; that is the judge's whole
+   design, and it means a new rule never needs a mode either.
+3. **Emission is keyed on a requested deliverable.** `minecraft.dialect`,
+   `export.formats`, `proof.turntable` — build targets in the Makefile sense,
+   not capability gates, and legitimate.
+
+A fact measured only in one mode is a fact no other consumer can use, and an
+enum whose content is "which arm of a `??` fired" (`texelDiscipline` was
+literally that) is precedence wearing a mode's name. When a flag appears, place
+it in one of the three strata; if it fits none, it is probably duplicating a
+value that already exists.
+
 ## Diagnostics philosophy
 
 The reader is an agent with no viewport. Every issue carries: the stable

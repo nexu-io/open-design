@@ -253,6 +253,16 @@ it again; read this, then act.
   changes nothing on screen — Blender's own factory cylinder ships one.
   Rasterise UV occupancy per FACE, never per fan triangle (the quad
   diagonal runs through cell centres and reports self-overlap).
+- **Measure unconditionally; gate judgement on policy, emission on a requested
+  deliverable.** An intrinsic fact (the oriented box, symmetry) is measured for
+  every mesh in every scene — gating a MEASUREMENT on a target means no other
+  consumer can use it, and it inverts "measure in Blender, judge in the
+  contract". The only legitimate measurement gate is cost, keyed on a VALUE
+  that proves a reader exists (`minThicknessMm` for the thickness ray-cast, a
+  declared grid for `gridDeviation`), never on a mode. `voxel.enabled` /
+  `minecraft.enabled` are not author-settable and are not modes: they are the
+  cached "did anyone declare this policy". Before adding a flag, place it in
+  one of the three strata; if it fits none, it duplicates a value.
 - **A check never exits without a verdict, and a relaxation is never a
   suppression.** Every bounded search reports what it skipped (the caller owns
   the cap, so there is somebody to tell); every sidecar that fails to load
