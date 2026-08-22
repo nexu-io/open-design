@@ -99,6 +99,7 @@ export function latestTodoWriteInputFromMessages(
 
 export function latestTodoWriteInputForPinnedCard<
   T extends {
+    role?: 'user' | 'assistant' | undefined;
     events?: AgentEvent[] | undefined;
     runStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | undefined;
     endedAt?: number | undefined;
@@ -109,6 +110,7 @@ export function latestTodoWriteInputForPinnedCard<
   if (!messages || messages.length === 0) return null;
   for (let mi = messages.length - 1; mi >= 0; mi -= 1) {
     const message = messages[mi];
+    if (message?.role === 'user') return null;
     const events = message?.events;
     if (!events || events.length === 0) continue;
     for (let ei = events.length - 1; ei >= 0; ei -= 1) {

@@ -121,6 +121,36 @@ describe('todo event helpers', () => {
     ]);
   });
 
+  it('does not reuse the previous task todo while a newer task is starting', () => {
+    const input = latestTodoWriteInputForPinnedCard([
+      {
+        role: 'assistant',
+        runStatus: 'succeeded',
+        endedAt: 2_000,
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-previous',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Finish previous design', status: 'completed' },
+              ],
+            },
+          },
+        ],
+      },
+      { role: 'user' },
+      {
+        role: 'assistant',
+        runStatus: 'running',
+        events: [{ kind: 'text', text: 'Starting the new task...' }],
+      },
+    ]);
+
+    expect(input).toBeNull();
+  });
+
   it('accepts native task item text aliases used by different agents', () => {
     expect(parseTodoWriteInput({
       todos: [

@@ -268,7 +268,7 @@ function longConversationWithEarlyTodo(): ChatMessage[] {
   for (let i = 0; i < 90; i += 1) {
     messages.push({
       id: `tail-${i}`,
-      role: i % 2 === 0 ? 'user' : 'assistant',
+      role: 'assistant',
       content: `tail message ${i}`,
       createdAt: Date.now() + i + 1,
     });
@@ -313,6 +313,18 @@ describe('composer-pinned Todo snapshot', () => {
     expect(document.querySelectorAll('.chat-pinned-todo .op-card.op-todo')).toHaveLength(1);
     expect(document.querySelector('.chat-log .op-card.op-todo')).toBeNull();
     expect(screen.queryAllByText('Task 2 updated').length).toBeGreaterThan(0);
+  });
+
+  it('hides the previous task todo when a new user task starts', async () => {
+    render(chatPaneEl([
+      ...messagesWithTodo(1),
+      { id: 'u2', role: 'user', content: 'start a different task', createdAt: Date.now() + 1 },
+      { id: 'a2', role: 'assistant', content: 'starting', createdAt: Date.now() + 2 },
+    ]));
+    await flushFrames();
+
+    expect(document.querySelector('.chat-pinned-todo .op-card.op-todo')).toBeNull();
+    expect(screen.queryByText('Task 1')).toBeNull();
   });
 
   it('collapses a completed snapshot to one summary row and remains expandable', async () => {
