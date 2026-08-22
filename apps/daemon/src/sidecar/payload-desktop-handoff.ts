@@ -502,32 +502,34 @@ export async function executeLegacyPayloadDesktopHandoff(
     ...buildLauncherHandoffResumeArgs({ handoffId: prepared.descriptor.handoffId }),
     ...createProcessStampArgs(desktopStamp, OPEN_DESIGN_SIDECAR_CONTRACT),
   ];
-  let child: ReturnType<typeof spawn>;
-  try {
-    child = (options.spawn ?? spawn)(prepared.descriptor.payloadExecutablePath, args, {
-      cwd: dirname(prepared.descriptor.payloadExecutablePath),
-      detached: true,
-      env: desktopProcessEnv(options.env ?? process.env, prepared.runtimeRoot),
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    await new Promise<void>((resolveSpawn, rejectSpawn) => {
-      child.once("spawn", () => resolveSpawn());
-      child.once("error", rejectSpawn);
-    });
-    child.unref();
-  } catch {
-    return { kind: "aborted", reason: "spawn-failed" };
-  }
-
   // Packaged daemons now monitor OD_TOOLS_DEV_PARENT_PID and exit when the
-  // outer Electron dies. Desktop SHUTDOWN acks before asynchronously exiting,
-  // then beforeShutdown -> sidecars.close() sends daemon SHUTDOWN. Hold both
-  // the parent-death timer and that explicit exit from shutdown acceptance
-  // through the three commits so the replacement payload can still resume.
+  // outer Electron dies. Hold before spawn: a crash after the child emits
+  // `spawn` but before the hold would let the parent monitor stop the daemon
+  // while the journal is still `prepared`, and the detached replacement then
+  // rejects resume. Desktop SHUTDOWN also acks before asynchronously exiting,
+  // then beforeShutdown -> sidecars.close() sends daemon SHUTDOWN. Keep the
+  // hold through the three commits so the replacement can still resume.
   const persist = options.writeJsonFile ?? writeJsonFile;
   const releaseParentMonitor = holdParentMonitorExit();
   try {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = (options.spawn ?? spawn)(prepared.descriptor.payloadExecutablePath, args, {
+        cwd: dirname(prepared.descriptor.payloadExecutablePath),
+        detached: true,
+        env: desktopProcessEnv(options.env ?? process.env, prepared.runtimeRoot),
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      await new Promise<void>((resolveSpawn, rejectSpawn) => {
+        child.once("spawn", () => resolveSpawn());
+        child.once("error", rejectSpawn);
+      });
+      child.unref();
+    } catch {
+      return { kind: "aborted", reason: "spawn-failed" };
+    }
+
     try {
       await requestDesktop("shutdown");
     } catch {
