@@ -2,7 +2,7 @@ import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import type { ClaimsSpec } from "../solve/types.js";
 import { isExempt } from "./exempt.js";
-import { groundVerdict, restsOnSomething } from "../solve/contact.js";
+import { groundVerdict } from "../solve/contact.js";
 
 /**
  * Adjudicate a spec's `claims` block against the measured census.
@@ -39,14 +39,6 @@ export function lintClaims(
      * part. Matched with the shared segment-boundary predicate.
      */
     groundExempt?: readonly string[];
-    /**
-     * Parts the SPEC declares as hanging over something (an `above` relation)
-     * rather than resting on it. A levitating lamp is not a part left in
-     * mid-air by accident, and the difference is stated in the language — so
-     * the claim reads that intent instead of inferring it from coordinates,
-     * which cannot tell the two apart.
-     */
-    suspended?: readonly string[];
   } = {},
 ): void {
   const fail = (claim: string, message: string, detail: Record<string, unknown>): void => {
@@ -118,29 +110,25 @@ export function lintClaims(
         unchecked("grounded", `'${mesh.object}' has no spatial measurements`);
         continue;
       }
-      // Resting is a RELATION, not a coordinate. A stacked roof rests on its
-      // columns without touching the floor; a box hovering in mid-air rests on
-      // nothing, whatever its height. Checking only the sink direction let a
-      // part floating metres up PASS this claim while lintWorld warned about
-      // the very same part — two authorities using the word "grounded" for
-      // different predicates, and the compile awarding its "claims declared,
-      // none failed" badge to a floating asset.
+      // One direction only: nothing may sink THROUGH the floor.
+      //
+      // Floating is not a defect. A lantern hangs, an orb hovers, a bird flies,
+      // a cliff overhangs — these are compositions, and a compiler has no
+      // standing to call them wrong. This claim was briefly made two-sided, on
+      // the reasoning that a claim named "grounded" should not pass for a
+      // scene where things hover; that reasoning mistook a vocabulary
+      // collision for a missing check, and it failed this repo's own showcase
+      // on its deliberately levitating orb the first time it ran. What the
+      // author asserts here is what the field has always documented: nothing
+      // has fallen through the ground plane.
+      //
+      // A project that DOES want floating reported opts into
+      // `conventions.grounding`, where S3D-W-325 names the nearest support
+      // below. That is the project's policy, chosen — not the compiler's
+      // opinion, imposed.
       const gap = mesh.spatial.groundGap;
-      const verdict = groundVerdict(gap, TOLERANCE);
-      if (verdict === "sunk") {
+      if (groundVerdict(gap, TOLERANCE) === "sunk") {
         fail("grounded", `'${mesh.object}' sinks ${(-gap).toFixed(4)}m below the ground plane`, {
-          target: mesh.object,
-          groundGap: gap,
-        });
-      } else if (verdict === "floating" && census.contacts === undefined) {
-        // No contact scan, so "is anything under it?" is unanswerable.
-        unchecked("grounded", `'${mesh.object}' floats ${gap.toFixed(4)}m up and the census carries no contacts to say what holds it`);
-      } else if (
-        verdict === "floating" &&
-        !(options.suspended ?? []).includes(mesh.object) &&
-        restsOnSomething(census, mesh.object, gap, TOLERANCE) === false
-      ) {
-        fail("grounded", `'${mesh.object}' floats ${gap.toFixed(4)}m above the ground plane with nothing beneath it`, {
           target: mesh.object,
           groundGap: gap,
         });

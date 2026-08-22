@@ -84,24 +84,3 @@ function overlapsInPlan(
   }
   return true;
 }
-
-/**
- * Does this part rest on something — the ground, or another part?
- *
- * `null` when the census cannot say (no spatial measurement), so the caller
- * can report "unchecked" rather than inventing a pass.
- */
-export function restsOnSomething(
-  census: Census,
-  name: string,
-  groundGap: number | undefined,
-  tolerance: number,
-): boolean | null {
-  if (groundGap === undefined || !Number.isFinite(groundGap)) return null;
-  if (groundVerdict(groundGap, tolerance) !== "floating") return true;
-  const support = nearestSupportBelow(census, name);
-  // Resting means TOUCHING it. A support measured 3cm below is what the part
-  // should have been placed on, which is worth naming in a warning, but it is
-  // not something the part is resting on.
-  return support !== null && support.gap <= tolerance;
-}

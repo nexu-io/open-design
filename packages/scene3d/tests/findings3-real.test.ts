@@ -383,58 +383,51 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     expect(notGrounded!.message).toContain("rests on 'prp_base'");
   });
 
-  it("fails a grounded claim for a part resting on nothing", async () => {
-    // claims.grounded checked only the SINK direction, so a part hovering
-    // metres in the air passed it while the world linter warned about the same
-    // part — and the compile awarded its "claims declared, none failed" badge
-    // to a floating asset.
+  it("lets a scene float: grounded claims what it says, not what it implies", async () => {
+    // Floating is a composition, not a defect — a lantern hangs, an orb
+    // hovers, a cliff overhangs — and the compiler has no standing to call
+    // those wrong. This claim was briefly made two-sided, on the reasoning
+    // that a claim named "grounded" should not pass for a hovering scene;
+    // that mistook a vocabulary collision for a missing check, and it failed
+    // this repo's own showcase on its deliberately levitating orb the first
+    // time it ran. The field documents one direction, and one direction is
+    // what it adjudicates.
     const dir = mkProject({
       "scene.json": JSON.stringify({
         schemaVersion: 1,
         name: "float",
         parts: [
           { id: "prp_base", size: [1, 1, 0.2] },
-          { id: "prp_float", size: [0.4, 0.4, 0.4] },
+          { id: "prp_orb", size: [0.4, 0.4, 0.4], shape: "sphere" },
         ],
         relations: [
           { type: "at", part: "prp_base", center: [0, 0, 0.1] },
-          { type: "at", part: "prp_float", center: [0, 0, 5] },
-        ],
-        claims: { grounded: true },
-      }),
-    });
-    const r = await run(dir);
-    const failed = r.issues.filter((i) => i.code === "S3D-E-701");
-    expect(failed).toHaveLength(1);
-    expect(failed[0]!.target).toBe("prp_float");
-    expect(failed[0]!.message).toMatch(/nothing beneath it/);
-    expect(r.ok).toBe(false);
-  });
-
-  it("passes a grounded claim for a part the spec declares as hanging", async () => {
-    // The counterweight to the case above, and the one the atelier capstone
-    // caught: `above ... clearance` is the author saying, in the language,
-    // "this hangs over that". A levitating lamp is not a part left in mid-air
-    // by accident, and coordinates alone cannot tell the two apart — so the
-    // claim reads the intent the solver recorded rather than re-deriving it.
-    const dir = mkProject({
-      "scene.json": JSON.stringify({
-        schemaVersion: 1,
-        name: "hang",
-        parts: [
-          { id: "prp_base", size: [1, 1, 0.2] },
-          { id: "prp_orb", size: [0.3, 0.3, 0.3], shape: "sphere" },
-        ],
-        relations: [
-          { type: "at", part: "prp_base", center: [0, 0, 0.1] },
-          { type: "above", part: "prp_orb", over: "prp_base", clearance: 0.5 },
-          { type: "align", part: "prp_orb", to: "prp_base", axes: ["x", "y"] },
+          { type: "at", part: "prp_orb", center: [0, 0, 5] },
         ],
         claims: { grounded: true },
       }),
     });
     const r = await run(dir);
     expect(r.issues.filter((i) => i.code === "S3D-E-701")).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("still fails a grounded claim for a part sunk through the floor", async () => {
+    // The direction that IS a defect: geometry below the ground plane is
+    // through the floor in every engine that will load it.
+    const dir = mkProject({
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "sunk",
+        parts: [{ id: "prp_box", size: [1, 1, 1] }],
+        relations: [{ type: "at", part: "prp_box", center: [0, 0, 0.2] }],
+        claims: { grounded: true },
+      }),
+    });
+    const r = await run(dir);
+    const failed = r.issues.filter((i) => i.code === "S3D-E-701");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.message).toMatch(/sinks/);
   });
 
   it("passes a grounded claim for a part resting on another part", async () => {

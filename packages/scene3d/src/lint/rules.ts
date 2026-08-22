@@ -75,7 +75,6 @@ export function runLint(input: LintInput): Issue[] {
     lintClaims(input.claims, input.census, issues, {
       groundTolerance: input.contract.grounding.tolerance,
       groundExempt: input.contract.grounding.exempt,
-      suspended: (input.solved?.parts ?? []).filter((p) => p.suspended).map((p) => p.id),
     });
   }
   lintProof(input.proofFrames, issues, input.contract.proofThresholds);

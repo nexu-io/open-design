@@ -399,12 +399,25 @@ epsilon: hand-authored blocky assets overlap junctions by a whole pixel, and
 an embed window sized to the solver's own 1mm called every such joint
 unsupported.
 
-Making the claim two-sided immediately failed the atelier capstone on its
-levitating lava orb, which is the useful half of the lesson: a part suspended
-by an `above` relation is DECLARED to hang, and coordinates alone cannot tell
-that from a part left in mid-air by accident. The solver records the intent
-where it is expressed (`SolvedPart.suspended`) and the claim reads it, rather
-than the adjudicator inferring intent back out of geometry it cannot read.
+Making the claim two-sided was a mistake, and it is worth recording as one.
+It failed the atelier capstone on its deliberately levitating lava orb; the
+first repair taught the solver to record "declared suspension" from `above`
+relations so the claim could tell a hovering lamp from an accident. That was
+clever and still wrong — it rescued only parts placed one particular way, so a
+part positioned with `at` was still told it was broken.
+
+**Floating is a composition, not a defect.** A lantern hangs, an orb hovers, a
+cliff overhangs, a bird flies. The field has always documented one direction —
+"rests on OR ABOVE the ground plane" — and this repo's own showcase asserts
+`grounded: true` over a floating orb, which is the clearest statement of what
+its author meant by the word. What went wrong upstream of the code: an audit
+observed that a claim named `grounded` passes for a scene where things hover,
+and that was read as a missing check. It was a VOCABULARY collision — two
+things both called grounded — and the fix for a vocabulary collision is never
+to make one of them stricter. `claims.grounded` means nothing sinks through
+the floor. A project that wants floating reported opts into
+`conventions.grounding`, where W-325 names the nearest support below: their
+policy, chosen, rather than the compiler's opinion, imposed.
 
 **The oriented box is the voxel authority** (see the voxel section). The
 census recovered it and one consumer read it; grid deviation, element extent,

@@ -54,11 +54,6 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
     size.set(part.id, [...part.size] as Vec3);
   }
 
-  // Parts the SPEC declares as hanging over something rather than resting on
-  // it. Intent recorded where it is expressed, so the claims adjudicator does
-  // not have to infer it back out of coordinates.
-  const suspended = new Set<string>();
-
   const unknown = (id: string, relation: string): void => {
     diagnostics.push({
       code: "SOLVE-UNKNOWN-PART",
@@ -140,12 +135,6 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
         const gap = contact(relation.clearance, relation.part, "clearance");
         const half = size.get(relation.part)![2] / 2;
         setAxis(relation.part, "z", under.max + gap + half, "above");
-        // `above` is a DECLARATION that this part hangs over another with a
-        // gap — the author saying "it does not rest on anything" in the
-        // language itself. Recorded so the grounded claim can tell a levitating
-        // lamp from a part left in mid-air by accident, instead of re-deriving
-        // intent from coordinates it cannot read.
-        suspended.add(relation.part);
         return true;
       }
 
@@ -400,10 +389,6 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
   // order — the property the stage cache and the compile diff both rely on.
   solved.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   reportGeneratedIntersections(solved, diagnostics);
-  for (const part of solved) {
-    // Clones inherit their base part's declared intent.
-    if (suspended.has(part.from ?? part.id)) part.suspended = true;
-  }
   return { parts: solved, diagnostics };
 }
 

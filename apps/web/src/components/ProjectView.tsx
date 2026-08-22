@@ -3772,6 +3772,25 @@ export function ProjectView({
     refreshFilesAndDesignMd,
     { wait: 80, maxWait: 250 },
   );
+  /* Evicting the keep-alive pool is the EXPENSIVE half of a file-change: it
+     tears down the live iframe, taking camera, selection and undo history with
+     it. One scene3d compile writes ~15 files spread across its run (the build,
+     eight proof frames, four export containers, the manifest, two sidecars),
+     and every one evicted — so the viewport a user was working in reloaded a
+     dozen times per compile, and reloaded MID-WRITE, where a half-written GLB
+     is what it would have loaded.
+     A much longer quiet window than the file rail's: the rail wants to feel
+     instant and re-reading a directory is cheap, while this wants to happen
+     ONCE, after the writing stops. maxWait only bounds a pathological
+     never-quiet storm; it is not the normal path. */
+  const evictIframesNow = useCallback(
+    () => iframeKeepAlivePool.evictProject(project.id),
+    [project.id],
+  );
+  const coalescedIframeEvict = useCoalescedCallback(evictIframesNow, {
+    wait: 1500,
+    maxWait: 12000,
+  });
   // Collab realtime hop-2: poll-as-floor for the comment poll below. True while
   // the project events SSE (which now also carries `comment-changed`) is live;
   // the comment poll slows to a safety-net cadence while true and runs at full
@@ -3791,7 +3810,7 @@ export function ProjectView({
          user pressed Save. The file rail still refreshes; only the
          iframe teardown is skipped. */
       if (!isEditorStateSidecarPath(evt.path)) {
-        iframeKeepAlivePool.evictProject(project.id);
+        coalescedIframeEvict();
       }
       /* Snapshot invalidation stays UNCONDITIONAL: it only forces the next
          mount to refetch, which is cheap and always correct — the thing a
@@ -3929,6 +3948,7 @@ export function ProjectView({
   }, [
     authoritativeProjectName,
     coalescedFileChangedRefresh,
+    coalescedIframeEvict,
     collabCheckStatusNow,
     collabRefreshPresence,
     iframeKeepAlivePool,
