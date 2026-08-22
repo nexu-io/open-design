@@ -32,6 +32,7 @@ import {
   setDesktopAuthSecret,
   signDesktopImportToken,
 } from "../desktop-auth.js";
+import { attachParentMonitor } from "./parent-monitor-gate.js";
 
 /**
  * PR #974 round 6 (mrcfps): pure wrapper that overlays the live
@@ -48,7 +49,6 @@ export function withCurrentDesktopAuthGate(snapshot: DaemonStatusSnapshot): Daem
 
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
-const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 
 export type DaemonSidecarHandle = {
@@ -69,27 +69,6 @@ function parsePort(value: string | undefined): number {
 function parseOptionalTrustedWebPort(value: string | undefined): number | null {
   const port = parsePort(value);
   return port > 0 ? port : null;
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function attachParentMonitor(stop: () => Promise<void>): void {
-  const parentPid = Number(process.env[TOOLS_DEV_PARENT_PID_ENV]);
-  if (!Number.isInteger(parentPid) || parentPid <= 0) return;
-
-  const timer = setInterval(() => {
-    if (isProcessAlive(parentPid)) return;
-    clearInterval(timer);
-    void stop().finally(() => process.exit(0));
-  }, 1000);
-  timer.unref();
 }
 
 export function mintImportTokenForCli(baseDir: string): MintImportTokenResult {
