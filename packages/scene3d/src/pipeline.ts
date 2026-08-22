@@ -1601,6 +1601,16 @@ function emitMasterParity(lowering: LoweringRecord | null | undefined, issues: I
         file: lowering.master ?? "scene.usda",
       });
     }
+    const shift = boundsShift(lowering.buildFingerprint, lowering.masterFingerprint);
+    if (shift) {
+      issues.push({
+        code: ISSUE_CODES.MASTER_ORDER_DRIFT,
+        severity: "warning",
+        message: `the scene's world extents changed through lowering, ${shift.from} -> ${shift.to} — ${shift.permuted ? "the axes were permuted, so the asset arrives rotated" : "the asset arrives at a different size"}; every mesh, bone and clip survived, which is why nothing else reports it`,
+        file: lowering.master ?? "scene.usda",
+        detail: { from: shift.from, to: shift.to, permuted: shift.permuted },
+      });
+    }
     for (const drift of orderDrifts(lowering.buildFingerprint, lowering.masterFingerprint)) {
       issues.push({
         code: ISSUE_CODES.MASTER_ORDER_DRIFT,
@@ -1613,6 +1623,38 @@ function emitMasterParity(lowering: LoweringRecord | null | undefined, issues: I
   }
 }
 
+
+/**
+ * Whether the scene's world extents survived lowering.
+ *
+ * The parity check counts content; this asks WHERE it is. A round trip that
+ * rotated or rescaled the whole asset keeps every mesh, material, bone and
+ * clip, so nothing else in the compiler would notice. `permuted` separates the
+ * two failures worth telling apart: the same three extents in a different
+ * order is a rotation, anything else is a resize.
+ *
+ * Tolerance is relative, because a 3.7km Sponza and a 2cm Avocado cannot share
+ * an absolute epsilon; 1% is far under a wrong axis and far over float drift
+ * through a text stage.
+ */
+export function boundsShift(
+  build: Fingerprint,
+  master: Fingerprint,
+): { from: string; to: string; permuted: boolean } | null {
+  const a = build.bounds;
+  const b = master.bounds;
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== 3 || b.length !== 3) return null;
+  // A scene with no renderable geometry has no extents to compare.
+  if (a.every((v) => v === 0) && b.every((v) => v === 0)) return null;
+  const close = (x: number, y: number) => Math.abs(x - y) <= Math.max(1e-3, Math.abs(x) * 0.01);
+  if (a.every((v, i) => close(v, b[i]!))) return null;
+  const sortedA = [...a].sort((x, y) => x - y);
+  const sortedB = [...b].sort((x, y) => x - y);
+  const permuted = sortedA.every((v, i) => close(v, sortedB[i]!));
+  const fmt = (v: number[]) => `[${v.map((n) => n.toFixed(3)).join(", ")}]`;
+  return { from: fmt(a), to: fmt(b), permuted };
+}
+
 /** What the runner's scene fingerprints carry for the parity check. */
 interface Fingerprint {
   meshes?: Record<string, number>;
@@ -1623,6 +1665,10 @@ interface Fingerprint {
   boneOrder?: Record<string, string[]>;
   /** Ordered morph-target (shape key) names per mesh, Basis excluded. */
   morphs?: Record<string, string[]>;
+  /** World-space extents of all renderable geometry (metres, mm-rounded).
+   *  Counts cannot see a scene that arrived ROTATED or RESCALED — every mesh,
+   *  bone and clip is present when an asset comes back on its side. */
+  bounds?: number[] | null;
 }
 
 /**

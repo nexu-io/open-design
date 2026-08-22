@@ -2919,9 +2919,16 @@ def usd_orientation_kwargs(job):
 
 def scene_fingerprint():
     """A compact identity of what the current scene CONTAINS — the facts
-    the master-parity check compares. Names and counts, not geometry: the
-    question is "did everything reach the stage", not "is it identical to
-    the float"."""
+    the master-parity check compares.
+
+    Mostly names and counts: the question is "did everything reach the stage",
+    not "is it identical to the float". But counts alone cannot see the scene
+    arriving ROTATED or RESCALED — every mesh, material, bone and clip is
+    present, so a round trip that turned the asset on its side passes. So the
+    world-space bounds travel too, rounded coarsely enough that float drift
+    through a text stage is not a finding while a 90 degree turn or a unit slip
+    is. Calibration against the Khronos corpus found the current round trip
+    sound on all 23 assets; this is what keeps it that way."""
     import bpy
     meshes = {}
     for o in bpy.context.scene.objects:
@@ -2940,8 +2947,28 @@ def scene_fingerprint():
             names = [k.name for k in o.data.shape_keys.key_blocks[1:]]
             if names:
                 morphs[o.name] = names
+    # World-space bounds of all renderable geometry, face-connected like every
+    # other bound this compiler reports. R3 (millimetre at metre scale) is well
+    # under anything an author can see and well over the drift of writing a
+    # float to text and reading it back.
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    for o in bpy.context.scene.objects:
+        if o.type != "MESH":
+            continue
+        for p in face_connected_world_points(o):
+            for i in range(3):
+                if p[i] < lo[i]:
+                    lo[i] = p[i]
+                if p[i] > hi[i]:
+                    hi[i] = p[i]
+    bounds = None
+    if lo[0] != float("inf"):
+        bounds = [round(hi[i] - lo[i], 3) for i in range(3)]
+
     return {
         "meshes": meshes,
+        "bounds": bounds,
         "materials": sorted(m.name for m in bpy.data.materials if m.users > 0),
         "armatures": {o.name: len(o.data.bones)
                       for o in bpy.context.scene.objects if o.type == "ARMATURE"},

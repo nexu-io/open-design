@@ -486,6 +486,53 @@ unchecked is never passed. The digest orders issues first, then allocation
 statistics (tri-density spread, worst bilateral asymmetry) that no render
 can show.
 
+## Calibration against assets the industry agrees on
+
+Generated fixtures test what the author imagined. A corpus of well-understood
+assets tests what is TRUE. The method, run against 23 Khronos glTF sample
+models compiled with **no contract written at all** — the drop-it-in path:
+
+> Nobody is going to "fix" Sponza. So every ERROR is a false positive by
+> definition, and every warning has to earn itself.
+
+That single falsifiable premise found four defects in one afternoon, and each
+was the SAME defect wearing different clothes — **a verdict computed from facts
+too coarse to see the thing being judged**:
+
+| symptom | root |
+|---|---|
+| `E-341` failed OrientationTest, a correctness reference | the imported-provenance posture indexed OBJECT names; metallic names a MATERIAL |
+| `E-324` failed TransmissionTest | the posture indexed single names; a z-fight names a PAIR (`"A <-> B"`) |
+| `W-348` told AlphaBlendModeTest to merge its five deliberately-different materials | the census measured no alpha mode and no cutoff |
+| `W-903` (new) — glass, iridescence, sheen, IOR and volume destroyed end to end | master parity COUNTS materials, so a material surviving as a shell passes |
+
+The third is the instructive one. Adding `blendMethod` fixed one asset; adding
+`alphaCutoff` fixed a second; iridescence would have been a third. **Enumerating
+properties loses that race by construction** — a Blender material is an
+arbitrary node graph and every glTF extension adds a distinction the list does
+not carry — so the fingerprint hashes the GRAPH instead and subsumes all of
+them. The asymmetry that justifies it: a false negative costs a missed draw
+call, a false positive costs an author merging two materials that looked
+identical only to us.
+
+Two habits the corpus enforces that a fixture suite cannot:
+
+- **Separate instrument error from findings.** The first ground-truth run
+  reported eight "metallic declared=1 measured=null" disagreements. All eight
+  were the PROBE being wrong: those materials drive metallic from a texture, so
+  the Principled input is linked and has no scalar, and glTF's `metallicFactor`
+  is a multiplier there rather than a value. Fix the instrument before
+  believing it.
+- **Report clean results as loudly as failures.** Texture colour space was
+  audited across 19 assets and 129 images (69 of them Sponza's) against the
+  role each source binds — baseColor/emissive sRGB, normal/occlusion/
+  metallicRoughness linear data — with zero disagreements. Knowing a thing is
+  RIGHT is worth as much as finding it wrong, and only a real corpus can say so.
+
+Corpus assets are downloaded, never vendored: `tests/fixtures/real/` holds the
+four pinned ones (with LICENSES.md), and the calibration set is fetched on
+demand because 100 MB of reference art does not belong in the repository.
+
 ## Test corpus
 
 - Generated calibration controls (must stay zero-issue): `spec_pavilion`

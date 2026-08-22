@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderDrifts, fingerprintLosses, isCompilerProofFrame } from "../src/pipeline.js";
+import { orderDrifts, fingerprintLosses, isCompilerProofFrame, boundsShift } from "../src/pipeline.js";
 
 /**
  * W-902 (MASTER_ORDER_DRIFT): the set of joints/morphs survives lowering but
@@ -93,5 +93,43 @@ describe("isCompilerProofFrame", () => {
     expect(isCompilerProofFrame("proof-deadbeef-999.png")).toBe(false); // 8 hex, not 24
     expect(isCompilerProofFrame("my-render-001.png")).toBe(false);
     expect(isCompilerProofFrame("proof-0123456789abcdef01234567.png")).toBe(false); // no frame
+  });
+});
+
+describe("boundsShift — parity asks WHERE the geometry is", () => {
+  // The rest of the fingerprint counts content, so an asset that comes back
+  // rotated or resized keeps every mesh, material, bone and clip and nothing
+  // reports it. Calibration against 23 Khronos assets found the round trip
+  // currently sound; this is what keeps it that way.
+  const at = (bounds: number[] | null) => ({ bounds });
+
+  it("is silent when the extents survive", () => {
+    expect(boundsShift(at([1.5, 0.3, 2.2]), at([1.5, 0.3, 2.2]))).toBeNull();
+  });
+
+  it("forgives float drift through a text stage, proportionally", () => {
+    // A 3.7km Sponza and a 2cm Avocado cannot share an absolute epsilon.
+    expect(boundsShift(at([3720.854, 1555.876, 2288.233]), at([3720.9, 1555.87, 2288.24]))).toBeNull();
+    expect(boundsShift(at([0.0426, 0.0629, 0.0276]), at([0.0426, 0.0629, 0.0276]))).toBeNull();
+  });
+
+  it("calls a permuted set a rotation, by name", () => {
+    const shift = boundsShift(at([1.1789, 0.3259, 1.4499]), at([1.1789, 1.4499, 0.3259]))!;
+    expect(shift).not.toBeNull();
+    expect(shift.permuted).toBe(true);
+    expect(shift.from).toContain("1.179");
+  });
+
+  it("calls a changed size a resize, not a rotation", () => {
+    const shift = boundsShift(at([1, 1, 1]), at([100, 100, 100]))!;
+    expect(shift.permuted).toBe(false);
+  });
+
+  it("says nothing when there is nothing to compare", () => {
+    // Absent bounds (an older runner, or a scene with no renderable geometry)
+    // must read as "not measured", never as a loss.
+    expect(boundsShift(at(null), at([1, 1, 1]))).toBeNull();
+    expect(boundsShift({}, {})).toBeNull();
+    expect(boundsShift(at([0, 0, 0]), at([0, 0, 0]))).toBeNull();
   });
 });
