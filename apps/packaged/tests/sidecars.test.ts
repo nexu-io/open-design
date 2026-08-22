@@ -433,6 +433,62 @@ describe.runIf(process.platform !== 'win32')('packaged stale web endpoint recove
     }
   }, 10_000);
 
+  it('does not unlink when the stamped web owner survives stopProcesses', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-remaining-'));
+    const socketPath = join(root, 'web.sock');
+    const logPath = join(root, 'web.log');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { child, pid } = await spawnStampedHungWebOwner(socketPath);
+    const stopProcesses = vi.fn(async () => ({
+      alreadyStopped: false,
+      forcedPids: [],
+      matchedPids: [pid],
+      remainingPids: [pid],
+      stoppedPids: [],
+    }));
+
+    try {
+      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB, { stopProcesses });
+      expect(isProcessAlive(pid)).toBe(true);
+      expect(existsSync(socketPath)).toBe(true);
+      expect(readFileSync(logPath, 'utf8')).toContain(
+        'unresponsive stamped web sidecar still running after stop',
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      child.kill('SIGKILL');
+      await waitForProcessExit(pid, 1_000);
+      rmSync(root, { force: true, recursive: true });
+    }
+  }, 10_000);
+
+  it('does not unlink when stopping the stamped web owner throws', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-stop-throw-'));
+    const socketPath = join(root, 'web.sock');
+    const logPath = join(root, 'web.log');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { child, pid } = await spawnStampedHungWebOwner(socketPath);
+    const stopProcesses = vi.fn(async () => {
+      throw new Error('stop-failed');
+    });
+
+    try {
+      await retireExistingSidecarEndpoint(socketPath, logPath, APP_KEYS.WEB, { stopProcesses });
+      expect(isProcessAlive(pid)).toBe(true);
+      expect(existsSync(socketPath)).toBe(true);
+      expect(readFileSync(logPath, 'utf8')).toContain(
+        'failed to stop unresponsive stamped web sidecar',
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      child.kill('SIGKILL');
+      await waitForProcessExit(pid, 1_000);
+      rmSync(root, { force: true, recursive: true });
+    }
+  }, 10_000);
+
   it('does not stop a stamped web owner of a different ipc path', async () => {
     const root = mkdtempSync(join(tmpdir(), 'od-packaged-stale-web-other-'));
     const ownerSocketPath = join(root, 'owner.sock');

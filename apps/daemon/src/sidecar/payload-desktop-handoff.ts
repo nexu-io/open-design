@@ -31,6 +31,7 @@ import {
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_ENV,
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
@@ -49,6 +50,10 @@ const SIDECAR_ONLY_ENV_KEYS = [
   "OD_SIDECAR_IPC_PATH",
   "OD_SIDECAR_NAMESPACE",
   "OD_SIDECAR_SOURCE",
+  // Packaged daemon/web now inherit OD_TOOLS_DEV_PARENT_PID so they exit with
+  // the outer Electron. The replacement payload desktop waits for that same
+  // PID to die, then must not treat it as its own lifecycle owner.
+  SIDECAR_ENV.TOOLS_DEV_PARENT_PID,
 ] as const;
 
 type DesktopRootIdentity = {

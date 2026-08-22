@@ -13,6 +13,7 @@ import { readProcessStamp } from "@open-design/platform";
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_ENV,
   SIDECAR_SOURCES,
 } from "@open-design/sidecar-proto";
 import { describe, expect, it, vi } from "vitest";
@@ -149,6 +150,7 @@ describe("legacy payload desktop handoff", () => {
         env: {
           ELECTRON_RUN_AS_NODE: "1",
           OD_SIDECAR_BASE: runtimeRoot,
+          [SIDECAR_ENV.TOOLS_DEV_PARENT_PID]: "4321",
           PATH: "/usr/bin",
         },
         now: () => new Date("2026-07-15T02:00:00.000Z"),
@@ -176,6 +178,7 @@ describe("legacy payload desktop handoff", () => {
       expect(spawn).toHaveBeenCalledOnce();
       expect(launchedEnv).not.toHaveProperty("ELECTRON_RUN_AS_NODE");
       expect(launchedEnv).not.toHaveProperty("OD_SIDECAR_BASE");
+      expect(launchedEnv).not.toHaveProperty(SIDECAR_ENV.TOOLS_DEV_PARENT_PID);
       expect(launchedEnv).toMatchObject({
         OD_PACKAGED_NAMESPACE_BASE_ROOT: join(root, "namespaces"),
         PATH: "/usr/bin",

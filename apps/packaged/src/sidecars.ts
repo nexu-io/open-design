@@ -565,8 +565,21 @@ export async function waitForStatus<T>(
   }
 }
 
-async function stopStampedWebSidecarOwner(ipcPath: string, logPath: string): Promise<void> {
-  const processes = await listProcessSnapshots();
+type StopStampedWebSidecarOwnerDeps = {
+  listProcessSnapshots?: typeof listProcessSnapshots;
+  stopProcesses?: typeof stopProcesses;
+};
+
+type StampedWebSidecarRetirement = "absent" | "stopped" | "still-running";
+
+async function stopStampedWebSidecarOwner(
+  ipcPath: string,
+  logPath: string,
+  deps: StopStampedWebSidecarOwnerDeps = {},
+): Promise<StampedWebSidecarRetirement> {
+  const listSnapshots = deps.listProcessSnapshots ?? listProcessSnapshots;
+  const stop = deps.stopProcesses ?? stopProcesses;
+  const processes = await listSnapshots();
   const rootPids = processes
     .filter((processInfo) =>
       matchesStampedProcess(
@@ -576,7 +589,10 @@ async function stopStampedWebSidecarOwner(ipcPath: string, logPath: string): Pro
       ),
     )
     .map((processInfo) => processInfo.pid);
-  if (rootPids.length === 0) return;
+  // No stamped owner: leftover or unstamped hung socket. Unlink remains the
+  // original recovery. A live JsonIpcServer.close() race requires a stamped
+  // sidecar, which this helper would have found.
+  if (rootPids.length === 0) return "absent";
 
   // Stop the whole tree before unlinking. A later SIGTERM on the old owner
   // would run JsonIpcServer.close(), which unconditionally removes this
@@ -587,12 +603,21 @@ async function stopStampedWebSidecarOwner(ipcPath: string, logPath: string): Pro
     `[open-design packaged] stopping unresponsive stamped web sidecar before socket takeover ipc=${ipcPath} pids=${pids.join(",")}`,
   );
   try {
-    await stopProcesses(pids, { killGraceMs: 1_500, termGraceMs: 1_500 });
+    const result = await stop(pids, { killGraceMs: 1_500, termGraceMs: 1_500 });
+    if (result.remainingPids.length > 0) {
+      await appendSidecarLifecycleLog(
+        logPath,
+        `[open-design packaged] unresponsive stamped web sidecar still running after stop ipc=${ipcPath} remainingPids=${result.remainingPids.join(",")}`,
+      );
+      return "still-running";
+    }
+    return "stopped";
   } catch (error) {
     await appendSidecarLifecycleLog(
       logPath,
       `[open-design packaged] failed to stop unresponsive stamped web sidecar ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
     );
+    return "still-running";
   }
 }
 
@@ -600,6 +625,7 @@ export async function retireExistingSidecarEndpoint(
   ipcPath: string,
   logPath: string,
   app: AppKey,
+  deps: StopStampedWebSidecarOwnerDeps = {},
 ): Promise<void> {
   let status: { pid?: number | null } | null = null;
   try {
@@ -617,7 +643,8 @@ export async function retireExistingSidecarEndpoint(
     // is safe; daemon recovery remains conservative because starting a second
     // daemon beside a hung first owner could put two writers on the same DB.
     if (app !== APP_KEYS.WEB || isWindowsNamedPipePath(ipcPath)) return;
-    await stopStampedWebSidecarOwner(ipcPath, logPath);
+    const retirement = await stopStampedWebSidecarOwner(ipcPath, logPath, deps);
+    if (retirement === "still-running") return;
     try {
       const stat = await lstat(ipcPath);
       if (!stat.isSocket()) return;
