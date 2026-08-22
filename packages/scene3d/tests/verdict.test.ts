@@ -83,6 +83,46 @@ describe("assessVerdict", () => {
 });
 
 describe("summariseKit (catalog roll-up)", () => {
+  it("ranks systemic PROBLEMS from actionable codes, not from notes", () => {
+    // Once imported geometry started being reclassified rather than
+    // suppressed, findings about a downloaded asset's UVs became visible —
+    // correctly — as info. Ranking systemic codes by frequency alone then
+    // promoted them to "systemic across the kit", which is exactly the
+    // reading the relaxation exists to prevent: a note recurring across a
+    // corpus of third-party assets is a fact about the corpus, not work.
+    const kit = summariseKit([
+      {
+        errors: 0,
+        warnings: 1,
+        issueCodes: ["S3D-W-323", "S3D-W-441", "S3D-W-442"],
+        actionableCodes: ["S3D-W-323"],
+      },
+      {
+        errors: 0,
+        warnings: 0,
+        issueCodes: ["S3D-W-441", "S3D-W-442"],
+        actionableCodes: [],
+      },
+    ]);
+    expect(kit.systemic.map((s) => s.code)).toEqual([]);
+  });
+
+  it("still reports a genuinely systemic warning", () => {
+    const kit = summariseKit([
+      { errors: 0, warnings: 1, issueCodes: ["S3D-W-323"], actionableCodes: ["S3D-W-323"] },
+      { errors: 0, warnings: 1, issueCodes: ["S3D-W-323"], actionableCodes: ["S3D-W-323"] },
+    ]);
+    expect(kit.systemic).toEqual([{ code: "S3D-W-323", scenes: 2 }]);
+  });
+
+  it("falls back to issueCodes for a manifest written before the distinction", () => {
+    const kit = summariseKit([
+      { errors: 0, warnings: 1, issueCodes: ["S3D-W-323"] },
+      { errors: 0, warnings: 1, issueCodes: ["S3D-W-323"] },
+    ]);
+    expect(kit.systemic).toEqual([{ code: "S3D-W-323", scenes: 2 }]);
+  });
+
   it("grades the kit as its weakest scene", () => {
     expect(summariseKit([{ errors: 0, warnings: 0, issueCodes: [] }]).grade).toBe("pass");
     expect(

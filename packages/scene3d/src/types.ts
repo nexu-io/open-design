@@ -905,6 +905,11 @@ export interface Scene3dManifest {
   exportedAssets: string[];
   issues: IssueSummary;
   issueCodes: string[];
+  /** The subset of issueCodes that fired at error or warning severity —
+   *  what somebody is meant to act on, as distinct from what was noted.
+   *  The kit roll-up ranks systemic PROBLEMS from this, so a relaxed note
+   *  about third-party geometry can never read as one. */
+  actionableCodes?: string[];
   /**
    * The viewer edits this build actually baked into the geometry.
    *

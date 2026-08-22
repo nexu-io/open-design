@@ -205,6 +205,54 @@ describe("uv rules", () => {
     expect(codes(capped)).toContain(ISSUE_CODES.UV_UNCHECKED);
   });
 
+  it("measures texel-density spread over the AUTHORED parts only", () => {
+    // A downloaded hero's texel budget was somebody else's decision, made
+    // before this scene existed. Folding one into the scene's coherence
+    // statistic produced a x189 spread naming the author's own floor as the
+    // offender against a 2K asset — unactionable in either direction. Unlike
+    // the per-mesh rules there is no single subject to reclassify, so the
+    // population is scoped and the exclusion is stated.
+    const mixed = census({
+      meshes: [
+        mesh({ uv: { ...cleanUv, texelDensity: { min: 50, max: 60, mean: 55 } } }),
+        mesh({
+          object: "prp_hero",
+          uv: { ...cleanUv, texelDensity: { min: 800, max: 900, mean: 850 } },
+        }),
+      ],
+    });
+    // Authored: the spread is real and reported.
+    expect(codes(mixed)).toContain(ISSUE_CODES.TEXEL_DENSITY_SPREAD);
+
+    // The same scene where the dense mesh is an imported `file:` part.
+    const issues = runLint({
+      contract: contract(),
+      census: mixed,
+      solved: { parts: [{ id: "prp_hero", file: "hero.glb" }] } as never,
+    });
+    expect(issues.map((i) => i.code)).not.toContain(ISSUE_CODES.TEXEL_DENSITY_SPREAD);
+  });
+
+  it("says how many meshes it left out of the spread", () => {
+    const mixed = census({
+      meshes: [
+        mesh({ uv: { ...cleanUv, texelDensity: { min: 50, max: 60, mean: 55 } } }),
+        mesh({ object: "prp_lid", uv: { ...cleanUv, texelDensity: { min: 800, max: 900, mean: 850 } } }),
+        mesh({ object: "prp_hero", uv: { ...cleanUv, texelDensity: { min: 9000, max: 9900, mean: 9400 } } }),
+      ],
+    });
+    const spread = runLint({
+      contract: contract(),
+      census: mixed,
+      solved: { parts: [{ id: "prp_hero", file: "hero.glb" }] } as never,
+    }).find((i) => i.code === ISSUE_CODES.TEXEL_DENSITY_SPREAD);
+    expect(spread).toBeDefined();
+    expect(spread!.detail?.importedExcluded).toBe(1);
+    expect(spread!.message).toContain("authored parts");
+    // ...and the ratio is the authored one (800/60), not the imported 9900/60.
+    expect(spread!.message).toMatch(/x1[0-9]\.[0-9]/);
+  });
+
   it("flags texel-density spread across the scene and target misses per mesh", () => {
     const spread = census({
       meshes: [

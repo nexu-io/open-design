@@ -50,6 +50,17 @@ export function buildManifest(input: {
 }): Scene3dManifest {
   const { census } = input;
   const issueCodes = [...new Set(input.issues.map((i) => i.code))].sort();
+  // Codes that fired at a severity somebody is meant to ACT on. `issueCodes`
+  // is the factual list of everything reported, including notes — and the kit
+  // roll-up must not read a note as a problem. Once imported geometry started
+  // being reclassified rather than suppressed (lint/provenance.ts), findings
+  // about a downloaded asset's UVs became visible, correctly, as info; ranking
+  // the kit's systemic problems by code frequency alone then promoted them to
+  // "systemic across the kit", which is precisely the reading the relaxation
+  // exists to prevent.
+  const actionableCodes = [
+    ...new Set(input.issues.filter((i) => i.severity !== "info").map((i) => i.code)),
+  ].sort();
   // The claims ledger: failures counted from the adjudicator's own code so
   // the badge can never disagree with the issue list it summarises.
   const claims =
@@ -154,6 +165,7 @@ export function buildManifest(input: {
     exportedAssets: input.exportedAssets,
     issues: input.summary,
     issueCodes,
+    actionableCodes,
     assetKind: deriveAssetKind({
       partTree,
       keyframedObjects: census?.animation.keyframedObjects ?? [],
@@ -665,6 +677,7 @@ export function writeProjectKit(
       errors: manifest.issues.errors,
       warnings: manifest.issues.warnings,
       issueCodes: manifest.issueCodes,
+      actionableCodes: manifest.actionableCodes ?? manifest.issueCodes,
       deliverables: manifest.exportedAssets.map(sceneRel),
     });
     entries.push({
@@ -736,6 +749,8 @@ interface KitSceneRecord {
   warnings: number;
   /** The scene's issue codes — the roll-up needs them to find systemic ones. */
   issueCodes: string[];
+  /** …ranked from the ones above `info`, so a note is never a "problem". */
+  actionableCodes?: string[];
   deliverables: string[];
 }
 

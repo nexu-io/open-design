@@ -160,7 +160,16 @@ export interface KitVerdict {
  * a systemic issue the pipeline TD fixes at the source, not asset by asset.
  */
 export function summariseKit(
-  scenes: Array<{ errors: number; warnings: number; issueCodes: string[] }>,
+  scenes: Array<{
+    errors: number;
+    warnings: number;
+    issueCodes: string[];
+    /** Codes that fired above `info`. A systemic PROBLEM is something a
+     *  pipeline TD fixes at the source; a note recurring across a corpus of
+     *  downloaded assets is a fact about the corpus, not work to do. Falls
+     *  back to issueCodes for a manifest written before the distinction. */
+    actionableCodes?: string[];
+  }>,
 ): KitVerdict {
   const grade: Grade = scenes.some((s) => s.errors > 0)
     ? "fail"
@@ -169,7 +178,7 @@ export function summariseKit(
       : "pass";
   const sceneCountByCode = new Map<string, number>();
   for (const s of scenes) {
-    for (const code of new Set(s.issueCodes)) {
+    for (const code of new Set(s.actionableCodes ?? s.issueCodes)) {
       sceneCountByCode.set(code, (sceneCountByCode.get(code) ?? 0) + 1);
     }
   }

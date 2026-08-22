@@ -133,18 +133,30 @@ export function lintUv(ctx: LintContext, issues: Issue[]): void {
   // Scene-wide density spread: two textured parts standing next to each
   // other with wildly different px/m read as different levels of detail no
   // matter how good each texture is alone.
-  if (densities.length > 1) {
-    const min = densities.reduce((a, b) => (a.min <= b.min ? a : b));
-    const max = densities.reduce((a, b) => (a.max >= b.max ? a : b));
+  //
+  // Over the AUTHORED meshes only. This is a coherence statistic about a
+  // decision — "did I texture my own parts consistently" — and a downloaded
+  // asset's texel budget was somebody else's decision, made before this scene
+  // existed. Folding one in produced a x189 warning naming the author's floor
+  // as the offender against a 2K hero's 9882 px/m, which cannot be acted on in
+  // either direction. Unlike the per-mesh rules there is no single subject to
+  // reclassify, so the honest move is to state the population.
+  const authored = densities.filter((d) => !(ctx.imported?.has(d.object) ?? false));
+  const excluded = densities.length - authored.length;
+  if (authored.length > 1) {
+    const min = authored.reduce((a, b) => (a.min <= b.min ? a : b));
+    const max = authored.reduce((a, b) => (a.max >= b.max ? a : b));
     if (min.min > 0 && max.max / min.min > rules.texelDensityMaxRatio) {
+      const over = excluded > 0 ? ` (${excluded} imported mesh(es) excluded)` : "";
       issues.push({
         code: ISSUE_CODES.TEXEL_DENSITY_SPREAD,
         severity: "warning",
-        message: `texel density varies x${(max.max / min.min).toFixed(1)} across the scene ('${min.object}' ${formatDensity(min.min)} px/m vs '${max.object}' ${formatDensity(max.max)} px/m; limit x${rules.texelDensityMaxRatio})`,
+        message: `texel density varies x${(max.max / min.min).toFixed(1)} across the scene's authored parts${over} ('${min.object}' ${formatDensity(min.min)} px/m vs '${max.object}' ${formatDensity(max.max)} px/m; limit x${rules.texelDensityMaxRatio})`,
         hint: "even out UV scale or texture resolution so neighbouring parts read at one level of detail",
         detail: {
           min: { object: min.object, density: min.min },
           max: { object: max.object, density: max.max },
+          ...(excluded > 0 ? { importedExcluded: excluded } : {}),
         },
       });
     }
