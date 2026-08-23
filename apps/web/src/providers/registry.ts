@@ -3072,6 +3072,14 @@ export function projectRawUrl(
   return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
 }
 
+export function projectRawBaseHref(
+  projectId: string,
+  filePath: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return previewCapabilityHref(projectRawUrl(projectId, filePath, workspaceContext));
+}
+
 export function designSystemStaticUrl(
   designSystemId: string,
   filePath: string,

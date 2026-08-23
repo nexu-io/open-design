@@ -1866,10 +1866,14 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByTestId('artifact-preview-first-load')).not.toBeInTheDocument();
   });
 
-  it('loads an inline preview through a blob URL when the browser supports it', () => {
+  it('keeps project-relative assets resolvable in an Electron blob preview', async () => {
     const originalCreateObjectURL = URL.createObjectURL;
     const originalRevokeObjectURL = URL.revokeObjectURL;
-    const createObjectURL = vi.fn(() => 'blob:od://app/preview-document');
+    let previewBlob: Blob | null = null;
+    const createObjectURL = vi.fn((blob: Blob) => {
+      previewBlob = blob;
+      return 'blob:od://app/preview-document';
+    });
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
       value: createObjectURL,
@@ -1900,6 +1904,10 @@ describe('FileViewer SVG artifacts', () => {
       expect(createObjectURL).toHaveBeenCalledTimes(1);
       expect(frame.getAttribute('src')).toBe('blob:od://app/preview-document');
       expect(frame.hasAttribute('srcdoc')).toBe(false);
+      expect(previewBlob).not.toBeNull();
+      expect(await previewBlob!.text()).toContain(
+        '<base href="http://localhost:3000/api/projects/blob-preview-project/raw/" data-od-project-preview-base>',
+      );
     } finally {
       userAgent.mockRestore();
       if (originalCreateObjectURL) {

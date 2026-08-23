@@ -123,6 +123,7 @@ import {
   uploadProjectFiles,
   liveArtifactPreviewUrl,
   projectFileUrl,
+  projectRawBaseHref,
   projectRawUrl,
   renewProjectPreviewBaseScope,
   publishProjectFilePublic,
@@ -10571,7 +10572,7 @@ function HtmlViewer({
   ]);
 
   const srcDocBaseSeedHref = effectiveScopedSrcDocPreviewBase?.href
-    ?? projectRawUrl(projectId, baseDirFor(file.name), workspaceContext);
+    ?? projectRawBaseHref(projectId, baseDirFor(file.name), workspaceContext);
   const srcDocBaseSelectionIdentity = [
     srcDocPreviewBaseIdentity,
     sourceSnapshotRefreshKey,
