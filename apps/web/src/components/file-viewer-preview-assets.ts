@@ -409,8 +409,15 @@ export function rewriteProjectAssetRefsToRawUrls(
   // selection bridge. Hide complete iframe tags during the asset pass and
   // restore them unchanged afterwards; images/fonts/media still use their
   // scoped raw URLs below.
+  //
+  // The marker includes a per-call random nonce (#7008 review) rather than
+  // a fixed literal: a fixed placeholder could collide with the exact same
+  // string appearing in authored HTML/script content (a code sample, a
+  // comment referencing this very mechanism), silently corrupting that
+  // unrelated text instead of the intended iframe tag on restore below.
   const iframeTags: string[] = [];
-  const iframeMarker = '__OD_PRESERVED_IFRAME_';
+  const iframeMarkerNonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const iframeMarker = `__OD_PRESERVED_IFRAME_${iframeMarkerNonce}_`;
   let next = html.replace(/<iframe\b[^>]*>/gi, (tag) => {
     const marker = `${iframeMarker}${iframeTags.length}__`;
     iframeTags.push(tag);
