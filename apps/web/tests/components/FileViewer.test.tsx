@@ -12945,6 +12945,147 @@ describe('previewTargetFilePath', () => {
   });
 });
 
+describe('nested-frame live-path authorization', () => {
+  const rootWithStaticFrame = '<html><body><iframe src="slides/first.html"></iframe></body></html>';
+  const nestedHtmlFile = baseFile({
+    name: 'preview.html',
+    path: 'preview.html',
+    mime: 'text/html',
+    kind: 'html',
+  });
+  const nestedTarget = {
+    type: 'od:comment-target',
+    elementId: `frame:${encodeURIComponent(JSON.stringify(['slides/second.html', 'hero']))}`,
+    selector: '[data-od-id="hero"]',
+    label: 'Hero',
+    text: 'Hero',
+    position: { x: 8, y: 12, width: 120, height: 48 },
+    hoverPoint: { x: 12, y: 16 },
+    htmlHint: '<main data-od-id="hero">Hero</main>',
+  };
+
+  function renderNonceFromFrame(frame: HTMLIFrameElement): string {
+    const nonce = frame.srcdoc.match(/var RENDER_NONCE = "([^"]+)";/)?.[1]
+      ?? new URL(frame.getAttribute('src') ?? '', window.location.href).searchParams.get('odRenderNonce')
+      ?? undefined;
+    if (!nonce) throw new Error('Expected selection bridge render nonce');
+    return nonce;
+  }
+
+  it('rejects a forged root live-path message without the bridge nonce', async () => {
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={nestedHtmlFile}
+        liveHtml={rootWithStaticFrame}
+      />,
+    );
+    // Comment mode is what forces srcDoc transport for this file (a plain
+    // HTML preview otherwise defaults to URL-load, which never carries a
+    // render nonce -- see the FileViewer.tsx comment on `urlFrameSrc`).
+    clickAgentTool('board-mode-toggle');
+    const frame = await waitFor(() => {
+      const candidate = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(candidate.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(renderNonceFromFrame(candidate)).toBeTruthy();
+      return candidate;
+    });
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:project-frame-live-path',
+        originalPath: 'slides/first.html',
+        newPath: 'slides/second.html',
+      },
+    }));
+
+    const commentFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', { source: commentFrame.contentWindow, data: nestedTarget }));
+    await waitFor(() => expect(screen.queryByTestId('comment-target-overlay')).toBeNull());
+  });
+
+  it('clears the host live path after a bridge-reported navigation becomes unavailable', async () => {
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={nestedHtmlFile}
+        liveHtml={rootWithStaticFrame}
+      />,
+    );
+    clickAgentTool('board-mode-toggle');
+    const frame = await waitFor(() => {
+      const candidate = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(candidate.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(renderNonceFromFrame(candidate)).toBeTruthy();
+      return candidate;
+    });
+    const nonce = renderNonceFromFrame(frame);
+    // The live-path message updates host state (liveFramePaths) via
+    // setState; a raw dispatchEvent doesn't flush that update the way a
+    // testing-library interaction does, so the very next comment-target
+    // message would still see the stale pre-update closure without act().
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'od:project-frame-live-path',
+          originalPath: 'slides/first.html',
+          newPath: 'slides/second.html',
+          nonce,
+        },
+      }));
+    });
+    const commentFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', { source: commentFrame.contentWindow, data: nestedTarget }));
+    expect(await screen.findByTestId('comment-target-overlay')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    await waitFor(() => expect(screen.queryByTestId('comment-target-overlay')).toBeNull());
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: commentFrame.contentWindow,
+        data: {
+          type: 'od:project-frame-live-path-cleared',
+          originalPath: 'slides/first.html',
+          nonce,
+        },
+      }));
+    });
+    clickAgentTool('board-mode-toggle');
+    const reactivatedCommentFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', { source: reactivatedCommentFrame.contentWindow, data: nestedTarget }));
+    await waitFor(() => expect(screen.queryByTestId('comment-target-overlay')).toBeNull());
+  });
+
+  it('rejects a valid-nonce live-path message from the retained inactive URL transport', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={nestedHtmlFile}
+        liveHtml={rootWithStaticFrame}
+      />,
+    );
+    const initialUrlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    clickAgentTool('board-mode-toggle');
+    const activeFrame = await waitFor(() => {
+      const candidate = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(candidate.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(renderNonceFromFrame(candidate)).toBeTruthy();
+      return candidate;
+    });
+    const retainedUrlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+    expect(retainedUrlFrame).toBe(initialUrlFrame);
+    expect(retainedUrlFrame.getAttribute('data-od-active')).toBe('false');
+    window.dispatchEvent(new MessageEvent('message', {
+      source: retainedUrlFrame.contentWindow,
+      data: {
+        type: 'od:project-frame-live-path',
+        originalPath: 'slides/first.html',
+        newPath: 'slides/second.html',
+        nonce: renderNonceFromFrame(activeFrame),
+      },
+    }));
+
+    clickAgentTool('board-mode-toggle');
+    window.dispatchEvent(new MessageEvent('message', { source: activeFrame.contentWindow, data: nestedTarget }));
+    await waitFor(() => expect(screen.queryByTestId('comment-target-overlay')).toBeNull());
+  });
+});
+
 // Regression for nexu-io/open-design#362: the host owns the inspect override
 // map authoritatively. Hydration parses the artifact source on load so an
 // initial Save-to-source preserves prior rules even when the user edits a

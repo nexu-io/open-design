@@ -182,6 +182,7 @@ import {
   htmlHasAuthoredBase,
   PREVIEW_REDIRECT_LOOP_MESSAGE,
 } from '../runtime/srcdoc';
+import { randomUUID } from '../utils/uuid';
 import { DeckThumbnailRail, type DeckThumbnailViewport } from './DeckThumbnailRail';
 import { parseDeckThumbnails } from '../runtime/deck-thumbnail-parser';
 import {
@@ -661,6 +662,7 @@ type SrcDocTransportCacheEntry = {
 };
 const htmlPreviewSrcDocTransportState = new Map<string, SrcDocTransportCacheEntry>();
 const htmlPreviewDocumentUrlState = new Map<string, string>();
+const htmlPreviewRenderNonces = new Map<string, string>();
 function nextPreviewContentMeasurementDocumentEpoch(): string {
   previewContentMeasurementDocumentEpochSequence += 1;
   return `preview-document-${previewContentMeasurementDocumentEpochSequence}`;
@@ -672,6 +674,17 @@ function nextPreviewContentMeasurementHostInstance(): string {
 function nextPreviewTransportGeneration(): string {
   previewTransportGenerationSequence += 1;
   return `preview-transport-${previewTransportGenerationSequence}`;
+}
+function previewRenderNonceForKey(key: string): string {
+  const cached = htmlPreviewRenderNonces.get(key);
+  if (cached) return cached;
+  const nonce = randomUUID();
+  htmlPreviewRenderNonces.set(key, nonce);
+  if (htmlPreviewRenderNonces.size > MAX_CACHED_SRC_DOC_TRANSPORTS) {
+    const oldest = htmlPreviewRenderNonces.keys().next().value;
+    if (oldest != null) htmlPreviewRenderNonces.delete(oldest);
+  }
+  return nonce;
 }
 function previewSourceFingerprint(source: string): string {
   let hash = 2166136261;
@@ -9156,6 +9169,15 @@ function HtmlViewer({
     [file.name, source],
   );
   const [liveFramePaths, setLiveFramePaths] = useState<ReadonlyMap<string, string>>(() => new Map());
+  // The selection bridge closes over this host-owned render secret. Artifact
+  // scripts cannot read the bridge closure, so they cannot forge live-path
+  // authorizations merely by sharing the root preview window.
+  const previewRenderNonceKey = `${projectId}\0${file.name}\0${file.mtime}\0${reloadKey}`;
+  const previewRenderNonceRef = useRef({ key: previewRenderNonceKey, value: previewRenderNonceForKey(previewRenderNonceKey) });
+  if (previewRenderNonceRef.current.key !== previewRenderNonceKey) {
+    previewRenderNonceRef.current = { key: previewRenderNonceKey, value: previewRenderNonceForKey(previewRenderNonceKey) };
+  }
+  const previewRenderNonce = previewRenderNonceRef.current.value;
   const liveCommentTargetsRef = useRef(liveCommentTargets);
   const [commentDraft, setCommentDraft] = useState('');
   // Inspect mode shares the iframe selection bridge with comment mode but
@@ -10776,6 +10798,7 @@ function HtmlViewer({
     transportPreviewMeasurementDocumentEpoch,
     effectiveDeck ? 'deck' : 'html',
     srcDocBaseHref,
+    previewRenderNonce,
   ].join('\0');
   const candidateSrcDocTransport = useMemo(
     () => {
@@ -10804,6 +10827,7 @@ function HtmlViewer({
           hideDeckChrome: effectiveDeck,
           selectionBridge: true,
           staticFramePaths: Array.from(projectFramePaths),
+          renderNonce: previewRenderNonce,
           // Always inject the manual-edit bridge into the PREVIEW srcDoc (not the
           // export path), so the document is byte-identical across preview /
           // comment / draw / edit. The bridge boots dormant (`enabled=false`) and
@@ -10837,6 +10861,7 @@ function HtmlViewer({
       reloadKey,
       transportPreviewMeasurementDocumentEpoch,
       srcDocBaseHref,
+      previewRenderNonce,
     ],
   );
   // A retained file tab stays full-sized but transparent, so a newer srcDoc can
@@ -11568,6 +11593,19 @@ function HtmlViewer({
         urlFrameBaseSrc,
         `odPreviewEpoch=${encodeURIComponent(transportPreviewMeasurementDocumentEpoch)}`,
       );
+  // Deliberately NOT attaching `odRenderNonce` here (unlike the srcDoc
+  // transport, which passes it as a direct JS parameter into a closure the
+  // document's own script can never observe): this URL becomes the
+  // URL-loaded document's own `location.href`, which any script in that
+  // same document -- including the artifact's own -- can read via
+  // `location.search`. A nonce embedded in a document's own navigation URL
+  // is not a secret from that document. The daemon's URL-preview selection
+  // bridge therefore always renders with an empty RENDER_NONCE for a
+  // root document served this way, so the host's nonce check in the
+  // `od:project-frame-live-path`/`-cleared` listener below never matches
+  // and the self-navigated-live-path authorization upgrade simply does not
+  // apply to a URL-load-transported root -- a static-declared-path-only
+  // fallback, not a silent bypass (#7296 review).
   const lastRenderedUrlFrameSrcRef = useRef(computedUrlFrameSrc);
   const urlFrameSrc = filesRefreshPending
     ? lastRenderedUrlFrameSrcRef.current
@@ -12010,17 +12048,36 @@ function HtmlViewer({
     if (!workspaceActive) return;
     function onMessage(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
-      const data = ev.data as { type?: string; originalPath?: unknown; newPath?: unknown } | null;
-      if (data?.type !== 'od:project-frame-live-path') return;
+      // This message mutates host authorization state (liveFramePaths), so --
+      // unlike a read-only broadcast -- it must come from the single
+      // currently-active preview transport, not any retained-but-hidden one
+      // still mounted during a srcDoc/URL-load transport swap (#7296 review).
+      if (!isActivePreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string; originalPath?: unknown; newPath?: unknown; nonce?: unknown } | null;
+      if (data?.type !== 'od:project-frame-live-path' && data?.type !== 'od:project-frame-live-path-cleared') return;
       if (typeof data.originalPath !== 'string' || !projectFramePaths.has(data.originalPath)) return;
-      if (typeof data.newPath !== 'string') return;
+      if (data.nonce !== previewRenderNonceRef.current.value) return;
       const originalPath = data.originalPath;
+      if (data.type === 'od:project-frame-live-path-cleared') {
+        setLiveFramePaths((current) => {
+          if (!current.has(originalPath)) return current;
+          const next = new Map(current);
+          next.delete(originalPath);
+          return next;
+        });
+        return;
+      }
+      if (
+        typeof data.newPath !== 'string'
+        || !/\.html?$/i.test(data.newPath)
+        || data.newPath.split('/').some((part) => !part || part === '.' || part === '..')
+      ) return;
       const newPath = data.newPath;
       setLiveFramePaths((current) => new Map(current).set(originalPath, newPath));
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [isOurPreviewIframeSource, projectFramePaths, workspaceActive]);
+  }, [isActivePreviewIframeSource, isOurPreviewIframeSource, projectFramePaths, workspaceActive]);
 
   // Mirror the bridge's `od:comment-targets` broadcast into
   // `liveCommentTargets` whenever EITHER Inspect or Comments mode is
