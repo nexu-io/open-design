@@ -28,6 +28,24 @@ The installer checks for Docker or Podman and, on Ubuntu/Debian, Fedora, and mac
 
 > **MCP note:** Docker/Compose installs run the daemon inside the container. The MCP client snippets shown in Settings are stdio/local-path based and require a local/source install for now. Container-friendly MCP transport will be added in a follow-up.
 
+## Resource requirements
+
+The sizes in this guide — the `384m` memory limit prompt, `OPEN_DESIGN_MEM_LIMIT`, and the
+`--max-old-space-size=192` Node heap cap — are **runtime** requirements for running the
+already-built `ghcr.io/nexu-io/od` image. A small VPS can run that container.
+
+They are **not** build-machine requirements. Building the image from source (for example,
+when `ghcr.io/nexu-io/od` cannot be pulled) needs substantially more RAM than running it:
+the production web/Next.js build step can exhaust memory and fail or hang on small hosts.
+
+- A ~1 GB VPS is not recommended for source builds.
+- Use at least 4 GB RAM for a practical source build; 8 GB is recommended for additional
+  headroom. These are recommendations, not guaranteed minimums for every system.
+- If your runtime server must stay small, build the image on a larger machine, push it to a
+  registry you can pull from, then deploy that image to the smaller server.
+
+See [`deploy/README.md`](../deploy/README.md#resource-requirements) for details.
+
 ## Interactive install walkthrough
 
 Running the installer without flags launches an interactive wizard:
@@ -176,8 +194,8 @@ All settings live in `deploy/.env`. Edit it directly or re-run the installer to 
 | `OPEN_DESIGN_IMAGE` | `ghcr.io/nexu-io/od:latest` | Full image reference |
 | `OPEN_DESIGN_PORT` | `7456` | Host-side port (bound to `127.0.0.1`) |
 | `OPEN_DESIGN_ALLOWED_ORIGINS` | _(empty)_ | CORS origins for reverse-proxy setups |
-| `OPEN_DESIGN_MEM_LIMIT` | `384m` | Container memory cap |
-| `NODE_OPTIONS` | `--max-old-space-size=192` | Node.js heap cap inside the container |
+| `OPEN_DESIGN_MEM_LIMIT` | `384m` | Runtime container memory cap (not a build-machine requirement) |
+| `NODE_OPTIONS` | `--max-old-space-size=192` | Node.js heap cap inside the runtime container |
 
 The container always binds `127.0.0.1:<port>:7456` — the daemon is never directly exposed to the network. To allow remote access, put an authenticated reverse proxy in front. See [`deploy/README.md`](../deploy/README.md) for the authentication and allowed-origin contract.
 

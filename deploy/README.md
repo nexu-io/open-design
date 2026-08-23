@@ -54,8 +54,33 @@ Defaults:
 - Runtime data: before documenting, changing, or choosing persistent daemon
   storage, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data
   directory contract**. This README MUST NOT restate it.
-- Node heap cap: `--max-old-space-size=192`
-- Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
+- Node heap cap (runtime container): `--max-old-space-size=192`
+- Compose memory cap (runtime container): `384m` (`OPEN_DESIGN_MEM_LIMIT=256m`
+  to override)
+
+These caps describe the runtime container for an already-built image, not the
+resources needed to produce one — see [Resource
+requirements](#resource-requirements) before building the image from source.
+
+### Resource requirements
+
+The two requirements are different:
+
+**Running a prebuilt image** — a small host is acceptable; the runtime caps
+above apply as-is.
+
+**Building the image from source** (for example, when `ghcr.io/nexu-io/od`
+cannot be pulled and you must build locally) needs substantially more RAM and
+CPU than running the resulting container. The production web/Next.js build step
+can exhaust memory and fail or hang on small hosts.
+
+- A ~1 GB VPS is not recommended for source builds.
+- Use at least 4 GB RAM for a practical build; 8 GB is recommended for
+  additional headroom. These are recommendations, not guaranteed minimums for
+  every system.
+- If your runtime server must stay small, build the image on a larger machine,
+  push it to a registry you can pull from, then deploy that image to the
+  smaller server.
 
 Do not publish the daemon directly on a public or shared LAN interface. The shared
 API token is single-tenant authentication, not user-level access control, and both
