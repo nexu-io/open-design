@@ -723,6 +723,15 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'minimax'
+      && surface === 'audio'
+      && ctx.audioKind === 'music'
+    ) {
+      const result = await renderMinimaxMusic(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'minimax' && surface === 'audio') {
       const result = await renderMinimaxTTS(ctx, credentials);
       bytes = result.bytes;
@@ -2713,6 +2722,89 @@ const MINIMAX_IMAGE_DEFAULT_BASE_URL = 'https://api.minimax.io';
 const MINIMAX_IMAGE_MODEL_MAP = {
   'minimax-image-01': 'image-01',
 } as Record<string, string>;
+
+const MINIMAX_MUSIC_DEFAULT_BASE_URL = 'https://api.minimax.io/v1';
+const MINIMAX_MUSIC_MODEL_MAP = {
+  'minimax-music-3.0': 'music-3.0',
+  'minimax-music-2.6': 'music-2.6',
+} as Record<string, string>;
+
+/** Generate music through MiniMax's synchronous music_generation endpoint. */
+async function renderMinimaxMusic(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      `no MiniMax API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_MINIMAX_API_KEY`,
+    );
+  }
+  const configuredBase = (credentials.baseUrl || MINIMAX_MUSIC_DEFAULT_BASE_URL).replace(/\/+$/, '');
+  const endpoint = configuredBase.endsWith('/music_generation')
+    ? configuredBase
+    : `${configuredBase}/music_generation`;
+  const wireModel = (
+    credentials.model
+    || MINIMAX_MUSIC_MODEL_MAP[ctx.wireModel]
+    || ctx.wireModel
+  ).trim();
+  const body = {
+    model: wireModel,
+    prompt: (ctx.prompt && ctx.prompt.trim()) || 'An instrumental musical composition.',
+    stream: false,
+    output_format: 'hex',
+    audio_setting: {
+      format: 'mp3',
+      sample_rate: 44100,
+      bitrate: 256000,
+    },
+    lyrics_optimizer: true,
+  };
+  const resp = await fetch(endpoint, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`minimax music ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`minimax music non-JSON: ${truncate(respText, 200)}`);
+  }
+  const statusCode = data?.base_resp?.status_code;
+  if (typeof statusCode === 'number' && statusCode !== 0) {
+    throw new Error(
+      `minimax music api error ${statusCode}: ${data?.base_resp?.status_msg || 'unknown'}`,
+    );
+  }
+  const status = data?.data?.status;
+  if (status !== undefined && status !== 2) {
+    throw new Error(`minimax music generation incomplete (status=${String(status)})`);
+  }
+  const audio = data?.data?.audio;
+  if (typeof audio !== 'string' || !audio) {
+    throw new Error('minimax music response missing data.audio');
+  }
+  let bytes: Buffer;
+  if (/^https?:\/\//i.test(audio)) {
+    const audioResp = await assertAndFetchExternalAsset(audio, withMediaRequestInit(ctx));
+    bytes = Buffer.from(await audioResp.arrayBuffer());
+  } else {
+    bytes = Buffer.from(audio, 'hex');
+  }
+  if (bytes.length === 0) {
+    throw new Error('minimax music decoded zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `minimax/${wireModel} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
 
 async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {

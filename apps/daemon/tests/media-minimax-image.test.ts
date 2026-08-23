@@ -9,6 +9,51 @@ const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8
 const TEST_MINIMAX_DEFAULT_BASE_URL = 'https://api.minimax.io';
 const TEST_MINIMAX_TTS_BASE_URL = 'https://api.minimaxi.chat/v1';
 
+describe('minimax music generation', () => {
+  let root: string;
+  let projectRoot: string;
+  let projectsRoot: string;
+  const realFetch = globalThis.fetch;
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'od-minimax-music-'));
+    projectRoot = path.join(root, 'project-root');
+    projectsRoot = path.join(projectRoot, '.od', 'projects');
+    await mkdir(projectsRoot, { recursive: true });
+    process.env.OD_MINIMAX_API_KEY = 'minimax-test-key';
+    delete process.env.OD_MEDIA_CONFIG_DIR;
+    delete process.env.OD_DATA_DIR;
+  });
+  afterEach(async () => {
+    globalThis.fetch = realFetch;
+    delete process.env.OD_MINIMAX_API_KEY;
+    await rm(root, { recursive: true, force: true });
+  });
+  it('posts to music_generation and decodes hex audio', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://api.minimax.io/v1/music_generation');
+      expect(init?.headers).toMatchObject({ authorization: 'Bearer minimax-test-key' });
+      const body = JSON.parse(String(init?.body));
+      expect(body).toMatchObject({
+        model: 'music-3.0', prompt: 'A bright synthwave instrumental', stream: false,
+        output_format: 'hex', lyrics_optimizer: true,
+        audio_setting: { format: 'mp3', sample_rate: 44100, bitrate: 256000 },
+      });
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0 }, data: { status: 2, audio: '00010203' },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await generateMedia({
+      projectRoot, projectsRoot, projectId: 'project-1', surface: 'audio',
+      audioKind: 'music', model: 'minimax-music-3.0',
+      prompt: 'A bright synthwave instrumental', output: 'music.mp3',
+    });
+    expect(result.providerId).toBe('minimax');
+    expect(result.name).toBe('music.mp3');
+    expect((await readFile(path.join(projectsRoot, 'project-1', 'music.mp3'))).length).toBe(4);
+  });
+});
+
 describe('minimax image generation', () => {
   let root: string;
   let projectRoot: string;
