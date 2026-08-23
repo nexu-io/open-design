@@ -75,6 +75,8 @@ vi.mock('../../src/analytics/provider', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  // Host-managed BYOK defaults: absent in these tests (fresh-browser preflight keeps its historical behavior).
+  fetchByokHostDefaults: vi.fn(async () => ({ configured: false })),
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),

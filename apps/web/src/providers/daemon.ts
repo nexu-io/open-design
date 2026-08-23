@@ -33,6 +33,7 @@ import type {
   AmrModelsResponse,
   AmrWalletSnapshot,
   ByokChatProviderConfig,
+  ByokHostDefaultsView,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -998,6 +999,24 @@ export interface VelaLoginAuthStage {
 //   POST /api/integrations/vela/login/cancel — terminate a still-pending login
 //   POST /api/integrations/vela/logout   — clear ~/.amr auth and Settings-backed AMR auth env
 // The Settings UI polls /status after kicking off /login to detect completion.
+/**
+ * Keyless view of the daemon's host-managed default BYOK provider
+ * (OD_BYOK_*). The chat preflight consults it so a browser with no local
+ * BYOK config can still start a byok-opencode run on a server deployment
+ * that pre-wired inference — the daemon fills the provider server-side.
+ * Fail-closed: any unreachable/old daemon reads as "not configured", which
+ * keeps the historical preflight behavior.
+ */
+export async function fetchByokHostDefaults(): Promise<ByokHostDefaultsView> {
+  try {
+    const resp = await fetch('/api/byok-defaults', { cache: 'no-store' });
+    if (!resp.ok) return { configured: false };
+    return (await resp.json()) as ByokHostDefaultsView;
+  } catch {
+    return { configured: false };
+  }
+}
+
 export async function fetchVelaLoginStatus(options: { refresh?: boolean } = {}): Promise<VelaLoginStatus | null> {
   try {
     const query = options.refresh ? '?refresh=1' : '';

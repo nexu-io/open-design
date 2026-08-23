@@ -26,6 +26,7 @@ import {
 } from '../byok-tools.js';
 import {
   envByokDefaultForProtocol,
+  envByokDefaultsView,
   resolveProxyProviderFields,
 } from '../byok-env.js';
 import {
@@ -984,6 +985,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       })),
     },
   ];
+
+  // What a browser may learn about the host-managed default provider
+  // (OD_BYOK_*): enough to badge "managed by host environment" and relax the
+  // local-config preflight for byok-opencode runs — never the key. The CLI
+  // (`od byok-defaults`) reads the same payload (UI/CLI dual-track).
+  app.get('/api/byok-defaults', (_req, res) => {
+    res.json(envByokDefaultsView());
+  });
 
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */

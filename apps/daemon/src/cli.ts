@@ -212,6 +212,8 @@ const DAEMON_STRING_FLAGS = new Set([
 const DAEMON_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'headless', 'serve-web', 'no-open',
 ]);
+const BYOK_DEFAULTS_STRING_FLAGS = new Set(['daemon-url']);
+const BYOK_DEFAULTS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const LIBRARY_STRING_FLAGS = new Set([
   'daemon-url', 'query', 'tag', 'workspace', 'workspace-member',
 ]);
@@ -412,6 +414,7 @@ const SUBCOMMAND_MAP = {
   skill: runSkills,
   skills: runSkills,
   'design-systems': runDesignSystems,
+  'byok-defaults': runByokDefaults,
   resource: runResource,
   craft: runCraft,
   diagnostics: runDiagnostics,
@@ -882,6 +885,12 @@ function printRootHelp() {
 
   od research search --query <text> [--max-sources 5] [--daemon-url <url>]
       Run agent-callable Tavily research through the local daemon.
+
+  od byok-defaults [--json] [--daemon-url <url>]
+      Print the host-managed default BYOK provider view (OD_BYOK_*):
+      configured or not, protocol / base URL / model, key tail only.
+      Lets external agents detect a server-pre-wired deployment without
+      opening the web UI. CLI half of GET /api/byok-defaults.
 
   od plugin <list|info|install|uninstall|apply|doctor|replay|trust> [args]
       Discover, install, and apply plugins through the local daemon.
@@ -8908,6 +8917,41 @@ async function runDaemonStart(flags) {
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
   });
+}
+
+// CLI half of GET /api/byok-defaults (UI/CLI dual-track): reports the
+// host-managed default BYOK provider (OD_BYOK_*) so scripts and external
+// agents can detect a server-pre-wired deployment without a browser.
+async function runByokDefaults(args) {
+  if (args.length > 0 && (args[0] === 'help' || args.includes('--help') || args.includes('-h'))) {
+    console.log(`Usage: od byok-defaults [--json] [--daemon-url <url>]
+
+Print the daemon's host-managed default BYOK provider view (OD_BYOK_*):
+whether one is configured, its protocol / base URL / model, and the key's
+last four characters for identification. The key itself is never exposed.`);
+    process.exit(0);
+  }
+  const flags = parseFlags(args, { string: BYOK_DEFAULTS_STRING_FLAGS, boolean: BYOK_DEFAULTS_BOOLEAN_FLAGS });
+  const base = await cliDaemonBaseUrl(flags);
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/byok-defaults`);
+  } catch (err) {
+    return exitWithStructuredError({
+      code:    'daemon-not-running',
+      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
+    });
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const view = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(view, null, 2) + '\n');
+  if (!view.configured) {
+    return console.log('[byok] no host-managed default provider (OD_BYOK_*) configured');
+  }
+  console.log(
+    `[byok] host-managed default: ${view.protocol} ${view.baseUrl} model=${view.model}`
+      + (view.apiKeyTail ? ` key=…${view.apiKeyTail}` : ''),
+  );
 }
 
 async function runDaemonStatus(flags) {

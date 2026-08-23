@@ -247,6 +247,37 @@ describe('proxy fallback (integration)', () => {
     );
   });
 
+  it('GET /api/byok-defaults reports not-configured when the env carries no default', async () => {
+    for (const key of ENV_KEYS) delete process.env[key];
+    const res = await fetch(`${url}/api/byok-defaults`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ configured: false });
+  });
+
+  it('GET /api/byok-defaults describes the host default without ever exposing the key', async () => {
+    // Given a host-managed default with a key
+    process.env.OD_BYOK_PROTOCOL = 'openai';
+    process.env.OD_BYOK_BASE_URL = 'https://host.example.com/v1';
+    process.env.OD_BYOK_API_KEY = 'sk-host-managed-secret';
+    process.env.OD_BYOK_MODEL = 'host-model';
+
+    // When a browser asks what the host provides
+    const res = await fetch(`${url}/api/byok-defaults`);
+
+    // Then it learns enough to badge and pre-fill — but the key never
+    // appears, in any field, in full
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toEqual({
+      configured: true,
+      protocol: 'openai',
+      baseUrl: 'https://host.example.com/v1',
+      model: 'host-model',
+      apiKeyTail: 'cret',
+    });
+    expect(JSON.stringify(body)).not.toContain('sk-host-managed-secret');
+  });
+
   it('the openai proxy no longer 400s for a field-less body when the env default is set', async () => {
     // Given the env default pointing at an unreachable loopback (no real
     // network in tests)

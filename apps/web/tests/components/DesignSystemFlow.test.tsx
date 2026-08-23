@@ -174,6 +174,8 @@ vi.mock('../../src/components/FileWorkspace', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  // Host-managed BYOK defaults: absent in these tests (fresh-browser preflight keeps its historical behavior).
+  fetchByokHostDefaults: vi.fn(async () => ({ configured: false })),
   streamViaDaemon: (...args: unknown[]) => mocks.streamViaDaemon(...args),
 }));
 
