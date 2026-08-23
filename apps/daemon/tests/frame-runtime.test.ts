@@ -4,8 +4,8 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  buildUrlPreviewSelectionBridge,
   URL_PREVIEW_SCROLL_BRIDGE,
-  URL_PREVIEW_SELECTION_BRIDGE,
 } from '../src/routes/project/index.js';
 
 const repoRoot = path.resolve(
@@ -88,10 +88,10 @@ function resolveFrameScreenSrc({
 // the literal is evaluated. Slicing the source file's raw text instead would
 // skip that unescaping and silently pass scripts a browser would reject with
 // a SyntaxError (#7008) — this must match what actually reaches the browser.
-function urlPreviewBridgeScript(name: 'URL_PREVIEW_SCROLL_BRIDGE' | 'URL_PREVIEW_SELECTION_BRIDGE'): string {
+function urlPreviewBridgeScript(name: 'URL_PREVIEW_SCROLL_BRIDGE' | 'URL_PREVIEW_SELECTION_BRIDGE', staticFramePaths: readonly string[] = []): string {
   const evaluated = name === 'URL_PREVIEW_SCROLL_BRIDGE'
     ? URL_PREVIEW_SCROLL_BRIDGE
-    : URL_PREVIEW_SELECTION_BRIDGE;
+    : buildUrlPreviewSelectionBridge(staticFramePaths);
   const scriptStart = evaluated.indexOf('\n') + 1;
   const scriptEnd = evaluated.lastIndexOf('</script>');
   if (scriptStart <= 0 || scriptEnd < 0) throw new Error(`Missing script body for ${name}`);
@@ -290,7 +290,7 @@ describe('URL preview nested-frame bridges', () => {
     class MutationObserver { constructor(_callback: () => void) {} observe() {} }
     const context = { window, document, URL, MutationObserver, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout };
     vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SCROLL_BRIDGE'), context);
-    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE'), context);
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE', ['child.html']), context);
     const dispatch = (data: unknown, source: unknown = undefined) => {
       for (const listener of listeners) listener({ data, source });
     };
@@ -326,6 +326,7 @@ describe('URL preview nested-frame bridges', () => {
     // accepted even though it disagrees with frame.src.
     const listeners: Array<(event: { data?: unknown; source?: unknown }) => void> = [];
     const received: unknown[] = [];
+    const hostMessages: unknown[] = [];
     const childWindow = { postMessage: (message: unknown) => received.push(message) };
     const frameAttrs: Record<string, string> = { src: 'child.html' };
     const frame = {
@@ -354,7 +355,7 @@ describe('URL preview nested-frame bridges', () => {
       __odUrlScrollBridge: false,
       __odUrlSelectionBridge: false,
       location: { href: document.baseURI, search: '', hash: '' },
-      parent: { postMessage: () => {} },
+      parent: { postMessage: (message: unknown) => hostMessages.push(message) },
       addEventListener(type: string, listener: (event: { data?: unknown; source?: unknown }) => void) {
         if (type === 'message') listeners.push(listener);
       },
@@ -365,7 +366,7 @@ describe('URL preview nested-frame bridges', () => {
     class MutationObserver { constructor(_callback: () => void) {} observe() {} }
     const context = { window, document, URL, MutationObserver, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout };
     vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SCROLL_BRIDGE'), context);
-    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE'), context);
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE', ['child.html']), context);
     const dispatch = (data: unknown, source: unknown = undefined) => {
       for (const listener of listeners) listener({ data, source });
     };
@@ -382,6 +383,7 @@ describe('URL preview nested-frame bridges', () => {
       { type: 'od:comment-mode', enabled: true, mode: 'picker' },
       { type: 'od:inspect-mode', enabled: true },
     ]);
+    expect(hostMessages).toContainEqual({ type: 'od:project-frame-live-path', originalPath: 'child.html', newPath: 'slide-2.html' });
     received.length = 0;
     dispatch({
       type: 'od:inspect-set',
