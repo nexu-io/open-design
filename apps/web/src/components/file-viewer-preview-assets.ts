@@ -197,7 +197,8 @@ export function htmlHasRelativeProjectIframeRefs(
     const srcMatch = tagMatch[0].match(IFRAME_SRC);
     const ref = srcMatch?.[2] ?? srcMatch?.[3];
     if (!ref) continue;
-    if (resolveRelativeAssetPath(ownerFilePath, ref)) return true;
+    const relativePath = resolveRelativeAssetPath(ownerFilePath, ref);
+    if (relativePath && (projectFilePaths === null || projectFilePaths.has(relativePath))) return true;
     if (rootRelativeProjectAssetPath(ref, projectFilePaths) !== null) return true;
   }
   return false;
