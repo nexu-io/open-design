@@ -311,6 +311,27 @@ describe('rewriteProjectAssetRefsToRawUrls', () => {
       'src="/api/projects/p1/raw/system/images/poster.png?workspaceId=ws-1&workspaceMemberId=member-1&v=2"',
     );
   });
+
+  it('does not corrupt authored content matching the (old, fixed) iframe restoration marker (#7008 review: nettee)', () => {
+    // The marker used to hide iframe tags during the rewrite pass was a
+    // fixed literal string restored via a global regex — authored text
+    // containing that exact string (a code sample, a comment about this
+    // very mechanism) would be silently replaced with the tracked iframe
+    // tag instead of the intended content. The marker is now a per-call
+    // random nonce; this old, fixed-format string can never collide with it.
+    const collidingScript = '<script>var marker = "__OD_PRESERVED_IFRAME_0__";</script>';
+    const html = `<iframe title="child" src="child.html"></iframe>${collidingScript}<img src="poster.png">`;
+    const rewritten = rewriteProjectAssetRefsToRawUrls(
+      html,
+      'root.html',
+      new Set(['child.html', 'poster.png']),
+      toRawUrl,
+    );
+
+    expect(rewritten).toContain('<iframe title="child" src="child.html"></iframe>');
+    expect(rewritten).toContain(collidingScript);
+    expect(rewritten).toContain('<img src="/api/projects/p1/raw/poster.png">');
+  });
 });
 
 describe('rewriteInlinedCssAssetRefs', () => {
