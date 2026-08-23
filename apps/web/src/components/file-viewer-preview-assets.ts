@@ -152,21 +152,32 @@ export function htmlHasRelativeProjectAssetRefs(
 
 /**
  * True when the document has at least one `<iframe src="...">` pointing at
- * a project-local relative path (e.g. a slide deck viewer loading
- * `./slide-01.html`). Narrower than `htmlHasRelativeProjectAssetRefs` on
- * purpose: an ordinary relative image/script/font must not force the extra
- * `/preview-url` mint below, only a nested navigable frame needs it, so
- * `runtime/srcdoc.ts`'s `projectFramePath()` can recognize the child as a
- * project frame via the scoped preview base's `document.baseURI` (#7008).
+ * a project-local path — either relative (e.g. a slide deck viewer loading
+ * `./slide-01.html`) or root-relative and confirmed against the project
+ * file set (e.g. `/slides/slide-01.html`, the convention generated
+ * multi-file artifacts commonly use — see `htmlHasRootRelativeProjectAssetRefs`
+ * above). Narrower than `htmlHasRelativeProjectAssetRefs`/
+ * `htmlHasRootRelativeProjectAssetRefs` on purpose: an ordinary image/script/
+ * font ref must not force the extra `/preview-url` mint below, only a nested
+ * navigable frame needs it, so `runtime/srcdoc.ts`'s `projectFramePath()` can
+ * recognize the child as a project frame via the scoped preview base's
+ * `document.baseURI` (#7008).
+ *
+ * `projectFilePaths === null` (file list still loading) answers in candidate
+ * mode for a root-relative ref, matching `rootRelativeProjectAssetPath`'s own
+ * convention elsewhere in this file.
  */
 export function htmlHasRelativeProjectIframeRefs(
   html: string,
   ownerFilePath: string,
+  projectFilePaths: ReadonlySet<string> | null,
 ): boolean {
   for (const tagMatch of html.matchAll(IFRAME_TAG)) {
     const srcMatch = tagMatch[0].match(IFRAME_SRC);
     const ref = srcMatch?.[2] ?? srcMatch?.[3];
-    if (ref && resolveRelativeAssetPath(ownerFilePath, ref)) return true;
+    if (!ref) continue;
+    if (resolveRelativeAssetPath(ownerFilePath, ref)) return true;
+    if (rootRelativeProjectAssetPath(ref, projectFilePaths) !== null) return true;
   }
   return false;
 }
