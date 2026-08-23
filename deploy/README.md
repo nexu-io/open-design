@@ -161,6 +161,19 @@ ANTHROPIC_API_KEY=sk-ant-…
 OPENAI_API_KEY=sk-…
 ```
 
+To pre-wire inference for the whole deployment — browsers never configure or
+see a key — set a host-managed default BYOK provider in `.env`:
+
+```bash
+OD_BYOK_PROTOCOL=anthropic   # or "openai" for OpenAI-compatible hosts
+OD_BYOK_BASE_URL=https://api.example.com
+OD_BYOK_API_KEY=sk-…
+OD_BYOK_MODEL=my-model
+```
+
+The daemon uses it for chat runs and proxy calls that carry no provider fields;
+a browser's own provider tuple always wins. See `.env.example` for details.
+
 If you install Codex inside an unprivileged Linux container and it fails while
 creating its `workspace-write` sandbox, opt into Codex's full-access mode for
 all Codex runs in that deployment:
