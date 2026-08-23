@@ -91,6 +91,16 @@ describe('htmlHasRootRelativeProjectAssetRefs', () => {
     expect(htmlHasRootRelativeProjectAssetRefs('<img src="/not-here.png">', files)).toBe(false);
     expect(htmlHasRootRelativeProjectAssetRefs('<img src="images/hero.png">', files)).toBe(false);
   });
+
+  it('detects a confirmed unquoted root-relative iframe src (#7008 review: nettee)', () => {
+    const iframeFiles = new Set(['slides/child.html']);
+    expect(
+      htmlHasRootRelativeProjectAssetRefs('<iframe src=/slides/child.html></iframe>', iframeFiles),
+    ).toBe(true);
+    expect(
+      htmlHasRootRelativeProjectAssetRefs('<iframe src=/slides/missing.html></iframe>', iframeFiles),
+    ).toBe(false);
+  });
 });
 
 describe('collectPreviewAssetPaths', () => {
@@ -222,6 +232,42 @@ describe('normalizeRootRelativeProjectAssetRefs', () => {
       '<link rel="stylesheet" href="/api/projects/p1/raw/reference-assets/main.css">',
     ].join('\n');
     expect(normalizeRootRelativeProjectAssetRefs(html, 'index.html', files)).toBe(html);
+  });
+
+  describe('unquoted iframe src (#7008 review: nettee)', () => {
+    const iframeFiles = new Set(['slides/child.html']);
+
+    it('rewrites a confirmed unquoted root-relative iframe src to owner-relative', () => {
+      const html = '<html><body><iframe title="child" src=/slides/child.html></iframe></body></html>';
+      const out = normalizeRootRelativeProjectAssetRefs(html, 'root.html', iframeFiles);
+      expect(out).toContain('src="slides/child.html"');
+    });
+
+    it('matches the already-working quoted case for the same ref', () => {
+      const quoted = normalizeRootRelativeProjectAssetRefs(
+        '<html><body><iframe src="/slides/child.html"></iframe></body></html>',
+        'root.html',
+        iframeFiles,
+      );
+      const unquoted = normalizeRootRelativeProjectAssetRefs(
+        '<html><body><iframe src=/slides/child.html></iframe></body></html>',
+        'root.html',
+        iframeFiles,
+      );
+      expect(unquoted).toBe(quoted);
+    });
+
+    it('leaves an unconfirmed unquoted root-relative iframe src untouched', () => {
+      const html = '<html><body><iframe src=/slides/missing.html></iframe></body></html>';
+      expect(normalizeRootRelativeProjectAssetRefs(html, 'root.html', iframeFiles)).toBe(html);
+    });
+
+    it('leaves an unquoted relative (non-root-relative) iframe src untouched', () => {
+      // Not this normalizer's job -- htmlHasRelativeProjectIframeRefs's own
+      // relative branch handles the already-relative case.
+      const html = '<html><body><iframe src=child.html></iframe></body></html>';
+      expect(normalizeRootRelativeProjectAssetRefs(html, 'root.html', iframeFiles)).toBe(html);
+    });
   });
 });
 

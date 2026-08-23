@@ -123,6 +123,27 @@ export function htmlHasRootRelativeProjectAssetRefs(
   eachAssetRef(html, (ref) => {
     if (!found && rootRelativeProjectAssetPath(ref, projectFilePaths) !== null) found = true;
   });
+  if (!found) {
+    // eachAssetRef's ASSET_ATTR requires a quoted value and therefore never
+    // matches valid-but-unquoted iframe markup like
+    // <iframe src=/slides/child.html> (#7008 review). Without this, this
+    // function's caller (the URL-load -> srcDoc routing decision, and in
+    // turn the materialization pass that rewrites the ref) never fires for
+    // that exact case, leaving the browser to resolve it against the origin
+    // root instead of the srcDoc <base href>.
+    for (const tagMatch of html.matchAll(IFRAME_TAG)) {
+      const srcMatch = tagMatch[0].match(IFRAME_SRC);
+      if (
+        srcMatch
+        && srcMatch[1] === undefined
+        && srcMatch[3]
+        && rootRelativeProjectAssetPath(srcMatch[3], projectFilePaths) !== null
+      ) {
+        found = true;
+        break;
+      }
+    }
+  }
   return found;
 }
 
@@ -321,6 +342,24 @@ export function normalizeRootRelativeProjectAssetRefs(
       return rewritten === value ? match : `${space}${name}${eq}${quote}${rewritten}${quote}`;
     },
   );
+  // ASSET_ATTR requires a quoted value and therefore never matches valid-but-
+  // unquoted HTML like <iframe src=/slides/child.html> (#7008 review) — the
+  // confirmed root-relative ref survives untouched and the browser resolves
+  // it against the origin root instead of the srcDoc <base href>. Only
+  // iframe src gets this extra unquoted pass: it is the one attribute this
+  // module's own detector (htmlHasRelativeProjectIframeRefs) already treats
+  // as unquoted-eligible, and widening ASSET_ATTR itself would touch every
+  // other call site that shares it without the same need.
+  next = next.replace(IFRAME_TAG, (tag) => {
+    const srcMatch = tag.match(IFRAME_SRC);
+    if (!srcMatch || srcMatch[1] !== undefined || !srcMatch[3]) return tag;
+    const rewritten = rewriteConfirmedRef(srcMatch[3], projectFilePaths, toOwnerRelative);
+    if (rewritten === srcMatch[3]) return tag;
+    return tag.replace(
+      /(\ssrc\s*=\s*)([^\s"'>]+)/i,
+      (_full, prefix: string) => `${prefix}"${rewritten}"`,
+    );
+  });
   next = next.replace(LINK_TAG, (tag) =>
     tag.replace(LINK_HREF, (hrefMatch, prefix: string, quote: string, value: string) => {
       const rewritten = rewriteConfirmedRef(value, projectFilePaths, toOwnerRelative);
