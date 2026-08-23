@@ -690,6 +690,88 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('overrides = Object.create(null);');
   });
 
+  it('relays a frame-qualified entry in an od:inspect-replay payload to the matching child (#7008 review: nettee)', () => {
+    // A frame-qualified id (frame:[...]) has no matching selector in the
+    // root document's own DOM -- safeSelectorFor would reject it and the
+    // entry would be silently dropped instead of reaching the child it
+    // actually belongs to.
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    childWindow.postMessage = (message: unknown) => received.push(message);
+
+    const frameElementId = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-replay',
+        overrides: {
+          [frameElementId]: { selector: '[data-od-id="hero"]', props: { color: 'red' } },
+        },
+      },
+      source: dom.window,
+    }));
+
+    expect(received).toEqual([
+      { type: 'od:inspect-replay', overrides: { hero: { selector: '[data-od-id="hero"]', props: { color: 'red' } } } },
+    ]);
+    dom.window.close();
+  });
+
+  it('queues a frame-qualified inspect replay until the child reports ready', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    let childListening = false;
+    childWindow.postMessage = (message: unknown) => { if (childListening) received.push(message); };
+
+    const frameElementId = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-replay',
+        overrides: {
+          [frameElementId]: { selector: '[data-od-id="hero"]', props: { 'font-weight': '700' } },
+        },
+      },
+      source: dom.window,
+    }));
+    expect(received).toEqual([]);
+
+    childListening = true;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html',
+      },
+      source: childWindow,
+    }));
+    expect(received).toContainEqual(
+      { type: 'od:inspect-replay', overrides: { hero: { selector: '[data-od-id="hero"]', props: { 'font-weight': '700' } } } },
+    );
+    dom.window.close();
+  });
+
   it('hardens inspect overrides with a prop allow-list, value sanitizer, and trusted selector', () => {
     const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
       inspectBridge: true,

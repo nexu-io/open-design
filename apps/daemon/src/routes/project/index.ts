@@ -727,6 +727,14 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   var activeCommentSelector = null;
   var activeTargetPending = false;
   var inspectOverrides = Object.create(null);
+  // #7008: a replayed override keyed by a frame-qualified id (frame:[...])
+  // has no matching selector in THIS document's DOM, so it can never be
+  // validated/applied locally. Keep the raw, per-child entries here (keyed
+  // by framePath, then by the child's own local elementId) so they can be
+  // forwarded once -- immediately if the child frame already exists, and
+  // again on a later od:url-selection-bridge-ready in case the replay
+  // arrived before the child finished mounting or reloaded afterward.
+  var pendingFrameInspectOverrides = Object.create(null);
   var inspectStyle = null;
   var ALLOWED_INSPECT_PROPS = {
     'color': true, 'background-color': true, 'font-size': true,
@@ -786,6 +794,7 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   }
   markProjectFrames();
   try { new MutationObserver(markProjectFrames).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] }); } catch (_) {}
+  hydrateInspectOverridesFromDom();
   function parseProjectFrameTarget(elementId){
     var raw = String(elementId || '');
     if (raw.indexOf('frame:') !== 0) return null;
@@ -817,6 +826,13 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
     if (typeof data.value === 'string') message.value = data.value;
     try { frame.contentWindow.postMessage(message, '*'); } catch (_) {}
     return true;
+  }
+  function relayFrameInspectOverrides(framePath){
+    var entries = pendingFrameInspectOverrides[framePath];
+    if (!entries) return;
+    var frame = projectFrameForPath(framePath);
+    if (!frame || !frame.contentWindow) return;
+    try { frame.contentWindow.postMessage({ type: 'od:inspect-replay', overrides: entries }, '*'); } catch (_) {}
   }
   function broadcastProjectFrameMode(data){
     if (!data || (data.type !== 'od:comment-mode' && data.type !== 'od:inspect-mode')) return;
@@ -879,6 +895,43 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
       (document.head || document.documentElement).appendChild(inspectStyle);
     }
     return inspectStyle;
+  }
+  function hydrateInspectOverridesFromDom(){
+    // #7008 review: unlike the srcDoc bridge's own hydrateOverridesFromDom(),
+    // this URL-load bridge previously started inspectOverrides empty even
+    // when the served document already had a persisted
+    // <style data-od-inspect-overrides> block -- the first od:inspect-set
+    // or od:inspect-reset would then rebuild that style element from only
+    // the in-memory map, wiping every other persisted rule out of the live
+    // preview (the host's own on-disk copy is unaffected until Save, but
+    // the visible preview and the source it will save silently diverge).
+    var existing = document.querySelector('style[data-od-inspect-overrides]');
+    if (!existing) return;
+    var text = existing.textContent || '';
+    var ruleRe = /(\\[data-(?:od-id|screen-label)="[^"]*"\\])\\s*\\{\\s*([^}]*)\\}/g;
+    var match;
+    while ((match = ruleRe.exec(text)) !== null) {
+      var selector = match[1];
+      var declBody = match[2];
+      var idMatch = selector.match(/="([^"]*)"/);
+      if (!idMatch) continue;
+      var elementId = idMatch[1];
+      var props = Object.create(null);
+      var decls = declBody.split(';');
+      for (var d = 0; d < decls.length; d++) {
+        var raw = decls[d];
+        if (!raw) continue;
+        var colon = raw.indexOf(':');
+        if (colon <= 0) continue;
+        var name = raw.slice(0, colon).trim().toLowerCase();
+        if (!Object.prototype.hasOwnProperty.call(ALLOWED_INSPECT_PROPS, name)) continue;
+        var value = raw.slice(colon + 1).replace(/!important/i, '').trim();
+        if (!value || UNSAFE_INSPECT_VALUE.test(value)) continue;
+        props[name] = value;
+      }
+      if (Object.keys(props).length) inspectOverrides[elementId] = { selector: selector, props: props };
+    }
+    inspectStyle = existing;
   }
   function rebuildInspectStyle(){
     var lines = [];
@@ -1247,6 +1300,11 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
       if (data.href !== expectedHref) return;
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
+      // #7008: a replay that arrived before this child mounted (or before it
+      // reloaded, e.g. a scope rotation) was queued rather than dropped --
+      // deliver it now that the child's own bridge is confirmed ready.
+      var readyFramePath = projectFramePath(readyFrame);
+      if (readyFramePath) relayFrameInspectOverrides(readyFramePath);
       return;
     }
     if (routeProjectFrameCommand(data)) return;
@@ -1295,6 +1353,52 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
     }
     if (data.type === 'od:inspect-reset') {
       resetInspectOverrides(data.elementId);
+      return;
+    }
+    if (data.type === 'od:inspect-replay') {
+      // Replace the in-memory map with the host's authoritative set so
+      // unsaved edits survive a reload (toggling inspect off/on, switching
+      // to comment, a scope rotation that re-navigates this document).
+      // Re-validate every entry: a parent able to postMessage to this
+      // bridge is otherwise trusted, but applying its payload through the
+      // same allow-list / value sanitizer keeps the override sheet under
+      // the bridge's own contract instead of whatever the parent sent.
+      var replayRaw = (data && typeof data.overrides === 'object' && data.overrides) ? data.overrides : {};
+      inspectOverrides = Object.create(null);
+      // This replay's map is the host's FULL authoritative set, not an
+      // incremental patch, so the per-child breakdown is also replaced
+      // wholesale rather than merged.
+      var nextPendingFrameOverrides = Object.create(null);
+      var replayIds = Object.keys(replayRaw);
+      for (var ri = 0; ri < replayIds.length; ri++) {
+        var replayId = replayIds[ri];
+        var replayEntry = replayRaw[replayId];
+        if (!replayEntry || typeof replayEntry.props !== 'object' || !replayEntry.props) continue;
+        var replayFrameTarget = parseProjectFrameTarget(replayId);
+        if (replayFrameTarget) {
+          if (!nextPendingFrameOverrides[replayFrameTarget.framePath]) nextPendingFrameOverrides[replayFrameTarget.framePath] = Object.create(null);
+          nextPendingFrameOverrides[replayFrameTarget.framePath][replayFrameTarget.localElementId] = replayEntry;
+          continue;
+        }
+        var replaySafeSelector = inspectSelectorFor(replayId, replayEntry.selector);
+        if (!replaySafeSelector) continue;
+        var replayClean = Object.create(null);
+        var replayPropKeys = Object.keys(replayEntry.props);
+        for (var rp = 0; rp < replayPropKeys.length; rp++) {
+          var replayPropName = String(replayPropKeys[rp]).toLowerCase();
+          if (!Object.prototype.hasOwnProperty.call(ALLOWED_INSPECT_PROPS, replayPropName)) continue;
+          var replayRawValue = replayEntry.props[replayPropKeys[rp]];
+          if (replayRawValue == null) continue;
+          var replayValue = String(replayRawValue).trim();
+          if (!replayValue || UNSAFE_INSPECT_VALUE.test(replayValue)) continue;
+          replayClean[replayPropName] = replayValue;
+        }
+        if (Object.keys(replayClean).length) inspectOverrides[replayId] = { selector: replaySafeSelector, props: replayClean };
+      }
+      pendingFrameInspectOverrides = nextPendingFrameOverrides;
+      var pendingFramePaths = Object.keys(pendingFrameInspectOverrides);
+      for (var pf = 0; pf < pendingFramePaths.length; pf++) relayFrameInspectOverrides(pendingFramePaths[pf]);
+      rebuildInspectStyle();
       return;
     }
     if (data.type === 'od:comment-active-target') {

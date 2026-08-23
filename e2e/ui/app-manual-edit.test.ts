@@ -134,6 +134,81 @@ test('[P0] nested Inspect merges and resets a persisted child rule without chang
   await expectFileSourceExcludes(page, projectId, 'child.html', ['data-od-inspect-overrides']);
 });
 
+test('[P0] Inspect reaches a project child declared as an unquoted root-relative iframe src', async ({ page }) => {
+  test.setTimeout(60_000);
+  // #7008 review (nettee): htmlHasRelativeProjectIframeRefs() detects
+  // <iframe src=/slides/child.html> (unquoted, root-relative) and mints a
+  // scope, but the materialization pipeline (normalizeRootRelativeProjectAssetRefs,
+  // which only ASSET_ATTR-matches quoted values) previously left this exact
+  // markup untouched — the browser resolved it against the origin root
+  // instead of the srcDoc <base href>, so the child never got the selection
+  // bridge. This exercises the real markup through preview loading and
+  // selection, not just the detector/rewrite unit behavior.
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Unquoted root-relative iframe');
+  await seedProjectFile(page, projectId, 'slides/child.html', '<!doctype html><html><body><h2 data-od-id="hero">Root-Relative Child</h2></body></html>');
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'root.html',
+    '<!doctype html><html><body><iframe title="child" src=/slides/child.html></iframe></body></html>',
+  );
+  await page.goto(`/projects/${projectId}/files/root.html`);
+  await openDesignFile(page, 'root.html');
+  await page.getByTestId('inspect-mode-toggle').click();
+
+  const nested = artifactPreviewFrame(page).frameLocator('iframe[title="child"]');
+  await expect(nested.getByRole('heading', { name: 'Root-Relative Child' })).toBeVisible();
+  await expect(nested.locator('html[data-od-inspect-mode]')).toHaveCount(1);
+  await nested.locator('[data-od-id="hero"]').click();
+  await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  await page.getByTestId('inspect-font-size').fill('22');
+  await page.getByTestId('inspect-save').click();
+  await expectFileSource(page, projectId, 'slides/child.html', ['font-size: 22px']);
+});
+
+test('[P0] unsaved nested Inspect edit survives toggling Inspect off and back on', async ({ page }) => {
+  test.setTimeout(60_000);
+  // #7008 review (nettee): a frame-qualified entry in the host's
+  // od:inspect-replay payload has no matching selector in the root
+  // document's own DOM, so the root's own replay handler silently dropped
+  // it instead of forwarding it to the child. Toggling Inspect off then on
+  // rebuilds the srcDoc and replays the host's authoritative override map
+  // into the (freshly reloaded) iframe -- without the fix, this is exactly
+  // where an unsaved edit inside a nested child would disappear from the
+  // live preview even though the host still has it for a later Save.
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Nested inspect replay survives toggle');
+  const root = '<!doctype html><html><body><iframe title="child" src="child.html"></iframe></body></html>';
+  const child = '<!doctype html><html><body><h2 data-od-id="hero">Child Hero</h2></body></html>';
+  await seedProjectFile(page, projectId, 'child.html', child);
+  await seedHtmlArtifact(page, projectId, 'root.html', root);
+  await page.goto(`/projects/${projectId}/files/root.html`);
+  await openDesignFile(page, 'root.html');
+  await page.getByTestId('inspect-mode-toggle').click();
+
+  const nested = artifactPreviewFrame(page).frameLocator('iframe[title="child"]');
+  await expect(nested.getByRole('heading', { name: 'Child Hero' })).toBeVisible();
+  await expect(nested.locator('html[data-od-inspect-mode]')).toHaveCount(1);
+  await nested.locator('[data-od-id="hero"]').click();
+  await expect(page.getByTestId('inspect-panel')).toBeVisible();
+  await page.getByTestId('inspect-font-size').fill('30');
+  // Apply the edit to the live preview without saving to source yet -- the
+  // host's in-memory map is now the only place this override exists.
+  await expect(nested.locator('[data-od-id="hero"]')).toHaveCSS('font-size', '30px');
+
+  await page.getByTestId('inspect-mode-toggle').click();
+  await page.getByTestId('inspect-mode-toggle').click();
+
+  const nestedAfterToggle = artifactPreviewFrame(page).frameLocator('iframe[title="child"]');
+  await expect(nestedAfterToggle.getByRole('heading', { name: 'Child Hero' })).toBeVisible();
+  await expect(nestedAfterToggle.locator('[data-od-id="hero"]')).toHaveCSS('font-size', '30px');
+
+  await nestedAfterToggle.locator('[data-od-id="hero"]').click();
+  await page.getByTestId('inspect-save').click();
+  await expectFileSource(page, projectId, 'child.html', ['font-size: 30px']);
+});
+
 test('[P0] duplicate data-od-id in sibling project frames stay independently addressable', async ({ page }) => {
   test.setTimeout(60_000);
   // #7008 verification plan: "Duplicate child data-od-id values in different

@@ -1821,6 +1821,14 @@ function injectSelectionBridge(
   var postTargetsTimer = null;
   // overrides[elementId] = { selector: '[data-od-id="x"]', props: { color: '#fff', ... } }
   var overrides = Object.create(null);
+  // #7008: a replayed override keyed by a frame-qualified id (frame:[...])
+  // has no matching selector in THIS document's DOM, so it can never be
+  // validated/applied locally. Keep the raw, per-child entries here (keyed
+  // by framePath, then by the child's own local elementId) so they can be
+  // forwarded once — immediately if the child frame already exists, and
+  // again on a later od:url-selection-bridge-ready in case the replay
+  // arrived before the child finished mounting or reloaded afterward.
+  var pendingFrameInspectOverrides = Object.create(null);
   var styleEl = null;
   // Allow-list of CSS properties the host may override. A malicious parent
   // could otherwise smuggle arbitrary CSS (or, with </style>, raw HTML)
@@ -1915,6 +1923,13 @@ function injectSelectionBridge(
     if (typeof data.value === 'string') message.value = data.value;
     try { frame.contentWindow.postMessage(message, '*'); } catch (_) {}
     return true;
+  }
+  function relayFrameInspectOverrides(framePath){
+    var entries = pendingFrameInspectOverrides[framePath];
+    if (!entries) return;
+    var frame = projectFrameForPath(framePath);
+    if (!frame || !frame.contentWindow) return;
+    try { frame.contentWindow.postMessage({ type: 'od:inspect-replay', overrides: entries }, '*'); } catch (_) {}
   }
   function broadcastProjectFrameMode(data){
     if (!data || (data.type !== 'od:comment-mode' && data.type !== 'od:inspect-mode')) return;
@@ -2604,6 +2619,11 @@ function meaningfulDomFallbackTarget(el) {
       if (data.href !== expectedHref) return;
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
+      // #7008: a replay that arrived before this child mounted (or before it
+      // reloaded, e.g. a scope rotation) was queued rather than dropped —
+      // deliver it now that the child's own bridge is confirmed ready.
+      var readyFramePath = projectFramePath(readyFrame);
+      if (readyFramePath) relayFrameInspectOverrides(readyFramePath);
       return;
     }
     if (routeProjectFrameCommand(data)) return;
@@ -2684,11 +2704,21 @@ function meaningfulDomFallbackTarget(el) {
       // contract instead of whatever the parent sent.
       var raw = (data && typeof data.overrides === 'object' && data.overrides) ? data.overrides : {};
       overrides = Object.create(null);
+      // #7008: this replay's map is the host's FULL authoritative set, not
+      // an incremental patch, so the per-child breakdown below is also
+      // replaced wholesale rather than merged.
+      var nextPendingFrameOverrides = Object.create(null);
       var ids = Object.keys(raw);
       for (var i = 0; i < ids.length; i++) {
         var id = ids[i];
         var entry = raw[id];
         if (!entry || typeof entry.props !== 'object' || !entry.props) continue;
+        var frameTarget = parseProjectFrameTarget(id);
+        if (frameTarget) {
+          if (!nextPendingFrameOverrides[frameTarget.framePath]) nextPendingFrameOverrides[frameTarget.framePath] = Object.create(null);
+          nextPendingFrameOverrides[frameTarget.framePath][frameTarget.localElementId] = entry;
+          continue;
+        }
         var safeSelector = safeSelectorFor(id, entry.selector);
         if (!safeSelector) continue;
         var clean = Object.create(null);
@@ -2704,6 +2734,9 @@ function meaningfulDomFallbackTarget(el) {
         }
         if (Object.keys(clean).length) overrides[id] = { selector: safeSelector, props: clean };
       }
+      pendingFrameInspectOverrides = nextPendingFrameOverrides;
+      var pendingFramePaths = Object.keys(pendingFrameInspectOverrides);
+      for (var f = 0; f < pendingFramePaths.length; f++) relayFrameInspectOverrides(pendingFramePaths[f]);
       rebuildStyleSheet();
       postOverrides();
       return;
