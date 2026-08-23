@@ -382,7 +382,33 @@ describe('URL preview nested-frame bridges', () => {
       { type: 'od:comment-mode', enabled: true, mode: 'picker' },
       { type: 'od:inspect-mode', enabled: true },
     ]);
-    expect(frame.getAttribute('data-od-live-frame-path')).toBe('slide-2.html');
+    received.length = 0;
+    dispatch({
+      type: 'od:inspect-set',
+      elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-2.html', 'hero']))}`,
+      prop: 'color',
+      value: 'red',
+    });
+    expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'red' }]);
+
+    // No MutationObserver callback is needed for correctness: comparing the
+    // cached src snapshot makes this parent mutation invalidate immediately.
+    frameAttrs.src = 'slide-3.html';
+    received.length = 0;
+    dispatch({
+      type: 'od:inspect-set',
+      elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-2.html', 'hero']))}`,
+      prop: 'color',
+      value: 'blue',
+    });
+    expect(received).toEqual([]);
+    dispatch({
+      type: 'od:inspect-set',
+      elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-3.html', 'hero']))}`,
+      prop: 'color',
+      value: 'green',
+    });
+    expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'green' }]);
   });
 
   it('rejects a child-ready ping whose href is outside the current preview scope (#7008 review: frame.src staleness)', () => {
@@ -443,7 +469,6 @@ describe('URL preview nested-frame bridges', () => {
     }, childWindow);
 
     expect(received).toEqual([]);
-    expect(frame.getAttribute('data-od-live-frame-path')).toBeNull();
   });
 
   it('hydrates persisted inspect overrides on boot instead of starting empty (#7008 review: nettee, non-blocking)', () => {

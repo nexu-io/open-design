@@ -29,7 +29,8 @@ function makeMockFrame(initialSrc: string, resolveBase: () => string) {
     getAttribute(name: string) { return Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name] : null; },
     setAttribute(name: string, value: string) { attrs[name] = value; },
     get src() {
-      try { return new URL(attrs.src, resolveBase()).href; } catch { return attrs.src; }
+      const rawSrc = attrs.src ?? '';
+      try { return new URL(rawSrc, resolveBase()).href; } catch { return rawSrc; }
     },
     set src(value: string) { attrs.src = value; },
   };
@@ -123,13 +124,15 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
   function setUp(iframeSrc: string, ownerDir = '') {
     const baseEl = { href: `http://preview.local/api/projects/p1/preview/scope-1/${ownerDir}`, setAttribute(_: string, value: string) { this.href = value; } };
     const frame = makeMockFrame(iframeSrc, () => baseEl.href);
+    const childWindow = {};
+    Object.assign(frame, { contentWindow: childWindow });
     const parentMessages: unknown[] = [];
-    let messageListener: ((event: { source: unknown; data: unknown }) => void) | undefined;
+    const messageListeners: Array<(event: { source: unknown; data: unknown }) => void> = [];
     const window = {
       __odPreviewBaseBridge: false,
       parent: { postMessage: (message: unknown) => parentMessages.push(message) },
       addEventListener(type: string, listener: (event: { source: unknown; data: unknown }) => void) {
-        if (type === 'message') messageListener = listener;
+        if (type === 'message') messageListeners.push(listener);
       },
     };
     const document = {
@@ -142,8 +145,10 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
     // rotation href too (see injectProjectPreviewBase), so the next scope's
     // href carries the same ownerDir suffix as the current one.
     const send = (scope: string) =>
-      messageListener?.({ source: window.parent, data: { type: 'od:preview-base-update', href: `http://preview.local/api/projects/p1/preview/${scope}/${ownerDir}` } });
-    return { baseEl, frame, parentMessages, send };
+      messageListeners.forEach((listener) => listener({ source: window.parent, data: { type: 'od:preview-base-update', href: `http://preview.local/api/projects/p1/preview/${scope}/${ownerDir}` } }));
+    const ready = (href: string, source: unknown = childWindow) =>
+      messageListeners.forEach((listener) => listener({ source, data: { type: 'od:url-selection-bridge-ready', href } }));
+    return { baseEl, frame, parentMessages, ready, send };
   }
 
   it('rebases and reloads an already-navigated project-relative child iframe to the new scope', () => {
@@ -187,27 +192,36 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
   });
 
   it('rebases to the child-confirmed live path when the child navigated itself, not the stale src attribute (#7008 review: frame.src staleness)', () => {
-    // Unlike the previous test (a parent-driven src assignment, which DOES
-    // update the reflected attribute), a child navigating ITSELF -- an
-    // internal link, a window.location assignment -- never updates its
-    // parent's src attribute at all. The selection bridge's ready-ping
-    // handler is the only thing that observes the child's real location
-    // (via window.location.href from inside the child) and records it on
-    // data-od-live-frame-path; this bridge must prefer that confirmed value
-    // over frame.src whenever both are present.
-    const { frame, send } = setUp('child.html');
+    const { frame, ready, send } = setUp('child.html');
     send('scope-2');
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/child.html');
 
-    // Simulate the selection bridge's ready-ping handler confirming the
-    // child self-navigated to a different slide -- frame.src is left
-    // untouched (still "child.html" resolved against scope-2), exactly as a
-    // real child self-navigation would leave it.
-    frame.setAttribute('data-od-live-frame-path', 'slide-2.html');
+    // A child self-navigation leaves frame.src untouched. Its ready ping is
+    // independently recorded by this bridge's private cache.
+    ready('http://preview.local/api/projects/p1/preview/scope-2/slide-2.html');
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/child.html');
 
     send('scope-3');
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/slide-2.html');
+  });
+
+  it('falls back to the current src synchronously after a parent src mutation', () => {
+    const { frame, ready, send } = setUp('child.html');
+    send('scope-2');
+    ready('http://preview.local/api/projects/p1/preview/scope-2/slide-2.html');
+    frame.setAttribute('src', 'slide-3.html');
+
+    send('scope-3');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/slide-3.html');
+  });
+
+  it('ignores a ready ping outside the current preview scope and falls back to src', () => {
+    const { frame, ready, send } = setUp('child.html');
+    send('scope-2');
+    ready('http://preview.local/api/projects/p1/preview/other-scope/slide-2.html');
+
+    send('scope-3');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/child.html');
   });
 
   it('rebases a sibling-directory iframe src that crosses the owner file directory boundary (Codex review)', () => {

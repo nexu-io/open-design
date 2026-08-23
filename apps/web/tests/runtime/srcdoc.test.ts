@@ -583,7 +583,6 @@ describe('buildSrcdoc', () => {
     }));
 
     expect(received).toEqual([]);
-    expect(frame?.getAttribute('data-od-live-frame-path')).toBeNull();
     dom.window.close();
   });
 
@@ -622,11 +621,25 @@ describe('buildSrcdoc', () => {
       { type: 'od:comment-mode', enabled: true, mode: 'picker' },
       { type: 'od:inspect-mode', enabled: true },
     ]);
-    expect(frame?.getAttribute('data-od-live-frame-path')).toBe('slide-2.html');
+    // The confirmed live path is now closure-private (#7008 review: nettee --
+    // no longer an inspectable/writable DOM attribute), so verify its effect
+    // indirectly: an od:inspect-set targeting a frame-qualified id keyed by
+    // the CONFIRMED path ('slide-2.html', not the original 'child.html' src)
+    // must resolve to and relay into this exact frame.
+    received.length = 0;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-set',
+        elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-2.html', 'hero']))}`,
+        prop: 'color',
+        value: 'red',
+      },
+    }));
+    expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'red' }]);
     dom.window.close();
   });
 
-  it('clears the cached live path when the parent explicitly changes a frame src (#7008 review: cache invalidation)', async () => {
+  it('falls back from the cached live path synchronously when the parent changes a frame src (#7008 review: cache invalidation)', () => {
     const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
       baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
       inspectBridge: true,
@@ -640,7 +653,8 @@ describe('buildSrcdoc', () => {
     const childWindow = frame?.contentWindow;
     expect(childWindow).toBeTruthy();
     if (!childWindow || !frame) throw new Error('Expected child iframe window');
-    childWindow.postMessage = () => {};
+    const received: unknown[] = [];
+    childWindow.postMessage = (message: unknown) => received.push(message);
 
     dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
       data: {
@@ -649,13 +663,51 @@ describe('buildSrcdoc', () => {
       },
       source: childWindow,
     }));
-    expect(frame.getAttribute('data-od-live-frame-path')).toBe('slide-2.html');
+    // Cache is closure-private (#7008 review: nettee) -- verify it's set by
+    // routing a frame-qualified command keyed by the confirmed path. Clear
+    // the ready-ping's own mode-broadcast replies first.
+    received.length = 0;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-set',
+        elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-2.html', 'hero']))}`,
+        prop: 'color',
+        value: 'red',
+      },
+    }));
+    expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'red' }]);
 
     frame.setAttribute('src', 'slide-3.html');
-    // The MutationObserver callback that clears the cache fires as a
-    // microtask, not synchronously with the attribute change.
-    await new Promise<void>((resolve) => dom.window.queueMicrotask(resolve));
-    expect(frame.getAttribute('data-od-live-frame-path')).toBeNull();
+    // A real src reassignment navigates the frame -- JSDOM (like a real
+    // browser reloading a child) replaces contentWindow with a fresh object,
+    // so the mock from before the mutation no longer intercepts anything.
+    const childWindowAfterReload = frame.contentWindow;
+    expect(childWindowAfterReload).toBeTruthy();
+    if (!childWindowAfterReload) throw new Error('Expected reloaded child iframe window');
+    childWindowAfterReload.postMessage = (message: unknown) => received.push(message);
+    // The stale 'slide-2.html' identity no longer resolves to this frame...
+    received.length = 0;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-set',
+        elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-2.html', 'hero']))}`,
+        prop: 'color',
+        value: 'blue',
+      },
+    }));
+    expect(received).toEqual([]);
+
+    // ...projectFramePath() now falls back to re-deriving from the mutated
+    // src attribute, so the NEW path resolves instead.
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:inspect-set',
+        elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-3.html', 'hero']))}`,
+        prop: 'color',
+        value: 'green',
+      },
+    }));
+    expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'green' }]);
     dom.window.close();
   });
 
@@ -704,7 +756,7 @@ describe('buildSrcdoc', () => {
 
     dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
       data: { type: 'od:comment-leave' },
-      source: { unrelated: true },
+      source: { unrelated: true } as unknown as MessageEventSource,
     }));
 
     expect(received).toEqual([]);
@@ -800,7 +852,7 @@ describe('buildSrcdoc', () => {
           [frameElementId]: { selector: '[data-od-id="hero"]', props: { color: 'red' } },
         },
       },
-      source: dom.window,
+      source: dom.window.parent,
     }));
 
     expect(received).toEqual([
@@ -835,7 +887,7 @@ describe('buildSrcdoc', () => {
           [frameElementId]: { selector: '[data-od-id="hero"]', props: { 'font-weight': '700' } },
         },
       },
-      source: dom.window,
+      source: dom.window.parent,
     }));
     expect(received).toEqual([]);
 

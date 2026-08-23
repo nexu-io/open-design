@@ -786,14 +786,18 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
       return path && path.indexOf('..') < 0 && /\.html?$/i.test(path) ? path : null;
     } catch (_) { return null; }
   }
+  // Keep live paths outside artifact-controlled DOM. The cached src snapshot
+  // makes a parent src mutation invalidate synchronously before observers run.
+  var liveFramePaths = new WeakMap();
   function projectFramePath(frame){
     // A validated ready ping (see od:url-selection-bridge-ready below)
     // caches the child's own reported path here -- ground truth from the
     // child itself, once known, always wins over re-deriving from the
     // parent's possibly-stale src attribute.
     try {
-      var livePath = frame && frame.getAttribute && frame.getAttribute('data-od-live-frame-path');
-      if (livePath) return livePath;
+      var cachedFramePath = frame && liveFramePaths.get(frame);
+      var currentFrameSrc = frame && frame.getAttribute ? (frame.getAttribute('src') || '') : '';
+      if (cachedFramePath && cachedFramePath.srcAtCache === currentFrameSrc) return cachedFramePath.path;
     } catch (_) {}
     try {
       return projectFramePathFromHref(frame.src);
@@ -815,18 +819,7 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   }
   markProjectFrames();
   try {
-    new MutationObserver(function(records){
-      // #7008 review: the parent explicitly setting a new src is exactly
-      // the moment the cached live path (from a prior ready ping) is known
-      // to be stale -- clear it so projectFramePath() falls back to the
-      // best-effort src-derived guess until the reloaded child's own
-      // ready ping confirms the real new path.
-      for (var r = 0; r < records.length; r++) {
-        var record = records[r];
-        if (record.attributeName === 'src' && record.target && record.target.tagName === 'IFRAME') {
-          try { record.target.removeAttribute('data-od-live-frame-path'); } catch (_) {}
-        }
-      }
+    new MutationObserver(function(){
       markProjectFrames();
     }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
   } catch (_) {}
@@ -1338,7 +1331,9 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
       if (!readyFrame) return;
       var readyFramePath = projectFramePathFromHref(data.href);
       if (!readyFramePath) return;
-      try { readyFrame.setAttribute('data-od-live-frame-path', readyFramePath); } catch (_) {}
+      try {
+        liveFramePaths.set(readyFrame, { path: readyFramePath, srcAtCache: readyFrame.getAttribute('src') || '' });
+      } catch (_) {}
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
       // #7008: a replay that arrived before this child mounted (or before it

@@ -44,6 +44,36 @@ export function buildPreviewBaseHrefBridge(
       }, '*');
     } catch (_) {}
   }
+  // This bridge has its own closure, so it keeps a separate private record of
+  // paths confirmed by ready pings. FileViewer remains the write authority.
+  var liveFramePaths = new WeakMap();
+  function projectFramePathFromHref(hrefString){
+    try {
+      var base = new URL(document.baseURI);
+      var baseMatch = base.pathname.match(/^\\/api\\/projects\\/([^/]+)\\/preview\\/([^/]+)\\//);
+      var child = new URL(hrefString, document.baseURI);
+      if (!baseMatch || child.origin !== base.origin) return null;
+      var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
+      if (child.pathname.indexOf(prefix) !== 0) return null;
+      var path = decodeURIComponent(child.pathname.slice(prefix.length));
+      return path && path.indexOf('..') < 0 ? path : null;
+    } catch (_) { return null; }
+  }
+  function projectFrameForSource(source){
+    var frames = document.querySelectorAll('iframe[src]');
+    for (var i = 0; i < frames.length; i++) {
+      if (frames[i].contentWindow === source) return frames[i];
+    }
+    return null;
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:url-selection-bridge-ready') return;
+    var frame = projectFrameForSource(ev.source);
+    var path = frame && projectFramePathFromHref(data.href);
+    if (!path) return;
+    try { liveFramePaths.set(frame, { path: path, srcAtCache: frame.getAttribute('src') || '' }); } catch (_) {}
+  });
   window.addEventListener('message', function(ev){
     if (ev.source !== window.parent) return;
     var data = ev && ev.data;
@@ -101,17 +131,9 @@ export function buildPreviewBaseHrefBridge(
             var frame = frames[i];
             var relative = null;
             try {
-              // #7008 review: prefer the child's own confirmed live path (set
-              // by the selection bridge's ready-ping handler on the same
-              // element) over re-deriving from this frame's src. A child that
-              // navigated itself since the last ready ping never updates its
-              // parent's src attribute, so stripping scopeRoot from src here
-              // would silently revert the rebase target to whatever page was
-              // showing when the child last confirmed readiness. This bridge
-              // can also run without the selection bridge present (no
-              // Comment/Inspect enabled), so the attribute may be absent --
-              // fall back to the src-derived guess in that case.
-              relative = frame.getAttribute && frame.getAttribute('data-od-live-frame-path');
+              var cachedFramePath = liveFramePaths.get(frame);
+              var currentFrameSrc = frame.getAttribute ? (frame.getAttribute('src') || '') : '';
+              if (cachedFramePath && cachedFramePath.srcAtCache === currentFrameSrc) relative = cachedFramePath.path;
             } catch (_) {}
             if (!relative) {
               var resolvedSrc = frame.src;
