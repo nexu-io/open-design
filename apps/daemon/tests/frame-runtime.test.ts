@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   URL_PREVIEW_SCROLL_BRIDGE,
   URL_PREVIEW_SELECTION_BRIDGE,
-} from '../src/routes/project/index.ts';
+} from '../src/routes/project/index.js';
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -208,5 +208,17 @@ describe('URL preview nested-frame bridges', () => {
     expect(received).toEqual([
       { type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'red' },
     ]);
+
+    // #7008 review: od:comment-leave carries no target identity — it must
+    // still reach the host (to dismiss the hover card) even though it has
+    // none of the position/elementId/selector fields the target/hover
+    // relay branch requires.
+    parentMessages.length = 0;
+    dispatch({ type: 'od:comment-leave' }, childWindow);
+    expect(parentMessages).toEqual([{ type: 'od:comment-leave' }]);
+
+    parentMessages.length = 0;
+    dispatch({ type: 'od:comment-leave' }, { unrelated: true });
+    expect(parentMessages).toEqual([]);
   });
 });
