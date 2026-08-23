@@ -465,6 +465,46 @@ test('[P0] child element comment re-anchors after root reload', async ({ page })
   await expect(page.getByTestId(`comment-saved-marker-${childTargetId}`)).toHaveAttribute('data-anchor-state', 'anchored');
 });
 
+test('[P0] self-navigated child comment stays authorized after re-navigating past a root reload', async ({ page }) => {
+  test.setTimeout(60_000);
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Self-navigated comment re-anchor');
+  await seedProjectFile(page, projectId, 'slide-1.html', '<!doctype html><html><body><h2 data-od-id="one">One</h2></body></html>');
+  await seedProjectFile(page, projectId, 'slide-2.html', '<!doctype html><html><body><h2 data-od-id="two">Two</h2></body></html>');
+  await seedHtmlArtifact(page, projectId, 'root.html', '<!doctype html><html><body><iframe title="comment child" src="slide-1.html"></iframe></body></html>');
+  await page.goto(`/projects/${projectId}/files/root.html`);
+  await openDesignFile(page, 'root.html');
+  await page.getByTestId('board-mode-toggle').click();
+  const nested = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
+  await expect(nested.locator('html[data-od-comment-mode]')).toHaveCount(1);
+  await nested.locator('html').evaluate(() => { window.location.href = 'slide-2.html'; });
+  await expect(nested.getByRole('heading', { name: 'Two' })).toBeVisible();
+  await nested.locator('[data-od-id="two"]').click();
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+  await page.getByTestId('comment-popover-input').fill('Self-navigated comment');
+  await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
+  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
+  await page.getByTestId('comment-panel-toggle').click();
+  await expect(page.getByTestId('comment-side-panel')).toContainText('Self-navigated comment');
+  // A plain reload restarts the child at its declared static src (slide-1.html) --
+  // there is no server-side persistence of "this frame's last live path", so a
+  // comment anchored on a self-navigated path is authorized again only once the
+  // child re-navigates there, exactly like the first time. This re-navigation
+  // step is what's actually guaranteed by the STATIC_FRAME_PATHS/liveFramePaths
+  // design; asserting the comment survives reload with no re-navigation would
+  // test a persistence guarantee this PR does not implement.
+  await page.reload();
+  await waitForLoadingToClear(page);
+  await page.getByTestId('board-mode-toggle').click();
+  const reloadedChild = artifactPreviewFrame(page).frameLocator('iframe[title="comment child"]');
+  await expect(reloadedChild.getByRole('heading', { name: 'One' })).toBeVisible();
+  await reloadedChild.locator('html').evaluate(() => { window.location.href = 'slide-2.html'; });
+  await expect(reloadedChild.getByRole('heading', { name: 'Two' })).toBeVisible();
+  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
+  await page.getByTestId('comment-panel-toggle').click();
+  await expect(page.getByTestId('comment-side-panel')).toContainText('Self-navigated comment');
+});
+
 test('[P0] manual edit mode preserves the current page in a multi-page mobile app', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Multi-page mobile edit');
