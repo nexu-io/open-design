@@ -71,19 +71,26 @@ export function buildPreviewBaseHrefBridge(
       // document's base URL only once, at the time it navigates. Rebase and
       // reload every still-relative iframe src now, so it lands under the
       // scope that lets the daemon inject the child selection bridge.
+      //
+      // Derive each frame's current relative path fresh every rotation by
+      // stripping the OLD scope prefix (the local 'current', captured above
+      // before base was updated) from its live resolved src — do not cache
+      // the relative ref on first sight. A cached value goes stale the
+      // moment a deck navigates the frame to a different slide between two
+      // scope rotations (e.g. a renewed preview scope or a daemon restart
+      // while a deck is open): re-resolving a stale cached ref would
+      // silently revert the frame back to whatever slide was showing at the
+      // first rotation.
       try {
         var frames = document.querySelectorAll('iframe[src]');
         for (var i = 0; i < frames.length; i++) {
           var frame = frames[i];
-          var original = frame.getAttribute('data-od-original-frame-src');
-          if (original === null) {
-            var candidate = frame.getAttribute('src') || '';
-            original = /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|\\/|#)/i.test(candidate) ? '' : candidate;
-            frame.setAttribute('data-od-original-frame-src', original);
-          }
-          if (!original) continue;
+          var resolvedSrc = frame.src;
+          if (!resolvedSrc || resolvedSrc.indexOf(current.href) !== 0) continue;
+          var relative = resolvedSrc.slice(current.href.length);
+          if (!relative || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|\\/|#)/i.test(relative)) continue;
           try {
-            var rebased = new URL(original, next.href).href;
+            var rebased = new URL(relative, next.href).href;
             if (frame.src !== rebased) frame.src = rebased;
           } catch (_) {}
         }

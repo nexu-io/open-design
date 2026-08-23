@@ -18,14 +18,20 @@ function runPreviewBaseHrefBridge(context: Record<string, unknown>): void {
   vm.runInNewContext(bridge.slice(scriptStart, scriptEnd), context);
 }
 
-function makeMockFrame(initialSrc: string) {
+// Mirrors real reflected-URL-attribute semantics: the raw attribute is
+// whatever was last set (relative or absolute, verbatim), while the `.src`
+// IDL property always resolves that raw value against the CURRENT document
+// base at access time — not whatever base was active when it was set. The
+// rebase fix under test depends on this exact distinction.
+function makeMockFrame(initialSrc: string, resolveBase: () => string) {
   const attrs: Record<string, string> = { src: initialSrc };
-  let liveSrc = initialSrc;
   return {
     getAttribute(name: string) { return Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name] : null; },
     setAttribute(name: string, value: string) { attrs[name] = value; },
-    get src() { return liveSrc; },
-    set src(value: string) { liveSrc = value; attrs.src = value; },
+    get src() {
+      try { return new URL(attrs.src, resolveBase()).href; } catch { return attrs.src; }
+    },
+    set src(value: string) { attrs.src = value; },
   };
 }
 
@@ -116,7 +122,7 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
   // child previously covered any of this path.
   function setUp(iframeSrc: string) {
     const baseEl = { href: 'http://preview.local/api/projects/p1/preview/scope-1/', setAttribute(_: string, value: string) { this.href = value; } };
-    const frame = makeMockFrame(iframeSrc);
+    const frame = makeMockFrame(iframeSrc, () => baseEl.href);
     const parentMessages: unknown[] = [];
     let messageListener: ((event: { source: unknown; data: unknown }) => void) | undefined;
     const window = {
@@ -157,5 +163,22 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
     const { frame, send } = setUp('https://example.com/embed');
     send('http://preview.local/api/projects/p1/preview/scope-2/');
     expect(frame.src).toBe('https://example.com/embed');
+  });
+
+  it('carries a dynamically changed child src forward across a later scope rotation', () => {
+    // #7008 review (nettee): caching the "original" relative ref on first
+    // sight goes stale the moment a deck navigates the frame to a different
+    // slide between two scope rotations — a later rotation (renewal, daemon
+    // restart) must rebase the CURRENT src, not revert to the first slide.
+    const { frame, send } = setUp('child.html');
+    send('http://preview.local/api/projects/p1/preview/scope-2/');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/child.html');
+
+    // Simulate the deck's own navigation setting a new relative src directly.
+    frame.src = 'slide-2.html';
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/slide-2.html');
+
+    send('http://preview.local/api/projects/p1/preview/scope-3/');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/slide-2.html');
   });
 });
