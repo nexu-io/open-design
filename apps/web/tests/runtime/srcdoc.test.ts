@@ -578,6 +578,58 @@ describe('buildSrcdoc', () => {
     dom.window.close();
   });
 
+  it('relays a child comment-leave to the top-level host (#7008 review: hover dismiss)', () => {
+    // od:comment-leave carries no target identity — it must still reach the
+    // host so FileViewer can dismiss the hover card, not just target/hover/
+    // active-target-update messages that carry a position+elementId.
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+
+    const received: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od:comment-leave' },
+      source: childWindow,
+    }));
+
+    expect(received).toEqual([{ type: 'od:comment-leave' }]);
+    dom.window.close();
+  });
+
+  it('does not relay a comment-leave from a source that is not a known project frame', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const received: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od:comment-leave' },
+      source: { unrelated: true },
+    }));
+
+    expect(received).toEqual([]);
+    dom.window.close();
+  });
+
   it('hydrates inspect overrides from a persisted style block on bridge boot', () => {
     // Without hydration, the first od:inspect-set rebuilds the override
     // sheet from an empty in-memory map and silently drops every previously

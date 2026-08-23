@@ -826,6 +826,12 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   function relayProjectFrameSelection(ev){
     if (!active()) return;
     var data = ev && ev.data;
+    if (data && data.type === 'od:comment-leave') {
+      // Carries no target identity — the pointer simply left whatever it was
+      // over. Relay as-is once the sender is confirmed a real project frame.
+      if (projectFrameForSource(ev.source)) window.parent.postMessage({ type: 'od:comment-leave' }, '*');
+      return;
+    }
     var allowed = { 'od:comment-target': true, 'od:comment-hover': true, 'od:comment-active-target-update': true };
     if (!data || !allowed[data.type] || !data.position || !data.elementId || !data.selector) return;
     var frame = projectFrameForSource(ev.source);
