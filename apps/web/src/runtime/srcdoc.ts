@@ -78,6 +78,8 @@ export type SrcdocOptions = {
   transportActivationGeneration?: string;
   /** Static project-local child paths authorized by the host's root-source parse. */
   staticFramePaths?: readonly string[];
+  /** Per-render secret echoed only by the selection bridge's closure-private relay. */
+  renderNonce?: string;
 };
 
 // --- Redirect-loop guard -------------------------------------------------
@@ -453,6 +455,7 @@ export function buildSrcdoc(
       initialCommentMode: !!options.commentBridge,
       initialInspectMode: !!options.inspectBridge,
       staticFramePaths: options.staticFramePaths,
+      renderNonce: options.renderNonce,
       })
     : withDeck;
   const withPalette = options.paletteBridge
@@ -1803,11 +1806,17 @@ function injectPreviewRedirectGuard(
 // damage. Any parent able to postMessage here can already mount the iframe.
 function injectSelectionBridge(
   doc: string,
-  options: { initialCommentMode?: boolean; initialInspectMode?: boolean; staticFramePaths?: readonly string[] } = {},
+  options: {
+    initialCommentMode?: boolean;
+    initialInspectMode?: boolean;
+    staticFramePaths?: readonly string[];
+    renderNonce?: string;
+  } = {},
 ): string {
   const initialComment = options.initialCommentMode ? 'true' : 'false';
   const initialInspect = options.initialInspectMode ? 'true' : 'false';
   const staticFramePaths = JSON.stringify(options.staticFramePaths ?? []).replace(/</g, '\\u003c');
+  const renderNonce = JSON.stringify(options.renderNonce ?? '').replace(/</g, '\\u003c');
   const script = `<script data-od-selection-bridge>(function(){
   var commentEnabled = ${initialComment};
   var inspectEnabled = ${initialInspect};
@@ -1834,6 +1843,7 @@ function injectSelectionBridge(
   // arrived before the child finished mounting or reloaded afterward.
   var pendingFrameInspectOverrides = Object.create(null);
   var STATIC_FRAME_PATHS = ${staticFramePaths};
+  var RENDER_NONCE = ${renderNonce};
   var styleEl = null;
   // Allow-list of CSS properties the host may override. A malicious parent
   // could otherwise smuggle arbitrary CSS (or, with </style>, raw HTML)
@@ -1894,6 +1904,20 @@ function injectSelectionBridge(
   // narrower than project-wide file authorization; do not add timing heuristics.
   var originalFrameIsStatic = new WeakMap();
   var originalFramePaths = new WeakMap();
+  var projectFrameLoadListeners = new WeakSet();
+  function clearLiveFramePath(frame){
+    try { liveFramePaths.delete(frame); } catch (_) {}
+    try {
+      if (originalFrameIsStatic.get(frame)) {
+        window.parent.postMessage({ type: 'od:project-frame-live-path-cleared', originalPath: originalFramePaths.get(frame), nonce: RENDER_NONCE }, '*');
+      }
+    } catch (_) {}
+  }
+  function observeProjectFrameLoad(frame){
+    if (!frame || projectFrameLoadListeners.has(frame)) return;
+    projectFrameLoadListeners.add(frame);
+    frame.addEventListener('load', function(){ clearLiveFramePath(frame); });
+  }
   function projectFramePath(frame){
     // A validated ready ping (see od:url-selection-bridge-ready below)
     // caches the child's own reported path here -- ground truth from the
@@ -1905,6 +1929,7 @@ function injectSelectionBridge(
       if (frame && !originalFramePaths.has(frame)) {
         originalFramePaths.set(frame, srcDerivedPath);
         originalFrameIsStatic.set(frame, !!srcDerivedPath && STATIC_FRAME_PATHS.indexOf(srcDerivedPath) !== -1);
+        observeProjectFrameLoad(frame);
       }
       var cachedFramePath = frame && liveFramePaths.get(frame);
       var currentFrameSrc = frame && frame.getAttribute ? (frame.getAttribute('src') || '') : '';
@@ -2677,7 +2702,7 @@ function meaningfulDomFallbackTarget(el) {
       try { liveFramePaths.set(readyFrame, { path: readyFramePath, srcAtCache: readyFrame.getAttribute('src') || '' }); } catch (_) {}
       try {
         if (originalFrameIsStatic.get(readyFrame)) {
-          window.parent.postMessage({ type: 'od:project-frame-live-path', originalPath: originalFramePaths.get(readyFrame), newPath: readyFramePath }, '*');
+          window.parent.postMessage({ type: 'od:project-frame-live-path', originalPath: originalFramePaths.get(readyFrame), newPath: readyFramePath, nonce: RENDER_NONCE }, '*');
         }
       } catch (_) {}
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
