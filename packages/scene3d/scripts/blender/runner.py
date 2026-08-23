@@ -23,6 +23,7 @@ nothing reads wall-clock time, and geometry analysis happens in world space
 with fixed epsilons so results are bit-stable across runs.
 """
 
+import array
 import base64
 import json
 import math
@@ -3066,13 +3067,38 @@ def orbit_offset(azimuth, elevation, distance):
     )) * distance
 
 
-def frame_stats(filepath):
-    """Deterministic coverage statistics for one rendered frame.
+# The colour written UNDER a transparent proof background.
+#
+# The film is rendered transparent so the alpha channel is an exact subject
+# mask — which is what the coverage measurement below reads, and what lets a
+# viewer composite the asset over anything. But Blender leaves RGB at zero
+# beneath those transparent pixels, and most things that touch a PNG drop
+# alpha: converters, thumbnailers, model runtimes that accept images. All of
+# them then show a BLACK frame, and a dark asset on black reads as a broken
+# render rather than a dark asset. Every agent using this harness reported it.
+#
+# So the transparency stays and the black goes: RGB under the backdrop is
+# filled with a neutral studio grey, alpha left at zero. Alpha-aware consumers
+# see exactly what they saw before; everything else sees a grey backdrop
+# instead of a void. Slightly cool and mid-dark, so neither a white ceramic
+# nor a black hull disappears into it.
+PROOF_MATTE = (0.16, 0.17, 0.19)
 
-    A proof image is the loop's vision feedback, so an empty render must be
-    detectable rather than silently accepted. Pixels are sampled on a fixed
-    stride so the numbers are stable across runs and the cost stays flat as
-    resolution grows.
+
+def frame_stats(filepath):
+    """Coverage statistics for one rendered frame, and its backdrop matte.
+
+    Both here because both need the pixels, and loading a 1024^2 PNG twice to
+    do one job each is a second of every compile for nothing.
+
+    Coverage comes from ALPHA, not from brightness. Reading it as
+    "luminance > 0.01" only worked because the backdrop was pure black, and it
+    conflates two different questions the moment anything else is true: a matte
+    black hull is subject that is not bright, and a grey backdrop is bright
+    without being subject. Alpha answers "is this the asset" exactly, at any
+    albedo, against any backdrop — and mean luminance is then measured over the
+    covered pixels only, so exposure findings describe the ASSET rather than
+    the average of the asset and the void around it.
     """
     import bpy
     try:
@@ -3083,38 +3109,78 @@ def frame_stats(filepath):
         width, height = img.size
         if width == 0 or height == 0:
             return {"path": filepath, "meanLuminance": None, "coverage": None}
-        pixels = list(img.pixels)
+        count = width * height * 4
+        # foreach_get into a stdlib float array: numpy is not a dependency of
+        # every scene (only shader bakes require it), and `list(img.pixels)`
+        # on a 1024^2 frame is four million Python floats.
+        buf = array.array("f", bytes(count * 4))
+        try:
+            img.pixels.foreach_get(buf)
+        except Exception:
+            buf = array.array("f", img.pixels)
+
         stride = max(1, (width * height) // 4096)
         total = 0.0
-        lit = 0
+        covered = 0
         blown = 0
         samples = 0
         for index in range(0, width * height, stride):
             base = index * 4
-            r, g, b = pixels[base], pixels[base + 1], pixels[base + 2]
-            luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-            total += luminance
-            if luminance > 0.01:
-                lit += 1
-                if luminance > 0.92:
-                    blown += 1
+            alpha = buf[base + 3]
             samples += 1
+            if alpha <= 0.02:
+                continue
+            covered += 1
+            luminance = 0.2126 * buf[base] + 0.7152 * buf[base + 1] + 0.0722 * buf[base + 2]
+            total += luminance
+            if luminance > 0.92:
+                blown += 1
+
+        matte_transparent_pixels(img, buf, count)
+
         if samples == 0:
             return {"path": filepath, "meanLuminance": None, "coverage": None, "blownRatio": None}
         return {
             "path": filepath,
-            "meanLuminance": R6(total / samples),
-            "coverage": R6(lit / samples),
-            # Fraction of LIT pixels near pure white. A frame can pass the
+            # Mean over the SUBJECT. An empty frame has no subject, so it
+            # reports 0 and the empty rule still fires on it.
+            "meanLuminance": R6((total / covered) if covered else 0.0),
+            "coverage": R6(covered / samples),
+            # Fraction of covered pixels near pure white. A frame can pass the
             # black-frame rule and still be exposure mush — this is the
             # number that catches "pale, shadowless, blown out".
-            "blownRatio": R6((blown / lit) if lit else 0.0),
+            "blownRatio": R6((blown / covered) if covered else 0.0),
         }
     finally:
         try:
             bpy.data.images.remove(img)
         except Exception:
             pass
+
+
+def matte_transparent_pixels(img, buf, count):
+    """Write PROOF_MATTE under every fully transparent pixel, in place.
+
+    Alpha is untouched, so nothing that reads the mask changes. Failure is
+    survivable and silent by design: a frame that could not be matted is still
+    a correct render, just one with a black backdrop, and refusing the compile
+    over a cosmetic pass would be the worse trade.
+    """
+    try:
+        changed = False
+        for base in range(0, count, 4):
+            if buf[base + 3] > 0.02:
+                continue
+            buf[base] = PROOF_MATTE[0]
+            buf[base + 1] = PROOF_MATTE[1]
+            buf[base + 2] = PROOF_MATTE[2]
+            changed = True
+        if not changed:
+            return
+        img.pixels.foreach_set(buf)
+        img.save()
+    except Exception as exc:
+        log("proof matte skipped for %s: %s" % (getattr(img, "name", "?"), exc))
 
 
 # The band EEVEE actually resolves a subject in, measured by bisection: below
