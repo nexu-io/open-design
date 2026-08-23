@@ -31,6 +31,7 @@ import { homeHeroChipLabel } from './home-hero/chip-labels';
 import { useGlideIndicator } from '../hooks/useGlideIndicator';
 import { useLiquidGlass } from '../hooks/useLiquidGlass';
 
+import { seedHomeComposerPrompt } from './HomeView';
 type WorkspaceChromeTab =
   | {
       id: string;
@@ -1433,27 +1434,33 @@ export function WorkspaceTabsBar({
   }
 
   function createNewTab() {
-    // Onboarding gate — see `onboardingActive`. Covers the "+" button and the
-    // Cmd/Ctrl+T keyboard shortcut, since both funnel through here.
-    if (onboardingActive) return;
-    const normalized = normalizeTabsState(state);
-    const existingEntryTab = normalized.tabs.find((tab) => tab.kind === 'entry');
-    if (existingEntryTab) {
-      setState({
-        ...normalized,
-        activeTabId: existingEntryTab.id,
-      });
-      navigate({ kind: 'home', view: 'home' });
-    } else {
-      const tab = createEntryTab('home');
-      setState({
-        tabs: [...normalized.tabs, tab],
-        activeTabId: tab.id,
-      });
-      navigate({ kind: 'home', view: 'home' });
-    }
-  }
+  // Onboarding gate — see `onboardingActive`. Covers the "+" button and the
+  // Cmd/Ctrl+T keyboard shortcut, since both funnel through here.
+  if (onboardingActive) return;
 
+  // A newly opened Home tab should start with an empty composer.
+  seedHomeComposerPrompt('');
+
+  const normalized = normalizeTabsState(state);
+  const existingEntryTab = normalized.tabs.find((tab) => tab.kind === 'entry');
+
+  if (existingEntryTab) {
+    setState({
+      ...normalized,
+      activeTabId: existingEntryTab.id,
+    });
+    navigate({ kind: 'home', view: 'home' });
+  } else {
+    const tab = createEntryTab('home');
+
+    setState({
+      tabs: [...normalized.tabs, tab],
+      activeTabId: tab.id,
+    });
+
+    navigate({ kind: 'home', view: 'home' });
+  }
+}
   function closeTab(tabId: string) {
     const normalized = normalizeTabsState(state);
     const closingIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
