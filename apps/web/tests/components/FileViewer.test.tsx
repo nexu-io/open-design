@@ -12921,14 +12921,21 @@ describe('previewTargetFilePath', () => {
   const childId = 'frame:%5B%22slides%2Fdetail.html%22%2C%22hero%22%5D';
 
   it('resolves a frame identity only when the root preview discovered that child', () => {
-    expect(previewTargetFilePath(childId, 'index.html', new Set(['slides/detail.html'])))
+    expect(previewTargetFilePath(childId, 'index.html', new Set(['slides/detail.html']), null))
       .toBe('slides/detail.html');
-    expect(previewTargetFilePath(childId, 'index.html', new Set()))
+    expect(previewTargetFilePath(childId, 'index.html', new Set(), null))
+      .toBeNull();
+  });
+
+  it('accepts a self-navigated frame only when the daemon file inventory confirms it exists', () => {
+    expect(previewTargetFilePath(childId, 'index.html', new Set(), new Set(['slides/detail.html'])))
+      .toBe('slides/detail.html');
+    expect(previewTargetFilePath(childId, 'index.html', new Set(), new Set(['slides/other.html'])))
       .toBeNull();
   });
 
   it('does not treat malformed frame identities as root targets', () => {
-    expect(previewTargetFilePath('frame:slides/detail.html::hero', 'index.html', new Set()))
+    expect(previewTargetFilePath('frame:slides/detail.html::hero', 'index.html', new Set(), null))
       .toBeNull();
   });
 });

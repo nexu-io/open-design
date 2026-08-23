@@ -5526,14 +5526,15 @@ export function previewTargetFilePath(
   elementId: unknown,
   rootFilePath: string,
   projectFramePaths: ReadonlySet<string>,
+  projectFilePathSet: ReadonlySet<string> | null,
 ): string | null {
   if (typeof elementId !== 'string') return rootFilePath;
   if (!FRAME_QUALIFIED_INSPECT_ID.test(elementId)) return rootFilePath;
   const frame = parseFrameQualifiedInspectId(elementId);
   // A structured value is merely parseable input. It becomes a file identity
-  // only after the top-level preview bridge has discovered that exact child
-  // from the daemon-minted project-preview scope during this preview session.
-  if (!frame || !projectFramePaths.has(frame.filePath)) return null;
+  // only after either the root source declared that child or the daemon file
+  // inventory confirmed the self-navigated child exists in this project.
+  if (!frame || (!projectFramePaths.has(frame.filePath) && !projectFilePathSet?.has(frame.filePath))) return null;
   return frame.filePath;
 }
 
@@ -12023,7 +12024,7 @@ function HtmlViewer({
       data.targets.forEach((item) => {
         const elementId = String(item?.elementId || '');
         if (!elementId) return;
-        const ownerFile = previewTargetFilePath(elementId, file.name, projectFramePaths);
+        const ownerFile = previewTargetFilePath(elementId, file.name, projectFramePaths, projectFilePathSet);
         if (!ownerFile) return;
         const position = {
           x: clampBridgeCoordinate(item?.position?.x),
@@ -12052,7 +12053,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [inspectMode, boardMode, file.name, isOurPreviewIframeSource, projectFramePaths, workspaceActive]);
+  }, [inspectMode, boardMode, file.name, isOurPreviewIframeSource, projectFilePathSet, projectFramePaths, workspaceActive]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
@@ -12108,7 +12109,21 @@ function HtmlViewer({
   // with what saveInspectToSource will persist.
   if (inspectHydratedSourceRef.current !== source) {
     inspectHydratedSourceRef.current = source;
-    setInspectOverrides(typeof source === 'string' ? parseInspectOverridesFromSource(source) : {});
+    const rootOverrides = typeof source === 'string' ? parseInspectOverridesFromSource(source) : {};
+    // #7008 review (nettee): serializeInspectOverrides never writes
+    // frame-qualified (`frame:...`) entries into the root source's own
+    // persisted style block -- they exist only in this in-memory map until a
+    // CHILD save persists them. Re-hydrating wholesale from the root source
+    // (e.g. after saving the ROOT itself, which also changes `source`) would
+    // silently discard any unsaved child edit. Carry those entries forward;
+    // only the root-local entries come from the freshly parsed source.
+    setInspectOverrides((current) => {
+      const frameQualified: InspectOverrideMap = {};
+      for (const [key, value] of Object.entries(current)) {
+        if (FRAME_QUALIFIED_INSPECT_ID.test(key)) frameQualified[key] = value;
+      }
+      return { ...rootOverrides, ...frameQualified };
+    });
   }
 
   useEffect(() => {
@@ -12135,7 +12150,7 @@ function HtmlViewer({
       return;
     }
   const snapshotFromData = (data: Partial<PreviewCommentSnapshot>): PreviewCommentSnapshot | null => {
-    const filePath = previewTargetFilePath(data.elementId, file.name, projectFramePaths);
+    const filePath = previewTargetFilePath(data.elementId, file.name, projectFramePaths, projectFilePathSet);
     if (!filePath) return null;
     return {
       filePath,
@@ -12310,7 +12325,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments, projectFramePaths, scheduleHoverCardDismiss, workspaceActive]);
+  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments, projectFilePathSet, projectFramePaths, scheduleHoverCardDismiss, workspaceActive]);
 
   useEffect(() => {
     if (!workspaceActive || !boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
@@ -13224,7 +13239,7 @@ function HtmlViewer({
         | null;
       if (!data || data.type !== 'od:comment-target') return;
       if (!data.elementId || !data.selector) return;
-      if (!previewTargetFilePath(data.elementId, file.name, projectFramePaths)) return;
+      if (!previewTargetFilePath(data.elementId, file.name, projectFramePaths, projectFilePathSet)) return;
       const clickedDescendant =
         data.clickedDescendant && typeof data.clickedDescendant === 'object'
           ? {
@@ -13245,7 +13260,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [file.name, inspectMode, isOurPreviewIframeSource, projectFramePaths, workspaceActive]);
+  }, [file.name, inspectMode, isOurPreviewIframeSource, projectFilePathSet, projectFramePaths, workspaceActive]);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last' | 'go', index?: number) {
     // Track prev/next here so every entry point (top toolbar, floating nav,
@@ -13471,10 +13486,16 @@ function HtmlViewer({
       const frameTarget = activeInspectTarget
         ? parseFrameQualifiedInspectId(activeInspectTarget.elementId)
         : null;
-      if (activeInspectTarget?.elementId.startsWith('frame:') && (!frameTarget || !projectFramePaths.has(frameTarget.filePath))) {
+      const ownerFile = previewTargetFilePath(
+        activeInspectTarget?.elementId,
+        file.name,
+        projectFramePaths,
+        projectFilePathSet,
+      );
+      if (activeInspectTarget?.elementId.startsWith('frame:') && (!frameTarget || !ownerFile)) {
         throw new Error('The selected nested preview is no longer an allowed project HTML frame. Refresh and select it again.');
       }
-      const ownerFile = frameTarget?.filePath ?? file.name;
+      if (!ownerFile) throw new Error('The selected preview target is no longer available. Refresh and select it again.');
       const ownerSource = frameTarget
         ? await fetchProjectFileText(projectId, ownerFile, { workspaceContext, cache: 'no-store' })
         : source;
