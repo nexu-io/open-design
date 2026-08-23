@@ -5837,16 +5837,25 @@ export function previewTargetFilePath(
   elementId: unknown,
   rootFilePath: string,
   projectFramePaths: ReadonlySet<string>,
-  projectFilePathSet: ReadonlySet<string> | null,
+  liveFramePaths: ReadonlyMap<string, string>,
 ): string | null {
   if (typeof elementId !== 'string') return rootFilePath;
   if (!FRAME_QUALIFIED_INSPECT_ID.test(elementId)) return rootFilePath;
   const frame = parseFrameQualifiedInspectId(elementId);
   // A structured value is merely parseable input. It becomes a file identity
-  // only after either the root source declared that child or the daemon file
-  // inventory confirmed the self-navigated child exists in this project.
-  if (!frame || (!projectFramePaths.has(frame.filePath) && !projectFilePathSet?.has(frame.filePath))) return null;
+  if (!frame || (!projectFramePaths.has(frame.filePath) && !Array.from(liveFramePaths.values()).includes(frame.filePath))) return null;
   return frame.filePath;
+}
+
+export function isAuthorizedCommentFilePath(
+  filePath: string,
+  rootFilePath: string,
+  projectFramePaths: ReadonlySet<string>,
+  liveFramePaths: ReadonlyMap<string, string>,
+): boolean {
+  return filePath === rootFilePath
+    || projectFramePaths.has(filePath)
+    || Array.from(liveFramePaths.values()).includes(filePath);
 }
 
 // Build the inspect overrides CSS body the host will persist, from the
@@ -9678,6 +9687,7 @@ function HtmlViewer({
     () => projectPreviewChildHtmlPaths(typeof source === 'string' ? source : '', file.name),
     [file.name, source],
   );
+  const [liveFramePaths, setLiveFramePaths] = useState<ReadonlyMap<string, string>>(() => new Map());
   const liveCommentTargetsRef = useRef(liveCommentTargets);
   const [commentDraft, setCommentDraft] = useState('');
   // Inspect mode shares the iframe selection bridge with comment mode but
@@ -11542,6 +11552,7 @@ function HtmlViewer({
           initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
           hideDeckChrome: effectiveDeck,
           selectionBridge: true,
+          staticFramePaths: Array.from(projectFramePaths),
           // Always inject the manual-edit bridge into the PREVIEW srcDoc (not the
           // export path), so the document is byte-identical across preview /
           // comment / draw / edit. The bridge boots dormant (`enabled=false`) and
@@ -11572,6 +11583,7 @@ function HtmlViewer({
       srcDocTransportIdentity,
       previewStorageScopeKey,
       previewStateKey,
+      projectFramePaths,
       reloadKey,
       transportPreviewMeasurementDocumentEpoch,
       srcDocBaseHref,
@@ -12981,6 +12993,21 @@ function HtmlViewer({
     setLiveCommentTargets(new Map());
     setStrokePoints([]);
   }, [commentTargetsKey]);
+  useEffect(() => {
+    if (!workspaceActive) return;
+    function onMessage(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string; originalPath?: unknown; newPath?: unknown } | null;
+      if (data?.type !== 'od:project-frame-live-path') return;
+      if (typeof data.originalPath !== 'string' || !projectFramePaths.has(data.originalPath)) return;
+      if (typeof data.newPath !== 'string') return;
+      const originalPath = data.originalPath;
+      const newPath = data.newPath;
+      setLiveFramePaths((current) => new Map(current).set(originalPath, newPath));
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [isOurPreviewIframeSource, projectFramePaths, workspaceActive]);
 
   // Mirror the bridge's `od:comment-targets` broadcast into
   // `liveCommentTargets` whenever EITHER Inspect or Comments mode is
@@ -13014,7 +13041,7 @@ function HtmlViewer({
       data.targets.forEach((item) => {
         const elementId = String(item?.elementId || '');
         if (!elementId) return;
-        const ownerFile = previewTargetFilePath(elementId, file.name, projectFramePaths, projectFilePathSet);
+        const ownerFile = previewTargetFilePath(elementId, file.name, projectFramePaths, liveFramePaths);
         if (!ownerFile) return;
         const position = {
           x: clampBridgeCoordinate(item?.position?.x),
@@ -13044,13 +13071,14 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [inspectMode, boardMode, file.name, commentTargetsKey, isOurPreviewIframeSource, isActivePreviewIframeSource, projectFilePathSet, projectFramePaths, workspaceActive]);
+  }, [inspectMode, boardMode, file.name, commentTargetsKey, isOurPreviewIframeSource, isActivePreviewIframeSource, liveFramePaths, projectFramePaths, workspaceActive]);
 
   useEffect(() => {
     commentReselectPendingRef.current = false;
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
     setLiveCommentTargets(new Map());
+    setLiveFramePaths(new Map());
     setCommentDraft('');
     setActiveCommentExistingAttachments([]);
     setActiveInspectTarget(null);
@@ -13142,7 +13170,7 @@ function HtmlViewer({
       return;
     }
   const snapshotFromData = (data: Partial<PreviewCommentSnapshot>): PreviewCommentSnapshot | null => {
-    const filePath = previewTargetFilePath(data.elementId, file.name, projectFramePaths, projectFilePathSet);
+    const filePath = previewTargetFilePath(data.elementId, file.name, projectFramePaths, liveFramePaths);
     if (!filePath) return null;
     return {
       filePath,
@@ -13401,7 +13429,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, commentTargetsKey, commentTargetsReadyKey, commentLocationIntent, isActivePreviewIframeSource, previewComments, requestComposerRetarget, scheduleHoverCardDismiss, projectFilePathSet, projectFramePaths, workspaceActive]);
+  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, commentTargetsKey, commentTargetsReadyKey, commentLocationIntent, isActivePreviewIframeSource, previewComments, requestComposerRetarget, scheduleHoverCardDismiss, liveFramePaths, projectFramePaths, workspaceActive]);
 
   useEffect(() => {
     commentLocateRequestRef.current = null;
@@ -14464,7 +14492,7 @@ function HtmlViewer({
         | null;
       if (!data || data.type !== 'od:comment-target') return;
       if (!data.elementId || !data.selector) return;
-      if (!previewTargetFilePath(data.elementId, file.name, projectFramePaths, projectFilePathSet)) return;
+      if (!previewTargetFilePath(data.elementId, file.name, projectFramePaths, liveFramePaths)) return;
       const clickedDescendant =
         data.clickedDescendant && typeof data.clickedDescendant === 'object'
           ? {
@@ -14485,7 +14513,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [file.name, inspectMode, isOurPreviewIframeSource, projectFilePathSet, projectFramePaths, workspaceActive]);
+  }, [file.name, inspectMode, isOurPreviewIframeSource, liveFramePaths, projectFramePaths, workspaceActive]);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last' | 'go', index?: number) {
     // Track prev/next here so every entry point (top toolbar, floating nav,
@@ -14728,7 +14756,7 @@ function HtmlViewer({
         activeInspectTarget?.elementId,
         file.name,
         projectFramePaths,
-        projectFilePathSet,
+        liveFramePaths,
       );
       if (activeInspectTarget?.elementId.startsWith('frame:') && (!frameTarget || !ownerFile)) {
         throw new Error('The selected nested preview is no longer an allowed project HTML frame. Refresh and select it again.');
@@ -15824,7 +15852,7 @@ function HtmlViewer({
     if (!activePreviewCommentId) return null;
     return previewComments.find((comment) => (
       comment.id === activePreviewCommentId &&
-      (comment.filePath === file.name || projectFramePaths.has(comment.filePath)) &&
+      isAuthorizedCommentFilePath(comment.filePath, file.name, projectFramePaths, liveFramePaths) &&
       comment.status === 'open'
     )) ?? null;
   }
@@ -16696,9 +16724,9 @@ function HtmlViewer({
   // order the sidebar happens to display things in.
   const creationSortedSideComments = useMemo(
     () => previewComments
-      .filter((comment) => (comment.filePath === file.name || projectFramePaths.has(comment.filePath)) && comment.status === 'open')
+      .filter((comment) => isAuthorizedCommentFilePath(comment.filePath, file.name, projectFramePaths, liveFramePaths) && comment.status === 'open')
       .sort((a, b) => commentCreatedAt(a) - commentCreatedAt(b)),
-    [file.name, previewComments, projectFramePaths],
+    [file.name, liveFramePaths, previewComments, projectFramePaths],
   );
   // Provisional number for the next (not-yet-saved) pin. Computed over the
   // file's comments across ALL statuses — a resolved/attached/failed comment
@@ -16707,10 +16735,10 @@ function HtmlViewer({
   const nextProvisionalPinNumber = useMemo(
     () => provisionalNextPinNumber(
       previewComments
-        .filter((comment) => comment.filePath === file.name || projectFramePaths.has(comment.filePath))
+        .filter((comment) => isAuthorizedCommentFilePath(comment.filePath, file.name, projectFramePaths, liveFramePaths))
         .sort((a, b) => commentCreatedAt(a) - commentCreatedAt(b)),
     ),
-    [file.name, previewComments, projectFramePaths],
+    [file.name, liveFramePaths, previewComments, projectFramePaths],
   );
   // Sidebar display order: descending by `sortKey` (a fresh comment gets the
   // largest sortKey, so it shows first by default — "newest at the front").
