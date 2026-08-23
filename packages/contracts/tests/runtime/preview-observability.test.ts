@@ -120,8 +120,8 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
   // navigation time. This suite pins the rebase-and-reload behavior added
   // alongside the <base> update, since only an e2e case for a late-mounted
   // child previously covered any of this path.
-  function setUp(iframeSrc: string) {
-    const baseEl = { href: 'http://preview.local/api/projects/p1/preview/scope-1/', setAttribute(_: string, value: string) { this.href = value; } };
+  function setUp(iframeSrc: string, ownerDir = '') {
+    const baseEl = { href: `http://preview.local/api/projects/p1/preview/scope-1/${ownerDir}`, setAttribute(_: string, value: string) { this.href = value; } };
     const frame = makeMockFrame(iframeSrc, () => baseEl.href);
     const parentMessages: unknown[] = [];
     let messageListener: ((event: { source: unknown; data: unknown }) => void) | undefined;
@@ -138,13 +138,17 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
       querySelectorAll(selector: string) { return selector === 'iframe[src]' ? [frame] : []; },
     };
     runPreviewBaseHrefBridge({ window, document, URL });
-    const send = (href: string) => messageListener?.({ source: window.parent, data: { type: 'od:preview-base-update', href } });
+    // The daemon includes the owner file's own directory in the scope
+    // rotation href too (see injectProjectPreviewBase), so the next scope's
+    // href carries the same ownerDir suffix as the current one.
+    const send = (scope: string) =>
+      messageListener?.({ source: window.parent, data: { type: 'od:preview-base-update', href: `http://preview.local/api/projects/p1/preview/${scope}/${ownerDir}` } });
     return { baseEl, frame, parentMessages, send };
   }
 
   it('rebases and reloads an already-navigated project-relative child iframe to the new scope', () => {
     const { baseEl, frame, send } = setUp('child.html');
-    send('http://preview.local/api/projects/p1/preview/scope-2/');
+    send('scope-2');
     expect(baseEl.href).toBe('http://preview.local/api/projects/p1/preview/scope-2/');
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/child.html');
   });
@@ -154,14 +158,14 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
     // .src after the first update instead of the cached attribute, a
     // second update would compound the previous scope into the new one.
     const { frame, send } = setUp('child.html');
-    send('http://preview.local/api/projects/p1/preview/scope-2/');
-    send('http://preview.local/api/projects/p1/preview/scope-3/');
+    send('scope-2');
+    send('scope-3');
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/child.html');
   });
 
   it('does not rebase an absolute or cross-origin iframe src', () => {
     const { frame, send } = setUp('https://example.com/embed');
-    send('http://preview.local/api/projects/p1/preview/scope-2/');
+    send('scope-2');
     expect(frame.src).toBe('https://example.com/embed');
   });
 
@@ -171,14 +175,44 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
     // slide between two scope rotations — a later rotation (renewal, daemon
     // restart) must rebase the CURRENT src, not revert to the first slide.
     const { frame, send } = setUp('child.html');
-    send('http://preview.local/api/projects/p1/preview/scope-2/');
+    send('scope-2');
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/child.html');
 
     // Simulate the deck's own navigation setting a new relative src directly.
     frame.src = 'slide-2.html';
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/slide-2.html');
 
-    send('http://preview.local/api/projects/p1/preview/scope-3/');
+    send('scope-3');
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/slide-2.html');
+  });
+
+  it('rebases a sibling-directory iframe src that crosses the owner file directory boundary (Codex review)', () => {
+    // The daemon's injected <base> includes the owner FILE's own directory
+    // (deck/), not just the scope root -- see injectProjectPreviewBase. A
+    // project-local child in a SIBLING directory, like
+    // <iframe src="../slides/one.html"> from deck/index.html, resolves
+    // OUTSIDE .../preview/<scope>/deck/ but is still well within
+    // .../preview/<scope>/. Stripping against the owner-specific prefix
+    // (instead of the scope root) would incorrectly treat this as
+    // ineligible and never rebase it.
+    const { baseEl, frame, send } = setUp('../slides/one.html', 'deck/');
+    expect(baseEl.href).toBe('http://preview.local/api/projects/p1/preview/scope-1/deck/');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-1/slides/one.html');
+
+    send('scope-2');
+    expect(baseEl.href).toBe('http://preview.local/api/projects/p1/preview/scope-2/deck/');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/slides/one.html');
+  });
+
+  it('carries a sibling-directory child that navigated dynamically across a scope rotation', () => {
+    const { frame, send } = setUp('../slides/one.html', 'deck/');
+    send('scope-2');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/slides/one.html');
+
+    frame.src = '../slides/two.html';
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/slides/two.html');
+
+    send('scope-3');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/slides/two.html');
   });
 });
