@@ -343,25 +343,42 @@ describe('rewriteInlinedScriptAssetRefs', () => {
 describe('htmlHasRelativeProjectIframeRefs', () => {
   it('detects a quoted relative iframe src', () => {
     const html = '<html><body><iframe title="child" src="child.html"></iframe></body></html>';
-    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html')).toBe(true);
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html', null)).toBe(true);
   });
 
   it('detects an unquoted relative iframe src (#7008 P1: valid HTML the quoted-only regex missed)', () => {
     const html = '<html><body><iframe title="child" src=child.html></iframe></body></html>';
-    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html')).toBe(true);
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html', null)).toBe(true);
   });
 
   it('does not mistake a data-src attribute for src', () => {
     const html = '<html><body><iframe title="lazy" data-src="child.html"></iframe></body></html>';
-    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html')).toBe(false);
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html', null)).toBe(false);
   });
 
   it('ignores an absolute or cross-origin iframe src', () => {
     const html = '<html><body><iframe src="https://example.com/embed"></iframe></body></html>';
-    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html')).toBe(false);
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html', null)).toBe(false);
   });
 
   it('returns false when the document has no iframe', () => {
-    expect(htmlHasRelativeProjectIframeRefs('<html><body>hi</body></html>', 'root.html')).toBe(false);
+    expect(htmlHasRelativeProjectIframeRefs('<html><body>hi</body></html>', 'root.html', null)).toBe(false);
+  });
+
+  it('detects a confirmed root-relative iframe src (#7008 review: personal-project generated decks)', () => {
+    const html = '<html><body><iframe title="child" src="/slides/child.html"></iframe></body></html>';
+    const files = new Set(['slides/child.html']);
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html', files)).toBe(true);
+  });
+
+  it('answers in candidate mode for a shape-valid root-relative iframe src while the file list is loading', () => {
+    const html = '<html><body><iframe src="/slides/child.html"></iframe></body></html>';
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html', null)).toBe(true);
+  });
+
+  it('rejects an unconfirmed root-relative iframe src once the file list is known', () => {
+    const html = '<html><body><iframe src="/slides/missing.html"></iframe></body></html>';
+    const files = new Set(['slides/child.html']);
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html', files)).toBe(false);
   });
 });

@@ -9925,15 +9925,6 @@ function HtmlViewer({
     () => source != null && htmlHasRelativeProjectAssetRefs(source, file.name, null),
     [source, file.name],
   );
-  // #7008: narrower than relativeProjectAssetRefs above (which also matches
-  // plain <img>/<script> assets) — only a project-local nested <iframe>
-  // needs the scoped preview base minted below, since that is what lets
-  // runtime/srcdoc.ts's projectFramePath() recognize the child as a project
-  // frame. Ordinary relative assets must not force the extra mint.
-  const relativeProjectIframeRefs = useMemo(
-    () => source != null && htmlHasRelativeProjectIframeRefs(source, file.name),
-    [source, file.name],
-  );
   // Browser-owned iframe subresource requests cannot attach Workspace headers,
   // and URL resolution does not inherit the query string from the document's
   // scoped raw URL. Hold the Team preview until every confirmed relative asset
@@ -10080,6 +10071,18 @@ function HtmlViewer({
   const projectRootAssetRefs = useMemo(
     () => source != null && htmlHasRootRelativeProjectAssetRefs(source, projectFilePathSet),
     [source, projectFilePathSet],
+  );
+  // #7008: narrower than relativeProjectAssetRefs/projectRootAssetRefs above
+  // (which also match plain <img>/<script> assets) — only a project-local
+  // nested <iframe> needs the scoped preview base minted below, since that is
+  // what lets runtime/srcdoc.ts's projectFramePath() recognize the child as a
+  // project frame. Ordinary relative assets must not force the extra mint.
+  // Covers both relative (./slide-01.html) and root-relative-and-confirmed
+  // (/slides/slide-01.html) iframe src forms — generated multi-file artifacts
+  // commonly use the latter, matching projectRootAssetRefs's own convention.
+  const relativeProjectIframeRefs = useMemo(
+    () => source != null && htmlHasRelativeProjectIframeRefs(source, file.name, projectFilePathSet),
+    [source, file.name, projectFilePathSet],
   );
   useEffect(() => {
     if (!workspaceActive) return;
