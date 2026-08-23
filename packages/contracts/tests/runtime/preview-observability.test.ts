@@ -25,6 +25,7 @@ function runPreviewBaseHrefBridge(context: Record<string, unknown>): void {
 // rebase fix under test depends on this exact distinction.
 function makeMockFrame(initialSrc: string, resolveBase: () => string) {
   const attrs: Record<string, string> = { src: initialSrc };
+  const loadListeners: Array<() => void> = [];
   return {
     getAttribute(name: string) { return Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name] : null; },
     setAttribute(name: string, value: string) { attrs[name] = value; },
@@ -33,6 +34,8 @@ function makeMockFrame(initialSrc: string, resolveBase: () => string) {
       try { return new URL(rawSrc, resolveBase()).href; } catch { return rawSrc; }
     },
     set src(value: string) { attrs.src = value; },
+    addEventListener(type: string, listener: () => void) { if (type === 'load') loadListeners.push(listener); },
+    dispatchLoad() { loadListeners.forEach((listener) => listener()); },
   };
 }
 
@@ -150,6 +153,29 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
       messageListeners.forEach((listener) => listener({ source, data: { type: 'od:url-selection-bridge-ready', href } }));
     return { baseEl, frame, parentMessages, ready, send };
   }
+
+  it('does not resurrect a self-navigated child that later left for a destination with no ready ping (#7296 review R8-3)', () => {
+    const { frame, ready, send } = setUp('child.html');
+    send('scope-2');
+    ready('http://preview.local/api/projects/p1/preview/scope-2/slide-2.html');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/child.html');
+
+    // The child leaves for a destination with no bridge/ready ping (an
+    // external site, a non-HTML file) via its OWN internal navigation --
+    // the parent's src ATTRIBUTE is never touched by that (same staleness
+    // as the child's original self-navigation to slide-2.html), but a real
+    // browser still fires the frame's native `load` event regardless of
+    // what the child navigated to. That must clear this bridge's
+    // confirmed-path cache, not leave the stale "slide-2.html" behind.
+    frame.dispatchLoad();
+
+    // A later scope rotation must fall back to the frame's still-declared
+    // "child.html" attribute, NOT rebase back to the stale cached
+    // "slide-2.html" -- which is a real project path, so without the fix
+    // this would silently "resurrect" a destination the child left long ago.
+    send('scope-3');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/child.html');
+  });
 
   it('rebases and reloads an already-navigated project-relative child iframe to the new scope', () => {
     const { baseEl, frame, send } = setUp('child.html');

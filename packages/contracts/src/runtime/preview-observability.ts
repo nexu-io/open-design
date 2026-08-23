@@ -47,6 +47,22 @@ export function buildPreviewBaseHrefBridge(
   // This bridge has its own closure, so it keeps a separate private record of
   // paths confirmed by ready pings. FileViewer remains the write authority.
   var liveFramePaths = new WeakMap();
+  // #7296 review (R8-3): a static child that self-navigates to a confirmed
+  // path and then leaves again for a destination with no ready ping (an
+  // external URL, a non-HTML file) must not keep resolving to that stale
+  // confirmed path -- otherwise a later scope rotation's rebase can
+  // "resurrect" the departed child instead of leaving its current,
+  // no-longer-project-scoped destination alone. A native load event fires
+  // on essentially every navigation regardless of destination, so clearing
+  // the cache there (not on a timer) is a correctness fix, not a heuristic.
+  var frameLoadListeners = new WeakSet();
+  function observeProjectFrameLoad(frame){
+    if (!frame || frameLoadListeners.has(frame)) return;
+    frameLoadListeners.add(frame);
+    frame.addEventListener('load', function(){
+      try { liveFramePaths.delete(frame); } catch (_) {}
+    });
+  }
   function projectFramePathFromHref(hrefString){
     try {
       var base = new URL(document.baseURI);
@@ -72,6 +88,7 @@ export function buildPreviewBaseHrefBridge(
     var frame = projectFrameForSource(ev.source);
     var path = frame && projectFramePathFromHref(data.href);
     if (!path) return;
+    observeProjectFrameLoad(frame);
     try { liveFramePaths.set(frame, { path: path, srcAtCache: frame.getAttribute('src') || '' }); } catch (_) {}
   });
   window.addEventListener('message', function(ev){
