@@ -521,6 +521,7 @@ describe('buildSrcdoc', () => {
       baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
       commentBridge: true,
       inspectBridge: true,
+      staticFramePaths: ['child.html'],
     });
     const dom = new JSDOM(srcdoc, {
       pretendToBeVisual: true,
@@ -532,6 +533,8 @@ describe('buildSrcdoc', () => {
     expect(childWindow).toBeTruthy();
     if (!childWindow) throw new Error('Expected child iframe window');
     const received: unknown[] = [];
+    const hostMessages: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
     childWindow.postMessage = (message: unknown) => received.push(message);
 
     dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
@@ -546,6 +549,56 @@ describe('buildSrcdoc', () => {
       { type: 'od:comment-mode', enabled: true, mode: 'picker' },
       { type: 'od:inspect-mode', enabled: true },
     ]);
+    expect(hostMessages).toContainEqual({ type: 'od:project-frame-live-path', originalPath: 'child.html', newPath: 'child.html' });
+    dom.window.close();
+  });
+
+  it('does not publish a live path for a dynamic frame that merely points at a project path', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      inspectBridge: true,
+      staticFramePaths: [],
+    });
+    const dom = new JSDOM(srcdoc, { pretendToBeVisual: true, runScripts: 'dangerously', url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html' });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const hostMessages: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
+    childWindow.postMessage = () => {};
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'od:url-selection-bridge-ready', href: 'http://preview.local/api/projects/project-1/preview/scope-1/other-real-file.html' }, source: childWindow }));
+    expect(hostMessages).toEqual([]);
+    dom.window.close();
+  });
+
+  it('preserves descendant metadata, hover point, and slide index through a nested relay', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+      staticFramePaths: ['child.html'],
+    });
+    const dom = new JSDOM(srcdoc, { pretendToBeVisual: true, runScripts: 'dangerously', url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html' });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!frame || !childWindow) throw new Error('Expected child iframe window');
+    Object.defineProperty(frame, 'clientWidth', { value: 100 });
+    Object.defineProperty(frame, 'clientHeight', { value: 100 });
+    frame.getBoundingClientRect = () => ({ x: 10, y: 20, width: 100, height: 100 } as DOMRect);
+    const hostMessages: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:comment-target', elementId: 'hero', selector: '[data-od-id="hero"]', label: 'Hero', text: 'Hero',
+        position: { x: 1, y: 2, width: 3, height: 4 }, htmlHint: '<h1>', style: {},
+        clickedDescendant: { label: 'span.badge', text: 'Badge' }, hoverPoint: { x: 4, y: 5 }, slideIndex: 2,
+      },
+      source: childWindow,
+    }));
+    expect(hostMessages).toContainEqual(expect.objectContaining({
+      clickedDescendant: { label: 'span.badge', text: 'Badge' }, hoverPoint: { x: 4, y: 5 }, slideIndex: 2,
+    }));
     dom.window.close();
   });
 
