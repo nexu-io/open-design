@@ -429,6 +429,13 @@ async function spawnDaemonRuntime(
   const webPort = parsePortOption(options.webPort, "--web-port");
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
 
+  // Point VELA_BIN to the mock vela wrapper for local development.
+  // On Windows the daemon's executable resolver rejects extensionless files,
+  // so use the `.cmd` shim (which spawns `node` on the mock agent) instead of
+  // the shebang-style extensionless `vela` used on POSIX.
+  const mockVelaName = process.platform === "win32" ? "vela.cmd" : "vela";
+  const mockVelaBin = path.join(config.workspaceRoot, "mocks", "bin", mockVelaName);
+
   try {
     await ensureDaemonCliBuild(config, logHandle);
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
@@ -451,6 +458,9 @@ async function spawnDaemonRuntime(
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
         ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
+        VELA_BIN: mockVelaBin,
+        // Give the mock vela login time to print activation URL before exiting
+        FAKE_VELA_LOGIN_DELAY_MS: "2000",
       },
       logHandle,
     });

@@ -81,12 +81,27 @@ export async function runVelaLogin() {
       },
     };
     writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8');
-    process.stdout.write(`Login successful for ${userEmail}.\n`);
-    process.exit(0);
+    // Use console.log which flushes automatically
+    console.log(`Login successful for ${userEmail}.`);
   };
 
-  if (delayMs > 0) setTimeout(write, delayMs);
-  else write();
+  // Print activation URL first (what the daemon's capture looks for)
+  // Use console.log for immediate flush
+  console.log('Open this URL to continue:');
+  console.log('https://fake-vela.example/cli/activate?deviceId=fake-device');
+  console.log('');
+  console.log('Code: FAKE-CODE');
+  console.log('');
+
+  if (delayMs > 0) {
+    setTimeout(() => {
+      write();
+      process.exit(0);
+    }, delayMs);
+  } else {
+    write();
+    process.exit(0);
+  }
 }
 
 /**
@@ -96,5 +111,28 @@ export async function runVelaLogin() {
 export function runVelaModels() {
   const out = process.env.FAKE_VELA_MODELS || DEFAULT_MODELS_STDOUT;
   process.stdout.write(`${out}\n`);
+  process.exit(0);
+}
+
+/**
+ * `vela billing summary --format json` — returns fake billing info for the signed-in account.
+ * Envs:
+ *   FAKE_VELA_BILLING_TIER         — membershipTier (plan) in the JSON
+ *   FAKE_VELA_BILLING_BALANCE_USD  — balanceUsd in the JSON
+ * With neither set, exits 1 to simulate unavailable billing.
+ */
+export function runVelaBilling() {
+  const tier = process.env.FAKE_VELA_BILLING_TIER;
+  const balance = process.env.FAKE_VELA_BILLING_BALANCE_USD;
+  if (!tier && !balance) {
+    process.stderr.write('billing summary unavailable\n');
+    process.exit(1);
+  }
+  process.stdout.write(
+    `${JSON.stringify({
+      ...(tier ? { membershipTier: tier } : {}),
+      balanceUsd: balance ?? null,
+    })}\n`,
+  );
   process.exit(0);
 }
