@@ -719,7 +719,7 @@ async function pollNetlifyDeploy(config: DeployConfig, deploymentId: string, { t
     if (nextRemaining <= 0) break;
     await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
   }
-  return last;
+  throw new DeployError('Netlify deployment poll timed out.', 504, last);
 }
 
 export async function deployToNetlify({
@@ -1291,7 +1291,7 @@ async function pollRenderDeploy(config: DeployConfig, serviceId: string, deployI
     if (nextRemaining <= 0) break;
     await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
   }
-  return last;
+  throw new DeployError('Render deployment poll timed out.', 504, last);
 }
 
 export async function deployToRender({
@@ -1653,7 +1653,7 @@ async function pollRailwayDeploy(
     if (nextRemaining <= 0) break;
     await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
   }
-  return last;
+  throw new DeployError('Railway deployment poll timed out.', 504, last);
 }
 
 export async function checkNetlifyDeploymentLinks(existing: any) {

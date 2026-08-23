@@ -643,6 +643,59 @@ describe('render deploys', () => {
     expect(aborted).toBe(true);
   });
 
+  it('fails Render deploy with 504 when status remains build_in_progress through the deadline', async () => {
+    vi.useFakeTimers();
+    let pollCount = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      if (url === 'https://api.github.com/user') return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+      if (url === 'https://api.github.com/repos/testuser/od-render-p1') return new Response(JSON.stringify({ id: 123, default_branch: 'main' }), { status: 200 });
+      if (url === 'https://api.github.com/repos/testuser/od-render-p1/keys' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 789 }), { status: 201 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-render-p1/git/trees/')) {
+        return new Response(JSON.stringify({ tree: [] }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-render-p1/contents/') && init?.method === 'PUT') return new Response(JSON.stringify({ content: { sha: 'sha' } }), { status: 200 });
+      if (url.startsWith('https://api.github.com/repos/testuser/od-render-p1/contents/')) return new Response('', { status: 404 });
+      if (url.includes('/owners')) return new Response(JSON.stringify([{ owner: { id: 'owner-1' } }]), { status: 200 });
+      if (url.includes('/services?limit=100')) return new Response(JSON.stringify([]), { status: 200 });
+      if (url.includes('/services') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 'render-service-1', url: 'https://od-render-p1.onrender.com' }), { status: 200 });
+      }
+      if (url.includes('/deploys?limit=1')) return new Response(JSON.stringify([{ deploy: { id: 'render-deploy-1' } }]), { status: 200 });
+      
+      if (url.includes('/deploys/render-deploy-1')) {
+        pollCount++;
+        return new Response(JSON.stringify({ id: 'render-deploy-1', status: 'build_in_progress' }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    const deployPromise = deployToRender({
+      config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
+      projectId: 'p1',
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('<!doctype html><h1>Hello Render</h1>'),
+          contentType: 'text/html',
+        },
+      ],
+    });
+
+    const assertionPromise = expect(deployPromise).rejects.toMatchObject({
+      message: expect.stringMatching(/Render deployment poll timed out/),
+      status: 504,
+    });
+
+    await vi.advanceTimersByTimeAsync(185_000);
+
+    await assertionPromise;
+    expect(pollCount).toBeGreaterThan(1);
+  });
+
   it('polls and resolves new Render deploy when trigger response lacks deploy_id and new deploy fails', async () => {
     let listDeploysCount = 0;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -2700,6 +2753,59 @@ describe('netlify and railway deploys', () => {
 
     await assertionPromise;
     expect(aborted).toBe(true);
+  });
+
+  it('fails Netlify deploy with 504 when state remains building through the deadline', async () => {
+    vi.useFakeTimers();
+    let pollCount = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      if (url === 'https://api.github.com/user') return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1') return new Response(JSON.stringify({ id: 123, default_branch: 'main' }), { status: 200 });
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1/keys' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 789 }), { status: 201 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/git/trees/')) {
+        return new Response(JSON.stringify({ tree: [] }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && init?.method === 'PUT') return new Response(JSON.stringify({ content: { sha: 'sha' } }), { status: 200 });
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/')) return new Response('', { status: 404 });
+      if (url.includes('/sites?name=od-p1')) return new Response(JSON.stringify([{ id: 'site-1', site_id: 'site-1', name: 'od-p1', deploy_key_id: 'existing-key-id' }]), { status: 200 });
+      if (url.endsWith('/sites/site-1')) return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }), { status: 200 });
+      if (url.endsWith('/deploy_keys/existing-key-id')) {
+        return new Response(JSON.stringify({ id: 'existing-key-id', public_key: 'ssh-rsa AAAAB3NzaC1...' }), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1/builds')) return new Response(JSON.stringify({ id: 'deploy-1', deploy_id: 'deploy-1' }), { status: 200 });
+      
+      if (url.includes('/deploys/deploy-1')) {
+        pollCount++;
+        return new Response(JSON.stringify({ id: 'deploy-1', state: 'building' }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    const deployPromise = deployToNetlify({
+      config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
+      projectId: 'p1',
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('<!doctype html><h1>Hello</h1>'),
+          contentType: 'text/html',
+        },
+      ],
+    });
+
+    const assertionPromise = expect(deployPromise).rejects.toMatchObject({
+      message: expect.stringMatching(/Netlify deployment poll timed out/),
+      status: 504,
+    });
+
+    await vi.advanceTimersByTimeAsync(65_000);
+
+    await assertionPromise;
+    expect(pollCount).toBeGreaterThan(1);
   });
 
   it('reconciles files in GitHub repository and deletes stale files not in build plan', async () => {

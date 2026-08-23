@@ -271,11 +271,13 @@ const TEMPLATES_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description',
 ]);
 const TEMPLATES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-// `od deploy …` posts to /api/projects/:id/deploy. The CLI form is the
-// embeddability contract: external agents can deploy a project file to
-// Vercel or Cloudflare Pages without going through the web UI.
+// `od deploy …` posts to /api/projects/:id/deploy or /api/deploy/config.
+// The CLI form is the embeddability contract: external agents can configure credentials
+// and deploy a project file to Vercel, Cloudflare Pages, Netlify, Render, or Railway
+// without going through the web UI.
 const DEPLOY_STRING_FLAGS = new Set([
   'daemon-url', 'file', 'provider', 'target',
+  'token', 'github-token', 'account-id', 'project-name', 'team-id', 'team-slug', 'value-json',
   'cf-zone-id', 'cf-zone-name', 'cf-domain-prefix',
   'workspace', 'workspace-member',
 ]);
@@ -11692,28 +11694,124 @@ async function runDeploy(args) {
     console.error(err.message);
     process.exit(2);
   }
-  if (flags.help || flags.h) {
-    console.log(`Usage: od deploy <projectId> --file <fileName> [options]
+  const positionals = positionalArgs(args, DEPLOY_STRING_FLAGS);
+  if (flags.help || flags.h || positionals[0] === 'help') {
+    console.log(`Usage:
+  od deploy <projectId> --file <fileName> [options]
+  od deploy config get <provider> [options]
+  od deploy config set <provider> [options]
 
-Required:
+Deploy:
   <projectId>              Project id to deploy.
   --file <fileName>        File name within the project to deploy.
 
 Options:
-  --provider vercel-self|cloudflare-pages   Deploy provider (default: vercel-self).
-  --target preview|production               Deployment target (default: server decides).
-  --cf-zone-id <id>                         Cloudflare Pages: zone id.
-  --cf-zone-name <name>                     Cloudflare Pages: zone name.
-  --cf-domain-prefix <prefix>               Cloudflare Pages: domain prefix.
-  --workspace <id>                          Explicit Workspace id for a bound project.
-  --workspace-member <id>                   Explicit Workspace member id for a bound project.
-  --json                                    Emit raw JSON response.
-  --daemon-url <url>                        OpenDesign daemon HTTP base.`);
+  --provider vercel-self|cloudflare-pages|netlify|render|railway
+                           Deploy provider (default: vercel-self).
+  --target preview|production
+                           Deployment target (default: server decides).
+  --token <token>          Provider API token / key.
+  --github-token <token>   GitHub PAT for GitHub-backed providers (netlify, render, railway).
+  --account-id <id>        Cloudflare Pages account id.
+  --project-name <name>    Cloudflare Pages project name.
+  --team-id <id>           Vercel team id.
+  --team-slug <slug>       Vercel team slug.
+  --value-json <json>      JSON string payload for deploy config.
+  --cf-zone-id <id>        Cloudflare Pages: zone id.
+  --cf-zone-name <name>    Cloudflare Pages: zone name.
+  --cf-domain-prefix <prefix>
+                           Cloudflare Pages: domain prefix.
+  --workspace <id>         Explicit Workspace id for a bound project.
+  --workspace-member <id>  Explicit Workspace member id for a bound project.
+  --json                   Emit raw JSON response.
+  --daemon-url <url>       OpenDesign daemon HTTP base.`);
+    return;
+  }
+
+  // Subcommand: od deploy config ...
+  if (positionals[0] === 'config') {
+    const base = await cliDaemonBaseUrl(flags);
+    const subAction = positionals[1];
+    let action = 'get';
+    let providerId = typeof flags.provider === 'string' ? flags.provider : '';
+
+    if (subAction === 'get' || subAction === 'set') {
+      action = subAction;
+      if (positionals[2]) {
+        providerId = positionals[2];
+      }
+    } else if (subAction) {
+      providerId = subAction;
+      if (
+        flags.token !== undefined ||
+        flags['github-token'] !== undefined ||
+        flags['value-json'] !== undefined ||
+        flags['account-id'] !== undefined ||
+        flags['project-name'] !== undefined ||
+        flags['team-id'] !== undefined ||
+        flags['team-slug'] !== undefined
+      ) {
+        action = 'set';
+      }
+    }
+
+    if (!providerId) {
+      providerId = typeof flags.provider === 'string' ? flags.provider : 'vercel-self';
+    }
+
+    if (action === 'get') {
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/deploy/config?providerId=${encodeURIComponent(providerId)}`);
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+      console.log(`[deploy-config] ${data.providerId ?? providerId} (configured: ${Boolean(data.configured)})`);
+      return;
+    }
+
+    // action === 'set'
+    let body: Record<string, unknown> = { providerId };
+    if (typeof flags['value-json'] === 'string') {
+      try {
+        body = JSON.parse(flags['value-json']);
+        if (!body.providerId) body.providerId = providerId;
+      } catch (err: any) {
+        console.error(`--value-json must be valid JSON: ${err.message}`);
+        process.exit(2);
+      }
+    } else {
+      if (flags.token !== undefined) body.token = flags.token;
+      if (flags['github-token'] !== undefined) body.githubToken = flags['github-token'];
+      if (flags['account-id'] !== undefined) body.accountId = flags['account-id'];
+      if (flags['project-name'] !== undefined) body.projectName = flags['project-name'];
+      if (flags['team-id'] !== undefined) body.teamId = flags['team-id'];
+      if (flags['team-slug'] !== undefined) body.teamSlug = flags['team-slug'];
+    }
+
+    let resp;
+    try {
+      resp = await fetch(`${base}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json();
+    if (flags.json) return process.stdout.write(JSON.stringify(data) + '\n');
+    console.log(`[deploy-config] updated ${data.providerId ?? providerId}`);
     return;
   }
 
   // Extract positional projectId (first non-flag argument)
-  const positionals = positionalArgs(args, DEPLOY_STRING_FLAGS);
   const projectId = positionals[0] ?? '';
   if (!projectId) {
     console.error('projectId is required: od deploy <projectId> --file <fileName>');

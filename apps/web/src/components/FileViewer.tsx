@@ -39,6 +39,7 @@ import {
   type TrackingArtifactKind,
   type TrackingProjectKind,
   type TrackingDeployProvider,
+  type TrackingExportFormat,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { exportErrorCode } from '../analytics/export-error-code';
@@ -7581,21 +7582,7 @@ function HtmlViewer({
   // / .catch. The same request_id threads both events so PostHog can
   // stitch click → result via $insert_id correlation.
   const fireShareExport = (
-    format:
-      | 'pdf'
-      | 'pptx'
-      | 'zip'
-      | 'html'
-      | 'image'
-      | 'markdown'
-      | 'template'
-      | 'share_link'
-      | 'share_page'
-      | 'vercel'
-      | 'cloudflare_pages'
-      | 'netlify'
-      | 'render'
-      | 'railway',
+    format: TrackingExportFormat,
     fn: () => Promise<unknown> | unknown,
     context?: HtmlVersionExportContext | null,
   ) => {
