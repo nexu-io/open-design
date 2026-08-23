@@ -83,18 +83,27 @@ export class DeployError extends Error {
   }
 }
 
-export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
+export function deployConfigPath(
+  providerId: DeployProviderId = VERCEL_PROVIDER_ID,
+  dataDir?: string,
+) {
+  if (providerId === NETLIFY_PROVIDER_ID || providerId === RENDER_PROVIDER_ID || providerId === RAILWAY_PROVIDER_ID) {
+    if (dataDir) {
+      if (providerId === NETLIFY_PROVIDER_ID) return path.join(dataDir, 'netlify.json');
+      if (providerId === RENDER_PROVIDER_ID) return path.join(dataDir, 'render.json');
+      if (providerId === RAILWAY_PROVIDER_ID) return path.join(dataDir, 'railway.json');
+    }
+    throw new Error(`Provider ${providerId} credentials require an explicit data directory.`);
+  }
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return path.join(base, 'cloudflare-pages.json');
-  if (providerId === NETLIFY_PROVIDER_ID) return path.join(base, 'netlify.json');
-  if (providerId === RENDER_PROVIDER_ID) return path.join(base, 'render.json');
-  if (providerId === RAILWAY_PROVIDER_ID) return path.join(base, 'railway.json');
-  return path.join(base, 'vercel.json');
+  if (providerId === VERCEL_PROVIDER_ID) return path.join(base, 'vercel.json');
+  throw new Error(`Provider ${providerId} credentials require an explicit data directory.`);
 }
 
-export async function readVercelConfig(): Promise<DeployConfig> {
+export async function readVercelConfig(dataDir?: string): Promise<DeployConfig> {
   try {
-    const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
     const token = typeof parsed.token === 'string' ? parsed.token : '';
     return {
@@ -108,9 +117,9 @@ export async function readVercelConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
+export async function readCloudflarePagesConfig(dataDir?: string): Promise<DeployConfig> {
   try {
-    const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
     const token = typeof parsed.token === 'string' ? parsed.token : '';
     return {
@@ -125,9 +134,9 @@ export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function readNetlifyConfig(): Promise<DeployConfig> {
+export async function readNetlifyConfig(dataDir?: string): Promise<DeployConfig> {
   try {
-    const raw = await readFile(deployConfigPath(NETLIFY_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(NETLIFY_PROVIDER_ID, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
     const token = typeof parsed.token === 'string' ? parsed.token : '';
     const githubToken = typeof parsed.githubToken === 'string' ? parsed.githubToken : '';
@@ -141,9 +150,9 @@ export async function readNetlifyConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function readRenderConfig(): Promise<DeployConfig> {
+export async function readRenderConfig(dataDir?: string): Promise<DeployConfig> {
   try {
-    const raw = await readFile(deployConfigPath(RENDER_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(RENDER_PROVIDER_ID, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
     const token = typeof parsed.token === 'string' ? parsed.token : '';
     const githubToken = typeof parsed.githubToken === 'string' ? parsed.githubToken : '';
@@ -157,9 +166,9 @@ export async function readRenderConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function readRailwayConfig(): Promise<DeployConfig> {
+export async function readRailwayConfig(dataDir?: string): Promise<DeployConfig> {
   try {
-    const raw = await readFile(deployConfigPath(RAILWAY_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(RAILWAY_PROVIDER_ID, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
     const token = typeof parsed.token === 'string' ? parsed.token : '';
     const githubToken = typeof parsed.githubToken === 'string' ? parsed.githubToken : '';
@@ -180,20 +189,20 @@ function preserveSecretInput(inputValue: unknown, currentValue: string | undefin
   return trimmed;
 }
 
-export async function writeVercelConfig(input: Partial<DeployConfig>) {
-  const current = await readVercelConfig();
+export async function writeVercelConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readVercelConfig(dataDir);
   const next = {
     token: preserveSecretInput(input?.token, current.token, SAVED_TOKEN_MASK),
     teamId: typeof input?.teamId === 'string' ? input.teamId.trim() : current.teamId,
     teamSlug:
       typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
   };
-  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID), next);
+  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID, dataDir), next);
   return publicDeployConfig(next);
 }
 
-export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
-  const current = await readCloudflarePagesConfig();
+export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readCloudflarePagesConfig(dataDir);
   const cloudflarePages = normalizeCloudflarePagesConfigHints(input?.cloudflarePages, current.cloudflarePages);
   const next: DeployConfig = {
     token: preserveSecretInput(input?.token, current.token, SAVED_CLOUDFLARE_TOKEN_MASK),
@@ -207,37 +216,37 @@ export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
   if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
   if (!next.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
   if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
+  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir), next);
   return publicCloudflarePagesConfig(next);
 }
 
-export async function writeNetlifyConfig(input: Partial<DeployConfig>) {
-  const current = await readNetlifyConfig();
+export async function writeNetlifyConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readNetlifyConfig(dataDir);
   const next = {
     token: preserveSecretInput(input?.token, current.token, SAVED_NETLIFY_TOKEN_MASK),
     githubToken: preserveSecretInput(input?.githubToken, current.githubToken, SAVED_GITHUB_TOKEN_MASK),
   };
-  await writeDeployConfigFile(deployConfigPath(NETLIFY_PROVIDER_ID), next);
+  await writeDeployConfigFile(deployConfigPath(NETLIFY_PROVIDER_ID, dataDir), next);
   return publicNetlifyConfig(next);
 }
 
-export async function writeRenderConfig(input: Partial<DeployConfig>) {
-  const current = await readRenderConfig();
+export async function writeRenderConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readRenderConfig(dataDir);
   const next = {
     token: preserveSecretInput(input?.token, current.token, SAVED_RENDER_TOKEN_MASK),
     githubToken: preserveSecretInput(input?.githubToken, current.githubToken, SAVED_GITHUB_TOKEN_MASK),
   };
-  await writeDeployConfigFile(deployConfigPath(RENDER_PROVIDER_ID), next);
+  await writeDeployConfigFile(deployConfigPath(RENDER_PROVIDER_ID, dataDir), next);
   return publicRenderConfig(next);
 }
 
-export async function writeRailwayConfig(input: Partial<DeployConfig>) {
-  const current = await readRailwayConfig();
+export async function writeRailwayConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readRailwayConfig(dataDir);
   const next = {
     token: preserveSecretInput(input?.token, current.token, SAVED_RAILWAY_TOKEN_MASK),
     githubToken: preserveSecretInput(input?.githubToken, current.githubToken, SAVED_GITHUB_TOKEN_MASK),
   };
-  await writeDeployConfigFile(deployConfigPath(RAILWAY_PROVIDER_ID), next);
+  await writeDeployConfigFile(deployConfigPath(RAILWAY_PROVIDER_ID, dataDir), next);
   return publicRailwayConfig(next);
 }
 
@@ -314,20 +323,20 @@ export function publicRailwayConfig(config: Partial<DeployConfig>) {
   };
 }
 
-export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
-  if (providerId === NETLIFY_PROVIDER_ID) return readNetlifyConfig();
-  if (providerId === RENDER_PROVIDER_ID) return readRenderConfig();
-  if (providerId === RAILWAY_PROVIDER_ID) return readRailwayConfig();
-  return readVercelConfig();
+export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, dataDir?: string) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig(dataDir);
+  if (providerId === NETLIFY_PROVIDER_ID) return readNetlifyConfig(dataDir);
+  if (providerId === RENDER_PROVIDER_ID) return readRenderConfig(dataDir);
+  if (providerId === RAILWAY_PROVIDER_ID) return readRailwayConfig(dataDir);
+  return readVercelConfig(dataDir);
 }
 
-export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
-  if (providerId === NETLIFY_PROVIDER_ID) return writeNetlifyConfig(input);
-  if (providerId === RENDER_PROVIDER_ID) return writeRenderConfig(input);
-  if (providerId === RAILWAY_PROVIDER_ID) return writeRailwayConfig(input);
-  return writeVercelConfig(input);
+export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}, dataDir?: string) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input, dataDir);
+  if (providerId === NETLIFY_PROVIDER_ID) return writeNetlifyConfig(input, dataDir);
+  if (providerId === RENDER_PROVIDER_ID) return writeRenderConfig(input, dataDir);
+  if (providerId === RAILWAY_PROVIDER_ID) return writeRailwayConfig(input, dataDir);
+  return writeVercelConfig(input, dataDir);
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
@@ -1656,7 +1665,7 @@ async function pollRailwayDeploy(
   throw new DeployError('Railway deployment poll timed out.', 504, last);
 }
 
-export async function checkNetlifyDeploymentLinks(existing: any) {
+export async function checkNetlifyDeploymentLinks(existing: any, dataDir?: string) {
   const metadata = existing.providerMetadata || {};
   const { siteId, serviceUrl } = metadata;
   const deployId = existing.deploymentId;
@@ -1671,7 +1680,7 @@ export async function checkNetlifyDeploymentLinks(existing: any) {
   }
 
   try {
-    const config = await readDeployConfig(NETLIFY_PROVIDER_ID);
+    const config = await readDeployConfig(NETLIFY_PROVIDER_ID, dataDir);
     const resp = await fetch(`${NETLIFY_API}/deploys/${encodeURIComponent(deployId)}`, {
       headers: { Authorization: `Bearer ${config.token}` },
     });
@@ -1707,7 +1716,7 @@ export async function checkNetlifyDeploymentLinks(existing: any) {
   }
 }
 
-export async function checkRenderDeploymentLinks(existing: any) {
+export async function checkRenderDeploymentLinks(existing: any, dataDir?: string) {
   const metadata = existing.providerMetadata || {};
   const { serviceId, deployId, serviceUrl } = metadata;
   const targetServiceId = serviceId || existing.deploymentId;
@@ -1722,7 +1731,7 @@ export async function checkRenderDeploymentLinks(existing: any) {
   }
 
   try {
-    const config = await readDeployConfig(RENDER_PROVIDER_ID);
+    const config = await readDeployConfig(RENDER_PROVIDER_ID, dataDir);
     const resp = await fetch(`${RENDER_API}/services/${encodeURIComponent(targetServiceId)}/deploys/${encodeURIComponent(deployId)}`, {
       headers: {
         Authorization: `Bearer ${config.token}`,
@@ -1761,7 +1770,7 @@ export async function checkRenderDeploymentLinks(existing: any) {
   }
 }
 
-export async function checkRailwayDeploymentLinks(existing: any) {
+export async function checkRailwayDeploymentLinks(existing: any, dataDir?: string) {
   const metadata = existing.providerMetadata || {};
   const { railwayProjectId, environmentId, serviceId, serviceUrl, railwayDeployId } = metadata;
   if (!railwayDeployId) {
@@ -1775,7 +1784,7 @@ export async function checkRailwayDeploymentLinks(existing: any) {
   }
 
   try {
-    const config = await readDeployConfig(RAILWAY_PROVIDER_ID);
+    const config = await readDeployConfig(RAILWAY_PROVIDER_ID, dataDir);
     const RAILWAY_API = 'https://backboard.railway.com/graphql/v2';
     const resp = await fetch(RAILWAY_API, {
       method: 'POST',

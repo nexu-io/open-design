@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 function stubGlobalFetch(fetchMock: any) {
   const wrappedFetchMock = vi.fn(async (input: any, init: any) => {
@@ -62,8 +62,10 @@ import {
   prepareDeployPreflight,
   publicDeployConfig,
   RAILWAY_PROVIDER_ID,
+  RENDER_PROVIDER_ID,
   readNetlifyConfig,
   readRailwayConfig,
+  readRenderConfig,
   readVercelConfig,
   resolveReferencedPath,
   rewriteCssReferences,
@@ -72,12 +74,14 @@ import {
   SAVED_GITHUB_TOKEN_MASK,
   SAVED_NETLIFY_TOKEN_MASK,
   SAVED_RAILWAY_TOKEN_MASK,
+  SAVED_RENDER_TOKEN_MASK,
   SAVED_TOKEN_MASK,
   VERCEL_PROVIDER_ID,
   waitForReachableDeploymentUrl,
   writeCloudflarePagesConfig,
   writeNetlifyConfig,
   writeRailwayConfig,
+  writeRenderConfig,
   writeVercelConfig,
 } from '../src/deploy.js';
 import { closeDatabase, getDeployment, insertProject, openDatabase, upsertDeployment } from '../src/db.js';
@@ -157,12 +161,15 @@ describe('deploy config', () => {
     });
   });
 
-  it('preserves saved Netlify and Railway secrets when masks or partial updates are submitted', async () => {
-    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-secret-preserve-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+  it('preserves saved Netlify, Render, and Railway secrets with explicit dataDir and rejects fallback', async () => {
+    const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-data-root-'));
     try {
-      const netlifySaved = await writeNetlifyConfig({ token: 'netlify-token-secret', githubToken: 'netlify-github-secret' });
+      // Rejects missing dataDir for new providers
+      expect(() => deployConfigPath(NETLIFY_PROVIDER_ID)).toThrow();
+      expect(() => deployConfigPath(RENDER_PROVIDER_ID)).toThrow();
+      expect(() => deployConfigPath(RAILWAY_PROVIDER_ID)).toThrow();
+
+      const netlifySaved = await writeNetlifyConfig({ token: 'netlify-token-secret', githubToken: 'netlify-github-secret' }, dataRoot);
       expect(netlifySaved).toMatchObject({
         providerId: NETLIFY_PROVIDER_ID,
         configured: true,
@@ -170,19 +177,36 @@ describe('deploy config', () => {
         githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
       });
 
-      await writeNetlifyConfig({});
-      expect(await readNetlifyConfig()).toEqual({ token: 'netlify-token-secret', githubToken: 'netlify-github-secret' });
+      await writeNetlifyConfig({}, dataRoot);
+      expect(await readNetlifyConfig(dataRoot)).toEqual({ token: 'netlify-token-secret', githubToken: 'netlify-github-secret' });
 
-      await writeNetlifyConfig({ token: SAVED_NETLIFY_TOKEN_MASK });
-      expect(JSON.parse(await readFile(deployConfigPath(NETLIFY_PROVIDER_ID), 'utf8'))).toEqual({
+      await writeNetlifyConfig({ token: SAVED_NETLIFY_TOKEN_MASK }, dataRoot);
+      expect(JSON.parse(await readFile(deployConfigPath(NETLIFY_PROVIDER_ID, dataRoot), 'utf8'))).toEqual({
         token: 'netlify-token-secret',
         githubToken: 'netlify-github-secret',
+      });
+
+      const renderSaved = await writeRenderConfig({
+        token: 'render-token-secret',
+        githubToken: 'render-github-secret',
+      }, dataRoot);
+      expect(renderSaved).toMatchObject({
+        providerId: RENDER_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_RENDER_TOKEN_MASK,
+        githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
+      });
+
+      await writeRenderConfig({ token: SAVED_RENDER_TOKEN_MASK }, dataRoot);
+      expect(await readRenderConfig(dataRoot)).toEqual({
+        token: 'render-token-secret',
+        githubToken: 'render-github-secret',
       });
 
       const railwaySaved = await writeRailwayConfig({
         token: 'railway-token-secret',
         githubToken: 'github-token-secret',
-      });
+      }, dataRoot);
       expect(railwaySaved).toMatchObject({
         providerId: RAILWAY_PROVIDER_ID,
         configured: true,
@@ -190,21 +214,19 @@ describe('deploy config', () => {
         githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
       });
 
-      await writeRailwayConfig({ token: SAVED_RAILWAY_TOKEN_MASK });
-      expect(await readRailwayConfig()).toEqual({
+      await writeRailwayConfig({ token: SAVED_RAILWAY_TOKEN_MASK }, dataRoot);
+      expect(await readRailwayConfig(dataRoot)).toEqual({
         token: 'railway-token-secret',
         githubToken: 'github-token-secret',
       });
 
-      await writeRailwayConfig({ githubToken: SAVED_GITHUB_TOKEN_MASK });
-      expect(JSON.parse(await readFile(deployConfigPath(RAILWAY_PROVIDER_ID), 'utf8'))).toEqual({
+      await writeRailwayConfig({ githubToken: SAVED_GITHUB_TOKEN_MASK }, dataRoot);
+      expect(JSON.parse(await readFile(deployConfigPath(RAILWAY_PROVIDER_ID, dataRoot), 'utf8'))).toEqual({
         token: 'railway-token-secret',
         githubToken: 'github-token-secret',
       });
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
-      await rm(stateRoot, { recursive: true, force: true });
+      await rm(dataRoot, { recursive: true, force: true });
     }
   });
 
@@ -6085,6 +6107,15 @@ describe('deployment link readiness', () => {
   });
 
   describe('checkNetlifyDeploymentLinks', () => {
+    let dataRoot: string;
+    beforeEach(async () => {
+      dataRoot = await mkdtemp(path.join(os.tmpdir(), 'od-check-netlify-'));
+      await writeNetlifyConfig({ token: 'dummy-token' }, dataRoot);
+    });
+    afterEach(async () => {
+      await rm(dataRoot, { recursive: true, force: true });
+    });
+
     it('returns ready and checks URL reachability when netlify deploy state is ready', async () => {
       const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : String(input);
@@ -6104,7 +6135,7 @@ describe('deployment link readiness', () => {
       const result = await checkNetlifyDeploymentLinks({
         deploymentId: 'dep-1',
         providerMetadata: { siteId: 'site-1', serviceUrl: 'https://example.netlify.app' },
-      });
+      }, dataRoot);
       expect(result).toEqual({
         status: 'ready',
         statusMessage: 'Public link is ready.',
@@ -6127,7 +6158,7 @@ describe('deployment link readiness', () => {
       const result = await checkNetlifyDeploymentLinks({
         deploymentId: 'dep-1',
         providerMetadata: { siteId: 'site-1', serviceUrl: 'https://example.netlify.app' },
-      });
+      }, dataRoot);
       expect(result).toEqual({
         status: 'failed',
         statusMessage: 'Build failed due to syntax error',
@@ -6149,7 +6180,7 @@ describe('deployment link readiness', () => {
       const result = await checkNetlifyDeploymentLinks({
         deploymentId: 'dep-1',
         providerMetadata: { siteId: 'site-1', serviceUrl: 'https://example.netlify.app' },
-      });
+      }, dataRoot);
       expect(result).toEqual({
         status: 'link-delayed',
         statusMessage: 'Netlify deployment is currently: building.',
@@ -6158,6 +6189,15 @@ describe('deployment link readiness', () => {
   });
 
   describe('checkRenderDeploymentLinks', () => {
+    let dataRoot: string;
+    beforeEach(async () => {
+      dataRoot = await mkdtemp(path.join(os.tmpdir(), 'od-check-render-'));
+      await writeRenderConfig({ token: 'dummy-token' }, dataRoot);
+    });
+    afterEach(async () => {
+      await rm(dataRoot, { recursive: true, force: true });
+    });
+
     it('returns ready and checks URL reachability when render deploy status is live', async () => {
       const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : String(input);
@@ -6176,7 +6216,7 @@ describe('deployment link readiness', () => {
       const result = await checkRenderDeploymentLinks({
         deploymentId: 'service-1',
         providerMetadata: { serviceId: 'service-1', deployId: 'dep-1', serviceUrl: 'https://example.onrender.com' },
-      });
+      }, dataRoot);
       expect(result).toEqual({
         status: 'ready',
         statusMessage: 'Public link is ready.',
@@ -6198,7 +6238,7 @@ describe('deployment link readiness', () => {
       const result = await checkRenderDeploymentLinks({
         deploymentId: 'service-1',
         providerMetadata: { serviceId: 'service-1', deployId: 'dep-1', serviceUrl: 'https://example.onrender.com' },
-      });
+      }, dataRoot);
       expect(result).toEqual({
         status: 'failed',
         statusMessage: 'Render deployment failed with status: build_failed.',
@@ -6220,14 +6260,15 @@ describe('deployment link readiness', () => {
       const result = await checkRenderDeploymentLinks({
         deploymentId: 'service-1',
         providerMetadata: { serviceId: 'service-1', deployId: 'dep-1', serviceUrl: 'https://example.onrender.com' },
-      });
+      }, dataRoot);
       expect(result).toEqual({
         status: 'link-delayed',
         statusMessage: 'Render deployment is currently: building.',
       });
     });
+  });
 
-    it('does not mutate existing netlify.toml or render.yaml in linked folder during deploy', async () => {
+  it('does not mutate existing netlify.toml or render.yaml in linked folder during deploy', async () => {
       const projectDir = await mkdtemp(path.join(os.tmpdir(), 'od-linked-folder-deploy-'));
       try {
         const customNetlifyToml = '[build]\n  command = "npm run custom-build"\n  publish = "dist"\n';
@@ -6383,5 +6424,5 @@ describe('deployment link readiness', () => {
       expect(requestedUrls).toContain('PUT https://api.github.com/repos/testuser/od-netlify-p1/contents/assets/hero%20%231.png');
     });
   });
-});
+
 

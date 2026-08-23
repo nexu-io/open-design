@@ -7558,8 +7558,8 @@ export async function startServer({
     RAILWAY_PROVIDER_ID,
     isDeployProviderId,
     publicDeployConfigForProvider,
-    readDeployConfig,
-    writeDeployConfig,
+    readDeployConfig: (providerId?: DeployProviderId) => readDeployConfig(providerId, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
+    writeDeployConfig: (providerId?: DeployProviderId, input?: Partial<DeployConfig>) => writeDeployConfig(providerId, input, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
     listCloudflarePagesZones,
     DeployError,
     listDeployments,
@@ -7580,9 +7580,9 @@ export async function startServer({
     deployToNetlify,
     deployToRender,
     deployToRailway,
-    checkRailwayDeploymentLinks,
-    checkNetlifyDeploymentLinks,
-    checkRenderDeploymentLinks,
+    checkRailwayDeploymentLinks: (existing: any) => checkRailwayDeploymentLinks(existing, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
+    checkNetlifyDeploymentLinks: (existing: any) => checkNetlifyDeploymentLinks(existing, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
+    checkRenderDeploymentLinks: (existing: any) => checkRenderDeploymentLinks(existing, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
   };
   const mediaDeps = {
     MEDIA_PROVIDERS,
