@@ -99,10 +99,26 @@ export function buildPreviewBaseHrefBridge(
           var frames = document.querySelectorAll('iframe[src]');
           for (var i = 0; i < frames.length; i++) {
             var frame = frames[i];
-            var resolvedSrc = frame.src;
-            if (!resolvedSrc || resolvedSrc.indexOf(scopeRoot) !== 0) continue;
-            var relative = resolvedSrc.slice(scopeRoot.length);
-            if (!relative || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|\\/|#)/i.test(relative)) continue;
+            var relative = null;
+            try {
+              // #7008 review: prefer the child's own confirmed live path (set
+              // by the selection bridge's ready-ping handler on the same
+              // element) over re-deriving from this frame's src. A child that
+              // navigated itself since the last ready ping never updates its
+              // parent's src attribute, so stripping scopeRoot from src here
+              // would silently revert the rebase target to whatever page was
+              // showing when the child last confirmed readiness. This bridge
+              // can also run without the selection bridge present (no
+              // Comment/Inspect enabled), so the attribute may be absent --
+              // fall back to the src-derived guess in that case.
+              relative = frame.getAttribute && frame.getAttribute('data-od-live-frame-path');
+            } catch (_) {}
+            if (!relative) {
+              var resolvedSrc = frame.src;
+              if (!resolvedSrc || resolvedSrc.indexOf(scopeRoot) !== 0) continue;
+              relative = resolvedSrc.slice(scopeRoot.length);
+              if (!relative || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|\\/|#)/i.test(relative)) continue;
+            }
             try {
               var rebased = new URL(relative, nextScopeRoot).href;
               if (frame.src !== rebased) frame.src = rebased;

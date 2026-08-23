@@ -318,6 +318,134 @@ describe('URL preview nested-frame bridges', () => {
     );
   });
 
+  it('accepts a child-ready ping that self-navigated to a different in-scope path, caching the live path (#7008 review: frame.src staleness)', () => {
+    // frame.src still reflects the iframe's ORIGINAL attribute ("child.html")
+    // because a child navigating itself (an internal link, a
+    // window.location assignment) never updates the parent's reflected src.
+    // The ready ping's self-reported href is ground truth and must be
+    // accepted even though it disagrees with frame.src.
+    const listeners: Array<(event: { data?: unknown; source?: unknown }) => void> = [];
+    const received: unknown[] = [];
+    const childWindow = { postMessage: (message: unknown) => received.push(message) };
+    const frameAttrs: Record<string, string> = { src: 'child.html' };
+    const frame = {
+      contentWindow: childWindow,
+      get src() { return frameAttrs.src; },
+      getAttribute(name: string) { return Object.prototype.hasOwnProperty.call(frameAttrs, name) ? frameAttrs[name] : null; },
+      setAttribute(name: string, value: string) { frameAttrs[name] = value; },
+      toggleAttribute() {},
+      getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
+      clientWidth: 100,
+      clientHeight: 100,
+    };
+    const documentElement = { toggleAttribute() {}, setAttribute() {}, attributes: [] };
+    const document = {
+      baseURI: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+      documentElement,
+      body: { querySelectorAll: () => [], attributes: [] },
+      head: { appendChild() {} },
+      scrollingElement: { scrollLeft: 0, scrollTop: 0 },
+      querySelectorAll(selector: string) { return selector === 'iframe' ? [frame] : []; },
+      querySelector() { return null; },
+      createElement() { return { setAttribute() {}, textContent: '', isConnected: true }; },
+      addEventListener() {},
+    };
+    const window = {
+      __odUrlScrollBridge: false,
+      __odUrlSelectionBridge: false,
+      location: { href: document.baseURI, search: '', hash: '' },
+      parent: { postMessage: () => {} },
+      addEventListener(type: string, listener: (event: { data?: unknown; source?: unknown }) => void) {
+        if (type === 'message') listeners.push(listener);
+      },
+      requestAnimationFrame(callback: () => void) { callback(); return 1; },
+      setTimeout(callback: () => void) { callback(); return 1; },
+      clearTimeout() {},
+    };
+    class MutationObserver { constructor(_callback: () => void) {} observe() {} }
+    const context = { window, document, URL, MutationObserver, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout };
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SCROLL_BRIDGE'), context);
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE'), context);
+    const dispatch = (data: unknown, source: unknown = undefined) => {
+      for (const listener of listeners) listener({ data, source });
+    };
+    dispatch({ type: 'od:comment-mode', enabled: true, mode: 'picker' });
+    dispatch({ type: 'od:inspect-mode', enabled: true });
+    received.length = 0;
+
+    dispatch({
+      type: 'od:url-selection-bridge-ready',
+      href: 'http://preview.local/api/projects/project-1/preview/scope-1/slide-2.html',
+    }, childWindow);
+
+    expect(received).toEqual([
+      { type: 'od:comment-mode', enabled: true, mode: 'picker' },
+      { type: 'od:inspect-mode', enabled: true },
+    ]);
+    expect(frame.getAttribute('data-od-live-frame-path')).toBe('slide-2.html');
+  });
+
+  it('rejects a child-ready ping whose href is outside the current preview scope (#7008 review: frame.src staleness)', () => {
+    const listeners: Array<(event: { data?: unknown; source?: unknown }) => void> = [];
+    const received: unknown[] = [];
+    const childWindow = { postMessage: (message: unknown) => received.push(message) };
+    const frameAttrs: Record<string, string> = { src: 'child.html' };
+    const frame = {
+      contentWindow: childWindow,
+      get src() { return frameAttrs.src; },
+      getAttribute(name: string) { return Object.prototype.hasOwnProperty.call(frameAttrs, name) ? frameAttrs[name] : null; },
+      setAttribute(name: string, value: string) { frameAttrs[name] = value; },
+      toggleAttribute() {},
+      getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
+      clientWidth: 100,
+      clientHeight: 100,
+    };
+    const documentElement = { toggleAttribute() {}, setAttribute() {}, attributes: [] };
+    const document = {
+      baseURI: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+      documentElement,
+      body: { querySelectorAll: () => [], attributes: [] },
+      head: { appendChild() {} },
+      scrollingElement: { scrollLeft: 0, scrollTop: 0 },
+      querySelectorAll(selector: string) { return selector === 'iframe' ? [frame] : []; },
+      querySelector() { return null; },
+      createElement() { return { setAttribute() {}, textContent: '', isConnected: true }; },
+      addEventListener() {},
+    };
+    const window = {
+      __odUrlScrollBridge: false,
+      __odUrlSelectionBridge: false,
+      location: { href: document.baseURI, search: '', hash: '' },
+      parent: { postMessage: () => {} },
+      addEventListener(type: string, listener: (event: { data?: unknown; source?: unknown }) => void) {
+        if (type === 'message') listeners.push(listener);
+      },
+      requestAnimationFrame(callback: () => void) { callback(); return 1; },
+      setTimeout(callback: () => void) { callback(); return 1; },
+      clearTimeout() {},
+    };
+    class MutationObserver { constructor(_callback: () => void) {} observe() {} }
+    const context = { window, document, URL, MutationObserver, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout };
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SCROLL_BRIDGE'), context);
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE'), context);
+    const dispatch = (data: unknown, source: unknown = undefined) => {
+      for (const listener of listeners) listener({ data, source });
+    };
+    dispatch({ type: 'od:comment-mode', enabled: true, mode: 'picker' });
+    dispatch({ type: 'od:inspect-mode', enabled: true });
+    received.length = 0;
+
+    dispatch({
+      type: 'od:url-selection-bridge-ready',
+      // A different scope segment (scope-2 vs this bridge's scope-1) is
+      // outside the prefix projectFramePathFromHref requires.
+      href: 'http://preview.local/api/projects/project-1/preview/scope-2/child.html',
+    }, childWindow);
+
+    expect(received).toEqual([]);
+    expect(frame.getAttribute('data-od-live-frame-path')).toBeNull();
+  });
+
   it('hydrates persisted inspect overrides on boot instead of starting empty (#7008 review: nettee, non-blocking)', () => {
     // Unlike the srcDoc bridge's hydrateOverridesFromDom(), this URL-load
     // bridge previously initialized inspectOverrides empty even when the

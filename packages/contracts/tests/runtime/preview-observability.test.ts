@@ -186,6 +186,30 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/slide-2.html');
   });
 
+  it('rebases to the child-confirmed live path when the child navigated itself, not the stale src attribute (#7008 review: frame.src staleness)', () => {
+    // Unlike the previous test (a parent-driven src assignment, which DOES
+    // update the reflected attribute), a child navigating ITSELF -- an
+    // internal link, a window.location assignment -- never updates its
+    // parent's src attribute at all. The selection bridge's ready-ping
+    // handler is the only thing that observes the child's real location
+    // (via window.location.href from inside the child) and records it on
+    // data-od-live-frame-path; this bridge must prefer that confirmed value
+    // over frame.src whenever both are present.
+    const { frame, send } = setUp('child.html');
+    send('scope-2');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/child.html');
+
+    // Simulate the selection bridge's ready-ping handler confirming the
+    // child self-navigated to a different slide -- frame.src is left
+    // untouched (still "child.html" resolved against scope-2), exactly as a
+    // real child self-navigation would leave it.
+    frame.setAttribute('data-od-live-frame-path', 'slide-2.html');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-2/child.html');
+
+    send('scope-3');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/slide-2.html');
+  });
+
   it('rebases a sibling-directory iframe src that crosses the owner file directory boundary (Codex review)', () => {
     // The daemon's injected <base> includes the owner FILE's own directory
     // (deck/), not just the scope root -- see injectProjectPreviewBase. A

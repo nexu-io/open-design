@@ -766,16 +766,37 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   // Keep the URL-load bridge on the same one-depth project-frame contract as
   // srcdoc: only direct HTML children served under this minted preview scope
   // may receive input or identify a child source file.
-  function projectFramePath(frame){
+  //
+  // Validates and extracts the in-scope project path from an already-
+  // resolved href string, without touching a frame's reflected src
+  // attribute at all -- src is set by the PARENT and does not update
+  // when the CHILD navigates itself (an internal link, a
+  // window.location assignment), so deriving path from it goes stale the
+  // moment that happens. Callers that have a live, child-reported href
+  // (a ready ping) should use this instead of projectFramePath(frame).
+  function projectFramePathFromHref(hrefString){
     try {
       var base = new URL(document.baseURI);
       var baseMatch = base.pathname.match(/^\\/api\\/projects\\/([^/]+)\\/preview\\/([^/]+)\\//);
-      var child = new URL(frame.src, document.baseURI);
+      var child = new URL(hrefString, document.baseURI);
       if (!baseMatch || child.origin !== base.origin) return null;
       var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
       if (child.pathname.indexOf(prefix) !== 0) return null;
       var path = decodeURIComponent(child.pathname.slice(prefix.length));
       return path && path.indexOf('..') < 0 && /\.html?$/i.test(path) ? path : null;
+    } catch (_) { return null; }
+  }
+  function projectFramePath(frame){
+    // A validated ready ping (see od:url-selection-bridge-ready below)
+    // caches the child's own reported path here -- ground truth from the
+    // child itself, once known, always wins over re-deriving from the
+    // parent's possibly-stale src attribute.
+    try {
+      var livePath = frame && frame.getAttribute && frame.getAttribute('data-od-live-frame-path');
+      if (livePath) return livePath;
+    } catch (_) {}
+    try {
+      return projectFramePathFromHref(frame.src);
     } catch (_) { return null; }
   }
   function projectFrameForSource(source){
@@ -793,7 +814,22 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
     }
   }
   markProjectFrames();
-  try { new MutationObserver(markProjectFrames).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] }); } catch (_) {}
+  try {
+    new MutationObserver(function(records){
+      // #7008 review: the parent explicitly setting a new src is exactly
+      // the moment the cached live path (from a prior ready ping) is known
+      // to be stale -- clear it so projectFramePath() falls back to the
+      // best-effort src-derived guess until the reloaded child's own
+      // ready ping confirms the real new path.
+      for (var r = 0; r < records.length; r++) {
+        var record = records[r];
+        if (record.attributeName === 'src' && record.target && record.target.tagName === 'IFRAME') {
+          try { record.target.removeAttribute('data-od-live-frame-path'); } catch (_) {}
+        }
+      }
+      markProjectFrames();
+    }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+  } catch (_) {}
   hydrateInspectOverridesFromDom();
   function parseProjectFrameTarget(elementId){
     var raw = String(elementId || '');
@@ -1290,21 +1326,25 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
     var data = ev && ev.data;
     if (!data || !data.type) return;
     if (data.type === 'od:url-selection-bridge-ready') {
-      // A child can install after the parent broadcast its initial mode.
-      // Bind the ping to the current direct scoped iframe and reject stale
-      // navigations before returning the parent's live mode state.
+      // A project child can load after the root's initial mode broadcast.
+      // Its ready ping is accepted only from the current direct, scoped frame
+      // (window-identity check below); the href itself is validated against
+      // the scope, not against the frame's possibly-stale src attribute --
+      // that attribute is set by the PARENT and does not update when the
+      // CHILD navigates itself (an internal link, a window.location
+      // assignment), so comparing against it would falsely reject a
+      // legitimate ready ping the moment that happens (#7008 review).
       var readyFrame = projectFrameForSource(ev.source);
       if (!readyFrame) return;
-      var expectedHref = '';
-      try { expectedHref = new URL(readyFrame.getAttribute('src') || '', document.baseURI).href; } catch (_) { return; }
-      if (data.href !== expectedHref) return;
+      var readyFramePath = projectFramePathFromHref(data.href);
+      if (!readyFramePath) return;
+      try { readyFrame.setAttribute('data-od-live-frame-path', readyFramePath); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
       // #7008: a replay that arrived before this child mounted (or before it
       // reloaded, e.g. a scope rotation) was queued rather than dropped --
       // deliver it now that the child's own bridge is confirmed ready.
-      var readyFramePath = projectFramePath(readyFrame);
-      if (readyFramePath) relayFrameInspectOverrides(readyFramePath);
+      relayFrameInspectOverrides(readyFramePath);
       return;
     }
     if (routeProjectFrameCommand(data)) return;

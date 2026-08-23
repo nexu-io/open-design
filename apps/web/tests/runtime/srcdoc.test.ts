@@ -549,7 +549,12 @@ describe('buildSrcdoc', () => {
     dom.window.close();
   });
 
-  it('does not replay mode for a stale child-ready URL', () => {
+  it('does not replay mode for a child-ready URL outside the current preview scope (#7008 review: frame.src staleness)', () => {
+    // A ready ping is validated against the scope, not against frame.src, so
+    // the meaningful "reject" case is now an href genuinely outside this
+    // srcdoc's daemon-minted scope -- not merely one that differs from the
+    // frame's original src (see the companion "self-navigated" test below,
+    // which is the legitimate case this scope check must still allow).
     const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
       baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
       inspectBridge: true,
@@ -569,12 +574,88 @@ describe('buildSrcdoc', () => {
     dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
       data: {
         type: 'od:url-selection-bridge-ready',
-        href: 'http://preview.local/api/projects/project-1/preview/scope-1/old-child.html',
+        // A different scope segment (scope-2 vs this srcdoc's scope-1) is
+        // outside the prefix projectFramePathFromHref requires, unlike a
+        // same-scope path change from self-navigation.
+        href: 'http://preview.local/api/projects/project-1/preview/scope-2/old-child.html',
       },
       source: childWindow,
     }));
 
     expect(received).toEqual([]);
+    expect(frame?.getAttribute('data-od-live-frame-path')).toBeNull();
+    dom.window.close();
+  });
+
+  it('replays mode and caches the live path for a child-ready URL that self-navigated within scope (#7008 review: frame.src staleness)', () => {
+    // frame.src still reflects the iframe's ORIGINAL attribute ("child.html")
+    // because a child navigating itself (an internal link, a
+    // window.location assignment) never updates the parent's reflected src.
+    // The ready ping's self-reported href is ground truth and must be
+    // accepted even though it disagrees with frame.src.
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    childWindow.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        href: 'http://preview.local/api/projects/project-1/preview/scope-1/slide-2.html',
+      },
+      source: childWindow,
+    }));
+
+    expect(received).toEqual([
+      { type: 'od:comment-mode', enabled: true, mode: 'picker' },
+      { type: 'od:inspect-mode', enabled: true },
+    ]);
+    expect(frame?.getAttribute('data-od-live-frame-path')).toBe('slide-2.html');
+    dom.window.close();
+  });
+
+  it('clears the cached live path when the parent explicitly changes a frame src (#7008 review: cache invalidation)', async () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow || !frame) throw new Error('Expected child iframe window');
+    childWindow.postMessage = () => {};
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        href: 'http://preview.local/api/projects/project-1/preview/scope-1/slide-2.html',
+      },
+      source: childWindow,
+    }));
+    expect(frame.getAttribute('data-od-live-frame-path')).toBe('slide-2.html');
+
+    frame.setAttribute('src', 'slide-3.html');
+    // The MutationObserver callback that clears the cache fires as a
+    // microtask, not synchronously with the attribute change.
+    await new Promise<void>((resolve) => dom.window.queueMicrotask(resolve));
+    expect(frame.getAttribute('data-od-live-frame-path')).toBeNull();
     dom.window.close();
   });
 
