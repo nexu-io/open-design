@@ -76,10 +76,6 @@ export type SrcdocOptions = {
    * echoes it only after all document-side listeners are installed, allowing
    * the host to reject a stale ready signal from the document being replaced. */
   transportActivationGeneration?: string;
-  /** Static project-local child paths authorized by the host's root-source parse. */
-  staticFramePaths?: readonly string[];
-  /** Per-render secret echoed only by the selection bridge's closure-private relay. */
-  renderNonce?: string;
 };
 
 // --- Redirect-loop guard -------------------------------------------------
@@ -452,10 +448,8 @@ export function buildSrcdoc(
   // bridge's own listener install and the iframe ignores clicks.
   const withSelection = options.selectionBridge || options.commentBridge || options.inspectBridge
     ? injectSelectionBridge(withDeck, {
-      initialCommentMode: !!options.commentBridge,
-      initialInspectMode: !!options.inspectBridge,
-      staticFramePaths: options.staticFramePaths,
-      renderNonce: options.renderNonce,
+        initialCommentMode: !!options.commentBridge,
+        initialInspectMode: !!options.inspectBridge,
       })
     : withDeck;
   const withPalette = options.paletteBridge
@@ -1806,17 +1800,10 @@ function injectPreviewRedirectGuard(
 // damage. Any parent able to postMessage here can already mount the iframe.
 function injectSelectionBridge(
   doc: string,
-  options: {
-    initialCommentMode?: boolean;
-    initialInspectMode?: boolean;
-    staticFramePaths?: readonly string[];
-    renderNonce?: string;
-  } = {},
+  options: { initialCommentMode?: boolean; initialInspectMode?: boolean } = {},
 ): string {
   const initialComment = options.initialCommentMode ? 'true' : 'false';
   const initialInspect = options.initialInspectMode ? 'true' : 'false';
-  const staticFramePaths = JSON.stringify(options.staticFramePaths ?? []).replace(/</g, '\\u003c');
-  const renderNonce = JSON.stringify(options.renderNonce ?? '').replace(/</g, '\\u003c');
   const script = `<script data-od-selection-bridge>(function(){
   var commentEnabled = ${initialComment};
   var inspectEnabled = ${initialInspect};
@@ -1842,8 +1829,6 @@ function injectSelectionBridge(
   // again on a later od:url-selection-bridge-ready in case the replay
   // arrived before the child finished mounting or reloaded afterward.
   var pendingFrameInspectOverrides = Object.create(null);
-  var STATIC_FRAME_PATHS = ${staticFramePaths};
-  var RENDER_NONCE = ${renderNonce};
   var styleEl = null;
   // Allow-list of CSS properties the host may override. A malicious parent
   // could otherwise smuggle arbitrary CSS (or, with </style>, raw HTML)
@@ -1900,43 +1885,18 @@ function injectSelectionBridge(
   // the forged value trusted as ground truth. A closure-local WeakMap has no
   // such surface: nothing outside this IIFE has a reference to it.
   var liveFramePaths = new WeakMap();
-  // A script-created frame can imitate a declared path. This accepted limit is
-  // narrower than project-wide file authorization; do not add timing heuristics.
-  var originalFrameIsStatic = new WeakMap();
-  var originalFramePaths = new WeakMap();
-  var projectFrameLoadListeners = new WeakSet();
-  function clearLiveFramePath(frame){
-    try { liveFramePaths.delete(frame); } catch (_) {}
-    try {
-      if (originalFrameIsStatic.get(frame)) {
-        window.parent.postMessage({ type: 'od:project-frame-live-path-cleared', originalPath: originalFramePaths.get(frame), nonce: RENDER_NONCE }, '*');
-      }
-    } catch (_) {}
-  }
-  function observeProjectFrameLoad(frame){
-    if (!frame || projectFrameLoadListeners.has(frame)) return;
-    projectFrameLoadListeners.add(frame);
-    frame.addEventListener('load', function(){ clearLiveFramePath(frame); });
-  }
   function projectFramePath(frame){
     // A validated ready ping (see od:url-selection-bridge-ready below)
     // caches the child's own reported path here -- ground truth from the
     // child itself, once known, always wins over re-deriving from the
     // parent's possibly-stale src attribute.
-    var srcDerivedPath = null;
-    try { srcDerivedPath = projectFramePathFromHref(frame.src); } catch (_) {}
     try {
-      if (frame && !originalFramePaths.has(frame)) {
-        originalFramePaths.set(frame, srcDerivedPath);
-        originalFrameIsStatic.set(frame, !!srcDerivedPath && STATIC_FRAME_PATHS.indexOf(srcDerivedPath) !== -1);
-        observeProjectFrameLoad(frame);
-      }
       var cachedFramePath = frame && liveFramePaths.get(frame);
       var currentFrameSrc = frame && frame.getAttribute ? (frame.getAttribute('src') || '') : '';
       if (cachedFramePath && cachedFramePath.srcAtCache === currentFrameSrc) return cachedFramePath.path;
     } catch (_) {}
     try {
-      return srcDerivedPath;
+      return projectFramePathFromHref(frame.src);
     } catch (_) { return null; }
   }
   function isProjectHtmlPath(path){ return /\.html?$/i.test(String(path || '')); }
@@ -2700,11 +2660,6 @@ function meaningfulDomFallbackTarget(el) {
       var readyFramePath = projectFramePathFromHref(data.href);
       if (!readyFramePath) return;
       try { liveFramePaths.set(readyFrame, { path: readyFramePath, srcAtCache: readyFrame.getAttribute('src') || '' }); } catch (_) {}
-      try {
-        if (originalFrameIsStatic.get(readyFrame)) {
-          window.parent.postMessage({ type: 'od:project-frame-live-path', originalPath: originalFramePaths.get(readyFrame), newPath: readyFramePath, nonce: RENDER_NONCE }, '*');
-        }
-      } catch (_) {}
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
       // #7008: a replay that arrived before this child mounted (or before it

@@ -735,8 +735,6 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   // again on a later od:url-selection-bridge-ready in case the replay
   // arrived before the child finished mounting or reloaded afterward.
   var pendingFrameInspectOverrides = Object.create(null);
-  var STATIC_FRAME_PATHS = [];
-  var RENDER_NONCE = "";
   var inspectStyle = null;
   var ALLOWED_INSPECT_PROPS = {
     'color': true, 'background-color': true, 'font-size': true,
@@ -791,43 +789,18 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   // Keep live paths outside artifact-controlled DOM. The cached src snapshot
   // makes a parent src mutation invalidate synchronously before observers run.
   var liveFramePaths = new WeakMap();
-  // A script-created frame can imitate a declared path. This accepted limit is
-  // narrower than project-wide file authorization; do not add timing heuristics.
-  var originalFrameIsStatic = new WeakMap();
-  var originalFramePaths = new WeakMap();
-  var projectFrameLoadListeners = new WeakSet();
-  function clearLiveFramePath(frame){
-    try { liveFramePaths.delete(frame); } catch (_) {}
-    try {
-      if (originalFrameIsStatic.get(frame)) {
-        window.parent.postMessage({ type: 'od:project-frame-live-path-cleared', originalPath: originalFramePaths.get(frame), nonce: RENDER_NONCE }, '*');
-      }
-    } catch (_) {}
-  }
-  function observeProjectFrameLoad(frame){
-    if (!frame || projectFrameLoadListeners.has(frame)) return;
-    projectFrameLoadListeners.add(frame);
-    frame.addEventListener('load', function(){ clearLiveFramePath(frame); });
-  }
   function projectFramePath(frame){
     // A validated ready ping (see od:url-selection-bridge-ready below)
     // caches the child's own reported path here -- ground truth from the
     // child itself, once known, always wins over re-deriving from the
     // parent's possibly-stale src attribute.
-    var srcDerivedPath = null;
-    try { srcDerivedPath = projectFramePathFromHref(frame.src); } catch (_) {}
     try {
-      if (frame && !originalFramePaths.has(frame)) {
-        originalFramePaths.set(frame, srcDerivedPath);
-        originalFrameIsStatic.set(frame, !!srcDerivedPath && STATIC_FRAME_PATHS.indexOf(srcDerivedPath) !== -1);
-        observeProjectFrameLoad(frame);
-      }
       var cachedFramePath = frame && liveFramePaths.get(frame);
       var currentFrameSrc = frame && frame.getAttribute ? (frame.getAttribute('src') || '') : '';
       if (cachedFramePath && cachedFramePath.srcAtCache === currentFrameSrc) return cachedFramePath.path;
     } catch (_) {}
     try {
-      return srcDerivedPath;
+      return projectFramePathFromHref(frame.src);
     } catch (_) { return null; }
   }
   function projectFrameForSource(source){
@@ -1365,11 +1338,6 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
       try {
         liveFramePaths.set(readyFrame, { path: readyFramePath, srcAtCache: readyFrame.getAttribute('src') || '' });
       } catch (_) {}
-      try {
-        if (originalFrameIsStatic.get(readyFrame)) {
-          window.parent.postMessage({ type: 'od:project-frame-live-path', originalPath: originalFramePaths.get(readyFrame), newPath: readyFramePath, nonce: RENDER_NONCE }, '*');
-        }
-      } catch (_) {}
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
       // #7008: a replay that arrived before this child mounted (or before it
@@ -1587,35 +1555,6 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   postReady();
 })();
 </script>`;
-
-export function buildUrlPreviewSelectionBridge(
-  staticFramePaths: readonly string[] = [],
-  renderNonce = '',
-): string {
-  const paths = JSON.stringify([...staticFramePaths]).replace(/</g, '\\u003c');
-  const nonce = JSON.stringify(renderNonce).replace(/</g, '\\u003c');
-  return URL_PREVIEW_SELECTION_BRIDGE
-    .replace('var STATIC_FRAME_PATHS = [];', `var STATIC_FRAME_PATHS = ${paths};`)
-    .replace('var RENDER_NONCE = "";', `var RENDER_NONCE = ${nonce};`);
-}
-
-function staticProjectFramePaths(source: string, rootFilePath: string): string[] {
-  const paths = new Set<string>();
-  try {
-    const $ = load(source);
-    const base = new URL(rootFilePath, 'https://open-design.preview/');
-    $('iframe[src]').each((_, frame) => {
-      const raw = $(frame).attr('src');
-      if (!raw) return;
-      const url = new URL(raw, base);
-      if (url.origin !== base.origin) return;
-      const filePath = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
-      if (!/\.html?$/i.test(filePath) || filePath.split('/').some((part) => !part || part === '.' || part === '..')) return;
-      paths.add(filePath);
-    });
-  } catch {}
-  return [...paths];
-}
 
 const URL_PREVIEW_SNAPSHOT_BRIDGE = `<script data-od-url-snapshot-bridge>
 (function(){
@@ -1837,12 +1776,7 @@ function injectAfterHeadOpen(html: string, marker: string, injection: string): s
   return `${injection}${html}`;
 }
 
-function injectUrlPreviewBridge(
-  html: string,
-  bridge: 'scroll' | 'selection' | 'snapshot' | 'observability',
-  rootFilePath = '',
-  renderNonce = '',
-): string {
+function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | 'snapshot' | 'observability'): string {
   if (bridge === 'observability') {
     return injectAfterHeadOpen(
       html,
@@ -1854,7 +1788,7 @@ function injectUrlPreviewBridge(
     return injectBeforeBodyClose(html, 'data-od-url-scroll-bridge', URL_PREVIEW_SCROLL_BRIDGE);
   }
   if (bridge === 'selection') {
-    return injectBeforeBodyClose(html, 'data-od-url-selection-bridge', buildUrlPreviewSelectionBridge(staticProjectFramePaths(html, rootFilePath), renderNonce));
+    return injectBeforeBodyClose(html, 'data-od-url-selection-bridge', URL_PREVIEW_SELECTION_BRIDGE);
   }
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
 }
@@ -1863,8 +1797,6 @@ function applyUrlPreviewBridgesToHtml(
   transformed: string | Buffer,
   mime: string,
   requestedBridge: unknown,
-  rootFilePath = '',
-  renderNonce = '',
 ): string | Buffer {
   if (
     !(
@@ -1884,16 +1816,16 @@ function applyUrlPreviewBridgesToHtml(
   // title after load, and powered previews are intentionally cross-origin.
   html = daemonSanitizeTitleInDoc(html);
   if (wantsUrlPreviewObservabilityBridge(requestedBridge)) {
-    html = injectUrlPreviewBridge(html, 'observability', rootFilePath);
+    html = injectUrlPreviewBridge(html, 'observability');
   }
   if (wantsUrlPreviewScrollBridge(requestedBridge)) {
-    html = injectUrlPreviewBridge(html, 'scroll', rootFilePath);
+    html = injectUrlPreviewBridge(html, 'scroll');
   }
   if (wantsUrlPreviewSelectionBridge(requestedBridge)) {
-    html = injectUrlPreviewBridge(html, 'selection', rootFilePath, renderNonce);
+    html = injectUrlPreviewBridge(html, 'selection');
   }
   if (wantsUrlPreviewSnapshotBridge(requestedBridge)) {
-    html = injectUrlPreviewBridge(html, 'snapshot', rootFilePath);
+    html = injectUrlPreviewBridge(html, 'snapshot');
   }
   return html;
 }
@@ -6453,7 +6385,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           // child-side picker bridge: relative iframe navigation remains on
           // this route through the injected preview <base>, while raw and
           // cross-origin URLs retain the old outer-frame fallback.
-          return applyUrlPreviewBridgesToHtml(transformed, file.mime, 'selection', relPath);
+          return applyUrlPreviewBridgesToHtml(transformed, file.mime, 'selection');
         },
       );
     } catch (err: any) {
@@ -6535,8 +6467,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             transformed,
             file.mime,
             req.query.odPreviewBridge,
-            relPath,
-            typeof req.query.odRenderNonce === 'string' ? req.query.odRenderNonce : '',
           );
           const workspaceId = typeof req.query.workspaceId === 'string'
             ? req.query.workspaceId
@@ -6647,13 +6577,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             projectsRoot: PROJECTS_DIR,
             readProjectFile,
           });
-          return applyUrlPreviewBridgesToHtml(
-            transformed,
-            file.mime,
-            req.query.odPreviewBridge,
-            relPath,
-            typeof req.query.odRenderNonce === 'string' ? req.query.odRenderNonce : '',
-          );
+          return applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge);
         },
       );
     } catch (err: any) {

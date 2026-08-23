@@ -521,8 +521,6 @@ describe('buildSrcdoc', () => {
       baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
       commentBridge: true,
       inspectBridge: true,
-      staticFramePaths: ['child.html'],
-      renderNonce: 'test-render-nonce',
     });
     const dom = new JSDOM(srcdoc, {
       pretendToBeVisual: true,
@@ -550,26 +548,6 @@ describe('buildSrcdoc', () => {
       { type: 'od:comment-mode', enabled: true, mode: 'picker' },
       { type: 'od:inspect-mode', enabled: true },
     ]);
-    expect(hostMessages).toContainEqual({ type: 'od:project-frame-live-path', originalPath: 'child.html', newPath: 'child.html', nonce: 'test-render-nonce' });
-    dom.window.close();
-  });
-
-  it('does not publish a live path for a dynamic frame that merely points at a project path', () => {
-    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
-      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
-      inspectBridge: true,
-      staticFramePaths: [],
-    });
-    const dom = new JSDOM(srcdoc, { pretendToBeVisual: true, runScripts: 'dangerously', url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html' });
-    const frame = dom.window.document.querySelector('iframe');
-    const childWindow = frame?.contentWindow;
-    expect(childWindow).toBeTruthy();
-    if (!childWindow) throw new Error('Expected child iframe window');
-    const hostMessages: unknown[] = [];
-    dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
-    childWindow.postMessage = () => {};
-    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'od:url-selection-bridge-ready', href: 'http://preview.local/api/projects/project-1/preview/scope-1/other-real-file.html' }, source: childWindow }));
-    expect(hostMessages).toEqual([]);
     dom.window.close();
   });
 
@@ -577,7 +555,6 @@ describe('buildSrcdoc', () => {
     const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
       baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
       commentBridge: true,
-      staticFramePaths: ['child.html'],
     });
     const dom = new JSDOM(srcdoc, { pretendToBeVisual: true, runScripts: 'dangerously', url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html' });
     const frame = dom.window.document.querySelector('iframe');
@@ -762,54 +739,6 @@ describe('buildSrcdoc', () => {
       },
     }));
     expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'green' }]);
-    dom.window.close();
-  });
-
-  it('clears a self-navigated live path when the frame loads a destination without a ready bridge', () => {
-    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
-      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
-      inspectBridge: true,
-      staticFramePaths: ['child.html'],
-      renderNonce: 'test-render-nonce',
-    });
-    const dom = new JSDOM(srcdoc, {
-      pretendToBeVisual: true,
-      runScripts: 'dangerously',
-      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
-    });
-    const frame = dom.window.document.querySelector('iframe');
-    const childWindow = frame?.contentWindow;
-    expect(childWindow).toBeTruthy();
-    if (!childWindow || !frame) throw new Error('Expected child iframe window');
-    const received: unknown[] = [];
-    const hostMessages: unknown[] = [];
-    dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
-    childWindow.postMessage = (message: unknown) => received.push(message);
-
-    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
-      data: {
-        type: 'od:url-selection-bridge-ready',
-        href: 'http://preview.local/api/projects/project-1/preview/scope-1/slide-2.html',
-      },
-      source: childWindow,
-    }));
-    received.length = 0;
-    frame.dispatchEvent(new dom.window.Event('load'));
-
-    expect(hostMessages).toContainEqual({
-      type: 'od:project-frame-live-path-cleared',
-      originalPath: 'child.html',
-      nonce: 'test-render-nonce',
-    });
-    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
-      data: {
-        type: 'od:inspect-set',
-        elementId: `frame:${encodeURIComponent(JSON.stringify(['slide-2.html', 'hero']))}`,
-        prop: 'color',
-        value: 'red',
-      },
-    }));
-    expect(received).toEqual([]);
     dom.window.close();
   });
 
