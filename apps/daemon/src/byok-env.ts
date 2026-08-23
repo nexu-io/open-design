@@ -1,6 +1,7 @@
 import type {
   ByokChatProtocol,
   ByokChatProviderConfig,
+  ByokHostDefaultsView,
 } from '@open-design/contracts';
 
 /**
@@ -61,6 +62,26 @@ export function readEnvByokDefault(
       requiresApiKey: apiKey.length > 0,
     },
     model,
+  };
+}
+
+/**
+ * What the web and CLI may learn about the host-managed provider — enough to
+ * badge "managed by host environment", pre-fill the model, and relax the
+ * browser-side local-config preflight. NEVER the key: only a tail for
+ * identification.
+ */
+export function envByokDefaultsView(
+  env: NodeJS.ProcessEnv = process.env,
+): ByokHostDefaultsView {
+  const d = readEnvByokDefault(env);
+  if (!d) return { configured: false };
+  return {
+    configured: true,
+    protocol: d.provider.protocol,
+    ...(d.provider.baseUrl ? { baseUrl: d.provider.baseUrl } : {}),
+    model: d.model,
+    ...(d.provider.apiKey ? { apiKeyTail: d.provider.apiKey.slice(-4) } : {}),
   };
 }
 

@@ -139,6 +139,7 @@ vi.mock('../../src/collab/useProjectCollab', async (importOriginal) => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  fetchByokHostDefaults: vi.fn(async () => ({ configured: false })),
   GENERIC_DAEMON_DISCONNECT_CODE: 'DAEMON_STREAM_DISCONNECTED',
   GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
   fetchChatRunStatus: vi.fn(),

@@ -83,6 +83,7 @@ vi.mock('../../src/analytics/provider', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  fetchByokHostDefaults: vi.fn(async () => ({ configured: false })),
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),

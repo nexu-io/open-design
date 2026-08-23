@@ -134,6 +134,7 @@ vi.mock('../../src/collab/useProjectCollab', async (importOriginal) => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  fetchByokHostDefaults: vi.fn(async () => ({ configured: false })),
   fetchChatRunStatus: vi.fn(),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
   listProjectRuns: vi.fn().mockResolvedValue([]),
