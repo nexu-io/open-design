@@ -181,10 +181,20 @@ test('[P0] duplicate data-od-id in sibling project frames stay independently add
   await expectFileSourceExcludes(page, projectId, 'slide-one.html', ['font-size: 24px']);
 });
 
-test('[P0] nested Inspect reaches a project child mounted after Inspect is enabled', async ({ page }) => {
+test('[P0] Inspect does not treat a dynamically created iframe as a trusted project frame', async ({ page }) => {
   test.setTimeout(60_000);
+  // projectPreviewChildHtmlPaths() (FileViewer.tsx) intentionally authorizes
+  // frame-qualified Inspect targets only from iframes with a literal
+  // `<iframe src>` in the server-read root *source* — "Dynamic frames are
+  // outside v1; only static project-relative HTML children are eligible" per
+  // its own doc comment, precisely so artifact JS cannot self-declare an
+  // arbitrary file as a trusted write target via a runtime-created iframe.
+  // The low-level preview-scope bridge in runtime/srcdoc.ts still marks any
+  // same-scope iframe as a project frame (unlocking pointer-events and
+  // relaying its clicks) regardless of how it was created, so this pins the
+  // higher-level FileViewer gate that must still refuse to act on the result.
   await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Late nested inspect');
+  const projectId = await createEmptyProject(page, 'Dynamic iframe stays untrusted');
   await seedProjectFile(page, projectId, 'child.html', '<!doctype html><html><body><h2 data-od-id="late-hero">Late Child Hero</h2></body></html>');
   await seedHtmlArtifact(
     page,
@@ -198,8 +208,12 @@ test('[P0] nested Inspect reaches a project child mounted after Inspect is enabl
 
   const nested = artifactPreviewFrame(page).frameLocator('iframe[title="late child"]');
   await expect(nested.getByRole('heading', { name: 'Late Child Hero' })).toBeVisible();
-  await expect(nested.locator('html[data-od-inspect-mode]')).toHaveCount(1);
   await nested.locator('[data-od-id="late-hero"]').click();
+  await page.waitForTimeout(500);
+  await expect(page.getByTestId('inspect-panel')).toHaveCount(0);
+
+  // The statically-known root document must remain unaffected and selectable.
+  await artifactPreviewFrame(page).locator('[data-od-id="root"]').click();
   await expect(page.getByTestId('inspect-panel')).toBeVisible();
 });
 

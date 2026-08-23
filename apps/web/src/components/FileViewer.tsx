@@ -10215,7 +10215,17 @@ function HtmlViewer({
     // relay never activated for them. Mint the same scope whenever the
     // document has a project-local nested iframe, regardless of workspace
     // type — but not for plain relative assets (img/script/etc.), which
-    // must keep the existing Team-only gating untouched.
+    // must keep the existing Team-only gating untouched (a personal project
+    // with no nested iframe at all must not mint a scope it will never use).
+    //
+    // A project frame created at runtime (document.createElement('iframe'))
+    // has no literal <iframe src> for this scan to see, so it is not
+    // eligible here either way — and by design: projectPreviewChildHtmlPaths()
+    // below (the actual Inspect/Comment authorization gate) only trusts
+    // iframes declared in the server-read root source, precisely so artifact
+    // JS cannot self-declare an arbitrary file as a trusted frame. Minting a
+    // scope for such a frame would unlock nothing it isn't already refused
+    // lower down, so it is not worth widening this gate to try to catch it.
     if (
       (workspaceContext?.workspaceType !== 'team' && !relativeProjectIframeRefs)
       ||
