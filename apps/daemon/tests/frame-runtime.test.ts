@@ -220,5 +220,162 @@ describe('URL preview nested-frame bridges', () => {
     parentMessages.length = 0;
     dispatch({ type: 'od:comment-leave' }, { unrelated: true });
     expect(parentMessages).toEqual([]);
+
+    // #7008 review: od:inspect-replay's map can contain frame-qualified
+    // entries (edits made inside a project child). The root has no
+    // matching DOM node for those, so they must be forwarded to the
+    // matching child rather than silently dropped by local selector
+    // validation. The child is already ready at this point in the test.
+    received.length = 0;
+    dispatch({
+      type: 'od:inspect-replay',
+      overrides: {
+        [`frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`]: {
+          selector: '[data-od-id="hero"]',
+          props: { color: 'blue' },
+        },
+      },
+    });
+    expect(received).toEqual([
+      { type: 'od:inspect-replay', overrides: { hero: { selector: '[data-od-id="hero"]', props: { color: 'blue' } } } },
+    ]);
+  });
+
+  it('queues a frame-qualified inspect replay until the child reports ready', () => {
+    const listeners: Array<(event: { data?: unknown; source?: unknown }) => void> = [];
+    const received: unknown[] = [];
+    // A real <iframe>'s contentWindow exists as soon as the element is in
+    // the DOM, well before the child document's own script has run far
+    // enough to register its message listener -- a postMessage sent in
+    // that window lands on no listener and is simply lost, not queued.
+    // Model that gap explicitly instead of capturing unconditionally,
+    // otherwise this test cannot tell "relayed before ready" (would be
+    // lost in a real browser) apart from "relayed after ready" (the
+    // od:url-selection-bridge-ready path this test exists to cover).
+    let childListening = false;
+    const childWindow = { postMessage: (message: unknown) => { if (childListening) received.push(message); } };
+    const frame = {
+      contentWindow: childWindow,
+      src: 'child.html',
+      getAttribute(name: string) { return name === 'src' ? 'child.html' : null; },
+      toggleAttribute() {},
+      getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
+      clientWidth: 100,
+      clientHeight: 100,
+    };
+    const documentElement = { toggleAttribute() {}, setAttribute() {}, attributes: [] };
+    const document = {
+      baseURI: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+      documentElement,
+      body: { querySelectorAll: () => [], attributes: [] },
+      head: { appendChild() {} },
+      scrollingElement: { scrollLeft: 0, scrollTop: 0 },
+      querySelectorAll(selector: string) { return selector === 'iframe' ? [frame] : []; },
+      querySelector() { return null; },
+      createElement() { return { setAttribute() {}, textContent: '', isConnected: true }; },
+      addEventListener() {},
+    };
+    const window = {
+      __odUrlScrollBridge: false,
+      __odUrlSelectionBridge: false,
+      location: { href: document.baseURI, search: '', hash: '' },
+      parent: { postMessage: () => {} },
+      addEventListener(type: string, listener: (event: { data?: unknown; source?: unknown }) => void) {
+        if (type === 'message') listeners.push(listener);
+      },
+      requestAnimationFrame(callback: () => void) { callback(); return 1; },
+      setTimeout(callback: () => void) { callback(); return 1; },
+      clearTimeout() {},
+    };
+    class MutationObserver { constructor(_callback: () => void) {} observe() {} }
+    const context = { window, document, URL, MutationObserver, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout };
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SCROLL_BRIDGE'), context);
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE'), context);
+    const dispatch = (data: unknown, source: unknown = undefined) => {
+      for (const listener of listeners) listener({ data, source });
+    };
+
+    // Replay arrives BEFORE the child has announced readiness (e.g. right
+    // after a reload). It must not be silently dropped.
+    dispatch({
+      type: 'od:inspect-replay',
+      overrides: {
+        [`frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`]: {
+          selector: '[data-od-id="hero"]',
+          props: { 'font-size': '18px' },
+        },
+      },
+    });
+    expect(received).toEqual([]);
+
+    childListening = true;
+    dispatch({
+      type: 'od:url-selection-bridge-ready',
+      href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html',
+    }, childWindow);
+    expect(received).toContainEqual(
+      { type: 'od:inspect-replay', overrides: { hero: { selector: '[data-od-id="hero"]', props: { 'font-size': '18px' } } } },
+    );
+  });
+
+  it('hydrates persisted inspect overrides on boot instead of starting empty (#7008 review: nettee, non-blocking)', () => {
+    // Unlike the srcDoc bridge's hydrateOverridesFromDom(), this URL-load
+    // bridge previously initialized inspectOverrides empty even when the
+    // served document already had a persisted <style
+    // data-od-inspect-overrides> block: rebuildInspectStyle() would then
+    // replace that element's full text with only the in-memory map on the
+    // first edit, dropping every other persisted rule from the live
+    // preview.
+    const styleEl = {
+      textContent: '[data-od-id="title"] { color: #111111 !important; font-weight: 700 !important }',
+      isConnected: true,
+      setAttribute() {},
+    };
+    const listeners: Array<(event: { data?: unknown; source?: unknown }) => void> = [];
+    const documentElement = { toggleAttribute() {}, setAttribute() {}, attributes: [] };
+    const document = {
+      baseURI: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+      documentElement,
+      body: { querySelectorAll: () => [], attributes: [] },
+      head: { appendChild() {} },
+      scrollingElement: { scrollLeft: 0, scrollTop: 0 },
+      querySelectorAll(selector: string) { return selector === 'iframe' ? [] : []; },
+      querySelector(selector: string) {
+        if (selector === 'style[data-od-inspect-overrides]') return styleEl;
+        // inspectSelectorFor re-derives the selector from elementId and
+        // confirms the target actually exists in the live DOM before
+        // trusting it -- this mock has a stand-in "title" element for that.
+        if (selector === '[data-od-id="title"]') return { tagName: 'H1' };
+        return null;
+      },
+      createElement() { return { setAttribute() {}, textContent: '', isConnected: true }; },
+      addEventListener() {},
+    };
+    const window = {
+      __odUrlScrollBridge: false,
+      __odUrlSelectionBridge: false,
+      location: { href: document.baseURI, search: '', hash: '' },
+      parent: { postMessage: () => {} },
+      addEventListener(type: string, listener: (event: { data?: unknown; source?: unknown }) => void) {
+        if (type === 'message') listeners.push(listener);
+      },
+      requestAnimationFrame(callback: () => void) { callback(); return 1; },
+      setTimeout(callback: () => void) { callback(); return 1; },
+      clearTimeout() {},
+    };
+    class MutationObserver { constructor(_callback: () => void) {} observe() {} }
+    const context = { window, document, URL, MutationObserver, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout };
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SCROLL_BRIDGE'), context);
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE'), context);
+    const dispatch = (data: unknown) => { for (const listener of listeners) listener({ data }); };
+
+    // Edit the SAME element with a different property. Without hydration,
+    // inspectOverrides['title'] starts undefined and applyInspectOverride
+    // would create a fresh entry with only { color }, so
+    // rebuildInspectStyle() would wipe the persisted font-weight rule from
+    // the live style element.
+    dispatch({ type: 'od:inspect-set', elementId: 'title', selector: '[data-od-id="title"]', prop: 'color', value: '#222222' });
+    expect(styleEl.textContent).toContain('color: #222222 !important');
+    expect(styleEl.textContent).toContain('font-weight: 700 !important');
   });
 });
