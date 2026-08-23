@@ -8,8 +8,15 @@ import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   cloudflarePagesProjectNameForProject,
   deployConfigPath,
-  VERCEL_PROVIDER_ID,
+  NETLIFY_PROVIDER_ID,
+  RAILWAY_PROVIDER_ID,
+  RENDER_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
+  SAVED_GITHUB_TOKEN_MASK,
+  SAVED_NETLIFY_TOKEN_MASK,
+  SAVED_RAILWAY_TOKEN_MASK,
+  SAVED_RENDER_TOKEN_MASK,
+  VERCEL_PROVIDER_ID,
 } from '../src/deploy.js';
 import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
@@ -25,9 +32,12 @@ describe('deploy provider routes', () => {
     };
     baseUrl = started.url;
     server = started.server;
-  });
+  }, 60_000);
 
-  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  afterAll(() => new Promise<void>((resolve) => {
+    if (server) server.close(() => resolve());
+    else resolve();
+  }));
 
   it('dispatches deploy config reads and writes by providerId', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-config-'));
@@ -94,6 +104,120 @@ describe('deploy provider routes', () => {
     } finally {
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('routes provider credentials through the daemon resolved data root and isolates them', async () => {
+    const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-data-root-'));
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-user-state-'));
+    const priorDataDir = process.env.OD_DATA_DIR;
+    const priorStateDir = process.env.OD_USER_STATE_DIR;
+    process.env.OD_DATA_DIR = dataRoot;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    let testServer: http.Server | undefined;
+    try {
+      const started = await startServer({ port: 0, returnServer: true }) as {
+        url: string;
+        server: http.Server;
+      };
+      testServer = started.server;
+
+      // 1. Netlify
+      const netlifyResp = await fetch(`${started.url}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: NETLIFY_PROVIDER_ID,
+          token: 'net_secret_token',
+          githubToken: 'ghp_net_token',
+        }),
+      });
+      expect(netlifyResp.status).toBe(200);
+      expect(await netlifyResp.json()).toMatchObject({
+        providerId: NETLIFY_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_NETLIFY_TOKEN_MASK,
+        githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
+      });
+
+      // 2. Render
+      const renderResp = await fetch(`${started.url}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: RENDER_PROVIDER_ID,
+          token: 'rnd_secret_token',
+          githubToken: 'ghp_rnd_token',
+        }),
+      });
+      expect(renderResp.status).toBe(200);
+      expect(await renderResp.json()).toMatchObject({
+        providerId: RENDER_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_RENDER_TOKEN_MASK,
+        githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
+      });
+
+      // 3. Railway
+      const railwayResp = await fetch(`${started.url}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: RAILWAY_PROVIDER_ID,
+          token: 'rw_secret_token',
+          githubToken: 'ghp_rw_token',
+        }),
+      });
+      expect(railwayResp.status).toBe(200);
+      expect(await railwayResp.json()).toMatchObject({
+        providerId: RAILWAY_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_RAILWAY_TOKEN_MASK,
+        githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
+      });
+
+      // Verify files exist directly under dataRoot
+      const netlifyFile = path.join(dataRoot, 'netlify.json');
+      const renderFile = path.join(dataRoot, 'render.json');
+      const railwayFile = path.join(dataRoot, 'railway.json');
+
+      expect(JSON.parse(await readFile(netlifyFile, 'utf8'))).toEqual({
+        token: 'net_secret_token',
+        githubToken: 'ghp_net_token',
+      });
+      expect(JSON.parse(await readFile(renderFile, 'utf8'))).toEqual({
+        token: 'rnd_secret_token',
+        githubToken: 'ghp_rnd_token',
+      });
+      expect(JSON.parse(await readFile(railwayFile, 'utf8'))).toEqual({
+        token: 'rw_secret_token',
+        githubToken: 'ghp_rw_token',
+      });
+
+      // Verify nothing is written under stateRoot / ~/.open-design
+      await expect(readFile(path.join(stateRoot, 'netlify.json'), 'utf8')).rejects.toThrow();
+      await expect(readFile(path.join(stateRoot, 'render.json'), 'utf8')).rejects.toThrow();
+      await expect(readFile(path.join(stateRoot, 'railway.json'), 'utf8')).rejects.toThrow();
+
+      // Verify GET endpoints return configured: true
+      const getNet = await fetch(`${started.url}/api/deploy/config?providerId=${NETLIFY_PROVIDER_ID}`);
+      expect(await getNet.json()).toMatchObject({ providerId: NETLIFY_PROVIDER_ID, configured: true });
+
+      const getRnd = await fetch(`${started.url}/api/deploy/config?providerId=${RENDER_PROVIDER_ID}`);
+      expect(await getRnd.json()).toMatchObject({ providerId: RENDER_PROVIDER_ID, configured: true });
+
+      const getRw = await fetch(`${started.url}/api/deploy/config?providerId=${RAILWAY_PROVIDER_ID}`);
+      expect(await getRw.json()).toMatchObject({ providerId: RAILWAY_PROVIDER_ID, configured: true });
+    } finally {
+      if (testServer) {
+        await new Promise<void>((resolve) => testServer!.close(() => resolve()));
+      }
+      if (priorDataDir === undefined) delete process.env.OD_DATA_DIR;
+      else process.env.OD_DATA_DIR = priorDataDir;
+      if (priorStateDir === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateDir;
+      await rm(dataRoot, { recursive: true, force: true });
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
