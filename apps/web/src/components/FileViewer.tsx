@@ -209,6 +209,7 @@ import {
 import {
   collectPreviewAssetPaths,
   htmlHasRelativeProjectAssetRefs,
+  htmlHasRelativeProjectIframeRefs,
   htmlHasRootRelativeProjectAssetRefs,
   normalizeRootRelativeProjectAssetRefs,
   rewriteProjectAssetRefsToRawUrls,
@@ -9924,6 +9925,15 @@ function HtmlViewer({
     () => source != null && htmlHasRelativeProjectAssetRefs(source, file.name, null),
     [source, file.name],
   );
+  // #7008: narrower than relativeProjectAssetRefs above (which also matches
+  // plain <img>/<script> assets) — only a project-local nested <iframe>
+  // needs the scoped preview base minted below, since that is what lets
+  // runtime/srcdoc.ts's projectFramePath() recognize the child as a project
+  // frame. Ordinary relative assets must not force the extra mint.
+  const relativeProjectIframeRefs = useMemo(
+    () => source != null && htmlHasRelativeProjectIframeRefs(source, file.name),
+    [source, file.name],
+  );
   // Browser-owned iframe subresource requests cannot attach Workspace headers,
   // and URL resolution does not inherit the query string from the document's
   // scoped raw URL. Hold the Team preview until every confirmed relative asset
@@ -10194,8 +10204,20 @@ function HtmlViewer({
     [currentSourceIdentity, routingHtmlSource, routingSourceIdentity],
   );
   useEffect(() => {
+    // #7008: nested project-local iframes (e.g. a deck viewer loading each
+    // slide as its own HTML file) need a project-preview-scoped base so the
+    // srcDoc bridge in runtime/srcdoc.ts can recognize them as project
+    // frames (projectFramePath() matches document.baseURI against
+    // /api/projects/{id}/preview/{scope}/). This was previously gated to
+    // Team workspaces only — that gate exists for a separate, pre-existing
+    // feature (Workspace-header asset scoping, see scopedRelativeAssetRefs
+    // below) and left non-Team projects on the plain /raw/ base, so the
+    // relay never activated for them. Mint the same scope whenever the
+    // document has a project-local nested iframe, regardless of workspace
+    // type — but not for plain relative assets (img/script/etc.), which
+    // must keep the existing Team-only gating untouched.
     if (
-      workspaceContext?.workspaceType !== 'team'
+      (workspaceContext?.workspaceType !== 'team' && !relativeProjectIframeRefs)
       ||
       useUrlLoadPreview
       || authoredSrcDocBase !== false
@@ -10221,6 +10243,7 @@ function HtmlViewer({
     file.name,
     projectId,
     projectResourceReadBlocked,
+    relativeProjectIframeRefs,
     srcDocPreviewBaseIdentity,
     useUrlLoadPreview,
     workspaceActive,

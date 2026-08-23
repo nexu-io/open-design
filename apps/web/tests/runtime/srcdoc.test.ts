@@ -516,6 +516,68 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('html[data-od-inspect-mode]');
   });
 
+  it('replays active mode into a direct project child when its bridge becomes ready', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    childWindow.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html',
+      },
+      source: childWindow,
+    }));
+
+    expect(received).toEqual([
+      { type: 'od:comment-mode', enabled: true, mode: 'picker' },
+      { type: 'od:inspect-mode', enabled: true },
+    ]);
+    dom.window.close();
+  });
+
+  it('does not replay mode for a stale child-ready URL', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      inspectBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow) throw new Error('Expected child iframe window');
+    const received: unknown[] = [];
+    childWindow.postMessage = (message: unknown) => received.push(message);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:url-selection-bridge-ready',
+        href: 'http://preview.local/api/projects/project-1/preview/scope-1/old-child.html',
+      },
+      source: childWindow,
+    }));
+
+    expect(received).toEqual([]);
+    dom.window.close();
+  });
+
   it('hydrates inspect overrides from a persisted style block on bridge boot', () => {
     // Without hydration, the first od:inspect-set rebuilds the override
     // sheet from an empty in-memory map and silently drops every previously

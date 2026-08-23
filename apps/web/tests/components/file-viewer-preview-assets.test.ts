@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   collectPreviewAssetPaths,
+  htmlHasRelativeProjectIframeRefs,
   htmlHasRootRelativeProjectAssetRefs,
   normalizeRootRelativeProjectAssetRefs,
   ownerRelativeAssetPath,
@@ -225,6 +226,19 @@ describe('normalizeRootRelativeProjectAssetRefs', () => {
 });
 
 describe('rewriteProjectAssetRefsToRawUrls', () => {
+  it('keeps project-local HTML iframe navigation relative so the preview route can inject its bridge', () => {
+    const html = '<iframe title="child" src="child.html"></iframe><img src="poster.png">';
+    const rewritten = rewriteProjectAssetRefsToRawUrls(
+      html,
+      'root.html',
+      new Set(['child.html', 'poster.png']),
+      toRawUrl,
+    );
+
+    expect(rewritten).toContain('<iframe title="child" src="child.html"></iframe>');
+    expect(rewritten).toContain('<img src="/api/projects/p1/raw/poster.png">');
+  });
+
   it('keeps explicit Workspace scope on relative font and image requests from srcDoc', () => {
     const files = new Set([
       'fonts/inter-variable-400.woff2',
@@ -323,5 +337,31 @@ describe('rewriteInlinedScriptAssetRefs', () => {
       "const c = '/missing.json';",
     ].join('\n');
     expect(rewriteInlinedScriptAssetRefs(js, 'index.html', files, toRawUrl)).toBe(js);
+  });
+});
+
+describe('htmlHasRelativeProjectIframeRefs', () => {
+  it('detects a quoted relative iframe src', () => {
+    const html = '<html><body><iframe title="child" src="child.html"></iframe></body></html>';
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html')).toBe(true);
+  });
+
+  it('detects an unquoted relative iframe src (#7008 P1: valid HTML the quoted-only regex missed)', () => {
+    const html = '<html><body><iframe title="child" src=child.html></iframe></body></html>';
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html')).toBe(true);
+  });
+
+  it('does not mistake a data-src attribute for src', () => {
+    const html = '<html><body><iframe title="lazy" data-src="child.html"></iframe></body></html>';
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html')).toBe(false);
+  });
+
+  it('ignores an absolute or cross-origin iframe src', () => {
+    const html = '<html><body><iframe src="https://example.com/embed"></iframe></body></html>';
+    expect(htmlHasRelativeProjectIframeRefs(html, 'root.html')).toBe(false);
+  });
+
+  it('returns false when the document has no iframe', () => {
+    expect(htmlHasRelativeProjectIframeRefs('<html><body>hi</body></html>', 'root.html')).toBe(false);
   });
 });

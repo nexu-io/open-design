@@ -2587,6 +2587,19 @@ function meaningfulDomFallbackTarget(el) {
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
+    if (data.type === 'od:url-selection-bridge-ready') {
+      // A project child can load after the root's initial mode broadcast.
+      // Its ready ping is accepted only from the current direct, scoped frame;
+      // the href confirms this is not a delayed ping from a prior navigation.
+      var readyFrame = projectFrameForSource(ev.source);
+      if (!readyFrame) return;
+      var expectedHref = '';
+      try { expectedHref = new URL(readyFrame.getAttribute('src') || '', document.baseURI).href; } catch (_) { return; }
+      if (data.href !== expectedHref) return;
+      try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
+      try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
+      return;
+    }
     if (routeProjectFrameCommand(data)) return;
     if (data.type === 'od:preview-runtime-state-restore') {
       scheduleRuntimeStateRestore(data.state);

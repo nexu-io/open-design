@@ -65,6 +65,29 @@ export function buildPreviewBaseHrefBridge(
       var base = document.querySelector('base[data-od-project-preview-base]');
       if (!base) return;
       base.setAttribute('href', next.href);
+      // #7008: a nested project-local iframe (e.g. a deck viewer's own slide
+      // frame) that already navigated before this scope arrived is not
+      // affected by updating <base> — an iframe's src resolves against the
+      // document's base URL only once, at the time it navigates. Rebase and
+      // reload every still-relative iframe src now, so it lands under the
+      // scope that lets the daemon inject the child selection bridge.
+      try {
+        var frames = document.querySelectorAll('iframe[src]');
+        for (var i = 0; i < frames.length; i++) {
+          var frame = frames[i];
+          var original = frame.getAttribute('data-od-original-frame-src');
+          if (original === null) {
+            var candidate = frame.getAttribute('src') || '';
+            original = /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|\\/|#)/i.test(candidate) ? '' : candidate;
+            frame.setAttribute('data-od-original-frame-src', original);
+          }
+          if (!original) continue;
+          try {
+            var rebased = new URL(original, next.href).href;
+            if (frame.src !== rebased) frame.src = rebased;
+          } catch (_) {}
+        }
+      } catch (_) {}
       window.parent.postMessage({
         type: 'od:preview-base-updated',
         requestId: typeof data.requestId === 'string' ? data.requestId : '',

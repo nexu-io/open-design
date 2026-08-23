@@ -25,10 +25,12 @@
  */
 
 // Attributes that carry a subresource URL (not navigation): plain `src`
-// (script/img/iframe/source/audio/video), `poster`, and the lazy-load
+// (script/img/source/audio/video), `poster`, and the lazy-load
 // convention `data-src`. Anchor `href` is deliberately NOT scanned — a
 // root-relative page link is navigation, not an asset, and must not force
-// the srcDoc path. `<link href>` is handled by its own tag-scoped pass.
+// the srcDoc path. Iframe `src` is also navigation: keeping a project-local
+// HTML frame relative lets the scoped preview route inject the selection
+// bridge. `<link href>` is handled by its own tag-scoped pass.
 const ASSET_ATTR = /(\s)(src|poster|data-src)(\s*=\s*)(["'])([^"']*)\4/gi;
 const LINK_TAG = /<link\b[^>]*>/gi;
 const LINK_HREF = /(\shref\s*=\s*)(["'])([^"']*)\2/i;
@@ -36,6 +38,19 @@ const SRCSET_ATTR = /(\ssrcset\s*=\s*)(["'])([^"']*)\2/gi;
 // css url(...) — covers inline <style> blocks and style="" attributes when
 // run over an HTML document, and stylesheet bodies when run over CSS text.
 const CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
+// Iframe `src` only — scoped separately from ASSET_ATTR (#7008) because an
+// iframe navigates into another document rather than loading a passive
+// subresource, and only iframes need the scoped preview base that lets
+// runtime/srcdoc.ts recognize a project-local child frame.
+const IFRAME_TAG = /<iframe\b[^>]*>/gi;
+// `(?:^|\s)` anchors the attribute boundary so `data-src="..."` (its own
+// distinct attribute, already covered by ASSET_ATTR) is never mistaken for
+// `src` — without it, `\bsrc` alone matches the `-src` tail of `data-src`
+// because `-` is a non-word character. Quoted (group 2) and unquoted
+// (group 3, valid HTML: `<iframe src=child.html>`) values are both
+// captured; skipping unquoted values would leave this exact bypass open
+// for #7008 relative-iframe detection.
+const IFRAME_SRC = /(?:^|\s)src\s*=\s*(?:(["'])([^"']*)\1|([^\s"'>]+))/i;
 
 function splitRefSuffix(ref: string): { path: string; suffix: string } {
   const match = ref.match(/^([^?#]*)([?#][\s\S]*)?$/);
@@ -133,6 +148,27 @@ export function htmlHasRelativeProjectAssetRefs(
     if (path && (projectFilePaths === null || projectFilePaths.has(path))) found = true;
   });
   return found;
+}
+
+/**
+ * True when the document has at least one `<iframe src="...">` pointing at
+ * a project-local relative path (e.g. a slide deck viewer loading
+ * `./slide-01.html`). Narrower than `htmlHasRelativeProjectAssetRefs` on
+ * purpose: an ordinary relative image/script/font must not force the extra
+ * `/preview-url` mint below, only a nested navigable frame needs it, so
+ * `runtime/srcdoc.ts`'s `projectFramePath()` can recognize the child as a
+ * project frame via the scoped preview base's `document.baseURI` (#7008).
+ */
+export function htmlHasRelativeProjectIframeRefs(
+  html: string,
+  ownerFilePath: string,
+): boolean {
+  for (const tagMatch of html.matchAll(IFRAME_TAG)) {
+    const srcMatch = tagMatch[0].match(IFRAME_SRC);
+    const ref = srcMatch?.[2] ?? srcMatch?.[3];
+    if (ref && resolveRelativeAssetPath(ownerFilePath, ref)) return true;
+  }
+  return false;
 }
 
 /**
@@ -317,7 +353,20 @@ export function rewriteProjectAssetRefsToRawUrls(
     return appendAssetRefSuffix(toRawUrl(projectPath), suffix);
   };
 
-  let next = html.replace(
+  // Iframes navigate into another document rather than loading a passive
+  // subresource. Rewriting their local HTML `src` to `/raw/` bypasses the
+  // scoped `/preview/` route, which is where the daemon injects the child
+  // selection bridge. Hide complete iframe tags during the asset pass and
+  // restore them unchanged afterwards; images/fonts/media still use their
+  // scoped raw URLs below.
+  const iframeTags: string[] = [];
+  const iframeMarker = '__OD_PRESERVED_IFRAME_';
+  let next = html.replace(/<iframe\b[^>]*>/gi, (tag) => {
+    const marker = `${iframeMarker}${iframeTags.length}__`;
+    iframeTags.push(tag);
+    return marker;
+  });
+  next = next.replace(
     ASSET_ATTR,
     (match, space: string, name: string, eq: string, quote: string, value: string) => {
       const rewritten = rewrite(value);
@@ -349,6 +398,9 @@ export function rewriteProjectAssetRefsToRawUrls(
     const rewritten = rewrite(value);
     return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
   });
+  next = next.replace(new RegExp(`${iframeMarker}(\\d+)__`, 'g'), (_match, index: string) => (
+    iframeTags[Number(index)] ?? _match
+  ));
   return next;
 }
 
