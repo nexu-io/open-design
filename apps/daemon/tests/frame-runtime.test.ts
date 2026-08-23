@@ -3,6 +3,10 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import {
+  URL_PREVIEW_SCROLL_BRIDGE,
+  URL_PREVIEW_SELECTION_BRIDGE,
+} from '../src/routes/project/index.ts';
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -79,6 +83,21 @@ function resolveFrameScreenSrc({
   return iframeSrc;
 }
 
+// Read the already-evaluated bridge constant (not the raw .ts source text):
+// the constant is a template literal, and TS/JS unescape `\\/` to `\/` when
+// the literal is evaluated. Slicing the source file's raw text instead would
+// skip that unescaping and silently pass scripts a browser would reject with
+// a SyntaxError (#7008) — this must match what actually reaches the browser.
+function urlPreviewBridgeScript(name: 'URL_PREVIEW_SCROLL_BRIDGE' | 'URL_PREVIEW_SELECTION_BRIDGE'): string {
+  const evaluated = name === 'URL_PREVIEW_SCROLL_BRIDGE'
+    ? URL_PREVIEW_SCROLL_BRIDGE
+    : URL_PREVIEW_SELECTION_BRIDGE;
+  const scriptStart = evaluated.indexOf('\n') + 1;
+  const scriptEnd = evaluated.lastIndexOf('</script>');
+  if (scriptStart <= 0 || scriptEnd < 0) throw new Error(`Missing script body for ${name}`);
+  return evaluated.slice(scriptStart, scriptEnd);
+}
+
 describe('shared frame runtime', () => {
   it.each(frameFiles)(
     'resolves project-relative screen paths against the embedding artifact for %s',
@@ -109,4 +128,85 @@ describe('shared frame runtime', () => {
       })).toBe('https://cdn.example.test/screens/tablet-edition.html');
     },
   );
+});
+
+describe('URL preview nested-frame bridges', () => {
+  it('resyncs a ready direct child and routes frame Inspect commands without a scroll-bridge ReferenceError', () => {
+    const listeners: Array<(event: { data?: unknown; source?: unknown }) => void> = [];
+    const received: unknown[] = [];
+    const childWindow = { postMessage: (message: unknown) => received.push(message) };
+    const frame = {
+      contentWindow: childWindow,
+      src: 'child.html',
+      getAttribute(name: string) { return name === 'src' ? 'child.html' : null; },
+      toggleAttribute() {},
+      getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
+      clientWidth: 100,
+      clientHeight: 100,
+    };
+    const documentElement = {
+      toggleAttribute() {},
+      setAttribute() {},
+      attributes: [],
+    };
+    const document = {
+      baseURI: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+      documentElement,
+      body: { querySelectorAll: () => [], attributes: [] },
+      head: { appendChild() {} },
+      scrollingElement: { scrollLeft: 0, scrollTop: 0 },
+      querySelectorAll(selector: string) { return selector === 'iframe' ? [frame] : []; },
+      querySelector() { return null; },
+      createElement() { return { setAttribute() {}, textContent: '', isConnected: true }; },
+      addEventListener() {},
+    };
+    const parentMessages: unknown[] = [];
+    const window = {
+      __odUrlScrollBridge: false,
+      __odUrlSelectionBridge: false,
+      location: { href: document.baseURI, search: '', hash: '' },
+      parent: { postMessage: (message: unknown) => parentMessages.push(message) },
+      addEventListener(type: string, listener: (event: { data?: unknown; source?: unknown }) => void) {
+        if (type === 'message') listeners.push(listener);
+      },
+      requestAnimationFrame(callback: () => void) { callback(); return 1; },
+      setTimeout(callback: () => void) { callback(); return 1; },
+      clearTimeout() {},
+    };
+    class MutationObserver {
+      constructor(_callback: () => void) {}
+      observe() {}
+    }
+    const context = { window, document, URL, MutationObserver, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout };
+
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SCROLL_BRIDGE'), context);
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE'), context);
+
+    const dispatch = (data: unknown, source: unknown = undefined) => {
+      for (const listener of listeners) listener({ data, source });
+    };
+    dispatch({ type: 'od:comment-mode', enabled: true, mode: 'picker' });
+    dispatch({ type: 'od:inspect-mode', enabled: true });
+    received.length = 0;
+
+    dispatch({
+      type: 'od:url-selection-bridge-ready',
+      href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html',
+    }, childWindow);
+    expect(received).toEqual([
+      { type: 'od:comment-mode', enabled: true, mode: 'picker' },
+      { type: 'od:inspect-mode', enabled: true },
+    ]);
+
+    received.length = 0;
+    dispatch({
+      type: 'od:inspect-set',
+      elementId: `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`,
+      prop: 'color',
+      value: 'red',
+    });
+    expect(received).toEqual([
+      { type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'red' },
+    ]);
+  });
 });

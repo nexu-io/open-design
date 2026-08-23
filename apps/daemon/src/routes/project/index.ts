@@ -538,7 +538,7 @@ export async function ensureReferencedProjectDir(
   await ensureProject(projectsRoot, project.id, project.metadata);
 }
 
-const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
+export const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
 (function(){
   if (window.__odUrlScrollBridge) return;
   window.__odUrlScrollBridge = true;
@@ -648,7 +648,6 @@ const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
-    if (routeProjectFrameCommand(data)) return;
     if (data.type === 'od:preview-scroll-restore') {
       scrollTo(document.scrollingElement || document.documentElement, data.frameLeft, data.frameTop);
       scrollTo(scrollElement(), data.canvasLeft, data.canvasTop);
@@ -711,7 +710,7 @@ function sameOrchestratorWorkspace(a: unknown, b: unknown): boolean {
   return JSON.stringify(parsedA.value) === JSON.stringify(parsedB.value);
 }
 
-const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
+export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
 (function(){
   if (window.__odUrlSelectionBridge) return;
   window.__odUrlSelectionBridge = true;
@@ -762,7 +761,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   function projectFramePath(frame){
     try {
       var base = new URL(document.baseURI);
-      var baseMatch = base.pathname.match(/^\/api\/projects\/([^/]+)\/preview\/([^/]+)\//);
+      var baseMatch = base.pathname.match(/^\\/api\\/projects\\/([^/]+)\\/preview\\/([^/]+)\\//);
       var child = new URL(frame.src, document.baseURI);
       if (!baseMatch || child.origin !== base.origin) return null;
       var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
@@ -1231,6 +1230,20 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
+    if (data.type === 'od:url-selection-bridge-ready') {
+      // A child can install after the parent broadcast its initial mode.
+      // Bind the ping to the current direct scoped iframe and reject stale
+      // navigations before returning the parent's live mode state.
+      var readyFrame = projectFrameForSource(ev.source);
+      if (!readyFrame) return;
+      var expectedHref = '';
+      try { expectedHref = new URL(readyFrame.getAttribute('src') || '', document.baseURI).href; } catch (_) { return; }
+      if (data.href !== expectedHref) return;
+      try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
+      try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
+      return;
+    }
+    if (routeProjectFrameCommand(data)) return;
     if (data.type === 'od:url-selection-bridge-probe') {
       postReady();
       return;
