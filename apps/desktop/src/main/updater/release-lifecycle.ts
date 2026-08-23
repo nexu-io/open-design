@@ -462,17 +462,15 @@ async function inspectRetainedMetadata(metadataPath: string): Promise<RetainedMe
  * exists. Such an entry is moved to the same terminal `cleanup-removed` state
  * the app's own pruning produces.
  *
- * A retained release counts as present only when its directory is a plain
- * directory and its `metadata.json` is still a readable record — the record is what lets
- * the app identify the release, so a surviving directory with no metadata is
- * just as unusable as no directory at all. Both land on the same
- * `metadata-missing` reason `scanReleaseCleanupEntries` already uses.
+ * Only a release whose directory is gone is recorded as `cleanup-removed`:
+ * that state means the payload is off the disk, and this pass never calls
+ * `rm()` — removal belongs to `cleanupDeprecatedReleaseEntries`. A directory
+ * that survives while its `metadata.json` is missing, unreadable, or not a
+ * usable record is marked `unknown` instead, matching what a full rescan would
+ * say and leaving the orphan visible to the cleanup pass.
  *
- * Only a path that is genuinely gone is downgraded. An entry that merely
- * cannot be read at this moment is left untouched, so a transient filesystem
- * failure never erases the record of a real release. A directory whose shape
- * is wrong is not "removed" either: it is marked `unknown`, matching what a
- * full rescan would record.
+ * An entry that merely cannot be read at this moment is left untouched, so a
+ * transient filesystem failure never erases the record of a real release.
  */
 export async function revalidateRetainedReleaseEntries(input: {
   descriptor: ReleaseCleanupDescriptor;
@@ -515,30 +513,34 @@ export async function revalidateRetainedReleaseEntries(input: {
       continue;
     }
     if (releaseEntry != null) {
-      const metadataPath = entry.metadataPath == null
-        ? join(releaseDir, "metadata.json")
-        : resolve(layout.root, entry.metadataPath);
-      if (!containsPath(layout.releasesRoot, metadataPath)) {
-        releases.push(entry);
-        continue;
-      }
+      // Derived from the release directory, never from entry.metadataPath: the
+      // stored field is only shape-checked when cleanup.json is read, so a
+      // tampered entry could otherwise point at a sibling release's valid
+      // record and vouch for itself. scanReleaseCleanupEntries() derives it the
+      // same way.
+      const metadataPath = join(releaseDir, "metadata.json");
       const verdict = await inspectRetainedMetadata(metadataPath);
       if (verdict === "intact") {
         releases.push(entry);
         continue;
       }
-      if (verdict === "invalid") {
-        releases.push({
-          ...entry,
-          error: releaseCleanupError("release-metadata-invalid", "retained release metadata.json is not a usable record", {
-            path: metadataPath,
-          }),
-          reason: "metadata-invalid",
-          state: "unknown",
-          updatedAt: nowIso,
-        });
-        continue;
-      }
+      // The directory is still on disk, so nothing was cleaned up here. Flag it
+      // the way a full rescan would and leave removal to the pass that actually
+      // calls rm().
+      releases.push({
+        ...entry,
+        error: releaseCleanupError(
+          verdict === "missing" ? "release-metadata-missing" : "release-metadata-invalid",
+          verdict === "missing"
+            ? "retained release metadata.json could not be read"
+            : "retained release metadata.json is not a usable record",
+          { path: metadataPath },
+        ),
+        reason: verdict === "missing" ? "metadata-missing" : "metadata-invalid",
+        state: "unknown",
+        updatedAt: nowIso,
+      });
+      continue;
     }
     logger.warn("[open-design updater] retained release is no longer on disk; marking it removed", {
       key: entry.key,

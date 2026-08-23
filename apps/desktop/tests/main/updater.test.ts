@@ -396,12 +396,74 @@ describe("desktop updater", () => {
     expect(isVanishedPathError(null)).toBe(false);
   });
 
+  // cleanup.json is only shape-checked when it is read, so entry.metadataPath
+  // is not evidence about this release. Pointed at a sibling release's valid
+  // record, it must not be able to vouch for an entry whose own metadata is
+  // gone.
+  it("ignores a retained entry's stored metadata path and derives the canonical one", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      const seeded = await updater.checkForUpdates();
+      expect(seeded.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const realKey = seeded.active?.key ?? "";
+      expect(existsSync(join(layout.releasesRoot, realKey, "metadata.json"))).toBe(true);
+
+      // Stale release: directory present, its own metadata.json never written.
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      const staleDir = join(layout.releasesRoot, staleKey);
+      await mkdir(staleDir, { recursive: true });
+      await writeFile(join(staleDir, "artifact.bin"), "0.9.0", "utf8");
+
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        // Borrowed from the real release — in root, so a containment check alone
+        // would accept it.
+        metadataPath: `releases/${realKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+
+      expect((await updater.checkForUpdates()).state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; reason?: string; state: string }[];
+      };
+      const stale = descriptor.releases.find((entry) => entry.key === staleKey);
+      expect(stale?.state).toBe("unknown");
+      expect(stale?.reason).toBe("metadata-missing");
+
+      // The borrowed record's own release is untouched.
+      const real = descriptor.releases.find((entry) => entry.key === realKey);
+      expect(real?.state).toBe("retained");
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   // lstat() only proves a directory entry exists. A retained release whose
   // metadata is a dangling symlink or unparseable JSON is just as unusable as
   // one with no metadata at all, and the full rescan already says so; the
   // per-check pass must not disagree with it.
   it.each([
-    { expectedReason: "metadata-missing", expectedState: "cleanup-removed", label: "dangling symlink" },
+    { expectedReason: "metadata-missing", expectedState: "unknown", label: "dangling symlink" },
     { expectedReason: "metadata-invalid", expectedState: "unknown", label: "malformed json" },
   ])("drops a retained cleanup entry whose metadata is a $label", async ({ expectedReason, expectedState, label }) => {
     const root = makeRoot();
@@ -547,11 +609,15 @@ describe("desktop updater", () => {
       expect((await updater.checkForUpdates()).state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
 
       const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
-        releases: { key: string; reason?: string; state: string }[];
+        releases: { key: string; reason?: string; removedAt?: string; state: string }[];
       };
       const stale = descriptor.releases.find((entry) => entry.key === staleKey);
-      expect(stale?.state).toBe("cleanup-removed");
+      expect(stale?.state).toBe("unknown");
       expect(stale?.reason).toBe("metadata-missing");
+      // Nothing was cleaned up, so the payload must still be there and the
+      // entry must not claim a removal that never happened.
+      expect(stale?.removedAt).toBeUndefined();
+      expect(existsSync(staleDir)).toBe(true);
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
