@@ -836,6 +836,7 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   // arrived before the child finished mounting or reloaded afterward.
   var pendingFrameInspectOverrides = Object.create(null);
   var STATIC_FRAME_PATHS = [];
+  var RENDER_NONCE = "";
   var inspectStyle = null;
   var ALLOWED_INSPECT_PROPS = {
     'color': true, 'background-color': true, 'font-size': true,
@@ -937,6 +938,20 @@ ${COMMENT_IDENTITY_HELPERS}
   // narrower than project-wide file authorization; do not add timing heuristics.
   var originalFrameIsStatic = new WeakMap();
   var originalFramePaths = new WeakMap();
+  var projectFrameLoadListeners = new WeakSet();
+  function clearLiveFramePath(frame){
+    try { liveFramePaths.delete(frame); } catch (_) {}
+    try {
+      if (originalFrameIsStatic.get(frame)) {
+        window.parent.postMessage({ type: 'od:project-frame-live-path-cleared', originalPath: originalFramePaths.get(frame), nonce: RENDER_NONCE }, '*');
+      }
+    } catch (_) {}
+  }
+  function observeProjectFrameLoad(frame){
+    if (!frame || projectFrameLoadListeners.has(frame)) return;
+    projectFrameLoadListeners.add(frame);
+    frame.addEventListener('load', function(){ clearLiveFramePath(frame); });
+  }
   function projectFramePath(frame){
     // A validated ready ping (see od:url-selection-bridge-ready below)
     // caches the child's own reported path here -- ground truth from the
@@ -948,6 +963,7 @@ ${COMMENT_IDENTITY_HELPERS}
       if (frame && !originalFramePaths.has(frame)) {
         originalFramePaths.set(frame, srcDerivedPath);
         originalFrameIsStatic.set(frame, !!srcDerivedPath && STATIC_FRAME_PATHS.indexOf(srcDerivedPath) !== -1);
+        observeProjectFrameLoad(frame);
       }
       var cachedFramePath = frame && liveFramePaths.get(frame);
       var currentFrameSrc = frame && frame.getAttribute ? (frame.getAttribute('src') || '') : '';
@@ -1590,7 +1606,7 @@ ${COMMENT_IDENTITY_HELPERS}
       } catch (_) {}
       try {
         if (originalFrameIsStatic.get(readyFrame)) {
-          window.parent.postMessage({ type: 'od:project-frame-live-path', originalPath: originalFramePaths.get(readyFrame), newPath: readyFramePath }, '*');
+          window.parent.postMessage({ type: 'od:project-frame-live-path', originalPath: originalFramePaths.get(readyFrame), newPath: readyFramePath, nonce: RENDER_NONCE }, '*');
         }
       } catch (_) {}
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
@@ -1849,9 +1865,15 @@ ${COMMENT_IDENTITY_HELPERS}
 })();
 </script>`;
 
-export function buildUrlPreviewSelectionBridge(staticFramePaths: readonly string[] = []): string {
+export function buildUrlPreviewSelectionBridge(
+  staticFramePaths: readonly string[] = [],
+  renderNonce = '',
+): string {
   const paths = JSON.stringify([...staticFramePaths]).replace(/</g, '\\u003c');
-  return URL_PREVIEW_SELECTION_BRIDGE.replace('var STATIC_FRAME_PATHS = [];', `var STATIC_FRAME_PATHS = ${paths};`);
+  const nonce = JSON.stringify(renderNonce).replace(/</g, '\\u003c');
+  return URL_PREVIEW_SELECTION_BRIDGE
+    .replace('var STATIC_FRAME_PATHS = [];', `var STATIC_FRAME_PATHS = ${paths};`)
+    .replace('var RENDER_NONCE = "";', `var RENDER_NONCE = ${nonce};`);
 }
 
 function staticProjectFramePaths(source: string, rootFilePath: string): string[] {
@@ -2173,6 +2195,7 @@ function injectUrlPreviewBridge(
     | 'focus'
     | 'redirect',
   rootFilePath = '',
+  renderNonce = '',
 ): string {
   if (bridge === 'sandbox') {
     return injectAfterHeadOpen(html, 'data-od-sandbox-shim', buildPreviewSandboxShim());
@@ -2209,7 +2232,7 @@ function injectUrlPreviewBridge(
     return injectBeforeBodyClose(html, 'data-od-url-scroll-bridge', URL_PREVIEW_SCROLL_BRIDGE);
   }
   if (bridge === 'selection') {
-    return injectBeforeBodyClose(html, 'data-od-url-selection-bridge', buildUrlPreviewSelectionBridge(staticProjectFramePaths(html, rootFilePath)));
+    return injectBeforeBodyClose(html, 'data-od-url-selection-bridge', buildUrlPreviewSelectionBridge(staticProjectFramePaths(html, rootFilePath), renderNonce));
   }
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
 }
@@ -2220,6 +2243,7 @@ function applyUrlPreviewBridgesToHtml(
   requestedBridge: unknown,
   requestedMotionPreview?: unknown,
   rootFilePath = '',
+  renderNonce = '',
 ): string | Buffer {
   if (
     !(
@@ -2269,7 +2293,7 @@ function applyUrlPreviewBridgesToHtml(
     html = injectUrlPreviewBridge(html, 'scroll', rootFilePath);
   }
   if (wantsUrlPreviewSelectionBridge(requestedBridge)) {
-    html = injectUrlPreviewBridge(html, 'selection', rootFilePath);
+    html = injectUrlPreviewBridge(html, 'selection', rootFilePath, renderNonce);
   }
   if (wantsUrlPreviewSnapshotBridge(requestedBridge)) {
     html = injectUrlPreviewBridge(html, 'snapshot', rootFilePath);
@@ -7605,6 +7629,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             req.query.odPreviewBridge,
             req.query.odMotionPreview,
             relPath,
+            typeof req.query.odRenderNonce === 'string' ? req.query.odRenderNonce : '',
           );
           const workspaceId = typeof req.query.workspaceId === 'string'
             ? req.query.workspaceId
@@ -7726,7 +7751,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             const html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : String(transformed);
             res.setHeader(MOTION_PREVIEW_OUTPUT_HEADER, isMotionVideoComposition(html) ? 'video' : 'html');
           }
-          return applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge, req.query.odMotionPreview, relPath);
+          return applyUrlPreviewBridgesToHtml(
+            transformed,
+            file.mime,
+            req.query.odPreviewBridge,
+            req.query.odMotionPreview,
+            relPath,
+            typeof req.query.odRenderNonce === 'string' ? req.query.odRenderNonce : '',
+          );
         },
       );
     } catch (err: any) {
