@@ -1,5 +1,8 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -226,6 +229,7 @@ describe('scopeEnvByokForAgent (the BYOK-only boundary)', () => {
 describe('proxy fallback (integration)', () => {
   let url: string;
   let server: http.Server;
+  const stubDirs: string[] = [];
 
   beforeAll(async () => {
     const started = (await startServer({ port: 0, returnServer: true })) as {
@@ -238,6 +242,9 @@ describe('proxy fallback (integration)', () => {
 
   afterAll(async () => {
     await new Promise((resolve) => server.close(resolve));
+    await Promise.all(
+      stubDirs.map((dir) => rm(dir, { recursive: true, force: true })),
+    );
   });
 
   it('the openai proxy no longer 400s for a field-less body when the env default is set', async () => {
@@ -277,9 +284,38 @@ describe('proxy fallback (integration)', () => {
     process.env.OD_BYOK_BASE_URL = 'http://127.0.0.1:9';
     process.env.OD_BYOK_API_KEY = 'sk-host-managed-secret';
     process.env.OD_BYOK_MODEL = 'host-model';
+    // And the daemon's claude is a deterministic stub that fails the way an
+    // unauthenticated ordinary run does — the outcome must not depend on
+    // whether the machine running this suite happens to have a real,
+    // logged-in claude binary
+    const stubDir = await mkdtemp(path.join(os.tmpdir(), 'od-byok-env-claude-'));
+    stubDirs.push(stubDir);
+    const stubBin = path.join(stubDir, 'claude-stub');
+    await writeFile(
+      stubBin,
+      `#!/usr/bin/env node
+if (process.argv.includes('--version')) { console.log('claude-code 1.0.0-byok-env-test'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('Usage: claude -p'); process.exit(0); }
+// Auxiliary daemon invocations (memory extraction / title generation) speak
+// plain text; only the chat run streams JSON — fail exactly that one.
+const streamIdx = process.argv.indexOf('--input-format');
+if (process.argv[streamIdx + 1] !== 'stream-json') { process.stdout.write('{"entries":[]}'); process.exit(0); }
+process.stderr.write('Error: Not logged in \\u00b7 Please run /login\\n');
+process.exit(1);
+`,
+      'utf8',
+    );
+    await chmod(stubBin, 0o755);
+    const configRes = await fetch(`${url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentCliEnv: { claude: { CLAUDE_BIN: stubBin } } }),
+    });
+    expect(configRes.status).toBe(200);
 
     // When an ordinary Claude run starts (no browser provider, explicit
-    // model) in the test environment that has no claude binary
+    // model) it goes down the ordinary-agent path — the host default must
+    // not reroute or re-arm it
     const res = await fetch(`${url}/api/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -292,8 +328,8 @@ describe('proxy fallback (integration)', () => {
     expect([200, 202]).toContain(res.status);
     const { runId } = (await res.json()) as { runId: string };
 
-    // Then the run fails because the BINARY is missing (the ordinary-agent
-    // path), never because of anything BYOK — the env default did not
+    // Then the run fails on the ordinary-agent path (the stub's auth
+    // failure), never because of anything BYOK — the env default did not
     // reroute or re-arm this run
     let status = '';
     let errorCode: string | null = null;
