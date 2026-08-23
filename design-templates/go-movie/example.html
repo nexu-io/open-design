@@ -12,9 +12,9 @@
     --gm-card-solid: #ffffff;
     --gm-text: #25211c;            /* primary text */
     --gm-text-soft: #202936;       /* hot-card title */
-    --gm-muted: rgba(37, 33, 28, 0.5);
-    --gm-muted2: rgba(37, 33, 28, 0.42);
-    --gm-faint: rgba(37, 33, 28, 0.36);
+    --gm-muted: #6b6258;
+    --gm-muted2: #665d53;
+    --gm-faint: #766d62;
     --gm-primary: #8f2f2f;         /* brand / active red */
     --gm-gold: #a88652;            /* kicker / accent gold */
     --gm-gold-bright: #c9a84c;
@@ -41,7 +41,7 @@
 
   /* ---------- device (low-key viewport, not a Dribbble mockup) ---------- */
   .device {
-    width: 390px; height: 844px;
+    width: min(390px, 100%); height: 844px; flex-shrink: 0;
     background: var(--gm-bg);
     border-radius: 24px;
     border: 1px solid rgba(0, 0, 0, 0.08);
@@ -86,7 +86,7 @@
   }
   .hero-save {
     flex: none; position: relative;
-    display: inline-flex; align-items: center; gap: 4px;
+    display: inline-flex; align-items: center; gap: 4px; min-height: 44px;
     padding: 6px 12px; border: 1px solid rgba(168, 134, 82, 0.38);
     border-radius: 999px; background: rgba(255, 253, 248, 0.06);
     color: var(--gm-dark-text); font-size: 12px; cursor: pointer; font-family: var(--font);
@@ -121,6 +121,8 @@
 
   /* ---------- search ---------- */
   .search-wrap { position: relative; z-index: 2; margin: -11px 15px 0; }
+  .list-search { margin: 12px 15px 0; }
+  .list-search .search-box { box-shadow: none; }
   .search-box {
     display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 11px;
     border: 1px solid var(--gm-border-ink); border-radius: 7px;
@@ -129,15 +131,21 @@
   .search-icon { color: var(--gm-primary); font-size: 20px; line-height: 1; }
   .search-box input { flex: 1; height: 42px; border: none; outline: none; background: none; color: var(--gm-text); font-size: 12px; font-family: var(--font); }
   .search-box input::placeholder { color: var(--gm-faint); }
-  .search-clear { color: var(--gm-muted2); font-size: 18px; line-height: 1; cursor: pointer; }
+  .search-clear {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 44px; min-height: 44px; margin-right: -10px;
+    padding: 0; border: 0; background: none; color: var(--gm-muted2);
+    font: 400 18px/1 var(--font); cursor: pointer;
+  }
+  .search-clear:disabled { visibility: hidden; }
 
   /* ---------- scope / topic pills ---------- */
   .scope-switch { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 15px 0; }
   .pill {
     flex: 0 0 calc((100% - 12px) / 3); min-width: 0;
-    padding: 7px 4px; box-sizing: border-box;
+    min-height: 44px; padding: 7px 4px; box-sizing: border-box;
     border: 1px solid rgba(143, 47, 47, 0.15); border-radius: 999px;
-    background: rgba(255, 253, 248, 0.82); color: rgba(37, 33, 28, 0.58);
+    background: rgba(255, 253, 248, 0.82); color: var(--gm-muted);
     font: 500 10.5px/1.35 var(--font); text-align: center; cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -148,6 +156,18 @@
   .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
   .section-title { margin: 0; font-size: 17px; font-weight: 700; color: var(--gm-text); }
   .section-note { color: var(--gm-muted2); font-size: 10px; }
+  .filter-empty {
+    margin: 12px 15px 0; padding: 18px 14px;
+    border: 1px dashed rgba(143, 47, 47, 0.3); border-radius: 7px;
+    background: rgba(255, 253, 248, 0.72); text-align: center;
+    color: var(--gm-muted2); font-size: 12px; line-height: 1.6;
+  }
+  .filter-reset {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 88px; min-height: 44px; margin-top: 8px; padding: 0 14px;
+    border: 1px solid rgba(143, 47, 47, 0.34); border-radius: 999px;
+    background: var(--gm-card); color: var(--gm-primary); font: 600 11px/1 var(--font); cursor: pointer;
+  }
 
   /* ---------- quick access ---------- */
   .quick-grid { display: flex; flex-wrap: wrap; margin: -3px; }
@@ -177,7 +197,8 @@
   .mc-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 7px; }
   .mc-cat { flex: 1; min-width: 0; color: var(--gm-primary); font-size: 10.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mc-src { margin-top: 5px; color: var(--gm-muted2); font-size: 10px; }
-  .mc-summary { margin-top: 5px; color: rgba(37, 33, 28, 0.58); font-size: 11.5px; line-height: 1.5; }
+  .mc-summary { margin-top: 5px; color: var(--gm-muted); font-size: 11.5px; line-height: 1.5; }
+  .mc-session { margin-top: 7px; color: var(--gm-muted2); font-size: 10px; line-height: 1.5; }
   .mc-quote { background: var(--poster-bg, #fff8f0); padding: 16px 14px 14px; }
   .mc-quote-close { padding-bottom: 8px; }
   .quote-mark { font-size: 54px; line-height: 0.72; color: rgba(37, 33, 28, 0.14); font-weight: 400; }
@@ -188,6 +209,7 @@
   /* ---------- favorite (★/☆, GO MOVIE uses stars not bookmarks) ---------- */
   .fav {
     flex: none; display: inline-flex; align-items: center; gap: 3px;
+    min-width: 44px; min-height: 44px; justify-content: center;
     background: none; border: none; cursor: pointer; padding: 0;
     color: var(--gm-muted2); font: 400 12px var(--font); line-height: 1;
   }
@@ -205,29 +227,29 @@
   /* ---------- film card (wide cinematic, GO MOVIE film-info style) ---------- */
   .film-list { display: flex; flex-direction: column; gap: 10px; }
   .film-card {
-    position: relative; overflow: hidden; min-height: 170px;
+    position: relative; overflow: hidden; min-height: 198px;
     border: 1px solid var(--gm-border); border-radius: 7px;
     background: var(--gm-card); box-shadow: 0 3px 8px rgba(37, 33, 28, 0.045);
   }
   .card-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: translateX(18%); }
-  .card-overlay { position: absolute; inset: 0; z-index: 1; background: linear-gradient(90deg, rgba(255,253,248,1) 0%, rgba(255,253,248,1) 25%, rgba(255,253,248,0.97) 30%, rgba(255,253,248,0.92) 35%, rgba(255,253,248,0.84) 40%, rgba(255,253,248,0.73) 45%, rgba(255,253,248,0.60) 50%, rgba(255,253,248,0.47) 55%, rgba(255,253,248,0.34) 60%, rgba(255,253,248,0.23) 65%, rgba(255,253,248,0.14) 70%, rgba(255,253,248,0.07) 75%, rgba(255,253,248,0.02) 80%, rgba(255,253,248,0) 85%); }
-  .card-body { position: relative; z-index: 2; display: flex; align-items: flex-start; min-height: 170px; }
-  .card-info { flex: 1; min-width: 0; padding: 14px 12px; }
+  .card-overlay { position: absolute; inset: 0; z-index: 1; background: linear-gradient(90deg, rgba(255,253,248,1) 0%, rgba(255,253,248,1) 30%, rgba(255,253,248,0.97) 38%, rgba(255,253,248,0.9) 48%, rgba(255,253,248,0.78) 58%, rgba(255,253,248,0.58) 68%, rgba(255,253,248,0.34) 76%, rgba(255,253,248,0.12) 84%, rgba(255,253,248,0) 92%); }
+  .card-body { position: relative; z-index: 2; display: flex; align-items: flex-start; min-height: 198px; }
+  .card-info { flex: 0 0 72%; min-width: 0; padding: 14px 12px; }
   .card-title { font-size: 15px; font-weight: 700; line-height: 1.4; color: var(--gm-text); }
   .card-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 7px; }
   .card-tag { padding: 2px 8px; border: 1px solid rgba(168, 134, 82, 0.28); border-radius: 999px; background: rgba(168, 134, 82, 0.08); color: #765d39; font-size: 9px; white-space: nowrap; }
   .card-tag.tag--low { color: var(--gm-primary); border-color: rgba(143, 47, 47, 0.3); background: rgba(143, 47, 47, 0.08); }
-  .card-tag.tag--sold { color: rgba(37, 33, 28, 0.5); }
+  .card-tag.tag--sold { color: var(--gm-muted); }
   .card-tag.tag--ok { color: var(--gm-good); border-color: rgba(59, 130, 88, 0.3); background: rgba(59, 130, 88, 0.08); }
-  .card-meta { margin-top: 4px; color: rgba(37, 33, 28, 0.52); font-size: 10.5px; line-height: 1.5; }
-  .card-line { display: flex; align-items: center; margin-top: 5px; font-size: 11px; color: rgba(37, 33, 28, 0.68); line-height: 1.5; }
-  .card-label { flex: none; width: 48px; color: rgba(37, 33, 28, 0.42); font-size: 10px; }
+  .card-meta { margin-top: 4px; color: var(--gm-muted2); font-size: 10.5px; line-height: 1.5; }
+  .card-line { display: flex; align-items: flex-start; margin-top: 5px; font-size: 11px; color: var(--gm-muted); line-height: 1.5; }
+  .card-label { flex: none; width: 48px; color: var(--gm-muted2); font-size: 10px; }
   .card-value { min-width: 0; flex: 1; overflow-wrap: break-word; word-break: break-all; }
   .rating-row { align-items: center; }
   .rating-content { display: flex; align-items: center; min-width: 0; white-space: nowrap; }
   .rating-score { color: var(--gm-primary); font-weight: 600; font-size: 14px; line-height: 1; }
-  .rating-count { color: rgba(37, 33, 28, 0.52); font-size: 11px; line-height: 1; }
-  .card-fav { position: absolute; top: 8px; right: 10px; z-index: 3; padding: 4px 6px; color: rgba(37, 33, 28, 0.32); font-size: 14px; line-height: 1; background: none; border: none; cursor: pointer; }
+  .rating-count { color: var(--gm-muted2); font-size: 11px; line-height: 1; }
+  .card-fav { position: absolute; top: 2px; right: 2px; z-index: 3; min-width: 44px; min-height: 44px; padding: 0; color: var(--gm-muted2); font-size: 14px; line-height: 1; background: none; border: none; cursor: pointer; }
   .card-fav .fav-star { font-size: 14px; }
   .card-fav.saved { color: var(--gm-primary); }
 
@@ -247,7 +269,7 @@
   .cat-tabs { display: flex; gap: 0; border-bottom: 1px solid rgba(37, 33, 28, 0.1); background: var(--gm-card); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
   .cat-tabs::-webkit-scrollbar { display: none; }
   .cat-tab {
-    position: relative; padding: 11px 10px; color: rgba(37, 33, 28, 0.5);
+    position: relative; min-width: 44px; min-height: 44px; padding: 11px 10px; color: var(--gm-muted);
     font-size: 11.5px; cursor: pointer; white-space: nowrap; border: none; background: none; font-family: var(--font);
   }
   .cat-tab.active { color: var(--gm-primary); font-weight: 700; }
@@ -283,13 +305,15 @@
   .settings .row .lab { font-size: 13.5px; font-weight: 600; color: var(--gm-text); }
   .settings .row .hint { font-size: 10.5px; color: var(--gm-muted2); margin-top: 1px; }
   .settings .row .arrow { color: rgba(143, 47, 47, 0.78); font-size: 20px; flex: none; }
-  .switch { width: 44px; height: 26px; border-radius: 999px; background: var(--gm-border-ink); position: relative; border: none; cursor: pointer; padding: 0; flex: none; }
-  .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: left .15s; }
-  .switch.on { background: var(--gm-primary); }
+  .setting-panel { padding: 12px 16px 14px; border-bottom: 1px solid var(--gm-border-ink); background: #f9f5ec; color: var(--gm-muted); font-size: 11.5px; line-height: 1.65; }
+  .switch { width: 44px; height: 44px; position: relative; border: none; background: none; cursor: pointer; padding: 0; flex: none; }
+  .switch::before { content: ''; position: absolute; inset: 9px 0; border-radius: 999px; background: var(--gm-border-ink); }
+  .switch::after { content: ''; position: absolute; top: 12px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: left .15s; }
+  .switch.on::before { background: var(--gm-primary); }
   .switch.on::after { left: 21px; }
 
   /* ---------- footer ---------- */
-  .home-footer { padding: 25px 0 6px; color: rgba(37, 33, 28, 0.4); font-size: 9px; line-height: 1.8; text-align: center; }
+  .home-footer { padding: 25px 0 6px; color: var(--gm-muted2); font-size: 9px; line-height: 1.8; text-align: center; }
   .footer-rule { width: 24px; height: 1px; margin: 0 auto 9px; background: var(--gm-primary); }
 
   /* ---------- tab bar ---------- */
@@ -303,11 +327,17 @@
     flex: 1; min-width: 0; height: 58px; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 4px;
     border: none; background: none; cursor: pointer; padding: 0;
-    color: #7b746a; font: 400 10px/1 var(--font);
+    color: #6b6258; font: 400 10px/1 var(--font);
   }
   .tab svg { width: 21px; height: 21px; }
   .tab .star-ico { font-size: 21px; line-height: 1; }
   .tab.active { color: var(--gm-primary); font-weight: 600; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--gm-primary); outline-offset: 2px; }
+
+  @media (max-width: 438px) {
+    body { padding: 0; align-items: flex-start; }
+    .device { border-radius: 0; box-shadow: none; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
@@ -359,18 +389,18 @@
           <div class="search-wrap">
             <div class="search-box">
               <span class="search-icon">⌕</span>
-              <input type="search" placeholder="搜索影片、物料、影院、攻略…" aria-label="搜索" />
-              <span class="search-clear">×</span>
+              <input id="homeSearch" type="search" placeholder="搜索影片、物料、影院、攻略…" aria-label="搜索" />
+              <button class="search-clear" id="homeSearchClear" type="button" aria-label="清除搜索" disabled>×</button>
             </div>
           </div>
 
           <!-- scope / topic pills -->
           <div class="scope-switch" role="tablist" aria-label="切换影展" data-od-id="topics">
-            <button class="pill active" role="tab" aria-selected="true">港湾国际电影周</button>
-            <button class="pill" role="tab" aria-selected="false">法国电影展</button>
-            <button class="pill" role="tab" aria-selected="false">加拿大电影展</button>
-            <button class="pill" role="tab" aria-selected="false">经典修复单元</button>
-            <button class="pill" role="tab" aria-selected="false">本月影展</button>
+            <button class="pill active" role="tab" aria-selected="true" data-scope="all">港湾国际电影周</button>
+            <button class="pill" role="tab" aria-selected="false" data-scope="french">法国电影展</button>
+            <button class="pill" role="tab" aria-selected="false" data-scope="canadian">加拿大电影展</button>
+            <button class="pill" role="tab" aria-selected="false" data-scope="restored">经典修复单元</button>
+            <button class="pill" role="tab" aria-selected="false" data-scope="month">本月影展</button>
           </div>
 
           <!-- quick access (3 entries, GO MOVIE non-SIFF scope) -->
@@ -385,16 +415,16 @@
 
           <!-- today's hot (two-column masonry, image + text cards) -->
           <section class="section" data-od-id="hot">
-            <div class="section-heading"><div class="section-title">今日热门</div><button class="pill" style="flex:none;width:auto;padding:5px 12px;">订阅物料更新</button></div>
+            <div class="section-heading"><div class="section-title">今日热门</div><button class="pill" id="subscribeMerch" type="button" aria-pressed="false" style="flex:none;width:auto;padding:5px 12px;">订阅物料更新</button></div>
             <div class="masonry">
-              <article class="mc">
+              <article class="mc" data-filter-item data-scopes="all month">
                 <div class="mc-quote" style="--poster-bg:#f3e6dc;"><span class="quote-mark quote-open" aria-hidden="true">“</span><span class="quote-text">提前 25 分钟到场，18:00 后安检慢</span></div>
                 <div class="mc-body">
                   <div class="mc-meta"><span class="mc-cat">影院提醒</span><span class="fav-meta">☆ 21</span></div>
                   <div class="mc-src">影迷投稿 · 2 小时前</div>
                 </div>
               </article>
-              <article class="mc">
+              <article class="mc" data-filter-item data-scopes="all french month">
                 <img class="mc-img" src="assets/merch-salt-line-tote.webp" alt="《盐线》票根" />
                 <div class="mc-body">
                   <div class="mc-title">《盐线》散场票根，限量 40 张</div>
@@ -402,14 +432,14 @@
                   <div class="mc-src">港湾票根群</div>
                 </div>
               </article>
-              <article class="mc">
+              <article class="mc" data-filter-item data-scopes="all canadian month">
                 <div class="mc-quote" style="--poster-bg:#e2e6eb;"><span class="quote-mark quote-open" aria-hidden="true">“</span><span class="quote-text">今晚《水房》放映故障，周六免费重映</span></div>
                 <div class="mc-body">
                   <div class="mc-meta"><span class="mc-cat">避坑</span><span class="fav-meta">☆ 15</span></div>
                   <div class="mc-src">北码头 2 号厅</div>
                 </div>
               </article>
-              <article class="mc">
+              <article class="mc" data-filter-item data-scopes="all restored month">
                 <img class="mc-img" src="assets/film-night-ferry.webp" alt="《夜航》海报" />
                 <div class="mc-body">
                   <div class="mc-title">《夜航》4K 修复版两个场次售罄</div>
@@ -417,7 +447,7 @@
                   <div class="mc-src">经典修复单元</div>
                 </div>
               </article>
-              <article class="mc">
+              <article class="mc" data-filter-item data-scopes="all canadian month">
                 <img class="mc-img" src="assets/film-winter-grain-wide.webp" alt="《冬麦》" />
                 <div class="mc-body">
                   <div class="mc-title">别错过《冬麦》，本周声音设计最好的一场</div>
@@ -425,7 +455,7 @@
                   <div class="mc-src">影迷社群</div>
                 </div>
               </article>
-              <article class="mc">
+              <article class="mc" data-filter-item data-scopes="all month">
                 <div class="mc-quote mc-quote-close" style="--poster-bg:#efe9d8;"><span class="quote-text">《铜时》导演映后谈改至周六 14:00</span><span class="quote-mark quote-close" aria-hidden="true">”</span></div>
                 <div class="mc-body">
                   <div class="mc-meta"><span class="mc-cat">活动更新</span><span class="fav-meta">☆ 9</span></div>
@@ -439,7 +469,7 @@
           <section class="section" data-od-id="merch" id="home-merch">
             <div class="section-heading"><div class="section-title">物料周边</div><div class="section-note">3 条信息</div></div>
             <div class="masonry">
-              <article class="mc" data-save-key="merch-tote" data-save-type="merch">
+              <article class="mc" data-filter-item data-scopes="all french month" data-save-key="merch-tote" data-save-type="merch">
                 <img class="mc-img" src="assets/merch-salt-line-tote.webp" alt="《盐线》帆布袋" style="aspect-ratio:4/3;" />
                 <div class="mc-body">
                   <h3 class="mc-title">《盐线》帆布袋 · 散场后领取</h3>
@@ -447,7 +477,7 @@
                   <div class="mc-src">港湾票根群</div>
                 </div>
               </article>
-              <article class="mc" data-save-key="merch-one-sheet" data-save-type="merch">
+              <article class="mc" data-filter-item data-scopes="all restored month" data-save-key="merch-one-sheet" data-save-type="merch">
                 <img class="mc-img" src="assets/merch-night-ferry-poster.webp" alt="《夜航》重映海报" style="aspect-ratio:4/3;" />
                 <div class="mc-body">
                   <h3 class="mc-title">《夜航》4K 重映单页海报</h3>
@@ -455,7 +485,7 @@
                   <div class="mc-src">经典修复单元</div>
                 </div>
               </article>
-              <article class="mc" data-save-key="merch-pins" data-save-type="merch">
+              <article class="mc" data-filter-item data-scopes="all month" data-save-key="merch-pins" data-save-type="merch">
                 <img class="mc-img" src="assets/merch-copper-hours-pins.webp" alt="《铜时》珐琅徽章" style="aspect-ratio:4/3;" />
                 <div class="mc-body">
                   <h3 class="mc-title">《铜时》珐琅徽章三枚</h3>
@@ -470,28 +500,28 @@
           <section class="section" data-od-id="guides" id="home-guides">
             <div class="section-heading"><div class="section-title">实用攻略</div></div>
             <div class="masonry">
-              <article class="mc" data-save-key="guide-rush" data-save-type="guide">
+              <article class="mc" data-filter-item data-scopes="all month" data-save-key="guide-rush" data-save-type="guide">
                 <div class="mc-quote" style="--poster-bg:#f3eee2;"><span class="quote-mark quote-open" aria-hidden="true">“</span><span class="quote-text">港湾影院 → 北码头<br>22 分钟</span></div>
                 <div class="mc-body">
                   <div class="mc-meta"><span class="mc-cat">赶场</span><button class="fav saved" data-save="guide-rush" aria-pressed="true" aria-label="收藏"><span class="fav-star">★</span></button></div>
                   <div class="mc-summary">步行 22 分钟或公交 8 分钟，场次间隔别少于 40 分钟。</div>
                 </div>
               </article>
-              <article class="mc" data-save-key="guide-eat" data-save-type="guide">
+              <article class="mc" data-filter-item data-scopes="all month" data-save-key="guide-eat" data-save-type="guide">
                 <div class="mc-quote mc-quote-close" style="--poster-bg:#eef0e4;"><span class="quote-text">码头美食广场<br>15 分钟套餐 ¥28</span><span class="quote-mark quote-close" aria-hidden="true">”</span></div>
                 <div class="mc-body">
                   <div class="mc-meta"><span class="mc-cat">吃喝</span><button class="fav" data-save="guide-eat" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
                   <div class="mc-summary">比影院门口的队伍短，赶场前先去吃。</div>
                 </div>
               </article>
-              <article class="mc" data-save-key="guide-queues" data-save-type="guide">
+              <article class="mc" data-filter-item data-scopes="all month" data-save-key="guide-queues" data-save-type="guide">
                 <div class="mc-quote" style="--poster-bg:#f1ece0;"><span class="quote-mark quote-open" aria-hidden="true">“</span><span class="quote-text">通票提前 10 分钟进场</span></div>
                 <div class="mc-body">
                   <div class="mc-meta"><span class="mc-cat">排队</span><button class="fav" data-save="guide-queues" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
                   <div class="mc-summary">无固定座位的场次，提前 20 分钟到更稳妥。</div>
                 </div>
               </article>
-              <article class="mc" data-save-key="guide-etiquette" data-save-type="guide">
+              <article class="mc" data-filter-item data-scopes="all month" data-save-key="guide-etiquette" data-save-type="guide">
                 <div class="mc-quote mc-quote-close" style="--poster-bg:#ececf0;"><span class="quote-text">等到片尾字幕走完</span><span class="quote-mark quote-close" aria-hidden="true">”</span></div>
                 <div class="mc-body">
                   <div class="mc-meta"><span class="mc-cat">观影礼仪</span><button class="fav" data-save="guide-etiquette" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
@@ -501,6 +531,7 @@
             </div>
           </section>
 
+          <div class="filter-empty is-hidden" id="homeFilterEmpty" role="status">没有找到匹配内容。<br><button class="filter-reset" id="homeFilterReset" type="button">清除筛选</button></div>
           <div class="home-footer"><div class="footer-rule"></div>港湾国际电影周 · 演示数据<br/>GO MOVIE｜影迷互助情报站 · 内容仅供参考</div>
         </section>
 
@@ -508,7 +539,7 @@
         <section class="app-view" data-view="films" data-od-id="view-films">
           <div class="page-head">
             <div class="page-kicker">FESTIVAL PROGRAMME</div>
-            <h1 class="page-title">影片</h1>
+            <h2 class="page-title">影片</h2>
             <div class="page-subtitle">港湾国际电影周 · 选片参考与场次信息</div>
           </div>
 
@@ -518,11 +549,21 @@
             <button class="cat-tab" role="tab" aria-selected="false" data-filter="tomorrow">明天</button>
             <button class="cat-tab" role="tab" aria-selected="false" data-filter="restored">修复</button>
             <button class="cat-tab" role="tab" aria-selected="false" data-filter="sold">售罄</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-filter="venue-old-dock">港湾影院</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-filter="venue-north-pier">北码头</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-filter="venue-harbour-arts">艺术中心</button>
+          </div>
+          <div class="list-search">
+            <div class="search-box">
+              <span class="search-icon">⌕</span>
+              <input id="filmSearch" type="search" placeholder="搜索片名、导演、影院…" aria-label="搜索影片" />
+              <button class="search-clear" id="filmSearchClear" type="button" aria-label="清除影片搜索" disabled>×</button>
+            </div>
           </div>
 
           <section class="section">
             <div class="film-list">
-              <article class="film-card" data-save-key="film-salt-line" data-save-type="film" data-day="tomorrow" data-status="low" data-tag="french">
+              <article class="film-card" data-save-key="film-salt-line" data-save-type="film" data-day="tomorrow" data-status="low" data-tag="french" data-venue="old-dock">
                 <img class="card-backdrop" src="assets/film-salt-line-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -530,6 +571,7 @@
                     <div class="card-title">《盐线》</div>
                     <div class="card-tags"><span class="card-tag">高分</span><span class="card-tag">影迷推荐佳片</span><span class="card-tag tag--low">余票紧张</span></div>
                     <div class="card-meta">The Salt Line · 2019 / 法国 / 104 分钟</div>
+                    <div class="card-line session-line"><span class="card-label">场次</span><span class="card-value">09.13 18:40 · 港湾影院 1 号厅 · 余票紧张</span></div>
                     <div class="card-line"><span class="card-label">导演</span><span class="card-value">Luc Moreau</span></div>
                     <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">9.1</span><span class="rating-count"> / 2864人</span></span></div>
                   </div>
@@ -537,7 +579,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-winter-grain" data-save-type="film" data-day="tomorrow" data-status="ok" data-tag="canadian">
+              <article class="film-card" data-save-key="film-winter-grain" data-save-type="film" data-day="tomorrow" data-status="ok" data-tag="canadian" data-venue="harbour-arts">
                 <img class="card-backdrop" src="assets/film-winter-grain-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -545,6 +587,7 @@
                     <div class="card-title">《冬麦》</div>
                     <div class="card-tags"><span class="card-tag">高分</span><span class="card-tag">声音</span><span class="card-tag tag--ok">在售</span></div>
                     <div class="card-meta">Winter Grain · 2023 / 加拿大 / 118 分钟</div>
+                    <div class="card-line session-line"><span class="card-label">场次</span><span class="card-value">09.14 15:20 · 港湾艺术中心主厅 · 在售</span></div>
                     <div class="card-line"><span class="card-label">导演</span><span class="card-value">Émile Toussaint</span></div>
                     <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">9.3</span><span class="rating-count"> / 1542人</span></span></div>
                   </div>
@@ -552,7 +595,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-night-ferry" data-save-type="film" data-day="today" data-status="sold" data-tag="restored">
+              <article class="film-card" data-save-key="film-night-ferry" data-save-type="film" data-day="today" data-status="sold" data-tag="restored" data-venue="north-pier">
                 <img class="card-backdrop" src="assets/film-night-ferry-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -560,6 +603,7 @@
                     <div class="card-title">《夜航》</div>
                     <div class="card-tags"><span class="card-tag">修复</span><span class="card-tag">经典</span><span class="card-tag tag--sold">已售罄</span></div>
                     <div class="card-meta">Night Ferry · 1987 / 日本 / 96 分钟</div>
+                    <div class="card-line session-line"><span class="card-label">场次</span><span class="card-value">09.12 20:10 · 北码头 2 号厅 · 已售罄</span></div>
                     <div class="card-line"><span class="card-label">导演</span><span class="card-value">Kenji Aoyama</span></div>
                     <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">8.9</span><span class="rating-count"> / 3210人</span></span></div>
                   </div>
@@ -567,7 +611,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-copper-hours" data-save-type="film" data-day="tomorrow" data-status="ok" data-tag="">
+              <article class="film-card" data-save-key="film-copper-hours" data-save-type="film" data-day="tomorrow" data-status="ok" data-tag="" data-venue="north-pier">
                 <img class="card-backdrop" src="assets/film-copper-hours-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -575,6 +619,7 @@
                     <div class="card-title">《铜时》</div>
                     <div class="card-tags"><span class="card-tag">剧情</span><span class="card-tag">劳工</span><span class="card-tag tag--ok">在售</span></div>
                     <div class="card-meta">Copper Hours · 2022 / 智利 / 131 分钟</div>
+                    <div class="card-line session-line"><span class="card-label">场次</span><span class="card-value">09.14 14:00 · 北码头 2 号厅 · 在售</span></div>
                     <div class="card-line"><span class="card-label">导演</span><span class="card-value">Inés Araya</span></div>
                     <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">9.0</span><span class="rating-count"> / 987人</span></span></div>
                   </div>
@@ -582,7 +627,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-room-of-water" data-save-type="film" data-day="today" data-status="ok" data-tag="">
+              <article class="film-card" data-save-key="film-room-of-water" data-save-type="film" data-day="today" data-status="ok" data-tag="" data-venue="north-pier">
                 <img class="card-backdrop" src="assets/film-room-of-water-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -590,6 +635,7 @@
                     <div class="card-title">《水房》</div>
                     <div class="card-tags"><span class="card-tag">剧情</span><span class="card-tag">室内</span><span class="card-tag tag--ok">在售</span></div>
                     <div class="card-meta">A Room of Water · 2021 / 丹麦 / 89 分钟</div>
+                    <div class="card-line session-line"><span class="card-label">场次</span><span class="card-value">09.13 19:30 · 北码头 2 号厅 · 免费重映</span></div>
                     <div class="card-line"><span class="card-label">导演</span><span class="card-value">Mikkel Brandt</span></div>
                     <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">8.7</span><span class="rating-count"> / 1120人</span></span></div>
                   </div>
@@ -597,7 +643,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-last-projectionist" data-save-type="film" data-day="later" data-status="low" data-tag="">
+              <article class="film-card" data-save-key="film-last-projectionist" data-save-type="film" data-day="later" data-status="low" data-tag="" data-venue="harbour-arts">
                 <img class="card-backdrop" src="assets/film-last-projectionist-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -605,6 +651,7 @@
                     <div class="card-title">《最后的放映员》</div>
                     <div class="card-tags"><span class="card-tag">纪录</span><span class="card-tag">35mm</span><span class="card-tag tag--low">余票紧张</span></div>
                     <div class="card-meta">The Last Projectionist · 2020 / 爱尔兰 / 101 分钟</div>
+                    <div class="card-line session-line"><span class="card-label">场次</span><span class="card-value">09.16 17:50 · 港湾艺术中心 2 厅 · 余票紧张</span></div>
                     <div class="card-line"><span class="card-label">导演</span><span class="card-value">Niamh O'Rourke</span></div>
                     <div class="card-line rating-row"><span class="card-label">影迷评分</span><span class="rating-content"><span class="rating-score">9.2</span><span class="rating-count"> / 765人</span></span></div>
                   </div>
@@ -612,6 +659,7 @@
                 </div>
               </article>
             </div>
+            <div class="filter-empty is-hidden" id="filmFilterEmpty" role="status">没有符合当前条件的影片。<br><button class="filter-reset" id="filmFilterReset" type="button">查看全部影片</button></div>
           </section>
         </section>
 
@@ -619,13 +667,27 @@
         <section class="app-view" data-view="cinemas" data-od-id="view-cinemas">
           <div class="page-head">
             <div class="page-kicker">CINEMA GUIDE</div>
-            <h1 class="page-title">影院指北</h1>
+            <h2 class="page-title">影院指北</h2>
             <div class="page-subtitle">交通、检票、座位，只有老影迷才知道的细节</div>
+          </div>
+
+          <div class="cat-tabs" role="tablist" aria-label="筛选影院">
+            <button class="cat-tab active" role="tab" aria-selected="true" data-cinema-filter="all">全部</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-cinema-filter="old-dock">港湾区</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-cinema-filter="north-pier">北码头</button>
+            <button class="cat-tab" role="tab" aria-selected="false" data-cinema-filter="harbour-arts">港湾步道</button>
+          </div>
+          <div class="list-search">
+            <div class="search-box">
+              <span class="search-icon">⌕</span>
+              <input id="cinemaSearch" type="search" placeholder="搜索影院、交通、检票提示…" aria-label="搜索影院" />
+              <button class="search-clear" id="cinemaSearchClear" type="button" aria-label="清除影院搜索" disabled>×</button>
+            </div>
           </div>
 
           <section class="section">
             <div class="cinema-list">
-              <article class="cinema-card" data-save-key="cinema-old-dock" data-save-type="cinema">
+              <article class="cinema-card" data-cinema-area="old-dock" data-save-key="cinema-old-dock" data-save-type="cinema">
                 <div class="cinema-top"><h3>港湾影院</h3><button class="fav" data-save="cinema-old-dock" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
                 <div class="cinema-addr">港湾区码头路 12 号</div>
                 <ul class="cinema-tips">
@@ -638,7 +700,7 @@
                 <p class="cinema-note">「全区最好的画质；阳台酒吧 17:00 开门。」</p>
               </article>
 
-              <article class="cinema-card" data-save-key="cinema-north-pier" data-save-type="cinema">
+              <article class="cinema-card" data-cinema-area="north-pier" data-save-key="cinema-north-pier" data-save-type="cinema">
                 <div class="cinema-top"><h3>北码头 2 号厅</h3><button class="fav" data-save="cinema-north-pier" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
                 <div class="cinema-addr">北码头 88 号 · 仓库区</div>
                 <ul class="cinema-tips">
@@ -650,7 +712,7 @@
                 <p class="cinema-note">「后排偏冷，带件外套。」</p>
               </article>
 
-              <article class="cinema-card" data-save-key="cinema-harbour-arts" data-save-type="cinema">
+              <article class="cinema-card" data-cinema-area="harbour-arts" data-save-key="cinema-harbour-arts" data-save-type="cinema">
                 <div class="cinema-top"><h3>港湾艺术中心</h3><button class="fav" data-save="cinema-harbour-arts" aria-pressed="false" aria-label="收藏"><span class="fav-star">☆</span></button></div>
                 <div class="cinema-addr">港湾步道 3 号</div>
                 <ul class="cinema-tips">
@@ -663,6 +725,7 @@
                 <p class="cinema-note">「大热首映都在这；咖啡厅映后问答还开着。」</p>
               </article>
             </div>
+            <div class="filter-empty is-hidden" id="cinemaFilterEmpty" role="status">没有符合当前区域的影院。<br><button class="filter-reset" id="cinemaFilterReset" type="button">查看全部影院</button></div>
           </section>
         </section>
 
@@ -670,7 +733,7 @@
         <section class="app-view" data-view="saved" data-od-id="view-saved">
           <div class="page-head">
             <div class="page-kicker">MY FAVORITES</div>
-            <h1 class="page-title">我的收藏</h1>
+            <h2 class="page-title">我的收藏</h2>
             <div class="page-subtitle">把赶场前最常看的内容放在这里</div>
           </div>
 
@@ -684,7 +747,7 @@
         <section class="app-view" data-view="profile" data-od-id="view-profile">
           <div class="page-head">
             <div class="page-kicker">GO MOVIE</div>
-            <h1 class="page-title">更多</h1>
+            <h2 class="page-title">更多</h2>
             <div class="page-subtitle">影展 TIPS、迷影现场与 GO MOVIE 内容入口</div>
           </div>
 
@@ -708,10 +771,13 @@
           </div>
 
           <div class="settings" aria-label="设置">
-            <button class="row" type="button"><span class="txt"><span class="lab">影展偏好</span><span class="hint">专题、语言、场次时间</span></span><span class="arrow">›</span></button>
+            <button class="row" type="button" data-setting="preferences" aria-expanded="false" aria-controls="setting-preferences"><span class="txt"><span class="lab">影展偏好</span><span class="hint">专题、语言、场次时间</span></span><span class="arrow">›</span></button>
+            <div class="setting-panel is-hidden" id="setting-preferences">已选：法国电影、经典修复、18:00 后场次。再次点击可收起。</div>
             <div class="row"><span class="txt"><span class="lab">通知</span><span class="hint">售罄提醒与排片变动</span></span><button class="switch on" role="switch" aria-checked="true" aria-label="切换通知"></button></div>
-            <button class="row" type="button"><span class="txt"><span class="lab">无障碍</span><span class="hint">字幕、口述影像</span></span><span class="arrow">›</span></button>
-            <button class="row" type="button"><span class="txt"><span class="lab">关于 GO MOVIE</span><span class="hint">影迷互助情报站</span></span><span class="arrow">›</span></button>
+            <button class="row" type="button" data-setting="accessibility" aria-expanded="false" aria-controls="setting-accessibility"><span class="txt"><span class="lab">无障碍</span><span class="hint">字幕、口述影像</span></span><span class="arrow">›</span></button>
+            <div class="setting-panel is-hidden" id="setting-accessibility">字幕场优先；本演示未提供口述影像场次，未知信息以“—”标记。</div>
+            <button class="row" type="button" data-setting="about" aria-expanded="false" aria-controls="setting-about"><span class="txt"><span class="lab">关于 GO MOVIE</span><span class="hint">影迷互助情报站</span></span><span class="arrow">›</span></button>
+            <div class="setting-panel is-hidden" id="setting-about">GO MOVIE 汇总影片、影院与赶场攻略。本页为离线演示，排片仅供参考。</div>
           </div>
         </section>
 
@@ -777,33 +843,158 @@
 
       /* ===== scope pills (home) ===== */
       var scopePills = document.querySelectorAll('[data-view="home"] .scope-switch .pill');
+      var homeItems = document.querySelectorAll('[data-view="home"] [data-filter-item]');
+      var homeSearch = document.getElementById('homeSearch');
+      var homeSearchClear = document.getElementById('homeSearchClear');
+      var homeFilterEmpty = document.getElementById('homeFilterEmpty');
+      var activeScope = 'all';
+
+      function normalize(value) { return value.trim().toLocaleLowerCase('zh-CN'); }
+
+      function selectScope(scope) {
+        activeScope = scope;
+        scopePills.forEach(function (pill) {
+          var on = pill.getAttribute('data-scope') === scope;
+          pill.classList.toggle('active', on);
+          pill.setAttribute('aria-selected', String(on));
+        });
+      }
+
+      function applyHomeFilters() {
+        var query = normalize(homeSearch.value);
+        var visible = 0;
+        homeItems.forEach(function (item) {
+          var scopes = (item.getAttribute('data-scopes') || 'all').split(/\s+/);
+          var scopeMatches = activeScope === 'all' || scopes.indexOf(activeScope) >= 0;
+          var searchMatches = !query || normalize(item.textContent).indexOf(query) >= 0;
+          var show = scopeMatches && searchMatches;
+          item.classList.toggle('is-hidden', !show);
+          if (show) visible += 1;
+        });
+        homeFilterEmpty.classList.toggle('is-hidden', visible > 0);
+        homeSearchClear.disabled = !query;
+      }
+
       scopePills.forEach(function (p) {
         p.addEventListener('click', function () {
-          scopePills.forEach(function (x) { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
-          p.classList.add('active');
-          p.setAttribute('aria-selected', 'true');
+          selectScope(p.getAttribute('data-scope'));
+          applyHomeFilters();
         });
+      });
+
+      homeSearch.addEventListener('input', applyHomeFilters);
+      homeSearchClear.addEventListener('click', function () {
+        homeSearch.value = '';
+        applyHomeFilters();
+        homeSearch.focus();
+      });
+      document.getElementById('homeFilterReset').addEventListener('click', function () {
+        homeSearch.value = '';
+        selectScope('all');
+        applyHomeFilters();
+        homeSearch.focus();
       });
 
       /* ===== film filters (films view) ===== */
       var filterTabs = document.querySelectorAll('[data-view="films"] .cat-tab');
       var filmCards = document.querySelectorAll('[data-view="films"] .film-card');
+      var filmFilterEmpty = document.getElementById('filmFilterEmpty');
+      var filmSearch = document.getElementById('filmSearch');
+      var filmSearchClear = document.getElementById('filmSearchClear');
+      var activeFilmFilter = 'all';
+
+      function applyFilmFilters() {
+        var query = normalize(filmSearch.value);
+        var visible = 0;
+        filmCards.forEach(function (c) {
+          var facetMatches =
+            activeFilmFilter === 'all' ||
+            (activeFilmFilter === 'today' && c.getAttribute('data-day') === 'today') ||
+            (activeFilmFilter === 'tomorrow' && c.getAttribute('data-day') === 'tomorrow') ||
+            (activeFilmFilter === 'restored' && c.getAttribute('data-tag') === 'restored') ||
+            (activeFilmFilter === 'sold' && c.getAttribute('data-status') === 'sold') ||
+            (activeFilmFilter.indexOf('venue-') === 0 && c.getAttribute('data-venue') === activeFilmFilter.replace('venue-', ''));
+          var searchMatches = !query || normalize(c.textContent).indexOf(query) >= 0;
+          var show = facetMatches && searchMatches;
+          c.classList.toggle('is-hidden', !show);
+          if (show) visible += 1;
+        });
+        filmFilterEmpty.classList.toggle('is-hidden', visible > 0);
+        filmSearchClear.disabled = !query;
+      }
+
+      function selectFilmFilter(key) {
+        activeFilmFilter = key;
+        filterTabs.forEach(function (tab) {
+          var on = tab.getAttribute('data-filter') === key;
+          tab.classList.toggle('active', on);
+          tab.setAttribute('aria-selected', String(on));
+        });
+        applyFilmFilters();
+      }
+
       filterTabs.forEach(function (p) {
         p.addEventListener('click', function () {
-          filterTabs.forEach(function (x) { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
-          p.classList.add('active');
-          p.setAttribute('aria-selected', 'true');
-          var key = p.getAttribute('data-filter');
-          filmCards.forEach(function (c) {
-            var show =
-              key === 'all' ||
-              (key === 'today' && c.getAttribute('data-day') === 'today') ||
-              (key === 'tomorrow' && c.getAttribute('data-day') === 'tomorrow') ||
-              (key === 'restored' && c.getAttribute('data-tag') === 'restored') ||
-              (key === 'sold' && c.getAttribute('data-status') === 'sold');
-            c.classList.toggle('is-hidden', !show);
-          });
+          selectFilmFilter(p.getAttribute('data-filter'));
         });
+      });
+      filmSearch.addEventListener('input', applyFilmFilters);
+      filmSearchClear.addEventListener('click', function () {
+        filmSearch.value = '';
+        applyFilmFilters();
+        filmSearch.focus();
+      });
+      document.getElementById('filmFilterReset').addEventListener('click', function () {
+        filmSearch.value = '';
+        selectFilmFilter('all');
+        filmSearch.focus();
+      });
+
+      /* ===== cinema filters (cinemas view) ===== */
+      var cinemaFilterTabs = document.querySelectorAll('[data-view="cinemas"] [data-cinema-filter]');
+      var cinemaCards = document.querySelectorAll('[data-view="cinemas"] .cinema-card');
+      var cinemaFilterEmpty = document.getElementById('cinemaFilterEmpty');
+      var cinemaSearch = document.getElementById('cinemaSearch');
+      var cinemaSearchClear = document.getElementById('cinemaSearchClear');
+      var activeCinemaFilter = 'all';
+
+      function selectCinemaFilter(key) {
+        activeCinemaFilter = key;
+        applyCinemaFilters();
+      }
+
+      function applyCinemaFilters() {
+        var query = normalize(cinemaSearch.value);
+        var visible = 0;
+        cinemaFilterTabs.forEach(function (tab) {
+          var on = tab.getAttribute('data-cinema-filter') === activeCinemaFilter;
+          tab.classList.toggle('active', on);
+          tab.setAttribute('aria-selected', String(on));
+        });
+        cinemaCards.forEach(function (card) {
+          var facetMatches = activeCinemaFilter === 'all' || card.getAttribute('data-cinema-area') === activeCinemaFilter;
+          var searchMatches = !query || normalize(card.textContent).indexOf(query) >= 0;
+          var show = facetMatches && searchMatches;
+          card.classList.toggle('is-hidden', !show);
+          if (show) visible += 1;
+        });
+        cinemaFilterEmpty.classList.toggle('is-hidden', visible > 0);
+        cinemaSearchClear.disabled = !query;
+      }
+
+      cinemaFilterTabs.forEach(function (tab) {
+        tab.addEventListener('click', function () { selectCinemaFilter(tab.getAttribute('data-cinema-filter')); });
+      });
+      cinemaSearch.addEventListener('input', applyCinemaFilters);
+      cinemaSearchClear.addEventListener('click', function () {
+        cinemaSearch.value = '';
+        applyCinemaFilters();
+        cinemaSearch.focus();
+      });
+      document.getElementById('cinemaFilterReset').addEventListener('click', function () {
+        cinemaSearch.value = '';
+        selectCinemaFilter('all');
+        cinemaSearch.focus();
       });
 
       /* ===== favorite / save — full sync (★/☆) with compact Saved masonry ===== */
@@ -847,12 +1038,14 @@
           var tags = Array.from(c.querySelectorAll('.card-tag')).map(function(t){return t.textContent;}).slice(0,2).join(' · ') || '影片推荐';
           var score = txt(c, '.rating-score');
           var meta = txt(c, '.card-meta');
+          var session = txt(c, '.session-line .card-value');
           art.innerHTML =
             '<img class="mc-img" src="' + img + '" alt="' + title + '" style="aspect-ratio:3/2;" />' +
             '<div class="mc-body">' +
               '<h3 class="mc-title">' + title + '</h3>' +
               '<div class="mc-meta"><span class="mc-cat mc-type">影片推荐</span>' + (score ? '<span class="fav-meta">影迷评分 ' + score + '</span>' : '') + '</div>' +
               '<div class="mc-src">' + meta + '</div>' +
+              (session ? '<div class="mc-session">场次：' + session + '</div>' : '') +
             '</div>';
         } else if (entry.type === 'merch') {
           var mimg = attr(c, '.mc-img', 'src');
@@ -939,6 +1132,31 @@
       });
 
       renderSavedItems();
+
+      /* ===== visible Home/Profile control states ===== */
+      var subscribeMerch = document.getElementById('subscribeMerch');
+      subscribeMerch.addEventListener('click', function () {
+        var on = subscribeMerch.getAttribute('aria-pressed') !== 'true';
+        subscribeMerch.setAttribute('aria-pressed', String(on));
+        subscribeMerch.classList.toggle('active', on);
+        subscribeMerch.textContent = on ? '已订阅物料更新' : '订阅物料更新';
+      });
+
+      var settingButtons = document.querySelectorAll('[data-setting]');
+      settingButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          var targetId = button.getAttribute('aria-controls');
+          var target = document.getElementById(targetId);
+          var open = button.getAttribute('aria-expanded') !== 'true';
+          settingButtons.forEach(function (other) {
+            var otherTarget = document.getElementById(other.getAttribute('aria-controls'));
+            other.setAttribute('aria-expanded', 'false');
+            if (otherTarget) otherTarget.classList.add('is-hidden');
+          });
+          button.setAttribute('aria-expanded', String(open));
+          target.classList.toggle('is-hidden', !open);
+        });
+      });
 
       /* ===== notifications switch (profile) ===== */
       var notifSwitch = document.querySelector('.switch');
