@@ -789,6 +789,26 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
   // Keep live paths outside artifact-controlled DOM. The cached src snapshot
   // makes a parent src mutation invalidate synchronously before observers run.
   var liveFramePaths = new WeakMap();
+  // #7296 review (R9-2): once a frame is KNOWN to have navigated (its native
+  // load event fired), its parent src attribute staying unchanged no longer
+  // proves anything -- a child navigating itself never touches that
+  // attribute. Simply clearing the cache and falling back to re-deriving
+  // from that same stale attribute would let a departed document (an
+  // external site, a non-HTML file) keep answering to the frame's old,
+  // still-declared identity. This frame is unavailable until a fresh ready
+  // ping confirms it is back at that SAME declared identity -- not any
+  // other self-navigated path, which stays unauthorized per the R8-1/R8-2
+  // fix regardless of caching.
+  var frameUnavailable = new WeakSet();
+  var frameLoadListeners = new WeakSet();
+  function observeFrameLoad(frame){
+    if (!frame || frameLoadListeners.has(frame)) return;
+    frameLoadListeners.add(frame);
+    frame.addEventListener('load', function(){
+      try { liveFramePaths.delete(frame); } catch (_) {}
+      try { frameUnavailable.add(frame); } catch (_) {}
+    });
+  }
   function projectFramePath(frame){
     // A validated ready ping (see od:url-selection-bridge-ready below)
     // caches the child's own reported path here -- ground truth from the
@@ -800,15 +820,28 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
       if (cachedFramePath && cachedFramePath.srcAtCache === currentFrameSrc) return cachedFramePath.path;
     } catch (_) {}
     try {
+      if (frame && frameUnavailable.has(frame)) return null;
       return projectFramePathFromHref(frame.src);
     } catch (_) { return null; }
   }
-  function projectFrameForSource(source){
+  // DOM-identity-only lookup: frame.contentWindow === source cannot be
+  // forged by any script (it is the browser's own WindowProxy identity),
+  // unlike anything a message payload claims. Used by the ready-ping
+  // handler specifically because it must be able to locate a frame that is
+  // CURRENTLY unavailable (see frameUnavailable above) in order to
+  // re-validate and potentially clear that state -- projectFrameForSource
+  // below intentionally cannot see an unavailable frame at all, which would
+  // otherwise deadlock the very ready ping meant to clear it.
+  function frameElementForSource(source){
     var frames = document.querySelectorAll('iframe');
     for (var i = 0; i < frames.length; i++) {
-      if (frames[i].contentWindow === source && projectFramePath(frames[i])) return frames[i];
+      if (frames[i].contentWindow === source) return frames[i];
     }
     return null;
+  }
+  function projectFrameForSource(source){
+    var frame = frameElementForSource(source);
+    return frame && projectFramePath(frame) ? frame : null;
   }
   function markProjectFrames(){
     var frames = document.querySelectorAll('iframe');
@@ -1331,12 +1364,22 @@ export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridg
       // CHILD navigates itself (an internal link, a window.location
       // assignment), so comparing against it would falsely reject a
       // legitimate ready ping the moment that happens (#7008 review).
-      var readyFrame = projectFrameForSource(ev.source);
+      var readyFrame = frameElementForSource(ev.source);
       if (!readyFrame) return;
       var readyFramePath = projectFramePathFromHref(data.href);
       if (!readyFramePath) return;
+      observeFrameLoad(readyFrame);
       try {
         liveFramePaths.set(readyFrame, { path: readyFramePath, srcAtCache: readyFrame.getAttribute('src') || '' });
+      } catch (_) {}
+      // #7296 review (R9-2): a ready ping only clears the post-departure
+      // "unavailable" gate when it confirms the frame is back at its OWN
+      // declared identity -- a ready ping reporting some OTHER
+      // self-navigated path leaves the gate in place, since that path was
+      // never authorized to begin with (R8-1/R8-2).
+      try {
+        var declaredPath = projectFramePathFromHref(readyFrame.src);
+        if (declaredPath && declaredPath === readyFramePath) frameUnavailable.delete(readyFrame);
       } catch (_) {}
       try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
       try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}

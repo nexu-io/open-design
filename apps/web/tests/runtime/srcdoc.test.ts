@@ -670,6 +670,49 @@ describe('buildSrcdoc', () => {
     dom.window.close();
   });
 
+  it('rejects a forged target from a departed document reusing the frame’s stale declared identity (#7296 review R9-2)', () => {
+    const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
+      baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
+      commentBridge: true,
+    });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+    });
+    const frame = dom.window.document.querySelector('iframe');
+    const childWindow = frame?.contentWindow;
+    expect(childWindow).toBeTruthy();
+    if (!childWindow || !frame) throw new Error('Expected child iframe window');
+    const hostMessages: unknown[] = [];
+    dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
+
+    // The declared child confirms itself normally first.
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od:url-selection-bridge-ready', href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html' },
+      source: childWindow,
+    }));
+
+    // It then leaves for a destination with no bridge/ready ping (an
+    // external site, a non-HTML file) -- the parent's src ATTRIBUTE is
+    // untouched by that internal navigation, but the frame's native load
+    // event still fires. The SAME WindowProxy (childWindow) now belongs to
+    // that departed document, which forges a shaped od:comment-target
+    // message claiming the frame's old, still-declared "child.html"
+    // identity.
+    frame.dispatchEvent(new dom.window.Event('load'));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:comment-target', elementId: 'forged', selector: '[data-od-id="forged"]',
+        label: 'forged', text: 'forged', position: { x: 1, y: 1, width: 20, height: 20 },
+      },
+      source: childWindow,
+    }));
+
+    expect(hostMessages).toEqual([]);
+    dom.window.close();
+  });
+
   it('falls back from the cached live path synchronously when the parent changes a frame src (#7008 review: cache invalidation)', () => {
     const srcdoc = buildSrcdoc('<iframe src="child.html"></iframe>', {
       baseHref: 'http://preview.local/api/projects/project-1/preview/scope-1/',
