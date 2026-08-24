@@ -97,6 +97,8 @@ import {
   designSystemIdFromPluginSnapshot,
   resolveEffectiveDesignSystemSelection,
   resolveResearchCommandContract,
+  mergePromptImagePaths,
+  resolveAbsoluteProjectImageAttachments,
   resolveSafeProjectAttachments,
   resolveSafePromptImagePaths,
   selectPromptImagePaths,
@@ -153,6 +155,8 @@ export {
   designSystemIdFromPluginSnapshot,
   resolveEffectiveDesignSystemSelection,
   resolveResearchCommandContract,
+  mergePromptImagePaths,
+  resolveAbsoluteProjectImageAttachments,
   resolveSafeProjectAttachments,
   resolveSafePromptImagePaths,
   selectPromptImagePaths,
@@ -9897,6 +9901,16 @@ export async function startServer({
       : [];
     run.projectAttachmentPaths = safeAttachments;
 
+    // Web chat uploads images into the project and sends them only as
+    // `attachments` (relative paths), not `imagePaths` (upload-dir channel).
+    // Adapters that need absolute file handoff (byok-opencode `-f`, etc.)
+    // must receive those image attachments here (#6482).
+    const projectImageAbsPaths = resolveAbsoluteProjectImageAttachments(
+      cwd,
+      safeAttachments,
+    );
+    const agentImagePaths = mergePromptImagePaths(safeImages, projectImageAbsPaths);
+
     // Local code agents don't accept a separate "system" channel the way the
     // Messages API does — we fold the skill + design-system prompt into the
     // user message. The <artifact> wrapping instruction comes from
@@ -11688,7 +11702,7 @@ export async function startServer({
     try {
       args = def.buildArgs(
         composed,
-        safeImages,
+        agentImagePaths,
         extraAllowedDirs,
         agentOptions,
         {

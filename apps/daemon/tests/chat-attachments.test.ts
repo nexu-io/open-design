@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   formatDesignFilesWorkspaceHint,
   formatProjectAttachmentHint,
+  mergePromptImagePaths,
+  resolveAbsoluteProjectImageAttachments,
   resolveSafeProjectAttachments,
 } from '../src/server.js';
 
@@ -43,6 +45,57 @@ describe('resolveSafeProjectAttachments', () => {
         'When the user says "first attachment", "second file", or similar, map those references to the numbered list above.',
       ].join('\n'),
     );
+  });
+});
+
+describe('resolveAbsoluteProjectImageAttachments (#6482 web attachments path)', () => {
+  it('returns absolute paths for image attachments under cwd and drops non-images / escapes', () => {
+    const root = '/projects/demo';
+    const files = new Map<string, number>([
+      ['/projects/demo/shot.png', 12_000],
+      ['/projects/demo/assets/mark.JPG', 8_000],
+      ['/projects/demo/notes.md', 400],
+      ['/projects/demo/huge.png', 2_000_000],
+    ]);
+
+    const abs = resolveAbsoluteProjectImageAttachments(
+      root,
+      [
+        'shot.png',
+        'assets/mark.JPG',
+        'notes.md',
+        'huge.png',
+        '../escape.png',
+        'missing.png',
+      ],
+      {
+        pathImpl: path.posix,
+        existsSync: (target) => files.has(target),
+        statSync: (target) => ({
+          isFile: () => true,
+          size: files.get(target) ?? 0,
+        }),
+        maxBytes: 1_024_000,
+      },
+    );
+
+    expect(abs).toEqual([
+      '/projects/demo/shot.png',
+      '/projects/demo/assets/mark.JPG',
+    ]);
+  });
+
+  it('mergePromptImagePaths de-dupes upload-dir and project image paths', () => {
+    expect(
+      mergePromptImagePaths(
+        ['/tmp/od-uploads/a.png', '/projects/demo/shot.png'],
+        ['/projects/demo/shot.png', '/projects/demo/b.webp'],
+      ),
+    ).toEqual([
+      '/tmp/od-uploads/a.png',
+      '/projects/demo/shot.png',
+      '/projects/demo/b.webp',
+    ]);
   });
 });
 
