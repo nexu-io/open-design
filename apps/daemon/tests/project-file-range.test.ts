@@ -230,7 +230,13 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     );
   });
 
-  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  // `server.close()` only stops new connections; undici's agent keeps the
+  // sockets from this suite's many fetches alive, so the callback would never
+  // fire and the hook would hit vitest's 10s budget. Drop them explicitly.
+  afterAll(() => new Promise<void>((resolve) => {
+    server.close(() => resolve());
+    server.closeAllConnections?.();
+  }));
 
   const rawUrl = (name: string) => `${baseUrl}/api/projects/${projectId}/raw/${name}`;
   const poweredUrl = (name: string) => `${baseUrl}/api/projects/${projectId}/powered/${name}`;
@@ -352,6 +358,87 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).not.toContain('data-od-preview-observability');
   });
 
+  it('appends the preview bridges after streamed large HTML (issue #6361 review)', async () => {
+    // A powered artifact above HTML_PREVIEW_BRIDGE_MAX_BYTES streams from
+    // disk, but must still carry the bridges: without markAnchors Draw kicks
+    // the powered URL iframe back to the opaque srcDoc sandbox that cannot
+    // run Worker/SAB/WASM content. The bridges arrive as a suffix on a full
+    // (non-Range) response; Range replies keep exact file bytes.
+    const res = await fetch(`${rawUrl('large.html')}?odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Large Preview');
+    expect(html).toContain('data-od-url-scroll-bridge');
+    expect(html).toContain('data-od-url-selection-bridge');
+    expect(html).toContain('data-od-url-snapshot-bridge');
+    expect(html).toContain("type: 'od:url-selection-bridge-ready', href: window.location.href, markAnchors: true");
+    // The suffix follows the file's own bytes verbatim.
+    expect(html.indexOf('Large Preview')).toBeLessThan(html.indexOf('data-od-url-scroll-bridge'));
+    // Content-Length covers file + suffix so the response is not truncated.
+    expect(Number(res.headers.get('content-length'))).toBe(Buffer.byteLength(html, 'utf8'));
+  });
+
+  it('busts pre-suffix caches: a stale ETag revalidation returns the bridged body, not 304', async () => {
+    // A browser that cached the large HTML before the bridge suffix existed
+    // holds the plain size-mtime ETag. Revalidating with it must MISS (the
+    // suffix participates in the validator) and return the bridged bytes —
+    // a 304 here would pin a bridgeless document and Draw would silently
+    // fall back to srcDoc.
+    const url = `${rawUrl('large.html')}?odPreviewBridge=selection&odPreviewBridge=snapshot`;
+    const first = await fetch(url);
+    expect(first.status).toBe(200);
+    const freshEtag = first.headers.get('etag')!;
+    expect(freshEtag).toBeTruthy();
+
+    // Reconstruct the pre-fix validator (plain size-mtime, no suffix hash):
+    // strip the suffix segment from the fresh tag.
+    const preFixEtag = freshEtag.replace(/-[0-9a-f]{8}"$/, '"');
+    expect(preFixEtag).not.toBe(freshEtag);
+    const revalidated = await fetch(url, { headers: { 'If-None-Match': preFixEtag } });
+    expect(revalidated.status).toBe(200);
+    const html = await revalidated.text();
+    expect(html).toContain('data-od-url-selection-bridge');
+
+    // The fresh (suffix-aware) validator still 304s.
+    const fresh = await fetch(url, { headers: { 'If-None-Match': freshEtag } });
+    expect(fresh.status).toBe(304);
+
+    // And a bridge-less request keeps the plain validator (no false busting).
+    const plain = await fetch(rawUrl('large.html'));
+    expect(plain.headers.get('etag')).toBe(preFixEtag);
+  });
+
+  it('busts pre-suffix caches on If-Modified-Since-only revalidation too', async () => {
+    // An IMS-only client (no stored ETag) that cached the pre-suffix body
+    // sends the unchanged source mtime. Last-Modified does not identify the
+    // suffixed representation, so freshness must MISS and return the bridged
+    // bytes rather than 304ing a bridgeless document.
+    const url = `${rawUrl('large.html')}?odPreviewBridge=selection`;
+    const first = await fetch(url);
+    expect(first.status).toBe(200);
+    const lastModified = first.headers.get('last-modified')!;
+    expect(lastModified).toBeTruthy();
+
+    const ims = await fetch(url, { headers: { 'If-Modified-Since': lastModified } });
+    expect(ims.status).toBe(200);
+    expect(await ims.text()).toContain('data-od-url-selection-bridge');
+
+    // Without a suffix the IMS fast path still works (no false busting).
+    const plainFirst = await fetch(rawUrl('large.html'));
+    const plainLm = plainFirst.headers.get('last-modified')!;
+    const plainIms = await fetch(rawUrl('large.html'), { headers: { 'If-Modified-Since': plainLm } });
+    expect(plainIms.status).toBe(304);
+  });
+
+  it('appends the preview bridges after streamed large HTML on the powered route too', async () => {
+    const res = await fetch(`${poweredUrl('large.html')}?odPreviewBridge=selection&odPreviewBridge=snapshot`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('data-od-url-selection-bridge');
+    expect(html).toContain('data-od-url-snapshot-bridge');
+    expect(html).toContain("type: 'od:url-selection-bridge-ready', href: window.location.href, markAnchors: true");
+  });
+
   it('injects the URL preview scroll bridge only when requested', async () => {
     const plain = await fetch(rawUrl('page.html'));
     expect(await plain.text()).toBe('<html/>');
@@ -393,6 +480,35 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).toContain('function postReady(');
     expect(html).toContain('href: window.location.href');
     expect(html).not.toContain('data-od-url-scroll-bridge');
+  });
+
+  it('serves the Draw mark-anchor protocol from the URL selection bridge (issue #6361)', async () => {
+    // Draw-mode content anchoring must resolve element boxes from the frame
+    // the user sees. For powered previews that is the URL-loaded frame, so
+    // the daemon bridge answers od:mark-anchor-request and advertises the
+    // capability in its ready message; the host keys the URL-load decision
+    // (urlAnchorBridge) off that flag.
+    const bridged = await fetch(`${rawUrl('page.html')}?odPreviewBridge=selection`);
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html).toContain("'od:mark-anchor-request'");
+    expect(html).toContain("type: 'od:mark-anchor-targets'");
+    expect(html).toContain("type: 'od:url-selection-bridge-ready', href: window.location.href, markAnchors: true");
+    // Invisible elements must not anchor marks: the host picks the smallest
+    // containing box, so a hidden nested panel would beat the visible element
+    // the user marked. The bridge filters on computed style before replying
+    // (mirroring the srcDoc bridge's elementVisibleForComment gate).
+    const anchorHandler = html.slice(html.indexOf("'od:mark-anchor-request'"), html.indexOf("'od:mark-anchor-targets'"));
+    expect(anchorHandler).toContain("visibility === 'hidden'");
+    expect(anchorHandler).toContain("display === 'none'");
+    expect(anchorHandler).toContain('Number(anchorCs.opacity) === 0');
+    expect(anchorHandler).toContain('anchorRect.width <= 0');
+    // The probe walker is lean and bounded: it queries only annotated nodes
+    // and caps the walk, instead of reusing the full comment-payload
+    // enumerator on every 32ms scroll probe.
+    expect(anchorHandler).toContain("querySelectorAll('[data-od-id], [data-screen-label]')");
+    expect(anchorHandler).toContain('Math.min(anchorNodes.length, 1500)');
+    expect(anchorHandler).not.toContain('allTargets()');
   });
 
   it('injects the URL preview snapshot bridge only when requested', async () => {

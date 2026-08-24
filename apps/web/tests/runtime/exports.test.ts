@@ -23,6 +23,7 @@ import {
   prepareImageExportTarget,
   planDeckImageCapture,
   requestPreviewSnapshot,
+  requestPreviewAnchorTargets,
   sourceLooksLikeExportableDeck,
   sourceLooksLikeNavigableDeck,
 } from '../../src/runtime/exports';
@@ -1598,6 +1599,102 @@ describe('requestPreviewSnapshot', () => {
     const result = await promise;
     expect(result).toBeNull();
     vi.useRealTimers();
+  });
+});
+
+describe('requestPreviewAnchorTargets payload sanitization (#6476 review)', () => {
+  let listeners: Map<string, Set<(ev: unknown) => void>>;
+
+  beforeEach(() => {
+    listeners = new Map();
+    vi.stubGlobal('window', {
+      addEventListener: (type: string, fn: (ev: unknown) => void) => {
+        if (!listeners.has(type)) listeners.set(type, new Set());
+        listeners.get(type)!.add(fn);
+      },
+      removeEventListener: (type: string, fn: (ev: unknown) => void) => {
+        listeners.get(type)?.delete(fn);
+      },
+      dispatchEvent: (ev: { type: string }) => {
+        for (const fn of listeners.get(ev.type) ?? []) fn(ev);
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function bridgeReply(targets: unknown) {
+    const posted: unknown[] = [];
+    const win = {
+      postMessage: (msg: { id?: string }) => {
+        posted.push(msg);
+        // Reply asynchronously like a real bridge.
+        setTimeout(() => {
+          for (const fn of listeners.get('message') ?? []) {
+            fn({ source: win, data: { type: 'od:mark-anchor-targets', id: msg.id, targets } });
+          }
+        }, 0);
+      },
+    };
+    return { contentWindow: win } as unknown as HTMLIFrameElement;
+  }
+
+  it('drops malformed entries instead of letting them poison the anchor chooser', async () => {
+    // Bridge replies cross an origin boundary; a [null] or fieldless entry
+    // must not become a typed PreviewAnchorTarget that later dereferences
+    // t.position and aborts the send. Anchoring is best-effort.
+    const iframe = bridgeReply([
+      null,
+      42,
+      { elementId: '', selector: '#a', position: { x: 0, y: 0, width: 10, height: 10 } },
+      { elementId: 'b', selector: '', position: { x: 0, y: 0, width: 10, height: 10 } },
+      { elementId: 'c', selector: '#c' }, // no position
+      { elementId: 'd', selector: '#d', position: { x: 0, y: Number.NaN, width: 10, height: 10 } },
+      { elementId: 'ok', selector: '#ok', position: { x: 1, y: 2, width: 30, height: 40 } },
+    ]);
+    const res = await requestPreviewAnchorTargets(iframe, 500);
+    expect(res.answered).toBe(true);
+    expect(res.targets).toEqual([
+      { elementId: 'ok', selector: '#ok', position: { x: 1, y: 2, width: 30, height: 40 } },
+    ]);
+  });
+
+  it('classifies a non-array reply as answered-empty', async () => {
+    const res = await requestPreviewAnchorTargets(bridgeReply('garbage'), 500);
+    expect(res.answered).toBe(true);
+    expect(res.targets).toEqual([]);
+  });
+
+  it('refuses an oversized forged reply without iterating it', async () => {
+    // Our bridges cap enumeration at 1500 targets, so a bigger array cannot
+    // be a legitimate reply. It is rejected wholesale (answered-empty) —
+    // frame-relative fallback still applies — and per-entry strings above
+    // 512 chars are dropped too.
+    const oversized = Array.from({ length: 5000 }, (_, i) => ({
+      elementId: `e${i}`,
+      selector: `#e${i}`,
+      position: { x: 0, y: i, width: 10, height: 10 },
+    }));
+    const res = await requestPreviewAnchorTargets(bridgeReply(oversized), 500);
+    expect(res.answered).toBe(true);
+    expect(res.targets).toEqual([]);
+
+    const hugeStrings = [{
+      elementId: 'x'.repeat(600),
+      selector: '#ok',
+      position: { x: 0, y: 0, width: 10, height: 10 },
+    }, {
+      elementId: 'ok',
+      selector: '#ok',
+      position: { x: 1, y: 2, width: 3, height: 4 },
+    }];
+    const res2 = await requestPreviewAnchorTargets(bridgeReply(hugeStrings), 500);
+    expect(res2.targets).toEqual([
+      { elementId: 'ok', selector: '#ok', position: { x: 1, y: 2, width: 3, height: 4 } },
+    ]);
   });
 });
 

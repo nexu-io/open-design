@@ -2485,6 +2485,48 @@ function meaningfulDomFallbackTarget(el) {
       postPreviewScroll(data.requestId);
       return;
     }
+    // Annotation marks anchor to content so they survive a reflow (#6361).
+    // They need element boxes on demand WITHOUT turning on comment mode, whose
+    // hover/click interception would fight the drawing canvas. Only the three
+    // fields anchoring uses are sent back, so a large document does not ship a
+    // full style snapshot per element across the bridge.
+    if (data.type === 'od:mark-anchor-request') {
+      // Enumeration failure stays silent (no reply) so the host's timeout
+      // classifies it as unanswered and keeps its retry budget — a masked
+      // exception would read as a healthy empty document and pin marks
+      // frame-relative. Keep in sync with the URL bridge in
+      // apps/daemon/src/routes/project/index.ts.
+      // Lean, capped, visibility-filtered enumerator — see the URL bridge in
+      // apps/daemon/src/routes/project/index.ts for rationale; keep in sync.
+      var markTargets = [];
+      try {
+        var anchorNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+        var anchorCap = Math.min(anchorNodes.length, 1500);
+        for (var mi = 0; mi < anchorCap; mi++) {
+          var anchorEl = anchorNodes[mi];
+          var anchorSel = annotatedSelectorFor(anchorEl);
+          var anchorId = anchorEl.getAttribute('data-od-id') || anchorEl.getAttribute('data-screen-label');
+          if (!anchorSel || !anchorId) continue;
+          var anchorRect = anchorEl.getBoundingClientRect();
+          if (!anchorRect || anchorRect.width <= 0 || anchorRect.height <= 0) continue;
+          try {
+            var anchorCs = window.getComputedStyle(anchorEl);
+            if (anchorCs.display === 'none' || anchorCs.visibility === 'hidden' || Number(anchorCs.opacity) === 0) continue;
+          } catch (_) {}
+          markTargets.push({
+            elementId: String(anchorId),
+            selector: anchorSel,
+            position: { x: Math.round(anchorRect.x), y: Math.round(anchorRect.y), width: Math.round(anchorRect.width), height: Math.round(anchorRect.height) }
+          });
+        }
+      } catch (_) {
+        return;
+      }
+      try {
+        window.parent.postMessage({ type: 'od:mark-anchor-targets', id: data.id, targets: markTargets }, '*');
+      } catch (_) {}
+      return;
+    }
     if (data.type === 'od:comment-mode') {
       commentEnabled = !!data.enabled;
       mode = data.mode === 'pod' ? 'pod' : 'picker';

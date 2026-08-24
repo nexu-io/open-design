@@ -726,7 +726,9 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var activeCommentSelector = null;
   var activeTargetPending = false;
   function postReady(){
-    window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href }, '*');
+    // markAnchors advertises the mark-anchor bridge (#6361); href lets the
+    // host verify the ready describes the currently committed document.
+    window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href, markAnchors: true }, '*');
   }
   function esc(value){
     try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); }
@@ -1074,6 +1076,62 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     if (!data || !data.type) return;
     if (data.type === 'od:url-selection-bridge-probe') {
       postReady();
+      return;
+    }
+    // Annotation marks anchor to the element they were drawn on so they
+    // survive a reflow (#6361). Draw mode needs element boxes on demand
+    // WITHOUT comment mode's hover/click interception, and the boxes must
+    // come from the frame the user actually sees — for powered previews
+    // that is this URL-loaded frame, not the hidden srcDoc twin. Keep the
+    // reply shape in sync with the srcDoc bridge in
+    // apps/web/src/runtime/srcdoc.ts (od:mark-anchor-targets).
+    if (data.type === 'od:mark-anchor-request') {
+      // An enumeration failure must NOT look like a healthy empty document:
+      // the host treats any reply as "bridge answered" and clears its retry
+      // budget, so a masked exception would silently pin marks frame-relative.
+      // Stay silent on failure — the host's timeout classifies it as
+      // unanswered and its cooldown/retry semantics engage.
+      //
+      // Only VISIBLE elements may anchor a mark. The host picks the smallest
+      // containing box, so an invisible nested node (visibility:hidden,
+      // opacity:0, or a collapsed responsive panel) would otherwise win over
+      // the visible element the user actually marked and drag the annotation
+      // onto hidden content on reflow. Mirrors the srcDoc bridge's
+      // elementVisibleForComment gate.
+      // Lean enumerator: anchoring needs only elementId/selector/position for
+      // annotated nodes, and this runs on the 32ms scroll pacing — walking
+      // targetFrom()'s full comment payload (text, htmlHint, computed style)
+      // per node made large artifacts jank during a scroll gesture. Capped so
+      // a pathological document bounds the walk; visibility-filtered so a
+      // hidden nested panel cannot out-rank the visible element the user
+      // marked. Keep in sync with the srcDoc bridge.
+      var markTargets = [];
+      try {
+        var anchorNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+        var anchorCap = Math.min(anchorNodes.length, 1500);
+        for (var mi = 0; mi < anchorCap; mi++) {
+          var anchorEl = anchorNodes[mi];
+          var anchorSel = annotatedSelectorFor(anchorEl);
+          var anchorId = anchorEl.getAttribute('data-od-id') || anchorEl.getAttribute('data-screen-label');
+          if (!anchorSel || !anchorId) continue;
+          var anchorRect = anchorEl.getBoundingClientRect();
+          if (!anchorRect || anchorRect.width <= 0 || anchorRect.height <= 0) continue;
+          try {
+            var anchorCs = window.getComputedStyle(anchorEl);
+            if (anchorCs.display === 'none' || anchorCs.visibility === 'hidden' || Number(anchorCs.opacity) === 0) continue;
+          } catch (_) {}
+          markTargets.push({
+            elementId: String(anchorId),
+            selector: anchorSel,
+            position: { x: Math.round(anchorRect.x), y: Math.round(anchorRect.y), width: Math.round(anchorRect.width), height: Math.round(anchorRect.height) }
+          });
+        }
+      } catch (_) {
+        return;
+      }
+      try {
+        window.parent.postMessage({ type: 'od:mark-anchor-targets', id: data.id, targets: markTargets }, '*');
+      } catch (_) {}
       return;
     }
     if (data.type === 'od:preview-runtime-state-capture' && data.id) {
@@ -1446,6 +1504,22 @@ function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | '
     return injectBeforeBodyClose(html, 'data-od-url-selection-bridge', URL_PREVIEW_SELECTION_BRIDGE);
   }
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
+}
+
+// Bridge scripts as a plain suffix, for responses that must keep streaming
+// from disk (HTML above HTML_PREVIEW_BRIDGE_MAX_BYTES). Browsers move trailing
+// scripts into the body, and every bridge is a self-contained IIFE with a
+// re-entry guard, so appending after the streamed bytes is equivalent to the
+// buffered injectBeforeBodyClose fallback for a document with no </body>.
+// Without this, a >2MiB powered artifact got no selection bridge, never
+// advertised markAnchors, and Draw kicked it back to the opaque srcDoc
+// sandbox that cannot run it (#6361 review).
+function urlPreviewBridgeSuffix(requestedBridge: unknown): string {
+  let suffix = '';
+  if (wantsUrlPreviewScrollBridge(requestedBridge)) suffix += URL_PREVIEW_SCROLL_BRIDGE;
+  if (wantsUrlPreviewSelectionBridge(requestedBridge)) suffix += URL_PREVIEW_SELECTION_BRIDGE;
+  if (wantsUrlPreviewSnapshotBridge(requestedBridge)) suffix += URL_PREVIEW_SNAPSHOT_BRIDGE;
+  return suffix;
 }
 
 function applyUrlPreviewBridgesToHtml(
@@ -5218,16 +5292,27 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   // the file's size+mtime, so any agent rewrite changes them and busts the cache
   // immediately; `no-cache` means "always revalidate" (never serve stale without
   // asking), so a 304 only happens when the bytes are genuinely unchanged.
-  function setRawRevalidationHeaders(res: Response, meta: { size: number; mtime: number }): string {
+  function setRawRevalidationHeaders(
+    res: Response,
+    meta: { size: number; mtime: number },
+    // Appended bridge bytes are part of the representation: the validator must
+    // change when the suffix changes (bridges requested, bridge script edits),
+    // or a client that cached the pre-suffix body revalidates to a 304 and
+    // keeps a bridgeless document — Draw then silently falls back to srcDoc.
+    bodySuffix = '',
+  ): string {
     const mtime = Math.floor(meta.mtime);
-    const etag = `W/"${meta.size.toString(16)}-${mtime.toString(16)}"`;
+    const suffixTag = bodySuffix.length > 0
+      ? `-${createHash('sha1').update(bodySuffix).digest('hex').slice(0, 8)}`
+      : '';
+    const etag = `W/"${meta.size.toString(16)}-${mtime.toString(16)}${suffixTag}"`;
     res.setHeader('ETag', etag);
     res.setHeader('Last-Modified', new Date(mtime).toUTCString());
     res.setHeader('Cache-Control', 'no-cache');
     return etag;
   }
 
-  function rawRequestIsFresh(req: any, etag: string, mtimeMs: number): boolean {
+  function rawRequestIsFresh(req: any, etag: string, mtimeMs: number, suffixActive = false): boolean {
     // If-None-Match is authoritative when present (RFC 9110 §13.1.3): freshness
     // is decided solely by whether the ETag matches — do NOT fall through to
     // If-Modified-Since. Otherwise a same-second rewrite (ETag changes
@@ -5238,6 +5323,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     if (typeof ifNoneMatch === 'string') {
       return ifNoneMatch.split(',').some((tag) => tag.trim() === etag);
     }
+    // With an appended bridge suffix, Last-Modified (source mtime) does not
+    // identify the representation: a pre-suffix cache holds the same date but
+    // different bytes. An IMS-only revalidation must therefore MISS so the
+    // client refetches the bridged body; ETag clients are unaffected.
+    if (suffixActive) return false;
     const ifModifiedSince = req.headers['if-modified-since'];
     if (typeof ifModifiedSince === 'string') {
       const since = Date.parse(ifModifiedSince);
@@ -5333,6 +5423,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     beforeSend?: (mime: string) => void,
     transformFile?: (file: { mime: string; buffer: Buffer }) => Buffer | string | Promise<Buffer | string>,
     revalidate = false,
+    streamHtmlSuffix = '',
   ) {
     const meta = await resolveProjectFilePath(
       PROJECTS_DIR,
@@ -5353,10 +5444,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     const willSubstitute =
       !isStreamed && !!transformFile && /^text\/html(?:;|$)/i.test(meta.mime);
 
+    // A suffix applies only to full-body HTML responses (see appendSuffix
+    // below); it participates in the validator so pre-suffix caches revalidate
+    // to fresh bytes instead of 304ing a bridgeless body.
+    const validatorSuffix =
+      streamHtmlSuffix.length > 0 && /^text\/html(?:;|$)/i.test(meta.mime) ? streamHtmlSuffix : '';
     let currentEtag: string | null = null;
     if (revalidate && !willSubstitute) {
-      currentEtag = setRawRevalidationHeaders(res, meta);
-      if (rawRequestIsFresh(req, currentEtag, meta.mtime)) {
+      currentEtag = setRawRevalidationHeaders(res, meta, validatorSuffix);
+      if (rawRequestIsFresh(req, currentEtag, meta.mtime, validatorSuffix.length > 0)) {
         return res.status(304).end();
       }
     }
@@ -5382,6 +5478,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return res.status(416).end();
       }
 
+      // Bridge suffix only applies to a full-body HTML response: a Range
+      // request must return the file's exact bytes (offsets would otherwise
+      // shift between requests), and non-HTML never gets bridges.
+      const appendSuffix =
+        streamHtmlSuffix.length > 0 && !range && /^text\/html(?:;|$)/i.test(meta.mime)
+          ? Buffer.from(streamHtmlSuffix, 'utf8')
+          : null;
+
       let start;
       let end;
       let statusCode;
@@ -5394,7 +5498,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         start = 0;
         end = meta.size - 1;
         statusCode = 200;
-        res.setHeader('Content-Length', String(meta.size));
+        res.setHeader('Content-Length', String(meta.size + (appendSuffix?.byteLength ?? 0)));
       }
 
       res.status(statusCode);
@@ -5406,7 +5510,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           res.destroy(streamErr);
         }
       });
-      stream.pipe(res);
+      if (appendSuffix) {
+        stream.pipe(res, { end: false });
+        stream.on('end', () => res.end(appendSuffix));
+      } else {
+        stream.pipe(res);
+      }
       return;
     }
 
@@ -6093,6 +6202,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       );
       const skipHtmlPreviewBridge =
         /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > HTML_PREVIEW_BRIDGE_MAX_BYTES;
+      // Large HTML streams from disk without the buffered transform, but the
+      // preview bridges must still ride along or Draw/comment capabilities
+      // silently vanish above the size cutoff; append them after the streamed
+      // bytes instead (see urlPreviewBridgeSuffix).
+      const largeHtmlBridgeSuffix = skipHtmlPreviewBridge
+        ? urlPreviewBridgeSuffix(req.query.odPreviewBridge)
+        : '';
 
       await sendProjectFile(
         req,
@@ -6159,6 +6275,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           );
         },
         true, // revalidate: emit ETag/Last-Modified so covers/preview/export reuse cached assets
+        largeHtmlBridgeSuffix,
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
@@ -6226,6 +6343,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           });
           return applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge);
         },
+        false,
+        // Powered artifacts above the buffering cutoff still need the preview
+        // bridges (markAnchors gating: no bridge -> Draw falls back to srcDoc,
+        // which cannot run Worker/SAB/WASM content). Streamed + appended.
+        skipPoweredTransform ? urlPreviewBridgeSuffix(req.query.odPreviewBridge) : '',
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;

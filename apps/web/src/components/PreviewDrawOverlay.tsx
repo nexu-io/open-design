@@ -5,16 +5,34 @@ import { Icon } from './Icon';
 import { RemixIcon } from './RemixIcon';
 import { useT } from '../i18n';
 import type { PreviewVisualMarkKind } from '../types';
-import { requestPreviewSnapshot } from '../runtime/exports';
+import { requestPreviewSnapshot, requestPreviewAnchorTargets } from '../runtime/exports';
 import { isImeComposing } from '../utils/imeComposing';
+import {
+  reanchorNormalizedPoint,
+  reanchorNormalizedRect,
+  shouldReanchorMarks,
+  type FrameSize,
+} from './preview-mark-geometry';
+import {
+  anchorMark,
+  chooseAnchorTarget,
+  resolveAnchor,
+  type AnchorTarget,
+  type MarkAnchor,
+} from './preview-mark-anchor';
 
 interface Point { x: number; y: number }
-interface Stroke { points: Point[] }
+// `anchor` binds the mark to the artifact element it was drawn on, so it keeps
+// pointing at the same content when the preview reflows (#6361). It is absent
+// when the preview could not report element boxes; the mark then falls back to
+// its frame-relative position.
+interface Stroke { points: Point[]; anchor?: MarkAnchor }
 interface NormalizedRect { x: number; y: number; width: number; height: number }
+interface AnchoredRect extends NormalizedRect { anchor?: MarkAnchor }
 // A free-floating text label the user drops onto the preview. `x`/`y` are the
 // top-left position normalized to the frame (0..1) so it tracks the artifact as
 // the device frame scales; `text` is the raw multi-line string.
-interface TextMark { id: number; x: number; y: number; text: string }
+interface TextMark { id: number; x: number; y: number; text: string; anchor?: MarkAnchor }
 interface Rect { x: number; y: number; width: number; height: number }
 type MarkTool = 'box' | 'pen' | 'text';
 type DrawDockLayout = 'floating' | 'docked';
@@ -151,7 +169,7 @@ export function PreviewDrawOverlay({
   const drawingRef = useRef<Stroke | null>(null);
   // Box-select accumulates: each drag commits another region, so the user can
   // mark several areas in one pass instead of one box replacing the last.
-  const selectionBoxesRef = useRef<NormalizedRect[]>([]);
+  const selectionBoxesRef = useRef<AnchoredRect[]>([]);
   const boxDraftRef = useRef<{ start: Point; current: Point } | null>(null);
   const composingRef = useRef(false);
   // Text tool: each drop is a transparent label — bare glyphs and a blinking
@@ -183,6 +201,11 @@ export function PreviewDrawOverlay({
   // Untransformed layout size of the frame, tracked so the text glyph size can
   // scale with the frame the same way the exported screenshot does.
   const [frameSize, setFrameSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  // Ref mirror of the layout size the committed marks are currently normalized
+  // against. The resize pass compares it with the incoming size to decide
+  // whether the marks need re-anchoring (issue #6361); a state read there would
+  // be stale, since this effect does not re-subscribe on frameSize.
+  const frameSizeRef = useRef<FrameSize>({ w: 0, h: 0 });
   const [hasInk, setHasInk] = useState(false);
   const [hasBox, setHasBox] = useState(false);
   const [hasText, setHasText] = useState(false);
@@ -285,6 +308,8 @@ export function PreviewDrawOverlay({
       // untransformed size, so the canvas fills the whole frame at any scale.
       const width = wrap.offsetWidth;
       const height = wrap.offsetHeight;
+      reanchorMarksToFrame({ w: width, h: height });
+      scheduleContentReanchor();
       const dpr = window.devicePixelRatio || 1;
       cvs.width = Math.max(1, Math.floor(width * dpr));
       cvs.height = Math.max(1, Math.floor(height * dpr));
@@ -333,6 +358,369 @@ export function PreviewDrawOverlay({
     setHasText(next.some((mark) => mark.text.trim().length > 0));
   }
 
+  // Invariant (issue #6361): a committed mark identifies a fixed region of the
+  // previewed artifact, and resizing the preview frame must not change which
+  // region that is.
+  //
+  // Marks are stored as a fraction of the frame, which is exactly right while
+  // the frame only *scales* — a device-frame `transform: scale()` shell renders
+  // the same layout box larger, so the same fraction still lands on the same
+  // artifact pixels, and this pass correctly does nothing (the layout box is
+  // unchanged). But when the frame's layout box itself changes — UI zoom, a
+  // window resize, a sidebar toggle — the artifact re-lays-out instead of
+  // scaling, and a fraction of the new frame no longer addresses the pixels the
+  // user drew on. Re-normalize the stored marks here, at the one place the old
+  // and new frame sizes are both known, so everything downstream (on-screen
+  // redraw, exported PNG, the structured bounds handed to the agent) keeps
+  // agreeing with what the user marked.
+  function reanchorMarksToFrame(next: FrameSize) {
+    // Capture freeze covers this writer too: a resize (window, UI zoom,
+    // sidebar, device frame) landing while the compositor holds the pixels
+    // must not rewrite the mark refs, or annotationBounds reads a different
+    // frame state than the PNG. Remember only the LATEST pending frame; the
+    // freeze release in send()'s finally replays it against the pre-freeze
+    // baseline.
+    if (anchorWritesFrozenRef.current) {
+      pendingFrameReanchorRef.current = next;
+      return;
+    }
+    const previous = frameSizeRef.current;
+    frameSizeRef.current = next;
+    if (!shouldReanchorMarks(previous, next)) return;
+    // Spread the original first: this pass rewrites geometry only, and must not
+    // drop the content anchor that `syncContentAnchors` attached — losing it
+    // would make the mark look unanchored and get re-bound to whatever element
+    // now sits under its (not yet corrected) position.
+    selectionBoxesRef.current = selectionBoxesRef.current.map((box) => ({
+      ...box,
+      ...reanchorNormalizedRect(box, previous, next),
+    }));
+    const reanchorStroke = (stroke: Stroke): Stroke => ({
+      ...stroke,
+      points: stroke.points.map((point) => reanchorNormalizedPoint(point, previous, next)),
+    });
+    strokesRef.current = strokesRef.current.map(reanchorStroke);
+    // Undone strokes are re-anchored too, so a redo after a resize restores the
+    // stroke onto the artifact rather than onto a stale fraction of the frame.
+    undoneStrokesRef.current = undoneStrokesRef.current.map(reanchorStroke);
+    if (textMarksRef.current.length > 0) {
+      commitTextMarks(
+        textMarksRef.current.map((mark) => ({
+          ...mark,
+          ...reanchorNormalizedPoint({ x: mark.x, y: mark.y }, previous, next),
+        })),
+      );
+    }
+  }
+
+  function strokeBBox(points: Point[]): NormalizedRect | null {
+    if (points.length === 0) return null;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+  }
+
+  function anchorFor(
+    rect: NormalizedRect,
+    frame: FrameSize,
+    targets: readonly AnchorTarget[],
+  ): MarkAnchor | null {
+    const target = chooseAnchorTarget(rect, frame, targets);
+    return target ? anchorMark(rect, frame, target) : null;
+  }
+
+  function syncStrokeAnchor(stroke: Stroke, frame: FrameSize, targets: readonly AnchorTarget[]): Stroke {
+    const box = strokeBBox(stroke.points);
+    if (!box) return stroke;
+    if (!stroke.anchor) {
+      const anchor = anchorFor(box, frame, targets);
+      return anchor ? { ...stroke, anchor } : stroke;
+    }
+    const next = resolveAnchor(stroke.anchor, frame, targets);
+    if (!next) return stroke;
+    // Move the whole stroke with its anchor element, scaling only if that
+    // element itself changed size; re-running this with unchanged targets is a
+    // no-op because the bbox already equals the resolved rect.
+    const sx = box.width > 0 ? next.width / box.width : 1;
+    const sy = box.height > 0 ? next.height / box.height : 1;
+    return {
+      anchor: stroke.anchor,
+      points: stroke.points.map((p) => ({
+        x: next.x + (p.x - box.x) * sx,
+        y: next.y + (p.y - box.y) * sy,
+      })),
+    };
+  }
+
+  // Invariant (issue #6361): a mark identifies artifact content, not a fraction
+  // of the preview frame. `reanchorMarksToFrame` keeps marks stable when the
+  // frame is merely resized, but it cannot see a *reflow* — narrowing the frame
+  // rewraps text and shifts every block below it, which no frame-level rule can
+  // predict. So each mark is additionally bound to the element it was drawn on
+  // and re-projected from that element's current box.
+  //
+  // One bridge round trip does both jobs: marks without an anchor acquire one,
+  // marks with an anchor are re-projected. Anchoring is best-effort — a preview
+  // that reports no elements leaves marks on their frame-relative position
+  // rather than blocking the annotation.
+  function syncContentAnchors(): Promise<void> {
+    // One probe in flight at a time: a burst of scroll/resize events during a
+    // slow bridge must not stack timeout-bound listeners. But callers AWAIT
+    // this — the pre-capture sync in requestSnapshot relies on the returned
+    // promise covering the work — so a coalesced call must not resolve early:
+    // it joins the in-flight chain, which also runs the trailing pass inline
+    // before settling. Send therefore always observes the final anchors, and
+    // the screenshot and structured bounds read the same state (#6361).
+    if (anchorWritesFrozenRef.current) {
+      // Capture in progress: remember the work; send()'s finally releases the
+      // freeze and runs the deferred pass.
+      anchorSyncTrailingRef.current = true;
+      return Promise.resolve();
+    }
+    if (anchorSyncPromiseRef.current) {
+      anchorSyncTrailingRef.current = true;
+      return anchorSyncPromiseRef.current;
+    }
+    const chain = (async () => {
+      try {
+        await syncContentAnchorsInner();
+        while (anchorSyncTrailingRef.current) {
+          anchorSyncTrailingRef.current = false;
+          await syncContentAnchorsInner();
+        }
+      } finally {
+        anchorSyncPromiseRef.current = null;
+      }
+    })();
+    anchorSyncPromiseRef.current = chain;
+    return chain;
+  }
+
+  async function syncContentAnchorsInner(): Promise<void> {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const frame: FrameSize = { w: wrap.offsetWidth, h: wrap.offsetHeight };
+    if (frame.w <= 0 || frame.h <= 0) return;
+    if (
+      selectionBoxesRef.current.length === 0 &&
+      strokesRef.current.length === 0 &&
+      textMarksRef.current.length === 0
+    ) {
+      return;
+    }
+    // Anchors must come from the frame the user draws on and the compositor
+    // captures — the ACTIVE iframe. The hidden srcDoc twin can diverge from an
+    // active URL/powered frame (independent scroll, or a powered artifact that
+    // does not execute in the opaque sandbox at all), so resolving anchors
+    // there re-introduces the drift this feature exists to fix. Snapshot
+    // capture keeps its own srcDoc-preferring fallback (snapshotHostIframe).
+    const iframe = anchorHostIframe();
+    if (!iframe) return;
+    if (anchorProbeFrameRef.current !== iframe) {
+      anchorProbeFrameRef.current = iframe;
+      anchorSilentProbesRef.current = 0;
+    }
+    // A frame that never answers should not make every send wait out the
+    // bridge timeout — but "answered with zero targets" is a live bridge (a
+    // dynamic app may annotate elements later), and a bridge can also become
+    // ready AFTER two early probes time out (slow-loading document). So the
+    // give-up is a cooldown, not a verdict: after the threshold, probing
+    // pauses, then a single retry is allowed each cooldown window.
+    if (anchorSilentProbesRef.current >= ANCHOR_PROBE_GIVE_UP) {
+      const now = Date.now();
+      if (now - anchorLastProbeAtRef.current < ANCHOR_PROBE_COOLDOWN_MS) return;
+    }
+    anchorLastProbeAtRef.current = Date.now();
+    // Generation token: a reply may resolve after the world it described is
+    // gone — the overlay was closed and reopened, the file changed on a reused
+    // iframe, or a NEWER probe (resize/scroll/pre-capture) has started. Each
+    // of those bumps the generation, so only the latest probe may commit.
+    const generation = ++anchorProbeGenerationRef.current;
+    const response = await requestPreviewAnchorTargets(iframe);
+    if (anchorProbeGenerationRef.current !== generation) return;
+    anchorSilentProbesRef.current = response.answered ? 0 : anchorSilentProbesRef.current + 1;
+    // The await spans up to the bridge timeout, during which the world can
+    // change under us: the active iframe can swap (srcDoc → URL once the
+    // bridge-ready message advertises markAnchors) and the frame can resize.
+    // The reply describes the OLD document/geometry; committing it to the
+    // shared mark refs would move marks to the wrong region right before a
+    // capture. Discard the stale reply AND queue a trailing pass: the discard
+    // must not settle the shared chain with the current frame unprobed, or an
+    // awaiting pre-capture sync proceeds with marks that were never resolved
+    // against the document it is about to screenshot. The trailing pass runs
+    // inside the same chain (see syncContentAnchors), so awaiting callers see
+    // the re-probe complete.
+    if (anchorHostIframe() !== iframe) {
+      anchorSyncTrailingRef.current = true;
+      return;
+    }
+    if (wrap.offsetWidth !== frame.w || wrap.offsetHeight !== frame.h) {
+      anchorSyncTrailingRef.current = true;
+      return;
+    }
+    const targets = response.targets;
+    if (targets.length === 0) return;
+
+    selectionBoxesRef.current = selectionBoxesRef.current.map((box) => {
+      if (!box.anchor) {
+        const anchor = anchorFor(box, frame, targets);
+        return anchor ? { ...box, anchor } : box;
+      }
+      const next = resolveAnchor(box.anchor, frame, targets);
+      return next ? { ...next, anchor: box.anchor } : box;
+    });
+
+    strokesRef.current = strokesRef.current.map((stroke) => syncStrokeAnchor(stroke, frame, targets));
+    // Undone strokes are still live content — redoStroke() pushes one straight
+    // back into strokesRef — so they must track the artifact through a reflow
+    // exactly like visible strokes, or undo → reflow → redo restores the stroke
+    // on the neighbouring element.
+    undoneStrokesRef.current = undoneStrokesRef.current.map((stroke) => syncStrokeAnchor(stroke, frame, targets));
+
+    const nextText = textMarksRef.current.map((mark) => {
+      const rect = { x: mark.x, y: mark.y, width: 0, height: 0 };
+      if (!mark.anchor) {
+        const anchor = anchorFor(rect, frame, targets);
+        return anchor ? { ...mark, anchor } : mark;
+      }
+      const next = resolveAnchor(mark.anchor, frame, targets);
+      return next ? { ...mark, x: next.x, y: next.y } : mark;
+    });
+    if (nextText.some((mark, i) => mark !== textMarksRef.current[i])) commitTextMarks(nextText);
+
+    redraw();
+  }
+
+  // Scrolling the artifact moves every element box the anchors resolve against,
+  // so a mark that is bound to content has to be re-projected then too — not
+  // only on resize (#6361). The preview reports its own scroll position; that
+  // signal is rAF-throttled at the source and paced `live` here so the mark
+  // tracks the content during the gesture rather than snapping after it.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      const data = ev.data as { type?: string } | null;
+      if (!data || data.type !== 'od:preview-scroll') return;
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const frames = wrap.querySelectorAll('iframe');
+      for (const frame of frames) {
+        if (frame.contentWindow === ev.source) {
+          scheduleContentReanchor('live');
+          return;
+        }
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  // Document epoch: the host can navigate/reload the SAME iframe element for
+  // the SAME file (reloadKey bumps, URL swaps) while Draw stays open. A probe
+  // reply from the pre-reload document would pass the node/size guards, so a
+  // (re)load in any child iframe invalidates pending probe generations. `load`
+  // does not bubble, but capture-phase listeners on ancestors do fire.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    function onFrameLoad(ev: Event) {
+      if (!(ev.target instanceof HTMLIFrameElement)) return;
+      anchorProbeGenerationRef.current += 1;
+      anchorSilentProbesRef.current = 0;
+      anchorLastProbeAtRef.current = 0;
+      // Fresh document, fresh boxes — re-project marks against it.
+      scheduleContentReanchor();
+    }
+    wrap.addEventListener('load', onFrameLoad, true);
+    return () => wrap.removeEventListener('load', onFrameLoad, true);
+  }, []);
+
+  /**
+   * Anchor-probe backoff state. A frame with no anchor bridge never answers,
+   * and each unanswered probe costs the full bridge timeout — but the verdict
+   * must stay per-frame, reversible, and time-bounded (see syncContentAnchors):
+   * after ANCHOR_PROBE_GIVE_UP consecutive silent probes, probing cools down
+   * rather than stopping, so a bridge that becomes ready late (slow document
+   * load) is still discovered. Activation resets everything so a re-opened
+   * overlay or a new file starts with a fresh probe budget.
+   */
+  const ANCHOR_PROBE_GIVE_UP = 2;
+  const ANCHOR_PROBE_COOLDOWN_MS = 5000;
+  const anchorSilentProbesRef = useRef(0);
+  const anchorLastProbeAtRef = useRef(0);
+  const anchorProbeFrameRef = useRef<HTMLIFrameElement | null>(null);
+  // Monotonic probe generation — see syncContentAnchors. Bumped whenever a new
+  // probe starts and whenever the world a pending probe measured is
+  // invalidated (deactivation, file switch, or a document (re)load in the
+  // probed iframe), so a late reply can never commit.
+  const anchorProbeGenerationRef = useRef(0);
+  // In-flight coalescing for syncContentAnchors: at most one probe awaits the
+  // bridge at a time; bursts collapse into a single trailing pass that runs
+  // inside the shared promise so awaiting callers see the final state.
+  const anchorSyncPromiseRef = useRef<Promise<void> | null>(null);
+  const anchorSyncTrailingRef = useRef(false);
+  // While true (from the pre-capture sync until send() finishes reading the
+  // bounds), syncContentAnchors defers instead of writing the mark refs, so
+  // the composited PNG and the structured bounds read one consistent state.
+  const anchorWritesFrozenRef = useRef(false);
+  // Latest frame size a resize reported while writes were frozen; replayed on
+  // release so marks catch up to the final geometry exactly once.
+  const pendingFrameReanchorRef = useRef<FrameSize | null>(null);
+  // Layout size captured when the freeze engages. Marks are normalized, so
+  // the bounds reader must multiply by the SAME size the PNG was composited
+  // against — the live canvas can grow mid-capture even when the refs do not.
+  const frozenLayoutSizeRef = useRef<{ width: number; height: number } | null>(null);
+  // Deactivation arrived while send() was in flight; run the full inactive
+  // cleanup once the send settles (see the active-cleanup effect).
+  const cleanupAfterSendRef = useRef(false);
+  // The overlay can stay mounted (and even active) across a file switch; the
+  // iframe element is often reused, so the per-frame reset above won't fire.
+  // A new document is a new bridge — start its probe budget from zero.
+  useEffect(() => {
+    anchorSilentProbesRef.current = 0;
+    anchorLastProbeAtRef.current = 0;
+    anchorProbeFrameRef.current = null;
+    anchorProbeGenerationRef.current += 1;
+  }, [filePath]);
+  const contentAnchorTimerRef = useRef<number | null>(null);
+  const contentAnchorRanAtRef = useRef(0);
+
+  /**
+   * Two pacing modes, because scrolling and resizing want opposite things.
+   *
+   * `settle` waits for quiet — right for a resize or a freshly committed mark,
+   * where only the final state matters. Using it for scroll is what made marks
+   * visibly snap into place only once the user stopped: every scroll event
+   * pushed the timer back, so the re-projection never ran mid-gesture.
+   *
+   * `live` runs on the leading edge and then at most once per interval while
+   * events keep arriving, so a mark tracks the content it is anchored to during
+   * the scroll instead of after it.
+   */
+  function scheduleContentReanchor(pacing: 'settle' | 'live' = 'settle') {
+    const run = () => {
+      contentAnchorTimerRef.current = null;
+      contentAnchorRanAtRef.current = Date.now();
+      void syncContentAnchors();
+    };
+    if (pacing === 'live') {
+      // Never restart a pending run — that would turn this back into a debounce.
+      if (contentAnchorTimerRef.current !== null) return;
+      const since = Date.now() - contentAnchorRanAtRef.current;
+      contentAnchorTimerRef.current = window.setTimeout(run, Math.max(0, 32 - since));
+      return;
+    }
+    if (contentAnchorTimerRef.current !== null) window.clearTimeout(contentAnchorTimerRef.current);
+    contentAnchorTimerRef.current = window.setTimeout(run, 120);
+  }
+  useEffect(
+    () => () => {
+      if (contentAnchorTimerRef.current !== null) window.clearTimeout(contentAnchorTimerRef.current);
+    },
+    [],
+  );
+
   function pointFromEvent(e: PointerEvent): Point {
     const cvs = canvasRef.current!;
     const rect = cvs.getBoundingClientRect();
@@ -361,6 +749,17 @@ export function PreviewDrawOverlay({
       wrapRef.current?.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="srcdoc"]') ??
       activePreviewIframe()
     );
+  }
+
+  // Anchors are different: they must describe the document the user is looking
+  // at and drawing over. When the URL/powered iframe is active, its hidden
+  // srcDoc twin can scroll independently (URL scroll restoration targets the
+  // active frame only) or not execute at all (powered artifacts need the
+  // isolated real origin), so element boxes read from the twin are wrong.
+  // Always ask the ACTIVE frame; render-mode gating (urlAnchorBridge) already
+  // guarantees it can answer whenever draw mode kept URL-load.
+  function anchorHostIframe(): HTMLIFrameElement | null {
+    return activePreviewIframe();
   }
 
   function canTryDirectFrameScroll(iframe: HTMLIFrameElement): boolean {
@@ -408,6 +807,7 @@ export function PreviewDrawOverlay({
       const point = pointFromEvent(e);
       const id = (textIdRef.current += 1);
       commitTextMarks([...textMarksRef.current, { id, x: point.x, y: point.y, text: '' }]);
+      scheduleContentReanchor();
       setEditingTextId(id);
       return;
     }
@@ -453,6 +853,7 @@ export function PreviewDrawOverlay({
       if (next.width >= 0.006 && next.height >= 0.006) {
         selectionBoxesRef.current = [...selectionBoxesRef.current, next];
         bumpLayoutRevision();
+        scheduleContentReanchor();
       }
       syncHistoryState();
       redraw();
@@ -463,6 +864,7 @@ export function PreviewDrawOverlay({
       strokesRef.current.push(drawingRef.current);
       undoneStrokesRef.current = [];
       bumpLayoutRevision();
+      scheduleContentReanchor();
       syncHistoryState();
     }
     drawingRef.current = null;
@@ -583,9 +985,16 @@ export function PreviewDrawOverlay({
     (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
     textDragRef.current = null;
     if (drag.moved) {
+      // The user chose a NEW position — the old element binding no longer
+      // describes this label. Drop it so the next sync re-anchors at the new
+      // location instead of snapping the label back to the old element (the
+      // pre-capture sync in Send would otherwise undo the drag).
       commitTextMarks(
-        textMarksRef.current.map((item) => (item.id === mark.id ? { ...item, x: drag.curX, y: drag.curY } : item)),
+        textMarksRef.current.map((item) =>
+          item.id === mark.id ? { ...item, x: drag.curX, y: drag.curY, anchor: undefined } : item,
+        ),
       );
+      scheduleContentReanchor();
       lastTextTapRef.current = null;
       return;
     }
@@ -706,11 +1115,35 @@ export function PreviewDrawOverlay({
 
   useEffect(() => {
     if (active) return;
+    // Deactivating mid-send (Escape, file switch) must not clear the refs the
+    // compositor and annotationBounds are still reading — send() holds the
+    // frozen layout and the marks until its finally. Defer the cleanup; the
+    // send path runs it on completion when the overlay is still inactive.
+    if (sending) {
+      cleanupAfterSendRef.current = true;
+      return;
+    }
+    cleanupInactiveOverlay();
+  }, [active, redraw, sending]);
+
+  function cleanupInactiveOverlay() {
+    cleanupAfterSendRef.current = false;
     strokesRef.current = [];
     undoneStrokesRef.current = [];
     drawingRef.current = null;
     selectionBoxesRef.current = [];
     boxDraftRef.current = null;
+    // Fresh probe budget for the next activation: the file, transport, or
+    // bridge readiness may all have changed while the overlay was closed, and
+    // a stale silent-probe counter would leave the next session frame-relative.
+    anchorSilentProbesRef.current = 0;
+    anchorLastProbeAtRef.current = 0;
+    anchorProbeFrameRef.current = null;
+    anchorProbeGenerationRef.current += 1;
+    anchorWritesFrozenRef.current = false;
+    anchorSyncTrailingRef.current = false;
+    pendingFrameReanchorRef.current = null;
+    frozenLayoutSizeRef.current = null;
     resetTextEditingState();
     commitTextMarks([]);
     setExtraFiles([]);
@@ -718,11 +1151,31 @@ export function PreviewDrawOverlay({
     syncHistoryState();
     redraw();
     bumpLayoutRevision();
-  }, [active, redraw]);
+  }
+
+  // Bounds read for the annotation payload must be in the frame's *layout*
+  // space (offsetWidth/Height), matching the snapshot the marks are composited
+  // onto. In a scaled tablet/phone device frame getBoundingClientRect() returns
+  // the on-screen (transform-scaled) size, which shrank the structured bounds
+  // by the fit scale while the painted PNG stayed artifact-local (#6361).
+  function canvasLayoutSize(): { width: number; height: number } | null {
+    if (anchorWritesFrozenRef.current && frozenLayoutSizeRef.current) {
+      return frozenLayoutSizeRef.current;
+    }
+    const cvs = canvasRef.current;
+    if (!cvs) return null;
+    // offsetWidth/Height are the untransformed layout size. Fall back to the
+    // client rect when layout metrics are unavailable (detached node, JSDOM) —
+    // in an unscaled frame the two agree.
+    const width = cvs.offsetWidth > 0 ? cvs.offsetWidth : cvs.getBoundingClientRect().width;
+    const height = cvs.offsetHeight > 0 ? cvs.offsetHeight : cvs.getBoundingClientRect().height;
+    if (width <= 0 || height <= 0) return null;
+    return { width, height };
+  }
 
   function normalizedRectToCanvasRect(box: NormalizedRect): Rect | null {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    const rect = canvasLayoutSize();
+    if (!rect) return null;
     return {
       x: box.x * rect.width,
       y: box.y * rect.height,
@@ -754,9 +1207,9 @@ export function PreviewDrawOverlay({
   }
 
   function strokeRect(stroke: Stroke | null | undefined): Rect | null {
-    const rect = canvasRef.current?.getBoundingClientRect();
+    const rect = canvasLayoutSize();
     const points = stroke?.points ?? [];
-    if (!rect || rect.width <= 0 || rect.height <= 0 || points.length === 0) return null;
+    if (!rect || points.length === 0) return null;
     const xs = points.map((point) => point.x * rect.width);
     const ys = points.map((point) => point.y * rect.height);
     const minX = Math.min(...xs);
@@ -773,8 +1226,14 @@ export function PreviewDrawOverlay({
   }
 
   function textBounds(): { x: number; y: number; width: number; height: number } | null {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    const layout = canvasLayoutSize();
+    const client = canvasRef.current?.getBoundingClientRect();
+    if (!layout || !client || client.width <= 0 || client.height <= 0) return null;
+    // Client-space offsets shrink under a device-frame `transform: scale()`;
+    // divide by the live scale so label boxes land in layout space like every
+    // other bounds source (#6361).
+    const scaleX = client.width / layout.width;
+    const scaleY = client.height / layout.height;
     const rects: { left: number; top: number; right: number; bottom: number }[] = [];
     for (const mark of textMarksRef.current) {
       if (mark.text.trim().length === 0) continue;
@@ -782,16 +1241,16 @@ export function PreviewDrawOverlay({
       if (el) {
         const box = el.getBoundingClientRect();
         rects.push({
-          left: box.left - rect.left,
-          top: box.top - rect.top,
-          right: box.right - rect.left,
-          bottom: box.bottom - rect.top,
+          left: (box.left - client.left) / scaleX,
+          top: (box.top - client.top) / scaleY,
+          right: (box.right - client.left) / scaleX,
+          bottom: (box.bottom - client.top) / scaleY,
         });
       } else {
         // No live element (e.g. capture path measured after unmount): fall back
         // to the drop point so the label still contributes to the crop bounds.
-        const left = mark.x * rect.width;
-        const top = mark.y * rect.height;
+        const left = mark.x * layout.width;
+        const top = mark.y * layout.height;
         rects.push({ left, top, right: left + 1, bottom: top + 1 });
       }
     }
@@ -857,6 +1316,24 @@ export function PreviewDrawOverlay({
   }
 
   async function requestSnapshot(): Promise<PreviewSnapshot | null> {
+    // Re-project marks onto the artifact's current layout before the pixels and
+    // the structured bounds are read (#6361). The debounced pass after a resize
+    // usually got here first; awaiting it once more makes the sent annotation
+    // correct even when the user zooms and submits in the same instant.
+    //
+    // Ordering hardening: a settle timer armed BEFORE this call could fire
+    // mid-capture and mutate the mark refs between the pixels and the bounds.
+    // Drain it into this awaited sync, then freeze anchor writes until send()
+    // finishes reading both (anchorWritesFrozenRef, released in send's
+    // finally). Mid-capture probe replies re-queue via the trailing flag and
+    // apply after the send completes.
+    if (contentAnchorTimerRef.current !== null) {
+      window.clearTimeout(contentAnchorTimerRef.current);
+      contentAnchorTimerRef.current = null;
+    }
+    await syncContentAnchors();
+    frozenLayoutSizeRef.current = canvasLayoutSize();
+    anchorWritesFrozenRef.current = true;
     if (captureSnapshot) {
       // The host's captureSnapshot is a compositor screenshot of the on-screen
       // region, which would otherwise include this overlay's own strokes +
@@ -1049,6 +1526,24 @@ export function PreviewDrawOverlay({
       setPreviewIndex(null);
     } finally {
       setPendingAction(null);
+      // Release the pre-capture freeze; if anchor work arrived mid-capture
+      // (scroll/resize probe replies), run it now.
+      if (anchorWritesFrozenRef.current) {
+        anchorWritesFrozenRef.current = false;
+        frozenLayoutSizeRef.current = null;
+        const pendingFrame = pendingFrameReanchorRef.current;
+        pendingFrameReanchorRef.current = null;
+        if (pendingFrame) {
+          reanchorMarksToFrame(pendingFrame);
+          redraw();
+        }
+        if (anchorSyncTrailingRef.current || pendingFrame) {
+          anchorSyncTrailingRef.current = false;
+          scheduleContentReanchor();
+        }
+      }
+      // A deactivation deferred by the in-flight send runs its cleanup now.
+      if (cleanupAfterSendRef.current) cleanupInactiveOverlay();
     }
   }
 

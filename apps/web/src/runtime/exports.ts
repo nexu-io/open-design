@@ -405,6 +405,101 @@ export type PreviewSnapshotResult =
   | { ok: true; snapshot: PreviewSnapshot }
   | { ok: false; reason: 'loading' | 'post-message-error' | 'render-error' | 'timeout'; error?: string };
 
+/** An element box as the preview bridge reports it, in frame CSS pixels. */
+export type PreviewAnchorTarget = {
+  elementId: string;
+  selector: string;
+  position: { x: number; y: number; width: number; height: number };
+};
+
+/**
+ * The preview frame's answer to an anchor-targets request. `answered`
+ * distinguishes a live bridge that currently has zero annotated elements
+ * (retry later — a dynamic app may add them) from a frame that never replied
+ * (no bridge, not loaded, or postMessage failed).
+ */
+export type PreviewAnchorResponse = {
+  answered: boolean;
+  targets: PreviewAnchorTarget[];
+};
+
+/**
+ * Ask the preview frame for the boxes of every annotated element, so an
+ * annotation mark can be anchored to the content it was drawn on and survive a
+ * reflow (#6361). Resolves rather than rejecting: anchoring is an enhancement
+ * over the frame-relative position, never a prerequisite for sending an
+ * annotation.
+ */
+/**
+ * Bridge replies cross an origin boundary — treat them as data, not as typed
+ * objects. A malformed or forged entry (null, missing selector, NaN box)
+ * would otherwise throw inside the anchor chooser and abort the send, even
+ * though anchoring is documented as best-effort. Invalid entries are dropped;
+ * a reply that is not an array at all counts as answered-empty.
+ */
+// The injected bridges cap their own enumeration at 1500 nodes; a reply above
+// that (or carrying absurd strings) cannot come from our bridge, so treat it
+// as forged and refuse it outright rather than paying to iterate it — this
+// handler runs synchronously on the UI thread.
+const ANCHOR_REPLY_MAX_TARGETS = 1500;
+const ANCHOR_REPLY_MAX_STRING = 512;
+
+function sanitizeAnchorTargets(value: unknown): PreviewAnchorTarget[] {
+  if (!Array.isArray(value)) return [];
+  if (value.length > ANCHOR_REPLY_MAX_TARGETS) return [];
+  const targets: PreviewAnchorTarget[] = [];
+  for (const item of value) {
+    if (item == null || typeof item !== 'object') continue;
+    const t = item as { elementId?: unknown; selector?: unknown; position?: unknown };
+    if (typeof t.elementId !== 'string' || t.elementId.length === 0 || t.elementId.length > ANCHOR_REPLY_MAX_STRING) continue;
+    if (typeof t.selector !== 'string' || t.selector.length === 0 || t.selector.length > ANCHOR_REPLY_MAX_STRING) continue;
+    const p = t.position as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | null;
+    if (p == null || typeof p !== 'object') continue;
+    const { x, y, width, height } = p;
+    if (![x, y, width, height].every((n) => typeof n === 'number' && Number.isFinite(n))) continue;
+    targets.push({
+      elementId: t.elementId,
+      selector: t.selector,
+      position: { x: x as number, y: y as number, width: width as number, height: height as number },
+    });
+  }
+  return targets;
+}
+
+export function requestPreviewAnchorTargets(
+  iframe: HTMLIFrameElement,
+  timeout = 1500,
+): Promise<PreviewAnchorResponse> {
+  const win = iframe.contentWindow;
+  if (!win) return Promise.resolve({ answered: false, targets: [] });
+  const id = `anchor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return new Promise((resolve) => {
+    let done = false;
+    function finish(response: PreviewAnchorResponse) {
+      if (done) return;
+      done = true;
+      window.removeEventListener('message', onMsg);
+      resolve(response);
+    }
+    function onMsg(ev: MessageEvent) {
+      if (ev.source !== win) return;
+      const d = ev.data as { type?: string; id?: string; targets?: unknown } | null;
+      if (!d || d.type !== 'od:mark-anchor-targets' || d.id !== id) return;
+      finish({
+        answered: true,
+        targets: sanitizeAnchorTargets(d.targets),
+      });
+    }
+    window.addEventListener('message', onMsg);
+    try {
+      win.postMessage({ type: 'od:mark-anchor-request', id }, '*');
+    } catch {
+      finish({ answered: false, targets: [] });
+    }
+    setTimeout(() => finish({ answered: false, targets: [] }), timeout);
+  });
+}
+
 export function requestPreviewSnapshotResult(
   iframe: HTMLIFrameElement,
   timeout = 8000,

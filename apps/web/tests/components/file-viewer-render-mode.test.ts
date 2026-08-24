@@ -50,8 +50,23 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true })).toBe(false);
   });
 
-  it('keeps URL-load when draw mode is active and the raw route injected the snapshot bridge', () => {
-    expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true, urlSnapshotBridge: true })).toBe(true);
+  it('falls back to srcDoc when draw mode has a snapshot bridge but no anchor bridge', () => {
+    // Issue #6361: marks anchor to the element they were drawn on. Resolving
+    // those anchors against the hidden srcDoc twin while the user marks and
+    // screenshots the URL-loaded frame agrees only until the visible frame is
+    // scrolled — so half the contract is not enough to stay on URL-load.
+    expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true, urlSnapshotBridge: true })).toBe(false);
+  });
+
+  it('keeps URL-load when draw mode is active and the raw route serves both bridges', () => {
+    expect(
+      shouldUrlLoadHtmlPreview({
+        ...base,
+        drawMode: true,
+        urlSnapshotBridge: true,
+        urlAnchorBridge: true,
+      }),
+    ).toBe(true);
   });
 
   it('falls back to srcDoc when the artifact ships the class based tweaks template', () => {
@@ -93,7 +108,15 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, tweaksBridge: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true, inspectMode: true })).toBe(false);
-    expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true, urlSnapshotBridge: true, inspectMode: true })).toBe(false);
+    expect(
+      shouldUrlLoadHtmlPreview({
+        ...base,
+        drawMode: true,
+        urlSnapshotBridge: true,
+        urlAnchorBridge: true,
+        inspectMode: true,
+      }),
+    ).toBe(false);
   });
 });
 
