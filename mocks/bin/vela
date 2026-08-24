@@ -1,32 +1,8 @@
-#!/usr/bin/env node
-// vela.js - Windows-compatible mock vela wrapper
-// This can be spawned directly with Node.js without cmd.exe intermediary
-// Inherit stdio to properly support ACP/AMR JSON-RPC over stdin
-
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const mockAgentPath = join(__dirname, '..', 'mock-agent.mjs');
-const args = process.argv.slice(2);
-
-const child = spawn(process.execPath, [mockAgentPath, '--as', 'vela', ...args], {
-  stdio: 'inherit',
-  env: process.env,
-});
-
-child.on('exit', (code, signal) => {
-  if (signal) {
-    process.kill(process.pid, signal);
-  } else {
-    process.exit(code ?? 0);
-  }
-});
-
-child.on('error', (err) => {
-  console.error('Failed to spawn mock vela:', err);
-  process.exit(1);
-});
+#!/usr/bin/env bash
+# vela mock CLI - dispatches by first argv
+#   vela login    - write ~/.amr/config.json (fake credentials)
+#   vela models   - print public model catalog
+#   vela agent run --runtime opencode - ACP JSON-RPC server (default)
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+exec node "$HERE/../mock-agent.mjs" --as vela "$@"

@@ -434,13 +434,11 @@ async function spawnDaemonRuntime(
   // On Windows the daemon's executable resolver rejects extensionless files,
   // so use the `.cmd` shim (which spawns `node` on the mock agent) instead of
   // the shebang-style extensionless `vela` used on POSIX.
-  const mockVelaName = process.platform === "win32" ? "vela.cmd" : "vela";
-  const mockVelaBin = path.join(config.workspaceRoot, "mocks", "bin", mockVelaName);
+  const mockVelaBin = path.join(config.workspaceRoot, "mocks", "bin", "vela.cmd");
   const existingVelaBin = process.env.VELA_BIN;
-  const useMock = !existingVelaBin && existsSync(mockVelaBin);
+  const useMock = process.platform === "win32" && !existingVelaBin && existsSync(mockVelaBin);
   const velaBin = useMock ? mockVelaBin : existingVelaBin;
   const fakeVelaDelay = useMock && !process.env.FAKE_VELA_LOGIN_DELAY_MS ? "2000" : undefined;
-
   try {
     await ensureDaemonCliBuild(config, logHandle);
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
