@@ -152,6 +152,13 @@ export type OdNextStrategyContinuationV2 =
         nativeAgentHandle: string;
         dependsOn: readonly string[];
       }[];
+      /**
+       * Machine-measured findings for the single Open Design-initiated
+       * corrective production turn. When present the payload instructs the
+       * session to make exactly these clauses hold instead of re-stating the
+       * frozen-plan production payload.
+       */
+      artifactFindings?: string;
     };
 
 function requireSha256(value: string, field: string): string {
@@ -881,6 +888,14 @@ export function composeOdNextStrategyContinuationV2(
     payload = `# OD Next native continuation — clarification\n\nMerge the user's answer below into the existing Full Plan context. Preserve the locked route, ask no second question round, rerun only affected resolution and Preflight work, and emit the updated V2 machine structures.\n\n## Clarification answer\n\n${requireText(input.answer, 'answer')}`;
   } else if (input.stage === 'contract_repair') {
     payload = `# OD Next native continuation — contract_repair\n\nThe semantic plan in this native session is frozen. Make one serialization-only attempt that addresses the issue below. Use no tools, do not re-plan, and preserve the locked route, execution mode, Design Spec, steps, and Build Packages.\n\n## Serialization issue\n\n${requireText(input.serializationIssue, 'serializationIssue')}`;
+  } else if (input.stage === 'production' && input.artifactFindings) {
+    payload = `# OD Next native continuation — production (corrective)
+
+Open Design measured the delivered entry against the runnability and layout clauses and the findings below name the clauses that do not hold yet. Continue this native session and make exactly these clauses hold: edit the named files at the named locations with the smallest sufficient change. Do not re-plan, choose a new route or execution mode, redesign, restructure navigation, or touch unrelated regions. This is the single corrective turn this task receives; when the edits are written, finish and emit the usual V2 machine structures.
+
+## Machine findings
+
+${requireText(input.artifactFindings, 'artifactFindings')}`;
   } else {
     const bindings = input.nativeBuildPackageBindings ?? [];
     const packageIds = bindings.map(({ buildPackageId }) => requireText(

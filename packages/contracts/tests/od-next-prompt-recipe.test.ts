@@ -627,3 +627,30 @@ describe('layout primitives in the stable request context', () => {
     expect(composeOdNextStrategyStableRequestContextV2({ memoryBody: 'x' })).not.toContain('layout-primitives');
   });
 });
+
+describe('corrective production continuation payload', () => {
+  it('carries the machine findings and the single-turn framing', () => {
+    const text = composeOdNextStrategyContinuationV2({
+      stage: 'production',
+      nativeSessionResume: true,
+      taskExecutionId: 'task-1',
+      taskRunIndex: 2,
+      planContractHash: A,
+      artifactFindings: '### js-syntax-error (1)\n- index.html:868 — JavaScript fails to parse.',
+    });
+    expect(text).toContain('production (corrective)');
+    expect(text).toContain('## Machine findings');
+    expect(text).toContain('index.html:868');
+    expect(text).toContain('single corrective turn');
+    expect(text).not.toContain('execute the frozen Full Plan');
+    // The ordinary production payload is unchanged when no findings ride along.
+    const ordinary = composeOdNextStrategyContinuationV2({
+      stage: 'production',
+      nativeSessionResume: true,
+      taskExecutionId: 'task-1',
+      taskRunIndex: 1,
+      planContractHash: A,
+    });
+    expect(ordinary).toContain('execute the frozen Full Plan');
+  });
+});

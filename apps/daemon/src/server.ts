@@ -46,6 +46,10 @@ import {
   observeOdNextLayoutPrimitives,
 } from './strategies/od-next/device-frames.js';
 import {
+  auditOdNextPrototypeArtifact,
+  renderOdNextArtifactFindings,
+} from './strategies/od-next/artifact-audit.js';
+import {
   composeSystemPrompt,
   detectDeckIntentSignal,
   detectMediaIntentSignal,
@@ -10223,7 +10227,10 @@ export async function startServer({
       'currentPrompt',
     );
     const strategyProtocol = strategyTaskAtStart
-      ? new OdNextMachineProtocolStream()
+      ? new OdNextMachineProtocolStream({
+          expectedTaskProfileVersion: getSnapshot(db, strategyTaskAtStart.snapshotId)
+            ?.strategy?.selectedTaskProfile.version,
+        })
       : null;
     let strategyVisibleEmitted = '';
     let strategyProtocolResult = null;
@@ -15252,6 +15259,54 @@ export async function startServer({
             }
           }
         }
+        // Deterministic artifact audit at the completion boundary. Runs only
+        // for the FIRST production turn of a simple prototype task that
+        // physically succeeded with a valid deliverable; P0 findings turn the
+        // completion into the single corrective production turn. Every other
+        // path — no browser, timeout, audit error, claim failure — completes
+        // and delivers exactly as before.
+        let odNextArtifactRepairFindings = null;
+        if (
+          strategyTaskAtStart
+          && strategyProtocolResult
+          && (
+            strategyProtocolResult.runtimeState?.outcome === 'completed'
+            || odNextTurnMayInferProductionCompletion(strategyTaskAtStart, strategyProtocolResult)
+          )
+          && deliverableValid
+          && strategyTaskAtStart.executionMode === 'simple'
+          && strategyTaskAtStart.inputStage === 'production'
+          && strategyTaskAtStart.runs.filter((mapping) => mapping.inputStage === 'production').length === 1
+          && projectRecord?.metadata?.kind === 'prototype'
+          && typeof run.projectId === 'string'
+          && run.deliverableEntryFile
+        ) {
+          try {
+            const audit = await auditOdNextPrototypeArtifact({
+              projectRoot: resolveProjectDir(PROJECTS_DIR, run.projectId, projectRecord.metadata),
+              entryFile: run.deliverableEntryFile,
+              timeoutMs: 10_000,
+            });
+            run.odNextArtifactAudit = {
+              p0: audit.findings.length,
+              rules: [...new Set(audit.findings.map((finding) => finding.rule))],
+              browser: audit.browser,
+              elapsedMs: audit.elapsedMs,
+            };
+            console.info('[od-next-artifact-audit]', {
+              runId: run.id,
+              ...run.odNextArtifactAudit,
+            });
+            if (audit.findings.length > 0) {
+              odNextArtifactRepairFindings = renderOdNextArtifactFindings(audit.findings);
+            }
+          } catch (err) {
+            console.warn(
+              `[od-next-artifact-audit] skipped: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
         if (strategyTaskAtStart && strategyProtocolResult) {
           let automaticContinuationChatBody = null;
           const plan = strategyProtocolResult.planContract
@@ -15309,6 +15364,9 @@ export async function startServer({
                       },
                     }
                   : {}),
+              ...(odNextArtifactRepairFindings
+                ? { artifactRepair: { findings: odNextArtifactRepairFindings } }
+                : {}),
               createMeta: (stage, instruction, taskRunIndex) => {
                 const identity = createHash('sha256')
                   .update(`${strategyTaskAtStart.taskExecutionId}:${stage}:${taskRunIndex}`)

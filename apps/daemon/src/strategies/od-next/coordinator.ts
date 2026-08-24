@@ -73,6 +73,7 @@ export interface OdNextCoordinatorResult {
     | 'running'
     | 'awaiting_clarification'
     | 'contract_repair'
+    | 'artifact_repair'
     | 'plan_ready'
     | 'completed'
     | 'blocked'

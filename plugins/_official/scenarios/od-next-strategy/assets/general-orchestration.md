@@ -107,6 +107,13 @@ discipline: every quality requirement in the Task Profile, Design Spec,
 completion standards, and task-type profile must be satisfied in one pass,
 while writing the source.
 
+One boundary clarification: the prohibition governs actions you initiate.
+Open Design itself measures the delivered entry after you finish, and when
+its machine findings name clauses that do not hold it continues this native
+session with a single corrective production turn. Executing exactly the edits
+that turn names — nothing wider — is production work inside this boundary,
+and that turn is the only one of its kind a task receives.
+
 ## Identify the input stage
 
 Use the stage supplied by Open Design:

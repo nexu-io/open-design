@@ -98,6 +98,61 @@ export function projectStrategyTaskByRunId(
  * InternalRunCreationService.beforeClaimCommit so the Run/message claim and
  * task CAS share the same SQLite transaction.
  */
+/**
+ * Claim the single Open Design-initiated corrective production turn.
+ *
+ * The delivered entry passed physical and canonical-deliverable validation
+ * but the deterministic artifact audit found P0 findings (nothing parses,
+ * nothing responds, core chrome detached). Instead of completing, the task
+ * continues into exactly one more production Run whose instruction carries
+ * the findings. Budget is structural: the claim is legal only while the task
+ * has exactly one production Run, so a second corrective turn cannot exist.
+ */
+export function beginAutomaticArtifactRepair(db: SqliteDb, input: {
+  task: StrategyTaskExecutionRecord;
+  sourceRunId: string;
+  nextRunId: string;
+  finalText: string;
+  updatedAt?: number;
+}): StrategyTaskExecutionRecord {
+  const current = input.task;
+  const productionRuns = current.runs.filter((run) => run.inputStage === 'production');
+  if (
+    current.route !== 'full_plan'
+    || current.outcome !== 'running'
+    || current.executionMode !== 'simple'
+    || current.inputStage !== 'production'
+    || productionRuns.length !== 1
+  ) {
+    throw new OdNextAutomaticProductionError(
+      'Only the first simple production Run can continue into the corrective turn.',
+      ['od_next_artifact_repair_not_eligible'],
+    );
+  }
+  if (current.latestRunId !== input.sourceRunId) {
+    throw new OdNextAutomaticProductionError(
+      'The corrective turn must continue from the latest physical Run.',
+      ['od_next_task_run_mismatch'],
+    );
+  }
+  return compareAndTransitionStrategyTaskExecution(db, {
+    taskExecutionId: current.taskExecutionId,
+    expectedRevision: current.revision,
+    to: {
+      route: 'full_plan',
+      inputStage: 'production',
+      outcome: 'running',
+      executionMode: 'simple',
+    },
+    nextRun: {
+      runId: input.nextRunId,
+      sourceRunId: input.sourceRunId,
+      finalText: input.finalText,
+    },
+    ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
+  });
+}
+
 export function beginAutomaticSimpleProduction(db: SqliteDb, input: {
   task: StrategyTaskExecutionRecord;
   sourceRunId: string;
@@ -297,6 +352,12 @@ export function prepareAutomaticStrategyContinuation<
     physicalStatus: 'succeeded' | 'failed' | 'canceled';
     deliverableValid: boolean;
   };
+  /**
+   * Machine-measured P0 findings rendered for the single corrective turn.
+   * Present only when the daemon's artifact audit decided the delivered entry
+   * is broken for every user; absence means the completed turn completes.
+   */
+  artifactRepair?: { findings: string };
   complexRuntimeEvidence?: OdNextComplexRuntimeEvidence;
   updatedAt?: number;
 }): PreparedAutomaticStrategyContinuation<TRun> {
@@ -378,6 +439,70 @@ export function prepareAutomaticStrategyContinuation<
     && input.parsed.runtimeState?.outcome === 'plan_ready'
     && input.parsed.runtimeState.executionMode === 'complex'
     && Boolean(input.parsed.planContract);
+
+  // The corrective turn: a clean, completed, delivered simple production turn
+  // whose artifact the deterministic audit found broken. Fail-open at every
+  // step — if the corrective Run cannot be claimed, the turn completes and the
+  // artifact ships as-is.
+  // Real production turns complete two ways: an explicit machine-block
+  // declaration, or the coordinator's inference for a turn that delivered and
+  // answered in prose only. Both are completions of the same delivered
+  // artifact, so both are eligible for the corrective turn.
+  const artifactRepairTurnCompleted =
+    (input.parsed.issues.length === 0 && input.parsed.runtimeState?.outcome === 'completed')
+    || odNextTurnMayInferProductionCompletion(input.task, input.parsed);
+  const artifactRepairCandidate =
+    Boolean(input.artifactRepair)
+    && artifactRepairTurnCompleted
+    && input.task.route === 'full_plan'
+    && input.task.inputStage === 'production'
+    && input.task.executionMode === 'simple'
+    && Boolean(input.task.planContract)
+    && input.completionEvidence?.physicalStatus === 'succeeded'
+    && input.completionEvidence.deliverableValid === true
+    && input.task.runs.filter((run) => run.inputStage === 'production').length === 1;
+
+  if (artifactRepairCandidate) {
+    const instruction = composeOdNextStrategyContinuationV2({
+      stage: 'production',
+      nativeSessionResume: true,
+      taskExecutionId: input.task.taskExecutionId,
+      taskRunIndex: input.task.runs.length,
+      planContractHash: strategyPlanContractHash(input.task.planContract!),
+      artifactFindings: input.artifactRepair!.findings,
+    });
+    let repairResult: OdNextCoordinatorResult | null = null;
+    try {
+      const prepared = input.service.prepare({
+        meta: input.createMeta('production', instruction, input.task.runs.length),
+        beforeClaimCommit: (nextRun) => {
+          const claimed = beginAutomaticArtifactRepair(input.db, {
+            task: input.task,
+            sourceRunId: input.task.latestRunId,
+            nextRunId: nextRun.id,
+            finalText: instruction,
+            ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
+          });
+          repairResult = {
+            action: 'artifact_repair',
+            task: claimed,
+            visibleText: input.parsed.visibleText,
+            reasonCodes: ['od_next_artifact_repair_started'],
+          };
+        },
+      });
+      if (prepared.kind === 'ready' && repairResult) {
+        return { result: repairResult, prepared, start: true, stage: 'production' };
+      }
+    } catch (error) {
+      console.warn('[od-next-task] corrective turn unavailable; completing as delivered', {
+        taskExecutionId: input.task.taskExecutionId,
+        runId: input.task.latestRunId,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return { result: finalize(), start: false };
+  }
 
   if (!repairCandidate && !simplePlanCandidate && !complexPlanCandidate) {
     return { result: finalize(), start: false };

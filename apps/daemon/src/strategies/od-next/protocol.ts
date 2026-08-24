@@ -187,14 +187,17 @@ export class OdNextMachineProtocolStream {
   private readonly streamIssues: OdNextProtocolIssue[] = [];
   private readonly normalizations: string[] = [];
   private readonly visible: string[] = [];
+  private readonly expectedTaskProfileVersion: string | null;
   private finished = false;
 
-  constructor(options: { maxMachineBlockBytes?: number } = {}) {
+  constructor(options: { maxMachineBlockBytes?: number; expectedTaskProfileVersion?: string } = {}) {
     const max = options.maxMachineBlockBytes ?? 256 * 1024;
     if (!Number.isSafeInteger(max) || max < 1) {
       throw new TypeError('maxMachineBlockBytes must be a positive safe integer.');
     }
     this.maxMachineBlockBytes = max;
+    const version = options.expectedTaskProfileVersion?.trim();
+    this.expectedTaskProfileVersion = version ? version : null;
   }
 
   push(chunk: string): string {
@@ -458,13 +461,14 @@ export class OdNextMachineProtocolStream {
    * unchanged.
    */
   private normalizeMachineValue(kind: MachineKind, value: unknown): unknown {
-    if (kind !== 'runtime') return value;
     if (
       typeof value !== 'object'
       || value === null
       || Array.isArray(value)
     ) return value;
     const record = value as Record<string, unknown>;
+    if (kind === 'plan') return this.normalizePlanContractValue(record);
+    if (kind !== 'runtime') return value;
     if (
       record['outcome'] !== 'clarification_required'
       || record['executionMode'] === null
@@ -472,6 +476,30 @@ export class OdNextMachineProtocolStream {
     ) return value;
     this.normalizations.push('od_next_protocol_clarification_execution_mode_normalized');
     return { ...record, executionMode: null };
+  }
+
+  /**
+   * `taskProfile.taskProfileVersion` is a runtime-owned fact the Bundle hands
+   * the agent verbatim and the coordinator later checks against the applied
+   * binding. An agent that reproduced the whole profile and dropped only that
+   * field has not made a planning decision Open Design must refuse; fill it
+   * from the binding and record the normalization. Any present value — right
+   * or wrong — passes through untouched so the coordinator's drift check still
+   * sees what the agent actually wrote.
+   */
+  private normalizePlanContractValue(record: Record<string, unknown>): unknown {
+    if (!this.expectedTaskProfileVersion) return record;
+    const profile = record['taskProfile'];
+    if (typeof profile !== 'object' || profile === null || Array.isArray(profile)) return record;
+    const profileRecord = profile as Record<string, unknown>;
+    const current = profileRecord['taskProfileVersion'];
+    if (typeof current === 'string' && current.trim()) return record;
+    if (current !== undefined && current !== null && current !== '') return record;
+    this.normalizations.push('od_next_protocol_plan_task_profile_version_normalized');
+    return {
+      ...record,
+      taskProfile: { ...profileRecord, taskProfileVersion: this.expectedTaskProfileVersion },
+    };
   }
 
   private issue(code: OdNextProtocolReasonCode, detail: string): void {

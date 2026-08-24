@@ -405,6 +405,13 @@ interface ChatRun {
   };
   /** Run-finish observation: how the delivered entry carries the staged layout primitives. */
   odNextLayoutPrimitives?: 'verbatim' | 'modified' | 'linked' | 'absent';
+  /** Deterministic artifact audit outcome at the completion boundary. */
+  odNextArtifactAudit?: {
+    p0: number;
+    rules: string[];
+    browser: 'available' | 'missing' | 'timeout' | 'error';
+    elapsedMs: number;
+  };
   analyticsTelemetry?: RunTelemetryTimestamps;
   resolvedModelId?: string | null;
   preflightAgentCliVersion?: string | null;
@@ -3824,6 +3831,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               : {}),
             ...(run.odNextLayoutPrimitives
               ? { od_next_layout_primitives: run.odNextLayoutPrimitives }
+              : {}),
+            ...(run.odNextArtifactAudit
+              ? {
+                  od_next_artifact_audit_p0: run.odNextArtifactAudit.p0,
+                  od_next_artifact_audit_rules: run.odNextArtifactAudit.rules.slice(0, 5).join(','),
+                  od_next_artifact_audit_browser: run.odNextArtifactAudit.browser,
+                  od_next_artifact_audit_elapsed_ms: run.odNextArtifactAudit.elapsedMs,
+                }
               : {}),
             ...(run.externalPluginAnalytics
               ? {

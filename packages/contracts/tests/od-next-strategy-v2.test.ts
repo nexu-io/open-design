@@ -508,3 +508,23 @@ describe('task profile resources', () => {
     ]))).toThrow();
   });
 });
+
+describe('corrective production transition', () => {
+  it('allows production to continue into one more production turn and nothing else same-stage', () => {
+    const endpoint = (inputStage: string, executionMode: string | null = 'simple') => ({ route: 'full_plan', inputStage, executionMode });
+    expect(StrategyRuntimeTransitionV2Schema.safeParse({
+      from: endpoint('production'),
+      to: endpoint('production'),
+    }).success).toBe(true);
+    for (const stage of ['request', 'clarification', 'contract_repair']) {
+      expect(StrategyRuntimeTransitionV2Schema.safeParse({
+        from: endpoint(stage, stage === 'request' ? null : 'simple'),
+        to: endpoint(stage, stage === 'request' ? null : 'simple'),
+      }).success).toBe(false);
+    }
+    expect(StrategyRuntimeTransitionV2Schema.safeParse({
+      from: endpoint('production'),
+      to: endpoint('request', null),
+    }).success).toBe(false);
+  });
+});

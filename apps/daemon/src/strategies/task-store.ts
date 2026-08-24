@@ -1324,6 +1324,9 @@ function validateRunChain(
     'clarification:contract_repair',
     'clarification:production',
     'contract_repair:production',
+    // The single Open Design-initiated corrective production turn; the claim
+    // (`beginAutomaticArtifactRepair`) is what bounds it to one.
+    'production:production',
   ]);
   for (let index = 1; index < mappings.length; index += 1) {
     const previous = mappings[index - 1];
@@ -1422,10 +1425,14 @@ function validateTransition(
   }
 
   const changesStage = next.inputStage !== current.inputStage;
-  if (changesStage) {
-    if (!input.nextRun || next.outcome !== 'running') {
+  if (input.nextRun) {
+    // Every next-Run claim — stage-advancing or the single same-stage
+    // corrective production turn — validates against the transition table,
+    // which is where production:production is allowed and everything else
+    // same-stage stays illegal.
+    if (next.outcome !== 'running') {
       throw new InvalidStrategyTaskTransitionError(
-        'A physical-stage change must atomically claim one running next Run.',
+        'A next-Run claim must atomically claim one running next Run.',
       );
     }
     if (input.nextRun.sourceRunId !== current.latestRunId) {
@@ -1447,12 +1454,14 @@ function validateTransition(
     });
     if (!transition.success) {
       throw new InvalidStrategyTaskTransitionError(
-        transition.error.issues[0]?.message ?? 'Illegal strategy physical-stage transition.',
+        !changesStage
+          ? 'A next Run must advance to a different physical stage.'
+          : transition.error.issues[0]?.message ?? 'Illegal strategy physical-stage transition.',
       );
     }
-  } else if (input.nextRun) {
+  } else if (changesStage) {
     throw new InvalidStrategyTaskTransitionError(
-      'A next Run must advance to a different physical stage.',
+      'A physical-stage change must atomically claim one running next Run.',
     );
   }
 

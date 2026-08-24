@@ -122,6 +122,38 @@ describe('OD Next machine protocol stream', () => {
     ]);
   });
 
+  it('backfills a missing taskProfileVersion from the applied binding and leaves a present one alone', () => {
+    // Observed on real runs: the agent reproduces the whole Task Profile and
+    // drops only `taskProfileVersion`, a runtime-owned fact the Bundle handed
+    // it verbatim. Refusing the plan for that gains nothing; filling it from
+    // the binding keeps the coordinator's drift check meaningful.
+    const { taskProfileVersion: _omitted, ...profileWithoutVersion } = plan.taskProfile;
+    const stream = new OdNextMachineProtocolStream({ expectedTaskProfileVersion: '2.2.0' });
+    stream.push([
+      machineBlock('open-design-plan-contract', { ...plan, taskProfile: profileWithoutVersion }),
+      machineBlock('open-design-runtime-state', state),
+    ].join('\n'));
+    const result = stream.finish();
+    expect(result.issues).toEqual([]);
+    expect(result.planContract?.taskProfile.taskProfileVersion).toBe('2.2.0');
+    expect(result.normalizations).toEqual([
+      'od_next_protocol_plan_task_profile_version_normalized',
+    ]);
+
+    // A version the agent did write — even a drifted one — passes through so
+    // the coordinator, not the parser, decides what drift means.
+    const drifted = new OdNextMachineProtocolStream({ expectedTaskProfileVersion: '2.2.0' });
+    drifted.push(machineBlock('open-design-plan-contract', plan) + '\n' + machineBlock('open-design-runtime-state', state));
+    const driftedResult = drifted.finish();
+    expect(driftedResult.planContract?.taskProfile.taskProfileVersion).toBe('2.0.0');
+    expect(driftedResult.normalizations).toEqual([]);
+
+    // Without a binding version there is nothing to fill from: schema failure stands.
+    const bare = new OdNextMachineProtocolStream();
+    bare.push(machineBlock('open-design-plan-contract', { ...plan, taskProfile: profileWithoutVersion }));
+    expect(bare.finish().issues.map((issue) => issue.code)).toContain('od_next_protocol_plan_contract_invalid_schema');
+  });
+
   it('does not treat Markdown headings or ordinary JSON as machine protocol', () => {
     const text = '# Plan Contract\n\n```json\n{"route":"full_plan"}\n```';
     const stream = new OdNextMachineProtocolStream();

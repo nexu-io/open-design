@@ -548,6 +548,11 @@ const allowedStageTransitions = new Set([
   'clarification:contract_repair',
   'clarification:production',
   'contract_repair:production',
+  // Production may continue into exactly one more production turn: the
+  // Open Design-initiated corrective turn that carries machine-measured
+  // findings about the delivered entry. Budgeting (at most one such turn)
+  // is enforced by the daemon claim, not by this table.
+  'production:production',
 ]);
 
 export const StrategyRuntimeTransitionV2Schema = z.object({

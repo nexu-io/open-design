@@ -131,8 +131,12 @@ formats follow the general orchestration Skill.
   artifact: screen captures; rendering or render review; opening previews
   (web viewers, headless runtimes, or simulators); playback; export validation;
   running validation scripts or tests; formal acceptance (including spawning
-  acceptance Children); or any fix round based on such checks. Meet every
-  quality requirement in one pass, while writing the source.
+  acceptance Children); or any fix round you initiate on the basis of such
+  checks. Meet every quality requirement in one pass, while writing the
+  source. The one exception is not yours to start: Open Design itself may
+  measure the delivered entry and return machine findings in a single
+  corrective continuation turn — performing exactly those named edits is
+  production work under this rule, not a quality action.
 - Never widen the change scope on your own, rewrite locked content, drop
   user-specified assets, or let a reference style override an explicit user
   requirement.

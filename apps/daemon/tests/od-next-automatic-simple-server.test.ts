@@ -2,6 +2,9 @@ import type { Server } from 'node:http';
 import { execFile } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
+import vm from 'node:vm';
+
+const BUNDLED_PLUGINS_DIR = path.resolve(import.meta.dirname, '../../../plugins/_official');
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -1045,6 +1048,115 @@ describe('OD Next automatic production through the real server', () => {
       { method: 'POST' },
     );
   });
+
+  it.each(['declared', 'inferred'] as const)('turns a broken delivered artifact into one corrective production turn (%s completion), then completes', async (completionShape) => {
+    const fixture = await createPublicRolloutFixture(`artifact-repair-${completionShape}`, 'design');
+    started = fixture.started;
+    binDir = fixture.binDir;
+    clearOdNextRolloutStop(database());
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+
+    // Rebuild the scripted agent: planning turn emits a simple Plan Contract,
+    // the production turn ships an index.html whose inline script cannot parse
+    // (the v2.0_007 quote-mismatch shape), and the corrective turn — detected
+    // by its "production (corrective)" payload — rewrites the file correctly.
+    const bundledFolder = path.resolve(BUNDLED_PLUGINS_DIR, 'scenarios', 'od-next-strategy');
+    const resolvedStrategy = await resolvePluginFolder({
+      folder: bundledFolder,
+      folderId: 'od-next-strategy',
+      sourceKind: 'bundled',
+      source: bundledFolder,
+      trust: 'bundled',
+    });
+    if (!resolvedStrategy.ok) throw new Error(resolvedStrategy.errors.join('; '));
+    const binding = createBundledStrategyBindingV2({
+      plugin: resolvedStrategy.record,
+      taskType: 'prototype',
+    });
+    const plan = planContract('00000000-0000-7000-8000-000000000000', binding, 'direct');
+    const planTurn = [
+      'Planned the prototype.',
+      machineBlock('open-design-plan-contract', plan),
+      machineBlock('open-design-runtime-state', runtimeState({ outcome: 'plan_ready', executionMode: 'simple' })),
+    ].join('\n');
+    const completedTurn = machineBlock('open-design-runtime-state', runtimeState({
+      inputStage: 'production',
+      outcome: 'completed',
+      executionMode: 'simple',
+    }));
+    const brokenHtml = '<!doctype html><html><body><div id="app"></div>\n<script>\nlet h = \'\';\n'
+      + 'h += \'<div class="card">今日任务提醒</div>";\n'
+      + 'document.getElementById(\'app\').innerHTML = h;\n</script></body></html>';
+    const fixedHtml = '<!doctype html><html><body><div id="app">FIXED</div>\n<script>\nlet h = \'\';\n'
+      + 'h += \'<div class="card">今日任务提醒</div>\';\n'
+      + 'document.getElementById(\'app\').innerHTML = h;\n</script></body></html>';
+    const bin = path.join(fixture.binDir, `codex-public-artifact-repair-${completionShape}`);
+    await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const argv = process.argv.slice(2);
+if (argv.includes('--version')) { console.log('codex-cli 0.147.0'); process.exit(0); }
+if (argv.includes('--help')) { console.log('Usage: codex exec'); process.exit(0); }
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'thread.started', thread_id: 'artifact-repair-session' }));
+  console.log(JSON.stringify({ type: 'turn.started' }));
+  let text;
+  if (stdin.includes('production (corrective)')) {
+    fs.writeFileSync(path.join(process.cwd(), 'index.html'), ${JSON.stringify('FIXED_PLACEHOLDER')});
+    text = ${JSON.stringify('COMPLETED_PLACEHOLDER')};
+  } else if (stdin.includes('native continuation \u2014 production')) {
+    fs.writeFileSync(path.join(process.cwd(), 'index.html'), ${JSON.stringify('BROKEN_PLACEHOLDER')});
+    text = ${JSON.stringify('PROD_TEXT_PLACEHOLDER')};
+  } else {
+    const detected = /"snapshotId"\\s*:\\s*"([a-f0-9-]{36})"/.exec(stdin)?.[1]
+      || /applied_snapshot=[^a-f0-9]*([a-f0-9-]{36})/.exec(stdin)?.[1];
+    text = ${JSON.stringify('PLAN_PLACEHOLDER')};
+    if (detected) text = text.replaceAll('00000000-0000-7000-8000-000000000000', detected);
+  }
+  console.log(JSON.stringify({ type: 'item.completed', item: { id: 'answer', type: 'agent_message', text } }));
+  console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
+  setTimeout(() => process.exit(0), 5);
+});
+`
+      .replace(JSON.stringify('FIXED_PLACEHOLDER'), JSON.stringify(fixedHtml))
+      .replace(JSON.stringify('BROKEN_PLACEHOLDER'), JSON.stringify(brokenHtml))
+      .replaceAll(JSON.stringify('COMPLETED_PLACEHOLDER'), JSON.stringify(completedTurn))
+      .replace(JSON.stringify('PROD_TEXT_PLACEHOLDER'), JSON.stringify(
+        completionShape === 'declared' ? completedTurn : 'Delivered the prototype; every screen is wired.',
+      ))
+      .replace(JSON.stringify('PLAN_PLACEHOLDER'), JSON.stringify(planTurn)), 'utf8');
+    await chmod(bin, 0o755);
+
+    const created = await postRun(started.url, publicRunRequest(
+      fixture,
+      '做一个宠物美容店预约 App 原型。',
+      `artifact-repair-request-${completionShape}`,
+    ));
+    const task = await waitForTask(created.taskExecutionId as string, 'completed');
+    expect(task.runs.map((mapping) => mapping.inputStage)).toEqual([
+      'request',
+      'production',
+      'production',
+    ]);
+    // The ordinary production turn carried the frozen-plan payload; the
+    // corrective turn carried the machine findings with the exact defect.
+    expect(task.runs[1]?.finalText.text).toContain('execute the frozen Full Plan');
+    expect(task.runs[2]?.finalText.text).toContain('production (corrective)');
+    expect(task.runs[2]?.finalText.text).toContain('## Machine findings');
+    expect(task.runs[2]?.finalText.text).toContain('js-syntax-error');
+    const delivered = await readFile(
+      path.join(process.env.OD_DATA_DIR!, 'projects', fixture.projectId, 'index.html'),
+      'utf8',
+    );
+    expect(delivered).toContain('FIXED');
+    expect(() => new vm.Script(
+      /<script>([\s\S]*?)<\/script>/.exec(delivered)![1]!,
+    )).not.toThrow();
+  }, 30_000);
 
   it('rejects mapped-row deletion or legacy NULL final text without spawning an ordinary retry', async () => {
     const fixture = await createPublicRolloutFixture('persisted-task-tamper', 'design');

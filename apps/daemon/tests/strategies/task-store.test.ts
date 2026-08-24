@@ -1352,3 +1352,92 @@ describe('durable strategy task store', () => {
     });
   });
 });
+
+describe('corrective production continuation (same-stage next Run)', () => {
+  let tempDir: string;
+  let db: Database.Database;
+  let snapshot: AppliedPluginSnapshot;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-strategy-task-store-repair-'));
+    db = openDatabase(tempDir, { dataDir: tempDir });
+    snapshot = seedParents(db);
+  });
+
+  afterEach(() => {
+    closeDatabase();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function enterProduction(taskExecutionId = 'task-1') {
+    const initial = createTask(db, snapshot, 'run-request', taskExecutionId);
+    return compareAndTransitionStrategyTaskExecutionRaw(db, {
+      taskExecutionId,
+      expectedRevision: initial.revision,
+      to: { route: 'full_plan', inputStage: 'production', outcome: 'running', executionMode: 'simple' },
+      planContract: planContract(snapshot),
+      nextRun: {
+        runId: 'run-production-1',
+        sourceRunId: 'run-request',
+        finalText: strategyTaskTurnText({
+          taskExecutionId,
+          inputStage: 'production',
+          taskRunIndex: 1,
+          payload: 'Frozen production instruction.',
+        }),
+      },
+      updatedAt: 200,
+    });
+  }
+
+  it('claims one more production Run through the transition table and stays repair-count-free', () => {
+    const production = enterProduction();
+    const corrected = compareAndTransitionStrategyTaskExecutionRaw(db, {
+      taskExecutionId: production.taskExecutionId,
+      expectedRevision: production.revision,
+      to: { route: 'full_plan', inputStage: 'production', outcome: 'running', executionMode: 'simple' },
+      nextRun: {
+        runId: 'run-production-2',
+        sourceRunId: 'run-production-1',
+        finalText: strategyTaskTurnText({
+          taskExecutionId: production.taskExecutionId,
+          inputStage: 'production',
+          taskRunIndex: 2,
+          payload: 'Corrective findings.',
+        }),
+      },
+      updatedAt: 300,
+    });
+    expect(corrected.latestRunId).toBe('run-production-2');
+    expect(corrected.runs.map((run) => run.inputStage)).toEqual(['request', 'production', 'production']);
+    expect(corrected.planContractRepairAttempts).toBe(0);
+    expect(corrected.clarificationCount).toBe(0);
+  });
+
+  it('still refuses a same-stage next Run outside production', () => {
+    const initial = createTask(db, snapshot, 'run-request', 'task-2');
+    expect(() => compareAndTransitionStrategyTaskExecutionRaw(db, {
+      taskExecutionId: 'task-2',
+      expectedRevision: initial.revision,
+      to: { route: 'full_plan', inputStage: 'request', outcome: 'running', executionMode: null },
+      nextRun: {
+        runId: 'run-request-2',
+        sourceRunId: 'run-request',
+        // The transition is rejected before the final text is interpreted, so
+        // a plain placeholder is enough here.
+        finalText: 'illegal same-stage request placeholder',
+      },
+      updatedAt: 250,
+    })).toThrow(/different physical stage/);
+  });
+
+  it('still refuses a stage change without a next Run', () => {
+    const production = enterProduction('task-3');
+    expect(() => compareAndTransitionStrategyTaskExecutionRaw(db, {
+      taskExecutionId: production.taskExecutionId,
+      expectedRevision: production.revision,
+      to: { route: 'full_plan', inputStage: 'contract_repair', outcome: 'running', executionMode: 'simple' },
+      updatedAt: 260,
+    })).toThrow(/physical-stage change must atomically claim/);
+  });
+});
