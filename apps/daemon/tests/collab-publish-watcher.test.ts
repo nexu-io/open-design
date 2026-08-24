@@ -93,4 +93,68 @@ describe('collab publish watcher', () => {
     expect(notifyChanged).toHaveBeenCalledOnce();
     expect(notifyChanged).toHaveBeenCalledWith('p1', principal);
   });
+
+  it('cancels an in-flight ownership check and does not subscribe after disposal starts', async () => {
+    let resolveShouldPublish!: (value: boolean) => void;
+    const ownershipSignals: AbortSignal[] = [];
+    const shouldPublish = vi.fn((_projectId: string, signal: AbortSignal) => {
+      ownershipSignals.push(signal);
+      return new Promise<boolean>((resolve) => {
+        resolveShouldPublish = resolve;
+      });
+    });
+    const subscribeFiles = vi.fn(() => ({ unsubscribe: () => {} }));
+    const notifyChanged = vi.fn();
+    const watcher = createCollabPublishWatcher({
+      notifyChanged,
+      listProjectIds: () => ['p1'],
+      shouldPublish,
+      subscribeFiles,
+    });
+
+    const reconciling = watcher.reconcile();
+    await vi.waitFor(() => expect(shouldPublish).toHaveBeenCalledOnce());
+    await watcher.dispose();
+    expect(ownershipSignals[0]?.aborted).toBe(true);
+
+    resolveShouldPublish(true);
+    await reconciling;
+
+    expect(subscribeFiles).not.toHaveBeenCalled();
+    expect(notifyChanged).not.toHaveBeenCalled();
+  });
+
+  it('waits for subscriptions to close and ignores stale file callbacks after disposal', async () => {
+    const handler: { onChange: (() => void) | null } = { onChange: null };
+    let finishUnsubscribe!: () => void;
+    const unsubscribe = vi.fn(() => new Promise<void>((resolve) => {
+      finishUnsubscribe = resolve;
+    }));
+    const notifyChanged = vi.fn();
+    const watcher = createCollabPublishWatcher({
+      notifyChanged,
+      listProjectIds: () => ['p1'],
+      shouldPublish: async () => true,
+      subscribeFiles: (_projectId, onFileChange) => {
+        handler.onChange = onFileChange;
+        return { unsubscribe };
+      },
+    });
+
+    await watcher.reconcile();
+    notifyChanged.mockClear();
+    let disposed = false;
+    const disposing = Promise.resolve(watcher.dispose()).then(() => {
+      disposed = true;
+    });
+    await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    handler.onChange?.();
+    expect(notifyChanged).not.toHaveBeenCalled();
+    finishUnsubscribe();
+    await disposing;
+    expect(disposed).toBe(true);
+  });
 });

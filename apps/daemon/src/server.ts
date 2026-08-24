@@ -4286,11 +4286,15 @@ export async function startServer({
   const resolveSharedProjectOwner = async (
     projectId: string,
     explicitScope: { workspaceId: string; workspaceMemberId: string },
+    signal?: AbortSignal,
   ): Promise<string | null> => {
+    const remoteProjects = await teamProjectsLister(explicitScope.workspaceId);
+    if (signal?.aborted) return null;
     const list = await withoutLocallyUnsharedProjects(
-      await teamProjectsLister(explicitScope.workspaceId),
+      remoteProjects,
       explicitScope,
     );
+    if (signal?.aborted) return null;
     return list.find((entry) => entry.projectId === projectId)?.ownerMemberId ?? null;
   };
   // GET /collab/status is a display read whose request authority has already
@@ -4377,7 +4381,8 @@ export async function startServer({
     notifyChanged: (projectId, principal) =>
       collab.scheduler.notifyChanged(projectId, 'file-change', principal),
     listProjectIds: () => listProjects(db).map((project: { id: string }) => project.id),
-    shouldPublish: async (projectId) => {
+    shouldPublish: async (projectId, signal) => {
+      if (signal.aborted) return false;
       if (projectIsUnmaterializedSharedPlaceholder(projectId)) return false;
       const workspaceId = findTeamWorkspaceIdForProject(db, projectId)?.trim();
       if (!workspaceId) return false;
@@ -4385,6 +4390,7 @@ export async function startServer({
         ok: false as const,
         items: [],
       }));
+      if (signal.aborted) return false;
       if (!directory.ok) return false;
       const scope = teamResourceRequestScopeForWorkspaceId(
         directory.items,
@@ -4394,7 +4400,8 @@ export async function startServer({
       const ownerMemberId = await resolveSharedProjectOwner(projectId, {
         workspaceId,
         workspaceMemberId: scope.principal.memberId,
-      });
+      }, signal);
+      if (signal.aborted) return false;
       if (ownerMemberId !== scope.principal.memberId) return false;
       collab.rememberTeamShare(projectId, scope.principal);
       return scope.principal;
@@ -14876,12 +14883,14 @@ export async function startServer({
       workspaceDirectoryRefreshes.dispose();
       workspaceBillingRuntime.dispose();
       proactiveContentPull.dispose();
+      void collabPublishWatcher.dispose();
       collabCloud?.dispose();
     };
     const shutdownDaemonRuns = async () => {
       if (daemonShutdownStarted) return;
       daemonShutdownStarted = true;
       daemonShuttingDown = true;
+      await collabPublishWatcher.dispose();
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
       await terminalService.shutdownActive();
       await browserSessionService.shutdownActive();

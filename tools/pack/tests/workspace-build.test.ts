@@ -165,6 +165,52 @@ describe("ensureWorkspaceBuildArtifacts", () => {
     }
   });
 
+  it("restores coupled Next standalone and static outputs from the same cached build", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-next-coupled-"));
+    const cache = new ToolPackCache(join(root, ".cache"));
+    const config = createConfig(root, cache.root);
+    let builds = 0;
+
+    try {
+      await writeWorkspace(root);
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        builds += 1;
+        await writeOutputs(root, `build-${builds}`);
+      });
+
+      await writeFile(
+        join(root, "apps/web/.next/standalone/apps/web/server.js"),
+        "external-standalone-build\n",
+        "utf8",
+      );
+      await writeFile(
+        join(root, "apps/web/.next/static/chunk.js"),
+        "external-static-build\n",
+        "utf8",
+      );
+      await writeFile(
+        join(root, "apps/packaged/dist/index.mjs"),
+        "external-unrelated-build\n",
+        "utf8",
+      );
+
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        builds += 1;
+        await writeOutputs(root, `build-${builds}`);
+      });
+
+      expect(builds).toBe(1);
+      expect(await readFile(join(root, "apps/web/.next/standalone/apps/web/server.js"), "utf8"))
+        .toBe("build-1\n");
+      expect(await readFile(join(root, "apps/web/.next/static/chunk.js"), "utf8"))
+        .toBe("build-1\n");
+      expect(await readFile(join(root, "apps/packaged/dist/index.mjs"), "utf8"))
+        .toBe("external-unrelated-build\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("writes a Windows version-family alias after a successful build", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-alias-"));
     const cache = new ToolPackCache(join(root, ".cache"));

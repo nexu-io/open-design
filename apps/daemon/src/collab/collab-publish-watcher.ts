@@ -33,6 +33,7 @@ export interface CollabPublishWatcherDeps {
    */
   shouldPublish: (
     projectId: string,
+    signal: AbortSignal,
   ) => Promise<boolean | ResourceHubPrincipal>;
   /** Subscribe to file-change events for a project's content dir. */
   subscribeFiles: (projectId: string, onChange: () => void) => PublishWatchSubscription;
@@ -45,7 +46,7 @@ export interface CollabPublishWatcher {
   /** Reconcile once immediately (exposed for tests / eager first pass). */
   reconcile: () => Promise<void>;
   start: () => void;
-  dispose: () => void;
+  dispose: () => Promise<void>;
 }
 
 const DEFAULT_RECONCILE_MS = 10_000;
@@ -59,78 +60,109 @@ export function createCollabPublishWatcher(deps: CollabPublishWatcherDeps): Coll
       principal?: ResourceHubPrincipal;
     }
   >();
+  const pendingUnsubscribes = new Set<Promise<void>>();
   let timer: ReturnType<typeof setInterval> | null = null;
-  let reconciling = false;
+  let activeReconcile: Promise<void> | null = null;
+  let activeReconcileController: AbortController | null = null;
+  let disposePromise: Promise<void> | null = null;
+  let disposed = false;
 
-  async function reconcile(): Promise<void> {
-    if (reconciling) return;
-    reconciling = true;
-    try {
-      const ids = new Set(deps.listProjectIds());
-      // Drop watchers for projects that no longer exist locally.
-      for (const [projectId, watched] of subs) {
-        if (!ids.has(projectId)) {
-          void Promise.resolve(watched.subscription.unsubscribe()).catch(() => {});
-          subs.delete(projectId);
-        }
+  function unsubscribe(watched: { subscription: PublishWatchSubscription }): Promise<void> {
+    const pending = Promise.resolve()
+      .then(() => watched.subscription.unsubscribe())
+      .then(() => undefined)
+      .catch(() => undefined);
+    pendingUnsubscribes.add(pending);
+    void pending.finally(() => pendingUnsubscribes.delete(pending));
+    return pending;
+  }
+
+  async function reconcileOnce(signal: AbortSignal): Promise<void> {
+    if (disposed || signal.aborted) return;
+    const ids = new Set(deps.listProjectIds());
+    // Drop watchers for projects that no longer exist locally.
+    for (const [projectId, watched] of subs) {
+      if (!ids.has(projectId)) {
+        void unsubscribe(watched);
+        subs.delete(projectId);
       }
-      // Add watchers for owned + team-shared projects not yet watched.
-      for (const projectId of ids) {
-        if (subs.has(projectId)) continue;
-        let publishScope: boolean | ResourceHubPrincipal = false;
-        try {
-          publishScope = await deps.shouldPublish(projectId);
-        } catch (error) {
-          deps.onError?.(error);
-          continue;
-        }
-        if (!publishScope) continue;
-        const principal =
-          typeof publishScope === 'object' ? publishScope : undefined;
-        const sub = deps.subscribeFiles(projectId, () => {
-          // Every edit → a debounced publish; the scheduler collapses bursts so a
-          // half-written intermediate state never reaches members.
-          if (principal) deps.notifyChanged(projectId, principal);
-          else deps.notifyChanged(projectId);
-        });
-        subs.set(projectId, {
-          subscription: sub,
-          ...(principal ? { principal } : {}),
-        });
-        // Publish the CURRENT content once on first watch. The file watcher uses
-        // `ignoreInitial`, so files already on disk when watching begins (e.g.
-        // documents uploaded to a project before it was shared, or before the
-        // owner-check resolved) never fire a change event and would otherwise
-        // stay stranded at the initial share version — members would see the
-        // shared project but pull an empty/stale copy. Gated on `shouldPublish`
-        // (team-shared AND owned by me) above, so this only republishes a
-        // single-writer's own project and is loop-safe. Fires once per project
-        // per watch session (reconcile only subscribes not-yet-watched ids).
+    }
+    // Add watchers for owned + team-shared projects not yet watched.
+    for (const projectId of ids) {
+      if (disposed || signal.aborted || subs.has(projectId)) continue;
+      let publishScope: boolean | ResourceHubPrincipal = false;
+      try {
+        publishScope = await deps.shouldPublish(projectId, signal);
+      } catch (error) {
+        if (!signal.aborted) deps.onError?.(error);
+        continue;
+      }
+      if (disposed || signal.aborted || !publishScope) continue;
+      const principal =
+        typeof publishScope === 'object' ? publishScope : undefined;
+      const sub = deps.subscribeFiles(projectId, () => {
+        // Every edit → a debounced publish; the scheduler collapses bursts so a
+        // half-written intermediate state never reaches members.
+        if (disposed) return;
         if (principal) deps.notifyChanged(projectId, principal);
         else deps.notifyChanged(projectId);
-      }
-    } finally {
-      reconciling = false;
+      });
+      subs.set(projectId, {
+        subscription: sub,
+        ...(principal ? { principal } : {}),
+      });
+      // Publish the CURRENT content once on first watch. The file watcher uses
+      // `ignoreInitial`, so files already on disk when watching begins (e.g.
+      // documents uploaded to a project before it was shared, or before the
+      // owner-check resolved) never fire a change event and would otherwise
+      // stay stranded at the initial share version — members would see the
+      // shared project but pull an empty/stale copy. Gated on `shouldPublish`
+      // (team-shared AND owned by me) above, so this only republishes a
+      // single-writer's own project and is loop-safe. Fires once per project
+      // per watch session (reconcile only subscribes not-yet-watched ids).
+      if (principal) deps.notifyChanged(projectId, principal);
+      else deps.notifyChanged(projectId);
     }
+  }
+
+  function reconcile(): Promise<void> {
+    if (disposed) return Promise.resolve();
+    if (activeReconcile) return activeReconcile;
+    const controller = new AbortController();
+    activeReconcileController = controller;
+    const tracked = reconcileOnce(controller.signal).finally(() => {
+      if (activeReconcile === tracked) {
+        activeReconcile = null;
+        activeReconcileController = null;
+      }
+    });
+    activeReconcile = tracked;
+    return tracked;
   }
 
   return {
     reconcile,
     start() {
-      if (timer) return;
+      if (disposed || timer) return;
       void reconcile().catch((error) => deps.onError?.(error));
       timer = setInterval(() => void reconcile().catch((error) => deps.onError?.(error)), reconcileMs);
       timer.unref?.();
     },
     dispose() {
+      if (disposePromise) return disposePromise;
+      disposed = true;
       if (timer) {
         clearInterval(timer);
         timer = null;
       }
-      for (const watched of subs.values()) {
-        void Promise.resolve(watched.subscription.unsubscribe()).catch(() => {});
-      }
-      subs.clear();
+      activeReconcileController?.abort();
+      disposePromise = (async () => {
+        const watched = [...subs.values()];
+        subs.clear();
+        await Promise.all(watched.map(unsubscribe));
+        await Promise.all([...pendingUnsubscribes]);
+      })();
+      return disposePromise;
     },
   };
 }

@@ -340,6 +340,8 @@ describe('server.ts wiring (source boundary)', () => {
     expect(end, 'expected daemon background cleanup to close').toBeGreaterThan(start);
     const cleanupBody = source.slice(start, end + 2);
     expect(cleanupBody).toContain('proactiveContentPull.dispose();');
+    expect(cleanupBody).toContain('void collabPublishWatcher.dispose();');
+    expect(source).toContain('await collabPublishWatcher.dispose();');
   });
 
   it('recovers promotion journals before registering collaboration pull routes', () => {

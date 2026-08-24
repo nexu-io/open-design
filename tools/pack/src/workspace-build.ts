@@ -225,6 +225,11 @@ async function stripBrokenSymlinks(rootPath: string): Promise<void> {
 }
 
 const WEB_STANDALONE_ARTIFACT = "apps/web/.next/standalone";
+const WEB_STATIC_ARTIFACT = "apps/web/.next/static";
+const COUPLED_WEB_BUILD_ARTIFACTS = new Set([
+  WEB_STANDALONE_ARTIFACT,
+  WEB_STATIC_ARTIFACT,
+]);
 const WEB_STANDALONE_APP_NODE_MODULES = "apps/web/node_modules";
 // Peer deps the web-standalone after-pack audit looks up through
 // `createRequire(server.js).resolve(<pkg>/package.json)`. Next 16
@@ -329,7 +334,13 @@ export async function ensureWorkspaceBuildArtifacts(
       });
   const materialize = artifacts.map((artifact) => ({
     from: artifact.cachePath,
-    reuse: true,
+    // Next's standalone server and static chunks are one build snapshot. A
+    // normal web build can replace `.next/static` while removing standalone;
+    // reusing either workspace target independently would then package HTML
+    // whose referenced chunks came from a different build. Always restore the
+    // pair from this cache entry while retaining the fast reuse path for every
+    // unrelated workspace artifact.
+    reuse: !COUPLED_WEB_BUILD_ARTIFACTS.has(artifact.workspacePath),
     reuseRequiredPaths: artifact.requiredPathGroups,
     to: join(config.workspaceRoot, artifact.workspacePath),
   }));
