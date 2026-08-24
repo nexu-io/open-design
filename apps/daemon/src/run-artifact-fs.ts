@@ -278,6 +278,10 @@ export interface RunArtifactDiff {
   // that need per-file side effects, such as HTML version snapshots, can filter
   // this list without re-walking the project tree.
   touchedPaths: string[];
+  // Files eligible to satisfy the declared project entry for this run.
+  // This includes renderable artifacts plus a changed DESIGN.md, which is a
+  // design-system deliverable but intentionally not an artifact_count file.
+  deliverableTouchedPaths: string[];
   // Content-only v4 counters. For hashable files, a timestamp-only rewrite is
   // excluded; the legacy counters above intentionally keep their old mtime
   // semantics during the compatibility window.
@@ -314,6 +318,7 @@ export function diffRunArtifacts(
   let previewModuleCount = 0;
   let designSystemCreated = false;
   const touchedPaths: string[] = [];
+  const deliverableTouchedPaths: string[] = [];
   let contentCreated = 0;
   let contentModified = 0;
   let renderDependencyTouched = 0;
@@ -345,6 +350,7 @@ export function diffRunArtifacts(
       if (isNew) created += 1;
       else modified += 1;
       touchedPaths.push(filePath);
+      deliverableTouchedPaths.push(filePath);
       if (contentChanged) {
         if (isNew) contentCreated += 1;
         else contentModified += 1;
@@ -357,7 +363,10 @@ export function diffRunArtifacts(
       renderDependencyTouchedPaths.push(filePath);
     }
     if (isPreviewModulePath(classifyPath)) previewModuleCount += 1;
-    if (isDesignSystemFile(classifyPath)) designSystemCreated = true;
+    if (isDesignSystemFile(classifyPath)) {
+      designSystemCreated = true;
+      deliverableTouchedPaths.push(filePath);
+    }
   }
   return {
     created,
@@ -366,6 +375,7 @@ export function diffRunArtifacts(
     designSystemCreated,
     previewModuleCount,
     touchedPaths,
+    deliverableTouchedPaths,
     contentCreated,
     contentModified,
     contentTouched: contentCreated + contentModified,

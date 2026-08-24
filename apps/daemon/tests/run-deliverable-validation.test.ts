@@ -104,6 +104,31 @@ describe('run deliverable validation', () => {
     });
   });
 
+  it('accepts DESIGN.md when the run filesystem diff reports it as touched', async () => {
+    const fixture = await projectFixture({
+      'DESIGN.md': '# Generated design system',
+      'preview/colors.html': '<!doctype html><title>Colors</title>',
+    });
+
+    await expect(
+      validateRunDeliverable({
+        ...fixture,
+        runStatus: 'succeeded',
+        artifactCount: 1,
+        touchedPaths: ['preview/colors.html', 'DESIGN.md'],
+        projectMetadata: {
+          kind: 'other',
+          entryFile: 'DESIGN.md',
+        },
+      }),
+    ).resolves.toMatchObject({
+      valid: true,
+      validation: 'valid',
+      entryFile: 'DESIGN.md',
+      artifactKind: 'text',
+    });
+  });
+
   it('rejects a readable entry whose file kind does not match the project kind', async () => {
     const fixture = await projectFixture({
       'index.html': '<!doctype html><title>Wrong kind</title>',
