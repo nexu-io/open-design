@@ -295,6 +295,146 @@ if ($null -ne $previousRuntime) {
 `;
 }
 
+export function createUserPathPowerShellScript(): string {
+  return `param(
+  [ValidateSet("add", "remove")]
+  [Parameter(Mandatory = $true)][string]$Action,
+  [Parameter(Mandatory = $true)][string]$PathEntry
+)
+
+$ErrorActionPreference = "Stop"
+
+function Normalize-PathEntry {
+  param([AllowEmptyString()][string]$Value)
+  if ($null -eq $Value) { return "" }
+  $normalized = $Value.Trim()
+  if ($normalized.Length -gt 3) {
+    $normalized = $normalized.TrimEnd([char]92, [char]47)
+  }
+  return $normalized
+}
+
+function Broadcast-EnvironmentChange {
+  try {
+    if ($null -eq ("OpenDesign.UserEnvironment" -as [type])) {
+      Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace OpenDesign
+{
+    public static class UserEnvironment
+    {
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern IntPtr SendMessageTimeout(
+            IntPtr hWnd,
+            uint msg,
+            IntPtr wParam,
+            string lParam,
+            uint flags,
+            uint timeout,
+            out IntPtr result);
+    }
+}
+'@
+    }
+
+    $result = [IntPtr]::Zero
+    [void][OpenDesign.UserEnvironment]::SendMessageTimeout(
+      [IntPtr]0xffff,
+      0x001a,
+      [IntPtr]::Zero,
+      "Environment",
+      2,
+      5000,
+      [ref]$result
+    )
+  } catch {}
+}
+
+$environmentKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey("Environment")
+try {
+  $currentPath = [string]$environmentKey.GetValue(
+    "Path",
+    "",
+    [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
+  )
+  $normalizedPathEntry = Normalize-PathEntry $PathEntry
+  $entries = @($currentPath -split ";")
+  $nextPath = $currentPath
+
+  if ($Action -eq "add") {
+    $containsPathEntry = @(
+      $entries | Where-Object { (Normalize-PathEntry $_) -ieq $normalizedPathEntry }
+    ).Count -gt 0
+    if (-not $containsPathEntry) {
+      $nextPath = if ([string]::IsNullOrEmpty($currentPath)) {
+        $PathEntry
+      } else {
+        "$PathEntry;$currentPath"
+      }
+    }
+  } else {
+    $nextPath = [string]::Join(
+      ";",
+      [string[]]@(
+        $entries | Where-Object { (Normalize-PathEntry $_) -ine $normalizedPathEntry }
+      )
+    )
+  }
+
+  if ($nextPath -cne $currentPath) {
+    $environmentKey.SetValue("Path", $nextPath, [Microsoft.Win32.RegistryValueKind]::ExpandString)
+    Broadcast-EnvironmentChange
+  }
+} finally {
+  if ($null -ne $environmentKey) {
+    $environmentKey.Dispose()
+  }
+}
+`;
+}
+
+function createUserPathUpdateFunctions(userPathScriptPath: string): string {
+  const helperFileName = escapeNsisString(userPathScriptPath.split(/[\\/]/).at(-1) ?? "update-user-path.ps1");
+  const escapedUserPathScriptPath = escapeNsisString(userPathScriptPath);
+  return `
+Function AddInstallDirToUserPath
+  Push $0
+  Push $1
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\\${helperFileName}" "${escapedUserPathScriptPath}"
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\${helperFileName}" add "$INSTDIR"'
+  Pop $0
+  Pop $1
+  Push "user PATH add exit=$0 output=$1"
+  Call LogInstallerEvent
+  \${If} $0 != "0"
+    DetailPrint "Could not add Open Design to the user PATH"
+  \${EndIf}
+  Pop $1
+  Pop $0
+FunctionEnd
+
+Function un.RemoveInstallDirFromUserPath
+  Push $0
+  Push $1
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\\${helperFileName}" "${escapedUserPathScriptPath}"
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\${helperFileName}" remove "$INSTDIR"'
+  Pop $0
+  Pop $1
+  Push "user PATH remove exit=$0 output=$1"
+  Call un.LogInstallerEvent
+  \${If} $0 != "0"
+    DetailPrint "Could not remove Open Design from the user PATH"
+  \${EndIf}
+  Pop $1
+  Pop $0
+FunctionEnd
+`;
+}
+
 async function findFirstExistingPath(candidates: string[]): Promise<string | null> {
   for (const candidate of candidates) {
     if (await pathExists(candidate)) return candidate;
@@ -439,10 +579,12 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, pac
     : escapeNsisString(paths.nsisLogPath);
   const runningInstancesScriptPath = join(dirname(paths.installerScriptPath), "running-instances.ps1");
   const launcherRuntimeSyncScriptPath = join(dirname(paths.installerScriptPath), "sync-launcher-runtime.ps1");
+  const userPathScriptPath = join(dirname(paths.installerScriptPath), "update-user-path.ps1");
 
   await mkdir(dirname(paths.installerScriptPath), { recursive: true });
   await writeFile(runningInstancesScriptPath, createRunningInstancesScript(), "utf8");
   await writeFile(launcherRuntimeSyncScriptPath, createLauncherRuntimeSyncPowerShellScript(), "utf8");
+  await writeFile(userPathScriptPath, createUserPathPowerShellScript(), "utf8");
   const script = `Unicode true
 ManifestDPIAware true
 RequestExecutionLevel user
@@ -581,6 +723,8 @@ ${createLauncherRuntimeSyncScript(
   launcher.paths.cleanupPath,
   launcherRuntimeSyncScriptPath,
 )}
+
+${createUserPathUpdateFunctions(userPathScriptPath)}
 
 Function un.LogInstallerEvent
   Exch $0
@@ -979,6 +1123,20 @@ prepare_install_dir:
   !insertmacro LOG_PATH_STATE "installed_exe_after_extract" "$INSTDIR\\${exeName}"
   WriteUninstaller "$INSTDIR\\${uninstallerName}"
   !insertmacro LOG_PATH_STATE "uninstaller_after_write" "$INSTDIR\\${uninstallerName}"
+  ClearErrors
+  FileOpen $0 "$INSTDIR\\od.cmd" w
+  \${If} \${Errors}
+    DetailPrint "od CLI launcher write failed"
+    Push "od CLI launcher write failed"
+    Call LogInstallerEvent
+    Abort
+  \${EndIf}
+  FileWrite $0 "@echo off$\\r$\\n"
+  FileWrite $0 "setlocal$\\r$\\n"
+  FileWrite $0 "set $\\"ELECTRON_RUN_AS_NODE=1$\\"$\\r$\\n"
+  FileWrite $0 "$\\"%~dp0${exeName}$\\" $\\"%~dp0resources\\app\\prebundled\\daemon\\daemon-cli.mjs$\\" %*$\\r$\\n"
+  FileClose $0
+  !insertmacro LOG_PATH_STATE "od_cli_launcher_after_write" "$INSTDIR\\od.cmd"
   SetOutPath "$INSTDIR"
   IfSilent 0 skip_silent_desktop_shortcut
   !insertmacro LOG_PATH_STATE "desktop_shortcut_before_create" "$DESKTOP\\${shortcutName}"
@@ -1001,6 +1159,7 @@ skip_silent_desktop_shortcut:
   WriteRegStr HKCU "${inviteProtocolKey}\\shell\\open\\command" "" ${inviteProtocolCommand}
   Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"
   Call LogInstallerEvent
+  Call AddInstallDirToUserPath
   Call SyncLauncherRuntime
   Push "install section done"
   Call LogInstallerEvent
@@ -1022,6 +1181,7 @@ after_desktop_shortcut:
   !insertmacro UN_LOG_PATH_STATE "desktop_shortcut_after_delete" "$DESKTOP\\${shortcutName}"
   Delete "$SMPROGRAMS\\${shortcutName}"
   !insertmacro UN_LOG_PATH_STATE "start_menu_shortcut_after_delete" "$SMPROGRAMS\\${shortcutName}"
+  Call un.RemoveInstallDirFromUserPath
   DeleteRegKey HKCU "${registryKey}"
   DeleteRegKey HKCU "${appPathsKey}"
   ReadRegStr $0 HKCU "${inviteProtocolKey}\\shell\\open\\command" ""
