@@ -472,6 +472,40 @@ describe("renderAgentReport", () => {
     expect(text).toContain("… +20 more parts");
   });
 
+  it("renders exactly CAP rows at the boundary — no phantom fold-away line", () => {
+    // The off-by-one that matters: at exactly 40 parts nothing is folded
+    // away, so a "+0 more parts" row would be a lie about truncation. The
+    // cap line only appears when something was actually dropped.
+    const parts = Array.from({ length: 40 }, (_, i) => ({
+      id: `prp_p${i}`,
+      size: [1, 1, 1] as [number, number, number],
+      center: [0, 0, 0.5] as [number, number, number],
+      shape: "box" as const,
+      axis: "z" as const,
+      flip: false,
+    }));
+    const text = renderAgentReport(result({ solved: { parts, diagnostics: [] } }));
+    expect(text).toContain("prp_p39"); // the last row IS rendered
+    expect(text).not.toContain("more parts");
+  });
+
+  it("caps at exactly CAP+1 with a single folded row", () => {
+    // One past the cap: the 41st part is dropped and counted, not silently
+    // truncated — the reader must be able to trust "40 shown + 1 more".
+    const parts = Array.from({ length: 41 }, (_, i) => ({
+      id: `prp_p${i}`,
+      size: [1, 1, 1] as [number, number, number],
+      center: [0, 0, 0.5] as [number, number, number],
+      shape: "box" as const,
+      axis: "z" as const,
+      flip: false,
+    }));
+    const text = renderAgentReport(result({ solved: { parts, diagnostics: [] } }));
+    expect(text).toContain("prp_p39");
+    expect(text).not.toContain("prp_p40:");
+    expect(text).toContain("… +1 more parts");
+  });
+
   it("omits the solved table when there is no solve (non-spec sources)", () => {
     const text = renderAgentReport(result());
     expect(text).not.toContain("solved boxes");

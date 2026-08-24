@@ -668,3 +668,82 @@ describe('sanitizeTweaks rotation channel', () => {
     expect(sanitizeTweaks({ a: { quat: [0, Number.NaN, 0, 1] } })).toBeNull();
   });
 });
+
+describe('scene3d compile response contract (real Blender)', () => {
+  const LONG = 300_000;
+
+  /**
+   * The route is the seam between the compiler's rich result and every
+   * consumer (web panel, CLI, external agents). Its response is typed as
+   * Scene3dCompileResponse, but nothing pinned that the route actually
+   * POPULATES the fields the contract promises — `solved` in particular was
+   * added to the type and the route together, and only an HTTP-level test
+   * catches the two drifting apart. These pins read the REAL JSON off the
+   * wire so a field dropped from the route (or renamed) fails here, not in
+   * some viewer three layers up.
+   */
+  it('carries solved placement for a spec-authored scene over HTTP', async () => {
+    const root = tempProjectsRoot();
+    const sceneDir = path.join(root, 'proj1', 'scenes', 'pavilion');
+    fs.mkdirSync(sceneDir, { recursive: true });
+    // Minimal two-part spec: a plinth with a post seated on it. The solve
+    // runs at parse time — no Blender build needed to have placement facts.
+    fs.writeFileSync(
+      path.join(sceneDir, 'scene.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        parts: [
+          { id: 'prp_plinth', size: [1, 1, 0.1] },
+          { id: 'prp_post', size: [0.1, 0.1, 0.5] },
+        ],
+        relations: [
+          { type: 'at', part: 'prp_plinth', center: [0, 0, 0.05] },
+          { type: 'sits_on', part: 'prp_post', on: 'prp_plinth' },
+        ],
+      }),
+    );
+    const api = await startServer({ projectsRoot: root });
+
+    const res = await api.req('/api/projects/proj1/scene3d/compile', {
+      method: 'POST',
+      body: { scenePath: 'scenes/pavilion', stages: ['parse'] },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+
+    // The contract's optional-but-promised field: present on any spec scene.
+    const solved = res.body.solved;
+    expect(solved, 'route dropped the solved field the contract declares').toBeTruthy();
+    const ids = solved.parts.map((p: any) => p.id);
+    expect(ids).toContain('prp_plinth');
+    expect(ids).toContain('prp_post');
+    const post = solved.parts.find((p: any) => p.id === 'prp_post');
+    // Placement facts, not just names: the post sits ON the plinth.
+    expect(post.restsOn).toBe('prp_plinth');
+    expect(post.size).toEqual([0.1, 0.1, 0.5]);
+    const plinth = solved.parts.find((p: any) => p.id === 'prp_plinth');
+    // Post bottom rests on plinth top floored by MIN_CONTACT (1mm): centre
+    // z = 0.1 + 0.25 - 0.001. The floor is the language's z-fight guarantee.
+    expect(post.center[2]).toBeCloseTo(0.349, 6);
+    expect(plinth.center[2]).toBeCloseTo(0.05, 6);
+    // Diagnostics ride along even when empty — shape, not just presence.
+    expect(Array.isArray(solved.diagnostics)).toBe(true);
+  }, LONG);
+
+  it('omits solved for a build.py scene where no solving ran', async () => {
+    const root = tempProjectsRoot();
+    const sceneDir = path.join(root, 'proj1');
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(path.join(sceneDir, 'build.py'), GOOD_CRATE);
+    const api = await startServer({ projectsRoot: root });
+
+    const res = await api.req('/api/projects/proj1/scene3d/compile', {
+      method: 'POST',
+      body: { stages: ['parse'] },
+    });
+    expect(res.status).toBe(200);
+    // Absent, not null and not {}: the contract says "present whenever
+    // solving ran", and a build.py scene never solves.
+    expect(res.body.solved).toBeUndefined();
+  }, LONG);
+});

@@ -41,6 +41,69 @@ describe.skipIf(!hasBlender)("shader pipeline (real GPU)", () => {
     expect(fs.existsSync(rough)).toBe(true);
     expect(fs.statSync(base).size).toBeGreaterThan(10_000); // real noise, not a flat fill
 
+    // The bake is the KERNEL's output, not just any 512px image: decoded
+    // pixels must sit inside the two authored tones' sRGB range and vary
+    // across texels (fbm patina), and the roughness companion must track
+    // its own kernel (0.55..0.95 grey, correlated with baseColor patina).
+    // A regression that baked an empty/black/flat texture passes every
+    // existence check above — only pixel content catches it.
+    const baseImg = decodePng(fs.readFileSync(base));
+    expect([baseImg.width, baseImg.height]).toEqual([512, 512]);
+    let minV = 255;
+    let maxV = 0;
+    let sumLum = 0;
+    const n = baseImg.width * baseImg.height;
+    for (let i = 0; i < n; i++) {
+      const r = baseImg.data[i * 4]!;
+      const g = baseImg.data[i * 4 + 1]!;
+      const b = baseImg.data[i * 4 + 2]!;
+      expect(baseImg.data[i * 4 + 3]).toBe(255); // fully opaque bake
+      const v = Math.max(r, g, b);
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
+      sumLum += (r + g + b) / 3;
+    }
+    // uColorA (0.72,0.45,0.2) → sRGB ≈ (221,179,124); uColorB (0.28,0.16,0.1)
+    // → sRGB ≈ (144,111,89). Every texel is a linear mix of the two, then
+    // multiplied by the flakes factor 0.85..1.0 — so the floor is B*0.85
+    // encoded (≈134,103,82) and the ceiling is A itself. Anything outside
+    // this span is not the authored kernel's output.
+    for (let i = 0; i < n; i += 997) {
+      const r = baseImg.data[i * 4]!;
+      const g = baseImg.data[i * 4 + 1]!;
+      const b = baseImg.data[i * 4 + 2]!;
+      expect(r).toBeGreaterThanOrEqual(133);
+      expect(r).toBeLessThanOrEqual(222);
+      expect(g).toBeGreaterThanOrEqual(102);
+      expect(g).toBeLessThanOrEqual(180);
+      expect(b).toBeGreaterThanOrEqual(81);
+      expect(b).toBeLessThanOrEqual(125);
+    }
+    // Real fbm varies: darkest and brightest texels are far apart.
+    expect(maxV - minV).toBeGreaterThan(40);
+    // Mean luminance sits between the two tones — not black, not blown.
+    const meanLum = sumLum / n;
+    expect(meanLum).toBeGreaterThan(100);
+    expect(meanLum).toBeLessThan(220);
+
+    // Roughness: kernel_roughness emits clamp(0.55 + 0.4*patina) LINEAR grey,
+    // and non-baseColor/emission outputs are written RAW (no sRGB encode —
+    // that bypass is the colour-management contract). fbm patina lands
+    // roughly 0.2..0.8, so bytes span ≈160..220; pin the kernel's own floor
+    // (0.55 → 140) and ceiling (0.95 → 242) with the observed spread inside.
+    const roughImg = decodePng(fs.readFileSync(rough));
+    expect([roughImg.width, roughImg.height]).toEqual([512, 512]);
+    let roughMin = 255;
+    let roughMax = 0;
+    for (let i = 0; i < roughImg.width * roughImg.height; i++) {
+      const v = roughImg.data[i * 4]!;
+      if (v < roughMin) roughMin = v;
+      if (v > roughMax) roughMax = v;
+    }
+    expect(roughMin).toBeGreaterThanOrEqual(140);
+    expect(roughMax).toBeLessThanOrEqual(242);
+    expect(roughMax - roughMin).toBeGreaterThan(20); // tracks the patina, not flat
+
     // The census sees a textured material: the baked images are bound,
     // measured (512 power-of-two), and the crate's UVs now face the full
     // UV rule set because the mesh is genuinely textured.

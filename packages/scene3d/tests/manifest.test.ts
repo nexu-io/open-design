@@ -6,7 +6,10 @@
 // contracts: arithmetic, not verdicts.
 
 import { describe, expect, it } from "vitest";
-import { buildManifest } from "../src/manifest.js";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { buildManifest, writeProjectKit } from "../src/manifest.js";
 import { Census, Issue, Scene3dManifest } from "../src/types.js";
 
 const issues: Issue[] = [];
@@ -164,5 +167,94 @@ describe("buildManifest proofFrames", () => {
     expect(
       manifestWith({ proofFrames: [] as Scene3dManifest["proofFrames"] }).proofFrames,
     ).toBeUndefined();
+  });
+});
+
+describe("writeProjectKit sidecar truncation flags", () => {
+  /**
+   * The host caps artifact metadata at 16KB and drops the whole manifest
+   * when it overflows — silently demoting a large kit to a plain HTML page.
+   * The sidecar therefore truncates its scene list and deliverable list and
+   * FLAGS the truncation. These pins hold both flags to their contract:
+   * false only when nothing was dropped, true whenever anything was, and
+   * the kept rows always being a prefix of the full set (a panel that says
+   * "showing a subset" must actually be showing a subset).
+   */
+  const SCENE_MANIFEST = (glbName: string) => ({
+    assetKind: "scene",
+    partTree: [{ name: "prp_a" }],
+    metrics: { totalTriangles: 12 },
+    issues: { errors: 0, warnings: 0 },
+    issueCodes: [] as string[],
+    exportedAssets: [`out/${glbName}.glb`],
+  });
+
+  function projectWithScenes(root: string, count: number): void {
+    for (let i = 0; i < count; i++) {
+      const dir = path.join(root, `scene_${String(i).padStart(2, "0")}`, "out");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(SCENE_MANIFEST(`s${i}`)));
+      fs.writeFileSync(path.join(dir, "scene.glb"), "bytes");
+    }
+  }
+
+  function readSidecar(root: string): Record<string, any> {
+    return JSON.parse(fs.readFileSync(path.join(root, "kit.html.artifact.json"), "utf8"));
+  }
+
+  it("flags deliverablesTruncated when one scene's exports overflow the cap", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "od-kit-trunc-"));
+    try {
+      const dir = path.join(root, "big", "out");
+      fs.mkdirSync(dir, { recursive: true });
+      // One scene whose deliverables alone exceed MAX_KIT_DELIVERABLES (192).
+      // A .glb must be present: a scene without one is not a kit entry.
+      const manifest = {
+        ...SCENE_MANIFEST("s0"),
+        exportedAssets: ["out/scene.glb", ...Array.from({ length: 200 }, (_, i) => `out/tex_${i}.png`)],
+      };
+      fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest));
+      writeProjectKit(root);
+      const sidecar = readSidecar(root);
+      expect(sidecar.metadata.scenesTruncated).toBe(false); // one scene, kept whole
+      expect(sidecar.metadata.deliverablesTruncated).toBe(true);
+      expect(sidecar.metadata.deliverables).toHaveLength(192);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps both flags false on a small kit — no false truncation alarms", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "od-kit-small-"));
+    try {
+      projectWithScenes(root, 3);
+      writeProjectKit(root);
+      const sidecar = readSidecar(root);
+      expect(sidecar.metadata.scenesTruncated).toBe(false);
+      expect(sidecar.metadata.deliverablesTruncated).toBe(false);
+      expect(sidecar.metadata.scenes).toHaveLength(3);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("truncates the scene list at the cap and keeps a prefix of it", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "od-kit-scenes-"));
+    try {
+      // MAX_KIT_SCENES is 48; build 50 so two must fold away.
+      projectWithScenes(root, 50);
+      writeProjectKit(root);
+      const sidecar = readSidecar(root);
+      expect(sidecar.metadata.scenesTruncated).toBe(true);
+      expect(sidecar.metadata.scenes.length).toBeLessThan(50);
+      // Every kept row carries its counts — truncation drops rows, never
+      // empties them into placeholders.
+      for (const scene of sidecar.metadata.scenes) {
+        expect(typeof scene.parts).toBe("number");
+        expect(Array.isArray(scene.scenePath)).toBe(false);
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
