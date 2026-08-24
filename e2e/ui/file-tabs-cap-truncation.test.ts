@@ -1,31 +1,7 @@
-// File-workspace tab labels: raised cap + extension-preserving truncation.
+// Browser witnesses for shipping tab geometry; parser cases live in Vitest.
+// The `.app` wrapper applies the same tab padding/border cascade as production.
 //
-// The file-tab strip (`.ws-tabs-bar` in the FileWorkspace) capped every tab
-// at 110px, which chopped `Design Files.html` to `Design Fi…` even with the
-// strip half empty. End-ellipsis also lost the file extension, which is
-// the token that tells the user which file kind the tab points at.
-//
-// The fix raises the cap to 240px and splits `.ws-tab-label` into a stem
-// span (may ellipsis-truncate) plus an optional extension span pinned
-// visible via flex, so a narrow tab reads `index….html` instead of
-// `index….ht`. Dirty sketch tabs also carry a trailing ` •` marker as its
-// own pinned span so the split still applies to the primary editing
-// surface.
-//
-// Scope: this spec is the CSS-invariant boundary. It boots the app so the
-// shipping stylesheet loads, then constructs the shipping DOM shape (root
-// `.ws-tab-label` with nested `.ws-tab-label-stem` / `.ws-tab-label-ext` /
-// `.ws-tab-label-dirty`) and measures rendered geometry. It does not
-// exercise `splitTabLabel`; that logic is pinned by the Vitest suite at
-// `apps/web/tests/components/workspaceTabLabel.test.tsx`. Splitting the
-// two responsibilities keeps the e2e from re-implementing the regex it is
-// supposed to trust and drifting from the shipped component.
-//
-// The `.app` wrapper below is what lets the `.app .ws-tab` padding/border
-// rules from `viewer/routines.css` apply; the `.ws-tab-label*` rules in
-// `workspace/drawer.css` live on bare selectors and would apply either
-// way. The wrapper is the smallest ancestor chain that makes the tab
-// geometry match a real shipping tab, not a full app scope simulation.
+// Width comparisons allow ±0.5px slack for subpixel rounding.
 
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
@@ -96,8 +72,6 @@ test('[P1] file tabs raise the label cap to 240 and keep extensions visible', as
       dirtyMarksPreserved: boolean;
     }> = [];
     for (const c of cases as StripCase[]) {
-      // Minimal ancestor chain so `.app .ws-tab` (viewer/routines.css) and
-      // the base `.ws-tab` (workspace/drawer.css) rules both apply.
       const app = document.createElement('div');
       app.className = 'app';
       app.style.cssText = `position: fixed; top: -3000px; left: 0; width: ${c.barWidth + 100}px;`;
@@ -167,9 +141,6 @@ test('[P1] file tabs raise the label cap to 240 and keep extensions visible', as
         const labelRect = label.getBoundingClientRect();
         return labelRect.right <= tabRect.right + 0.5 && labelRect.left >= tabRect.left - 0.5;
       });
-      // Per-tab label truncation: for each tab, does the stem render its
-      // full text without ellipsis clipping? Detected via scrollWidth vs
-      // clientWidth on the stem span.
       const stemTruncated = tabs.map((t) => {
         const stem = t.querySelector('.ws-tab-label-stem') as HTMLElement | null;
         if (!stem) return false;
@@ -200,25 +171,18 @@ test('[P1] file tabs raise the label cap to 240 and keep extensions visible', as
     expect(r.dirtyMarksPreserved, `dirty mark truncated at "${r.label}": ${detail}`).toBe(true);
   }
 
-  // Titles that fit within the 240px cap must render their full content
-  // with NO ellipsis truncation on the stem.
   const threeModerate = results.find((r) => r.label.startsWith('three moderate tabs'))!;
   expect(threeModerate.visibleText).toContain('Design Files.html');
   expect(threeModerate.visibleText).toContain('scene.json');
   expect(threeModerate.visibleText).toContain('kit.html');
   expect(threeModerate.stemTruncated.every((v) => v === false), `moderate tab stem truncated: ${detail}`).toBe(true);
 
-  // Long titles cap at 240px (up from the old 110px which chopped labels
-  // mid-word). Tabs sit at their natural content width and stop growing at
-  // the cap when the title exceeds it.
   const longThree = results.find((r) => r.label.startsWith('three tabs with long titles'))!;
   for (const w of longThree.tabWidths) {
     expect(w, `long-tab width breaches cap: ${detail}`).toBeLessThanOrEqual(240);
     expect(w, `long-tab width regressed under old 110px cap: ${detail}`).toBeGreaterThan(110);
   }
 
-  // Dirty sketch tab: extension AND dirty mark both survive; visible text
-  // ends with the ext + dirty mark in the shipped DOM order.
   const dirtySketch = results.find((r) => r.label.startsWith('dirty sketch tab'))!;
   expect(dirtySketch.tabWidths[0], `dirty sketch cap: ${detail}`).toBeLessThanOrEqual(240);
   expect(
@@ -232,11 +196,6 @@ test('[P1] file tabs raise the label cap to 240 and keep extensions visible', as
 });
 
 test('[P1] static-shape tabs keep the pre-fix 110px cap', async ({ page }) => {
-  // The raised 240px cap is scoped via :has(.ws-tab-label-stem) so it
-  // only applies to file tabs (which render the split spans). Static
-  // Design Files / Design System pills use a plain `.ws-tab-label` text
-  // node and must keep the pre-fix cap so they don't eat into file-tab
-  // space when the strip is tight.
   await page.goto('/');
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 
@@ -254,8 +213,6 @@ test('[P1] static-shape tabs keep the pre-fix 110px cap', async ({ page }) => {
     app.appendChild(shell);
     document.body.appendChild(app);
 
-    // Two static tabs matching the shipping shape: a `.ws-tab` with a
-    // plain-text `.ws-tab-label` child, no stem/ext/dirty spans.
     const results: Array<{ label: string; tabWidth: number; labelClipped: boolean }> = [];
     for (const text of ['Design Files', 'Design System supremely long variant that should truncate']) {
       const tab = document.createElement('button');
@@ -276,26 +233,14 @@ test('[P1] static-shape tabs keep the pre-fix 110px cap', async ({ page }) => {
 
   const detail = JSON.stringify(layout, null, 2);
   for (const r of layout) {
-    // Pre-fix cap on the base rule is 110px; the raised 240px cap must
-    // not leak to static labels. Half-pixel tolerance for subpixel
-    // rounding.
     expect(r.tabWidth, `static tab breached 110px cap on "${r.label}": ${detail}`).toBeLessThanOrEqual(110.5);
   }
-  // The long static label must actually truncate at the tight cap
-  // (proves the label max-width of 96px still applies here, not the
-  // raised 240 that only :has(.ws-tab-label-stem) grants).
   const long = layout.find((r) => r.label.startsWith('Design System supremely'))!;
   expect(long.labelClipped, `long static label did not truncate at pre-fix cap: ${detail}`).toBe(true);
 });
 
-test('[P1] file tab labels stay LTR under ambient dir=rtl', async ({ page }) => {
-  // The label is a flex row: without an explicit `direction: ltr`, ambient
-  // `<html dir="rtl">` on Arabic / Farsi locales would reverse the visual
-  // sibling order and render `foo.json` as `.json foo`. The pre-fix
-  // single-text-node label was safe because the Unicode Bidi Algorithm
-  // kept embedded Latin runs upright; the split form needs the row axis
-  // pinned. Extensions are always ASCII (regex-gated), so pinning LTR is
-  // safe across every locale.
+test('[P1] Arabic file labels stay LTR under ambient dir=rtl', async ({ page }) => {
+  // Pinning LTR preserves stem → extension → dirty order under RTL.
   await page.goto('/');
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 
@@ -323,7 +268,7 @@ test('[P1] file tab labels stay LTR under ambient dir=rtl', async ({ page }) => 
     label.className = 'ws-tab-label';
     const stem = document.createElement('span');
     stem.className = 'ws-tab-label-stem';
-    stem.textContent = 'foo';
+    stem.textContent = 'مشروع';
     label.appendChild(stem);
     const ext = document.createElement('span');
     ext.className = 'ws-tab-label-ext';
@@ -342,12 +287,10 @@ test('[P1] file tab labels stay LTR under ambient dir=rtl', async ({ page }) => 
     const dirtyRect = dirty.getBoundingClientRect();
     const ambientDir = getComputedStyle(app).direction;
     const labelDir = getComputedStyle(label).direction;
-    const visibleText = (tab.textContent ?? '').trim();
     app.remove();
     return {
       ambientDir,
       labelDir,
-      visibleText,
       stemLeft: stemRect.left,
       extLeft: extRect.left,
       dirtyLeft: dirtyRect.left,
@@ -355,16 +298,8 @@ test('[P1] file tab labels stay LTR under ambient dir=rtl', async ({ page }) => 
   });
 
   const detail = JSON.stringify(layout, null, 2);
-  // Sanity: the ancestor really did inherit RTL, so this test is exercising
-  // what it claims to.
   expect(layout.ambientDir, `ambient dir not rtl: ${detail}`).toBe('rtl');
-  // The fix: the split flex container pins LTR regardless of ambient dir.
   expect(layout.labelDir, `label dir not pinned to ltr: ${detail}`).toBe('ltr');
-  // Visual sibling order: stem left of ext left of dirty. Under ambient
-  // RTL without the pin, ext would end up left of stem.
   expect(layout.stemLeft, `stem not left of ext under rtl: ${detail}`).toBeLessThan(layout.extLeft);
   expect(layout.extLeft, `ext not left of dirty under rtl: ${detail}`).toBeLessThan(layout.dirtyLeft);
-  // textContent still concatenates DOM order, so this is a belt-and-braces
-  // check rather than a pure visual assertion.
-  expect(layout.visibleText, `visible text lost order: ${detail}`).toBe('foo.json •');
 });

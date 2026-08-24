@@ -1685,13 +1685,8 @@
   color: var(--text-muted);
   transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-/* File tabs (the ones carrying a stem/ext split via TabLabel) get the
-   raised 240px cap so titles like `Design Files.html` render at their
-   natural width. Scoped via :has() so the static Design Files / Design
-   System pills, which use a plain `.ws-tab-label` text node, keep the
-   original 110px cap and do not eat into file-tab space. Placed before
-   `.ws-tab.live-artifact-tab` so that rule's 260px cap still wins for
-   live-artifact tabs (same specificity, source order). */
+/* Split file tabs use 240px; keep this before the live-artifact rule so its
+   equal-specificity 260px cap wins. */
 .ws-tab:has(.ws-tab-label-stem) {
   max-width: 240px;
 }
@@ -1762,26 +1757,15 @@
   max-width: 96px;
   line-height: 1;
 }
-/* File tab label splits into a stem (may ellipsis-truncate) plus an
-   optional file-extension span pinned visible via flex, so a narrow tab
-   reads `index….html` instead of `index….ht`. Also lifts the label cap
-   to 240px so titles like `Design Files.html` render at their natural
-   width. Scoped to the split shape with :has() so the plain-text label
-   consumers (Design Files, Design System, and other static labels)
-   keep their block-level ellipsis and the pre-fix 96px cap. */
+/* Split labels reserve the extension while truncating the stem; plain labels
+   keep the base cap. */
 .ws-tab-label:has(.ws-tab-label-stem) {
   display: flex;
   align-items: baseline;
   white-space: normal;
   text-overflow: clip;
   max-width: 240px;
-  /* Pin LTR so the stem-then-ext-then-dirty box order survives Arabic /
-     Farsi locales. Flex `row` direction reverses sibling boxes under
-     ambient `dir=rtl`, which would render `foo.json` as visually
-     `.json foo`. The pre-fix single-text-node label relied on the
-     Unicode Bidi Algorithm keeping embedded Latin runs upright; the
-     split form loses that unless the row axis is forced. Extensions are
-     always ASCII (regex-gated), so LTR flex is safe universally. */
+  /* Keep filename order stable in RTL locales. */
   direction: ltr;
 }
 .ws-tab-label-stem {
@@ -1794,9 +1778,7 @@
   flex: 0 0 auto;
   white-space: nowrap;
 }
-/* Dirty/unsaved marker (sketch tabs). Pinned like the extension so the tab
-   still reads as `foo….json •` when the stem truncates, instead of losing
-   the affordance the marker carries. */
+/* Keep the dirty marker visible beside the extension. */
 .ws-tab-label-dirty {
   flex: 0 0 auto;
   white-space: nowrap;
