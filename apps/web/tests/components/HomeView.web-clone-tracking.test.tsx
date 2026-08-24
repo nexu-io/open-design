@@ -8,11 +8,12 @@
 // project_kind=web_clone on project_create_result.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { HomeView } from '../../src/components/HomeView';
 import { I18nProvider } from '../../src/i18n';
 import { writeHomeGuideStage } from '../../src/components/home-hero/firstRunGuide';
+import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
 
@@ -67,11 +68,31 @@ const WEB_CLONE_BASE = {
   },
 };
 
+const WEB_PROTOTYPE_BASE = {
+  ...WEB_CLONE_BASE,
+  id: 'example-web-prototype',
+  title: 'Web Prototype',
+  source: '/tmp/web-prototype',
+  fsPath: '/tmp/web-prototype',
+  manifest: {
+    ...WEB_CLONE_BASE.manifest,
+    name: 'example-web-prototype',
+    title: 'Web Prototype',
+    description: 'Create an interactive web prototype.',
+    tags: ['prototype'],
+    od: {
+      kind: 'scenario',
+      taskKind: 'new-generation',
+      useCase: { query: 'Create an interactive web prototype.' },
+    },
+  },
+};
+
 function stubPlugins() {
   vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
     const href = typeof url === 'string' ? url : url.toString();
     if (href === '/api/plugins') {
-      return new Response(JSON.stringify({ plugins: [WEB_CLONE_BASE] }), {
+      return new Response(JSON.stringify({ plugins: [WEB_CLONE_BASE, WEB_PROTOTYPE_BASE] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -83,9 +104,9 @@ function stubPlugins() {
   }));
 }
 
-function renderHome() {
+function renderHome(locale: 'en' | 'zh-CN' = 'en') {
   return render(
-    <I18nProvider initial="en">
+    <I18nProvider initial={locale}>
       <HomeView
         projects={[]}
         onSubmit={() => undefined}
@@ -113,6 +134,113 @@ async function pickHomeTemplate(id: string) {
 }
 
 describe('web-clone example-card tracking', () => {
+  it('clears the untouched Website-clone URL scaffold when another type tab is selected', async () => {
+    writeHomeGuideStage('done');
+    stubPlugins();
+    renderHome('zh-CN');
+
+    await pickHomeTemplate('web-clone');
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toBe('想要复刻的网站链接：');
+    });
+
+    await pickHomeTemplate('prototype');
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-input').textContent).toBe('');
+    });
+  });
+
+  it('preserves a Website-clone URL after the user edits the scaffold', async () => {
+    writeHomeGuideStage('done');
+    stubPlugins();
+    renderHome('zh-CN');
+
+    await pickHomeTemplate('web-clone');
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toBe('想要复刻的网站链接：');
+    });
+
+    setHomeHeroPrompt('想要复刻的网站链接：https://example.com');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await pickHomeTemplate('prototype');
+
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toBe('想要复刻的网站链接：https://example.com');
+    });
+  });
+
+  it('keeps the Website-clone scaffold system-owned across an unmount and remount', async () => {
+    writeHomeGuideStage('done');
+    stubPlugins();
+    const firstMount = renderHome('zh-CN');
+
+    await pickHomeTemplate('web-clone');
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toBe('想要复刻的网站链接：');
+      expect(JSON.parse(window.localStorage.getItem('open-design:home-composer:chip')!))
+        .toMatchObject({ chipId: 'web-clone', promptSeedKind: 'web-clone' });
+    });
+
+    firstMount.unmount();
+    renderHome('zh-CN');
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toBe('想要复刻的网站链接：');
+    });
+    await pickHomeTemplate('prototype');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-input').textContent).toBe('');
+    });
+  });
+
+  it('keeps a manually dismissed Website-clone scaffold empty across a remount', async () => {
+    writeHomeGuideStage('done');
+    stubPlugins();
+    const firstMount = renderHome('zh-CN');
+
+    await pickHomeTemplate('web-clone');
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toBe('想要复刻的网站链接：');
+    });
+
+    setHomeHeroPrompt('');
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-input').textContent).toBe('');
+    });
+
+    await pickHomeTemplate('prototype');
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-input').textContent).toBe('');
+    });
+
+    firstMount.unmount();
+    renderHome('zh-CN');
+    await pickHomeTemplate('web-clone');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-input').textContent).toBe('');
+    });
+  });
+
+  it('cleans up a Website-clone scaffold leaked into another persisted type by the old behavior', async () => {
+    writeHomeGuideStage('done');
+    stubPlugins();
+    window.localStorage.setItem('open-design:home-composer:prompt', '想要复刻的网站链接：');
+    window.localStorage.setItem('open-design:home-composer:chip', JSON.stringify({
+      chipId: 'prototype',
+      pluginId: 'example-web-prototype',
+      projectKind: 'prototype',
+    }));
+
+    renderHome('zh-CN');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-input').textContent).toBe('');
+    });
+  });
+
   it('renders the Website-clone examples as text prompt cards (no plugin preview / no remix)', async () => {
     writeHomeGuideStage('done');
     stubPlugins();
