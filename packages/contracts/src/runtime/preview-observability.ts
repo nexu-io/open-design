@@ -75,6 +75,25 @@ export function buildPreviewBaseHrefBridge(
       return path && path.indexOf('..') < 0 ? path : null;
     } catch (_) { return null; }
   }
+  // #7296 review (R9-3, non-blocking): projectFramePathFromHref intentionally
+  // strips to a bare pathname for the identity check above, but rebasing a
+  // frame to the next scope must preserve its query/hash (e.g.
+  // child.html?slide=2#section) -- otherwise a scope rotation silently
+  // resets deck/slide state carried in the URL. This mirrors the same
+  // validation but keeps child.search + child.hash intact.
+  function projectFrameRelativeFromHref(hrefString){
+    try {
+      var base = new URL(document.baseURI);
+      var baseMatch = base.pathname.match(/^\\/api\\/projects\\/([^/]+)\\/preview\\/([^/]+)\\//);
+      var child = new URL(hrefString, document.baseURI);
+      if (!baseMatch || child.origin !== base.origin) return null;
+      var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
+      if (child.pathname.indexOf(prefix) !== 0) return null;
+      var path = decodeURIComponent(child.pathname.slice(prefix.length));
+      if (!path || path.indexOf('..') >= 0) return null;
+      return path + child.search + child.hash;
+    } catch (_) { return null; }
+  }
   function projectFrameForSource(source){
     var frames = document.querySelectorAll('iframe[src]');
     for (var i = 0; i < frames.length; i++) {
@@ -88,8 +107,9 @@ export function buildPreviewBaseHrefBridge(
     var frame = projectFrameForSource(ev.source);
     var path = frame && projectFramePathFromHref(data.href);
     if (!path) return;
+    var relative = projectFrameRelativeFromHref(data.href) || path;
     observeProjectFrameLoad(frame);
-    try { liveFramePaths.set(frame, { path: path, srcAtCache: frame.getAttribute('src') || '' }); } catch (_) {}
+    try { liveFramePaths.set(frame, { path: relative, srcAtCache: frame.getAttribute('src') || '' }); } catch (_) {}
   });
   window.addEventListener('message', function(ev){
     if (ev.source !== window.parent) return;

@@ -177,6 +177,15 @@ describe('preview base href bridge (#7008 nested-iframe rebase)', () => {
     expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/child.html');
   });
 
+  it('preserves a self-navigated child’s query and hash across a scope rotation (#7296 review R9-3)', () => {
+    const { frame, ready, send } = setUp('child.html');
+    send('scope-2');
+    ready('http://preview.local/api/projects/p1/preview/scope-2/slide-2.html?slide=2#section');
+
+    send('scope-3');
+    expect(frame.src).toBe('http://preview.local/api/projects/p1/preview/scope-3/slide-2.html?slide=2#section');
+  });
+
   it('rebases and reloads an already-navigated project-relative child iframe to the new scope', () => {
     const { baseEl, frame, send } = setUp('child.html');
     send('scope-2');
