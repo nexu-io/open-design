@@ -576,6 +576,161 @@ describe('FileViewer manual edit history regressions', () => {
     await waitFor(() => expect(savedSources).toHaveLength(2));
     expect(savedSources[1]).toBe(initialSource);
   });
+
+  it('ignores the shared-window shortcut while the viewer is retained inactive', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero" style="color: #111111">Hero</h1></body></html>';
+    let persistedSource = initialSource;
+    let failSaves = false;
+    const savedSources: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { content: string };
+        savedSources.push(payload.content);
+        if (failSaves) {
+          return new Response(JSON.stringify({ message: 'save failed' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        persistedSource = payload.content;
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(persistedSource, { status: 200 });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+        workspaceActive
+      />,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget();
+
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { kind: 'set-style', id: 'hero', styles: { color: '#ef4444' } },
+        'Style: Hero',
+      );
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+
+    // A retained viewer only keeps its manual-edit session when the safe exit
+    // cannot complete. An uncommitted inspector preview whose save fails is
+    // exactly that case — edit mode survives the switch to another tab.
+    act(() => {
+      panelState.props?.onStyleChange?.('hero', { color: '#22c55e' }, 'Style: Hero');
+    });
+    failSaves = true;
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+        workspaceActive={false}
+      />,
+    );
+    await waitFor(() => expect(savedSources).toHaveLength(2));
+    expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
+
+    // The listener lives on the shared window, so the active tab's Cmd+Z would
+    // otherwise reach this hidden instance and write its file.
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'z', metaKey: true });
+      await Promise.resolve();
+    });
+    expect(savedSources).toHaveLength(2);
+    expect(persistedSource).toBe(savedSources[0]);
+  });
+
+  it('drops a pending inspector preview instead of saving an older revision on undo', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero" style="color: #111111">Hero</h1></body></html>';
+    const { savedSources } = stubManualEditHistoryFetch(initialSource);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget();
+
+    // Inspector previews stay in a ref until Save, so the history stack is
+    // still empty while the canvas already shows the change.
+    act(() => {
+      panelState.props?.onStyleChange?.('hero', { color: '#ef4444' }, 'Style: Hero');
+    });
+    expect(savedSources).toHaveLength(0);
+    expect((screen.getByTestId('manual-edit-undo') as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'z', metaKey: true });
+      await Promise.resolve();
+    });
+
+    // Undo reverted the live preview. Leaving edit mode must then have nothing
+    // left to flush — otherwise the undone edit lands after the undo.
+    clickManualTool('manual-edit-mode-toggle');
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+    });
+    expect(savedSources).toHaveLength(0);
+  });
+
+  it('does not re-apply a pending inspector preview after a toolbar undo', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero" style="color: #111111">Hero</h1></body></html>';
+    const { savedSources } = stubManualEditHistoryFetch(initialSource);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget();
+
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { kind: 'set-style', id: 'hero', styles: { color: '#ef4444' } },
+        'Style: Hero',
+      );
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    expect(savedSources[0]).toContain('rgb(239, 68, 68)');
+
+    act(() => {
+      panelState.props?.onStyleChange?.('hero', { color: '#22c55e' }, 'Style: Hero');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('manual-edit-undo'));
+      await Promise.resolve();
+    });
+
+    clickManualTool('manual-edit-mode-toggle');
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+    });
+    // The undo consumed the uncommitted preview, so the committed revision is
+    // untouched and no later flush re-applies the discarded colour.
+    expect(savedSources).toHaveLength(1);
+    expect(savedSources[0]).not.toContain('rgb(34, 197, 94)');
+  });
 });
 
 function htmlPreviewFile(): ProjectFile {

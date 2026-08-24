@@ -12472,8 +12472,7 @@ function HtmlViewer({
         return;
       }
       if (data.type === 'od-edit-history') {
-        if (data.op === 'redo') void redoManualEdit();
-        else void undoManualEdit();
+        void requestManualEditHistory(data.op === 'redo' ? 'redo' : 'undo');
         return;
       }
       if (data.type === 'od-edit-drag-commit') {
@@ -12511,9 +12510,11 @@ function HtmlViewer({
       // user's in-progress typing instead of reverting a committed edit.
       const target = ev.target as HTMLElement | null;
       if (target?.closest?.('input,textarea,select,[role="textbox"],[contenteditable]')) return;
+      // A retained inactive viewer is still mounted on this same window; only
+      // the active one may claim the key.
+      if (!workspaceActiveRef.current) return;
       ev.preventDefault();
-      if (ev.shiftKey) void redoManualEdit();
-      else void undoManualEdit();
+      void requestManualEditHistory(ev.shiftKey ? 'redo' : 'undo');
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -13156,6 +13157,46 @@ function HtmlViewer({
   ): string {
     const status = saved.status ? ` (${saved.status}${saved.code ? ` ${saved.code}` : ''})` : '';
     return `${prefix}${status}: ${saved.message}`;
+  }
+
+  // Single entry point for every undo/redo affordance (toolbar buttons, host
+  // shortcut, and the bridge's forwarded `od-edit-history`). Undo/redo write a
+  // whole revision, so they must never run while a newer edit is still only
+  // live in a ref: `manualEditPendingStyleRef` holds an uncommitted inspector
+  // preview and an inline text session holds an uncommitted DOM edit. Saving an
+  // older source underneath either one lets the later flush re-apply an edit the
+  // user just undid, or commit text onto the wrong revision.
+  async function requestManualEditHistory(op: 'undo' | 'redo') {
+    // Retained inactive viewers stay mounted, and the lifecycle keeps their
+    // manual-edit session alive through a pending or failed safe exit. The
+    // shortcut listener is on the shared window, so without this guard the
+    // active tab's Cmd/Ctrl+Z would make a hidden instance write its own file.
+    if (!workspaceActiveRef.current) return;
+    if (manualEditSavingRef.current) return;
+    const latestTextCommit = manualEditTextLatestCommitRef.current;
+    const hadPendingText = manualEditTextSessionIdRef.current != null
+      || (latestTextCommit != null && latestTextCommit.result == null);
+    if (!(await settlePendingManualEditCommit())) return;
+    // Settling committed text and moved the stack under this call's closure;
+    // act on the settled stack from the next press rather than an older one.
+    if (hadPendingText) return;
+    if (manualEditPendingStyleRef.current) {
+      clearManualEditStyleTimer();
+      if (op === 'undo') {
+        // The uncommitted preview IS the newest edit, so undo drops it. Popping
+        // committed history instead would save an older source that the pending
+        // flush then re-applies on top.
+        cancelManualEditStyleDraft();
+        return;
+      }
+      // A newer uncommitted edit invalidates redo exactly like a committed one
+      // does (applyManualEdit clears the undone stack). Commit it rather than
+      // restoring a revision the pending preview would immediately overwrite.
+      await flushManualEditStyleSave();
+      return;
+    }
+    if (op === 'redo') await redoManualEdit();
+    else await undoManualEdit();
   }
 
   async function undoManualEdit() {
@@ -16142,7 +16183,7 @@ function HtmlViewer({
                     aria-label={t('manualEdit.undo')}
                     disabled={manualEditSaving || manualEditHistory.length === 0}
                     onClick={() => {
-                      void undoManualEdit();
+                      void requestManualEditHistory('undo');
                     }}
                   >
                     <RemixIcon name="arrow-go-back-line" size={15} />
@@ -16157,7 +16198,7 @@ function HtmlViewer({
                     aria-label={t('manualEdit.redo')}
                     disabled={manualEditSaving || manualEditUndone.length === 0}
                     onClick={() => {
-                      void redoManualEdit();
+                      void requestManualEditHistory('redo');
                     }}
                   >
                     <RemixIcon name="arrow-go-forward-line" size={15} />
