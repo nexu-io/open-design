@@ -3975,6 +3975,34 @@ describe("desktop updater", () => {
     }
   });
 
+  it("makes the store failure terminal on a warm re-check after new artifacts appear", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ version: "99.0.0" });
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const first = await updater.checkForUpdates({ autoDownload: false });
+      expect(first.state).toBe(DESKTOP_UPDATE_STATES.AVAILABLE);
+      expect(first.availableVersion).toBe("99.0.0");
+
+      await writeFile(join(root, ".DS_Store"), "binary-finder-junk");
+      await writeFile(join(root, "stray-file.bin"), "junk");
+
+      const second = await updater.checkForUpdates({ autoDownload: false });
+      expect(second.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(second.error?.code).toBe("update-store-invalid-shape");
+      expect(second.error?.details).toMatchObject({ details: { unexpected: ["stray-file.bin"] } });
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("claims a fresh root that contains only OS-managed artifacts", async () => {
     const root = makeRoot();
     try {
