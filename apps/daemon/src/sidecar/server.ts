@@ -186,9 +186,10 @@ export async function startDaemonSidecar(
           // request so `tools-dev start desktop` sees the live value
           // (the flag flips after REGISTER_DESKTOP_AUTH and stays sticky).
           return withCurrentDesktopAuthGate(state);
-        case SIDECAR_MESSAGES.SHUTDOWN:
-          scheduleHeldDaemonExit(stop, options.exit);
-          return { accepted: true };
+        case SIDECAR_MESSAGES.SHUTDOWN: {
+          const deferred = scheduleHeldDaemonExit(stop, options.exit);
+          return deferred ? { accepted: true, deferred: true } : { accepted: true };
+        }
         case SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH:
           // PR #974: the desktop main process registers its per-process
           // auth secret here at startup. From this point on the HTTP
@@ -218,10 +219,10 @@ export async function startDaemonSidecar(
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      // Packaged beforeShutdown sends SHUTDOWN, then closeManagedChild waits
-      // five seconds and stopProcesses() delivers SIGTERM. Keep that path on
-      // the same hold as SHUTDOWN so a slow handoff journal commit cannot be
-      // cut off mid-write.
+      // Packaged beforeShutdown sends SHUTDOWN. When the handoff hold is
+      // active the SHUTDOWN ack includes deferred:true so closeManagedChild
+      // waits a longer bounded grace before stopProcesses(). SIGTERM from
+      // that escalation still uses this hold; SIGKILL remains the ceiling.
       scheduleHeldDaemonExit(stop, options.exit);
     });
   }

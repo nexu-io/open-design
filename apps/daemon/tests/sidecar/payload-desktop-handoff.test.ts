@@ -750,7 +750,7 @@ describe("legacy payload desktop handoff", () => {
     }
   });
 
-  it("commits the armed journal before packaged SIGTERM escalation can exit the daemon", async () => {
+  it("commits the armed journal before a second held SIGTERM exit runs", async () => {
     const { launcherPaths, prepared, root } = await armedHandoffFixture();
     try {
       let daemonExited = false;

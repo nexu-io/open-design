@@ -13,6 +13,7 @@ import {
   type AppKey,
   type DaemonStatusSnapshot,
   type RegisterWebUrlResult,
+  type ShutdownResult,
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
@@ -34,6 +35,7 @@ import {
   stopProcesses,
   waitForProcessExit,
   wellKnownUserToolchainBins,
+  type StopProcessesOptions,
 } from "@open-design/platform";
 
 import type { PackagedWebOutputMode } from "./config.js";
@@ -113,7 +115,7 @@ export type PackagedSidecarHandle = {
   web: WebStatusSnapshot;
 };
 
-type ManagedSidecarChild = {
+export type ManagedSidecarChild = {
   app: AppKey;
   child: ChildProcess;
   ipcPath: string;
@@ -951,18 +953,50 @@ export function createPackagedSidecarSpawnOptions(input: {
   };
 }
 
-async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
+export const MANAGED_CHILD_EXIT_GRACE_MS = 5_000;
+export const DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS = 30_000;
+
+export type CloseManagedChildDeps = {
+  deferredExitGraceMs?: number;
+  exitGraceMs?: number;
+  requestIpc?: typeof requestJsonIpc;
+  stopOptions?: StopProcessesOptions;
+  stopProcesses?: typeof stopProcesses;
+  waitForExit?: typeof waitForProcessExit;
+};
+
+export function resolveManagedChildExitGraceMs(
+  shutdown: ShutdownResult | null | undefined,
+): number {
+  return shutdown?.deferred === true
+    ? DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS
+    : MANAGED_CHILD_EXIT_GRACE_MS;
+}
+
+export async function closeManagedChild(
+  child: ManagedSidecarChild,
+  deps: CloseManagedChildDeps = {},
+): Promise<void> {
   const appendLifecycleLog = async (message: string): Promise<void> => appendSidecarLifecycleLog(child.logPath, message);
   await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
+  let shutdown: ShutdownResult | undefined;
   try {
-    await requestJsonIpc(child.ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1200 });
+    shutdown = await (deps.requestIpc ?? requestJsonIpc)<ShutdownResult>(
+      child.ipcPath,
+      { type: SIDECAR_MESSAGES.SHUTDOWN },
+      { timeoutMs: 1200 },
+    );
   } catch {
     // Fall through to process cleanup.
   }
 
-  if (!(await waitForProcessExit(child.child.pid, 5000))) {
+  const exitGraceMs = shutdown?.deferred === true
+    ? (deps.deferredExitGraceMs ?? resolveManagedChildExitGraceMs(shutdown))
+    : (deps.exitGraceMs ?? resolveManagedChildExitGraceMs(shutdown));
+
+  if (!(await (deps.waitForExit ?? waitForProcessExit)(child.child.pid, exitGraceMs))) {
     await appendLifecycleLog(`[open-design packaged] shutdown timeout app=${child.app} pid=${child.child.pid ?? "unknown"}; forcing stop`);
-    await stopProcesses([child.child.pid]);
+    await (deps.stopProcesses ?? stopProcesses)([child.child.pid], deps.stopOptions);
   }
 
   await appendLifecycleLog(`[open-design packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);

@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createProcessStampArgs, isProcessAlive, waitForProcessExit } from '@open-design/platform';
+import { createProcessStampArgs, isProcessAlive, stopProcesses, waitForProcessExit } from '@open-design/platform';
 import { createJsonIpcServer, resolveAppIpcPath } from '@open-design/sidecar';
 import {
   APP_KEYS,
@@ -35,11 +35,15 @@ import {
 
 import {
   buildPackagedDaemonSpawnEnv,
+  closeManagedChild,
   createPackagedSidecarSpawnOptions,
   createRestartPolicy,
   createWebSidecarSupervisor,
+  DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS,
+  MANAGED_CHILD_EXIT_GRACE_MS,
   openLog,
   registerPackagedWebUrl,
+  resolveManagedChildExitGraceMs,
   retireExistingSidecarEndpoint,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
@@ -1464,3 +1468,156 @@ describe('packaged sidecar log rotation', () => {
     }
   });
 });
+
+describe('packaged managed-child shutdown grace', () => {
+  it('keeps the ordinary 5s grace unless shutdown is deferred', () => {
+    expect(resolveManagedChildExitGraceMs(undefined)).toBe(MANAGED_CHILD_EXIT_GRACE_MS);
+    expect(resolveManagedChildExitGraceMs({ accepted: true })).toBe(MANAGED_CHILD_EXIT_GRACE_MS);
+    expect(resolveManagedChildExitGraceMs({ accepted: true, deferred: false })).toBe(
+      MANAGED_CHILD_EXIT_GRACE_MS,
+    );
+    expect(resolveManagedChildExitGraceMs({ accepted: true, deferred: true })).toBe(
+      DEFERRED_MANAGED_CHILD_EXIT_GRACE_MS,
+    );
+  });
+});
+
+describe.runIf(process.platform !== 'win32')(
+  'packaged deferred shutdown vs stopProcesses SIGKILL',
+  () => {
+    const journalNames = ['handoff.json', 'attempts.json', 'runtime.json'] as const;
+
+    async function spawnSlowJournalChild(journalDir: string, writeDelayMs: number): Promise<{
+      child: ChildProcess;
+      pid: number;
+    }> {
+      mkdirSync(journalDir, { recursive: true });
+      const child = spawn(
+        process.execPath,
+        [
+          '-e',
+          [
+            "process.on('SIGTERM',()=>{});",
+            "const fs=require('fs');",
+            "const path=require('path');",
+            "const dir=process.env.OD_TEST_JOURNAL_DIR;",
+            "const delay=Number(process.env.OD_TEST_WRITE_DELAY_MS);",
+            "const files=['handoff.json','attempts.json','runtime.json'];",
+            '(async()=>{',
+            '  for (const file of files) {',
+            '    await new Promise((resolve)=>setTimeout(resolve, delay));',
+            "    fs.writeFileSync(path.join(dir, file), JSON.stringify({ committed: file }) + '\\n');",
+            '  }',
+            '})();',
+            'setInterval(()=>{}, 1000);',
+          ].join(''),
+        ],
+        {
+          env: {
+            ...process.env,
+            OD_TEST_JOURNAL_DIR: journalDir,
+            OD_TEST_WRITE_DELAY_MS: String(writeDelayMs),
+          },
+          stdio: 'ignore',
+        },
+      );
+      const pid = child.pid;
+      if (pid == null) {
+        child.kill('SIGKILL');
+        throw new Error('slow journal child did not start');
+      }
+      return { child, pid };
+    }
+
+    function committedJournalCount(journalDir: string): number {
+      return journalNames.filter((name) => existsSync(join(journalDir, name))).length;
+    }
+
+    it('lets real stopProcesses SIGKILL truncate a non-deferred journal', async () => {
+      const root = mkdtempSync(join(tmpdir(), 'od-packaged-sigkill-trunc-'));
+      const ipcPath = join(root, 'daemon.sock');
+      const logPath = join(root, 'daemon.log');
+      const journalDir = join(root, 'journal');
+      const server = await createJsonIpcServer({
+        socketPath: ipcPath,
+        handler: async () => ({ accepted: true }),
+      });
+      const { child, pid } = await spawnSlowJournalChild(journalDir, 200);
+      const logHandle = await openLog(logPath);
+      let stopResult: Awaited<ReturnType<typeof stopProcesses>> | undefined;
+
+      try {
+        await closeManagedChild(
+          {
+            app: APP_KEYS.DAEMON,
+            child,
+            ipcPath,
+            logHandle,
+            logPath,
+          },
+          {
+            exitGraceMs: 0,
+            stopOptions: { killGraceMs: 1_000, termGraceMs: 0 },
+            stopProcesses: async (pids, options) => {
+              stopResult = await stopProcesses(pids, options);
+              return stopResult;
+            },
+          },
+        );
+
+        expect(committedJournalCount(journalDir)).toBeLessThan(journalNames.length);
+        expect(stopResult?.forcedPids).toContain(pid);
+        expect(isProcessAlive(pid)).toBe(false);
+      } finally {
+        child.kill('SIGKILL');
+        await waitForProcessExit(pid, 1_000);
+        await server.close();
+        rmSync(root, { recursive: true, force: true });
+      }
+    }, 10_000);
+
+    it('commits all three journal files before deferred stopProcesses SIGKILL', async () => {
+      const root = mkdtempSync(join(tmpdir(), 'od-packaged-sigkill-hold-'));
+      const ipcPath = join(root, 'daemon.sock');
+      const logPath = join(root, 'daemon.log');
+      const journalDir = join(root, 'journal');
+      const server = await createJsonIpcServer({
+        socketPath: ipcPath,
+        handler: async () => ({ accepted: true, deferred: true }),
+      });
+      const { child, pid } = await spawnSlowJournalChild(journalDir, 100);
+      const logHandle = await openLog(logPath);
+      let stopResult: Awaited<ReturnType<typeof stopProcesses>> | undefined;
+
+      try {
+        await closeManagedChild(
+          {
+            app: APP_KEYS.DAEMON,
+            child,
+            ipcPath,
+            logHandle,
+            logPath,
+          },
+          {
+            deferredExitGraceMs: 1_500,
+            exitGraceMs: 0,
+            stopOptions: { killGraceMs: 1_000, termGraceMs: 0 },
+            stopProcesses: async (pids, options) => {
+              stopResult = await stopProcesses(pids, options);
+              return stopResult;
+            },
+          },
+        );
+
+        expect(committedJournalCount(journalDir)).toBe(journalNames.length);
+        expect(stopResult?.forcedPids).toContain(pid);
+        expect(isProcessAlive(pid)).toBe(false);
+      } finally {
+        child.kill('SIGKILL');
+        await waitForProcessExit(pid, 1_000);
+        await server.close();
+        rmSync(root, { recursive: true, force: true });
+      }
+    }, 10_000);
+  },
+);

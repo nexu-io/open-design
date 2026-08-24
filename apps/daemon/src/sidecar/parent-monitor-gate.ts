@@ -39,12 +39,14 @@ export function resetParentMonitorExitHoldForTests(): void {
 export function scheduleHeldDaemonExit(
   stop: () => Promise<void>,
   exit: (code?: number) => void = (code) => process.exit(code),
-): void {
+): boolean {
+  const deferred = isParentMonitorExitHeld();
   setImmediate(() => {
     void waitForParentMonitorRelease()
       .then(() => stop())
       .finally(() => exit(0));
   });
+  return deferred;
 }
 
 function defaultIsProcessAlive(pid: number): boolean {

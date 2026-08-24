@@ -133,11 +133,12 @@ describe('daemon sidecar startup', () => {
     }, { exit });
 
     try {
-      await requestJsonIpc(
+      const shutdown = await requestJsonIpc(
         ipc,
         { type: SIDECAR_MESSAGES.SHUTDOWN },
         { timeoutMs: 1_000 },
       );
+      expect(shutdown).toEqual({ accepted: true, deferred: true });
       await new Promise((resolve) => setTimeout(resolve, 30));
       expect(exit).not.toHaveBeenCalled();
       expect(stopRuntime).not.toHaveBeenCalled();
