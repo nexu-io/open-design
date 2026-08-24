@@ -2543,6 +2543,111 @@ process.exit(0);
     );
   });
 
+  it('does not classify Antigravity background-poll log noise as missing auth', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+const logIndex = args.indexOf('--log-file');
+if (logIndex !== -1) {
+  fs.writeFileSync(
+    args[logIndex + 1],
+    'Failed to poll ListExperiments: error getting token source: You are not logged into Antigravity',
+  );
+}
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: end');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).not.toContain('AGENT_AUTH_REQUIRED');
+        expect(eventsBody).not.toContain('needs to sign in');
+        expect(eventsBody).toContain('event: run_retry_finished');
+        expect(eventsBody).toContain('"failure_category":"empty_output"');
+        expect(eventsBody).toContain('"failure_detail":"empty_output"');
+        expect(eventsBody).not.toContain('"retry_suppressed_reason":"hard_quota"');
+        expect(eventsBody).toContain('event: end');
+        expect(eventsBody).toContain('"failureCategory":"empty_output"');
+        expect(eventsBody).toContain('"failureDetail":"empty_output"');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('preserves Antigravity quota errors mixed with background auth noise', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+const logIndex = args.indexOf('--log-file');
+if (logIndex !== -1) {
+  fs.writeFileSync(
+    args[logIndex + 1],
+    [
+      'Authentication required while polling ListExperiments',
+      'upstream error: code = 429 RESOURCE_EXHAUSTED: Individual quota reached',
+    ].join('\\n'),
+  );
+}
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'RATE_LIMITED');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('RATE_LIMITED');
+        expect(eventsBody).not.toContain('AGENT_AUTH_REQUIRED');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
   it('parses successful Antigravity Gemini JSONL output instead of forwarding raw stdout', async () => {
     await withFakeAgent(
       'agy',

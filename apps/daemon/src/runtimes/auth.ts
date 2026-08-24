@@ -279,6 +279,10 @@ export type AgentServiceFailureCode =
   | 'AGENT_AUTH_REQUIRED'
   | 'RATE_LIMITED'
   | 'UPSTREAM_UNAVAILABLE';
+type AgentNonAuthServiceFailureCode = Exclude<
+  AgentServiceFailureCode,
+  'AGENT_AUTH_REQUIRED'
+>;
 
 // A bare HTTP status number (`500`, `429`, …) is too noisy to trust on its own
 // — agent stderr is full of unrelated numbers (`line 500`, `read 502 bytes`,
@@ -315,6 +319,16 @@ const AGENT_UPSTREAM_FAILURE_RE = new RegExp(
   'i',
 );
 
+function classifyAgentNonAuthServiceFailure(
+  text: string,
+): AgentNonAuthServiceFailureCode | null {
+  const value = String(text || '');
+  if (!value.trim()) return null;
+  if (AGENT_RATE_FAILURE_RE.test(value)) return 'RATE_LIMITED';
+  if (AGENT_UPSTREAM_FAILURE_RE.test(value)) return 'UPSTREAM_UNAVAILABLE';
+  return null;
+}
+
 // Returns the model-service failure class implied by an agent's combined
 // stdout/stderr/error text, or null when the text looks like an ordinary
 // process failure. Auth is checked before rate/upstream so a `401` is never
@@ -326,9 +340,33 @@ export function classifyAgentServiceFailure(
   const value = String(text || '');
   if (!value.trim()) return null;
   if (AGENT_AUTH_FAILURE_RE.test(value)) return 'AGENT_AUTH_REQUIRED';
-  if (AGENT_RATE_FAILURE_RE.test(value)) return 'RATE_LIMITED';
-  if (AGENT_UPSTREAM_FAILURE_RE.test(value)) return 'UPSTREAM_UNAVAILABLE';
-  return null;
+  return classifyAgentNonAuthServiceFailure(value);
+}
+
+/**
+ * Classifies a silent Antigravity run without allowing background diagnostic
+ * polling to establish authentication state. `directText` is child
+ * stdout/stderr; `diagnosticText` may additionally contain agy's default or
+ * per-run log tail. Quota and upstream signals remain useful from either
+ * source, while auth requires evidence on the run's own process channels.
+ */
+export function classifySilentAntigravityFailure(input: {
+  directText: string;
+  diagnosticText?: string;
+}): {
+  authFailure: AgentAuthProbeResult | null;
+  serviceFailure: AgentServiceFailureCode | null;
+} {
+  const directText = String(input.directText || '');
+  const diagnosticText = String(input.diagnosticText ?? directText);
+  const authFailure = classifyAgentAuthFailure('antigravity', directText);
+  const directServiceFailure = classifyAgentServiceFailure(directText);
+  const diagnosticNonAuthServiceFailure =
+    classifyAgentNonAuthServiceFailure(diagnosticText);
+  return {
+    authFailure,
+    serviceFailure: directServiceFailure ?? diagnosticNonAuthServiceFailure,
+  };
 }
 
 // Tail length matches the smoke-test sink so the diagnostics block

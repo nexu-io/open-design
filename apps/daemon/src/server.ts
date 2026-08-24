@@ -432,10 +432,10 @@ import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 import {
-  antigravityAuthGuidance,
   antigravityQuotaGuidance,
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
+  classifySilentAntigravityFailure,
   cursorAuthGuidance,
   normalizeDeepSeekHarnessFailure,
 } from './runtimes/auth.js';
@@ -13682,14 +13682,11 @@ export async function startServer({
         }
       }
       // Plain-stream empty-output guard: plain agents send raw stdout
-      // chunks without structured event tracking. Detect auth failures
-      // and quota / upstream errors when exit 0 but no stdout was
-      // seen. agy in print mode is silent on stdout/stderr for both
-      // missing-auth AND quota-exhausted failures; the daemon piped
-      // agy's `--log-file` to `agentLogFilePath` precisely so this
-      // guard can grep the upstream error code (RESOURCE_EXHAUSTED 429
-      // for quota, "not logged into Antigravity" for auth) and route
-      // to the right user-facing guidance.
+      // chunks without structured event tracking. Detect direct auth evidence
+      // plus quota/upstream failures when exit 0 but no stdout was seen. agy's
+      // default log is diagnostic-only: background polling can write "not
+      // logged into Antigravity" during an otherwise authenticated session, so
+      // log-only text must never establish the run's auth state (#4121).
       if (
         code === 0 &&
         !run.cancelRequested &&
@@ -13697,34 +13694,34 @@ export async function startServer({
         !childStdoutSeen
       ) {
         markRpcCloseReason('empty_output');
-        let combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
+        const directDetail = `${agentStderrTail}\n${agentStdoutTail}`;
+        let diagnosticDetail = directDetail;
         if (def.id === 'antigravity' && agentLogFilePath) {
           try {
             const logContent = await fs.promises.readFile(agentLogFilePath, 'utf8');
-            // Keep the last 8 KB — quota / auth lines all land near the
-            // tail (after the spawn / model-config preamble).
-            combinedDetail = `${combinedDetail}\n${logContent.slice(-8192)}`;
+            // Keep the last 8 KB — quota / upstream lines land near the tail
+            // (after the spawn / model-config preamble). Auth remains direct-only.
+            diagnosticDetail = `${diagnosticDetail}\n${logContent.slice(-8192)}`;
           } catch {
             // Missing log file (agy didn't write it, mounted tmpfs is
             // read-only, etc.) is fine — fall through to the generic
             // empty-output message.
           }
         }
-        const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
-        const serviceFailure = !authFailure
-          ? classifyAgentServiceFailure(combinedDetail)
-          : null;
+        const { authFailure, serviceFailure } =
+          def.id === 'antigravity'
+            ? classifySilentAntigravityFailure({
+                directText: directDetail,
+                diagnosticText: diagnosticDetail,
+              })
+            : {
+                authFailure: classifyAgentAuthFailure(agentId, directDetail),
+                serviceFailure: classifyAgentServiceFailure(diagnosticDetail),
+              };
         const isAntigravityQuota =
           def.id === 'antigravity' && serviceFailure === 'RATE_LIMITED';
-        // Antigravity-only fallback: if neither classifier matched but
-        // the run was silent, lean on the empirical observation that
-        // an empty agy print-mode exit almost always means
-        // missing-OAuth (the only other silent path is quota, which
-        // the log-file check above already caught).
-        const useAntigravityAuthFallback =
-          !authFailure && !serviceFailure && def.id === 'antigravity';
         const errorCode =
-          authFailure || useAntigravityAuthFallback
+          authFailure || serviceFailure === 'AGENT_AUTH_REQUIRED'
             ? 'AGENT_AUTH_REQUIRED'
             : isAntigravityQuota
               ? 'RATE_LIMITED'
@@ -13733,9 +13730,7 @@ export async function startServer({
           ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
           : isAntigravityQuota
             ? antigravityQuotaGuidance()
-            : useAntigravityAuthFallback
-              ? antigravityAuthGuidance()
-              : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
+            : `${def.name} returned an empty response. Check the agent logs for details, then retry.`;
         send('error', createSseErrorPayload(
           errorCode,
           msg,
