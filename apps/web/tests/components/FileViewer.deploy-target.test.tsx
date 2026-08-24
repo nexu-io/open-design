@@ -234,3 +234,119 @@ describe('FileViewer GitHub PAT scope link', () => {
     );
   });
 });
+
+describe('FileViewer social share provider selector', () => {
+  it('switches the visible URL and share payload when changing the deployment provider select', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'dep-netlify',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'netlify',
+              url: 'https://site-netlify.netlify.app',
+              status: 'ready',
+              createdAt: 1000,
+              updatedAt: 1000,
+            },
+            {
+              id: 'dep-cf',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'cloudflare-pages',
+              url: 'https://demo-pages.pages.dev',
+              status: 'ready',
+              createdAt: 2000,
+              updatedAt: 2000,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url.startsWith('/api/deploy/config')) {
+        return new Response(JSON.stringify({
+          providerId: 'cloudflare-pages',
+          configured: true,
+          tokenMask: 'saved-token',
+          accountId: 'account-123',
+          target: 'production',
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/cloudflare-pages/zones') {
+        return new Response(JSON.stringify({ zones: [] }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'cloudflare-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'cloudflare-pages',
+          url: 'https://demo-pages.pages.dev',
+          status: 'ready',
+          createdAt: 2000,
+          updatedAt: 2000,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }));
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={deployableHtmlFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    // Open share menu and click Publish share page to open the social share modal
+    fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Publish share page/i }));
+
+    // The social share modal should now be open
+    const providerSelect = await screen.findByRole('combobox', {
+      name: /Select deployment provider for social share/i,
+    });
+    expect((providerSelect as HTMLSelectElement).value).toBe('cloudflare-pages');
+
+    // The displayed URL in the modal is the Cloudflare URL
+    await waitFor(() => {
+      const displayedUrlLinks = screen.getAllByRole('link', { name: 'https://demo-pages.pages.dev' });
+      expect(displayedUrlLinks.length).toBeGreaterThan(0);
+      expect(displayedUrlLinks[0]).toHaveAttribute('href', 'https://demo-pages.pages.dev');
+    });
+
+    // The modal's X share button has the Cloudflare URL
+    await waitFor(() => {
+      const modalXButtons = screen.getAllByRole('link', { name: /X/i });
+      const modalXButton = modalXButtons[modalXButtons.length - 1]!;
+      expect(modalXButton.getAttribute('href')).toContain(encodeURIComponent('https://demo-pages.pages.dev'));
+    });
+
+    // Switch provider to netlify
+    fireEvent.change(providerSelect, { target: { value: 'netlify' } });
+
+    await waitFor(() => {
+      expect((providerSelect as HTMLSelectElement).value).toBe('netlify');
+    });
+
+    // The displayed link switches to the netlify URL
+    await waitFor(() => {
+      const netlifyLinks = screen.getAllByRole('link', { name: 'https://site-netlify.netlify.app' });
+      expect(netlifyLinks.length).toBeGreaterThan(0);
+      expect(netlifyLinks[0]).toHaveAttribute('href', 'https://site-netlify.netlify.app');
+    });
+
+    // The share payload on the X button switches to the netlify URL
+    await waitFor(() => {
+      const modalXButtons = screen.getAllByRole('link', { name: /X/i });
+      const modalXButton = modalXButtons[modalXButtons.length - 1]!;
+      expect(modalXButton.getAttribute('href')).toContain(encodeURIComponent('https://site-netlify.netlify.app'));
+    });
+  });
+});
+

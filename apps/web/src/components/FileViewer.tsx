@@ -15212,22 +15212,25 @@ function trackingProviderFromDeployProviderId(providerId: WebDeployProviderId): 
       ? t('fileViewer.redeployToProvider', { provider: label })
       : t('fileViewer.deployToProvider', { provider: label });
   };
-  const deployedEntries = DEPLOY_PROVIDER_OPTIONS
-    .map((option) => deploymentsByProvider[option.id])
-    .filter((item): item is WebDeploymentInfo => Boolean(item?.url?.trim()));
-  const shareableDeploymentUrl =
-    DEPLOY_PROVIDER_OPTIONS.map((option) => deploymentsByProvider[option.id])
-      .map((item) => publicShareUrlForDeployment(item))
-      .find(Boolean) ?? '';
+  const latestShareDeployment = useMemo(
+    () => pickLatestShareDeployment(deploymentsByProvider),
+    [deploymentsByProvider],
+  );
+  const latestSocialShareDeployment =
+    (activeSocialShareProviderId ? deploymentsByProvider[activeSocialShareProviderId] : null) ??
+    latestShareDeployment;
+  const latestShareDeploymentDefault = latestShareDeployment;
+
+  const shareableDeploymentUrl = publicShareUrlForDeployment(latestSocialShareDeployment);
   // A link is a link: the published-file URL unlocks social sharing exactly
   // like a ready deployment does, so a blocked/protected deployment never
   // gates sharing when a clean publish link exists.
   const socialShareBlockedDeployment =
     shareableDeploymentUrl || publishedFileUrl
       ? null
-      : deployedEntries.find((item) => deployResultState(item.status) === 'protected' && !publicShareUrlForDeployment(item)) ??
-        deployedEntries.find((item) => !publicShareUrlForDeployment(item)) ??
-        null;
+      : latestSocialShareDeployment && !publicShareUrlForDeployment(latestSocialShareDeployment)
+        ? latestSocialShareDeployment
+        : null;
   const socialShareBlockedState = socialShareBlockedDeployment
     ? deployResultState(socialShareBlockedDeployment.status)
     : null;
@@ -15293,14 +15296,8 @@ function trackingProviderFromDeployProviderId(providerId: WebDeployProviderId): 
     if (providerId === 'cloudflare-pages') return 'pages-line';
     return 'upload-cloud-line';
   };
-  const latestShareDeployment = useMemo(
-    () => pickLatestShareDeployment(deploymentsByProvider),
-    [deploymentsByProvider],
-  );
 
   const closeSocialShareModal = () => setSocialShareModalOpen(false);
-  const latestSocialShareDeployment = latestShareDeployment;
-  const latestShareDeploymentDefault = latestShareDeployment;
 
   const deployCopyLinks = DEPLOY_PROVIDER_OPTIONS.map((option) => ({
     providerId: option.id,
@@ -16637,6 +16634,25 @@ function trackingProviderFromDeployProviderId(providerId: WebDeployProviderId): 
                       <div className="share-menu-section-label" role="presentation">
                         {t('fileViewer.shareMenuPublishOnline')}
                       </div>
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        disabled={streaming || viewerOnly}
+                        title={
+                          viewerOnly
+                            ? viewerOnlyDisabledTitle
+                            : streaming
+                              ? t('fileViewer.shareAfterGenerationComplete')
+                              : undefined
+                        }
+                        onClick={() => {
+                          void openSocialShareFlow();
+                        }}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="share-line" size={15} /></span>
+                        <span>{t('socialShare.publishPageTitle')}</span>
+                      </button>
                       {DEPLOY_PROVIDER_OPTIONS.map((option) => (
                         <button
                           key={option.id}

@@ -19,25 +19,47 @@ import {
   VERCEL_PROVIDER_ID,
 } from '../src/deploy.js';
 import { ensureProject } from '../src/projects.js';
-import { startServer } from '../src/server.js';
 
 describe('deploy provider routes', () => {
   let server: http.Server;
   let baseUrl: string;
+  let serverShutdown: (() => Promise<void> | void) | undefined;
+  let startupDataDir: string;
+  let priorDataDir: string | undefined;
 
   beforeAll(async () => {
+    priorDataDir = process.env.OD_DATA_DIR;
+    startupDataDir = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-routes-data-'));
+    process.env.OD_DATA_DIR = startupDataDir;
+
+    const { startServer } = await import('../src/server.js');
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
       server: http.Server;
+      shutdown?: () => Promise<void> | void;
     };
     baseUrl = started.url;
     server = started.server;
+    serverShutdown = started.shutdown;
   }, 60_000);
 
-  afterAll(() => new Promise<void>((resolve) => {
-    if (server) server.close(() => resolve());
-    else resolve();
-  }));
+  afterAll(async () => {
+    if (serverShutdown) {
+      await Promise.race([
+        Promise.resolve(serverShutdown()),
+        new Promise((r) => setTimeout(r, 2000)),
+      ]);
+    }
+    if (server) {
+      server.closeAllConnections?.();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+    if (priorDataDir === undefined) delete process.env.OD_DATA_DIR;
+    else process.env.OD_DATA_DIR = priorDataDir;
+    if (startupDataDir) {
+      await rm(startupDataDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
 
   it('dispatches deploy config reads and writes by providerId', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-config-'));
@@ -110,11 +132,10 @@ describe('deploy provider routes', () => {
 
   it('credentials stay under the startup-resolved data root after OD_DATA_DIR is mutated or cleared', async () => {
     // RUNTIME_DATA_DIR is a module-level const captured at import time.
-    // The beforeAll server already resolved it. This test proves the deploy
+    // The beforeAll server already resolved it to startupDataDir. This test proves the deploy
     // adapters close over that startup-resolved root and ignore later
     // mutations to process.env.OD_DATA_DIR.
     const decoyRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-decoy-'));
-    const priorDataDir = process.env.OD_DATA_DIR;
     try {
       // ---- Mutate OD_DATA_DIR to a decoy AFTER startup ---------------------
       process.env.OD_DATA_DIR = decoyRoot;
@@ -182,15 +203,15 @@ describe('deploy provider routes', () => {
       await expect(readFile(path.join(decoyRoot, 'railway.json'), 'utf8')).rejects.toThrow();
 
       // Credentials positively landed under the originally resolved data root
-      // (= the OD_DATA_DIR value captured at startup), even though the env
+      // (= startupDataDir captured at startup), even though the env
       // variable was mutated or cleared at write time.
-      const netlifyRaw = await readFile(path.join(priorDataDir!, 'netlify.json'), 'utf8');
+      const netlifyRaw = await readFile(path.join(startupDataDir, 'netlify.json'), 'utf8');
       expect(netlifyRaw).toContain('net_isolation_token');
       expect(netlifyRaw).toContain('ghp_net_isolation');
-      const renderRaw = await readFile(path.join(priorDataDir!, 'render.json'), 'utf8');
+      const renderRaw = await readFile(path.join(startupDataDir, 'render.json'), 'utf8');
       expect(renderRaw).toContain('rnd_isolation_token');
       expect(renderRaw).toContain('ghp_rnd_isolation');
-      const railwayRaw = await readFile(path.join(priorDataDir!, 'railway.json'), 'utf8');
+      const railwayRaw = await readFile(path.join(startupDataDir, 'railway.json'), 'utf8');
       expect(railwayRaw).toContain('rw_isolation_token');
       expect(railwayRaw).toContain('ghp_rw_isolation');
 
@@ -204,14 +225,13 @@ describe('deploy provider routes', () => {
       const getRw = await fetch(`${baseUrl}/api/deploy/config?providerId=${RAILWAY_PROVIDER_ID}`);
       expect(await getRw.json()).toMatchObject({ providerId: RAILWAY_PROVIDER_ID, configured: true });
     } finally {
-      if (priorDataDir === undefined) delete process.env.OD_DATA_DIR;
-      else process.env.OD_DATA_DIR = priorDataDir;
+      process.env.OD_DATA_DIR = startupDataDir;
       await rm(decoyRoot, { recursive: true, force: true });
       // Do not leak planted credentials into sibling tests sharing the
       // process-wide startup data root.
       await Promise.all(
         ['netlify.json', 'render.json', 'railway.json'].map((name) =>
-          rm(path.join(priorDataDir ?? decoyRoot, name), { force: true }),
+          rm(path.join(startupDataDir, name), { force: true }),
         ),
       );
     }
