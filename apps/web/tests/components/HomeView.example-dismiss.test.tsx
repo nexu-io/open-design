@@ -327,7 +327,7 @@ const DISMISS_CASES: DismissCase[] = [
     cardId: 'example-image-template',
     automaticStrategyTaskProfile: null,
     projectKind: 'image',
-    projectMetadata: { kind: 'image' },
+    projectMetadata: { kind: 'image', imageModel: 'vela/gpt-image-2' },
     pluginId: 'od-media-generation',
   },
   {

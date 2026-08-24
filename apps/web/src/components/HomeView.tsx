@@ -356,10 +356,12 @@ const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 // system vanish when the user steps away and comes back. Persist those two
 // serializable, user-visible fields to localStorage so they survive the
 // unmount/remount, mirroring ChatComposer's draft persistence. Object-valued
-// selections (active template, skill, staged files, working directory) are
-// intentionally NOT persisted here — they reference live catalogue records /
-// File handles / a desktop auth token that cannot round-trip through JSON
-// safely.
+// selections (skill, staged files, working directory) are intentionally NOT
+// persisted here — they reference live catalogue records / File handles / a
+// desktop auth token that cannot round-trip through JSON safely. Media chips
+// are the narrow exception: persist only their visible scalar
+// template/model/aspect ids so a rejected optimistic create can remount Home
+// without silently changing the retry payload.
 const HOME_COMPOSER_PROMPT_KEY = 'open-design:home-composer:prompt';
 const HOME_COMPOSER_DESIGN_SYSTEM_KEY = 'open-design:home-composer:design-system';
 const HOME_COMPOSER_DESIGN_SYSTEM_SCOPE_KEY = 'open-design:home-composer:design-system-scope';
@@ -387,6 +389,11 @@ interface HomeComposerChipDraft {
   // identity, so it is persisted with it.
   explicitPick?: boolean;
   examplePick?: boolean;
+  mediaSelection?: {
+    template?: string;
+    model?: string;
+    aspect?: string;
+  };
 }
 // `EntryShell` keeps `HomeView` permanently mounted and toggles it with CSS
 // visibility instead of unmounting it on every Home/Community/... view
@@ -460,6 +467,20 @@ function readHomeComposerChipDraft(): HomeComposerChipDraft | null {
       typeof parsed.prototypeSubtypeId === 'string'
         ? prototypeSubChipForSlug(parsed.prototypeSubtypeId)
         : null;
+    const parsedMediaSelection = parsed.mediaSelection;
+    const mediaSelection = parsedMediaSelection && typeof parsedMediaSelection === 'object'
+      ? {
+          ...(typeof parsedMediaSelection.template === 'string'
+            ? { template: parsedMediaSelection.template }
+            : {}),
+          ...(typeof parsedMediaSelection.model === 'string'
+            ? { model: parsedMediaSelection.model }
+            : {}),
+          ...(typeof parsedMediaSelection.aspect === 'string'
+            ? { aspect: parsedMediaSelection.aspect }
+            : {}),
+        }
+      : undefined;
     return {
       chipId: legacyPrototypeSubtype ? 'prototype' : parsedChipId,
       pluginId: parsed.pluginId,
@@ -469,6 +490,7 @@ function readHomeComposerChipDraft(): HomeComposerChipDraft | null {
       // they restore as the plain type-chip binding they always did.
       explicitPick: parsed.explicitPick === true,
       examplePick: parsed.examplePick === true,
+      ...(mediaSelection && Object.keys(mediaSelection).length > 0 ? { mediaSelection } : {}),
     };
   } catch {
     return null;
@@ -788,6 +810,23 @@ export function HomeView({
               : {}),
             ...(active.explicitPick ? { explicitPick: true } : {}),
             ...(active.examplePick ? { examplePick: true } : {}),
+            ...(active.mediaSurface
+              ? {
+                  mediaSelection: {
+                    ...(typeof active.inputs.template === 'string'
+                      ? { template: active.inputs.template }
+                      : {}),
+                    ...(typeof active.inputs.model === 'string'
+                      ? { model: active.inputs.model }
+                      : {}),
+                    ...(typeof active.inputs.aspect === 'string'
+                      ? { aspect: active.inputs.aspect }
+                      : typeof active.inputs.ratio === 'string'
+                        ? { aspect: active.inputs.ratio }
+                        : {}),
+                  },
+                }
+              : {}),
           }
         : null,
     );
@@ -1934,17 +1973,57 @@ export function HomeView({
       ? prototypeSubChipForSlug(restore.prototypeSubtypeId ?? null)
       : null;
     const restoredAction = restoredChip?.action;
+    const restoredMediaSurface = homeMediaSurfaceForChipId(restore.chipId ?? '');
+    const restoredMediaComposer = restoredMediaSurface
+      && (restoredAction?.kind === 'apply-scenario' || restoredAction?.kind === 'apply-figma-migration')
+      ? buildHomeMediaComposer(
+          restoredMediaSurface,
+          promptTemplates,
+          {
+            ...restoredAction.inputs,
+            ...(restore.mediaSelection?.template
+              ? { template: restore.mediaSelection.template }
+              : {}),
+            ...(restore.mediaSelection?.model
+              ? { model: restore.mediaSelection.model }
+              : {}),
+            ...(restore.mediaSelection?.aspect
+              ? {
+                  aspect: restore.mediaSelection.aspect,
+                  ratio: restore.mediaSelection.aspect,
+                }
+              : {}),
+          },
+          elevenLabsVoices,
+          {
+            elevenLabsVoiceWarning,
+            elevenLabsVoicesLoading,
+            imageModels: composerImageModels,
+          },
+         )
+       : null;
     requestActivePlugin(record, undefined, {
       chipId: restore.chipId ?? undefined,
       prototypeSubtypeId: restoredSubtype?.slug ?? null,
       projectKind: restore.projectKind ?? undefined,
-      inputs:
-        restoredAction?.kind === 'apply-scenario' || restoredAction?.kind === 'apply-figma-migration'
+      inputs: restoredMediaComposer?.inputs
+        ?? (restoredAction?.kind === 'apply-scenario' || restoredAction?.kind === 'apply-figma-migration'
           ? restoredAction.inputs
-          : undefined,
-      projectMetadata: restoredChip
-        ? prototypeSceneProjectMetadata(restoredChip, restoredSubtype)
-        : null,
+          : undefined),
+      inputFields: restoredMediaComposer?.fields,
+      queryTemplate: restoredMediaComposer?.queryTemplate,
+      mediaSurface: restoredMediaComposer?.surface,
+      projectMetadata: restoredMediaComposer
+        ? metadataForHomeMediaComposer(
+            restoredMediaComposer.surface,
+            restoredMediaComposer.inputs,
+            promptTemplates,
+          )
+        : restoredChip
+          ? prototypeSceneProjectMetadata(restoredChip, restoredSubtype)
+          : null,
+      editableInputNames: restoredMediaComposer?.editableFieldNames,
+      preserveInputFields: Boolean(restoredMediaComposer),
       replaceWithoutConfirmation: true,
       suppressPromptUpdate: true,
       deferApply: true,

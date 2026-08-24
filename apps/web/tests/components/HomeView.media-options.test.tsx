@@ -27,6 +27,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 
 import { HomeView } from '../../src/components/HomeView';
 import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
+import { ProjectCreateError } from '../../src/state/projects';
 import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types';
 // HomeHero's prompt input migrated from a <textarea> + highlight overlay to the
 // same Lexical contenteditable the project composer uses. It still has
@@ -353,7 +354,13 @@ describe('HomeView media composer options', () => {
   it('retains image template metadata when a rejected create is retried', async () => {
     stubFetch();
     const onSubmit = vi.fn()
-      .mockResolvedValueOnce(false)
+      .mockRejectedValueOnce(new ProjectCreateError(
+        'Project create rejected',
+        400,
+        null,
+        false,
+        'request-1',
+      ))
       .mockResolvedValueOnce(true);
     const portraitTemplate: PromptTemplateSummary = {
       ...PROMPT_TEMPLATES[0]!,
@@ -373,6 +380,7 @@ describe('HomeView media composer options', () => {
         projectMetadata: expect.objectContaining({
           imageModel: 'gpt-image-2',
           imageAspect: '3:4',
+          promptTemplate: expect.objectContaining({ id: 'image-product' }),
         }),
       }));
     }
