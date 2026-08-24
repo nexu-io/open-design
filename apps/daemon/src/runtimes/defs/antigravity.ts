@@ -203,7 +203,7 @@ export const antigravityAgentDef = {
   // composed in server.ts gives a second line of defense for weak
   // plain-stream models like Gemini 3.5 Flash.
   buildArgs: (
-    _prompt,
+    prompt,
     _imagePaths,
     _extra = [],
     options = {},
@@ -215,18 +215,24 @@ export const antigravityAgentDef = {
         runtimeContext.antigravitySettingsPath,
       );
     }
-    // We invoke agy via `-p -` (print mode + stdin sentinel), NOT
-    // `chat -`. Verified against `agy --help` on v1.0.3 — the
-    // `Available subcommands` list is `changelog / help / install /
-    // plugin / update`, and `chat` is NOT among them. `-p` is the
-    // documented print-mode flag (`Short alias for --print`) and
-    // `agy -p -` reads the prompt from stdin. The looper reviewer
-    // bot's environment runs a different agy build that may have
-    // renamed the entry point; until upstream confirms a stable
-    // headless subcommand (see google-antigravity/antigravity-cli#119)
-    // and the change actually ships in the auto-update channel that
-    // packaged OD users get, `-p -` is the contract that actually
-    // produces a print-mode reply on the installed CLI.
+    // We invoke agy via `-p <prompt>` (print mode, prompt as the flag
+    // value). This changed with the upstream CLI: on v1.0.3 `-p` was a
+    // boolean and a trailing `-` meant "read the prompt from stdin", so
+    // this adapter shipped `-p -` with `promptViaStdin`. On v1.1.7 `-p`
+    // takes the prompt as its argument, stdin is ignored entirely, and
+    // `agy -p -` sends the literal `-` as the whole prompt — the model
+    // answers a non-question with a greeting ("Hello! How can I help you
+    // today?") and the user's actual request never reaches it. Reproduced
+    // outside OD on v1.1.7:
+    //
+    //   $ echo "Reply with exactly: PONG" | agy -p -
+    //   Hello! How can I help you today? …
+    //   $ agy -p "Reply with exactly: PONG"
+    //   PONG
+    //
+    // Bare `-p` with a piped stdin is not a fallback — it exits with
+    // "flag needs an argument: -p". Print mode is argv-only now, hence
+    // `maxPromptArgBytes` below.
     const args: string[] = [];
     // Always opt into `--log-file` when the daemon supplied a path so
     // it can post-exit grep for the actual upstream failure shape
@@ -243,11 +249,15 @@ export const antigravityAgentDef = {
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
-    args.push('-p');
-    args.push('-');
+    args.push('-p', prompt);
     return args;
   },
-  promptViaStdin: true,
+  // Print mode is argv-only on v1.1.7, so the composed prompt rides in
+  // argv and needs the same budget guard as the other argv-only adapters
+  // (aider / deepseek). On POSIX `checkPromptArgvBudget` raises this to
+  // POSIX_ARGV_PROMPT_BUDGET; the literal value is the Windows
+  // CreateProcess ceiling.
+  maxPromptArgBytes: 30_000,
   streamFormat: 'plain',
   installUrl: 'https://antigravity.google/cli',
   docsUrl: 'https://antigravity.google/docs/cli-overview',
