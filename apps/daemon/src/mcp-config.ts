@@ -416,9 +416,8 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  * access to daemon-selected absolute paths (project cwd, staged skill dirs,
  * etc.) so headless OpenCode runs do not auto-reject them.
  *
- * Schema (verified against the dev branch of `sst/opencode`'s
- * `packages/opencode/src/config/config.ts` and the public docs at
- * <https://opencode.ai/docs/mcp-servers>):
+ * Schema (verified against the upstream OpenCode config implementation and the
+ * public V2 docs at <https://opencode.ai/v2/docs/mcp-servers>):
  *
  *   {
  *     "mcp": {

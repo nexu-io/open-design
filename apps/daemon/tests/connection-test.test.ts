@@ -160,7 +160,31 @@ async function withOnlyFakeOpenClaude<T>(script: string, run: () => Promise<T>):
 }
 
 async function withFakeOpenCode<T>(script: string, run: () => Promise<T>): Promise<T> {
-  return withFakeAgent('opencode', script, run);
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-opencode-bin-'));
+  const oldPath = process.env.PATH;
+  try {
+    if (process.platform === 'win32') {
+      const runner = path.join(dir, 'opencode2-test-runner.cjs');
+      await fsp.writeFile(runner, script);
+      for (const name of ['opencode2', 'opencode']) {
+        await fsp.writeFile(
+          path.join(dir, `${name}.cmd`),
+          `@echo off\r\nnode "${runner}" %*\r\n`,
+        );
+      }
+    } else {
+      for (const name of ['opencode2', 'opencode']) {
+        const bin = path.join(dir, name);
+        await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
+        await fsp.chmod(bin, 0o755);
+      }
+    }
+    process.env.PATH = `${dir}${path.delimiter}${oldPath ?? ''}`;
+    return await run();
+  } finally {
+    process.env.PATH = oldPath;
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
 }
 
 async function withFakeCursorAgent<T>(script: string, run: () => Promise<T>): Promise<T> {
@@ -3730,7 +3754,7 @@ process.stdin.on('end', () => {
       `
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
-  console.log('openai/gpt-5');
+  console.log('opencode/deepseek-v4-flash-free');
   process.exit(0);
 }
 console.log(JSON.stringify({ type: 'error', error: { data: { message: 'OpenCode auth failed: login required' } } }));
@@ -3755,13 +3779,13 @@ setTimeout(() => process.exit(0), 50);
 
   it('reports outdated OpenCode CLI argument failures with update guidance', async () => {
     const expectedDetail =
-      'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+      'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it to the latest `opencode2` release, then retry the OpenCode connection test.';
 
     await withFakeOpenCode(
       `
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
-  console.log('github-copilot/gpt-4o');
+  console.log('opencode/deepseek-v4-flash-free');
   process.exit(0);
 }
 console.error('opencode');
@@ -3793,7 +3817,7 @@ process.exit(1);
       `
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
-  console.log('github-copilot/gpt-4o');
+  console.log('opencode/deepseek-v4-flash-free');
   process.exit(0);
 }
 console.error('missing required environment variable OPENAI_API_KEY');
@@ -3818,7 +3842,7 @@ process.exit(1);
     );
   });
 
-  it('launches OpenCode connection tests with 1.3-compatible JSON stdin args', async () => {
+  it('launches OpenCode connection tests with opencode2 JSON stdin args', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
     const stdinFile = path.join(markerDir, 'stdin.txt');
@@ -3828,7 +3852,7 @@ process.exit(1);
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
-  console.log('github-copilot/gpt-4o');
+  console.log('opencode/deepseek-v4-flash-free');
   process.exit(0);
 }
 fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
@@ -3852,7 +3876,7 @@ process.stdin.on('end', () => {
             body: JSON.stringify({
               mode: 'agent',
               agentId: 'opencode',
-              model: 'github-copilot/gpt-4o',
+              model: 'opencode/deepseek-v4-flash-free',
             }),
           });
           expect(res.status).toBe(200);
@@ -3860,7 +3884,7 @@ process.stdin.on('end', () => {
             ok: true,
             kind: 'success',
             agentName: 'OpenCode',
-            model: 'github-copilot/gpt-4o',
+            model: 'opencode/deepseek-v4-flash-free',
             sample: 'ok',
           });
 
@@ -3870,8 +3894,8 @@ process.stdin.on('end', () => {
               '--format',
               'json',
               '-m',
-              'github-copilot/gpt-4o',
-              '--pure',
+              'opencode/deepseek-v4-flash-free',
+              '--auto',
               '--title',
               'Connection test',
             ]),
@@ -3889,7 +3913,7 @@ process.stdin.on('end', () => {
       `
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
-  console.log('ollama/qwen3.5-9b');
+  console.log('opencode/deepseek-v4-flash-free');
   process.exit(0);
 }
 console.error('Cannot connect to API: Unable to connect. Is the computer able to access the url?');
@@ -3899,7 +3923,7 @@ setInterval(() => {}, 1000);
       async () => {
         const result = await testAgentConnection({
           agentId: 'opencode',
-          model: 'ollama/qwen3.5-9b',
+          model: 'opencode/deepseek-v4-flash-free',
         });
 
         expect(result.ok).toBe(false);
@@ -3931,7 +3955,7 @@ setInterval(() => {}, 1000);
         `
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
-  console.log('ollama/qwen3.5-9b');
+  console.log('opencode/deepseek-v4-flash-free');
   process.exit(0);
 }
 console.error(${JSON.stringify(stderrLine)});
@@ -3940,7 +3964,7 @@ setInterval(() => {}, 1000);
         async () => {
           const result = await testAgentConnection({
             agentId: 'opencode',
-            model: 'ollama/qwen3.5-9b',
+            model: 'opencode/deepseek-v4-flash-free',
           });
 
           expect(result.ok).toBe(false);

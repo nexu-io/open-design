@@ -98,6 +98,7 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import { resolveOpenCodeConnectionApprovalFlag } from './runtimes/opencode-permissions.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2080,7 +2081,7 @@ function extractOpenCodeTextFromRawStdout(stdout: string): string {
 }
 
 const OPENCODE_OUTDATED_CLI_DETAIL =
-  'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+  'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it to the latest `opencode2` release, then retry the OpenCode connection test.';
 const OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH = 240;
 
 function openCodeOutdatedCliDetail(output: string): string | null {
@@ -2572,18 +2573,23 @@ async function testAgentConnectionInternal(
         },
         {
           cwd: tempDir,
+          launchPath: executableResolution.launchPath,
           ...(promptFile ? { promptFilePath: promptFile.path } : {}),
           ...(antigravityLogFilePath
             ? { agentLogFilePath: antigravityLogFilePath }
             : {}),
         },
       );
-      // Connection tests should validate the adapter's core CLI path, not
-      // fail on unrelated user-installed OpenCode plugins. `opencode run
-      // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment.
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
-        args.push('--pure');
+      // Preserve plugin-isolated smoke tests on legacy OpenCode while using the
+      // current non-interactive approval path on opencode2.
+      if (input.agentId === 'opencode') {
+        const approvalFlag = resolveOpenCodeConnectionApprovalFlag(
+          input.agentId,
+          executableResolution.launchPath,
+        );
+        if (approvalFlag && !args.includes(approvalFlag)) {
+          args.push(approvalFlag);
+        }
       }
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
         args.push('--title', 'Connection test');

@@ -11693,6 +11693,7 @@ export async function startServer({
         agentOptions,
         {
           cwd: effectiveCwd,
+          launchPath: agentLaunch.launchPath,
           hasPriorAssistantTurn,
           agentLogFilePath,
           promptFilePath: promptFile?.path,

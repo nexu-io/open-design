@@ -8,8 +8,8 @@ import type { RuntimeAgentDef } from '../types.js';
 export const opencodeAgentDef = {
     id: 'opencode',
     name: 'OpenCode',
-    bin: 'opencode-cli',
-    fallbackBins: ['opencode'],
+    bin: 'opencode2',
+    fallbackBins: ['opencode-cli', 'opencode'],
     versionArgs: ['--version'],
     ...OPENCODE_PERMISSION_CAPABILITY,
     // `opencode models` prints `provider/model` per line. Real-world
@@ -82,6 +82,6 @@ export const opencodeAgentDef = {
     // + OPENCODE_CONFIG_CONTENT). The env-var form lets the daemon hand
     // user-configured external MCP servers to a single `opencode run`
     // invocation without polluting the user's saved config files. See
-    // <https://opencode.ai/docs/config> and issue #2142.
+    // <https://opencode.ai/v2/docs/config> and issue #2142.
     externalMcpInjection: 'opencode-env-content',
 } satisfies RuntimeAgentDef;

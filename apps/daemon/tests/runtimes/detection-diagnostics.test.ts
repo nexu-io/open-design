@@ -83,7 +83,7 @@ posixTest('detectAgents emits a not-on-path diagnostic with searched dirs + fix 
   }
 });
 
-posixTest('detectAgents finds OpenCode when npm exposes only the opencode binary', async () => {
+posixTest('detectAgents finds OpenCode when only the legacy opencode binary is available', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-opencode-npm-bin-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
@@ -95,7 +95,7 @@ posixTest('detectAgents finds OpenCode when npm exposes only the opencode binary
       const opencode = agents.find((agent) => agent.id === 'opencode');
 
       assert.equal(opencode?.available, true);
-      assert.equal(opencode?.bin, 'opencode-cli');
+      assert.equal(opencode?.bin, 'opencode2');
       assert.equal(opencode?.path, bin);
       assert.equal(opencode?.version, 'opencode 1.17.3');
       assert.equal(opencode?.diagnostics, undefined);

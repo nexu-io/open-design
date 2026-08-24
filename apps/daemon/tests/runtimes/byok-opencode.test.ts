@@ -15,6 +15,9 @@ describe('byok-opencode runtime config', () => {
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
     expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
       '--dangerously-skip-permissions': 'skipPermissions',
+      '--dir': 'workspaceDir',
+      '--auto': 'autoApprove',
+      '--pure': 'pureMode',
     });
     expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
       'run',
@@ -32,6 +35,52 @@ describe('byok-opencode runtime config', () => {
         '-m',
         'open-design-byok/gpt-5.5',
       ]);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('preserves the workspace pin when capability probing has not run yet', () => {
+    expect(
+      byokOpenCodeAgentDef.buildArgs('', [], [], {}, {
+        cwd: '/tmp/opencode-project',
+        launchPath: '/tmp/bin/opencode2',
+      }),
+    ).toEqual(['run', '--format', 'json', '--dir', '/tmp/opencode-project']);
+  });
+
+  it('omits --dir when the installed build explicitly does not advertise it', () => {
+    agentCapabilities.set('byok-opencode', { workspaceDir: false });
+    try {
+      expect(
+        byokOpenCodeAgentDef.buildArgs('', [], [], {}, {
+          cwd: '/tmp/opencode-project',
+          launchPath: '/tmp/bin/opencode2',
+        }),
+      ).toEqual(['run', '--format', 'json']);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('preserves the workspace pin on legacy OpenCode fallbacks', () => {
+    expect(
+      byokOpenCodeAgentDef.buildArgs('', [], [], {}, {
+        cwd: '/tmp/opencode-project',
+        launchPath: '/tmp/bin/opencode',
+      }),
+    ).toEqual(['run', '--format', 'json', '--dir', '/tmp/opencode-project']);
+  });
+
+  it('adds --dir for opencode2 when the installed build advertises it', () => {
+    agentCapabilities.set('byok-opencode', { workspaceDir: true });
+    try {
+      expect(
+        byokOpenCodeAgentDef.buildArgs('', [], [], {}, {
+          cwd: '/tmp/opencode-project',
+          launchPath: '/tmp/bin/opencode2',
+        }),
+      ).toEqual(['run', '--format', 'json', '--dir', '/tmp/opencode-project']);
     } finally {
       agentCapabilities.delete('byok-opencode');
     }
