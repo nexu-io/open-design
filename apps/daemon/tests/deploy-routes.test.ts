@@ -108,29 +108,25 @@ describe('deploy provider routes', () => {
     }
   });
 
-  it('routes provider credentials through the daemon resolved data root and isolates them', async () => {
-    const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-data-root-'));
-    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-user-state-'));
+  it('credentials stay under the startup-resolved data root after OD_DATA_DIR is mutated or cleared', async () => {
+    // RUNTIME_DATA_DIR is a module-level const captured at import time.
+    // The beforeAll server already resolved it. This test proves the deploy
+    // adapters close over that startup-resolved root and ignore later
+    // mutations to process.env.OD_DATA_DIR.
+    const decoyRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-decoy-'));
     const priorDataDir = process.env.OD_DATA_DIR;
-    const priorStateDir = process.env.OD_USER_STATE_DIR;
-    process.env.OD_DATA_DIR = dataRoot;
-    process.env.OD_USER_STATE_DIR = stateRoot;
-    let testServer: http.Server | undefined;
     try {
-      const started = await startServer({ port: 0, returnServer: true }) as {
-        url: string;
-        server: http.Server;
-      };
-      testServer = started.server;
+      // ---- Mutate OD_DATA_DIR to a decoy AFTER startup ---------------------
+      process.env.OD_DATA_DIR = decoyRoot;
 
-      // 1. Netlify
-      const netlifyResp = await fetch(`${started.url}/api/deploy/config`, {
+      // 1. Netlify — written while OD_DATA_DIR points to decoy
+      const netlifyResp = await fetch(`${baseUrl}/api/deploy/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           providerId: NETLIFY_PROVIDER_ID,
-          token: 'net_secret_token',
-          githubToken: 'ghp_net_token',
+          token: 'net_isolation_token',
+          githubToken: 'ghp_net_isolation',
         }),
       });
       expect(netlifyResp.status).toBe(200);
@@ -141,14 +137,14 @@ describe('deploy provider routes', () => {
         githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
       });
 
-      // 2. Render
-      const renderResp = await fetch(`${started.url}/api/deploy/config`, {
+      // 2. Render — written while OD_DATA_DIR points to decoy
+      const renderResp = await fetch(`${baseUrl}/api/deploy/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           providerId: RENDER_PROVIDER_ID,
-          token: 'rnd_secret_token',
-          githubToken: 'ghp_rnd_token',
+          token: 'rnd_isolation_token',
+          githubToken: 'ghp_rnd_isolation',
         }),
       });
       expect(renderResp.status).toBe(200);
@@ -159,14 +155,17 @@ describe('deploy provider routes', () => {
         githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
       });
 
-      // 3. Railway
-      const railwayResp = await fetch(`${started.url}/api/deploy/config`, {
+      // ---- Clear OD_DATA_DIR entirely --------------------------------------
+      delete process.env.OD_DATA_DIR;
+
+      // 3. Railway — written after OD_DATA_DIR is unset
+      const railwayResp = await fetch(`${baseUrl}/api/deploy/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           providerId: RAILWAY_PROVIDER_ID,
-          token: 'rw_secret_token',
-          githubToken: 'ghp_rw_token',
+          token: 'rw_isolation_token',
+          githubToken: 'ghp_rw_isolation',
         }),
       });
       expect(railwayResp.status).toBe(200);
@@ -177,48 +176,44 @@ describe('deploy provider routes', () => {
         githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
       });
 
-      // Verify files exist directly under dataRoot
-      const netlifyFile = path.join(dataRoot, 'netlify.json');
-      const renderFile = path.join(dataRoot, 'render.json');
-      const railwayFile = path.join(dataRoot, 'railway.json');
+      // Nothing written under decoyRoot — credentials stayed under startup root
+      await expect(readFile(path.join(decoyRoot, 'netlify.json'), 'utf8')).rejects.toThrow();
+      await expect(readFile(path.join(decoyRoot, 'render.json'), 'utf8')).rejects.toThrow();
+      await expect(readFile(path.join(decoyRoot, 'railway.json'), 'utf8')).rejects.toThrow();
 
-      expect(JSON.parse(await readFile(netlifyFile, 'utf8'))).toEqual({
-        token: 'net_secret_token',
-        githubToken: 'ghp_net_token',
-      });
-      expect(JSON.parse(await readFile(renderFile, 'utf8'))).toEqual({
-        token: 'rnd_secret_token',
-        githubToken: 'ghp_rnd_token',
-      });
-      expect(JSON.parse(await readFile(railwayFile, 'utf8'))).toEqual({
-        token: 'rw_secret_token',
-        githubToken: 'ghp_rw_token',
-      });
+      // Credentials positively landed under the originally resolved data root
+      // (= the OD_DATA_DIR value captured at startup), even though the env
+      // variable was mutated or cleared at write time.
+      const netlifyRaw = await readFile(path.join(priorDataDir!, 'netlify.json'), 'utf8');
+      expect(netlifyRaw).toContain('net_isolation_token');
+      expect(netlifyRaw).toContain('ghp_net_isolation');
+      const renderRaw = await readFile(path.join(priorDataDir!, 'render.json'), 'utf8');
+      expect(renderRaw).toContain('rnd_isolation_token');
+      expect(renderRaw).toContain('ghp_rnd_isolation');
+      const railwayRaw = await readFile(path.join(priorDataDir!, 'railway.json'), 'utf8');
+      expect(railwayRaw).toContain('rw_isolation_token');
+      expect(railwayRaw).toContain('ghp_rw_isolation');
 
-      // Verify nothing is written under stateRoot / ~/.open-design
-      await expect(readFile(path.join(stateRoot, 'netlify.json'), 'utf8')).rejects.toThrow();
-      await expect(readFile(path.join(stateRoot, 'render.json'), 'utf8')).rejects.toThrow();
-      await expect(readFile(path.join(stateRoot, 'railway.json'), 'utf8')).rejects.toThrow();
-
-      // Verify GET endpoints return configured: true
-      const getNet = await fetch(`${started.url}/api/deploy/config?providerId=${NETLIFY_PROVIDER_ID}`);
+      // GET endpoints still return the credentials (from the startup root)
+      const getNet = await fetch(`${baseUrl}/api/deploy/config?providerId=${NETLIFY_PROVIDER_ID}`);
       expect(await getNet.json()).toMatchObject({ providerId: NETLIFY_PROVIDER_ID, configured: true });
 
-      const getRnd = await fetch(`${started.url}/api/deploy/config?providerId=${RENDER_PROVIDER_ID}`);
+      const getRnd = await fetch(`${baseUrl}/api/deploy/config?providerId=${RENDER_PROVIDER_ID}`);
       expect(await getRnd.json()).toMatchObject({ providerId: RENDER_PROVIDER_ID, configured: true });
 
-      const getRw = await fetch(`${started.url}/api/deploy/config?providerId=${RAILWAY_PROVIDER_ID}`);
+      const getRw = await fetch(`${baseUrl}/api/deploy/config?providerId=${RAILWAY_PROVIDER_ID}`);
       expect(await getRw.json()).toMatchObject({ providerId: RAILWAY_PROVIDER_ID, configured: true });
     } finally {
-      if (testServer) {
-        await new Promise<void>((resolve) => testServer!.close(() => resolve()));
-      }
       if (priorDataDir === undefined) delete process.env.OD_DATA_DIR;
       else process.env.OD_DATA_DIR = priorDataDir;
-      if (priorStateDir === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateDir;
-      await rm(dataRoot, { recursive: true, force: true });
-      await rm(stateRoot, { recursive: true, force: true });
+      await rm(decoyRoot, { recursive: true, force: true });
+      // Do not leak planted credentials into sibling tests sharing the
+      // process-wide startup data root.
+      await Promise.all(
+        ['netlify.json', 'render.json', 'railway.json'].map((name) =>
+          rm(path.join(priorDataDir ?? decoyRoot, name), { force: true }),
+        ),
+      );
     }
   });
 

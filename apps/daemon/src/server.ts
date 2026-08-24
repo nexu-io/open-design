@@ -7558,8 +7558,8 @@ export async function startServer({
     RAILWAY_PROVIDER_ID,
     isDeployProviderId,
     publicDeployConfigForProvider,
-    readDeployConfig: (providerId?: DeployProviderId) => readDeployConfig(providerId, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
-    writeDeployConfig: (providerId?: DeployProviderId, input?: Partial<DeployConfig>) => writeDeployConfig(providerId, input, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
+    readDeployConfig: (providerId?: DeployProviderId) => readDeployConfig(providerId, RUNTIME_DATA_DIR),
+    writeDeployConfig: (providerId?: DeployProviderId, input?: Partial<DeployConfig>) => writeDeployConfig(providerId, input, RUNTIME_DATA_DIR),
     listCloudflarePagesZones,
     DeployError,
     listDeployments,
@@ -7580,9 +7580,9 @@ export async function startServer({
     deployToNetlify,
     deployToRender,
     deployToRailway,
-    checkRailwayDeploymentLinks: (existing: any) => checkRailwayDeploymentLinks(existing, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
-    checkNetlifyDeploymentLinks: (existing: any) => checkNetlifyDeploymentLinks(existing, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
-    checkRenderDeploymentLinks: (existing: any) => checkRenderDeploymentLinks(existing, resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT)),
+    checkRailwayDeploymentLinks: (existing: any) => checkRailwayDeploymentLinks(existing, RUNTIME_DATA_DIR),
+    checkNetlifyDeploymentLinks: (existing: any) => checkNetlifyDeploymentLinks(existing, RUNTIME_DATA_DIR),
+    checkRenderDeploymentLinks: (existing: any) => checkRenderDeploymentLinks(existing, RUNTIME_DATA_DIR),
   };
   const mediaDeps = {
     MEDIA_PROVIDERS,
