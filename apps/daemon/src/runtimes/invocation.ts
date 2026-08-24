@@ -1,10 +1,44 @@
-import { execFile } from 'node:child_process';
+import {
+  execFile,
+  spawn,
+  type ChildProcess,
+  type SpawnOptions,
+} from 'node:child_process';
 import os from 'node:os';
 import { promisify } from 'node:util';
 import { createCommandInvocation } from '@open-design/platform';
 import type { RuntimeExecOptions } from './types.js';
 
 const execFileP = promisify(execFile);
+
+/**
+ * Spawn a long-running agent process through the cross-platform invocation
+ * wrapper, keeping Windows CLI subprocesses attached without showing a
+ * transient console window.
+ */
+export function spawnAgentFile(
+  command: string,
+  args: string[],
+  options: SpawnOptions = {},
+): ChildProcess {
+  const invocation = createCommandInvocation(
+    options.env
+      ? {
+          command,
+          args,
+          env: options.env,
+        }
+      : {
+          command,
+          args,
+        },
+  );
+  return spawn(invocation.command, invocation.args, {
+    ...options,
+    windowsHide: process.platform === 'win32',
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
+}
 
 // Agent probes (model-list / version / help / auth-status) are short read-only
 // metadata calls that never need the caller's project files. Default them to a
@@ -37,6 +71,7 @@ export function execAgentFile(
   return execFileP(invocation.command, invocation.args, {
     ...options,
     cwd: options.cwd ?? os.tmpdir(),
+    windowsHide: process.platform === 'win32',
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
