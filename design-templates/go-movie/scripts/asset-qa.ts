@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 const templateRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const assetsRoot = resolve(templateRoot, 'assets');
 const manifestPath = resolve(templateRoot, 'references/assets.sha256');
+const forbiddenCaptionArtifacts = new Map([
+  ['assets/film-copper-hours.webp', '7ae98e9faab88a2331a687fe1e5c79d5458d39f8b61f141c29b5aeea67865a57'],
+]);
 const manifest = readFileSync(manifestPath, 'utf8')
   .trim()
   .split('\n')
@@ -25,8 +28,13 @@ for (const { expected, relativePath } of manifest) {
   const bytes = readFileSync(filePath);
   const actual = createHash('sha256').update(bytes).digest('hex');
   if (actual !== expected) throw new Error(`Asset checksum mismatch: ${relativePath}`);
+  if (forbiddenCaptionArtifacts.get(relativePath) === actual) {
+    throw new Error(`Visible generated caption artifact found: ${relativePath}`);
+  }
   const binaryText = bytes.toString('latin1');
-  if (/AI生成|WORKBUDD/i.test(binaryText)) throw new Error(`Watermark metadata found: ${relativePath}`);
+  if (/AI生成|WORKBUDD|Cinematic film poster still|AI-generated|AI generated/i.test(binaryText)) {
+    throw new Error(`Watermark or generated-caption metadata found: ${relativePath}`);
+  }
 }
 
 console.log(`GO MOVIE asset QA passed: ${manifest.length} clean WebP assets verified.`);
