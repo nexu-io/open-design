@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Informe de Auditoría UX/UI — KreO.One Dashboard</title>
+<style>
+  :root {
+    --bg: oklch(0.129 0.039 265.13);
+    --bg-2: oklch(0.155 0.04 265);
+    --surface: oklch(1 0 0 / 0.04);
+    --surface-2: oklch(1 0 0 / 0.07);
+    --fg: oklch(0.985 0 0);
+    --muted: oklch(0.74 0.015 265);
+    --faint: oklch(0.6 0.012 265);
+    --border: oklch(1 0 0 / 0.1);
+    --border-strong: oklch(1 0 0 / 0.16);
+    --primary-from: #2563eb;
+    --primary-to: #4f46e5;
+    --accent: #38bdf8;
+    --amber: #e17100;
+    --amber-fix: #b45309;
+    --emerald: #34d399;
+    --red: #f87171;
+    --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-display: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, 'Cascadia Code', monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 85% -10%, oklch(0.4 0.18 265 / 0.16), transparent 60%),
+      radial-gradient(900px 500px at -5% 0%, oklch(0.5 0.2 290 / 0.12), transparent 55%),
+      var(--bg);
+    color: var(--fg);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* top gradient flourish */
+  .topbar {
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary-from), var(--primary-to) 55%, var(--accent));
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* sticky NDL-style header */
+  header.ndl {
+    position: sticky;
+    top: 3px;
+    z-index: 30;
+    background: oklch(0.129 0.039 265 / 0.82);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    margin: 0 -24px 32px;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--primary-from), var(--primary-to));
+    display: grid; place-items: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 16px;
+    color: #fff; box-shadow: 0 6px 18px oklch(0.55 0.2 265 / 0.35);
+  }
+  .brand h1 {
+    font-family: var(--font-display);
+    font-size: 17px; font-weight: 650; margin: 0; letter-spacing: -0.01em;
+  }
+  .brand .sub { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+  .kbd-hint {
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: 6px 10px; display: inline-flex; gap: 6px; align-items: center;
+  }
+  .kbd-hint kbd {
+    font-family: var(--font-mono); background: var(--surface-2);
+    border: 1px solid var(--border-strong); border-radius: 5px;
+    padding: 1px 6px; font-size: 11px; color: var(--fg);
+  }
+
+  /* collapsible section */
+  section.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 22px;
+    overflow: hidden;
+  }
+  .sec-head {
+    display: flex; align-items: center; gap: 14px;
+    padding: 18px 22px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid transparent;
+  }
+  section.card.is-collapsed .sec-head { border-bottom-color: transparent; }
+  .sec-head:hover { background: var(--surface); }
+  .sec-head .chev {
+    width: 22px; height: 22px; flex: 0 0 auto;
+    display: grid; place-items: center; color: var(--muted);
+    transition: transform 0.18s ease;
+  }
+  section.card.is-collapsed .chev { transform: rotate(-90deg); }
+  .sec-head h2 {
+    font-family: var(--font-display); font-size: 19px; font-weight: 640;
+    margin: 0; letter-spacing: -0.01em; flex: 1;
+  }
+  .sec-head .tag {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);
+    border: 1px solid var(--border-strong); border-radius: 7px; padding: 3px 9px;
+  }
+  .sec-body { padding: 4px 22px 24px; }
+  section.card.is-collapsed .sec-body { display: none; }
+
+  /* executive summary */
+  .summary-lead {
+    font-size: 15.5px; color: var(--fg);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 16px 18px; margin: 14px 0 22px;
+  }
+  .summary-lead b { color: var(--accent); font-weight: 600; }
+
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px;
+  }
+  .panel h3 {
+    margin: 0 0 4px; font-size: 14px; font-weight: 600; color: var(--fg);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel .scope { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .lcp-hero {
+    display: flex; align-items: baseline; gap: 10px; margin: 8px 0 14px;
+  }
+  .lcp-hero .num { font-family: var(--font-mono); font-size: 34px; font-weight: 600; line-height: 1; }
+  .lcp-hero .unit { font-family: var(--font-mono); font-size: 14px; color: var(--muted); }
+  .lcp-hero .verdict {
+    margin-left: auto; font-size: 11.5px; font-family: var(--font-mono);
+    padding: 3px 9px; border-radius: 999px;
+  }
+  .v-good { color: var(--emerald); background: oklch(0.6 0.14 160 / 0.16); }
+  .v-warn { color: #fbbf24; background: oklch(0.65 0.14 75 / 0.16); }
+
+  .mrow { display: grid; grid-template-columns: 120px 1fr 52px; align-items: center; gap: 10px; margin: 7px 0; }
+  .mrow .mlabel { font-size: 12.5px; color: var(--muted); }
+  .mrow .mbar { height: 7px; border-radius: 999px; background: var(--surface); overflow: hidden; }
+  .mrow .mfill { height: 100%; border-radius: 999px; }
+  .mrow .mval { font-family: var(--font-mono); font-size: 12px; text-align: right; color: var(--fg); }
+  .fill-good { background: linear-gradient(90deg, var(--emerald), #6ee7b7); }
+  .fill-warn { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  .fill-bad  { background: linear-gradient(90deg, #ef4444, var(--red)); }
+
+  .note {
+    margin-top: 14px; font-size: 13px; color: var(--muted);
+    border-top: 1px dashed var(--border-strong); padding-top: 12px;
+  }
+  .note code, .evid code, .remediation code, .kbd-hint code {
+    font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+    background: oklch(0.6 0.14 230 / 0.12); padding: 1px 6px; border-radius: 5px;
+  }
+
+  /* filter */
+  .filter-row { display: flex; align-items: center; gap: 12px; margin: 16px 0 4px; flex-wrap: wrap; }
+  .filter-row label { font-size: 13px; color: var(--muted); }
+  #findingFilter {
+    flex: 1; min-width: 220px; max-width: 360px;
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    color: var(--fg); border-radius: 9px; padding: 9px 12px; font-size: 13.5px;
+    font-family: var(--font-ui);
+  }
+  #findingFilter::placeholder { color: var(--faint); }
+  #findingFilter:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .count-pill { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+
+  /* findings table */
+  .table-scroll { overflow-x: auto; margin-top: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 760px; }
+  thead th {
+    text-align: left; font-weight: 600; color: var(--muted);
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 10px 14px; border-bottom: 1px solid var(--border-strong);
+    white-space: nowrap;
+  }
+  tbody td { padding: 13px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:hover { background: var(--surface); }
+  td.id { font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); white-space: nowrap; }
+  td.cat { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  td.evid { color: var(--muted); font-size: 12.8px; }
+  td.evid code { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent); background: oklch(0.6 0.14 230 / 0.12); padding: 1px 5px; border-radius: 4px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; font-family: var(--font-mono);
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .b-refuted { color: var(--emerald); background: oklch(0.6 0.14 160 / 0.16); }
+  .b-fixed   { color: #6ee7b7; background: oklch(0.6 0.14 160 / 0.2); }
+  .b-confirm { color: #fbbf24; background: oklch(0.65 0.14 75 / 0.16); }
+  .b-fail    { color: var(--red); background: oklch(0.62 0.17 25 / 0.18); }
+
+  /* remediation */
+  .remediation { display: grid; gap: 12px; margin-top: 8px; }
+  .rem {
+    display: grid; grid-template-columns: 64px 1fr; gap: 16px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 15px 18px;
+  }
+  .rem .pri {
+    font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+    text-align: center; padding: 6px 0; border-radius: 8px; align-self: start;
+    letter-spacing: 0.02em;
+  }
+  .p0 { color: var(--red); background: oklch(0.62 0.17 25 / 0.16); }
+  .p1 { color: var(--amber); background: oklch(0.65 0.16 60 / 0.16); }
+  .p2 { color: var(--accent); background: oklch(0.6 0.14 230 / 0.16); }
+  .pdone { color: var(--emerald); background: oklch(0.6 0.14 160 / 0.16); }
+  .rem h4 { margin: 0 0 5px; font-size: 14.5px; font-weight: 620; }
+  .rem p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+  .rem .meta { display: flex; gap: 16px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11.5px; color: var(--faint); }
+  .rem .meta b { color: var(--muted); font-weight: 500; }
+
+  /* benchmark / skeleton demo */
+  .bench-list { display: grid; gap: 10px; margin: 8px 0 18px; }
+  .bench {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px;
+  }
+  .bench .ico { color: var(--accent); font-family: var(--font-mono); font-size: 13px; padding-top: 1px; }
+  .bench .txt b { font-weight: 600; font-size: 13.5px; }
+  .bench .txt span { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+
+  .skel-demo { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 8px; }
+  @media (max-width: 620px) { .skel-demo { grid-template-columns: 1fr; } }
+  .skel-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .skel-card .lbl { font-family: var(--font-mono); font-size: 11px; color: var(--faint); margin-bottom: 10px; }
+  .skeleton { background: linear-gradient(90deg, oklch(1 0 0 / 0.05), oklch(1 0 0 / 0.14), oklch(1 0 0 / 0.05)); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .skel-line { height: 10px; margin: 8px 0; }
+  .skel-block { height: 56px; margin-top: 10px; }
+
+  footer.foot {
+    margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--faint); text-align: center;
+    font-family: var(--font-mono);
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+</style>
+</head>
+<body>
+  <div class="topbar" aria-hidden="true"></div>
+
+  <header class="ndl" data-od-id="report-header">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">K</div>
+      <div>
+        <h1>Informe de Auditoría UX/UI — KreO.One Dashboard</h1>
+        <div class="sub">ERP B2B PYMEs · Laravel 13 + Filament 5 · panel admin dark-first</div>
+      </div>
+    </div>
+    <div class="kbd-hint" title="Recomendación de producto (no funcional en este informe)">
+      <kbd>⌘</kbd><kbd>K</kbd> búsqueda global
+    </div>
+  </header>
+
+  <div class="wrap">
+
+    <!-- EXECUTIVE SUMMARY -->
+    <section class="card" id="sec-summary" data-od-id="executive-summary" data-collapse>
+      <div class="sec-head" role="button" tabindex="0" aria-expanded="true" aria-controls="body-summary" class="collapse-toggle">
+        <span class="chev" aria-hidden="true">▾</span>
+        <h2>Resumen ejecutivo</h2>
+        <span class="tag">23 Ago 2026</span>
+      </div>
+      <div class="sec-body" id="body-summary">
+        <div class="summary-lead">
+          El <b>login</b> es sólido (Rendimiento 82, Accesibilidad 98, BP/SEO 100). El cuello de botella
+          está en el <b>dashboard autenticado</b>: LCP <b>~2.8s</b>, dominado por <b>18 hidrataciones Livewire
+          secuenciales</b>. Las 3 afirmaciones <b>CRÍTICAS</b> de un agente previo fueron <b>refutadas</b> con
+          evidencia de código. Los problemas reales son el <b>contraste del banner ámbar</b> (3.19:1, falla WCAG AA)
+          y <b>12 estados vacíos planos</b>.
+        </div>
+
+        <div class="metric-grid">
+          <div class="panel">
+            <h3>Login <span class="scope">Lighthouse · no auth</span></h3>
+            <div class="lcp-hero">
+              <span class="num" style="color:var(--emerald)">1.7s</span>
+              <span class="unit">LCP</span>
+              <span class="verdict v-good">BUENO</span>
+            </div>
+            <div class="mrow"><span class="mlabel">Rendimiento</span><span class="mbar"><span class="mfill fill-warn" style="width:82%"></span></span><span class="mval">82</span></div>
+            <div class="mrow"><span class="mlabel">Accesibilidad</span><span class="mbar"><span class="mfill fill-good" style="width:98%"></span></span><span class="mval">98</span></div>
+            <div class="mrow"><span class="mlabel">Mej. Práct.</span><span class="mbar"><span class="mfill fill-good" style="width:100%"></span></span><span class="mval">100</span></div>
+            <div class="mrow"><span class="mlabel">SEO</span><span class="mbar"><span class="mfill fill-good" style="width:100%"></span></span><span class="mval">100</span></div>
+            <div class="mrow"><span class="mlabel">CLS</span><span class="mbar"><span class="mfill fill-good" style="width:100%"></span></span><span class="mval">0</span></div>
+            <div class="note">CLS 0 indica layout estable. Rendimiento 82 rozando el umbral; margen para mejorar en el dashboard.</div>
+          </div>
+
+          <div class="panel">
+            <h3>Dashboard auth <span class="scope">Lighthouse · autenticado</span></h3>
+            <div class="lcp-hero">
+              <span class="num" style="color:#fbbf24">2.8s</span>
+              <span class="unit">LCP</span>
+              <span class="verdict v-warn">A MEJORAR</span>
+            </div>
+            <div class="mrow"><span class="mlabel">LCP vs 2.5s</span><span class="mbar"><span class="mfill fill-warn" style="width:100%"></span></span><span class="mval">+0.3s</span></div>
+            <div class="note">
+              LCP ~2.8s <b>dominado por 18 hidrataciones Livewire secuenciales</b>. Oportunidad real:
+              agrupar en <code>hydration waves</code> y diferir widgets no críticos para bajar de 2.5s.
+              Resto de métricas no medidas en esta pasada (no inventadas).
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINDINGS -->
+    <section class="card" id="sec-findings" data-od-id="findings-table" data-collapse>
+      <div class="sec-head" role="button" tabindex="0" aria-expanded="true" aria-controls="body-findings" class="collapse-toggle">
+        <span class="chev" aria-hidden="true">▾</span>
+        <h2>Hallazgos de la auditoría</h2>
+        <span class="tag">6 hallazgos</span>
+      </div>
+      <div class="sec-body" id="body-findings">
+        <div class="filter-row">
+          <label for="findingFilter">Filtrar hallazgos:</label>
+          <input id="findingFilter" type="text" placeholder="p. ej. sidebar, sw.js, contraste, empty…" aria-label="Filtrar hallazgos" />
+          <span class="count-pill" id="findingCount"></span>
+        </div>
+
+        <div class="table-scroll">
+          <table id="findingsTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Hallazgo</th>
+                <th>Categoría</th>
+                <th>Estado</th>
+                <th>Evidencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="id">C-1</td>
+                <td>Etiqueta ARIA del sidebar «Acción de interfaz»</td>
+                <td class="cat">Accesibilidad</td>
+                <td><span class="badge b-refuted">Refutado</span></td>
+                <td class="evid"><code>tests/Feature/SidebarA11yTest.php</code> afirma <code>NOT contains</code>; el sidebar usa títulos reales por ítem.</td>
+              </tr>
+              <tr>
+                <td class="id">C-2</td>
+                <td>ServiceWorker roto / no funcional</td>
+                <td class="cat">Rendimiento / PWA</td>
+                <td><span class="badge b-refuted">Refutado</span></td>
+                <td class="evid"><code>public/sw.js</code> es Workbox v5 ES module válido, servido <code>200 application/javascript</code>.</td>
+              </tr>
+              <tr>
+                <td class="id">C-3</td>
+                <td>Navegación oculta por defecto</td>
+                <td class="cat">UX</td>
+                <td><span class="badge b-refuted">Refutado</span></td>
+                <td class="evid"><code>scripts.blade.php</code> seeds <code>collapsedGroups=[]</code> (expandido por defecto).</td>
+              </tr>
+              <tr>
+                <td class="id">W-6</td>
+                <td>Chips en Spanglish (Breakdown / Heatmap / Progress / Completion / Sparklines)</td>
+                <td class="cat">Localización</td>
+                <td><span class="badge b-fixed">Confirmado · Corregido</span></td>
+                <td class="evid">→ Desglose / Mapa de calor / Progreso / Cumplimiento / Tendencia. Commit <code>8db14fcb</code>; <code>WidgetChipLocalizationTest</code> passing.</td>
+              </tr>
+              <tr>
+                <td class="id">F-1</td>
+                <td>Contraste del banner ámbar 3.19:1</td>
+                <td class="cat">Accesibilidad (WCAG AA)</td>
+                <td><span class="badge b-fail">Confirmado · Falla AA</span></td>
+                <td class="evid"><code>#e17100</code> sobre fondo = 3.19:1 &lt; 4.5:1. Fix: oscurecer a <code>#b45309</code> o añadir <code>text-shadow</code>.</td>
+              </tr>
+              <tr>
+                <td class="id">F-2</td>
+                <td>12 estados vacíos planos («Sin historial»)</td>
+                <td class="cat">UX / Empty states</td>
+                <td><span class="badge b-confirm">Confirmado</span></td>
+                <td class="evid">Replicar patrón «Productos en Riesgo»: ilustración + CTA + <code>Job 01:00</code>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- REMEDIATION -->
+    <section class="card" id="sec-remediation" data-od-id="remediation-list" data-collapse>
+      <div class="sec-head" role="button" tabindex="0" aria-expanded="true" aria-controls="body-remediation" class="collapse-toggle">
+        <span class="chev" aria-hidden="true">▾</span>
+        <h2>Lista de remediación priorizada</h2>
+        <span class="tag">P0 → P2</span>
+      </div>
+      <div class="sec-body" id="body-remediation">
+        <div class="remediation">
+
+          <div class="rem">
+            <div class="pri p0">P0</div>
+            <div>
+              <h4>Contraste del banner ámbar (falla WCAG 2.1 AA)</h4>
+              <p>El color actual <code>#e17100</code> da 3.19:1 sobre el fondo slate, por debajo del mínimo 4.5:1. Cambiar a <code>#b45309</code> (≈4.6:1) o añadir <code>text-shadow: 0 1px 2px rgba(0,0,0,.5)</code>.</p>
+              <div class="meta"><span><b>Impacto:</b> cumple AA · elimina riesgo a11y</span><span><b>Esfuerzo:</b> S (1 token)</span></div>
+            </div>
+          </div>
+
+          <div class="rem">
+            <div class="pri p1">P1</div>
+            <div>
+              <h4>Hidrataciones Livewire secuenciales (LCP 2.8s)</h4>
+              <p>El dashboard autenticado dispara <b>18 hidrataciones secuenciales</b>. Agrupar widgets en <code>hydration waves</code>, diferir los no críticos con <code>wire:init</code> / Lazy. Objetivo: LCP &lt; 2.5s.</p>
+              <div class="meta"><span><b>Impacto:</b> alto (core web vitals)</span><span><b>Esfuerzo:</b> M</span></div>
+            </div>
+          </div>
+
+          <div class="rem">
+            <div class="pri p1">P1</div>
+            <div>
+              <h4>Secciones colapsables (aria-expanded + localStorage)</h4>
+              <p>Patrón Stripe / Linear / Vercel: cada bloque con botón <code>aria-expanded</code> y estado persistido en <code>localStorage</code>. Reduce carga cognitiva en dashboards densos.</p>
+              <div class="meta"><span><b>Patrón:</b> benchmark</span><span><b>Esfuerzo:</b> S–M</span></div>
+            </div>
+          </div>
+
+          <div class="rem">
+            <div class="pri p1">P1</div>
+            <div>
+              <h4>Skeletons en wire:loading</h4>
+              <p>Mostrar placeholder <em>shimmer</em> durante la hidratación / petición Livewire en lugar de parpadeo de contenido vacío.</p>
+              <div class="meta"><span><b>Patrón:</b> benchmark</span><span><b>Esfuerzo:</b> S</span></div>
+            </div>
+          </div>
+
+          <div class="rem">
+            <div class="pri p2">P2</div>
+            <div>
+              <h4>Cmd+K búsqueda global</h4>
+              <p>Paleta de comandos tipo Linear; atajo <code>⌘K</code> / <code>Ctrl+K</code> para saltar entre módulos y registros.</p>
+              <div class="meta"><span><b>Patrón:</b> Linear</span><span><b>Esfuerzo:</b> M</span></div>
+            </div>
+          </div>
+
+          <div class="rem">
+            <div class="pri p2">P2</div>
+            <div>
+              <h4>Sticky NDL header</h4>
+              <p>Encabezado persistente con métricas clave y navegación siempre accesible al hacer scroll.</p>
+              <div class="meta"><span><b>Patrón:</b> Stripe / Vercel</span><span><b>Esfuerzo:</b> S</span></div>
+            </div>
+          </div>
+
+          <div class="rem">
+            <div class="pri p2">P2</div>
+            <div>
+              <h4>12 estados vacíos planos</h4>
+              <p>Reemplazar «Sin historial» plano por el patrón «Productos en Riesgo»: ilustración + CTA + etiqueta <code>Job 01:00</code>.</p>
+              <div class="meta"><span><b>Impacto:</b> medio (orientación)</span><span><b>Esfuerzo:</b> M</span></div>
+            </div>
+          </div>
+
+          <div class="rem">
+            <div class="pri pdone">HECHO</div>
+            <div>
+              <h4>W-6 Chips en Spanglish — ya corregido</h4>
+              <p>Commit <code>8db14fcb</code>. Verificar que <code>WidgetChipLocalizationTest</code> siga en verde en CI; no requiere acción adicional.</p>
+              <div class="meta"><span><b>Estado:</b> cerrado</span><span><b>Esfuerzo:</b> —</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- BENCHMARK -->
+    <section class="card" id="sec-benchmark" data-od-id="benchmark" data-collapse>
+      <div class="sec-head" role="button" tabindex="0" aria-expanded="true" aria-controls="body-benchmark" class="collapse-toggle">
+        <span class="chev" aria-hidden="true">▾</span>
+        <h2>Benchmark vs Stripe / Linear / Vercel</h2>
+        <span class="tag">recomendado</span>
+      </div>
+      <div class="sec-body" id="body-benchmark">
+        <div class="bench-list">
+          <div class="bench"><span class="ico">▸</span><div class="txt"><b>Secciones colapsables</b><span>Botón <code>aria-expanded</code> + estado en <code>localStorage</code> (este informe lo demuestra en sus propias secciones).</span></div></div>
+          <div class="bench"><span class="ico">▸</span><div class="txt"><b>Skeletons en wire:loading</b><span>Placeholder animado durante hidratación Livewire en vez de flash de contenido vacío.</span></div></div>
+          <div class="bench"><span class="ico">▸</span><div class="txt"><b>Cmd+K búsqueda global</b><span>Paleta de comandos tipo Linear para navegación rápida entre módulos.</span></div></div>
+          <div class="bench"><span class="ico">▸</span><div class="txt"><b>Sticky NDL header</b><span>Encabezado fijo con métricas clave siempre visibles (ver arriba).</span></div></div>
+        </div>
+
+        <div class="skel-demo">
+          <div class="skel-card">
+            <div class="lbl">Ejemplo: skeleton en wire:loading</div>
+            <div class="skeleton skel-line" style="width:70%"></div>
+            <div class="skeleton skel-line" style="width:90%"></div>
+            <div class="skeleton skel-line" style="width:55%"></div>
+            <div class="skeleton skel-block"></div>
+          </div>
+          <div class="skel-card">
+            <div class="lbl">Ejemplo: sección colapsable</div>
+            <div class="skeleton skel-line" style="width:80%"></div>
+            <div class="skeleton skel-line" style="width:60%"></div>
+            <div class="skeleton skel-block" style="height:40px"></div>
+            <div class="lbl" style="margin-top:12px">Estado persistido en localStorage al contraer/expandir.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot" data-od-id="report-footer">
+      Generado vía OpenDesign daemon · perfil hermes open-design
+    </footer>
+
+  </div>
+
+  <script>
+    (function () {
+      // Collapsible sections with aria-expanded + localStorage
+      function initCollapse() {
+        document.querySelectorAll('[data-collapse]').forEach(function (sec) {
+          var id = sec.id || 'sec';
+          var btn = sec.querySelector('.sec-head');
+          var body = sec.querySelector('.sec-body');
+          var saved = localStorage.getItem('od-collapse:' + id);
+          var collapsed = saved === '1';
+          apply(collapsed);
+
+          function toggle() {
+            var nowCollapsed = !sec.classList.contains('is-collapsed');
+            apply(nowCollapsed);
+            localStorage.setItem('od-collapse:' + id, nowCollapsed ? '1' : '0');
+          }
+          btn.addEventListener('click', toggle);
+          btn.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+          });
+
+          function apply(isC) {
+            sec.classList.toggle('is-collapsed', isC);
+            btn.setAttribute('aria-expanded', String(!isC));
+            if (body) body.hidden = false; // keep in DOM; CSS hides via .is-collapsed
+          }
+        });
+      }
+
+      // Findings filter
+      function initFilter() {
+        var f = document.getElementById('findingFilter');
+        var count = document.getElementById('findingCount');
+        var rows = document.querySelectorAll('#findingsTable tbody tr');
+        function update() {
+          var q = (f.value || '').toLowerCase().trim();
+          var n = 0;
+          rows.forEach(function (tr) {
+            var match = !q || tr.textContent.toLowerCase().indexOf(q) !== -1;
+            tr.hidden = !match;
+            if (match) n++;
+          });
+          if (count) count.textContent = q ? (n + ' / ' + rows.length) : '';
+        }
+        if (f) f.addEventListener('input', update);
+      }
+
+      initCollapse();
+      initFilter();
+    })();
+  </script>
+</body>
+</html>
