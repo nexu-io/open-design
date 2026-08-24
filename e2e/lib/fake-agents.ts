@@ -122,9 +122,13 @@ process.stdin.on('data', (chunk) => {
   prompt += chunk;
   if (emitted) return;
   if (emitTimer) clearTimeout(emitTimer);
+  // OD Next puts the user's request at the end of a large exact Prompt
+  // Bundle. A short inter-chunk pause must not make the fake runtime answer
+  // before that final section arrives.
+  const settleMs = prompt.startsWith('<open_design_') ? 1500 : 25;
   emitTimer = setTimeout(() => {
     void emitRun(prompt).catch(failUnhandled);
-  }, 25);
+  }, settleMs);
 });
 process.stdin.on('end', () => {
   void emitRun(prompt).catch(failUnhandled);
@@ -297,9 +301,27 @@ function promptIdentity(promptText, label) {
   return line.slice(prefix.length).split(String.fromCharCode(96)).join('');
 }
 
+function promptRecipeIdentityAttribute(promptText, attribute) {
+  const recipeIdentity = promptText.match(/<recipe_identity\\s+[^>]*>/)?.[0];
+  const value = recipeIdentity?.match(new RegExp('\\\\b' + attribute + '="([^"]+)"'))?.[1];
+  if (!value) throw new Error('OD Next fake could not read recipe_identity.' + attribute);
+  return value;
+}
+
 const odNextIdentityPath = join(__dirname, 'od-next-' + agentId + '-identity.json');
 
 function odNextPromptIdentity(promptText) {
+  if (promptText.includes('<recipe_identity ')) {
+    const packageHash = promptText.match(/"packageHash"\\s*:\\s*"([a-f0-9]{64})"/)?.[1];
+    if (!packageHash) throw new Error('OD Next fake could not read strategy packageHash');
+    const identity = {
+      version: promptRecipeIdentityAttribute(promptText, 'strategy_version'),
+      snapshotId: promptRecipeIdentityAttribute(promptText, 'applied_snapshot'),
+      packageHash,
+    };
+    writeFileSync(odNextIdentityPath, JSON.stringify(identity), 'utf8');
+    return identity;
+  }
   if (promptText.includes('- strategy: ')) {
     const strategy = promptIdentity(promptText, 'strategy').split('@');
     const identity = {
@@ -371,7 +393,8 @@ function emitOdNextClarificationRequest(promptText) {
   };
   const form = '<question-form id="od-next-canary-platform" title="Choose platform">'
     + '{"questions":[{"id":"platform","label":"Target platform","type":"radio",'
-    + '"options":[{"label":"Desktop web","value":"desktop"}],"required":true}]}'
+    + '"default":"desktop","options":[{"label":"Desktop web","value":"desktop"}],'
+    + '"required":true}]}'
     + '</question-form>';
   emitSuccess(
     'One platform choice is required.\\n' + form

@@ -262,8 +262,9 @@ function successfulEvidence(dependent = true): NormalizedAgentObservationV1[] {
       ];
 }
 
-function block(tag: string, value: unknown): string {
-  return `<${tag}>\n${JSON.stringify(value)}\n</${tag}>`;
+function block(tag: string, value: unknown, fenced = false): string {
+  const json = JSON.stringify(value);
+  return `<${tag}>\n${fenced ? `\`\`\`json\n${json}\n\`\`\`` : json}\n</${tag}>`;
 }
 
 function parsedPlanning(plan: OpenDesignPlanContractV2) {
@@ -738,6 +739,146 @@ describe('OD Next complex production enforcement', () => {
         task: { outcome: 'completed', terminalRunId: PRODUCTION_RUN_ID },
       },
     });
+  });
+
+  it('repairs one serialization defect before complex Production without changing packages', () => {
+    const capability = capabilitySnapshot();
+    const plan = planContract(snapshot, capability);
+    const repairProtocol = new OdNextMachineProtocolStream();
+    repairProtocol.push([
+      block('open-design-plan-contract', plan, true),
+      block('open-design-runtime-state', {
+        schema: 'open-design.strategy-state/v2',
+        route: 'full_plan',
+        inputStage: 'request',
+        outcome: 'plan_ready',
+        executionMode: 'complex',
+        reasonCodes: [],
+      }),
+    ].join('\n'));
+    const repairRunId = 'run-contract-repair';
+    const repair = prepareAutomaticStrategyContinuation({
+      db,
+      task: getStrategyTaskExecution(db, TASK_ID)!,
+      parsed: repairProtocol.finish(),
+      executionPreflight: executionPassed,
+      complexRuntimeEvidence: { capabilitySnapshot: capability },
+      service: {
+        prepare(input) {
+          const run = { id: repairRunId, status: 'queued' };
+          db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+          return { kind: 'ready', run, creationKind: 'created', resumed: false };
+        },
+        start(run) { return run; },
+      },
+      createMeta: (stage, instruction, taskRunIndex) => ({
+        stage, instruction, taskRunIndex,
+      }),
+      updatedAt: 120,
+    });
+    expect(repair).toMatchObject({
+      start: true,
+      stage: 'contract_repair',
+      result: {
+        action: 'contract_repair',
+        task: {
+          inputStage: 'contract_repair',
+          outcome: 'running',
+          executionMode: 'complex',
+          planContractRepairAttempts: 1,
+          planContract: plan,
+        },
+      },
+    });
+
+    const repairedProtocol = new OdNextMachineProtocolStream();
+    repairedProtocol.push([
+      block('open-design-plan-contract', plan),
+      block('open-design-runtime-state', {
+        schema: 'open-design.strategy-state/v2',
+        route: 'full_plan',
+        inputStage: 'contract_repair',
+        outcome: 'plan_ready',
+        executionMode: 'complex',
+        reasonCodes: [],
+      }),
+    ].join('\n'));
+    const production = prepareAutomaticStrategyContinuation({
+      db,
+      task: repair.result.task,
+      parsed: repairedProtocol.finish(),
+      toolUseCount: 0,
+      executionPreflight: executionPassed,
+      complexRuntimeEvidence: { capabilitySnapshot: capability },
+      service: {
+        prepare(input) {
+          const run = { id: PRODUCTION_RUN_ID, status: 'queued' };
+          db.transaction(() => input.beforeClaimCommit?.(run)).immediate();
+          return { kind: 'ready', run, creationKind: 'created', resumed: false };
+        },
+        start(run) { return run; },
+      },
+      createMeta: (stage, instruction, taskRunIndex) => ({
+        stage, instruction, taskRunIndex,
+      }),
+      updatedAt: 130,
+    });
+    expect(production).toMatchObject({
+      start: true,
+      stage: 'production',
+      result: {
+        action: 'plan_ready',
+        task: {
+          inputStage: 'production',
+          outcome: 'running',
+          executionMode: 'complex',
+          planContractRepairAttempts: 1,
+          planContract: plan,
+        },
+      },
+    });
+
+    const observations = successfulEvidence().map((item) => ({
+      ...item,
+      identity: { ...item.identity, taskRunIndex: 2 },
+    }));
+    const completed = prepareAutomaticStrategyContinuation({
+      db,
+      task: production.result.task,
+      parsed: parsedCompletion(),
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: true },
+      complexRuntimeEvidence: {
+        capabilitySnapshot: capability,
+        observations,
+        taskRunObservationId: ROOT_OBSERVATION_ID,
+      },
+      service: {
+        prepare() { throw new Error('Completion must not allocate another Run.'); },
+        start(run) { return run; },
+      },
+      createMeta: () => ({}),
+      updatedAt: 140,
+    });
+    expect(completed).toMatchObject({
+      start: false,
+      result: {
+        action: 'completed',
+        task: {
+          outcome: 'completed',
+          terminalRunId: PRODUCTION_RUN_ID,
+          planContractRepairAttempts: 1,
+          planContract: plan,
+        },
+      },
+    });
+    expect(completed.result.task.runs.map((item) => item.inputStage)).toEqual([
+      'request',
+      'contract_repair',
+      'production',
+    ]);
+    expect(completed.result.task.planContract?.fullPlan.buildPackages).toEqual(
+      plan.fullPlan.buildPackages,
+    );
   });
 
   it('blocks failed Child evidence and keeps cancellation terminal without repair or another Run', () => {

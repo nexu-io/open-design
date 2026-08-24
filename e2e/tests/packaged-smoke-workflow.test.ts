@@ -1374,9 +1374,13 @@ process.stdin.on("end", () => {
     ]);
     expect(uiP0Groups["project-collab"].workers).toBe(1);
     expect(uiP0Groups["critical-extras"]).toEqual({
+      env: {
+        OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY: "1",
+        OD_NEXT_STRATEGY_ROLLOUT: "active",
+      },
       grep: "@merge-extra",
       workers: 1,
-      files: ["ui/app.test.ts"],
+      files: ["ui/app.test.ts", "ui/real-daemon-run.test.ts"],
     });
     expect(uiP0Groups["workspace-restoration"]).toEqual({
       fullyParallel: true,

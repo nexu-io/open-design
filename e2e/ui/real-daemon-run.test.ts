@@ -169,7 +169,8 @@ test('[P0] local OD Next active canary follows one public task across physical r
   ))).toHaveLength(2);
 });
 
-test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
+test('[P0] local OD Next clarification gates Production and preserves one taskExecutionId @merge-extra', async ({ page }) => {
+  test.setTimeout(180_000);
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -177,9 +178,11 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
   );
   await prepareLocalOdNextCanary(page, 'OD Next local clarification canary');
 
-  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await sendPrompt(page, 'Create an OD Next clarification canary artifact');
-  const created = await (await createResponsePromise).json() as {
+  const created = await (await sendPrompt(
+    page,
+    'Create an OD Next clarification canary artifact',
+    T.long,
+  )).json() as {
     runId: string;
     taskExecutionId: string;
   };
@@ -190,7 +193,24 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
 
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
-  await form.getByText('Desktop web', { exact: true }).click();
+  await expect(form.getByText('Target platform', { exact: true })).toBeVisible();
+  await expect(form.locator('input[type="radio"]')).toHaveCount(1);
+  await expect(form.getByLabel('Desktop web', { exact: true })).toBeChecked();
+
+  const { projectId } = await currentProjectContext(page);
+  expect((await listProjectFiles(page, projectId)).map((file) => file.name))
+    .not.toContain(OD_NEXT_CANARY_FILE);
+  const beforeConfirmation = await page.request.get(
+    `/api/runs?projectId=${encodeURIComponent(projectId)}`,
+  );
+  expect(beforeConfirmation.ok(), await beforeConfirmation.text()).toBeTruthy();
+  const beforeConfirmationBody = await beforeConfirmation.json() as {
+    runs: Array<{ strategyTask?: { taskExecutionId: string; inputStage: string } }>;
+  };
+  expect(beforeConfirmationBody.runs.filter((run) => (
+    run.strategyTask?.taskExecutionId === created.taskExecutionId
+  ))).toHaveLength(1);
+
   const clarificationResponsePromise = page.waitForResponse(isCreateRunResponse);
   await form.getByRole('button', { name: 'Send answers' }).click();
   const clarificationResponse = await clarificationResponsePromise;
@@ -203,7 +223,6 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
   expect(clarification.taskExecutionId).toBe(created.taskExecutionId);
   expect(clarification.strategyTask?.inputStage).toBe('clarification');
 
-  const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
   await expect(page.getByText(
     'Created od-next-active-canary.html through the continued native session.',
@@ -1112,7 +1131,7 @@ async function gotoEntryHome(page: Page) {
 
 async function expectWorkspaceReady(page: Page) {
   await waitForLoadingToClear(page);
-  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page).toHaveURL(/\/projects\//, { timeout: T.long });
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -1135,7 +1154,7 @@ async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Pl
   await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
 }
 
-async function sendPrompt(page: Page, prompt: string) {
+async function sendPrompt(page: Page, prompt: string, responseTimeout = T.medium) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
   await expect(input).toBeVisible({ timeout: 5_000 });
@@ -1154,7 +1173,7 @@ async function sendPrompt(page: Page, prompt: string) {
   page.on('request', markRequest);
   try {
     const [response] = await Promise.all([
-      page.waitForResponse(isCreateRunResponse, { timeout: T.medium }),
+      page.waitForResponse(isCreateRunResponse, { timeout: responseTimeout }),
       sendButton.click(),
     ]);
     expect(response.ok()).toBeTruthy();

@@ -177,9 +177,11 @@ async function runUiGroup(): Promise<void> {
     args.push(`--workers=${group.workers}`);
   }
   const child = spawn('playwright', args, {
-    env: group.fullyParallel
-      ? { ...process.env, OD_PLAYWRIGHT_FULLY_PARALLEL: '1' }
-      : process.env,
+    env: {
+      ...process.env,
+      ...(group.fullyParallel ? { OD_PLAYWRIGHT_FULLY_PARALLEL: '1' } : {}),
+      ...group.env,
+    },
     stdio: 'inherit',
     shell: false,
   });

@@ -1,4 +1,5 @@
 export type UiPlaywrightGroup = {
+  env?: Readonly<Record<string, string>>;
   files: readonly string[];
   fullyParallel?: boolean;
   grep: string;
@@ -17,9 +18,13 @@ export type VisualCiMatrixEntry = {
 
 export const uiP0Groups = {
   "critical-extras": {
+    env: {
+      OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY: "1",
+      OD_NEXT_STRATEGY_ROLLOUT: "active",
+    },
     grep: "@merge-extra",
     workers: 1,
-    files: ["ui/app.test.ts"],
+    files: ["ui/app.test.ts", "ui/real-daemon-run.test.ts"],
   },
   "workspace-restoration": {
     fullyParallel: true,

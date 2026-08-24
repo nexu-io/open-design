@@ -664,47 +664,57 @@ describe('chat run service shutdown', () => {
       expect(run.signal).toBe('SIGKILL');
     });
 
-    it('waits for a real process group to exit before returning canceled status', async () => {
-      if (process.platform === 'win32') return;
-      vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
-      vi.stubEnv('OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS', '250');
-      const script = [
-        "const { spawn } = require('node:child_process');",
-        "process.on('SIGTERM', () => {});",
-        "const child = spawn(process.execPath, ['-e', \"process.on('SIGTERM',()=>{}); setInterval(()=>{}, 1000);\"], { stdio: 'ignore' });",
-        "process.stdout.write(JSON.stringify({ pid: process.pid, childPid: child.pid }) + '\\n');",
-        "setInterval(() => {}, 1000);",
-      ].join('\n');
-      const child = spawn(process.execPath, ['-e', script], {
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      try {
-        const line = await readOneLine(child.stdout);
-        const payload = JSON.parse(line) as { childPid: number };
-        const runs = createRuns();
-        const run = runs.create();
-        run.status = 'running';
-        (run as any).child = child;
-        (run as any).childPid = child.pid;
-        (run as any).processGroupId = child.pid;
-
-        const status = await runs.cancel(run);
-
-        expect(status.status).toBe('canceled');
-        expect(status.childPid).toBe(child.pid);
-        expect(status.processGroupId).toBe(child.pid);
-        expect(status.childExited).toBe(true);
-        expect(status.signal).toBe('SIGKILL');
-        await expectPidGone(payload.childPid);
-      } finally {
+    it.each(['user cancel', 'daemon shutdown'] as const)(
+      'waits for a real process group to exit after %s',
+      async (terminationPath) => {
+        if (process.platform === 'win32') return;
+        vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
+        vi.stubEnv('OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS', '250');
+        const script = [
+          "const { spawn } = require('node:child_process');",
+          "process.on('SIGTERM', () => {});",
+          "const child = spawn(process.execPath, ['-e', \"process.on('SIGTERM',()=>{}); setInterval(()=>{}, 1000);\"], { stdio: 'ignore' });",
+          "process.stdout.write(JSON.stringify({ pid: process.pid, childPid: child.pid }) + '\\n');",
+          "setInterval(() => {}, 1000);",
+        ].join('\n');
+        const child = spawn(process.execPath, ['-e', script], {
+          detached: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
         try {
-          if (typeof child.pid === 'number') process.kill(-child.pid, 'SIGKILL');
-        } catch {
-          // already gone
+          const line = await readOneLine(child.stdout);
+          const payload = JSON.parse(line) as { childPid: number };
+          const runs = createRuns();
+          const run = runs.create();
+          run.status = 'running';
+          (run as any).child = child;
+          (run as any).childPid = child.pid;
+          (run as any).processGroupId = child.pid;
+
+          const status = terminationPath === 'user cancel'
+            ? await runs.cancel(run)
+            : await runs.shutdownActive({ graceMs: 25 }).then(() => runs.statusBody(run));
+
+          expect(status.status).toBe('canceled');
+          expect(status.childPid).toBe(child.pid);
+          expect(status.processGroupId).toBe(child.pid);
+          expect(status.childExited).toBe(true);
+          expect(status.cancelOrigin).toBe(
+            terminationPath === 'user cancel' ? 'unknown' : 'daemon_shutdown',
+          );
+          expect(status.signal).toBe(
+            terminationPath === 'user cancel' ? 'SIGKILL' : 'SIGTERM',
+          );
+          await expectPidGone(payload.childPid);
+        } finally {
+          try {
+            if (typeof child.pid === 'number') process.kill(-child.pid, 'SIGKILL');
+          } catch {
+            // already gone
+          }
         }
-      }
-    });
+      },
+    );
   });
 
 

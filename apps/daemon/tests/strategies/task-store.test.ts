@@ -1317,38 +1317,151 @@ describe('durable strategy task store', () => {
     },
   );
 
-  it('persists blocked attribution when startup reconciliation interrupts a running Run', async () => {
-    const task = createTask(db, snapshot, 'run-interrupted');
-    closeDatabase();
+  it.each([
+    ['request', null],
+    ['contract_repair', 'simple'],
+    ['production', 'complex'],
+  ] as const)(
+    'recovers a daemon restart during %s/%s without leaving the task running',
+    async (interruptedStage, executionMode) => {
+      const initialRunId = `run-restart-${interruptedStage}-request`;
+      const interruptedRunId = interruptedStage === 'request'
+        ? initialRunId
+        : `run-restart-${interruptedStage}`;
+      let task = createTask(db, snapshot, initialRunId);
 
-    const runDir = path.join(tempDir, 'runs', 'run-interrupted');
-    fs.mkdirSync(runDir, { recursive: true });
-    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
-      schemaVersion: 1,
-      id: 'run-interrupted',
-      projectId: 'project-1',
-      conversationId: 'conversation-1',
-      agentId: AGENT_ID,
-      status: 'running',
-      createdAt: 100,
-      updatedAt: 200,
-      langfuseCompletedAt: 200,
-    }));
+      if (interruptedStage === 'contract_repair') {
+        task = compareAndTransitionStrategyTaskExecution(db, {
+          taskExecutionId: task.taskExecutionId,
+          expectedRevision: task.revision,
+          to: {
+            route: 'full_plan',
+            inputStage: 'clarification',
+            outcome: 'running',
+            executionMode: null,
+          },
+          nextRun: {
+            runId: 'run-restart-contract-repair-clarification',
+            sourceRunId: initialRunId,
+          },
+          updatedAt: 150,
+        });
+        task = compareAndTransitionStrategyTaskExecution(db, {
+          taskExecutionId: task.taskExecutionId,
+          expectedRevision: task.revision,
+          to: {
+            route: 'full_plan',
+            inputStage: 'clarification',
+            outcome: 'running',
+            executionMode: 'simple',
+          },
+          updatedAt: 160,
+        });
+        task = compareAndTransitionStrategyTaskExecution(db, {
+          taskExecutionId: task.taskExecutionId,
+          expectedRevision: task.revision,
+          to: {
+            route: 'full_plan',
+            inputStage: 'contract_repair',
+            outcome: 'running',
+            executionMode: 'simple',
+          },
+          nextRun: {
+            runId: interruptedRunId,
+            sourceRunId: 'run-restart-contract-repair-clarification',
+          },
+          updatedAt: 170,
+        });
+      } else if (interruptedStage === 'production') {
+        const contract = planContract(snapshot);
+        contract.fullPlan.executionMode = 'complex';
+        contract.fullPlan.steps = [
+          { id: 'shell', objective: 'Build shell', outputs: ['shell'] },
+          { id: 'flow', objective: 'Build flow', outputs: ['flow'], dependsOn: ['shell'] },
+        ];
+        contract.fullPlan.buildPackages = [
+          {
+            id: 'shell',
+            objective: 'Build shell',
+            inputs: ['design-spec'],
+            outputs: ['shell'],
+            sharedConstraints: ['Use the frozen design spec.'],
+            dependsOn: [],
+            allowedResources: ['project-source'],
+          },
+          {
+            id: 'flow',
+            objective: 'Build flow',
+            inputs: ['shell'],
+            outputs: ['flow'],
+            sharedConstraints: ['Use the frozen design spec.'],
+            dependsOn: ['shell'],
+            allowedResources: ['project-source'],
+          },
+        ];
+        task = compareAndTransitionStrategyTaskExecution(db, {
+          taskExecutionId: task.taskExecutionId,
+          expectedRevision: task.revision,
+          to: {
+            route: 'full_plan',
+            inputStage: 'production',
+            outcome: 'running',
+            executionMode: 'complex',
+          },
+          nextRun: { runId: interruptedRunId, sourceRunId: initialRunId },
+          planContract: contract,
+          updatedAt: 170,
+        });
+      }
+      closeDatabase();
 
-    db = openDatabase(tempDir, { dataDir: tempDir });
-    await reconcileDurableRunTerminals({
-      analytics: { capture: vi.fn() },
-      appVersion: '0.18.2',
-      db,
-      reportLangfuse: vi.fn(),
-      runsLogDir: path.join(tempDir, 'runs'),
-    });
+      const runDir = path.join(tempDir, 'runs', interruptedRunId);
+      const statePath = path.join(runDir, 'state.json');
+      fs.mkdirSync(runDir, { recursive: true });
+      fs.writeFileSync(statePath, JSON.stringify({
+        schemaVersion: 1,
+        id: interruptedRunId,
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+        agentId: AGENT_ID,
+        status: 'running',
+        createdAt: 100,
+        updatedAt: 200,
+        langfuseCompletedAt: 200,
+      }));
 
-    const persisted = getStrategyTaskExecution(db, task.taskExecutionId);
-    expect(persisted?.outcome).toBe('blocked');
-    expect(persisted?.blockedContext).toEqual({
-      reasonCodes: ['od_next_physical_run_interrupted'],
-      visibleText: null,
-    });
-  });
+      db = openDatabase(tempDir, { dataDir: tempDir });
+      const result = await reconcileDurableRunTerminals({
+        analytics: { capture: vi.fn() },
+        appVersion: '0.18.2',
+        db,
+        reportLangfuse: vi.fn(),
+        runsLogDir: path.join(tempDir, 'runs'),
+      });
+
+      expect(result).toMatchObject({ interrupted: 1, strategyTasksReconciled: 1 });
+      const persisted = getStrategyTaskExecution(db, task.taskExecutionId);
+      expect(persisted).toMatchObject({
+        taskExecutionId: task.taskExecutionId,
+        initialRunId,
+        latestRunId: interruptedRunId,
+        activeRunId: null,
+        terminalRunId: interruptedRunId,
+        inputStage: interruptedStage,
+        executionMode,
+        outcome: 'blocked',
+        blockedContext: {
+          reasonCodes: ['od_next_physical_run_interrupted'],
+          visibleText: null,
+        },
+      });
+      expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+        id: interruptedRunId,
+        status: 'failed',
+        errorCode: 'DAEMON_RESTARTED',
+        terminalTrigger: 'daemon_restart',
+        terminalRecoveryReason: 'daemon_restart',
+      });
+    },
+  );
 });
