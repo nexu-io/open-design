@@ -2364,13 +2364,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       );
       if (
         existingWorkflowRun
+        && !TERMINAL_RUN_STATUSES.has(existingWorkflowRun.status)
         && existingWorkflowRun.clientRequestId !== meta.clientRequestId
       ) {
         return sendApiError(
           res,
           409,
           'PLUGIN_WORKFLOW_CONFLICT',
-          'pluginWorkflowId is already bound to a different logical run request',
+          'pluginWorkflowId already has a different logical run request in progress',
         );
       }
     }
