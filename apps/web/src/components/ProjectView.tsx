@@ -1614,6 +1614,7 @@ function byokOpenCodeProviderFromConfig(
     apiKey: config.apiKey.trim(),
     baseUrl: config.baseUrl.trim(),
     model,
+    supportsImageInput: config.supportsImageInput === true,
     ...(config.apiProtocol === 'azure' && config.apiVersion?.trim()
       ? { apiVersion: config.apiVersion.trim() }
       : {}),

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   formatDesignFilesWorkspaceHint,
   formatProjectAttachmentHint,
+  resolveAbsoluteProjectImageAttachments,
+  resolveByokOpenCodeImagePaths,
   resolveSafeProjectAttachments,
 } from '../src/server.js';
 
@@ -43,6 +45,82 @@ describe('resolveSafeProjectAttachments', () => {
         'When the user says "first attachment", "second file", or similar, map those references to the numbered list above.',
       ].join('\n'),
     );
+  });
+});
+
+describe('resolveAbsoluteProjectImageAttachments', () => {
+  it('keeps only unique, existing, in-project image files within the size limit', () => {
+    const root = '/project';
+    const stats = new Map([
+      ['/project/first.png', { isFile: () => true, size: 128 }],
+      ['/project/second.webp', { isFile: () => true, size: 256 }],
+      ['/project/folder.gif', { isFile: () => false, size: 0 }],
+      ['/project/large.jpg', { isFile: () => true, size: 1025 }],
+      ['/project/notes.txt', { isFile: () => true, size: 10 }],
+    ]);
+
+    expect(resolveAbsoluteProjectImageAttachments(root, [
+      'first.png',
+      './first.png',
+      'second.webp',
+      '../escape.png',
+      'missing.jpeg',
+      'folder.gif',
+      'large.jpg',
+      'notes.txt',
+    ], {
+      maxBytes: 1024,
+      statSync: (target: string) => {
+        const result = stats.get(target);
+        if (!result) throw new Error('missing');
+        return result as never;
+      },
+    })).toEqual(['/project/first.png', '/project/second.webp']);
+  });
+
+  it('accepts PNG, JPEG, GIF, and WebP extensions case-insensitively', () => {
+    expect(resolveAbsoluteProjectImageAttachments('/project', [
+      'a.PNG', 'b.jpg', 'c.JPEG', 'd.Gif', 'e.WEBP',
+    ], {
+      statSync: () => ({ isFile: () => true, size: 1 }) as never,
+    })).toEqual([
+      '/project/a.PNG',
+      '/project/b.jpg',
+      '/project/c.JPEG',
+      '/project/d.Gif',
+      '/project/e.WEBP',
+    ]);
+  });
+});
+
+describe('resolveByokOpenCodeImagePaths', () => {
+  it('merges direct uploads and project images for enabled BYOK runs', () => {
+    expect(resolveByokOpenCodeImagePaths({
+      enabled: true,
+      cwd: '/project',
+      attachments: ['saved.png', 'saved.png'],
+      promptImagePaths: [
+        '/tmp/od-uploads/direct.png',
+        '/tmp/od-uploads/direct.png',
+        '/tmp/od-uploads/not-an-image.txt',
+      ],
+    }, {
+      statSync: () => ({ isFile: () => true, size: 1 }),
+    })).toEqual([
+      '/tmp/od-uploads/direct.png',
+      '/project/saved.png',
+    ]);
+  });
+
+  it('keeps legacy and disabled BYOK runs text-only', () => {
+    expect(resolveByokOpenCodeImagePaths({
+      enabled: false,
+      cwd: '/project',
+      attachments: ['saved.png'],
+      promptImagePaths: ['/tmp/od-uploads/direct.png'],
+    }, {
+      statSync: () => ({ isFile: () => true, size: 1 }),
+    })).toEqual([]);
   });
 });
 

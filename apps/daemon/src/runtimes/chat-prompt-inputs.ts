@@ -10,6 +10,13 @@ import {
 
 export const MAX_CHAT_IMAGE_BYTES = 1024 * 1024;
 export const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
+const CHAT_IMAGE_ATTACHMENT_EXTENSIONS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+]);
 type InputValue =
   | string
   | number
@@ -598,6 +605,82 @@ export function resolveSafeProjectAttachments(
   }
 
   return out;
+}
+
+export function resolveAbsoluteProjectImageAttachments(
+  cwd: string | null | undefined,
+  attachments: readonly string[] | null | undefined,
+  opts: {
+    pathImpl?: typeof path;
+    statSync?: (path: string) => Pick<fs.Stats, 'isFile' | 'size'>;
+    maxBytes?: number;
+  } = {},
+) {
+  if (!cwd || !Array.isArray(attachments)) return [];
+  const pathImpl = opts.pathImpl ?? path;
+  const statSync = opts.statSync ?? ((target: string) => fs.statSync(target));
+  const maxBytes = Number.isFinite(opts.maxBytes)
+    ? Math.max(0, Number(opts.maxBytes))
+    : MAX_CHAT_IMAGE_BYTES;
+  const root = pathImpl.resolve(cwd);
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const attachment of attachments) {
+    if (typeof attachment !== 'string' || attachment.length === 0) continue;
+    try {
+      const absolutePath = pathImpl.resolve(root, attachment);
+      const relativePath = pathImpl.relative(root, absolutePath);
+      const withinRoot =
+        relativePath.length > 0
+        && !relativePath.startsWith('..')
+        && !pathImpl.isAbsolute(relativePath);
+      const extension = pathImpl.extname(absolutePath).toLowerCase();
+      if (
+        !withinRoot
+        || !CHAT_IMAGE_ATTACHMENT_EXTENSIONS.has(extension)
+        || seen.has(absolutePath)
+      ) {
+        continue;
+      }
+      const stats = statSync(absolutePath);
+      if (!stats.isFile() || stats.size > maxBytes) continue;
+      seen.add(absolutePath);
+      out.push(absolutePath);
+    } catch {
+      // Keep the attachment metadata fallback when image preparation fails.
+    }
+  }
+
+  return out;
+}
+
+export function resolveByokOpenCodeImagePaths(
+  input: {
+    enabled: boolean;
+    cwd?: string | null;
+    attachments?: readonly string[] | null;
+    promptImagePaths?: readonly string[] | null;
+  },
+  opts: Parameters<typeof resolveAbsoluteProjectImageAttachments>[2] = {},
+) {
+  if (!input.enabled) return [];
+  const projectImages = resolveAbsoluteProjectImageAttachments(
+    input.cwd,
+    input.attachments,
+    opts,
+  );
+  const directImages = Array.isArray(input.promptImagePaths)
+    ? input.promptImagePaths.filter(
+        (imagePath): imagePath is string =>
+          typeof imagePath === 'string'
+          && path.isAbsolute(imagePath)
+          && CHAT_IMAGE_ATTACHMENT_EXTENSIONS.has(
+            path.extname(imagePath).toLowerCase(),
+          ),
+      )
+    : [];
+  return Array.from(new Set([...directImages, ...projectImages]));
 }
 
 export function formatProjectAttachmentHint(attachments: readonly string[] | null | undefined) {

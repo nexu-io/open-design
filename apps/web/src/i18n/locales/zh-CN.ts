@@ -1,6 +1,8 @@
 import type { Dict } from "../types";
 
 export const zhCN: Dict = {
+  'settings.byokSupportsImageInput': 'This model or deployment supports image input.',
+  'settings.byokSupportsImageInputHint': 'Enable only when the provider confirms image support. Text-only models will reject image payloads.',
   'invite.header.eyebrow': "团队邀请",
   'invite.loading': "正在加载邀请…",
   'invite.landing.title': "加入团队",

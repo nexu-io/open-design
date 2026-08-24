@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { opencodeByokModelId } from '../byok-opencode.js';
 import {
   OPENCODE_PERMISSION_CAPABILITY,
@@ -14,7 +15,7 @@ export const byokOpenCodeAgentDef = {
   versionArgs: ['--version'],
   ...OPENCODE_PERMISSION_CAPABILITY,
   fallbackModels: [DEFAULT_MODEL_OPTION],
-  buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
+  buildArgs: (_prompt, imagePaths, _extra, options = {}, runtimeContext = {}) => {
     const args = ['run', '--format', 'json'];
     if (typeof runtimeContext.cwd === 'string' && runtimeContext.cwd.length > 0) {
       // OpenCode promotes nested directories to the enclosing Git worktree
@@ -27,6 +28,11 @@ export const byokOpenCodeAgentDef = {
     appendOpenCodePermissionBypass(args, 'byok-opencode');
     const model = opencodeByokModelId(options.model);
     if (model) args.push('-m', model);
+    for (const imagePath of imagePaths) {
+      if (typeof imagePath === 'string' && path.isAbsolute(imagePath)) {
+        args.push('-f', imagePath);
+      }
+    }
     return args;
   },
   promptViaStdin: true,

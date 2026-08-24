@@ -840,6 +840,28 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.queryByTestId('settings-byok-no-file-tools-notice')).toBeNull();
   });
 
+  it('shows an off-by-default image-input capability switch and persists the opt-in', async () => {
+    const { onPersist } = renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai-test',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    const toggle = screen.getByTestId('settings-byok-supports-image-input');
+
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(toggle.textContent).toContain('This model or deployment supports image input.');
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({ supportsImageInput: true }),
+      {},
+    );
+  });
+
   it('only persists Max tokens overrides within the supported BYOK range', async () => {
     const { onPersist } = renderSettingsDialog({ apiKey: 'sk-ant-test' });
 

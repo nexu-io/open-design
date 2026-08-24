@@ -66,6 +66,8 @@ export interface ByokChatProviderConfig {
    * because some presets (e.g. Ollama) infer the model from baseUrl/protocol.
    */
   model?: string;
+  /** Opt-in capability for deployments that accept image inputs. */
+  supportsImageInput?: boolean;
 }
 
 export interface ByokMediaDefaults {
