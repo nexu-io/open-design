@@ -53,7 +53,7 @@ export const deepseekHarnessAgentDef = {
   bin: 'dsh',
   versionArgs: ['--version'],
   versionPolicy: {
-    supportedVersions: ['0.1.0-rc.6'],
+    supportedVersions: ['0.1.0-rc.6', '0.1.0-rc.7'],
     requireVersion: true,
     parse: parseDeepSeekHarnessVersion,
   },
