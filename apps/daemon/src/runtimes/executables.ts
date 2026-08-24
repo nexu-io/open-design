@@ -16,6 +16,7 @@ const RUNTIME_PROJECT_ROOT = path.resolve(
 const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['amr', 'VELA_BIN'],
   ['aider', 'AIDER_BIN'],
+  ['antigravity', 'AGY_BIN'],
   ['claude', 'CLAUDE_BIN'],
   ['codebuddy', 'CODEBUDDY_BIN'],
   ['codex', 'CODEX_BIN'],
