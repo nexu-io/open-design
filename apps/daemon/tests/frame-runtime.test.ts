@@ -139,6 +139,7 @@ describe('URL preview nested-frame bridges', () => {
       contentWindow: childWindow,
       src: 'child.html',
       getAttribute(name: string) { return name === 'src' ? 'child.html' : null; },
+      addEventListener() {},
       toggleAttribute() {},
       getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
       clientWidth: 100,
@@ -258,6 +259,7 @@ describe('URL preview nested-frame bridges', () => {
       contentWindow: childWindow,
       src: 'child.html',
       getAttribute(name: string) { return name === 'src' ? 'child.html' : null; },
+      addEventListener() {},
       toggleAttribute() {},
       getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
       clientWidth: 100,
@@ -333,6 +335,7 @@ describe('URL preview nested-frame bridges', () => {
       get src() { return frameAttrs.src; },
       getAttribute(name: string) { return Object.prototype.hasOwnProperty.call(frameAttrs, name) ? frameAttrs[name] : null; },
       setAttribute(name: string, value: string) { frameAttrs[name] = value; },
+      addEventListener() {},
       toggleAttribute() {},
       getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
       clientWidth: 100,
@@ -411,6 +414,81 @@ describe('URL preview nested-frame bridges', () => {
     expect(received).toEqual([{ type: 'od:inspect-set', elementId: 'hero', prop: 'color', value: 'green' }]);
   });
 
+  it('rejects a forged target from a departed document reusing the frame\'s stale declared identity (#7296 review R9-2)', () => {
+    const listeners: Array<(event: { data?: unknown; source?: unknown }) => void> = [];
+    const loadListeners: Array<() => void> = [];
+    const childWindow = { postMessage: () => {} };
+    const frame = {
+      contentWindow: childWindow,
+      src: 'child.html',
+      getAttribute(name: string) { return name === 'src' ? 'child.html' : null; },
+      addEventListener(type: string, listener: () => void) { if (type === 'load') loadListeners.push(listener); },
+      toggleAttribute() {},
+      getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
+      clientWidth: 100,
+      clientHeight: 100,
+    };
+    const documentElement = { toggleAttribute() {}, setAttribute() {}, attributes: [] };
+    const document = {
+      baseURI: 'http://preview.local/api/projects/project-1/preview/scope-1/root.html',
+      documentElement,
+      body: { querySelectorAll: () => [], attributes: [] },
+      head: { appendChild() {} },
+      scrollingElement: { scrollLeft: 0, scrollTop: 0 },
+      querySelectorAll(selector: string) { return selector === 'iframe' ? [frame] : []; },
+      querySelector() { return null; },
+      createElement() { return { setAttribute() {}, textContent: '', isConnected: true }; },
+      addEventListener() {},
+    };
+    const parentMessages: unknown[] = [];
+    const window = {
+      __odUrlScrollBridge: false,
+      __odUrlSelectionBridge: false,
+      location: { href: document.baseURI, search: '', hash: '' },
+      parent: { postMessage: (message: unknown) => parentMessages.push(message) },
+      addEventListener(type: string, listener: (event: { data?: unknown; source?: unknown }) => void) {
+        if (type === 'message') listeners.push(listener);
+      },
+      requestAnimationFrame(callback: () => void) { callback(); return 1; },
+      setTimeout(callback: () => void) { callback(); return 1; },
+      clearTimeout() {},
+    };
+    class MutationObserver { constructor(_callback: () => void) {} observe() {} }
+    const context = { window, document, URL, MutationObserver, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout };
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SCROLL_BRIDGE'), context);
+    vm.runInNewContext(urlPreviewBridgeScript('URL_PREVIEW_SELECTION_BRIDGE'), context);
+    const dispatch = (data: unknown, source: unknown = undefined) => {
+      for (const listener of listeners) listener({ data, source });
+    };
+
+    // relayProjectFrameSelection only runs while comment or inspect mode is
+    // active -- unlike srcdoc.ts's equivalent test (which starts a mode
+    // active via buildSrcdoc's commentBridge option), this bridge constant
+    // is not parameterized per test and starts both modes off by default.
+    dispatch({ type: 'od:comment-mode', enabled: true, mode: 'picker' });
+
+    // The declared child confirms itself normally first.
+    dispatch({
+      type: 'od:url-selection-bridge-ready',
+      href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html',
+    }, childWindow);
+
+    // It then leaves for a destination with no bridge/ready ping. The
+    // parent's src attribute is untouched by that internal navigation, but
+    // the frame's native load event still fires. The same WindowProxy
+    // (childWindow) now belongs to that departed document, which forges a
+    // shaped od:comment-target message claiming the frame's old,
+    // still-declared "child.html" identity.
+    for (const listener of loadListeners) listener();
+    parentMessages.length = 0;
+    dispatch({
+      type: 'od:comment-target', elementId: 'forged', selector: '[data-od-id="forged"]',
+      label: 'forged', text: 'forged', position: { x: 1, y: 1, width: 20, height: 20 },
+    }, childWindow);
+
+    expect(parentMessages).toEqual([]);
+  });
+
   it('rejects a child-ready ping whose href is outside the current preview scope (#7008 review: frame.src staleness)', () => {
     const listeners: Array<(event: { data?: unknown; source?: unknown }) => void> = [];
     const received: unknown[] = [];
@@ -421,6 +499,7 @@ describe('URL preview nested-frame bridges', () => {
       get src() { return frameAttrs.src; },
       getAttribute(name: string) { return Object.prototype.hasOwnProperty.call(frameAttrs, name) ? frameAttrs[name] : null; },
       setAttribute(name: string, value: string) { frameAttrs[name] = value; },
+      addEventListener() {},
       toggleAttribute() {},
       getBoundingClientRect() { return { x: 0, y: 0, width: 100, height: 100 }; },
       clientWidth: 100,
