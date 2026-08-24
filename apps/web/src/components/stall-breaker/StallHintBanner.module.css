@@ -1,0 +1,123 @@
+.banner {
+  margin: 0 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--amber-bg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 12px 14px;
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  pointer-events: none;
+  max-height: 0;
+  overflow: hidden;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
+  transition:
+    opacity var(--dur-exit) var(--ease-out),
+    transform var(--dur-exit) var(--ease-out),
+    max-height var(--dur-exit) var(--ease-out);
+}
+.bannerVisible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  max-height: 400px;
+  margin-bottom: 8px;
+  padding: 12px 14px;
+  border-width: 1px;
+  transition:
+    opacity var(--dur-enter) var(--ease-out),
+    transform var(--dur-enter) var(--ease-out),
+    max-height var(--dur-enter) var(--ease-out);
+}
+.text {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.text strong {
+  font-size: 13px;
+  color: var(--text-strong);
+}
+.text p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.pulse {
+  flex: none;
+  margin-top: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: var(--amber);
+  animation: hint-pulse 1600ms var(--ease-out) infinite;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* 模型 chip：统一选择器的默认 trigger，收窄为内容宽，与主按钮并排。 */
+.actions > :global(.model-select-searchable) {
+  width: auto;
+}
+.modelChip {
+  display: flex;
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out);
+}
+.modelChip:hover {
+  border-color: var(--border-strong);
+}
+
+@keyframes hint-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--amber) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner,
+  .bannerVisible {
+    transition: opacity var(--dur-quick) linear;
+    transform: none;
+  }
+  .pulse {
+    animation: none;
+  }
+}
+
+/* 下拉指示箭头：chip 是可下拉选择的，右侧 chevron 给出明确提示。 */
+.modelChip {
+  position: relative;
+  padding-right: 30px;
+}
+.modelChip::after {
+  content: '';
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}

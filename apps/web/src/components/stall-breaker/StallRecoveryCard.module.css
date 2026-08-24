@@ -1,0 +1,145 @@
+/* 视觉语言对齐 UserActionCard：panel 底、窄边距、tone 徽章。
+   卡片是「系统异常干预」，形态上刻意与 composer / 消息气泡区分。 */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 480px;
+  margin: 6px 0 36px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--amber) 28%, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  animation: card-in var(--dur-enter) var(--ease-out);
+}
+
+.head {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.iconBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--amber);
+}
+.headText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+  line-height: 1.5;
+}
+.detail {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.recommendBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.recommendLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.recommendPill {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-strong);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius-pill);
+  padding: 0 8px;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.switchRow > :global(.model-select-searchable) {
+  flex: 1;
+  min-width: 0;
+}
+/* 模型 chip：统一选择器的默认 trigger（所选模型 + capability 徽标），
+   右侧 chevron 提示可下拉选择。 */
+.modelChip {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out);
+  position: relative;
+  padding-right: 30px;
+}
+.modelChip:hover {
+  border-color: var(--border-strong);
+}
+.modelChip::after {
+  content: '';
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+/* 次级动作：小号描边按钮，隔一条 hairline 与推荐路径分层。 */
+.secondary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+.secondaryDemoted {
+  opacity: 0.65;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+}

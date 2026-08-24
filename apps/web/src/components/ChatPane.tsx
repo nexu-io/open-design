@@ -39,6 +39,10 @@ import {
   type DesignToolboxActionId,
 } from '../runtime/design-toolbox';
 import { isRetryableAssistantTerminalFailure } from '../runtime/design-delivery';
+import { StallForkNotice } from './stall-breaker/StallForkNotice';
+import { StallHintBanner } from './stall-breaker/StallHintBanner';
+import { StallRecoveryCard } from './stall-breaker/StallRecoveryCard';
+import type { StallBreakerPaneProps } from './stall-breaker/types';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { useLiquidGlass } from '../hooks/useLiquidGlass';
@@ -775,6 +779,10 @@ interface Props {
   projectHeader?: ReactNode;
   designSystemPicker?: ReactNode;
   config?: AppConfig;
+  /** 生成卡死熔断 UI（卡顿提示 / 熔断恢复卡片 / 新会话来源标识）。
+   *  当前由 stall-breaker demo 驱动；正式集成时改由 daemon 静默计时与
+   *  stall_timeout 终态事件驱动。见 components/stall-breaker/types.ts。 */
+  stallBreaker?: StallBreakerPaneProps | null;
 }
 
 const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
@@ -1007,6 +1015,7 @@ export function ChatPane({
   projectHeader,
   designSystemPicker,
   config,
+  stallBreaker = null,
 }: Props) {
   const { workspaceContext } = useProjectCollabContext();
   const { t, locale } = useI18n();
@@ -2706,6 +2715,9 @@ export function ChatPane({
                   )}
                 </div>
               ) : null}
+              {stallBreaker?.forkNotice ? (
+                <StallForkNotice notice={stallBreaker.forkNotice} />
+              ) : null}
               <ChatRows
                 messages={displayMessages}
                 streaming={streaming}
@@ -2762,6 +2774,16 @@ export function ChatPane({
                 scrollContainerRef={logRef}
                 highlightedUserMessageId={chatRailHighlightedMessageId}
               />
+              {stallBreaker?.phase === 'broken' ? (
+                <StallRecoveryCard
+                  secondBreak={stallBreaker.secondBreak}
+                  retriesUsed={stallBreaker.retriesUsed}
+                  failedModelId={stallBreaker.failedModelId}
+                  failedModelStallCount={stallBreaker.failedModelStallCount}
+                  modelOptions={stallBreaker.modelOptions}
+                  onAction={stallBreaker.onAction}
+                />
+              ) : null}
               {displayError ? (
                 <UserActionCard
                   dataKind="run-recovery"
@@ -3029,6 +3051,17 @@ export function ChatPane({
               <span>{t('chat.jumpToLatest')}</span>
             </button>
           </div>
+          {stallBreaker ? (
+            <StallHintBanner
+              visible={stallBreaker.phase === 'hint'}
+              silenceLabel={stallBreaker.silenceLabel}
+              failedModelId={stallBreaker.failedModelId}
+              failedModelStallCount={stallBreaker.failedModelStallCount}
+              modelOptions={stallBreaker.modelOptions}
+              onKeepWaiting={stallBreaker.onKeepWaiting}
+              onAction={stallBreaker.onAction}
+            />
+          ) : null}
           <PinnedTodoSlot
             messages={displayMessages}
             streaming={streaming}

@@ -1,0 +1,75 @@
+/* demo 控制面板：仅 ?stallDemo=1 时渲染的浮层，非产品 UI。 */
+
+.panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 14px;
+}
+.panelHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.panelHead strong {
+  font-size: 13px;
+  color: var(--text-strong);
+}
+.clock {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+.clock[data-live='true'] {
+  color: var(--amber);
+}
+.clock em {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--text-soft);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+  margin-left: 4px;
+}
+.cases {
+  display: flex;
+  gap: 6px;
+}
+.caseItem {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 6px 4px;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-quick) var(--ease-out),
+    background var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+.caseItem:hover {
+  border-color: var(--border-strong);
+}
+.caseItemActive {
+  color: var(--text-strong);
+  background: var(--bg-subtle);
+  border-color: var(--selected, var(--accent));
+}
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

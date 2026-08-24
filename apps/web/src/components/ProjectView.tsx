@@ -282,6 +282,7 @@ import type { AnchorWriteBack } from '../comments';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
+import { useStallBreakerDemo } from './stall-breaker/useStallBreakerDemo';
 import type { ChatSendMeta, ChatSendOutcome } from './ChatComposer';
 import {
   CritiqueTheaterMount,
@@ -9242,6 +9243,15 @@ export function ProjectView({
     setMessageLoadRetryNonce((nonce) => nonce + 1);
   }, [activeConversationId, commitPreviewComments, failedMessagesConversationId, project.id, openTabsState.active]);
 
+  // 生成卡死熔断 demo（?stallDemo=1 激活）：在真实会话上叠加一次会卡死
+  // 的生成，驱动 ChatPane 的 stallBreaker UI。正式集成后由 daemon 事件驱动。
+  const stallBreakerDemo = useStallBreakerDemo({
+    messages,
+    activeConversationId,
+    onCreateConversation: handleNewConversation,
+    onSelectConversation: handleSelectConversation,
+  });
+
   const refreshConversationsForProgrammaticBrandRetry = useCallback(
     async (conversationId: string): Promise<boolean> => {
       const capturedProjectId = project.id;
@@ -11109,8 +11119,9 @@ export function ProjectView({
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
               key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}:${chatSeed?.id ?? 'ready'}`}
-              messages={messages}
-              streaming={currentConversationControlStreaming}
+              messages={stallBreakerDemo.enabled ? stallBreakerDemo.messages : messages}
+              streaming={currentConversationControlStreaming || stallBreakerDemo.streamingOverride}
+              stallBreaker={stallBreakerDemo.paneProps}
               liveToolInput={liveToolInput}
               loading={currentConversationLoading}
               // A read-only viewer of a team-shared project cannot drive artifact
@@ -11354,6 +11365,7 @@ export function ProjectView({
               <CenteredLoader />
             </div>
           )}
+          {stallBreakerDemo.controls}
         </div>
         {/* The comment panel is a floating card over the workspace in EVERY
             state (per product: 任何状态下评论卡片都在这个位置). It used to dock
