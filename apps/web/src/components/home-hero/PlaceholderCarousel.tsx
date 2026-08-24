@@ -44,12 +44,21 @@ interface Props {
   // keeps `active` true so Send still submits the current scenario from an
   // empty composer — this only silences the animation.
   paused?: boolean;
+  // Home hero keeps the caret outside its ellipsized text; the chat composer
+  // keeps it inline so it follows wrapped lines.
+  caretPlacement?: 'row-end' | 'typing-edge';
 }
 
 // Pointer-events-none overlay that types the rotating scenario placeholders
 // over the (empty) Lexical editor. It owns the per-character animation state so
 // the frequent re-renders stay confined here and never touch the editor.
-export function PlaceholderCarousel({ scenarios, active, paused = false, onScenarioChange }: Props) {
+export function PlaceholderCarousel({
+  scenarios,
+  active,
+  paused = false,
+  onScenarioChange,
+  caretPlacement = 'row-end',
+}: Props) {
   const reducedMotion = usePrefersReducedMotion();
   const visualStabilityMode = isVisualStabilityMode();
   const [state, setState] = useState(initialTypewriterState);
@@ -110,14 +119,22 @@ export function PlaceholderCarousel({ scenarios, active, paused = false, onScena
   const visible = reducedMotion || visualStabilityMode
     ? scenario.text
     : scenario.text.slice(0, state.charCount);
-  // Caret is nested in the text span so it follows the last character when the
-  // placeholder wraps (long follow-up scenarios in the chat composer).
+
+  const caret = <span className="home-hero__carousel-caret" />;
+
   return (
     <div className="home-hero__carousel" aria-hidden="true" data-testid="home-hero-carousel">
-      <span className="home-hero__carousel-text">
-        {visible}
-        <span className="home-hero__carousel-caret" />
-      </span>
+      {caretPlacement === 'typing-edge' ? (
+        <span className="home-hero__carousel-text">
+          {visible}
+          {caret}
+        </span>
+      ) : (
+        <>
+          <span className="home-hero__carousel-text">{visible}</span>
+          {caret}
+        </>
+      )}
     </div>
   );
 }

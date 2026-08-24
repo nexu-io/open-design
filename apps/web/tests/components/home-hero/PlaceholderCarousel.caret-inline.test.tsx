@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
 //
-// The caret must be nested inside the text span, not a sibling, so it
-// follows the last character when the placeholder wraps in the chat
-// composer. Layout measurements live in the Playwright spec at
-// `e2e/ui/composer-carousel-placeholder-wrap.test.ts`; jsdom cannot lay
-// out, so this file locks the DOM shape only.
+// jsdom cannot lay out, so this file locks only the DOM shape each surface's
+// caret contract requires; the geometric visibility oracle lives in
+// e2e/ui/composer-carousel-placeholder-wrap.test.ts.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
@@ -16,38 +14,70 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const LONG_SCENARIO = {
+const SCENARIO = {
   id: 'visual-polish',
-  text: 'Polish this design until it is ready to ship: check hierarchy, typography, spacing, responsive behavior, button states, empty/loading/error states, and accessibility; directly fix the most important issues.',
+  text: 'Polish this design until it is ready to ship.',
   chipId: 'design-toolbox',
 } as const;
 
-describe('PlaceholderCarousel caret is nested inline in the text span', () => {
-  it('renders caret as the last child of .home-hero__carousel-text (not a sibling)', () => {
-    const { container } = render(
-      <PlaceholderCarousel
-        scenarios={[LONG_SCENARIO]}
-        active
-        onScenarioChange={() => {}}
-      />,
-    );
+function renderCarousel(caretPlacement?: 'row-end' | 'typing-edge') {
+  return render(
+    <PlaceholderCarousel
+      scenarios={[SCENARIO]}
+      active
+      {...(caretPlacement === undefined ? {} : { caretPlacement })}
+      onScenarioChange={() => {}}
+    />,
+  );
+}
+
+describe('PlaceholderCarousel caret placement', () => {
+  // The home hero ellipsizes inside .home-hero__carousel-text; a caret nested
+  // there is clipped away with the overflow, so row-end keeps it outside.
+  it("default renders the caret as a flex sibling after the clipped text span ('row-end')", () => {
+    const { container } = renderCarousel();
 
     const carousel = container.querySelector('[data-testid="home-hero-carousel"]');
-    expect(carousel, 'carousel root missing').not.toBeNull();
+    expect(carousel).not.toBeNull();
+    expect(carousel!.getAttribute('aria-hidden')).toBe('true');
 
     const textSpan = carousel!.querySelector('.home-hero__carousel-text');
-    expect(textSpan, 'text span missing').not.toBeNull();
+    expect(textSpan).not.toBeNull();
+    expect(textSpan!.querySelector('.home-hero__carousel-caret')).toBeNull();
 
+    const children = Array.from(carousel!.children);
+    expect(children).toHaveLength(2);
+    expect(children[0]).toBe(textSpan);
+    expect(children[1]!.classList.contains('home-hero__carousel-caret')).toBe(true);
+  });
+
+  it("explicit 'row-end' matches the default shape", () => {
+    const { container } = renderCarousel('row-end');
+    const carousel = container.querySelector('[data-testid="home-hero-carousel"]')!;
+    const textSpan = carousel.querySelector('.home-hero__carousel-text')!;
+    expect(textSpan.querySelector('.home-hero__carousel-caret')).toBeNull();
+    expect(carousel.children[1]!.classList.contains('home-hero__carousel-caret')).toBe(true);
+  });
+
+  // The follow-up composer wraps its placeholder across clamped lines, so the
+  // caret must be the last inline child of the text span to track the typing edge.
+  it("'typing-edge' nests the caret as the last child of the text span", () => {
+    const { container } = renderCarousel('typing-edge');
+
+    const carousel = container.querySelector('[data-testid="home-hero-carousel"]');
+    expect(carousel).not.toBeNull();
+    expect(carousel!.getAttribute('aria-hidden')).toBe('true');
+
+    const textSpan = carousel!.querySelector('.home-hero__carousel-text');
+    expect(textSpan).not.toBeNull();
     const caret = textSpan!.querySelector('.home-hero__carousel-caret');
-    expect(caret, 'caret must be a descendant of the text span').not.toBeNull();
+    expect(caret).not.toBeNull();
     expect(caret!.parentElement).toBe(textSpan);
     expect(textSpan!.lastElementChild).toBe(caret);
 
     const siblingCaret = Array.from(carousel!.children).find(
       (child) => child !== textSpan && child.classList.contains('home-hero__carousel-caret'),
     );
-    expect(siblingCaret, 'caret must not appear as a sibling of the text span').toBeUndefined();
-
-    expect(carousel!.getAttribute('aria-hidden')).toBe('true');
+    expect(siblingCaret).toBeUndefined();
   });
 });

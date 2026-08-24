@@ -1483,13 +1483,7 @@
   white-space: nowrap;
   max-width: calc(100% - 8px);
 }
-/* Follow-up scenarios can be full paragraphs (visualPolish is ~270 chars);
-   the placeholder wraps within the composer's width instead of clipping.
-   pre-wrap (not normal) keeps the typewriter's trailing spaces at wrap
-   edges so the caret doesn't jitter to the next line for one frame.
-   The wrap grows to fit up to four wrapped lines (13px * 1.6 * 4 + padding)
-   only while the carousel is mounted, so the composer chrome doesn't
-   bounce as the typewriter rotates and the toolbar row stays uncovered. */
+/* Reserve four wrapped lines while follow-up prompts are visible. */
 .composer-input-wrap:has(.home-hero__carousel) {
   min-height: 104px;
 }
@@ -1516,10 +1510,14 @@
   text-overflow: clip;
 }
 .composer-input-wrap .home-hero__carousel-caret {
+  display: inline-block;
   width: 1px;
   height: 1.25em;
+  margin: 0 0 0 1px;
+  vertical-align: text-bottom;
+  background: var(--accent);
   opacity: 0.85;
-  animation: home-hero-carousel-caret 900ms steps(1) infinite;
+  animation: home-hero-caret-blink 1.05s steps(1, end) infinite;
 }
 /* Single-paragraph + LineBreakNode model: collapse paragraph margins so a
    serialized "\n" reads as a single visual line break (no \n\n gap). */
