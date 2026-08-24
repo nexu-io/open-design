@@ -749,15 +749,49 @@ test('antigravity gates non-interactive permission bypass on the detected CLI ca
   assert.deepEqual(antigravity.capabilityFlags, {
     '--dangerously-skip-permissions': 'skipPermissions',
   });
-  assert.deepEqual(antigravity.buildArgs('', [], [], {}), ['-p', '-']);
+  assert.deepEqual(antigravity.buildArgs('', [], [], {}), ['-p', '']);
 
   agentCapabilities.set('antigravity', { skipPermissions: true });
   try {
     assert.deepEqual(antigravity.buildArgs('', [], [], {}), [
       '--dangerously-skip-permissions',
       '-p',
-      '-',
+      '',
     ]);
+  } finally {
+    agentCapabilities.delete('antigravity');
+  }
+});
+
+test('antigravity keeps log argv order when permission bypass is unavailable', () => {
+  agentCapabilities.set('antigravity', { skipPermissions: false });
+  try {
+    assert.deepEqual(
+      antigravity.buildArgs('', [], [], {}, {
+        agentLogFilePath: '/tmp/od-agy-test.log',
+      }),
+      ['--log-file', '/tmp/od-agy-test.log', '-p', ''],
+    );
+  } finally {
+    agentCapabilities.delete('antigravity');
+  }
+});
+
+test('antigravity places permission bypass after log args', () => {
+  agentCapabilities.set('antigravity', { skipPermissions: true });
+  try {
+    assert.deepEqual(
+      antigravity.buildArgs('', [], [], {}, {
+        agentLogFilePath: '/tmp/od-agy-test.log',
+      }),
+      [
+        '--log-file',
+        '/tmp/od-agy-test.log',
+        '--dangerously-skip-permissions',
+        '-p',
+        '',
+      ],
+    );
   } finally {
     agentCapabilities.delete('antigravity');
   }
