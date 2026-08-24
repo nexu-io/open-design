@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/instance-lifecycle-v1.schema.json",
+  "title": "Shared Shell instance lifecycle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scope", "state", "generationId", "instanceId", "references", "fence", "lease"],
+  "properties": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "namespace"],
+      "properties": {
+        "channel": {"type": "string", "pattern": "^[a-z0-9]{1,12}$", "not": {"const": "local"}},
+        "namespace": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"}
+      }
+    },
+    "state": {"enum": ["running", "stopped"]},
+    "generationId": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "instanceId": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+    "references": {"type": "integer", "minimum": 0},
+    "fence": {"type": "integer", "minimum": 0},
+    "lease": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["heartbeatIntervalMs", "expiresAt"],
+          "properties": {
+            "heartbeatIntervalMs": {"type": "integer", "minimum": 1000},
+            "expiresAt": {"type": "string", "format": "date-time"}
+          }
+        }
+      ]
+    }
+  }
+}

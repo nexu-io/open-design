@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/scene-receipt-v1.schema.json",
+  "title": "Terminal target scene receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "operation", "target", "sceneDirectory", "sceneManifestSha256", "products"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "operation": {"const": "terminal.scene.build"},
+    "target": {"enum": ["darwin-arm64", "darwin-x64", "win32-x64"]},
+    "sceneDirectory": {"type": "string", "minLength": 1},
+    "sceneManifestSha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "products": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "sha256", "size"],
+        "properties": {
+          "name": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "size": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

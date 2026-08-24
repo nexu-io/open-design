@@ -1,0 +1,21 @@
+{
+  "name": "@open-design/terminal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Native POSIX sh and PowerShell carrier for Standalone exact distributions.",
+  "files": ["contract", "node-lock.json", "ps1", "runtime", "sh", "version"],
+  "scripts": {
+    "pretest": "pnpm --filter @open-design/standalone build && pnpm --filter @open-design/closure build",
+    "test": "vitest run",
+    "pretypecheck": "pnpm --filter @open-design/standalone build",
+    "typecheck": "tsc -p tsconfig.tests.json --noEmit"
+  },
+  "devDependencies": {
+    "@open-design/standalone": "workspace:*",
+    "@types/node": "24.12.2",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {"node": "~24"}
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/shell-updater-v1.schema.json",
+  "title": "Shell-owned updater declaration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "provider", "currentVersion", "state", "actions"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "shell", "incarnation"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+        "shell": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "version", "digest"],
+          "properties": {
+            "type": {"const": "terminal"},
+            "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        },
+        "incarnation": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"}
+      }
+    },
+    "currentVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "availableVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "minimumVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "state": {"enum": ["idle", "checking", "available", "required", "failed", "unsupported"]},
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "strategy"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+          "label": {"type": "string", "minLength": 1},
+          "strategy": {"enum": ["restart", "restart-with-installer"]}
+        }
+      }
+    }
+  }
+}
