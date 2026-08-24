@@ -2082,6 +2082,63 @@ test('attachAcpSession surfaces non-text ACP updates as status progress', () => 
   );
 });
 
+test('attachAcpSession does not surface stabilized ACP metadata updates as status', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'make a simple deck',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  for (const sessionUpdate of ['usage_update', 'session_info_update', 'available_commands_update']) {
+    writeAcpUpdate(child, { sessionUpdate });
+  }
+  writeAcpUpdate(child, {
+    sessionUpdate: 'context_compaction',
+    status: 'in_progress',
+    message: 'Compacting conversation history',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Visible answer' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_thought_chunk',
+    content: { text: 'Private reasoning' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const statuses = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as { type?: string; label?: string; detail?: string })
+    .filter((payload) => payload.type === 'status');
+  assert.deepEqual(
+    statuses.filter((payload) =>
+      ['usage_update', 'session_info_update', 'available_commands_update'].includes(payload.label ?? ''),
+    ),
+    [],
+  );
+  assert.equal(
+    statuses.find((payload) => payload.label === 'context_compaction')?.detail,
+    'Compacting conversation history',
+  );
+  assert.deepEqual(
+    events
+      .filter((entry) => entry.event === 'agent')
+      .map((entry) => entry.payload as { type?: string; delta?: string })
+      .filter((payload) => payload.type === 'text_delta' || payload.type === 'thinking_delta')
+      .map((payload) => payload.delta),
+    ['Visible answer', 'Private reasoning'],
+  );
+});
+
 function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
   return writes
     .join('')
