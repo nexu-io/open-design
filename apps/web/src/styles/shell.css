@@ -977,6 +977,8 @@ html.od-radial-open .workspace-shell {
   width: max-content;
   min-width: min(248px, calc(100vw - 32px));
   max-width: min(360px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 80px));
+  overflow-y: auto;
   padding: 6px;
   border-radius: var(--radius);
   background: var(--bg-panel);
