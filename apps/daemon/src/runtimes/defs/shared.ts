@@ -28,6 +28,35 @@ export function clampCodexReasoning(
   return effort;
 }
 
+// Per-model support matrix for the Claude Code CLI's `--effort` flag.
+// Sonnet 5 / Opus 4.8 / Opus 4.7 / Fable 5 support the full
+// low|medium|high|xhigh|max range. The prior generation — Sonnet 4.6 /
+// Opus 4.6 — supports everything except `xhigh`. Unknown/omitted/aliased
+// model ids (e.g. 'default', 'sonnet', 'opus') are treated as the current
+// (full-range) generation rather than clamped, mirroring how
+// clampCodexReasoning treats an unset model id as the newest family.
+//
+// Matched by family prefix, not an exact-string set: mmd routes (see
+// mmd-routes.test.ts) surface suffixed 4.6 ids like
+// `claude-opus-4-6-thinking` through the same picker, and an exact-match
+// set would silently let `xhigh` through for those. The trailing
+// `(?:[-.].+)?` requires a separator before any suffix, so `4-6` doesn't
+// also match a hypothetical unrelated `4-60`.
+const CLAUDE_NO_XHIGH_FAMILY_RE = /^(?:claude-)?(?:sonnet|opus)-4[-.]6(?:[-.].+)?$/;
+
+export function clampClaudeReasoning(
+  modelId: string | null | undefined,
+  effort: string | null | undefined,
+) {
+  if (!effort) return effort;
+  const raw = String(modelId ?? '').trim().toLowerCase();
+  const id = raw.includes('/') ? raw.split('/').pop() : raw;
+  if (effort === 'xhigh' && id && CLAUDE_NO_XHIGH_FAMILY_RE.test(id)) {
+    return 'high';
+  }
+  return effort;
+}
+
 // Parse one-id-per-line stdout from `<cli> models` and prepend the synthetic
 // default option. Used by opencode / cursor-agent.
 export function parseLineSeparatedModels(stdout: string): RuntimeModelOption[] {

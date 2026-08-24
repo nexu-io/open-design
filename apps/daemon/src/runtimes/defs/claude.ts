@@ -1,5 +1,5 @@
 import { agentCapabilities } from '../capabilities.js';
-import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { DEFAULT_MODEL_OPTION, clampClaudeReasoning } from './shared.js';
 import { loadMmdRouteModels } from '../mmd-routes.js';
 import type { RuntimeAgentDef } from '../types.js';
 
@@ -42,6 +42,19 @@ export const claudeAgentDef = {
     // picker, then keep the built-in aliases as fallback hints.
     fallbackModels: CLAUDE_FALLBACK_MODELS,
     fetchModels: async (_resolvedBin, env) => loadMmdRouteModels(env, CLAUDE_FALLBACK_MODELS),
+    // `default` is the synthetic sentinel the picker falls back to
+    // (AvatarMenu/SettingsDialog use `reasoningOptions[0].id`) and round-trips
+    // to "omit --effort, let the CLI pick." The other five ids are the real
+    // `claude -p --effort <level>` levels; per-model support is narrowed by
+    // clampClaudeReasoning in buildArgs (e.g. Sonnet/Opus 4.6 lack `xhigh`).
+    reasoningOptions: [
+      { id: 'default', label: 'Default' },
+      { id: 'low', label: 'Low' },
+      { id: 'medium', label: 'Medium' },
+      { id: 'high', label: 'High' },
+      { id: 'xhigh', label: 'XHigh' },
+      { id: 'max', label: 'Max' },
+    ],
     // Prompt delivered via stdin to avoid both Linux `spawn E2BIG`
     // (MAX_ARG_STRLEN caps a single argv entry at ~128 KB) and Windows
     // `spawn ENAMETOOLONG` (CreateProcess caps the full command line at
@@ -65,6 +78,10 @@ export const claudeAgentDef = {
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
+      }
+      if (options.reasoning && options.reasoning !== 'default') {
+        const effort = clampClaudeReasoning(options.model, options.reasoning);
+        if (effort) args.push('--effort', effort);
       }
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,
