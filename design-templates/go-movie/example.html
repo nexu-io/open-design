@@ -548,8 +548,6 @@
 
           <div class="cat-tabs" role="tablist" aria-label="筛选影片">
             <button class="cat-tab active" role="tab" aria-selected="true" data-filter="all">全部</button>
-            <button class="cat-tab" role="tab" aria-selected="false" data-filter="today">今天</button>
-            <button class="cat-tab" role="tab" aria-selected="false" data-filter="tomorrow">明天</button>
             <button class="cat-tab" role="tab" aria-selected="false" data-filter="restored">修复</button>
             <button class="cat-tab" role="tab" aria-selected="false" data-filter="sold">售罄</button>
             <button class="cat-tab" role="tab" aria-selected="false" data-filter="venue-old-dock">港湾影院</button>
@@ -566,7 +564,7 @@
 
           <section class="section">
             <div class="film-list">
-              <article class="film-card" data-save-key="film-salt-line" data-save-type="film" data-day="tomorrow" data-status="low" data-tag="french" data-venue="old-dock">
+              <article class="film-card" data-save-key="film-salt-line" data-save-type="film" data-status="low" data-tag="french" data-venue="old-dock">
                 <img class="card-backdrop" src="assets/film-salt-line-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -582,7 +580,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-winter-grain" data-save-type="film" data-day="later" data-status="ok" data-tag="canadian" data-venue="harbour-arts">
+              <article class="film-card" data-save-key="film-winter-grain" data-save-type="film" data-status="ok" data-tag="canadian" data-venue="harbour-arts">
                 <img class="card-backdrop" src="assets/film-winter-grain-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -598,7 +596,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-night-ferry" data-save-type="film" data-day="today" data-status="sold" data-tag="restored" data-venue="north-pier">
+              <article class="film-card" data-save-key="film-night-ferry" data-save-type="film" data-status="sold" data-tag="restored" data-venue="north-pier">
                 <img class="card-backdrop" src="assets/film-night-ferry-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -614,7 +612,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-copper-hours" data-save-type="film" data-day="later" data-status="ok" data-tag="" data-venue="north-pier">
+              <article class="film-card" data-save-key="film-copper-hours" data-save-type="film" data-status="ok" data-tag="" data-venue="north-pier">
                 <img class="card-backdrop" src="assets/film-copper-hours-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -630,7 +628,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-room-of-water" data-save-type="film" data-day="tomorrow" data-status="ok" data-tag="" data-venue="north-pier">
+              <article class="film-card" data-save-key="film-room-of-water" data-save-type="film" data-status="ok" data-tag="" data-venue="north-pier">
                 <img class="card-backdrop" src="assets/film-room-of-water-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -646,7 +644,7 @@
                 </div>
               </article>
 
-              <article class="film-card" data-save-key="film-last-projectionist" data-save-type="film" data-day="later" data-status="low" data-tag="" data-venue="harbour-arts">
+              <article class="film-card" data-save-key="film-last-projectionist" data-save-type="film" data-status="low" data-tag="" data-venue="harbour-arts">
                 <img class="card-backdrop" src="assets/film-last-projectionist-wide.webp" alt="" />
                 <div class="card-overlay"></div>
                 <div class="card-body">
@@ -919,8 +917,6 @@
         filmCards.forEach(function (c) {
           var facetMatches =
             activeFilmFilter === 'all' ||
-            (activeFilmFilter === 'today' && c.getAttribute('data-day') === 'today') ||
-            (activeFilmFilter === 'tomorrow' && c.getAttribute('data-day') === 'tomorrow') ||
             (activeFilmFilter === 'restored' && c.getAttribute('data-tag') === 'restored') ||
             (activeFilmFilter === 'sold' && c.getAttribute('data-status') === 'sold') ||
             (activeFilmFilter.indexOf('venue-') === 0 && c.getAttribute('data-venue') === activeFilmFilter.replace('venue-', ''));
