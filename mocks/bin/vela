@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // vela.js - Windows-compatible mock vela wrapper
 // This can be spawned directly with Node.js without cmd.exe intermediary
+// Inherit stdio to properly support ACP/AMR JSON-RPC over stdin
 
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -13,15 +14,16 @@ const mockAgentPath = join(__dirname, '..', 'mock-agent.mjs');
 const args = process.argv.slice(2);
 
 const child = spawn(process.execPath, [mockAgentPath, '--as', 'vela', ...args], {
-  stdio: ['ignore', 'pipe', 'pipe'],
+  stdio: 'inherit',
   env: process.env,
 });
 
-child.stdout?.on('data', (data) => process.stdout.write(data));
-child.stderr?.on('data', (data) => process.stderr.write(data));
-
-child.on('exit', (code) => {
-  process.exit(code ?? 0);
+child.on('exit', (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal);
+  } else {
+    process.exit(code ?? 0);
+  }
 });
 
 child.on('error', (err) => {

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { lstat, mkdir, open, readdir, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { cac } from "cac";
@@ -435,6 +436,10 @@ async function spawnDaemonRuntime(
   // the shebang-style extensionless `vela` used on POSIX.
   const mockVelaName = process.platform === "win32" ? "vela.cmd" : "vela";
   const mockVelaBin = path.join(config.workspaceRoot, "mocks", "bin", mockVelaName);
+  const existingVelaBin = process.env.VELA_BIN;
+  const useMock = !existingVelaBin && existsSync(mockVelaBin);
+  const velaBin = useMock ? mockVelaBin : existingVelaBin;
+  const fakeVelaDelay = useMock && !process.env.FAKE_VELA_LOGIN_DELAY_MS ? "2000" : undefined;
 
   try {
     await ensureDaemonCliBuild(config, logHandle);
@@ -458,9 +463,8 @@ async function spawnDaemonRuntime(
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
         ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
-        VELA_BIN: mockVelaBin,
-        // Give the mock vela login time to print activation URL before exiting
-        FAKE_VELA_LOGIN_DELAY_MS: "2000",
+        ...(velaBin !== undefined ? { VELA_BIN: velaBin } : {}),
+        ...(fakeVelaDelay !== undefined ? { FAKE_VELA_LOGIN_DELAY_MS: fakeVelaDelay } : {}),
       },
       logHandle,
     });
