@@ -379,6 +379,36 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
         }));
       }
 
+      function waitForEmbeddedFrames() {
+        return Promise.all(Array.from(document.querySelectorAll('iframe')).map(function(frame) {
+          // Same-origin/srcdoc frames expose readiness directly. For an
+          // already-loaded cross-origin frame, Resource Timing is the only
+          // parent-readable completion signal; otherwise subscribe before its
+          // load/error event and retain the same bounded-wait behavior as
+          // images and fonts.
+          try {
+            if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
+              return Promise.resolve();
+            }
+          } catch {}
+          var frameUrl = frame.src;
+          if (
+            frameUrl &&
+            typeof performance !== 'undefined' &&
+            typeof performance.getEntriesByName === 'function' &&
+            performance.getEntriesByName(frameUrl).some(function(entry) {
+              return Number(entry.responseEnd) > 0;
+            })
+          ) {
+            return Promise.resolve();
+          }
+          return withDeadline(new Promise(function(resolve) {
+            frame.addEventListener('load', resolve, { once: true });
+            frame.addEventListener('error', resolve, { once: true });
+          }));
+        }));
+      }
+
       function nextFrame() {
         return new Promise(function(resolve) { requestAnimationFrame(function() { resolve(true); }); });
       }
@@ -388,7 +418,8 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
           ? withDeadline(document.fonts.ready.catch(function(){}))
           : Promise.resolve(),
         waitForImages(),
-        waitForCssBackgroundImages()
+        waitForCssBackgroundImages(),
+        waitForEmbeddedFrames()
       ])
         .then(nextFrame)
         .then(nextFrame)

@@ -308,7 +308,7 @@ describe('pdfFilenameFromDocument', () => {
 });
 
 describe('waitForPrintableContent', () => {
-  test('waits for fonts, document images, CSS image URLs, and stable animation frames', async () => {
+  test('waits for fonts, images, CSS URLs, embedded frames, and stable animation frames', async () => {
     const scripts: string[] = [];
     const window = {
       webContents: {
@@ -325,6 +325,10 @@ describe('waitForPrintableContent', () => {
     expect(scripts[0]).toContain('document.fonts.ready');
     expect(scripts[0]).toContain('document.images');
     expect(scripts[0]).toContain('waitForCssBackgroundImages');
+    expect(scripts[0]).toContain('waitForEmbeddedFrames');
+    expect(scripts[0]).toContain("document.querySelectorAll('iframe')");
+    expect(scripts[0]).toContain("frame.addEventListener('load'");
+    expect(scripts[0]).toContain("frame.addEventListener('error'");
     expect(scripts[0]).toContain('style.backgroundImage');
     expect(scripts[0]).toContain('style.borderImageSource');
     expect(scripts[0]).toContain('style.listStyleImage');
