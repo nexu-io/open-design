@@ -13,6 +13,7 @@ import {
   resolveNextBundlerOptions,
   resolveStandaloneBackendOrigin,
   resolveStandaloneServerEntry,
+  resolveWebListenPort,
   startWebSidecar,
 } from '../sidecar/server';
 
@@ -34,6 +35,17 @@ describe('resolveDaemonProxyTarget', () => {
 
   it('rejects non-daemon paths', () => {
     expect(resolveDaemonProxyTarget('http://127.0.0.1:7456', '/settings')).toBeNull();
+  });
+});
+
+describe('resolveWebListenPort', () => {
+  it('uses the fixed default only when the port is absent or blank', () => {
+    expect(resolveWebListenPort(undefined)).toBe(7457);
+    expect(resolveWebListenPort('   ')).toBe(7457);
+  });
+
+  it('preserves an explicit zero for ephemeral namespace launches', () => {
+    expect(resolveWebListenPort('0')).toBe(0);
   });
 });
 

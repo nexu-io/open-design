@@ -25,6 +25,7 @@ vi.mock('../src/daemon-startup.js', () => ({
 describe('daemon sidecar startup', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    delete process.env.OD_PORT;
     delete process.env.OD_WEB_PORT;
     const { resetDesktopAuthForTests } = await import('../src/desktop-auth.js');
     resetDesktopAuthForTests();
@@ -33,6 +34,7 @@ describe('daemon sidecar startup', () => {
   afterEach(async () => {
     const { resetDesktopAuthForTests } = await import('../src/desktop-auth.js');
     resetDesktopAuthForTests();
+    delete process.env.OD_PORT;
     delete process.env.OD_WEB_PORT;
   });
 
@@ -51,7 +53,7 @@ describe('daemon sidecar startup', () => {
 
     try {
       expect(startDaemonRuntime).toHaveBeenCalledWith(
-        expect.objectContaining({ port: 0 }),
+        expect.objectContaining({ port: 7456 }),
       );
       const initial = await handle.status();
       expect(initial.state).toBe('running');
@@ -68,6 +70,41 @@ describe('daemon sidecar startup', () => {
     }
 
     expect(stopRuntime).toHaveBeenCalled();
+  });
+
+  it('preserves explicit ephemeral ports for two concurrent namespaces', async () => {
+    const { startDaemonSidecar } = await import('../src/sidecar/server.js');
+    process.env.OD_PORT = '0';
+    const roots = await Promise.all([
+      mkdtemp(join(tmpdir(), 'od-daemon-sidecar-zero-a-')),
+      mkdtemp(join(tmpdir(), 'od-daemon-sidecar-zero-b-')),
+    ]);
+    const handles = await Promise.all(roots.map((root, index) => startDaemonSidecar({
+      app: APP_KEYS.DAEMON,
+      base: root,
+      ipc: join(root, 'daemon.sock'),
+      mode: SIDECAR_MODES.DEV,
+      namespace: `ephemeral-${index + 1}`,
+      source: SIDECAR_SOURCES.TOOLS_DEV,
+    })));
+
+    try {
+      expect(startDaemonRuntime).toHaveBeenCalledTimes(2);
+      expect(startDaemonRuntime).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ port: 0 }),
+      );
+      expect(startDaemonRuntime).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ port: 0 }),
+      );
+    } finally {
+      await Promise.all(handles.map(async (handle) => {
+        await handle.stop();
+        await handle.waitUntilStopped();
+      }));
+      await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
+    }
   });
 
   it('registers the live packaged web URL after daemon startup and replaces it on restart', async () => {
