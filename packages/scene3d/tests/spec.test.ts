@@ -144,6 +144,141 @@ describe("validateSceneSpec", () => {
     expect(rows[lines.prp_column! - 1]).toContain('"prp_column"');
     expect(rows[lines.mtl_brass! - 1]).toContain('"mtl_brass"');
   });
+
+  /* ---- unknown keys are errors, never swallows ---------------------- */
+
+  it("refuses an unknown part key instead of swallowing it (H1)", () => {
+    // `rotation` typed in good faith used to parse clean and emit a flat
+    // box — the author shipped a cube believing it was a pitched roof. The
+    // refusal names the vocabulary that DOES exist.
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_roof", size: [2, 2, 0.4], rotation: [0.35, 0, 0] }],
+      relations: [{ type: "at", part: "prp_roof", center: [0, 0, 0.2] }],
+    });
+    expect(spec).toBeUndefined();
+    expect(errors.some((e) => e.includes("parts[0].rotation is not a part field"))).toBe(true);
+    expect(errors.some((e) => e.includes("known fields"))).toBe(true);
+  });
+
+  it("refuses unknown camera keys — include/target were swallowed into an AABB shot", () => {
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1] }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+      camera: { distance: 3, include: ["prp_a"] },
+    });
+    expect(spec).toBeUndefined();
+    expect(errors.some((e) => e.includes("camera.include is not a camera field"))).toBe(true);
+  });
+
+  it("refuses a claim with no oracle instead of adjudicating nothing (H1)", () => {
+    // `doorWidth` compiled clean and checked nothing — the author believed
+    // they had signed a door and had signed air.
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1] }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+      claims: { parts: 1, doorWidth: 0.9 },
+    });
+    expect(spec).toBeUndefined();
+    expect(errors.some((e) => e.includes("claims.doorWidth has no oracle"))).toBe(true);
+    // The refusal teaches: it lists what DOES adjudicate.
+    expect(errors.some((e) => e.includes("parts, maxTriangles"))).toBe(true);
+  });
+
+  it("still accepts every key the language actually reads", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_x: { baseColor: [0.5, 0.5, 0.5], roughness: 0.5 } },
+      parts: [
+        {
+          id: "prp_full",
+          size: [1, 1, 1],
+          shape: "cylinder",
+          axis: "y",
+          flip: true,
+          material: "mtl_x",
+          role: "roller",
+          spin: { axis: "z", seconds: 2 },
+          bob: { amplitude: 0.05, seconds: 3 },
+        },
+      ],
+      relations: [{ type: "at", part: "prp_full", center: [0, 0, 0.5] }],
+      camera: { azimuthDeg: 30, elevationDeg: 20, distance: 5 },
+      claims: { parts: 1, grounded: true },
+    });
+    expect(errors).toEqual([]);
+  });
+
+  /* ---- script-backed parts: freeform as a shape kind ---------------- */
+
+  it("accepts a script-backed part and rejects its conflicts", () => {
+    const ok = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_hull", size: [3, 1.2, 0.8], script: "hull.py" }],
+      relations: [{ type: "at", part: "prp_hull", center: [0, 0, 0.4] }],
+    });
+    expect(ok.errors).toEqual([]);
+    expect(ok.spec!.parts[0]!.script).toBe("hull.py");
+
+    // One filler per box: script vs shape, script vs file are both refused —
+    // a silent winner would make "which geometry shipped" unanswerable.
+    const both = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_x", size: [1, 1, 1], script: "a.py", shape: "box" }],
+      relations: [],
+    });
+    expect(both.errors.some((e) => e.includes("script and shape are mutually exclusive"))).toBe(true);
+
+    const triple = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_y", size: [1, 1, 1], script: "a.py", file: "b.glb" }],
+      relations: [],
+    });
+    expect(triple.errors.some((e) => e.includes("script and file are mutually exclusive"))).toBe(true);
+
+    // Path discipline matches file: scene-relative, no '..'.
+    const escape = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_z", size: [1, 1, 1], script: "../evil.py" }],
+      relations: [],
+    });
+    expect(escape.errors.some((e) => e.includes("scene-relative"))).toBe(true);
+
+    // Orientation knobs belong to the script, not the JSON.
+    const axis = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_w", size: [1, 1, 1], script: "a.py", axis: "x" }],
+      relations: [],
+    });
+    expect(axis.errors.some((e) => e.includes("axis has no meaning on a script part"))).toBe(true);
+  });
+
+  it("emits _script_part calls for script-backed parts", () => {
+    const { spec } = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_brass: { baseColor: [0.85, 0.65, 0.3], roughness: 0.3, metallic: 1 } },
+      parts: [
+        { id: "prp_hull", size: [3, 1.2, 0.8], script: "hull.py" },
+        { id: "prp_cap", size: [0.4, 0.4, 0.2], script: "cap.py", material: "mtl_brass" },
+        { id: "prp_plain", size: [1, 1, 1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_hull", center: [0, 0, 0.4] },
+        { type: "sits_on", part: "prp_cap", on: "prp_hull" },
+        { type: "align", part: "prp_cap", to: "prp_hull", axes: ["x", "y"] },
+        { type: "at", part: "prp_plain", center: [5, 0, 0.5] },
+      ],
+    }) as { spec: SceneSpec };
+    const script = emitBlenderScript(solveScene(spec), {});
+    expect(script).toContain('_script_part("prp_hull", "hull.py"');
+    expect(script).toContain('_script_part("prp_cap", "cap.py", (0.4, 0.4, 0.2)');
+    expect(script).toContain('"prp_plain", "box"'); // primitives unchanged
+    // The runner-side machinery ships exactly once, before any part call.
+    expect(script.indexOf("def _run_script")).toBeLessThan(script.indexOf("_script_part("));
+    expect(script.match(/_SCRIPT_SEQ = \[0\]/g)).toHaveLength(1);
+  });
 });
 
 describe("repeat expansion", () => {

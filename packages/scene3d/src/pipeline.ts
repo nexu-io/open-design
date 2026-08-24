@@ -322,6 +322,22 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             target: part.id,
           });
         }
+        // A script-backed part's bytes join the content hash too: editing
+        // the script must recompile the scene, exactly like replacing an
+        // asset file. Existence is a parse error, not a Blender traceback.
+        if (!part.script) continue;
+        if (fs.existsSync(path.join(request.projectDir, part.script))) {
+          if (!source.files.includes(part.script)) source.files.push(part.script);
+        } else {
+          missingAssets = true;
+          issues.push({
+            code: ISSUE_CODES.SPEC_INVALID,
+            severity: "error",
+            message: `part '${part.id}': script '${part.script}' does not exist in the scene directory`,
+            file: "scene.json",
+            target: part.id,
+          });
+        }
       }
     }
     if (spec) {
@@ -700,6 +716,8 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
      it can report rather than a failure only a human would ever notice. */
   const proofImages: string[] = [];
   let proofFrames: ProofFrameStats[] | undefined;
+  /** Per-frame off-camera facts from the proof turntable, when it ran. */
+  let offByFrame: Array<{ frame: number; objects: string[] }> | undefined;
   const proofOpts: ProofOptions = { ...normalized.proof, ...(request.proof ?? {}) };
   if (wanted.has("proof")) {
     const tp = performance.now();
@@ -714,7 +732,12 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         // The cache carries the frame statistics, not just the file list:
         // without them a cached rerun would drop S3D-E-383 and a scene that
         // rendered black would start reporting clean on its second compile.
-        proofFrames = asProofFrames(cached.data);
+        // The per-frame off-camera facts ride the same entry.
+        const cachedData = cached.data as
+          | { frames?: unknown; offByFrame?: Array<{ frame: number; objects: string[] }> }
+          | null;
+        proofFrames = asProofFrames(cachedData);
+        offByFrame = Array.isArray(cachedData?.offByFrame) ? cachedData.offByFrame : undefined;
         report("proof", "cached", ms(tp));
       } else {
         const result = await runRunner(
@@ -757,10 +780,13 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           pruneStaleProofFrames(request.projectDir, names);
           proofImages.push(...rel);
           proofFrames = asProofFrames((result.data as { frames?: unknown } | undefined)?.frames);
+          offByFrame = (result.data as { offByFrame?: unknown } | undefined)?.offByFrame as
+            | Array<{ frame: number; objects: string[] }>
+            | undefined;
           if (!request.noCache && rel.length === names.length) {
             writeCache(request.projectDir, "proof", proofHash, {
               artifacts: rel,
-              data: proofFrames ?? null,
+              data: { frames: proofFrames ?? null, offByFrame: offByFrame ?? [] },
             });
           }
         }
@@ -1156,6 +1182,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       census,
       primTree,
       proofFrames,
+      ...(offByFrame ? { offByFrame } : {}),
       ...(exportedUsda ? { exportedUsda } : {}),
       ...(sheets ? { sheets } : {}),
       ...(spec?.claims ? { claims: spec.claims } : {}),
@@ -1243,6 +1270,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       source,
       projectDir: request.projectDir,
       carried: carriedRecord,
+      ...(proofFrames ? { proofFrames } : {}),
       census,
       issues: allIssues,
       summary: summarize(allIssues),
@@ -1277,6 +1305,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       source,
       projectDir: request.projectDir,
       carried: carriedRecord,
+      ...(proofFrames ? { proofFrames } : {}),
       census,
       issues: allIssues,
       summary,
@@ -1293,6 +1322,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     summary,
     digest,
     impact,
+    ...(solved ? { solved } : {}),
   };
 }
 
@@ -1617,9 +1647,16 @@ function pruneStaleProofFrames(projectDir: string, keep: string[]): void {
 }
 
 function asProofFrames(value: unknown): ProofFrameStats[] | undefined {
-  if (!Array.isArray(value)) return undefined;
+  // The cache entry's `data` has two shapes in the wild: entries written
+  // before offByFrame rode along store the frames array DIRECTLY, and
+  // entries since store `{ frames, offByFrame }`. Accept both — reading the
+  // new shape as "not an array" silently dropped proofFrames on every cached
+  // recompile, and a scene that rendered black started reporting clean on
+  // its second compile (the exact failure this cache exists to prevent).
+  const list = Array.isArray(value) ? value : isRecord(value) && Array.isArray(value.frames) ? value.frames : undefined;
+  if (!list) return undefined;
   const frames: ProofFrameStats[] = [];
-  for (const entry of value) {
+  for (const entry of list) {
     if (typeof entry !== "object" || entry === null) continue;
     const e = entry as Record<string, unknown>;
     if (typeof e.path !== "string") continue;
@@ -1631,6 +1668,10 @@ function asProofFrames(value: unknown): ProofFrameStats[] | undefined {
     });
   }
   return frames.length > 0 ? frames : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function mergeStage(a: ReturnType<typeof parseUsda>, b: ReturnType<typeof parseUsda>) {

@@ -61,6 +61,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-333': 'Unsupported print overhang',
   'S3D-W-335': 'Triangle budget approximated',
   'S3D-W-334': 'Wall too thin to print',
+  'S3D-W-336': 'Contact scan skipped',
 
   /* lint: world placement + budgets */
   'S3D-W-325': 'Part floats above support',

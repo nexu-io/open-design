@@ -1,8 +1,13 @@
 # Market research → scene3d decisions (condensed)
 
+Market thesis, not the maintainer map. Start at `README.md` for how the
+system is shaped and how to change it; this file is the condensed
+decision-shaping version of why scene3d is a compiler rather than a
+generator.
+
 Source: user-provided research, 2026-08-18 ("What AI 3D Tools Still Get
-Wrong"). This is the condensed, decision-shaping version; hold these theses
-while extending the compiler. The full text lives with the user.
+Wrong"). Hold these theses while extending the compiler. The full text
+lives with the user.
 
 ## The strategic thesis (verbatim spirit)
 

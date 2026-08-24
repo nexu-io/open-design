@@ -74,6 +74,25 @@ export interface PartSpec {
    */
   file?: string;
   /**
+   * A scene-relative Python file that fills the box with arbitrary geometry.
+   *
+   * This is freeform as a SHAPE KIND, not a parallel path: the script runs
+   * inside the same deterministic build, and its output is fitted into the
+   * declared box exactly like an imported asset — uniform scale, centred on
+   * x/y, resting on the box's bottom — so every relation, claim, contact
+   * fact and provenance line behaves identically. The JSON declares intent
+   * (box, relations, material); the script only fills geometry behind that
+   * contract. The compiler executes it with a fixed seed and hashes its
+   * bytes into the content cache, so the same source always bakes the same
+   * part.
+   *
+   * Constraints, all structural: the script must define `def build(ctx)`
+   * where ctx exposes `size` (the declared box) and `material(name)`; it
+   * must create exactly one mesh object; `material` on a script part is a
+   * wholesale override of whatever the script bound, mirroring `file`.
+   */
+  script?: string;
+  /**
    * The axis a cylinder/cone runs along, and the axis a torus's hole faces.
    * Default "z" (a standing column, a ring lying flat). Ignored for box and
    * sphere, whose boxes are orientation-complete already.
@@ -254,6 +273,8 @@ export interface SolvedPart {
   flip: boolean;
   /** Real asset file filling the box, when the part is file-backed. */
   file?: string;
+  /** Scene-relative Python script filling the box, when script-backed. */
+  script?: string;
   material?: string;
   spin?: { axis?: Axis; seconds?: number };
   bob?: { amplitude: number; seconds?: number };

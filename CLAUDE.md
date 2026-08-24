@@ -2,6 +2,11 @@
 
 # Fork focus: scene3d — the compiled-asset mode
 
+The maintainer map is `packages/scene3d/README.md` (host seam, issue
+catalog, how to change the system). This file is the fork working-rules
+overlay: load-bearing contracts, known gotchas, and the verify loop.
+Prefer the README when the two overlap.
+
 This fork's active work is `scene3d`: one deterministic pipeline (headless
 Blender) behind ONE compile call that produces game assets, props, scenes,
 kits, animations, textures, sprite sheets, flipbooks, VFX sheets, and
@@ -28,9 +33,9 @@ it again; read this, then act.
 ## Load-bearing contracts (violating these is a regression)
 
 - **`scene.json` is the primary authoring surface; `build.py`/USDA/blend are
-  escape hatches.** The declarative path (Kiln's design, adopted from
-  `~/Documents/Projects/vr-avatar/kiln/ADD.md` — read it before growing the
-  language) is: validate BEFORE execution (S3D-E-105 with JSON paths, never a
+  escape hatches.** The declarative path (Kiln's design; lineage and the
+  full bet map live in `packages/scene3d/KILN.md`) is: validate BEFORE
+  execution (S3D-E-105 with JSON paths, never a
   traceback) → solve relations to a fixpoint (E-106/W-106) → emit a
   deterministic script to `.scene3d/spec.build.py` → the normal six stages →
   **adjudicate the spec's `claims` against the census** (E-701 fail /

@@ -51,6 +51,8 @@ export function buildManifest(input: {
   source: SceneSource;
   /** Where the exported assets live, so their delivered size can be measured. */
   projectDir?: string;
+  /** Per-frame proof measurements, for readers who cannot open a PNG. */
+  proofFrames?: Scene3dManifest["proofFrames"];
   /** What the lowering had to restore because the master could not hold it. */
   carried?: Scene3dManifest["carried"];
   census?: Census;
@@ -172,6 +174,28 @@ export function buildManifest(input: {
   // was stat'd twice per manifest.
   const exportedAssetBytes = measureExportedBytes(input.projectDir, input.exportedAssets);
 
+  // Connectivity from the contacts the census already measured. A part in the
+  // contact list touches something; a mesh absent from every pair touches
+  // nothing. No new measurement, no new Blender work.
+  let connectivity: Scene3dManifest["connectivity"];
+  if (census && census.contacts) {
+    const touching = new Set<string>();
+    for (const contact of census.contacts) {
+      touching.add(contact.a);
+      touching.add(contact.b);
+    }
+    const isolatedParts = census.meshes
+      .map((m) => m.object)
+      .filter((name) => !touching.has(name))
+      .sort();
+    connectivity = {
+      touching: census.meshes.length - isolatedParts.length,
+      isolated: isolatedParts.length,
+      // Bounded: the point is the COUNT plus enough names to start looking.
+      isolatedParts: isolatedParts.slice(0, 12),
+    };
+  }
+
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -187,6 +211,12 @@ export function buildManifest(input: {
         metallic: m.principled.metallic,
         roughness: m.principled.roughness,
         hasTexture: m.principled.hasTexture,
+        // The look's third lever, next to metallic/roughness: an author
+        // verifying "is my lantern actually glowing" should not have to
+        // open Blender — the census measured it, so the manifest carries it.
+        ...(m.principled.emissionStrength !== undefined
+          ? { emissionStrength: m.principled.emissionStrength }
+          : {}),
       })) ?? [],
     textures:
       census?.textures.map((t) => ({
@@ -204,6 +234,10 @@ export function buildManifest(input: {
       : { fps: 0, frameStart: 0, frameEnd: 0, keyframedObjects: [] },
     camera: census?.camera ?? { present: false, name: null },
     proofImages: input.proofImages,
+    ...(connectivity ? { connectivity } : {}),
+    ...(input.proofFrames && input.proofFrames.length > 0
+      ? { proofFrames: input.proofFrames }
+      : {}),
     exportedAssets: input.exportedAssets,
     // Present whenever the lowering RECORDED one, empty lists included. An
     // all-empty carry says "the master held everything"; an absent field says

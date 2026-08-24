@@ -70,7 +70,11 @@ export function lintIntegrity(ctx: LintContext, issues: Issue[]): void {
       code: ISSUE_CODES.OFF_CAMERA,
       severity: "warning",
       message: `object '${name}' is outside the camera frustum`,
-      hint: "move it into frame or hide it",
+      // The reflex fix ("move the part") is often wrong: the part may be
+      // exactly where the author wants it and the FRAMING is what lost it —
+      // a wider subject needs the camera pulled back or the lens widened,
+      // not geometry dragged toward a shot. Name both levers.
+      hint: "move it into frame, or widen the framing: pull the camera back / reduce the lens so the whole subject fits",
       target: name,
     });
   }

@@ -56,10 +56,25 @@ export function lintNaming(ctx: LintContext, issues: Issue[]): void {
       continue;
     }
     if (contract.partPrefixes.length > 0 && !contract.partPrefixes.some((p) => name.startsWith(p))) {
+      // Suggest the closest prefix rather than just listing them: a model
+      // reading "must start with one of prp_, cam_, lgt_, mtl_" after writing
+      // `moot_foot` has to guess; naming the nearest match turns a thrash
+      // into a one-token edit. Nearest by shared leading characters, ties
+      // broken alphabetically so the suggestion is deterministic.
+      const suggestion = [...contract.partPrefixes]
+        .sort((a, b) => {
+          const shared = (p: string) => {
+            let n = 0;
+            while (n < p.length && n < name.length && p[n] === name[n]) n++;
+            return -n;
+          };
+          return shared(a) - shared(b) || (a < b ? -1 : 1);
+        })[0]!;
       issues.push({
         code: ISSUE_CODES.NAME_PREFIX,
         severity: "error",
         message: `'${name}' must start with one of ${contract.partPrefixes.join(", ")}`,
+        hint: `did you mean '${suggestion}${name}'?`,
         target: name,
       });
     }

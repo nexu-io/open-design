@@ -320,6 +320,47 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(codes.has(ISSUE_CODES.EMPTY_MESH)).toBe(true);
   });
 
+  it("says CONTACTS_UNCHECKED when the contact scan was skipped — empty never means clean (H2)", () => {
+    // The nave exhibit: 91 meshes, contacts [] and contactsSkipped filled,
+    // and no rule read it. An author placing a lintel by span had no measured
+    // word on any joint, and the report said nothing about why.
+    const issues = runLint({
+      contract: contract(),
+      census: census({
+        contacts: [],
+        contactsSkipped: ["scene has 91 meshes, above the 60-mesh contact limit"],
+      }),
+    });
+    const hit = issues.find((i) => i.code === ISSUE_CODES.CONTACTS_UNCHECKED);
+    expect(hit).toBeDefined();
+    expect(hit!.severity).toBe("warning");
+    expect(hit!.message).toContain("not measured");
+    expect(hit!.detail).toMatchObject({ skipped: ["scene has 91 meshes, above the 60-mesh contact limit"] });
+  });
+
+  it("does not flag a genuinely clean contact scan", () => {
+    // A scan that RAN and found nothing is a real "nothing touches" — the
+    // warning exists only for the skipped case.
+    const issues = runLint({
+      contract: contract(),
+      census: census({ contacts: [], contactsSkipped: [] }),
+    });
+    expect(issues.find((i) => i.code === ISSUE_CODES.CONTACTS_UNCHECKED)).toBeUndefined();
+  });
+
+  it("does not flag when contacts exist despite partial skips", () => {
+    // Some pairs measured, some skipped: the report has facts AND the
+    // z-fight-style confession rides separately. No double-doom here.
+    const issues = runLint({
+      contract: contract(),
+      census: census({
+        contacts: [{ a: "a", b: "b", gap: [0, 0, 0], separation: 0, intersects: true }],
+        contactsSkipped: ["pair cap exceeded"],
+      }),
+    });
+    expect(issues.find((i) => i.code === ISSUE_CODES.CONTACTS_UNCHECKED)).toBeUndefined();
+  });
+
   it("flags bad metallic values, roughness range and untouched defaults", () => {
     const issues = runLint({
       contract: contract(),
@@ -506,6 +547,44 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(codes.has(ISSUE_CODES.MISSING_LIGHTS)).toBe(true);
     expect(codes.has(ISSUE_CODES.OFF_CAMERA)).toBe(true);
     expect(codes.has(ISSUE_CODES.DEGENERATE_SCALE)).toBe(true);
+  });
+
+  it("names the failing turntable frames when the proof stage measured them (W-382)", () => {
+    // The exhibit: a part that clears the hero still but falls out of orbit
+    // frame 3. The census-level check measures ONE pose and reads as nonsense
+    // ("it's right there in the render!"); the turntable's own measurement
+    // names the frame, which turns the fix from "move the part" into "widen
+    // the framing".
+    const issues = runLint({
+      contract: contract(),
+      census: census({}),
+      offByFrame: [
+        { frame: 3, objects: ["prp_moot_spot_a", "prp_foot_r"] },
+        { frame: 7, objects: ["prp_moot_spot_a"] },
+      ],
+    });
+    const hits = issues.filter((i) => i.code === ISSUE_CODES.OFF_CAMERA && i.detail?.frames);
+    expect(hits).toHaveLength(2);
+    const spot = hits.find((i) => i.target === "prp_moot_spot_a")!;
+    expect(spot.message).toContain("2 turntable frame(s)");
+    expect(spot.message).toContain("#3, #7");
+    expect(spot.hint).toContain("widen the framing");
+    expect(spot.detail).toMatchObject({ frames: [3, 7] });
+  });
+
+  it("does not double-report an object both census and turntable flagged", () => {
+    // The census-level OFF_CAMERA has no `frames` detail; the turntable one
+    // does. Same code, different evidence — dedupe is by code+target+message,
+    // so they coexist deliberately rather than merging into one ambiguous row.
+    const issues = runLint({
+      contract: contract(),
+      census: census({ offCameraObjects: ["prp_far"] }),
+      offByFrame: [{ frame: 1, objects: ["prp_far"] }],
+    });
+    const hits = issues.filter((i) => i.code === ISSUE_CODES.OFF_CAMERA && i.target === "prp_far");
+    expect(hits).toHaveLength(2);
+    expect(hits.some((i) => i.message.includes("outside the camera frustum"))).toBe(true);
+    expect(hits.some((i) => i.message.includes("turntable frame"))).toBe(true);
   });
 
   it("checks hierarchy depth from the census parent chain for build.py/spec scenes (N-2)", () => {

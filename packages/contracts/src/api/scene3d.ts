@@ -114,6 +114,8 @@ export interface Scene3dManifestMaterial {
   metallic: number | null;
   roughness: number | null;
   hasTexture: boolean;
+  /** Emission strength the build actually authored, when measured. */
+  emissionStrength?: number;
 }
 
 export interface Scene3dManifestTexture {
@@ -197,6 +199,29 @@ export interface Scene3dCompileResponse {
   proofImages: Scene3dArtifactRef[];
   exportedAssets: Scene3dArtifactRef[];
   blender: { available: boolean; version: string | null };
+  /**
+   * The solver's output for spec-authored scenes: every part's solved box,
+   * what it rests on, and which authored part each instance expanded from.
+   * Present whenever solving ran — including parse-only compiles, where it
+   * is the only placement information a fast loop gets.
+   */
+  solved?: {
+    parts: Array<{
+      id: string;
+      size: [number, number, number];
+      center: [number, number, number];
+      shape: string;
+      axis: 'x' | 'y' | 'z';
+      flip: boolean;
+      file?: string;
+      script?: string;
+      material?: string;
+      role?: string;
+      from?: string;
+      restsOn?: string;
+    }>;
+    diagnostics: Array<{ code: string; message: string; part?: string }>;
+  };
   /**
    * The report pre-rendered as a `<scene3d-report>` block, formatted to be
    * spliced into the generating agent's next turn. Mirrors the artifact-lint

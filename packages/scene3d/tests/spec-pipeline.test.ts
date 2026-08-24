@@ -143,6 +143,47 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     expect(positions(again)).toEqual(positions(result));
   }, 400_000);
 
+  it("fills a declared box from an agent-authored script, freeform as a shape kind", async () => {
+    // The unification: a .py file fills one part's box INSIDE the
+    // declarative pipeline — no parallel path, no mode switch. The script's
+    // geometry is fitted into the box exactly like an imported asset, so
+    // relations place it, claims adjudicate it, and provenance points at
+    // the scene.json line that declared it.
+    const dir = workDir("good/spec_script_part");
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
+    expect(result.issues).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.census!.meshes).toHaveLength(2);
+
+    const hull = result.census!.meshes.find((m) => m.object === "prp_hull")!;
+    // Real freeform geometry: far more verts than a box, and closed — the
+    // script faces the same watertight bar as every primitive.
+    expect(hull.verts).toBeGreaterThan(8);
+    expect(hull.nonManifoldEdges).toBe(0);
+
+    // Fitted INTO the declared box: uniform scale, centred on x/y, resting
+    // on its support. The relations placed it; the script only filled it.
+    const obj = result.census!.objects.find((o) => o.name === "prp_hull")!;
+    expect(obj.location[0]).toBeCloseTo(0, 3);
+    expect(obj.location[1]).toBeCloseTo(0, 3);
+    // Box is 0.8 x 0.8 x 0.5 sitting on a 0.12 plinth: centre z = 0.12 + 0.25 - embed.
+    expect(obj.dimensions[2]).toBeCloseTo(0.5, 2);
+
+    // The material override reached the script geometry.
+    expect(hull.materials).toContain("mtl_brass");
+
+    // Provenance points at scene.json, not at any script line.
+    expect(result.manifest.partTree.some((p) => p.name === "prp_hull")).toBe(true);
+
+    // The solved table rides the result — parse-loop eyes.
+    expect(result.solved!.parts.find((p) => p.id === "prp_hull")!.script).toBe("hull.py");
+  }, 400_000);
+
   it("hits the build cache on an unchanged spec", async () => {
     const dir = workDir("good/spec_pavilion");
     const first = await compile({

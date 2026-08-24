@@ -66,6 +66,29 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
   if (parts.length > 0) {
     lines.push(`parts (${parts.length}): ${parts.map(describePart).join(", ")}`);
   }
+  // The solver's own output, as a table the parse loop can read. Parse runs
+  // in milliseconds and resolves every relation, but "relations resolved" is
+  // not eyes: an author composing a scene had to pay for a full Blender
+  // build to learn where a part landed. This is that table, from the same
+  // solve the build script is generated FROM — so it cannot disagree with
+  // what gets built. Capped: a 500-part scene prints its first 40 rows and
+  // says how many it folded away.
+  if (result.solved && result.solved.parts.length > 0) {
+    lines.push("");
+    lines.push("solved boxes (id · centre · size · rests on):");
+    const CAP = 40;
+    for (const part of result.solved.parts.slice(0, CAP)) {
+      const centre = part.center.map((v: number) => fmtM(v)).join(", ");
+      const size = part.size.map((v: number) => fmtM(v)).join(" × ");
+      const origin = part.from ? ` (from ${part.from})` : "";
+      const rests = part.restsOn ? ` · rests on ${part.restsOn}` : "";
+      lines.push(`  ${part.id}${origin}: (${centre}) · ${size}${rests}`);
+    }
+    const total = result.solved.parts.length;
+    if (total > CAP) {
+      lines.push(`  … +${total - CAP} more parts`);
+    }
+  }
   if (result.manifest.materials.length > 0) {
     lines.push(
       `materials: ${result.manifest.materials
@@ -89,6 +112,36 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
   }
   if (result.exportedAssets.length > 0) {
     lines.push(`assets: ${result.exportedAssets.join(", ")}`);
+  }
+  // What the frames MEASURED, always — not only when a rule complains.
+  // These numbers already existed and reached the linter alone, so the only
+  // consumer able to see them was a threshold. An author with no image input
+  // could not answer "did my render work" except by the absence of
+  // complaints, which is not the same question.
+  const frames = result.manifest.proofFrames ?? [];
+  const measured = frames.filter((f) => f.coverage !== null);
+  if (measured.length > 0) {
+    const mean = (pick: (f: (typeof measured)[number]) => number | null | undefined) =>
+      measured.reduce((sum, f) => sum + (pick(f) ?? 0), 0) / measured.length;
+    const dark = measured.filter((f) => (f.coverage ?? 0) < 0.01).length;
+    lines.push(
+      `frames: ${measured.length} · subject ${(mean((f) => f.coverage) * 100).toFixed(0)}% of frame · ` +
+        `lum ${mean((f) => f.meanLuminance).toFixed(2)} · clipped ${(mean((f) => f.blownRatio) * 100).toFixed(1)}%` +
+        (dark > 0 ? ` · ${dark} empty` : ""),
+    );
+  }
+  // How connected the result is. Arithmetic, not a verdict: floating is a
+  // legitimate composition and the compiler has no opinion about it. But a
+  // scene that came out as islands rather than one object is invisible to an
+  // author who cannot see the render, and this is the only place it shows.
+  const connectivity = result.manifest.connectivity;
+  if (connectivity && connectivity.isolated > 0) {
+    const names = connectivity.isolatedParts.join(", ");
+    const more = connectivity.isolated - connectivity.isolatedParts.length;
+    lines.push(
+      `contact: ${connectivity.touching} part(s) touch another, ${connectivity.isolated} touch nothing` +
+        ` — ${names}${more > 0 ? ` +${more} more` : ""}`,
+    );
   }
   appendFrames(lines, result, options);
 

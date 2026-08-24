@@ -1,7 +1,54 @@
 import { describe, expect, it } from "vitest";
 import { renderAgentReport } from "../src/report.js";
 import { buildManifest } from "../src/manifest.js";
-import { CompileResult, Issue } from "../src/types.js";
+import { CompileResult, Census, Issue } from "../src/types.js";
+
+const source = { kind: "bpy" as const, files: ["build.py"] };
+
+/** Minimal census carrying just what connectivity derivation reads. */
+function censusWith(meshes: string[], contacts: Array<[string, string]> = []): Census {
+  return {
+    blenderVersion: "5.0.1",
+    sceneName: "Scene",
+    objects: meshes.map((name) => ({
+      name,
+      type: "MESH",
+      parent: null,
+      location: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      dimensions: [1, 1, 1],
+      visible: true,
+      hasMeshData: true,
+    })),
+    meshes: meshes.map((object) => ({
+      object,
+      verts: 8,
+      faces: 6,
+      ngons: 0,
+      nonManifoldEdges: 0,
+      zeroAreaFaces: 0,
+      nan: false,
+      uvLayers: [],
+    })),
+    materials: [],
+    textures: [],
+    uvObjectsWithoutLayers: [],
+    objectsWithoutMaterial: [],
+    zFightingPairs: [],
+    contacts: contacts.map(([a, b]) => ({
+      a,
+      b,
+      gap: [0, 0, 0] as [number, number, number],
+      separation: 0,
+      intersects: false,
+    })),
+    camera: { present: false, name: null },
+    lightCount: 0,
+    animation: { fps: 24, frameStart: 1, frameEnd: 24, keyframedObjects: [] },
+    offCameraObjects: [],
+  };
+}
 
 function result(overrides: Partial<CompileResult> = {}): CompileResult {
   const issues: Issue[] = overrides.issues ?? [];
@@ -251,5 +298,182 @@ describe("renderAgentReport", () => {
   it("stays silent about tweaks when there are none — no empty sections", () => {
     const text = renderAgentReport(result());
     expect(text).not.toContain("user edits");
+  });
+
+  it("reports what the proof frames measured, even when no rule complained", () => {
+    // The numbers used to reach the linter alone, so an author with no
+    // image input could only infer "did my render work" from the absence
+    // of complaints. The line exists precisely for the clean case.
+    const text = renderAgentReport(
+      result({
+        manifest: buildManifest({
+          source,
+          issues: [],
+          summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: ["out/proof/proof-000.png", "out/proof/proof-001.png"],
+          exportedAssets: [],
+          blenderUsed: true,
+          blenderVersion: "5.0.1",
+          proofFrames: [
+            { path: "a.png", meanLuminance: 0.4, coverage: 0.3, blownRatio: 0 },
+            { path: "b.png", meanLuminance: 0.2, coverage: 0.5, blownRatio: 0.1 },
+          ],
+        }),
+        proofImages: ["out/proof/proof-000.png", "out/proof/proof-001.png"],
+      }),
+    );
+    // Means over the frames, not the raw values of either one.
+    expect(text).toContain("frames: 2 · subject 40% of frame · lum 0.30 · clipped 5.0%");
+    expect(text).not.toContain("empty");
+  });
+
+  it("counts empty frames in the measured line instead of hiding them", () => {
+    const text = renderAgentReport(
+      result({
+        manifest: buildManifest({
+          source,
+          issues: [],
+          summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: ["out/proof/proof-000.png"],
+          exportedAssets: [],
+          blenderUsed: true,
+          blenderVersion: "5.0.1",
+          proofFrames: [
+            { path: "a.png", meanLuminance: 0.4, coverage: 0.3, blownRatio: 0 },
+            { path: "b.png", meanLuminance: 0, coverage: 0, blownRatio: 0 },
+          ],
+        }),
+      }),
+    );
+    expect(text).toContain("· 1 empty");
+  });
+
+  it("stays silent about frames when the proof stage did not run", () => {
+    const text = renderAgentReport(result());
+    expect(text).not.toContain("frames:");
+  });
+
+  it("names isolated parts in a contact line, arithmetic without verdict", () => {
+    // Floating is legitimate composition; the compiler has no standing to
+    // call it wrong. But an author who cannot see the render has no other
+    // way to learn their scene came out as islands.
+    const text = renderAgentReport(
+      result({
+        manifest: buildManifest({
+          source,
+          issues: [],
+          summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [],
+          exportedAssets: [],
+          blenderUsed: true,
+          blenderVersion: "5.0.1",
+          census: censusWith(["prp_base", "prp_crate", "prp_orb"], [["prp_base", "prp_crate"]]),
+        }),
+      }),
+    );
+    expect(text).toContain(
+      "contact: 2 part(s) touch another, 1 touch nothing — prp_orb",
+    );
+    // Arithmetic, not a finding: it must not appear among the issues.
+    expect(text).not.toMatch(/S3D-\S-\d+.*touch nothing/);
+  });
+
+  it("summarises more isolated parts than it names with a +N tail", () => {
+    const names = Array.from({ length: 14 }, (_, i) => `part_${i}`);
+    const text = renderAgentReport(
+      result({
+        manifest: buildManifest({
+          source,
+          issues: [],
+          summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [],
+          exportedAssets: [],
+          blenderUsed: true,
+          blenderVersion: "5.0.1",
+          census: censusWith(names),
+        }),
+      }),
+    );
+    expect(text).toContain("contact: 0 part(s) touch another, 14 touch nothing");
+    // The manifest caps its name list at 12; the report renders all of
+    // them plus the true-count tail.
+    expect(text).toMatch(
+      /part_0, part_1, part_10, part_11, part_12, part_13, part_2.* \+2 more/,
+    );
+  });
+
+  it("says nothing about contact when every part touches something", () => {
+    // A healthy scene gains no chrome — same discipline as the kit banner.
+    const text = renderAgentReport(
+      result({
+        manifest: buildManifest({
+          source,
+          issues: [],
+          summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [],
+          exportedAssets: [],
+          blenderUsed: true,
+          blenderVersion: "5.0.1",
+          census: censusWith(["a", "b"], [["a", "b"]]),
+        }),
+      }),
+    );
+    expect(text).not.toContain("contact:");
+  });
+
+  /* ---- the solved table: the parse loop's eyes ---------------------- */
+
+  it("prints the solved boxes so a parse-only compile shows where parts land (H5)", () => {
+    const text = renderAgentReport(
+      result({
+        solved: {
+          parts: [
+            {
+              id: "prp_plinth",
+              size: [3, 1, 0.1],
+              center: [0, 0, 0.05],
+              shape: "box",
+              axis: "z",
+              flip: false,
+            },
+            {
+              id: "prp_column_2",
+              size: [0.2, 0.2, 1.5],
+              center: [1.2, 0, 0.85],
+              shape: "cylinder",
+              axis: "z",
+              flip: false,
+              from: "prp_column",
+              restsOn: "prp_plinth",
+            },
+          ],
+          diagnostics: [],
+        },
+      }),
+    );
+    expect(text).toContain("solved boxes (id · centre · size · rests on):");
+    expect(text).toContain("prp_plinth: (0mm, 0mm, 50mm) · 3m × 1m × 0.1m");
+    // Provenance to the authored part and the resting fact ride the row —
+    // this is what lets an agent audit placement without running Blender.
+    expect(text).toContain("prp_column_2 (from prp_column)");
+    expect(text).toContain("rests on prp_plinth");
+  });
+
+  it("caps the solved table instead of flooding a 500-part scene", () => {
+    const parts = Array.from({ length: 60 }, (_, i) => ({
+      id: `prp_p${i}`,
+      size: [1, 1, 1] as [number, number, number],
+      center: [0, 0, 0.5] as [number, number, number],
+      shape: "box" as const,
+      axis: "z" as const,
+      flip: false,
+    }));
+    const text = renderAgentReport(result({ solved: { parts, diagnostics: [] } }));
+    expect(text).toContain("… +20 more parts");
+  });
+
+  it("omits the solved table when there is no solve (non-spec sources)", () => {
+    const text = renderAgentReport(result());
+    expect(text).not.toContain("solved boxes");
   });
 });

@@ -15,14 +15,19 @@
 // grammar as every other file in the app, and lets the generated page go
 // back to being just the picture.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
 import {
+  buildPartTreeLayout,
+  primPaths,
   scene3dIssueTitle,
   type Scene3dArtifactRef,
   type Scene3dAssetKind,
   type Scene3dIssue,
   type Scene3dManifest,
+  type Scene3dSelectionPart,
+  type Scene3dTreeNodeInput,
+  type Scene3dTreeRow,
 } from '@open-design/contracts';
 import { useT } from '../i18n';
 import {
@@ -36,6 +41,12 @@ import {
   resolveAssetKind,
   totalTriangles,
 } from '../runtime/scene3d-assets';
+import {
+  getScene3dSelection,
+  getScene3dSelectionServerSnapshot,
+  setScene3dSelection,
+  subscribeScene3dSelection,
+} from '../runtime/scene3d-selection';
 import type { ProjectFile } from '../types';
 import { Icon } from './Icon';
 import styles from './Scene3dPanel.module.css';
@@ -320,6 +331,94 @@ function Scene3dScenePanel({
     return segments[segments.length - 1] ?? file?.name ?? '';
   }, [scenePath, file?.name]);
 
+  const treeInput = useMemo((): Scene3dTreeNodeInput[] => {
+    if (!manifest || !manifest.partTree) return [];
+    const keyframed = new Set(manifest.animation?.keyframedObjects ?? []);
+    const hasTextures =
+      (manifest.textures?.length ?? 0) > 0 ||
+      (manifest.materials?.some((m) => m.hasTexture) ?? false);
+
+    return manifest.partTree.map((part) => {
+      let glyphs = '';
+      if (keyframed.has(part.name)) glyphs += 'a';
+      if (part.mesh && part.mesh.faces > 0) glyphs += 'w';
+      if (hasTextures && part.mesh) glyphs += 'x';
+
+      return {
+        name: part.name,
+        parent: part.parent,
+        type: part.type,
+        mesh: part.mesh,
+        glyphs: glyphs || undefined,
+      };
+    });
+  }, [manifest]);
+
+  const treeRows = useMemo(() => buildPartTreeLayout(treeInput), [treeInput]);
+
+  const selectionState = useSyncExternalStore(
+    subscribeScene3dSelection,
+    getScene3dSelection,
+    getScene3dSelectionServerSnapshot,
+  );
+  const selectedPartsSet = useMemo(
+    () => new Set(selectionState.selected),
+    [selectionState.selected],
+  );
+
+  const allSelectionParts = useMemo((): Scene3dSelectionPart[] => {
+    if (!manifest || !manifest.partTree) return [];
+    const paths = primPaths(manifest.partTree);
+    return manifest.partTree.map((p) => ({
+      name: p.name,
+      path: paths.get(p.name) ?? `/${p.name}`,
+      type: p.type,
+    }));
+  }, [manifest]);
+
+  const handleRowClick = (event: React.MouseEvent, row: Scene3dTreeRow) => {
+    if (event.altKey) {
+      event.preventDefault();
+      const text =
+        row.kind === 'prototype'
+          ? row.memberNames
+              .map((name) => {
+                const nodePath = allSelectionParts.find((p) => p.name === name)?.path;
+                return nodePath ?? `/${name}`;
+              })
+              .join('\n')
+          : row.path;
+      try {
+        void navigator.clipboard.writeText(text);
+      } catch {
+        // ignore clipboard error
+      }
+      return;
+    }
+
+    const targetNames = row.targetNames;
+    let nextSelected: string[];
+
+    if (event.shiftKey) {
+      const currentSet = new Set(selectionState.selected);
+      const allIn = targetNames.length > 0 && targetNames.every((n) => currentSet.has(n));
+      if (allIn) {
+        for (const n of targetNames) currentSet.delete(n);
+      } else {
+        for (const n of targetNames) currentSet.add(n);
+      }
+      nextSelected = Array.from(currentSet);
+    } else {
+      const currentSet = new Set(selectionState.selected);
+      const alreadyExact =
+        targetNames.length === selectionState.selected.length &&
+        targetNames.every((n) => currentSet.has(n));
+      nextSelected = alreadyExact ? [] : targetNames;
+    }
+
+    setScene3dSelection(assetName, scenePath, allSelectionParts, nextSelected);
+  };
+
   return (
     // `.viewer` is the app's flex-fill layout contract for anything mounted in
     // the workspace pane. Without it this panel grows past the pane and
@@ -500,22 +599,77 @@ function Scene3dScenePanel({
               ) : null}
             </h4>
             {manifest && manifest.partTree.length > 0 ? (
-              <ul className={styles.list}>
-                {manifest.partTree.map((part) => (
-                  <li key={part.name} className={styles.part}>
-                    <span className={styles.partName} title={part.name}>
-                      {part.name}
-                    </span>
-                    <span className={styles.partMeta}>
-                      {part.mesh
-                        ? t('scene3d.meshCounts', {
-                            verts: part.mesh.verts,
-                            faces: part.mesh.faces,
-                          })
-                        : part.type.toLowerCase()}
-                    </span>
-                  </li>
-                ))}
+              <ul className={styles.treeList}>
+                {treeRows.map((row) => {
+                  const isSelected =
+                    row.targetNames.length > 0 &&
+                    row.targetNames.every((n) => selectedPartsSet.has(n));
+
+                  return (
+                    <li key={row.key}>
+                      <button
+                        type="button"
+                        className={`${styles.treeRow} ${isSelected ? styles.treeRowSelected : ''}`}
+                        style={{ paddingLeft: `${8 + row.depth * 11}px` }}
+                        title={partRowTooltip(row)}
+                        onClick={(e) => handleRowClick(e, row)}
+                      >
+                        <span className={styles.treeRowName}>
+                          {row.kind === 'prototype' ? row.stem : row.name}
+                        </span>
+                        {row.kind === 'prototype' ? (
+                          <span className={styles.treeRowCount}>×{row.count}</span>
+                        ) : null}
+                        {row.glyphs ? (
+                          <span className={styles.treeRowGlyphs}>
+                            {row.glyphs.includes('a') ? (
+                              <svg viewBox="0 0 8 8" aria-hidden="true" width="7" height="7" fill="currentColor">
+                                <path d="M1.8 1.1l4.8 2.9-4.8 2.9z" />
+                              </svg>
+                            ) : null}
+                            {row.glyphs.includes('w') ? (
+                              <svg viewBox="0 0 8 8" aria-hidden="true" width="7" height="7" fill="currentColor">
+                                <path d="M4 .7 7.1 2.5v3L4 7.3.9 5.5v-3z" />
+                              </svg>
+                            ) : null}
+                            {row.glyphs.includes('x') ? (
+                              <svg viewBox="0 0 8 8" aria-hidden="true" width="7" height="7" fill="currentColor">
+                                <path d="M1 1h2.5v2.5H1zM4.5 1H7v2.5H4.5zM1 4.5h2.5V7H1zM4.5 4.5H7V7H4.5z" />
+                              </svg>
+                            ) : null}
+                          </span>
+                        ) : null}
+                        {(() => {
+                          const gap = row.kind === 'prototype' ? row.worstGroundGap : row.groundGap;
+                          if (gap === undefined || gap <= 0) return null;
+                          const gapMm = Math.round(gap * 1000);
+                          return (
+                            <span
+                              className={styles.treeRowFloat}
+                              title={`Floats ${gapMm}mm above the ground plane`}
+                            >
+                              ↑{gapMm}mm
+                            </span>
+                          );
+                        })()}
+                        {row.type !== 'MESH' ? (
+                          <span className={styles.treeRowType}>
+                            {row.type === 'ARMATURE' && typeof row.bones === 'number'
+                              ? `${row.bones} bones`
+                              : row.type.toLowerCase()}
+                          </span>
+                        ) : row.mesh ? (
+                          <span className={styles.treeRowMeta}>
+                            {t('scene3d.meshCounts', {
+                              verts: row.mesh.verts,
+                              faces: row.mesh.faces,
+                            })}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className={styles.muted}>
@@ -539,4 +693,29 @@ function codeSeverity(code: string): string {
   if (code.startsWith('S3D-E-')) return 'error';
   if (code.startsWith('S3D-W-')) return 'warning';
   return 'info';
+}
+
+/** Tooltip line with full USD prim path, type, dimensions, faces/tris, and shortcuts. */
+function partRowTooltip(row: Scene3dTreeRow): string {
+  if (row.kind === 'prototype') {
+    return `${row.count} instances: ${row.memberNames.join(', ')} · click selects all · alt-click copies every path`;
+  }
+  const parts: string[] = [row.path];
+  if (row.type) parts.push(row.type.toLowerCase());
+  if (row.dimensions) parts.push(`${row.dimensions.join(' × ')} m`);
+  if (typeof row.tris === 'number') {
+    parts.push(`${row.tris.toLocaleString()} tris`);
+  } else if (row.mesh && typeof row.mesh.faces === 'number') {
+    parts.push(`${row.mesh.faces.toLocaleString()} faces`);
+  }
+  if (row.glyphs) {
+    const glyphNames = [
+      row.glyphs.includes('a') ? 'animated' : '',
+      row.glyphs.includes('w') ? 'watertight' : '',
+      row.glyphs.includes('x') ? 'textured' : '',
+    ].filter(Boolean);
+    if (glyphNames.length > 0) parts.push(glyphNames.join(', '));
+  }
+  parts.push('alt-click copies path');
+  return parts.join(' · ');
 }

@@ -216,6 +216,33 @@ function validatePart(
     // asset's own materials are replaced wholesale — the retexture-a-
     // download move. Omit it and the asset keeps what it shipped with.
   }
+  let script: string | undefined;
+  if (part.script !== undefined) {
+    if (typeof part.script !== "string" || part.script.length === 0) {
+      errors.push(`${at}.script must be a non-empty string`);
+    } else if (!/\.py$/i.test(part.script)) {
+      errors.push(`${at}.script '${part.script}' must be a .py file`);
+    } else if (/^([a-zA-Z]:|[\\/])/.test(part.script) || part.script.split(/[\\/]/).includes("..")) {
+      errors.push(`${at}.script must be a scene-relative path with no '..'`);
+    } else {
+      script = part.script.replace(/\\/g, "/");
+    }
+    // One authority per part: the box is filled by a primitive OR an asset
+    // OR a script, never two. A silent winner would make "which geometry
+    // shipped" unanswerable from the source.
+    if (part.shape !== undefined) {
+      errors.push(`${at}: script and shape are mutually exclusive — the script IS the shape`);
+    }
+    if (file !== undefined || part.file !== undefined) {
+      errors.push(`${at}: script and file are mutually exclusive — one filler per box`);
+    }
+    if (part.axis !== undefined) {
+      errors.push(`${at}: axis has no meaning on a script part — the script owns its own orientation`);
+    }
+    if (part.flip !== undefined) {
+      errors.push(`${at}: flip has no meaning on a script part — flip the geometry in the script`);
+    }
+  }
   let axis: Axis = "z";
   if (part.axis !== undefined) {
     if (AXES.includes(part.axis as Axis)) axis = part.axis as Axis;
@@ -300,11 +327,31 @@ function validatePart(
     }
   }
 
+  /* ---- unknown keys are ERRORS, never swallows ---------------------- */
+  //
+  // A key this language has not built is a sentence the author believes they
+  // said. A swallow lets them ship a cube believing it is a pitched roof, a
+  // subject camera, or a claimed door width — parse reported zero errors and
+  // the geometry silently ignored their intent. Every field that IS read is
+  // listed here; anything else refuses loudly with the vocabulary named, so
+  // the author learns what exists instead of trusting what does not.
+  const KNOWN_PART_KEYS = new Set([
+    "id", "size", "shape", "file", "script", "axis", "flip", "material", "role", "spin", "bob",
+  ]);
+  for (const key of Object.keys(part)) {
+    if (!KNOWN_PART_KEYS.has(key)) {
+      errors.push(
+        `${at}.${key} is not a part field — known fields: ${[...KNOWN_PART_KEYS].join(", ")}`,
+      );
+    }
+  }
+
   if (errors.length > before || !size) return undefined;
   return {
     id: part.id as string,
     size,
     ...(file !== undefined ? { file } : {}),
+    ...(script !== undefined ? { script } : {}),
     ...(shape !== "box" ? { shape } : {}),
     ...(axis !== "z" ? { axis } : {}),
     ...(part.flip === true ? { flip: true } : {}),
@@ -553,6 +600,17 @@ function validateCamera(value: unknown, errors: string[]): SceneSpec["camera"] {
   const azimuthDeg = num("azimuthDeg", -360, 360);
   const elevationDeg = num("elevationDeg", -89, 89);
   const distance = num("distance", 1, 20);
+  // Unknown camera keys are errors, not swallows: `include`/`target` typed in
+  // good faith produced zero parse errors and a photograph of the whole AABB
+  // — the author believed they had aimed the shot and had not.
+  const KNOWN_CAMERA_KEYS = new Set(["azimuthDeg", "elevationDeg", "distance"]);
+  for (const key of Object.keys(cam)) {
+    if (!KNOWN_CAMERA_KEYS.has(key)) {
+      errors.push(
+        `camera.${key} is not a camera field — known fields: ${[...KNOWN_CAMERA_KEYS].join(", ")}`,
+      );
+    }
+  }
   if (errors.length > before) return undefined;
   return {
     ...(azimuthDeg !== undefined ? { azimuthDeg } : {}),
@@ -611,6 +669,20 @@ function validateClaims(value: unknown, errors: string[]): ClaimsSpec | undefine
       out.materialsUsed = claims.materialsUsed as string[];
     } else {
       errors.push("claims.materialsUsed must be an array of material names");
+    }
+  }
+  // A claim key the language has no oracle for is refused, never swallowed:
+  // `doorWidth` typed in good faith compiled clean and adjudicated nothing —
+  // the author believed they had signed a door and had signed air. The error
+  // names every claim that DOES adjudicate so the refusal teaches.
+  const KNOWN_CLAIM_KEYS = new Set([
+    "parts", "maxTriangles", "grounded", "maxHeight", "footprint", "watertight", "materialsUsed",
+  ]);
+  for (const key of Object.keys(claims)) {
+    if (!KNOWN_CLAIM_KEYS.has(key)) {
+      errors.push(
+        `claims.${key} has no oracle — it would compile unchecked forever. Claims that adjudicate: ${[...KNOWN_CLAIM_KEYS].join(", ")}`,
+      );
     }
   }
   if (errors.length > before) return undefined;

@@ -99,6 +99,13 @@ export const ISSUE_CODES = {
   /* The coplanar search hit a cap, so silence about z-fighting is not
      evidence of its absence for this scene. */
   Z_FIGHTING_UNCHECKED: "S3D-W-323",
+  /* The contact scan was skipped past its mesh cap, so `contacts: []` in the
+     census means "we did not look", never "nothing touches". An empty contact
+     list that reads as a clean bill of health is how an interior went blind:
+     every joint the author cared about was above the cap, and the report said
+     nothing. Same discipline as Z_FIGHTING_UNCHECKED — a skipped oracle is a
+     verdict, not silence. */
+  CONTACTS_UNCHECKED: "S3D-W-336",
 
   /* lint: uv (440-459) — UV facts measured by the census, judged by
      conventions.uv. The one place "compiles clean" was blind to the thing

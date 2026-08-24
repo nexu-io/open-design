@@ -1,4 +1,5 @@
 import { Issue, ProofFrameStats, UsdaPrimTree, Census } from "../types.js";
+import { ISSUE_CODES } from "../errors.js";
 import { NormalizedContract } from "../contract.js";
 import { lintNaming } from "./naming.js";
 import { lintTopology, lintEmptyMeshes } from "./topology.js";
@@ -22,6 +23,13 @@ export interface LintInput {
   primTree?: UsdaPrimTree;
   /** Coverage stats from the proof stage, when it ran. */
   proofFrames?: ProofFrameStats[];
+  /**
+   * Per-frame off-camera facts from the proof turntable: which meshes fell
+   * out of which orbit frame. The census's own off-camera check measures
+   * ONE camera pose; this is the honest version across all N frames a
+   * turntable renders.
+   */
+  offByFrame?: Array<{ frame: number; objects: string[] }>;
   /** Raw text of the exported USD stage, when the export stage ran. */
   exportedUsda?: { text: string; file: string };
   /** Decoded and measured 2D sheets declared by the contract. */
@@ -97,6 +105,10 @@ export function runLint(input: LintInput): Issue[] {
   lintUnits(ctx, issues);
   lintIntegrity(ctx, issues);
   lintWorld(input.contract, input.census, issues);
+  // The turntable's own framing facts: which mesh fell out of which orbit
+  // frame. Runs after the census-level check so the two never double-report
+  // — this one carries the frame index the census cannot know.
+  if (input.offByFrame) lintTurntableFraming(input.offByFrame, issues);
   lintVoxel(input.contract, input.census, issues, input.solved);
   // Thresholds come from the contract, not from whatever the caller happened
   // to build, so the sheet family is tunable like every other one.
@@ -149,4 +161,48 @@ export function runLint(input: LintInput): Issue[] {
     deduped.push(issue);
   }
   return deduped;
+}
+
+/**
+ * Turntable framing: which mesh fell out of which orbit frame.
+ *
+ * The census's off-camera check measures ONE camera pose — the authored or
+ * staged camera at census time. A turntable renders N poses, and a part that
+ * clears the hero still can fall out of orbit frame 3. That gap made W-382
+ * read as nonsense ("it's right there in the render!") and cost an author
+ * two compiles to diagnose as camera tuning rather than geometry. The proof
+ * stage now measures every frame it renders; this turns those measurements
+ * into the finding, with the failing frame named.
+ */
+function lintTurntableFraming(
+  offByFrame: ReadonlyArray<{ frame: number; objects: string[] }>,
+  issues: Issue[],
+): void {
+  // One issue per object naming every frame that lost it — not one per
+  // (frame, object) pair, which would print the same fix four times.
+  const byObject = new Map<string, number[]>();
+  for (const { frame, objects } of offByFrame) {
+    for (const name of objects) {
+      const frames = byObject.get(name) ?? [];
+      frames.push(frame);
+      byObject.set(name, frames);
+    }
+  }
+  for (const [name, frames] of [...byObject].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    issues.push({
+      code: ISSUE_CODES.OFF_CAMERA,
+      severity: "warning",
+      message:
+        `object '${name}' falls outside the frustum in ${frames.length} turntable frame(s)` +
+        ` (${frames.map((f) => `#${f}`).join(", ")})`,
+      // The reflex fix ("move the part") is often wrong: the part may be
+      // exactly where the author wants it and the FRAMING is what lost it —
+      // a wider subject needs the camera pulled back or the lens widened,
+      // not geometry dragged toward a shot. Name both levers.
+      hint:
+        "widen the framing so every orbit angle keeps the subject in view: pull the camera back / reduce the lens",
+      target: name,
+      detail: { frames },
+    });
+  }
 }

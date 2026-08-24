@@ -626,7 +626,7 @@ const SCENE3D_STRING_FLAGS = new Set([
 ]);
 const SCENE3D_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'agent-message', 'no-turntable', 'no-cache',
-  'merge', 'clear',
+  'merge', 'clear', 'fast',
 ]);
 const SCENE3D_ACTIONS = ['compile', 'manifest', 'tweaks'];
 const SCENE3D_FAIL_ON_VALUES = ['error', 'warning', 'none'];
@@ -767,6 +767,9 @@ Exit codes: 0 clean at threshold · 1 issues at/above --fail-on ·
 Options:
   --project <id>           Project id (default: OD_PROJECT_ID)
   --scene <path>           Project-relative scene directory (default: project root)
+  --fast                   Structure loop: parse,build,lint — no proofs, no export.
+                           The default iteration gear; a full compile pays ~7s of
+                           proof for findings these stages already produce.
   --stages <a,b,c>         Restrict the pipeline (${SCENE3D_STAGE_IDS.join(', ')})
   --engine <e>             BLENDER_EEVEE | CYCLES
   --resolution <px>        Proof render resolution (64-4096)
@@ -786,6 +789,7 @@ Tweaks (per-part placement edits, the same file the viewer's gizmo saves):
 
 Examples:
   od scene3d compile --project p1 --scene scenes/crate
+  od scene3d compile --fast --json | jq '.issues[].code'
   od scene3d compile --stages parse,lint --json | jq '.issues[].code'
   od scene3d compile --scene scenes/crate --fail-on warning --agent-message
   od scene3d manifest --project p1 --scene scenes/crate --json
@@ -970,7 +974,16 @@ async function runScene3d(args) {
   // Stage/proof options are validated by the daemon too; parsing them here
   // means a typo fails before a Blender process is ever spawned.
   const body = { scenePath, noCache: flags['no-cache'] === true };
-  if (flags.stages) {
+  // `--fast` is the structure-loop alias: parse + build + lint, no proofs,
+  // no export. The iteration gear for grid/naming/relation work — a full
+  // compile pays ~7s of proof for findings these stages already produce.
+  if (flags.fast === true) {
+    if (flags.stages) {
+      console.error('pass either --fast or --stages, not both');
+      process.exit(2);
+    }
+    body.stages = ['parse', 'build', 'lint'];
+  } else if (flags.stages) {
     const stages = String(flags.stages).split(',').map((s) => s.trim()).filter(Boolean);
     const unknown = stages.filter((s) => !SCENE3D_STAGE_IDS.includes(s));
     if (stages.length === 0 || unknown.length > 0) {
@@ -1280,6 +1293,12 @@ function printRootHelp() {
       Run the daemon's anti-slop artifact linter against an HTML file or stdin
       (no model/agent calls; headless-safe). Exits 1 when findings meet the
       --fail-on threshold, so it can gate cron/CI render pipelines.
+
+  od scene3d <compile|manifest|tweaks> --project <id> --scene <path> [options]
+      Compile/inspect a scene3d asset through the same daemon endpoint the
+      viewer uses. \`od scene3d compile --help\` lists the full flag set
+      (--stages parse,build,lint,proof,export,manifest · --agent-message ·
+      --fail-on). Headless-safe; exits per --fail-on.
 
   "$OD_NODE_BIN" "$OD_BIN" tools ...
       Recommended agent-runtime form; avoids relying on user PATH for od or node.

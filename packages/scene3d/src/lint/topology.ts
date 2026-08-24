@@ -192,6 +192,25 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
       detail: { skipped },
     });
   }
+
+  /*
+   * The contact scan has its own cap, and it failed the same way the z-fight
+   * one did: `contactsSkipped` was written into the census and then nobody
+   * read it, so an empty `contacts` array read as "nothing touches" when it
+   * meant "we did not look". A 91-mesh interior is a shrine, not a stress
+   * test — and every joint the author placed by relation (lintel, inlay,
+   * torus on plinth) lost its measured word at once. The skip is SAID.
+   */
+  const contactsSkipped = census.contactsSkipped ?? [];
+  if (contactsSkipped.length > 0 && (census.contacts ?? []).length === 0) {
+    issues.push({
+      code: ISSUE_CODES.CONTACTS_UNCHECKED,
+      severity: "warning",
+      message: `contact scan did not run (${contactsSkipped.length} exclusion(s)) — an empty contact list here means "not measured", not "nothing touches"`,
+      hint: "the scan's mesh ceiling was exceeded; joints placed by relation are still floored by the solver, but no measured contact facts exist for this scene",
+      detail: { skipped: contactsSkipped },
+    });
+  }
 }
 
 /** Presence of a mesh is a sanity floor for a "modelling" pipeline. */

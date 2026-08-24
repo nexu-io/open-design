@@ -111,6 +111,25 @@ export function resetScene3dSelection(): void {
 }
 
 /**
+ * Update selection state from host UI.
+ */
+export function setScene3dSelection(
+  asset: string | null,
+  scenePath: string | null,
+  parts: Scene3dSelectionPart[],
+  selected: string[],
+): void {
+  applyMessage({
+    type: 'od:scene3d-select',
+    asset,
+    scenePath,
+    partId: selected.length === 1 ? selected[0]! : null,
+    partIds: selected,
+    parts,
+  });
+}
+
+/**
  * Order parts for completion: selected first, then meshes, then the rest.
  *
  * What someone has just clicked is overwhelmingly what they are about to

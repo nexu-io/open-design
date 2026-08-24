@@ -333,7 +333,15 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
   const pending = new Set<number>(
     spec.relations.map((_, index) => index).filter((index) => spec.relations[index]!.type !== "repeat"),
   );
-  for (let pass = 0; pass <= spec.relations.length && pending.size > 0; pass++) {
+  // Bounded by the work available, NOT by `pending.size > 0`: a relation
+  // can apply successfully and still leave an axis unset — `sits_on`
+  // resolves Z alone — so the queue empties while the scene is not solved.
+  // Exiting on an empty queue skipped support inheritance entirely for the
+  // commonest shape there is, one part resting on one placed part, and left
+  // it reporting no placement on x/y. The loop ends when NEITHER mechanism
+  // can make progress, which is what a fixpoint means.
+  const maxPasses = spec.relations.length + spec.parts.length + 2;
+  for (let pass = 0; pass < maxPasses; pass++) {
     let progressed = false;
     for (const index of [...pending]) {
       if (apply(spec.relations[index]!)) {
@@ -397,6 +405,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
       axis: part.axis ?? "z",
       flip: part.flip === true,
       ...(part.file !== undefined ? { file: part.file } : {}),
+      ...(part.script !== undefined ? { script: part.script } : {}),
       ...(part.material !== undefined ? { material: part.material } : {}),
       ...(part.spin !== undefined ? { spin: part.spin } : {}),
       ...(part.bob !== undefined ? { bob: part.bob } : {}),
@@ -502,6 +511,17 @@ function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDia
       }
       // The contact floor is the boundary between "touching" and "inside".
       if (depth <= MIN_CONTACT) continue;
+      // Two instances that REST ON THE SAME SUPPORT legitimately share its
+      // top plane: each is embedded by MIN_CONTACT on z (the solver's own
+      // floor), so their boxes interpenetrate by up to 2*MIN_CONTACT there —
+      // two lamps on one pylon, four caps on one post. That embed is the
+      // compiler's own arithmetic, not an authored mistake, and reporting it
+      // trained agents to float parts with `above` instead of seating them.
+      // The exemption is exact: same support, shallowest axis is z, depth no
+      // deeper than the two deliberate embeds. Anything more is real.
+      const sharedSupport =
+        a.restsOn !== undefined && a.restsOn === b.restsOn;
+      if (sharedSupport && axis === "z" && depth <= 2 * MIN_CONTACT + 1e-9) continue;
       const fa = a.from ?? a.id;
       const fb = b.from ?? b.id;
       const key = fa < fb ? `${fa}\u0000${fb}` : `${fb}\u0000${fa}`;

@@ -12,6 +12,7 @@
 // Type-only, so the circular reference between this file and the read
 // module costs nothing at runtime — impact.ts imports Census from here.
 import type { ImpactReport } from "./read/impact.js";
+import type { SolvedScene } from "./solve/types.js";
 
 export type StageId = "parse" | "build" | "lint" | "proof" | "export" | "manifest";
 
@@ -383,6 +384,19 @@ export interface CompileResult {
    * first compile, when there is nothing to have changed from.
    */
   impact?: ImpactReport;
+  /**
+   * The solver's output, when the scene is authored from scene.json: every
+   * part's solved box, what it rests on, and where each instance came from.
+   *
+   * This is the parse loop's EYES. Parse runs in milliseconds and resolves
+   * the whole relation graph, but until now its report said only "relations
+   * resolved" — an author composing blind had to pay for a full Blender
+   * build to learn where a part actually landed. Present whenever solving
+   * ran, build or no build; it costs nothing extra (the solve already
+   * happened) and cannot disagree with the geometry the build produces,
+   * because the build is generated FROM it.
+   */
+  solved?: SolvedScene;
 }
 
 export type Severity = "error" | "warning" | "info";
@@ -992,6 +1006,35 @@ export interface Scene3dManifest {
    * shipped capabilities the master does not actually account for.
    */
   carried?: { clips?: string[]; occlusion?: string[]; materials?: string[]; emission?: string[] };
+  /**
+   * How connected the scene is: parts that touch at least one other part,
+   * versus parts touching nothing at all.
+   *
+   * A measured fact, deliberately not a finding. Floating is legitimate — a
+   * lantern hangs, an orb hovers — so the compiler has no standing to call it
+   * wrong, and an earlier attempt to do exactly that failed this repo's own
+   * showcase on its levitating orb. But an author who cannot SEE the render
+   * has no other way to learn that their scene came out as forty disconnected
+   * islands rather than one machine, and that difference is the whole
+   * difference between an asset and confetti. So it is reported as arithmetic
+   * and left to the reader to judge.
+   */
+  connectivity?: { touching: number; isolated: number; isolatedParts: string[] };
+  /**
+   * Per-frame proof measurements: how lit, how covered, how clipped.
+   *
+   * The numbers already existed and reached the linter alone, so the only
+   * consumer that could see them was a rule with a threshold. An authoring
+   * agent with no image input was left inferring whether its render worked
+   * from the absence of complaints — "renders correctly" unverifiable by the
+   * one party that could act on it.
+   */
+  proofFrames?: Array<{
+    path: string;
+    meanLuminance: number | null;
+    coverage: number | null;
+    blownRatio?: number | null;
+  }>;
   issues: IssueSummary;
   issueCodes: string[];
   /** The subset of issueCodes that fired at error or warning severity —
@@ -1059,6 +1102,8 @@ export interface ManifestMaterial {
   metallic: number | null;
   roughness: number | null;
   hasTexture: boolean;
+  /** Emission strength the build actually authored, when measured. */
+  emissionStrength?: number;
 }
 
 export interface ManifestTexture {

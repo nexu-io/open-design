@@ -360,6 +360,92 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     "",
   ];
 
+  /* ---- script-backed parts ------------------------------------------ */
+  //
+  // Freeform as a shape kind: an agent-authored Python file fills one
+  // declared box, inside the same deterministic build. The runner executes
+  // each script ONCE per part with a fixed contract (ctx.size, ctx.material)
+  // and then applies the SAME fit as _import_part — uniform scale into the
+  // box, centred on x/y, resting on its bottom — so relations, contacts and
+  // claims behave identically over script geometry and primitives. The
+  // script must define build(ctx) and create exactly one mesh object; that
+  // is checked here, loudly, not assumed.
+  const scripted = scene.parts.filter((p) => p.script !== undefined);
+  if (scripted.length > 0) {
+    lines.push(
+      "def _run_script(filepath, size):",
+      '    """Execute one part-filling script in a fresh namespace.',
+      "",
+      "    The script sees ctx.size (the declared box, metres) and",
+      "    ctx.material(name) to bind a declared material. It must define",
+      "    build(ctx) and leave exactly one mesh object behind; anything else",
+      "    is a loud failure, never a silent partial fill.",
+      '    """',
+      "    import importlib.util",
+      "    before = set(o.name for o in bpy.data.objects)",
+      "    mod_name = \"scene3d_part_script_%d\" % _SCRIPT_SEQ[0]",
+      "    _SCRIPT_SEQ[0] += 1",
+      "    spec = importlib.util.spec_from_file_location(mod_name, filepath)",
+      "    if spec is None or spec.loader is None:",
+      '        raise ValueError("cannot load script: %s" % filepath)',
+      "    module = importlib.util.module_from_spec(spec)",
+      "    def material(name):",
+      "        obj = bpy.context.object",
+      "        obj.data.materials.append(_material(name))",
+      "    ctx = {",
+      '        "size": tuple(size),',
+      '        "material": material,',
+      "    }",
+      "    spec.loader.exec_module(module)",
+      "    if not hasattr(module, \"build\") or not callable(module.build):",
+      '        raise ValueError("script %s must define build(ctx)" % filepath)',
+      "    module.build(ctx)",
+      "    made = [o for o in bpy.data.objects if o.name not in before]",
+      "    meshes = [o for o in made if o.type == \"MESH\"]",
+      "    if len(meshes) != 1 or len(made) != 1:",
+      '        raise ValueError("script %s must create exactly one mesh object; it created %d object(s), %d mesh(es)" % (filepath, len(made), len(meshes)))',
+      "    return meshes[0]",
+      "",
+      "_SCRIPT_SEQ = [0]",
+      "",
+      "def _script_part(name, filepath, size, center, material=None):",
+      '    """Fill a solved box from an agent-authored script, then fit it',
+      "    exactly like an imported asset: uniform scale, centred on x/y,",
+      "    resting on the box's bottom. The box is the placement envelope;",
+      "    the script only decides what fills it.",
+      '    """',
+      "    from mathutils import Vector",
+      "    obj = _run_script(filepath, size)",
+      "    obj.name = name",
+      "    # Bake whatever transform the script authored, then fit the box.",
+      "    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)",
+      "    bpy.context.view_layer.update()",
+      "    corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]",
+      "    lo = [min(c[i] for c in corners) for i in range(3)]",
+      "    hi = [max(c[i] for c in corners) for i in range(3)]",
+      "    dim = [max(hi[i] - lo[i], 1e-9) for i in range(3)]",
+      "    s = min(size[i] / dim[i] for i in range(3))",
+      "    obj.scale = (obj.scale[0] * s, obj.scale[1] * s, obj.scale[2] * s)",
+      "    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)",
+      "    bpy.context.view_layer.update()",
+      "    corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]",
+      "    lo = [min(c[i] for c in corners) for i in range(3)]",
+      "    hi = [max(c[i] for c in corners) for i in range(3)]",
+      "    obj.location = (",
+      "        obj.location[0] + center[0] - (lo[0] + hi[0]) / 2.0,",
+      "        obj.location[1] + center[1] - (lo[1] + hi[1]) / 2.0,",
+      "        obj.location[2] + (center[2] - size[2] / 2.0) - lo[2],",
+      "    )",
+      "    bpy.context.view_layer.update()",
+      "    if material:",
+      "        # Deliberate override: replace whatever the script bound.",
+      "        obj.data.materials.clear()",
+      "        obj.data.materials.append(_material(material))",
+      "    return obj",
+      "",
+    );
+  }
+
   /* ---- material table --------------------------------------------- */
   const referenced = [...new Set(scene.parts.map((p) => p.material).filter(Boolean))] as string[];
   lines.push("_MATERIAL_SPECS = {");
@@ -407,6 +493,8 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     const material = part.material ? `, ${py(part.material)}` : "";
     if (part.file !== undefined) {
       lines.push(`_import_part(${py(part.id)}, ${py(part.file)}, ${size}, ${center}${material})`);
+    } else if (part.script !== undefined) {
+      lines.push(`_script_part(${py(part.id)}, ${py(part.script)}, ${size}, ${center}${material})`);
     } else {
       lines.push(
         `_part(${py(part.id)}, ${py(part.shape)}, ${size}, ${center}, ${py(part.axis)}, ${part.flip ? "True" : "False"}${material})`,

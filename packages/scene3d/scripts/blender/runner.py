@@ -3321,6 +3321,7 @@ def proof(job):
 def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntable_on):
     import bpy
     import mathutils
+    from bpy_extras.object_utils import world_to_camera_view
     lo, hi = scene_bbox(scene)
     center = (lo + hi) / 2.0
     diag = (hi - lo).length
@@ -3350,6 +3351,18 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
     cam_data.clip_end = max(dist * 1e3, diag * 10.0)
 
     frames = []
+    # Meshes the census will judge for framing, minus the rig itself. The
+    # per-frame check below is the honest version of the off-camera fact:
+    # the census measures against ONE camera pose, but a turntable renders
+    # N, and a part that clears the hero still can fall out of orbit frame 3
+    # — which is exactly the case that made W-382 read as nonsense ("it's
+    # right there in the render!") and cost an author two compiles to
+    # diagnose as a camera-tuning problem rather than geometry.
+    subjects = [
+        o for o in scene.objects
+        if o.type == "MESH" and o.name != "S3D_AutoCam"
+    ]
+    off_by_frame = []
     for i in range(steps):
         if turntable_on:
             aim_camera(auto_cam, center, orbit_offset(2.0 * math.pi * i / steps, elevation, dist))
@@ -3359,7 +3372,25 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
         bpy.ops.render.render(write_still=True)
         frames.append(frame_stats(filepaths[i]))
         log("rendered %s" % filepaths[i])
-    emit({"ok": True, "data": {"images": filepaths[:steps], "frames": frames}})
+        if turntable_on or is_auto:
+            gone = []
+            for o in subjects:
+                world = face_connected_world_points(o)
+                pts = [world_to_camera_view(scene, auto_cam, p) for p in world]
+                if world and all(
+                    not (0.0 <= p.x <= 1.0 and 0.0 <= p.y <= 1.0 and p.z > 0.0) for p in pts
+                ):
+                    gone.append(o.name)
+            if gone:
+                off_by_frame.append({"frame": i, "objects": sorted(gone)})
+    emit({
+        "ok": True,
+        "data": {
+            "images": filepaths[:steps],
+            "frames": frames,
+            "offByFrame": off_by_frame,
+        },
+    })
 
 
 # ------------------------------------------------------------------

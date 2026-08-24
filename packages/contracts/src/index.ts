@@ -46,6 +46,7 @@ export * from './api/research.js';
 export * from './api/run-completeness.js';
 export * from './api/scene3d.js';
 export * from './api/scene3d-codes.js';
+export * from './api/scene3d-tree.js';
 export * from './api/reasoningExecution.js';
 export * from './api/social-share.js';
 export * from './api/terminals.js';

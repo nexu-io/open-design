@@ -121,6 +121,83 @@ describe("solveScene", () => {
     );
   });
 
+  it("takes the support's lateral position when nothing else speaks for it", () => {
+    // The commonest shape in the language: one part resting on one placed
+    // part, with no `align`. `sits_on` resolves Z alone, so x/y arrive from
+    // the support — the author already said where the thing sits by saying
+    // what it sits ON.
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_floor", size: [4, 4, 0.1] },
+        { id: "prp_crate", size: [0.6, 0.6, 0.6] },
+      ],
+      relations: [
+        // Deliberately off-origin, so inheritance is observable rather than
+        // coincidentally zero.
+        { type: "at", part: "prp_floor", center: [1.25, -0.75, 0.05] },
+        { type: "sits_on", part: "prp_crate", on: "prp_floor" },
+      ],
+    };
+    const solved = solveScene(spec);
+    expect(solved.diagnostics.map((d) => d.code)).not.toContain("SOLVE-UNRESOLVED");
+    const crate = solved.parts.find((p) => p.id === "prp_crate")!;
+    expect(crate.center[0]).toBeCloseTo(1.25, 9);
+    expect(crate.center[1]).toBeCloseTo(-0.75, 9);
+  });
+
+  it("inherits through a chain, where every support is itself inherited", () => {
+    // This shape worked while the simple one above did not: each `sits_on`
+    // here is BLOCKED at first (its support is unplaced), so the queue stays
+    // full, the loop keeps spinning and reaches the stall that triggers
+    // inheritance. The one above applies immediately and empties the queue —
+    // which is how a loop that exited on `pending.size > 0` skipped
+    // inheritance entirely for the case people actually write.
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_plinth", size: [0.8, 0.8, 0.12] },
+        { id: "prp_base", size: [0.5, 0.5, 0.1] },
+        { id: "prp_boiler", size: [0.36, 0.36, 0.5], shape: "cylinder" },
+      ],
+      relations: [
+        { type: "at", part: "prp_plinth", center: [0.25, -0.1, 0.06] },
+        { type: "sits_on", part: "prp_base", on: "prp_plinth" },
+        { type: "sits_on", part: "prp_boiler", on: "prp_base" },
+      ],
+    };
+    const solved = solveScene(spec);
+    expect(solved.diagnostics.map((d) => d.code)).not.toContain("SOLVE-UNRESOLVED");
+    for (const id of ["prp_base", "prp_boiler"]) {
+      const part = solved.parts.find((p) => p.id === id)!;
+      expect(part.center[0], `${id} x`).toBeCloseTo(0.25, 9);
+      expect(part.center[1], `${id} y`).toBeCloseTo(-0.1, 9);
+    }
+  });
+
+  it("never overrides a lateral position an explicit relation gave", () => {
+    // Inheritance may only fill what nothing constrains. `inset_from` puts the
+    // crate against one edge; the support's centre must not pull it back.
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_floor", size: [4, 4, 0.1] },
+        { id: "prp_crate", size: [0.6, 0.6, 0.6] },
+      ],
+      relations: [
+        { type: "at", part: "prp_floor", center: [0, 0, 0.05] },
+        { type: "sits_on", part: "prp_crate", on: "prp_floor" },
+        { type: "inset_from", part: "prp_crate", from: "prp_floor", faces: ["x-"], by: 0.2 },
+        { type: "align", part: "prp_crate", to: "prp_floor", axes: ["y"] },
+      ],
+    };
+    const solved = solveScene(spec);
+    const crate = solved.parts.find((p) => p.id === "prp_crate")!;
+    // Against the -x edge: floor spans -2..2, inset 0.2, half-width 0.3.
+    expect(crate.center[0]).toBeCloseTo(-2 + 0.2 + 0.3, 9);
+    expect(crate.center[1]).toBeCloseTo(0, 9);
+  });
+
   it("is independent of the order relations are written in", () => {
     const spec = crate();
     const shuffled: SceneSpec = { ...spec, relations: [...spec.relations].reverse() };
@@ -224,6 +301,60 @@ describe("the solver's own output is checked, not assumed", () => {
       scene([{ type: "repeat", part: "prp_block", count: 3, along: "x", every: 1.5 }]),
     );
     expect(solved.diagnostics.filter((d) => d.code === "SOLVE-INTERSECTION")).toEqual([]);
+  });
+
+  it("exempts instances resting on the same support from the contact-floor embed", () => {
+    // Two lamps sits_on one pylon: each is embedded by MIN_CONTACT on z (the
+    // solver's own floor), so their boxes interpenetrate by up to twice that
+    // on the shared plane. That embed is the compiler's arithmetic, not an
+    // authored mistake — reporting it trained agents to float parts with
+    // `above` instead of seating them. The exemption is exact: same support,
+    // shallowest axis z, depth within two deliberate embeds.
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_pylon", size: [0.2, 0.2, 2] },
+        { id: "prp_lamp", size: [0.3, 0.3, 0.25] },
+      ],
+      relations: [
+        { type: "at", part: "prp_pylon", center: [0, 0, 1] },
+        { type: "sits_on", part: "prp_lamp", on: "prp_pylon" },
+        { type: "inset_from", part: "prp_lamp", from: "prp_pylon", faces: ["x+"], by: 0.05 },
+        { type: "repeat", part: "prp_lamp", count: 2, along: "y", every: 0.35 },
+      ],
+    };
+    const solved = solveScene(spec);
+    expect(solved.diagnostics.filter((d) => d.code === "SOLVE-INTERSECTION")).toEqual([]);
+    expect(solved.parts).toHaveLength(3);
+    // Both clones record what they rest on — the fact the exemption reads.
+    for (const lamp of solved.parts.filter((p) => p.id.startsWith("prp_lamp"))) {
+      expect(lamp.restsOn).toBe("prp_pylon");
+    }
+  });
+
+  it("still reports a genuine overlap between same-support instances", () => {
+    // The exemption is bounded by the two deliberate embeds. Lamps this close
+    // overlap in y far beyond any contact floor — that is a real mistake.
+    // count: 3 so two CLONES exist (the base is authored, not generated, and
+    // only solver-generated pairs are policed).
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_pylon", size: [0.2, 0.2, 2] },
+        { id: "prp_lamp", size: [0.3, 0.3, 0.25] },
+      ],
+      relations: [
+        { type: "at", part: "prp_pylon", center: [0, 0, 1] },
+        { type: "sits_on", part: "prp_lamp", on: "prp_pylon" },
+        { type: "inset_from", part: "prp_lamp", from: "prp_pylon", faces: ["x+"], by: 0.05 },
+        { type: "repeat", part: "prp_lamp", count: 3, along: "y", every: 0.15 },
+      ],
+    };
+    const solved = solveScene(spec);
+    const hit = solved.diagnostics.filter((d) => d.code === "SOLVE-INTERSECTION");
+    expect(hit).toHaveLength(1);
+    // The shallowest axis is y here — the real overlap — not the shared z plane.
+    expect(hit[0]!.message).toContain("y");
   });
 
   it("does not police interpenetration the author wrote by hand", () => {
