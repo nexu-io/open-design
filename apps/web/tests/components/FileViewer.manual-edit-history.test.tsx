@@ -96,6 +96,39 @@ async function selectManualEditTarget(target = heroTarget()) {
     }));
   });
   await waitFor(() => expect(panelState.props).not.toBeNull());
+  return frame;
+}
+
+// Persisting harness: every manual-edit save is echoed back as the file's raw
+// content, so history round-trips (undo → redo → follow-up edit) read what the
+// previous step actually wrote.
+function stubManualEditHistoryFetch(initialSource: string) {
+  const savedSources: string[] = [];
+  let persistedSource = initialSource;
+  const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+    if (url.includes('/api/projects/project-1/deployments')) {
+      return new Response(JSON.stringify({ deployments: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body)) as { content: string };
+      persistedSource = payload.content;
+      savedSources.push(payload.content);
+      return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/api/projects/project-1/raw/preview.html')) {
+      return new Response(persistedSource, { status: 200 });
+    }
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return { savedSources };
 }
 
 afterEach(() => {
@@ -432,6 +465,116 @@ describe('FileViewer manual edit history regressions', () => {
       expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
         .not.toContain('data-od-id="hero"');
     });
+  });
+
+  it('keeps toolbar undo/redo affordances in manual edit mode and drives history from them', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero" style="color: #111111">Hero</h1></body></html>';
+    const { savedSources } = stubManualEditHistoryFetch(initialSource);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget();
+
+    const undoButton = () => screen.getByTestId('manual-edit-undo') as HTMLButtonElement;
+    const redoButton = () => screen.getByTestId('manual-edit-redo') as HTMLButtonElement;
+    expect(undoButton().disabled).toBe(true);
+    expect(redoButton().disabled).toBe(true);
+
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { kind: 'set-style', id: 'hero', styles: { color: '#ef4444' } },
+        'Style: Hero',
+      );
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    await waitFor(() => expect(undoButton().disabled).toBe(false));
+
+    fireEvent.click(undoButton());
+    await waitFor(() => expect(savedSources).toHaveLength(2));
+    expect(savedSources[1]).toBe(initialSource);
+    await waitFor(() => expect(redoButton().disabled).toBe(false));
+
+    fireEvent.click(redoButton());
+    await waitFor(() => expect(savedSources).toHaveLength(3));
+    expect(savedSources[2]).toContain('rgb(239, 68, 68)');
+  });
+
+  it('undoes on Ctrl/Cmd+Z from host chrome but never from a focused field', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero" style="color: #111111">Hero</h1></body></html>';
+    const { savedSources } = stubManualEditHistoryFetch(initialSource);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget();
+
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { kind: 'set-style', id: 'hero', styles: { color: '#ef4444' } },
+        'Style: Hero',
+      );
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+
+    // A focused input owns its own undo stack; stealing it loses the user's
+    // in-progress typing instead of reverting a committed canvas edit.
+    const field = document.createElement('input');
+    document.body.appendChild(field);
+    field.focus();
+    act(() => {
+      fireEvent.keyDown(field, { key: 'z', metaKey: true });
+    });
+    expect(savedSources).toHaveLength(1);
+    field.remove();
+
+    act(() => {
+      fireEvent.keyDown(window, { key: 'z', metaKey: true });
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(2));
+    expect(savedSources[1]).toBe(initialSource);
+  });
+
+  it('undoes a deleted element after the inspector unmounts, via the canvas hotkey bridge', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="body">Body</p></body></html>';
+    const { savedSources } = stubManualEditHistoryFetch(initialSource);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    await enterManualEditMode();
+    const frame = await selectManualEditTarget();
+
+    act(() => {
+      panelState.props?.onApplyPatch({ kind: 'remove-element', id: 'hero' }, 'Delete element');
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    expect(savedSources[0]).not.toContain('data-od-id="hero"');
+
+    // Deleting clears the selection, so the inspector — and any listener it
+    // owned — is gone. The toolbar and the canvas hotkey must still undo.
+    await waitFor(() => expect(screen.queryByTestId('mock-manual-edit-panel')).toBeNull());
+    expect((screen.getByTestId('manual-edit-undo') as HTMLButtonElement).disabled).toBe(false);
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'od-edit-history', op: 'undo' },
+        source: frame.contentWindow,
+      }));
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(2));
+    expect(savedSources[1]).toBe(initialSource);
   });
 });
 

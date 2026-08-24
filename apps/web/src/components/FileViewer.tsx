@@ -12471,6 +12471,11 @@ function HtmlViewer({
         // save is never silently torn down.
         return;
       }
+      if (data.type === 'od-edit-history') {
+        if (data.op === 'redo') void redoManualEdit();
+        else void undoManualEdit();
+        return;
+      }
       if (data.type === 'od-edit-drag-commit') {
         // Free drag-to-reposition dropped: route the new translate() through
         // the same pending-style pipeline the inspector uses, so the panel's
@@ -12491,6 +12496,28 @@ function HtmlViewer({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [isRetainedPreviewIframeSource, manualEditMode, source, workspaceActive]);
+
+  // Undo/redo shortcuts while edit mode is active and host chrome has focus.
+  // Keys pressed inside the preview iframe are forwarded by the edit bridge as
+  // `od-edit-history` messages instead — a host listener cannot see them.
+  // Deliberately re-registered every render: the handler calls into history
+  // state that a stale closure would read from the wrong revision.
+  useEffect(() => {
+    if (!manualEditMode) return;
+    function onKeyDown(ev: KeyboardEvent) {
+      if (!(ev.metaKey || ev.ctrlKey) || ev.altKey) return;
+      if (ev.key.toLowerCase() !== 'z') return;
+      // A focused field owns its own undo stack; stealing it would drop the
+      // user's in-progress typing instead of reverting a committed edit.
+      const target = ev.target as HTMLElement | null;
+      if (target?.closest?.('input,textarea,select,[role="textbox"],[contenteditable]')) return;
+      ev.preventDefault();
+      if (ev.shiftKey) void redoManualEdit();
+      else void undoManualEdit();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
 
   function nextManualEditPreviewVersion(): number {
     manualEditPreviewVersionRef.current += 1;
@@ -16103,6 +16130,40 @@ function HtmlViewer({
               >
                 <RemixIcon name="edit-line" size={15} />
               </button>
+              {manualEditMode ? (
+                <>
+                  <button
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    type="button"
+                    data-testid="manual-edit-undo"
+                    data-tooltip={t('manualEdit.undo')}
+                    data-tooltip-placement="bottom"
+                    title={t('manualEdit.undo')}
+                    aria-label={t('manualEdit.undo')}
+                    disabled={manualEditSaving || manualEditHistory.length === 0}
+                    onClick={() => {
+                      void undoManualEdit();
+                    }}
+                  >
+                    <RemixIcon name="arrow-go-back-line" size={15} />
+                  </button>
+                  <button
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    type="button"
+                    data-testid="manual-edit-redo"
+                    data-tooltip={t('manualEdit.redo')}
+                    data-tooltip-placement="bottom"
+                    title={t('manualEdit.redo')}
+                    aria-label={t('manualEdit.redo')}
+                    disabled={manualEditSaving || manualEditUndone.length === 0}
+                    onClick={() => {
+                      void redoManualEdit();
+                    }}
+                  >
+                    <RemixIcon name="arrow-go-forward-line" size={15} />
+                  </button>
+                </>
+              ) : null}
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
                 ref={commentPanelToggleRef}
