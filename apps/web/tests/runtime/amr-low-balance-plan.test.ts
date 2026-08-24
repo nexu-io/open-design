@@ -10,6 +10,8 @@ import {
 import { fetchVelaLoginStatus } from '../../src/providers/daemon';
 
 vi.mock('../../src/providers/daemon', () => ({
+  // Host-managed BYOK defaults: absent in these tests (fresh-browser preflight keeps its historical behavior).
+  fetchByokHostDefaults: vi.fn(async () => ({ configured: false })),
   fetchVelaLoginStatus: vi.fn(),
 }));
 

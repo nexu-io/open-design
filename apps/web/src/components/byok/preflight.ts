@@ -9,6 +9,33 @@ type ByokPreflightConfig = Pick<
   'apiKey' | 'apiProtocol' | 'apiProviderBaseUrl' | 'baseUrl' | 'model'
 >;
 
+type ByokRunGateConfig = Pick<AppConfig, 'mode' | 'apiProtocol' | 'agentId'>;
+
+/**
+ * Whether the run-start preflight must stop a BYOK chat before it reaches
+ * the daemon. A host-managed default (OD_BYOK_* on the daemon) covers
+ * exactly the daemon-driven byok-opencode runtime: the daemon fills the
+ * provider server-side, so a browser without local BYOK settings may send.
+ * API mode stays blocked without a browser provider — the proxy
+ * deliberately never completes a partial request tuple with the host key
+ * (credential exfiltration), so a keyless api-mode body would 400 anyway.
+ */
+export function shouldBlockByokRunStart(
+  config: ByokRunGateConfig,
+  hasBrowserProvider: boolean,
+  hostByokConfigured: boolean,
+): boolean {
+  const requiresPreflight =
+    (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
+    (config.mode === 'daemon' && config.agentId === 'byok-opencode');
+  if (!requiresPreflight || hasBrowserProvider) return false;
+  const hostDefaultCoversRun =
+    hostByokConfigured &&
+    config.mode === 'daemon' &&
+    config.agentId === 'byok-opencode';
+  return !hostDefaultCoversRun;
+}
+
 export function byokPreflightBlockReason(
   config: ByokPreflightConfig,
 ): TrackingByokPreflightBlockReason | null {

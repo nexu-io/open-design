@@ -68,6 +68,21 @@ export interface ByokChatProviderConfig {
   model?: string;
 }
 
+/**
+ * Keyless view of the host-managed default BYOK provider (daemon-side
+ * OD_BYOK_* environment). Served by GET /api/byok-defaults so the web can
+ * badge "managed by host" and relax its local-config preflight, and the CLI
+ * can report the host wiring — it must NEVER carry the key itself, only
+ * enough to confirm one is set (a tail for identification).
+ */
+export interface ByokHostDefaultsView {
+  configured: boolean;
+  protocol?: ByokChatProtocol;
+  baseUrl?: string;
+  model?: string;
+  apiKeyTail?: string;
+}
+
 export interface ByokMediaDefaults {
   imageModel?: string;
   videoModel?: string;

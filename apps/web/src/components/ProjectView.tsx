@@ -20,6 +20,7 @@ import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, re
 import { createArtifactParser } from '../artifacts/parser';
 import { useI18n } from '../i18n';
 import {
+  fetchByokHostDefaults,
   fetchChatRunStatus,
   GENERIC_DAEMON_DISCONNECT_CODE,
   GENERIC_DAEMON_DISCONNECT_MESSAGE,
@@ -99,7 +100,7 @@ import {
   trackRunRecoveryActionClick,
   trackRunStartBlockedSurfaceView,
 } from '../analytics/events';
-import { byokPreflightBlockReason } from './byok/preflight';
+import { byokPreflightBlockReason, shouldBlockByokRunStart } from './byok/preflight';
 import {
   clearOnboardingSessionId,
   peekOnboardingSessionId,
@@ -2233,6 +2234,22 @@ export function ProjectView({
   }, [previewComments]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
+  // Host-managed default BYOK provider (daemon OD_BYOK_* env). A server
+  // deployment pre-wires inference so a browser with no local BYOK config
+  // may still start byok-opencode runs — the local-config preflight below
+  // consults this before bouncing the user to Settings. Fail-closed: until
+  // the daemon answers (or when it runs an older build), the preflight
+  // keeps its historical behavior.
+  const [hostByokConfigured, setHostByokConfigured] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchByokHostDefaults().then((view) => {
+      if (!cancelled) setHostByokConfigured(view.configured);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
   // Safety net: drop any live tool-input partials whose tool never produced a
   // full `tool_use` (run errored/canceled mid-call) once streaming settles.
@@ -6602,10 +6619,7 @@ export function ProjectView({
         ),
       );
       const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
-      const requiresByokPreflight =
-        (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
-        (config.mode === 'daemon' && config.agentId === 'byok-opencode');
-      if (requiresByokPreflight && !byokOpenCodeProvider) {
+      if (shouldBlockByokRunStart(config, byokOpenCodeProvider != null, hostByokConfigured)) {
         const blockReason = byokPreflightBlockReason(config) ?? 'config_invalid';
         const recoveryActionInstanceId = `blocked:${taskAnalytics.taskExecutionId}`;
         const recoveryActionType: TrackingRunRecoveryActionType =
@@ -8255,6 +8269,7 @@ export function ProjectView({
       queueChatSendForCurrentConversation,
       messages,
       config,
+      hostByokConfigured,
       locale,
       agentsById,
       onTouchProject,
