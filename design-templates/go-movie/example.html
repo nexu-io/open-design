@@ -17,6 +17,7 @@
     --gm-faint: #766d62;
     --gm-primary: #8f2f2f;         /* brand / active red */
     --gm-gold: #a88652;            /* kicker / accent gold */
+    --gm-gold-text: #765d39;       /* semantic gold text on light cards */
     --gm-gold-bright: #c9a84c;
     --gm-border: rgba(168, 134, 82, 0.22);
     --gm-border-ink: rgba(37, 33, 28, 0.08);
@@ -107,7 +108,7 @@
   .hero-subtitle { margin-top: 9px; color: var(--gm-gold); font-size: 12.5px; }
   .hero-rule { display: flex; align-items: center; gap: 6px; margin-top: 13px; }
   .hero-rule-line { width: 28px; height: 1px; background: var(--gm-gold); flex: none; }
-  .hero-rule-copy { color: rgba(255, 250, 240, 0.36); font-size: 8px; letter-spacing: 1px; }
+  .hero-rule-copy { color: rgba(255, 250, 240, 0.72); font-size: 8px; letter-spacing: 1px; }
   .hero-right { flex: none; text-align: right; padding-top: 4px; }
   .hero-date { color: rgba(255, 250, 240, 0.52); font-size: 9px; letter-spacing: 1px; white-space: nowrap; }
 
@@ -130,6 +131,8 @@
   }
   .search-icon { color: var(--gm-primary); font-size: 20px; line-height: 1; }
   .search-box input { flex: 1; height: 42px; border: none; outline: none; background: none; color: var(--gm-text); font-size: 12px; font-family: var(--font); }
+  .search-box input:focus { outline: none; }
+  body.keyboard-nav .search-box input:focus { outline: 2px solid var(--gm-primary); outline-offset: -2px; border-radius: 4px; }
   .search-box input::placeholder { color: var(--gm-faint); }
   .search-clear {
     display: inline-flex; align-items: center; justify-content: center;
@@ -262,7 +265,7 @@
   .cinema-tips { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--gm-border-ink); }
   .cinema-tips li { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--gm-border-ink); font-size: 12px; line-height: 1.45; }
   .cinema-tips li:last-child { border-bottom: none; }
-  .cinema-tips span { flex: none; width: 34px; font-size: 9px; letter-spacing: 1px; font-weight: 700; color: var(--gm-gold); padding-top: 1px; }
+  .cinema-tips span { flex: none; width: 34px; font-size: 9px; letter-spacing: 1px; font-weight: 700; color: var(--gm-gold-text); padding-top: 1px; }
   .cinema-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--gm-text); font-style: italic; }
 
   /* ---------- filters (category tabs, GO MOVIE style) ---------- */
@@ -289,7 +292,7 @@
   .profile-role { font-size: 11px; color: var(--gm-muted2); margin-top: 2px; }
   .profile-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
   .profile-meta .m { border: 1px solid var(--gm-border-ink); border-radius: 6px; padding: 8px 10px; min-width: 0; }
-  .profile-meta .m .k { font-size: 8.5px; letter-spacing: 1px; color: var(--gm-gold); font-weight: 700; }
+  .profile-meta .m .k { font-size: 8.5px; letter-spacing: 1px; color: var(--gm-gold-text); font-weight: 700; }
   .profile-meta .m .v { font-size: 11.5px; color: var(--gm-text); margin-top: 3px; line-height: 1.4; }
   .profile-preferences { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
   .profile-preferences .chip { font-size: 10.5px; color: var(--gm-muted2); border: 1px solid rgba(168, 134, 82, 0.28); background: rgba(168, 134, 82, 0.08); padding: 3px 8px; border-radius: 999px; }
@@ -800,6 +803,13 @@
       var views = document.querySelectorAll('.app-view');
       var tabs = document.querySelectorAll('.tab');
 
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Tab') document.body.classList.add('keyboard-nav');
+      });
+      document.addEventListener('pointerdown', function () {
+        document.body.classList.remove('keyboard-nav');
+      });
+
       /* ===== view switching ===== */
       function activateView(name) {
         views.forEach(function (v) {
@@ -1082,11 +1092,21 @@
           var qm = c.querySelector('.mc-quote');
           if (qm) {
             art.innerHTML = qm.outerHTML + c.querySelector('.mc-body').outerHTML;
-            // replace the fav button inside the clone so it stays in sync
-            var cloneBtn = art.querySelector('[data-save]');
-            if (cloneBtn) cloneBtn.outerHTML = '<span class="fav-meta">★</span>';
           }
         }
+        var savedButton = art.querySelector('[data-save]');
+        if (!savedButton) {
+          savedButton = document.createElement('button');
+          savedButton.className = 'fav';
+          var savedMeta = art.querySelector('.mc-meta') || art.querySelector('.mc-body') || art;
+          savedMeta.appendChild(savedButton);
+        }
+        savedButton.setAttribute('data-save', key);
+        savedButton.setAttribute('type', 'button');
+        savedButton.setAttribute('aria-label', entry.saved ? '取消收藏' : '收藏');
+        savedButton.classList.toggle('saved', entry.saved);
+        savedButton.setAttribute('aria-pressed', String(entry.saved));
+        savedButton.innerHTML = '<span class="fav-star">' + (entry.saved ? '★' : '☆') + '</span>';
         return art;
       }
 
