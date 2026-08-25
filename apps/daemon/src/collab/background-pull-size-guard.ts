@@ -104,6 +104,14 @@ export interface BackgroundPullSizeGuardDeps {
     version: number;
     entryCount: number;
     maxEntries: number;
+    /**
+     * Which ceiling deferred this. `oversized` is one project too large on its
+     * own; `budget-exhausted` is a small project that simply arrived after the
+     * cumulative budget was spent. They need different responses — raise the
+     * per-project threshold vs. raise the session budget — so a log that
+     * called both "oversized" sent readers after the wrong one.
+     */
+    reason: 'oversized' | 'budget-exhausted';
   }) => void;
   onError?: (error: unknown) => void;
 }
@@ -188,6 +196,7 @@ export function createBackgroundPullSizeGuard(
           version,
           entryCount: inspection.entryCount,
           maxEntries: deps.maxEntries,
+          reason: 'budget-exhausted',
         });
       } catch {
         // Observation must never affect the decision.
@@ -206,6 +215,7 @@ export function createBackgroundPullSizeGuard(
           version,
           entryCount: inspection.entryCount,
           maxEntries: deps.maxEntries,
+          reason: 'oversized',
         });
       } catch {
         // Observation must never affect the decision.

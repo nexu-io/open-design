@@ -62,6 +62,7 @@ describe('createBackgroundPullSizeGuard', () => {
       version: 12,
       entryCount: 7442,
       maxEntries: 2000,
+      reason: 'oversized',
     }));
   });
 
@@ -115,6 +116,32 @@ describe('createBackgroundPullSizeGuard', () => {
     // Budget spent: the fourth is left to the foreground lane, which never
     // consults this guard, so opening it still materializes on demand.
     await expect(guard.assess(project('p-4'), 1)).resolves.toBe('defer');
+  });
+
+  it('reports WHY it deferred, so the two ceilings are not confused', async () => {
+    // Observed live: a 12-entry project deferred by the budget logged
+    // "deferred (oversized) ... entries=12 maxEntries=2000" — which reads as a
+    // contradiction and points at the wrong knob. The two ceilings need
+    // different responses (raise the per-project threshold vs. raise the
+    // session budget), so the reason has to travel with the observation.
+    const onDeferred = vi.fn();
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      maxCumulativeEntries: 12,
+      inspect: async () => countedInspect(12),
+      onDeferred,
+    });
+
+    await expect(guard.assess({ ...scope, projectId: 'p-1' }, 1)).resolves.toBe('pull');
+    await expect(guard.assess({ ...scope, projectId: 'p-2' }, 1)).resolves.toBe('defer');
+
+    expect(onDeferred).toHaveBeenCalledTimes(1);
+    expect(onDeferred).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'p-2',
+      entryCount: 12,
+      maxEntries: 2000,
+      reason: 'budget-exhausted',
+    }));
   });
 
   it('leaves the cumulative budget disabled by default', async () => {
