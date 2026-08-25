@@ -128,4 +128,88 @@ describe('analytics telemetry environment', () => {
       properties: { member_count: 3, project_count: 8 },
     });
   });
+
+  it('sends $groups written inline by a call site as posthog-node group affiliation', async () => {
+    // posthog-node rebuilds the payload as `{ ...properties, $groups: groups }`,
+    // so an inline `$groups` is overwritten by the (unpassed, undefined)
+    // argument and the event ships with no group at all. Daemon events then
+    // vanish from every workspace-scoped aggregation while still looking
+    // correct at the call site — exactly how the comment-creation event was
+    // missing from Workspace reporting.
+    posthogCapture.mockReset();
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'od-analytics-groups-'));
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+      installationId: 'install-1',
+      telemetry: { metrics: true },
+    }));
+    const { createAnalyticsService } = await import('../src/analytics.js');
+    const analytics = createAnalyticsService({
+      dataDir,
+      env: { POSTHOG_KEY: 'phc_test', OD_TELEMETRY_ENV: 'local_development' },
+    });
+
+    await analytics.capture({
+      eventName: 'project_comment_create_result',
+      appVersion: '1.2.3',
+      context: {
+        deviceId: 'device-1',
+        sessionId: 'session-1',
+        clientType: 'web',
+        locale: 'en',
+        requestId: null,
+      },
+      insertId: 'insert-1',
+      properties: {
+        workspace_key: 'workspace-1',
+        $groups: { workspace: 'workspace-1' },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(posthogCapture).toHaveBeenCalled();
+    });
+    const captured = posthogCapture.mock.calls[0]?.[0];
+    expect(captured).toMatchObject({
+      event: 'project_comment_create_result',
+      groups: { workspace: 'workspace-1' },
+      properties: { workspace_key: 'workspace-1' },
+    });
+    // Left in `properties`, it would be the value posthog-node discards.
+    expect(captured.properties).not.toHaveProperty('$groups');
+  });
+
+  it('omits group affiliation when a call site sends no usable $groups', async () => {
+    posthogCapture.mockReset();
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'od-analytics-nogroups-'));
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+      installationId: 'install-1',
+      telemetry: { metrics: true },
+    }));
+    const { createAnalyticsService } = await import('../src/analytics.js');
+    const analytics = createAnalyticsService({
+      dataDir,
+      env: { POSTHOG_KEY: 'phc_test', OD_TELEMETRY_ENV: 'local_development' },
+    });
+
+    await analytics.capture({
+      eventName: 'unit_event',
+      appVersion: '1.2.3',
+      context: {
+        deviceId: 'device-1',
+        sessionId: 'session-1',
+        clientType: 'web',
+        locale: 'en',
+        requestId: null,
+      },
+      insertId: 'insert-2',
+      properties: { $groups: { workspace: '   ' } },
+    });
+
+    await vi.waitFor(() => {
+      expect(posthogCapture).toHaveBeenCalled();
+    });
+    const captured = posthogCapture.mock.calls[0]?.[0];
+    expect(captured).not.toHaveProperty('groups');
+    expect(captured.properties).not.toHaveProperty('$groups');
+  });
 });

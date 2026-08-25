@@ -304,11 +304,18 @@ export function createAnalyticsService(args: {
       try {
         const appCfg = await readAppConfig(args.dataDir);
         if (appCfg.telemetry?.metrics !== true) return;
+        const { groups, eventProperties } = splitGroupAffiliation(properties);
         client.capture({
           distinctId: context.deviceId,
           event: eventName,
+          // posthog-node assembles the wire payload as
+          // `{ ...properties, $groups: groups }`, so a `$groups` left inside
+          // `properties` is unconditionally overwritten by this argument —
+          // silently dropped to `undefined` when it goes unpassed. Group
+          // affiliation therefore has to travel here, not in `properties`.
+          ...(groups ? { groups } : {}),
           properties: {
-            ...properties,
+            ...eventProperties,
             event_id: insertId,
             event_schema_version: EVENT_SCHEMA_VERSION,
             env: cfg.env,
@@ -444,6 +451,41 @@ export function createAnalyticsService(args: {
         // best-effort flush on shutdown.
       }
     },
+  };
+}
+
+/**
+ * Lifts `$groups` out of an event's properties into the shape posthog-node
+ * wants it in — the top-level `groups` argument of `capture()`.
+ *
+ * Call sites write `$groups` inline alongside the rest of their properties,
+ * matching how the web SDK is used (see `apps/web/src/analytics/workspace.ts`).
+ * posthog-node does not accept it there: it rebuilds the payload as
+ * `{ ...properties, $groups: groups }`, so an inline `$groups` is always
+ * clobbered by the argument and the event ships with no group affiliation at
+ * all. Routing every daemon capture through here means a call site can keep
+ * using the familiar inline form and still land in the group.
+ *
+ * Only string-valued entries survive — PostHog keys groups by string, and a
+ * malformed value would otherwise drop the whole affiliation.
+ */
+function splitGroupAffiliation(properties: Record<string, unknown>): {
+  groups: Record<string, string> | undefined;
+  eventProperties: Record<string, unknown>;
+} {
+  const { $groups: rawGroups, ...eventProperties } = properties;
+  if (!rawGroups || typeof rawGroups !== 'object' || Array.isArray(rawGroups)) {
+    return { groups: undefined, eventProperties };
+  }
+  const groups: Record<string, string> = {};
+  for (const [groupType, groupKey] of Object.entries(rawGroups as Record<string, unknown>)) {
+    if (typeof groupKey !== 'string') continue;
+    const trimmed = groupKey.trim();
+    if (trimmed) groups[groupType] = trimmed;
+  }
+  return {
+    groups: Object.keys(groups).length > 0 ? groups : undefined,
+    eventProperties,
   };
 }
 

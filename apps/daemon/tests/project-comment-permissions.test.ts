@@ -19,7 +19,10 @@ import {
   updateProject,
   upsertPreviewComment,
 } from '../src/db.js';
-import { registerProjectCommentRoutes } from '../src/routes/project/comments.js';
+import {
+  registerProjectCommentRoutes,
+  resolveCommentTargetProjectRelation,
+} from '../src/routes/project/comments.js';
 
 // Server-authoritative permission gating for the preview-comment mutation routes
 // (product model 2026-07-09): editing a comment is author-only (structurally, via
@@ -50,7 +53,14 @@ function asMember(memberId: string): { authorization: string } {
   return { authorization: `member:${memberId}` };
 }
 
-async function startServer({ shared = true }: { shared?: boolean } = {}) {
+async function startServer({
+  shared = true,
+  resolveProjectOwnerMemberId = async () => OWNER,
+}: {
+  shared?: boolean;
+  /** Overridden to exercise how an absent or broken owner lookup is classified. */
+  resolveProjectOwnerMemberId?: () => Promise<string | null>;
+} = {}) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-perms-'));
   const db = openDatabase(tempDir);
   insertProject(db, { id: PROJECT, name: 'Project', createdAt: 1, updatedAt: 1 });
@@ -82,8 +92,8 @@ async function startServer({ shared = true }: { shared?: boolean } = {}) {
     // Identify the caller from the `member:<id>` Authorization header.
     resolveAuthorMemberId: async (authorization) =>
       authorization?.startsWith('member:') ? authorization.slice('member:'.length) : undefined,
-    // p1 is owned by OWNER.
-    resolveProjectOwnerMemberId: async () => OWNER,
+    // p1 is owned by OWNER unless a test overrides the lookup.
+    resolveProjectOwnerMemberId,
     isSharedProject: async () => shared,
     onCommentCreated: (c) => { created.push(c.id); },
     onCommentUpdated: (c) => { updated.push(c.id); },
@@ -202,6 +212,44 @@ describe('preview comment permission gating', () => {
     expect(edit.status).toBe(200);
     expect(ownComment.id).not.toBe(otherComment.id);
     expect(api.productEvents).toHaveLength(2);
+  });
+
+  it('reports a project with no owner to compare against as not_applicable', async () => {
+    // An unbound local project has no workspace members, so there is no second
+    // party the comment could belong to. Recording that as `unknown` made the
+    // metric unreadable: ~2/3 of production comments landed there, drowning out
+    // the genuine failures `unknown` is supposed to surface.
+    const api = await startServer({ resolveProjectOwnerMemberId: async () => null });
+    await api.createComment(OWNER, 'solo note');
+
+    expect(api.productEvents).toEqual([
+      {
+        eventName: 'project_comment_create_result',
+        properties: expect.objectContaining({
+          target_project_relation: 'not_applicable',
+        }),
+      },
+    ]);
+  });
+
+  it('keeps a failed owner lookup as unknown rather than not_applicable', async () => {
+    // The lookup used to be wrapped in `.catch(() => null)`, which made a broken
+    // owner resolver indistinguishable from a project that has no owner.
+    const api = await startServer({
+      resolveProjectOwnerMemberId: async () => {
+        throw new Error('directory unavailable');
+      },
+    });
+    await api.createComment(OWNER, 'note during an outage');
+
+    expect(api.productEvents).toEqual([
+      {
+        eventName: 'project_comment_create_result',
+        properties: expect.objectContaining({
+          target_project_relation: 'unknown',
+        }),
+      },
+    ]);
   });
 
   it('legacy comments in a shared project are owner-only', async () => {
@@ -464,5 +512,67 @@ describe('preview comment permission gating', () => {
       { method: 'PATCH', member: 'm-author', body: { sortKey: 1 } },
     );
     expect(missing.status).toBe(404);
+  });
+});
+
+// The route fixture above authenticates through `resolveAuthorMemberId` and so
+// always runs with a null workspace context. These cover the classifications
+// that depend on the workspace context itself.
+describe('comment target project relation', () => {
+  const base = {
+    authorMemberId: 'm-author',
+    ownerMemberId: null,
+    workspaceContext: null,
+    ownerLookupFailed: false,
+  };
+  const personal = { workspaceType: 'personal' } as any;
+  const team = { workspaceType: 'team' } as any;
+
+  it('compares author against owner when both resolved', () => {
+    expect(resolveCommentTargetProjectRelation({
+      ...base,
+      ownerMemberId: 'm-author',
+      workspaceContext: team,
+    })).toBe('self');
+    expect(resolveCommentTargetProjectRelation({
+      ...base,
+      ownerMemberId: 'm-owner',
+      workspaceContext: team,
+    })).toBe('other');
+  });
+
+  it('treats a personal workspace as having no second party', () => {
+    // A personal workspace has exactly one member, so `other` is unreachable by
+    // construction — an unresolvable owner there is not a failure to report.
+    expect(resolveCommentTargetProjectRelation({
+      ...base,
+      workspaceContext: personal,
+    })).toBe('not_applicable');
+  });
+
+  it('reports an unresolvable owner on a team project as unknown', () => {
+    // A team project genuinely has other members, so failing to identify the
+    // owner is a real gap and must stay visible.
+    expect(resolveCommentTargetProjectRelation({
+      ...base,
+      workspaceContext: team,
+    })).toBe('unknown');
+  });
+
+  it('reports an unidentifiable caller on a team project as unknown', () => {
+    expect(resolveCommentTargetProjectRelation({
+      ...base,
+      authorMemberId: undefined,
+      ownerMemberId: 'm-owner',
+      workspaceContext: team,
+    })).toBe('unknown');
+  });
+
+  it('keeps a thrown owner lookup as unknown even with no second party', () => {
+    expect(resolveCommentTargetProjectRelation({
+      ...base,
+      workspaceContext: personal,
+      ownerLookupFailed: true,
+    })).toBe('unknown');
   });
 });

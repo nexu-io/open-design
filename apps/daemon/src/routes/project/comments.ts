@@ -1,6 +1,7 @@
 import type { Express, Request } from 'express';
 import type {
   PreviewComment,
+  TrackingProjectRelationOrNotApplicable,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
 import type { RouteDeps } from '../../server-context.js';
@@ -16,6 +17,43 @@ export type ProjectCommentWorkspaceContextResolution =
       message: string;
       retryable?: true;
     };
+
+/**
+ * Classifies whose project a newly created comment landed on, for analytics only.
+ *
+ * `self`/`other` are reported only when BOTH the comment's author and the
+ * project's owner resolved — that is the sole case where the comparison means
+ * anything. When they don't, the reason is what matters, and this deliberately
+ * splits it two ways:
+ *
+ * - A project with no workspace binding, or one in a personal (single-member)
+ *   workspace, has no second party who could own it. The question does not
+ *   apply, so it reports `not_applicable`. This is the ordinary single-player
+ *   path and accounts for most comments.
+ * - Anything else — a shared project whose owner lookup threw or came back
+ *   empty, or a caller we could not identify — is a real resolution failure and
+ *   stays `unknown`.
+ *
+ * The split is the invariant worth preserving: `unknown` must stay small enough
+ * that a rise in it is readable as a defect, instead of being buried under
+ * personal-workspace traffic that was never classifiable in the first place.
+ */
+export function resolveCommentTargetProjectRelation(input: {
+  authorMemberId: string | undefined;
+  ownerMemberId: string | null;
+  workspaceContext: WorkspaceCollabContext | null;
+  ownerLookupFailed: boolean;
+}): TrackingProjectRelationOrNotApplicable {
+  if (input.authorMemberId && input.ownerMemberId) {
+    return input.authorMemberId === input.ownerMemberId ? 'self' : 'other';
+  }
+  // A thrown owner lookup is a failure even on a project that would otherwise
+  // have no counterparty — never let it masquerade as ordinary solo traffic.
+  if (input.ownerLookupFailed) return 'unknown';
+  const hasNoSecondParty = !input.workspaceContext
+    || input.workspaceContext.workspaceType === 'personal';
+  return hasNoSecondParty ? 'not_applicable' : 'unknown';
+}
 
 export interface RegisterProjectCommentRoutesDeps extends RouteDeps<'db' | 'projectStore' | 'conversations'> {
   /** Optional in focused CRUD fixtures; production supplies request-scoped analytics. */
@@ -482,18 +520,26 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
               | undefined
           : undefined;
         let ownerMemberId = localBinding?.createdByWorkspaceMemberId ?? null;
+        // A throw here is kept distinct from a legitimately absent owner: the
+        // two used to collapse into the same `unknown`, which made a broken
+        // lookup indistinguishable from a project that simply has no owner.
+        let ownerLookupFailed = false;
         if (!ownerMemberId && ctx.resolveProjectOwnerMemberId) {
-          ownerMemberId = await ctx.resolveProjectOwnerMemberId(
-            req.params.id,
-            workspaceContext,
-          ).catch(() => null);
+          try {
+            ownerMemberId = await ctx.resolveProjectOwnerMemberId(
+              req.params.id,
+              workspaceContext,
+            );
+          } catch {
+            ownerLookupFailed = true;
+          }
         }
-        const targetProjectRelation =
-          authorMemberId && ownerMemberId
-            ? authorMemberId === ownerMemberId
-              ? 'self'
-              : 'other'
-            : 'unknown';
+        const targetProjectRelation = resolveCommentTargetProjectRelation({
+          authorMemberId,
+          ownerMemberId,
+          workspaceContext,
+          ownerLookupFailed,
+        });
         const planId = workspaceContext?.planId?.trim().toLowerCase();
         void ctx.telemetry?.captureProductEvent?.(
           req,

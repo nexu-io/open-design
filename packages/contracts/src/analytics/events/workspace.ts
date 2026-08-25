@@ -93,6 +93,20 @@ export type TrackingProjectCollectionPage = 'home' | 'drafts' | 'all_projects';
 export type TrackingCountBucket = '0' | '1' | '2_5' | '6_10' | '11_plus';
 export type TrackingProjectRelation = 'self' | 'other' | 'unknown';
 
+/**
+ * Widens `TrackingProjectRelation` for surfaces that can observe a project with
+ * no second party at all — an unbound local project, or one in a personal
+ * (single-member) workspace. There, "did you comment on someone else's project?"
+ * has no answer to get wrong, so it reports `not_applicable`.
+ *
+ * Keeping that distinct from `unknown` is the point: `unknown` then means only
+ * "a shared project whose owner we genuinely failed to resolve", which is a
+ * defect signal rather than ordinary single-player traffic.
+ */
+export type TrackingProjectRelationOrNotApplicable =
+  | TrackingProjectRelation
+  | 'not_applicable';
+
 export interface ProjectCollectionClickProps extends TrackingWorkspaceDimensions {
   page_name: TrackingProjectCollectionPage;
   area: 'project_collection';
@@ -217,6 +231,6 @@ export interface ProjectCommentCreateResultProps extends TrackingWorkspaceDimens
   page_name: 'artifact';
   area: 'comments';
   result: 'success';
-  target_project_relation: TrackingProjectRelation;
+  target_project_relation: TrackingProjectRelationOrNotApplicable;
   comment_level: 'top_level' | 'reply';
 }
