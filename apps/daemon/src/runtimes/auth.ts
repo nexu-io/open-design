@@ -57,7 +57,7 @@ const REASONIX_AUTH_GUIDANCE =
   'DeepSeek Reasonix is installed but is not authenticated. Add your API key in `~/.reasonix/config.json` under `apiKey`, or expose DEEPSEEK_API_KEY to the OpenDesign daemon process, then retry. If OpenDesign is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
 
 const CLAUDE_AUTH_GUIDANCE =
-  'Claude Code is installed but is not authenticated. Run `claude auth login` or open `claude` and complete login in a terminal, then rescan. If OpenDesign was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.';
+  'Claude Code is not signed in. Run `claude auth login` in a terminal, then rescan.';
 
 export function cursorAuthGuidance(): string {
   return CURSOR_AUTH_GUIDANCE;

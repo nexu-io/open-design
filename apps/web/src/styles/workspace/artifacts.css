@@ -1631,6 +1631,9 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   min-height: 72px;
   overflow: hidden;
 }
+.agent-card-installed.agent-card--amr {
+  container-type: inline-size;
+}
 
 /* Failed-run AMR nudge: when the chat error card's "Try OpenDesign AMR" link
    opens Settings, the AMR card scrolls into view and pulses a couple of times.
@@ -1666,7 +1669,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
      the active card's select padding so the action pills line up with the
      name row. */
   align-self: flex-start;
-  margin: 13px 16px 0 8px;
+  margin: 20px 16px 0 8px;
 }
 .amr-coachmark {
   position: absolute;
@@ -1774,28 +1777,28 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .agent-card.active,
 .agent-card.active:hover:not(.disabled) {
-  /* Selected card keeps its hairline stroke — including on hover, where the
-     generic `.agent-card:hover` rule above would otherwise clear it. */
-  border-color: var(--border);
+  border-color: color-mix(in srgb, var(--brand) 72%, var(--border));
   background: var(--bg-panel);
-  box-shadow: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 14%, transparent);
 }
 /* One continuous fill for the whole active card — header + model config share
    it, so there is no tone seam between the two halves (they are one module). */
-.agent-card-installed.active {
+.agent-card-installed.active,
+.agent-card-installed.active:hover:not(.disabled) {
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--accent-tint) 22%, var(--bg-panel)),
-      var(--bg-panel)
+      color-mix(in srgb, var(--brand-soft) 66%, var(--bg)),
+      color-mix(in srgb, var(--brand-soft) 28%, var(--bg-panel))
     );
 }
 .agent-card-installed.active .agent-card-main {
   background: transparent;
 }
 .agent-card-installed.active .agent-card-select {
-  min-height: 78px;
-  padding: 14px 18px 12px 22px;
+  min-height: 82px;
+  padding: 20px 18px 10px 22px;
+  animation: agent-card-content-enter 200ms var(--ease-out) both;
 }
 .agent-card-installed.active .agent-icon {
   border-radius: var(--radius-md);
@@ -1807,6 +1810,28 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 }
 .agent-card-installed.active .agent-card-meta {
   margin-top: 1px;
+}
+@keyframes agent-card-content-enter {
+  from {
+    opacity: 0.94;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes agent-card-config-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
 }
 .agent-card.disabled {
   cursor: not-allowed;
@@ -1974,6 +1999,37 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .agent-card-title {
   min-width: 0;
 }
+.agent-card-active-badge {
+  position: absolute;
+  z-index: 2;
+  top: 3px;
+  left: 3px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  animation: agent-card-active-badge-enter 200ms var(--ease-out) both;
+}
+@keyframes agent-card-active-badge-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.94);
+    filter: blur(1px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
 .agent-card-name--amr {
   align-items: center;
   gap: 8px;
@@ -1991,7 +2047,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .agent-card-benefits {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 5px;
   min-width: min(100%, 220px);
   overflow: visible;
@@ -2039,7 +2095,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   align-items: center;
   gap: 6px;
   max-width: 100%;
-  margin-top: 4px;
+  margin-top: 8px;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
@@ -2068,6 +2124,12 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
+}
+.agent-card-plan-badge {
+  border: 0;
+  background: var(--brand-weak);
+  color: var(--brand-text);
+  font-size: 10px;
 }
 /* Balance rides on the same account row as the email + plan/profile chips
    (row 2 of the card), separated by a hairline instead of its own row. */
@@ -2150,29 +2212,6 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .agent-card-amr-wallet-refresh:disabled {
   cursor: default;
   opacity: 0.62;
-}
-.agent-card-model-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 4px;
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.agent-card-model-summary span {
-  flex: 0 0 auto;
-}
-.agent-card-model-summary strong {
-  min-width: 0;
-  color: var(--text);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* The auth pill is one cluster of header-row actions; the old full-height
    divider column (border-left + stretch + centered) is gone — the actions sit
@@ -2282,6 +2321,57 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   cursor: default;
   opacity: 0.62;
 }
+
+/* The active cloud card has two independently useful regions: identity and
+   account actions. When the card narrows, move the whole action cluster onto
+   its own row instead of squeezing the name/badges until individual labels
+   break across lines or letting actions clip outside the card. */
+@container (max-width: 600px) {
+  .agent-card-installed.agent-card--amr .agent-card-main {
+    flex-wrap: wrap;
+  }
+
+  .agent-card-installed.agent-card--amr .agent-card-select {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .agent-card-installed.agent-card--amr .amr-auth-anchor {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    margin: 0 16px 14px 66px;
+  }
+}
+
+/* At phone-like card widths the identity metadata becomes two deliberate
+   lines: email first, then plan/profile/balance. Capability pills move as a
+   group and never split their own labels. */
+@container (max-width: 460px) {
+  .agent-card-installed.agent-card--amr .agent-card-name--amr {
+    align-items: flex-start;
+  }
+
+  .agent-card-installed.agent-card--amr .agent-card-benefits {
+    flex-basis: 100%;
+  }
+
+  .agent-card-installed.agent-card--amr .agent-card-amr-email {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    overflow: visible;
+    white-space: normal;
+  }
+
+  .agent-card-installed.agent-card--amr .agent-card-amr-email-text {
+    flex: 1 1 100%;
+  }
+
+  .agent-card-installed.agent-card--amr .agent-card-amr-email .agent-card-amr-balance {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+}
 .agent-card-amr-auth .amr-account-control--error {
   width: 100%;
   flex-wrap: wrap;
@@ -2381,7 +2471,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 /* Diagnostic rows inside an installed card are card content, not a full-bleed
    strip: inset them to the same 24px gutter the model-config fields use. */
 .agent-card-installed .agent-card-diagnostic {
-  margin: 6px 24px 0;
+  margin: 8px 24px 0;
 }
 .agent-card-config {
   display: grid;
@@ -2391,6 +2481,9 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   /* Transparent: the card owns one continuous fill (see the active-card rule),
      so the header and this model section read as a single module with no seam. */
   background: transparent;
+}
+.agent-card-installed.active .agent-card-config {
+  animation: agent-card-config-enter 200ms var(--ease-out) both;
 }
 .agent-card-config select,
 .agent-card-config input,
@@ -2677,37 +2770,22 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .agent-model-source-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 18px;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
-  text-transform: none;
-}
-.agent-model-source-badge.live {
-  border-color: var(--green-border);
-  background: var(--green-bg);
-  color: var(--green);
-}
-.agent-model-source-badge.fallback {
   min-height: auto;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
 }
-.agent-model-source-badge.fallback::before {
+.agent-model-source-badge::before {
   content: '·';
   margin-right: 6px;
-  color: var(--text-muted);
+  color: var(--text-soft);
 }
 .agent-card-config .hint,
 .agent-model-row .hint { margin: 0; font-size: 12px; }
@@ -2764,6 +2842,12 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
    separates it from the page. */
 .model-select-searchable__popover.settings-model-popover {
   box-shadow: none;
+}
+/* The settings search field already provides a complete boundary. Keeping the
+   generic divider underneath it creates a doubled rule that crowds the first
+   model option, so this popover relies on spacing alone. */
+.settings-model-popover .model-select-searchable__search-row {
+  border-bottom: 0;
 }
 /* One 14px text size across this popover, matching the trigger that opens it.
    Every rule here out-specifies an explicit size on the base class, so a
@@ -3121,6 +3205,25 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   padding: 9px 32px 9px 12px;
   font-size: 14px;
   line-height: 20px;
+  background:
+    var(--bg-panel)
+    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E")
+    no-repeat right 10px center / 12px 12px;
+}
+.agent-card-config .model-select-searchable__value {
+  justify-content: flex-start;
+  gap: 7px;
+}
+.agent-card-config .model-select-searchable__value-badge::before {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-card-installed.active .agent-card-select,
+  .agent-card-installed.active .agent-card-config,
+  .agent-card-active-badge {
+    animation: none;
+  }
 }
 .settings-model-select--byok {
   min-width: min(420px, 100%);

@@ -1259,7 +1259,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       expect(screen.getByText('Saving…')).toBeTruthy();
     });
     await waitFor(() => {
-      expect(screen.getByText('All changes saved')).toBeTruthy();
+      const savedLabel = screen.getByText('All changes saved');
+      const savedStatus = savedLabel.closest('[role="status"]');
+      const settingsChrome = savedStatus?.parentElement;
+
+      expect(settingsChrome?.classList.contains('settings-chrome')).toBe(true);
+      expect(settingsChrome?.firstElementChild).toBe(savedStatus);
     });
     expect(first.onPersist).toHaveBeenCalledWith(
       expect.objectContaining({ apiKey: 'sk-ant-saved' }),
@@ -2676,7 +2681,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     vi.unstubAllGlobals();
   });
 
-  it('pins OpenDesign to the top of the installed CLI list', () => {
+  it('pins Open Design Cloud to the top of the installed CLI list', () => {
     const claudeAgent: AgentInfo = {
       id: 'claude',
       name: 'Claude Code',
@@ -2730,6 +2735,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       'settings-agent-card-codex',
       'settings-agent-card-claude',
     ]);
+    expect(
+      within(screen.getByTestId('settings-agent-card-amr')).getByText('Open Design Cloud'),
+    ).toBeTruthy();
   });
 
   it('lets users switch to Local CLI, select an installed agent, and autosave', async () => {
@@ -2772,8 +2780,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     ).toBeTruthy();
     expect(screen.getByText(en['settings.agentInstall.pathHint'])).toBeTruthy();
 
+    expect(within(codexCard).queryByText(en['settings.modelPicker'])).toBeNull();
+    expect(within(codexCard).queryByText(en['settings.modelUsesCliDefault'])).toBeNull();
     fireEvent.click(codexCard);
     const selectedCard = codexCard.closest('.agent-card') as HTMLElement;
+    expect(selectedCard.classList.contains('active')).toBe(true);
+    expect(within(selectedCard).getByText(en['common.active'])).toBeTruthy();
     const selectedModelPicker = within(selectedCard).getByRole('combobox', {
       name: en['settings.modelPicker'],
     });

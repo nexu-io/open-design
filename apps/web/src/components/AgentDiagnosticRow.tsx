@@ -21,6 +21,7 @@ interface Props {
   diagnostic: AgentDiagnostic;
   handlers?: AgentFixHandlers;
   className?: string;
+  compact?: boolean;
 }
 
 type ResolvedAction = {
@@ -86,7 +87,24 @@ function useResolveAction() {
 // The reason text is the daemon-authored message (already English, like the
 // existing auth banner), and tooltips expose the probe detail + the exact
 // directories PATH detection searched.
-export function AgentDiagnosticRow({ diagnostic, handlers = {}, className }: Props) {
+function renderCompactMessage(message: string) {
+  return message.split(/(`[^`]+`)/g).map((part, index) =>
+    part.startsWith('`') && part.endsWith('`') ? (
+      <code key={`${part}-${index}`} className={styles.code}>
+        {part.slice(1, -1)}
+      </code>
+    ) : (
+      part
+    ),
+  );
+}
+
+export function AgentDiagnosticRow({
+  diagnostic,
+  handlers = {},
+  className,
+  compact = false,
+}: Props) {
   const resolveAction = useResolveAction();
   const actions = (diagnostic.fixActions ?? [])
     .map((intent) => resolveAction(intent, handlers))
@@ -103,14 +121,19 @@ export function AgentDiagnosticRow({ diagnostic, handlers = {}, className }: Pro
 
   return (
     <div
-      className={[styles.root, styles[diagnostic.severity], className]
+      className={[
+        styles.root,
+        styles[diagnostic.severity],
+        compact ? styles.compact : null,
+        className,
+      ]
         .filter(Boolean)
         .join(' ')}
       role="group"
       data-reason={diagnostic.reason}
     >
       <span className={styles.message} title={tooltip || undefined}>
-        {diagnostic.message}
+        {compact ? renderCompactMessage(diagnostic.message) : diagnostic.message}
       </span>
       {actions.length > 0 ? (
         <div className={styles.actions}>

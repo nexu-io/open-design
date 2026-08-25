@@ -49,4 +49,19 @@ describe('AgentDiagnosticRow', () => {
     expect(onRescan).toHaveBeenCalledTimes(1);
   });
 
+  it('renders terminal commands as inline code in the compact selected-card variant', () => {
+    render(
+      <AgentDiagnosticRow
+        diagnostic={{
+          reason: 'auth-missing',
+          severity: 'error',
+          message: 'Claude Code is not signed in. Run `claude auth login` in a terminal, then rescan.',
+        }}
+        compact
+      />,
+    );
+
+    expect(screen.getByText('claude auth login').tagName).toBe('CODE');
+  });
+
 });

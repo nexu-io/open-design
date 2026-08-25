@@ -27,7 +27,7 @@ vi.mock('../../src/runtimes/invocation.js', () => ({
     (execAgentFileMock as unknown as (...args: unknown[]) => unknown)(...args),
 }));
 
-const { probeAgentAuthStatus } = await import('../../src/runtimes/auth.js');
+const { claudeAuthGuidance, probeAgentAuthStatus } = await import('../../src/runtimes/auth.js');
 
 const HEALTHY_CLAUDE = '{"authenticated": true, "source": "claude.ai"}';
 const CLAUDE_AUTH_PROBE = {
@@ -42,6 +42,12 @@ describe('probeAgentAuthStatus (#4456)', () => {
   });
 
   describe('Case 2 — inherited Claude profile classifier', () => {
+    it('keeps Claude sign-in guidance concise and actionable', () => {
+      expect(claudeAuthGuidance()).toBe(
+        'Claude Code is not signed in. Run `claude auth login` in a terminal, then rescan.',
+      );
+    });
+
     it('uses the base Claude classifier when classifierAgentId is carried', async () => {
       execAgentFileMock.mockResolvedValue({ stdout: HEALTHY_CLAUDE, stderr: '' });
       const result = await probeAgentAuthStatus(

@@ -883,7 +883,7 @@ function cleanAgentVersionLabel(
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'OpenDesign' : agent.name;
+  return agent.id === 'amr' ? 'Open Design Cloud' : agent.name;
 }
 
 const AGENT_CLI_ENV_FIELDS = [
@@ -3897,16 +3897,6 @@ export function SettingsDialog({
     }
     return label || id;
   };
-  const agentModelSummary = (agent: AgentInfo) => {
-    if (!Array.isArray(agent.models) || agent.models.length === 0) return null;
-    const choice = effectiveAgentModelChoice(agent, cfg.agentModels?.[agent.id]) ?? cfg.agentModels?.[agent.id] ?? {};
-    const modelValue = choice.model ?? defaultAgentModelId(agent) ?? '';
-    if (!modelValue) return t('settings.modelCustom');
-    return agentModelOptionLabel(
-      agent.models.find((m) => m.id === modelValue),
-      modelValue,
-    );
-  };
   const renderAgentModelConfig = (selected: AgentInfo) => {
     const hasModels =
       Array.isArray(selected.models) && selected.models.length > 0;
@@ -4624,7 +4614,6 @@ export function SettingsDialog({
                           const description = AGENT_SHORT_DESCRIPTIONS[a.id];
                           const agentName = displayAgentName(a);
                           const diagnosticHandlers = diagnosticHandlersForAgent(a);
-                          const modelSummary = agentModelSummary(a);
                           const amrBenefits = [
                             t('settings.amrBenefitOfficial'),
                             t('settings.amrBenefitManyModels'),
@@ -4742,6 +4731,7 @@ export function SettingsDialog({
                               className={
                                 'agent-card agent-card-installed' +
                                 (active ? ' active' : '') +
+                                (isAmrAgent ? ' agent-card--amr' : '') +
                                 (needsSetup ? ' agent-card-needs-setup' : '') +
                                 (amrHighlighted ? ' agent-card--amr-highlight' : '')
                               }
@@ -4754,6 +4744,14 @@ export function SettingsDialog({
                                 setHoveredAgentCardId(null);
                               }}
                             >
+                              {active ? (
+                                <span
+                                  className="agent-card-active-badge"
+                                  aria-hidden="true"
+                                >
+                                  {t('common.active')}
+                                </span>
+                              ) : null}
                               <div className="agent-card-main">
                                 <button
                                   type="button"
@@ -4888,12 +4886,6 @@ export function SettingsDialog({
                                           ) : null}
                                         </div>
                                       ) : null}
-                                      {!active && modelSummary ? (
-                                        <div className="agent-card-model-summary">
-                                          <span>{t('settings.modelPicker')}</span>
-                                          <strong>{modelSummary}</strong>
-                                        </div>
-                                      ) : null}
                                   </div>
                                 </button>
                                 {isAmrAgent ? (
@@ -5015,6 +5007,7 @@ export function SettingsDialog({
                                       diagnostic={diagnostic}
                                       handlers={diagnosticHandlers}
                                       className="agent-card-diagnostic"
+                                      compact
                                     />
                                   ))
                                 : null}
