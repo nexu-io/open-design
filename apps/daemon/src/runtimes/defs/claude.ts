@@ -3,20 +3,15 @@ import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { loadMmdRouteModels } from '../mmd-routes.js';
 import type { RuntimeAgentDef } from '../types.js';
 
-// Aliases resolve to whatever the CLI currently treats as "latest" for that
-// tier, so they stay correct across model generations and are the entries to
-// prefer. `claude --help` documents `fable`, `opus`, `sonnet` and `haiku`.
-// The pinned ids below are for users who deliberately want one exact
-// generation; the older ones stay listed because they still serve.
 const CLAUDE_FALLBACK_MODELS = [
   DEFAULT_MODEL_OPTION,
-  { id: 'fable', label: 'Fable (alias)' },
-  { id: 'opus', label: 'Opus (alias)' },
   { id: 'sonnet', label: 'Sonnet (alias)' },
+  { id: 'opus', label: 'Opus (alias)' },
   { id: 'haiku', label: 'Haiku (alias)' },
-  { id: 'claude-fable-5', label: 'claude-fable-5' },
+  { id: 'fable', label: 'Fable (alias)' },
   { id: 'claude-opus-5', label: 'claude-opus-5' },
   { id: 'claude-sonnet-5', label: 'claude-sonnet-5' },
+  { id: 'claude-fable-5', label: 'claude-fable-5' },
   { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
   { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
   { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
