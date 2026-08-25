@@ -15,6 +15,7 @@ import {
 } from '../analytics/events';
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
+import { modelProviderIconSrc } from './modelProviderIcon';
 import styles from './DeepSeekV4FlashCampaign.module.css';
 
 const GO_PLAN_DEEPSEEK_ICON = '/agent-icons/deepseek.svg';
@@ -53,6 +54,50 @@ interface Props {
   metricsConsent?: boolean;
   /** config.installationId — the preferred consent-gated AMR join key. */
   installationId?: string | null;
+}
+
+function CampaignProviderMark({
+  providerId,
+  label,
+  fallback,
+  src: preferredSrc,
+  className = styles.modelMark,
+  fallbackClassName = styles.modelMarkFallback,
+  decorative = false,
+}: {
+  providerId: string;
+  label: string;
+  fallback: string;
+  src?: string;
+  className?: string;
+  fallbackClassName?: string;
+  decorative?: boolean;
+}) {
+  const src = preferredSrc ?? modelProviderIconSrc(providerId);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const showLogo = src !== null && failedSrc !== src;
+
+  return (
+    <span
+      className={className}
+      role={decorative ? undefined : 'img'}
+      aria-label={decorative ? undefined : label}
+      aria-hidden={decorative || undefined}
+      title={decorative ? undefined : label}
+    >
+      {showLogo ? (
+        <img
+          src={src}
+          alt=""
+          onError={() => setFailedSrc(src)}
+        />
+      ) : (
+        <span className={fallbackClassName} aria-hidden="true">
+          {fallback}
+        </span>
+      )}
+    </span>
+  );
 }
 
 function hasSeenCampaign(campaignId: string): boolean {
@@ -254,13 +299,48 @@ export function DeepSeekV4FlashCampaign({
             aria-label={goPlanCopy.providersAria}
           >
             {[
-              { src: GO_PLAN_DEEPSEEK_ICON, label: 'DeepSeek' },
-              { src: GO_PLAN_ZHIPU_ICON, label: 'GLM', className: styles.goWelcomeZhipuLogo },
-              { src: GO_PLAN_KIMI_ICON, label: 'Kimi' },
-              { src: GO_PLAN_MINIMAX_ICON, label: 'MiniMax' },
-              { src: GO_PLAN_MIMO_ICON, label: 'MiMo', className: styles.goWelcomeMimoLogo },
-            ].map(({ src, label, className }) => (
-              <span key={label} className={className} title={label}><img src={src} alt={label} /></span>
+              {
+                providerId: 'deepseek/v4-pro',
+                src: GO_PLAN_DEEPSEEK_ICON,
+                label: 'DeepSeek',
+                fallback: 'DS',
+              },
+              {
+                providerId: 'zhipu/glm-5.2',
+                src: GO_PLAN_ZHIPU_ICON,
+                label: 'GLM',
+                fallback: 'GLM',
+                className: styles.goWelcomeZhipuLogo,
+              },
+              {
+                providerId: 'kimi/k2.6',
+                src: GO_PLAN_KIMI_ICON,
+                label: 'Kimi',
+                fallback: 'KM',
+              },
+              {
+                providerId: 'minimax/m2.5',
+                src: GO_PLAN_MINIMAX_ICON,
+                label: 'MiniMax',
+                fallback: 'MM',
+              },
+              {
+                providerId: 'mimo/v2-pro',
+                src: GO_PLAN_MIMO_ICON,
+                label: 'MiMo',
+                fallback: 'MI',
+                className: styles.goWelcomeMimoLogo,
+              },
+            ].map(({ providerId, src, label, fallback, className }) => (
+              <CampaignProviderMark
+                key={providerId}
+                providerId={providerId}
+                src={src}
+                label={label}
+                fallback={fallback}
+                className={className ?? ''}
+                fallbackClassName={styles.goWelcomeProviderFallback}
+              />
             ))}
           </div>
 
@@ -268,13 +348,40 @@ export function DeepSeekV4FlashCampaign({
             <strong>{goPlanCopy.benefit}</strong>
             <ul>
               {[
-                { src: GO_PLAN_DEEPSEEK_ICON, label: 'DeepSeek V4 Flash' },
-                { src: GO_PLAN_DEEPSEEK_ICON, label: 'DeepSeek V4 Pro' },
-                { src: GO_PLAN_ZHIPU_ICON, label: 'GLM-5.2', className: styles.goWelcomeBenefitZhipu },
-              ].map(({ src, label, className }) => (
+                {
+                  providerId: 'deepseek/v4-flash',
+                  src: GO_PLAN_DEEPSEEK_ICON,
+                  label: 'DeepSeek V4 Flash',
+                  fallback: 'DS',
+                },
+                {
+                  providerId: 'deepseek/v4-pro',
+                  src: GO_PLAN_DEEPSEEK_ICON,
+                  label: 'DeepSeek V4 Pro',
+                  fallback: 'DS',
+                },
+                {
+                  providerId: 'zhipu/glm-5.2',
+                  src: GO_PLAN_ZHIPU_ICON,
+                  label: 'GLM-5.2',
+                  fallback: 'GLM',
+                  className: styles.goWelcomeBenefitZhipu,
+                },
+              ].map(({ providerId, src, label, fallback, className }) => (
                 <li key={label}>
                   <span className={styles.goWelcomeBenefitModel}>
-                    <i className={className}><img src={src} alt="" /></i>{label}
+                    <CampaignProviderMark
+                      providerId={providerId}
+                      src={src}
+                      label={label}
+                      fallback={fallback}
+                      className={[styles.goWelcomeBenefitIcon, className]
+                        .filter(Boolean)
+                        .join(' ')}
+                      fallbackClassName={styles.goWelcomeBenefitFallback}
+                      decorative
+                    />
+                    {label}
                   </span>
                   <small>{goPlanCopy.status}</small>
                 </li>
@@ -323,7 +430,11 @@ export function DeepSeekV4FlashCampaign({
       <p id={descriptionId} className={styles.lead}>{t('campaign.deepseekV4Flash.description')}</p>
 
       <div className={styles.modelCard}>
-        <span className={styles.modelMark} aria-hidden="true">DS</span>
+        <CampaignProviderMark
+          providerId={campaign.modelId}
+          label="DeepSeek"
+          fallback="DS"
+        />
         <span className={styles.modelCopy}>
           <strong>{t('campaign.deepseekV4Flash.benefit')}</strong>
           <small>{presentation.status}</small>

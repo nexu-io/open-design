@@ -58,6 +58,22 @@ afterEach(() => {
 });
 
 describe('paid 立即使用 switches the workbench onto the campaign model', () => {
+  it('shows the model provider logo and restores the abbreviation if the asset fails', () => {
+    render(<DeepSeekV4FlashCampaign audience="paid" active />);
+
+    const providerLogo = screen.getByRole('img', { name: 'DeepSeek' });
+    expect(providerLogo.querySelector('img')).toHaveAttribute(
+      'src',
+      '/agent-icons/deepseek.svg',
+    );
+    expect(screen.queryByText('DS', { exact: true })).toBeNull();
+
+    fireEvent.error(providerLogo.querySelector('img')!);
+
+    expect(screen.getByRole('img', { name: 'DeepSeek' })).toBeVisible();
+    expect(screen.getByText('DS', { exact: true })).toBeVisible();
+  });
+
   it('applies agent amr + model deepseek-v4-flash and pulses the chip without opening the picker', () => {
     vi.useFakeTimers();
     const onUseCampaignModel = vi.fn();
@@ -157,6 +173,16 @@ describe('unpaid Go path opens public Pricing', () => {
     expect(screen.getByRole('button', { name: copy.cta })).toBeVisible();
   });
 
+  it('keeps provider identity visible when a Go-plan logo fails to load', () => {
+    render(<DeepSeekV4FlashCampaign audience="unpaid" active />);
+
+    const providerLogo = screen.getByRole('img', { name: 'MiniMax' });
+    fireEvent.error(providerLogo.querySelector('img')!);
+
+    expect(screen.getByRole('img', { name: 'MiniMax' })).toBeVisible();
+    expect(screen.getByText('MM', { exact: true })).toBeVisible();
+  });
+
   it('opens the locale-neutral comparison page', () => {
     const open = vi.fn();
     vi.stubGlobal('open', open);
@@ -213,6 +239,17 @@ describe('unpaid Go path opens public Pricing', () => {
 });
 
 describe('campaign modal only interrupts the active home view', () => {
+  it('keeps the shared dialog Escape behavior and records the dismissal', () => {
+    render(<DeepSeekV4FlashCampaign audience="paid" active />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByTestId(DIALOG)).toBeNull();
+    expect(window.localStorage.getItem(
+      'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026',
+    )).toBe('1');
+  });
+
   it('stays silent on non-home views even when the campaign is unseen', () => {
     render(<DeepSeekV4FlashCampaign audience="paid" active={false} />);
 
