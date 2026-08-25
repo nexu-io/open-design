@@ -439,6 +439,14 @@ Inspect or reset the OD Next safety latch for this daemon instance. Reset is
 compare-and-swap protected; when --expected-revision is omitted the CLI first
 reads status and submits that exact revision.
 
+OD Next is opt-in and off until this installation asks for it:
+
+  od config set odNextStrategyMode active    Opt in; takes effect next run.
+  od config set odNextStrategyMode off       Opt back out.
+
+The status subcommand reports which authority set the mode in effect (env /
+app_config / default), so you can confirm the configuration landed.
+
 Options:
   --expected-revision <n>  Reset only the status revision you inspected.
   --json                   Emit the daemon response as JSON.
@@ -449,6 +457,7 @@ function printStrategyRolloutStatus(status) {
   console.log(`Strategy\t${status.strategyId}`);
   console.log(`Scope\t${status.scope}`);
   console.log(`Requested mode\t${status.requestedMode}`);
+  if (status.requestedModeSource) console.log(`Requested by\t${status.requestedModeSource}`);
   console.log(`Effective mode\t${status.effectiveMode}`);
   console.log(`Latch\t${status.latch?.mode ?? 'none'}`);
   if (status.latch?.reasonCode) console.log(`Reason\t${status.latch.reasonCode}`);
