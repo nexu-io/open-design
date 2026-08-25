@@ -131,6 +131,14 @@ export interface BuildSafeRunQualityProjectionFromDaemonOpts {
   prefs: TelemetryPrefs;
   installationId?: string | null;
   fetchImpl?: typeof fetch;
+  /**
+   * Environment that decides trace-object relay resolution. Callers that carry
+   * their own env (the Task observation rollout service) must have that env
+   * decide the projection too — reading `process.env` here instead would let
+   * ambient relay configuration change the projection behind the caller's back.
+   * Defaults to `process.env` when omitted.
+   */
+  env?: NodeJS.ProcessEnv;
 }
 
 /** Minimal durable Run surface required to rebuild the Task-safe projection. */
@@ -1088,6 +1096,7 @@ export async function buildSafeRunQualityProjectionFromDaemon(
     prompt: run.userPrompt ?? '',
     prefs: opts.prefs,
     ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    ...(opts.env ? { env: opts.env } : {}),
     uploadMode: 'manifest-only',
   });
   const manifests = mergeTraceSafeManifests(fallbackManifests, registrationManifests);

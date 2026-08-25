@@ -254,6 +254,7 @@ describe('task observation rollout', () => {
     closeDatabase();
     fs.rmSync(tempDir, { recursive: true, force: true });
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   function service(input: {
@@ -546,7 +547,11 @@ describe('task observation rollout', () => {
     expect(batch.filter((event) => event.type === 'span-create')).toHaveLength(1);
   });
 
-  it('rebuilds safe Run quality from durable facts before exporting the Task payload', async () => {
+  /**
+   * Seeds the durable Run/message facts the safe-quality projection reads and
+   * returns the matching Run record.
+   */
+  function seedRunQualityFacts(): SyntheticRunLike {
     upsertMessage(db, 'conversation-1', {
       id: 'user-quality',
       role: 'user',
@@ -566,7 +571,7 @@ describe('task observation rollout', () => {
       producedFiles: [{ path: '/Users/alice/result.html', size: 84, kind: 'html' }],
       createdAt: 1_900,
     });
-    const run: SyntheticRunLike = {
+    return {
       ...syntheticRun(),
       status: 'failed',
       assistantMessageId: 'assistant-quality',
@@ -599,8 +604,13 @@ describe('task observation rollout', () => {
         ...syntheticRun().events,
       ],
     };
-    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+  }
 
+  async function exportRunQualityBatch(run: SyntheticRunLike): Promise<Array<{
+    type: string;
+    body: Record<string, unknown>;
+  }>> {
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
     await expect(service({
       mode: 'send',
       dataDir: tempDir,
@@ -608,11 +618,11 @@ describe('task observation rollout', () => {
       fetchImpl,
       getRun: (runId) => runId === 'run-1' ? run : null,
     }).finalizeForRun('run-1')).resolves.toMatchObject({ action: 'sent' });
+    return JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body)).batch;
+  }
 
-    const batch = JSON.parse(String(fetchImpl.mock.calls[0]![1]!.body)).batch as Array<{
-      type: string;
-      body: Record<string, unknown>;
-    }>;
+  it('rebuilds safe Run quality from durable facts before exporting the Task payload', async () => {
+    const batch = await exportRunQualityBatch(seedRunQualityFacts());
     const runSpan = batch.find((event) => event.body.name === 'strategy-stage:request')!;
     const toolSpan = batch.find((event) => (
       (event.body.metadata as Record<string, unknown> | undefined)?.toolName === 'Bash'
@@ -633,6 +643,26 @@ describe('task observation rollout', () => {
     expect(serialized).not.toContain('/Users/alice');
     expect(serialized).not.toContain('/home/alice');
     expect(serialized).not.toContain('private artifact body');
+  });
+
+  it('resolves trace-object relay configuration from the injected env, not process.env', async () => {
+    // The release workflows export OPEN_DESIGN_TELEMETRY_RELAY_URL so the
+    // packaged build ships with a relay; ci.yml does not. Any telemetry path
+    // that reads process.env instead of the env handed to the service reports
+    // a different Task payload in those two runs for the same durable facts.
+    vi.stubEnv(
+      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
+      'https://telemetry.example.test/api/langfuse',
+    );
+
+    const batch = await exportRunQualityBatch(seedRunQualityFacts());
+    const runSpan = batch.find((event) => event.body.name === 'strategy-stage:request')!;
+
+    expect(runSpan.body.metadata).toMatchObject({
+      manifestCompleteness: 'complete',
+      attachmentManifest: [{ object_class: 'attachment', size_bytes: 42 }],
+      artifactManifest: [{ object_class: 'artifact', size_bytes: 84, type: 'html' }],
+    });
   });
 
   it('exports the mapped raw hostComposed identity and bounded exact-text payload', async () => {
