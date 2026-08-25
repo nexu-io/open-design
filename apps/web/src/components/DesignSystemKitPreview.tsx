@@ -24,6 +24,10 @@ import {
 interface DesignSystemKitPreviewProps {
   system: DesignSystemSummary;
   brandSummary?: BrandSummary | null;
+  detailState?: {
+    detail: DesignSystemDetail | null;
+    loading: boolean;
+  };
   variant?: 'panel' | 'compact';
   showCover?: boolean;
   className?: string;
@@ -35,6 +39,7 @@ interface DesignSystemKitPreviewProps {
 export function DesignSystemKitPreview({
   system,
   brandSummary,
+  detailState,
   variant = 'panel',
   showCover = false,
   className,
@@ -68,6 +73,7 @@ export function DesignSystemKitPreview({
   return (
     <RegistryDesignSystemKitPreview
       system={system}
+      detailState={detailState}
       variant={variant}
       showCover={showCover}
       className={className}
@@ -111,6 +117,7 @@ function BrandDesignSystemKitPreview({
 
 function RegistryDesignSystemKitPreview({
   system,
+  detailState,
   variant,
   showCover,
   className,
@@ -118,6 +125,10 @@ function RegistryDesignSystemKitPreview({
   resourceReadIdentity,
 }: {
   system: DesignSystemSummary;
+  detailState?: {
+    detail: DesignSystemDetail | null;
+    loading: boolean;
+  };
   variant: 'panel' | 'compact';
   showCover: boolean;
   className?: string;
@@ -132,13 +143,16 @@ function RegistryDesignSystemKitPreview({
   const workspaceContext = effectiveResourceReadIdentity?.context ?? null;
   const [detail, setDetail] = useState<DesignSystemDetail | null>(null);
   const [detailResolved, setDetailResolved] = useState(false);
+  const detailIsControlled = detailState !== undefined;
 
   useEffect(() => {
+    if (detailIsControlled) return undefined;
     let cancelled = false;
+    const controller = new AbortController();
     const read = beginWorkspaceResourceScopedRead(resourceReadIdentityRef.current);
     setDetail(null);
     setDetailResolved(false);
-    void fetchDesignSystem(system.id, read.context)
+    void fetchDesignSystem(system.id, read.context, { signal: controller.signal })
       .then((next) => {
         if (cancelled || !read.isStillCurrent(resourceReadIdentityRef.current)) return;
         setDetail(next);
@@ -151,17 +165,23 @@ function RegistryDesignSystemKitPreview({
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [system.id, resourceReadIdentityKey]);
+  }, [system.id, resourceReadIdentityKey, detailIsControlled]);
 
-  const projectId = detail?.projectId ?? system.projectId;
+  const effectiveDetail = detailIsControlled ? detailState.detail : detail;
+  const effectiveDetailResolved = detailIsControlled
+    ? !detailState.loading
+    : detailResolved;
+
+  const projectId = effectiveDetail?.projectId ?? system.projectId;
   const host = designSystemLogoHost(system) || undefined;
   const { kit, loading } = useDesignKit({
     designSystemId: system.id,
     title: system.title,
     projectId,
-    body: detail?.body,
-    packageInfo: detail?.packageInfo,
+    body: effectiveDetail?.body,
+    packageInfo: effectiveDetail?.packageInfo,
     swatches: system.swatches,
     showcaseHtml: null,
     editable: isUserSystem(system),
@@ -170,7 +190,7 @@ function RegistryDesignSystemKitPreview({
     workspaceReadGeneration: resourceReadIdentityKey,
   });
 
-  const pending = !detailResolved || loading || !kit;
+  const pending = !effectiveDetailResolved || loading || !kit;
 
   return (
     <div className={className} data-testid={dataTestId}>

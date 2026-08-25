@@ -9,7 +9,7 @@
 //     sits flush with the other footer options.
 // The popover body is identical for both variants.
 //
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { DesignSystemSummary, WorkspaceCollabContext } from '@open-design/contracts';
@@ -24,6 +24,8 @@ import { useBrandsByDesignSystemId } from '../runtime/brands';
 import { DesignSystemKitPreview } from './DesignSystemKitPreview';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { Icon } from './Icon';
+
+const PREVIEW_HOVER_INTENT_MS = 120;
 
 // Mirror DesignSystemsTab's user/official split so the picker's grouping lines
 // up exactly with the "你的体系 / 官方预设" tabs in the Design Systems tab.
@@ -91,11 +93,18 @@ export function DesignSystemPicker({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const previewHoverTimeoutRef = useRef<number | null>(null);
   const [hovered, setHovered] = useState<DesignSystemSummary | null>(null);
   // Tracks whether the "不指定 / No design system" row is the active preview
   // target (hovered), so its right-pane blurb shows instead of a system preview.
   const [hoveredNone, setHoveredNone] = useState(false);
   const [previewModalSystem, setPreviewModalSystem] = useState<DesignSystemSummary | null>(null);
+
+  const cancelPreviewHover = useCallback(() => {
+    if (previewHoverTimeoutRef.current === null) return;
+    window.clearTimeout(previewHoverTimeoutRef.current);
+    previewHoverTimeoutRef.current = null;
+  }, []);
 
   const selected = useMemo(
     () => designSystems.find((d) => d.id === selectedId) ?? null,
@@ -176,11 +185,25 @@ export function DesignSystemPicker({
     if (open) {
       window.setTimeout(() => inputRef.current?.focus(), 0);
     } else {
+      cancelPreviewHover();
       setQuery('');
       setHovered(null);
       setHoveredNone(false);
     }
-  }, [open]);
+  }, [cancelPreviewHover, open]);
+
+  useEffect(() => () => {
+    cancelPreviewHover();
+  }, [cancelPreviewHover]);
+
+  const previewAfterHoverIntent = (system: DesignSystemSummary | null, none: boolean) => {
+    cancelPreviewHover();
+    previewHoverTimeoutRef.current = window.setTimeout(() => {
+      previewHoverTimeoutRef.current = null;
+      setHovered(system);
+      setHoveredNone(none);
+    }, PREVIEW_HOVER_INTENT_MS);
+  };
 
   // Resolve what the right pane previews. Priority: a hovered system, the
   // hovered "不指定" row, the selected system, then "不指定" when nothing is
@@ -239,14 +262,10 @@ export function DesignSystemPicker({
         className={`project-ds-picker-option${active ? ' active' : ''}`}
         role="option"
         aria-selected={active}
-        onMouseEnter={() => {
-          setHovered(d);
-          setHoveredNone(false);
-        }}
-        onFocus={() => {
-          setHovered(d);
-          setHoveredNone(false);
-        }}
+        onMouseEnter={() => previewAfterHoverIntent(d, false)}
+        onMouseLeave={cancelPreviewHover}
+        onFocus={() => previewAfterHoverIntent(d, false)}
+        onBlur={cancelPreviewHover}
         onMouseDown={(event) => {
           event.preventDefault();
           selectDesignSystem(d.id);
@@ -347,14 +366,10 @@ export function DesignSystemPicker({
                   className={`project-ds-picker-option${selectedId == null ? ' active' : ''}`}
                   role="option"
                   aria-selected={selectedId == null}
-                  onMouseEnter={() => {
-                    setHovered(null);
-                    setHoveredNone(true);
-                  }}
-                  onFocus={() => {
-                    setHovered(null);
-                    setHoveredNone(true);
-                  }}
+                  onMouseEnter={() => previewAfterHoverIntent(null, true)}
+                  onMouseLeave={cancelPreviewHover}
+                  onFocus={() => previewAfterHoverIntent(null, true)}
+                  onBlur={cancelPreviewHover}
                   onMouseDown={(event) => {
                     event.preventDefault();
                     selectDesignSystem(null);

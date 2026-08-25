@@ -142,6 +142,7 @@ describe('Design System Team/Personal same-id route isolation', () => {
     });
     const listAllDesignSystems = vi.fn(async () => [teamSummary]);
     const readAvailableDesignSystem = vi.fn(async () => '# Team copy');
+    const readAvailableDesignSystemSummary = vi.fn(async () => teamSummary);
     const readAvailableDesignSystemPackageInfo = vi.fn(async () => null);
     const readAvailableDesignSystemStaticFile = vi.fn(async () => ({
       bytes: Buffer.from('<!doctype html><title>Team showcase</title>'),
@@ -194,6 +195,7 @@ describe('Design System Team/Personal same-id route isolation', () => {
         listUserDesignSystemRevisions: async () => null,
         prepareDesignTokenContractRebuild: prepareDesignTokenContractRebuild as never,
         readAvailableDesignSystem,
+        readAvailableDesignSystemSummary,
         readAvailableDesignSystemPackageInfo,
         readAvailableDesignSystemStaticFile: readAvailableDesignSystemStaticFile as never,
         readDesignSystemWorkspaceTextFile: async () => null,
@@ -278,10 +280,11 @@ describe('Design System Team/Personal same-id route isolation', () => {
       designSystemId,
       root: teamRoot,
     }));
-    expect(listAllDesignSystems).toHaveBeenCalledWith(expect.objectContaining({
-      workspaceId,
-      exactTeam: true,
-    }));
+    expect(listAllDesignSystems).not.toHaveBeenCalled();
+    expect(readAvailableDesignSystemSummary).toHaveBeenCalledWith(
+      designSystemId,
+      expect.objectContaining({ workspaceId, exactTeam: true }),
+    );
     expect(readAvailableDesignSystem).toHaveBeenCalledWith(
       designSystemId,
       expect.objectContaining({ workspaceId, exactTeam: true }),

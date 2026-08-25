@@ -47,6 +47,17 @@ function registerRoutes(app: express.Express, staticHtml: string | null) {
       listUserDesignSystemRevisions: async () => null,
       prepareDesignTokenContractRebuild: async () => ({ decision: { available: false } }) as never,
       readAvailableDesignSystem: async (id: string) => (id === 'bento' ? '# Bento' : null),
+      readAvailableDesignSystemSummary: async (id: string) => (
+        id === 'bento'
+          ? {
+              id,
+              title: 'Bento',
+              summary: 'Bundled preset.',
+              category: 'Product',
+              body: '# Bento',
+            } as never
+          : null
+      ),
       readAvailableDesignSystemPackageInfo: async () => null,
       readAvailableDesignSystemStaticFile: async (_id: string, filePath: string) =>
         staticHtml && filePath === 'system/kit.html'

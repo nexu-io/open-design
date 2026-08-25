@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -67,6 +67,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -97,7 +98,11 @@ describe('DesignSystemPicker', () => {
     expect(screen.getByTestId('project-ds-picker-option-noir-check')).toBeTruthy();
 
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('noir', null);
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith(
+        'noir',
+        null,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
     expect(await screen.findByTestId('project-ds-picker-preview-kit-view')).toBeTruthy();
     expect(screen.getByText('High-contrast editorial system.')).toBeTruthy();
@@ -112,7 +117,11 @@ describe('DesignSystemPicker', () => {
 
     fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay', null);
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith(
+        'clay',
+        null,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
     expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();
 
@@ -122,6 +131,54 @@ describe('DesignSystemPicker', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('waits for hover intent and only previews the final row crossed', async () => {
+    vi.useFakeTimers();
+    renderPicker({ selectedId: null });
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+    const clay = screen.getByTestId('project-ds-picker-option-clay');
+    const noir = screen.getByTestId('project-ds-picker-option-noir');
+
+    fireEvent.mouseEnter(clay);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(119);
+    });
+    expect(fetchDesignSystemMock).not.toHaveBeenCalled();
+
+    fireEvent.mouseLeave(clay);
+    fireEvent.mouseEnter(noir);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120);
+    });
+
+    expect(fetchDesignSystemMock).toHaveBeenCalledTimes(1);
+    expect(fetchDesignSystemMock.mock.calls[0]?.[0]).toBe('noir');
+  });
+
+  it('applies preview intent to keyboard focus and cancels rows traversed quickly', async () => {
+    vi.useFakeTimers();
+    renderPicker({ selectedId: null });
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+    const clay = screen.getByTestId('project-ds-picker-option-clay');
+    const noir = screen.getByTestId('project-ds-picker-option-noir');
+
+    clay.focus();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(119);
+    });
+    expect(fetchDesignSystemMock).not.toHaveBeenCalled();
+
+    fireEvent.blur(clay);
+    noir.focus();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120);
+    });
+
+    expect(fetchDesignSystemMock).toHaveBeenCalledTimes(1);
+    expect(fetchDesignSystemMock.mock.calls[0]?.[0]).toBe('noir');
   });
 
   it('selects a design system option with keyboard activation', async () => {

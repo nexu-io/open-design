@@ -5521,8 +5521,12 @@ describe('SettingsDialog design systems section', () => {
 
     fireEvent.click(screen.getByText('Signal Green'));
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('signal-green', null);
-      expect(screen.getByText('design system body for signal-green')).toBeTruthy();
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith(
+        'signal-green',
+        null,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(screen.getAllByText('design system body for signal-green')).toHaveLength(2);
     });
 
     fireEvent.click(screen.getAllByLabelText('Show in home gallery')[0] as HTMLElement);

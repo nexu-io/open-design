@@ -76,22 +76,23 @@ export function DesignSystemPreviewModal({
 
   const [showcaseHtml, setShowcaseHtml] = useState<string | null | undefined>(undefined);
   const [tokensHtml, setTokensHtml] = useState<string | null | undefined>(undefined);
-  const [specBody, setSpecBody] = useState<string | null | undefined>(undefined);
   const [detail, setDetail] = useState<DesignSystemDetail | null | undefined>(
     () => (isDesignSystemDetail(system) ? system : undefined),
   );
-  const detailBody = detail?.body ?? (isDesignSystemDetail(system) ? system.body : undefined);
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     const read = beginWorkspaceResourceScopedRead(resourceReadIdentityRef.current);
-    setDetail(isDesignSystemDetail(system) ? system : undefined);
-    void fetchDesignSystem(system.id, read.context).then((next) => {
+    const initialDetail = isDesignSystemDetail(system) ? system : undefined;
+    setDetail(initialDetail);
+    void fetchDesignSystem(system.id, read.context, { signal: controller.signal }).then((next) => {
       if (cancelled || !read.isStillCurrent(resourceReadIdentityRef.current)) return;
-      if (next) setDetail(next);
+      setDetail(next ?? initialDetail ?? null);
     });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [system, resourceReadIdentityKey]);
 
@@ -130,28 +131,9 @@ export function DesignSystemPreviewModal({
     [analytics.track, system.id, system.source, showcaseHtml, tokensHtml, resourceReadIdentityKey],
   );
 
-  const handleSidebarToggle = useCallback(
-    (open: boolean) => {
-      if (!open || specBody !== undefined) return;
-      if (detailBody !== undefined) {
-        setSpecBody(detailBody);
-        return;
-      }
-      const read = beginWorkspaceResourceScopedRead(resourceReadIdentityRef.current);
-      setSpecBody(null);
-      void fetchDesignSystem(system.id, read.context).then((nextDetail) => {
-        if (read.isStillCurrent(resourceReadIdentityRef.current)) {
-          setSpecBody(nextDetail?.body ?? null);
-        }
-      });
-    },
-    [detailBody, system.id, specBody, resourceReadIdentityKey],
-  );
-
   useEffect(() => {
     setShowcaseHtml(undefined);
     setTokensHtml(undefined);
-    setSpecBody(undefined);
   }, [system.id, resourceReadIdentityKey]);
 
   const modal = (
@@ -165,6 +147,7 @@ export function DesignSystemPreviewModal({
           custom: (
             <DesignSystemKitPreview
               system={system}
+              detailState={{ detail: detail ?? null, loading: detail === undefined }}
               resourceReadIdentity={resourceReadIdentity}
               variant="panel"
               showCover={false}
@@ -219,11 +202,10 @@ export function DesignSystemPreviewModal({
       sidebar={{
         label: t('ds.specToggle'),
         defaultOpen: true,
-        onToggle: handleSidebarToggle,
         contentKey: `${system.id}:${resourceReadIdentityKey}`,
         content: (
           <DesignSpecView
-            source={specBody}
+            source={detail?.body}
             loadingLabel={t('ds.specLoading')}
           />
         ),

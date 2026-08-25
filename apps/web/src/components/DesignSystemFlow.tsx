@@ -1923,7 +1923,7 @@ export function DesignSystemDetailView({
       setGenerationJob(next);
       if (next.status === 'succeeded') {
         clearRememberedGenerationJob(id);
-        const detail = await fetchDesignSystem(id, workspaceContext);
+        const detail = await fetchDesignSystem(id, workspaceContext, { fresh: true });
         if (cancelled) return;
         if (detail) {
           setSystem(detail);

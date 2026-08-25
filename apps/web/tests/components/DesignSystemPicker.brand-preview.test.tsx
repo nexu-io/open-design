@@ -177,7 +177,11 @@ describe('DesignSystemPicker brand preview', () => {
     fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
 
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay', null);
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith(
+        'clay',
+        null,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
     expect(await screen.findByTestId('project-ds-picker-preview-kit-view')).toBeTruthy();
     expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();

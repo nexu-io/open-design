@@ -329,66 +329,91 @@ export async function listDesignSystems(
   }
   for (const entry of entries) {
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-    const brandRoot = path.join(root, entry.name);
-    const manifest = await readProjectManifest(brandRoot, entry.name);
-    const designPath = path.join(brandRoot, manifest?.files.design ?? 'DESIGN.md');
-    try {
-      const stats = await stat(designPath);
-      if (!stats.isFile()) continue;
-      const raw = await readFile(designPath, 'utf8');
-      const metadata = await readUserMetadata(root, entry.name);
-      if (!designSystemVisibleFromWorkspace(metadata.workspaceId, options.workspaceId)) continue;
-      const { data: frontmatter, body } = parseFrontmatter(raw);
-      const titleMatch = /^#\s+(.+?)\s*$/m.exec(body);
-      const markdownTitle =
-        titleMatch?.[1] !== undefined ? cleanTitle(titleMatch[1]) : '';
-      const fallbackTitle = markdownTitle || stringField(frontmatter, 'name') || entry.name;
-      const title = cleanTitle(
-        metadata.title
-        ?? manifest?.name
-        ?? fallbackTitle,
-      );
-      const frontmatterCategory = stringField(frontmatter, 'category');
-      const category = (
-        metadata.category
-        ?? manifest?.category
-        ?? extractCategory(body)
-        ?? frontmatterCategory
-      ) || 'Uncategorized';
-      const markdownSummary = summarize(body);
-      const markdownSwatches = extractSwatches(body);
-      const frontmatterSwatchRow = swatchesFromFrontmatter(frontmatter);
-      const swatches = pickFinalSwatchRow(frontmatterSwatchRow, markdownSwatches);
-      out.push({
-        id: `${options.idPrefix ?? ''}${entry.name}`,
-        title,
-        category,
-        summary:
-          (manifest?.description?.trim() || markdownSummary)
-          || stringField(frontmatter, 'description')
-          || '',
-        swatches,
-        surface:
-          metadata.surface
-          ?? extractSurface(body)
-          ?? frontmatterSurface(frontmatter)
-          ?? 'web',
-        body: raw,
-        source: options.source ?? 'built-in',
-        status: metadata.status ?? options.defaultStatus ?? 'published',
-        isEditable: options.isEditable ?? false,
-        ...(metadata.createdAt ? { createdAt: metadata.createdAt } : {}),
-        ...(metadata.updatedAt ? { updatedAt: metadata.updatedAt } : {}),
-        ...(metadata.provenance ? { provenance: metadata.provenance } : {}),
-        ...(metadata.projectId ? { projectId: metadata.projectId } : {}),
-        ...(metadata.teamSynced ? { teamSynced: true } : {}),
-        ...(metadata.workspaceId ? { workspaceId: metadata.workspaceId } : {}),
-      });
-    } catch {
-      // Skip.
-    }
+    const summary = await readDesignSystemSummaryFromDirectory(root, entry.name, options);
+    if (summary) out.push(summary);
   }
   return out;
+}
+
+export async function readDesignSystemSummary(
+  root: string,
+  id: string,
+  options: DesignSystemListOptions = {},
+): Promise<DesignSystemSummary | null> {
+  const dirId = stripPrefixAndValidateId(id, options.idPrefix);
+  if (!dirId) return null;
+  try {
+    const entries = await readdir(root);
+    if (!entries.includes(dirId)) return null;
+  } catch {
+    return null;
+  }
+  return readDesignSystemSummaryFromDirectory(root, dirId, options);
+}
+
+async function readDesignSystemSummaryFromDirectory(
+  root: string,
+  dirId: string,
+  options: DesignSystemListOptions,
+): Promise<DesignSystemSummary | null> {
+  const brandRoot = path.join(root, dirId);
+  const manifest = await readProjectManifest(brandRoot, dirId);
+  const designPath = path.join(brandRoot, manifest?.files.design ?? 'DESIGN.md');
+  try {
+    const stats = await stat(designPath);
+    if (!stats.isFile()) return null;
+    const raw = await readFile(designPath, 'utf8');
+    const metadata = await readUserMetadata(root, dirId);
+    if (!designSystemVisibleFromWorkspace(metadata.workspaceId, options.workspaceId)) return null;
+    const { data: frontmatter, body } = parseFrontmatter(raw);
+    const titleMatch = /^#\s+(.+?)\s*$/m.exec(body);
+    const markdownTitle =
+      titleMatch?.[1] !== undefined ? cleanTitle(titleMatch[1]) : '';
+    const fallbackTitle = markdownTitle || stringField(frontmatter, 'name') || dirId;
+    const title = cleanTitle(
+      metadata.title
+      ?? manifest?.name
+      ?? fallbackTitle,
+    );
+    const frontmatterCategory = stringField(frontmatter, 'category');
+    const category = (
+      metadata.category
+      ?? manifest?.category
+      ?? extractCategory(body)
+      ?? frontmatterCategory
+    ) || 'Uncategorized';
+    const markdownSummary = summarize(body);
+    const markdownSwatches = extractSwatches(body);
+    const frontmatterSwatchRow = swatchesFromFrontmatter(frontmatter);
+    const swatches = pickFinalSwatchRow(frontmatterSwatchRow, markdownSwatches);
+    return {
+      id: `${options.idPrefix ?? ''}${dirId}`,
+      title,
+      category,
+      summary:
+        (manifest?.description?.trim() || markdownSummary)
+        || stringField(frontmatter, 'description')
+        || '',
+      swatches,
+      surface:
+        metadata.surface
+        ?? extractSurface(body)
+        ?? frontmatterSurface(frontmatter)
+        ?? 'web',
+      body: raw,
+      source: options.source ?? 'built-in',
+      status: metadata.status ?? options.defaultStatus ?? 'published',
+      isEditable: options.isEditable ?? false,
+      ...(metadata.createdAt ? { createdAt: metadata.createdAt } : {}),
+      ...(metadata.updatedAt ? { updatedAt: metadata.updatedAt } : {}),
+      ...(metadata.provenance ? { provenance: metadata.provenance } : {}),
+      ...(metadata.projectId ? { projectId: metadata.projectId } : {}),
+      ...(metadata.teamSynced ? { teamSynced: true } : {}),
+      ...(metadata.workspaceId ? { workspaceId: metadata.workspaceId } : {}),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

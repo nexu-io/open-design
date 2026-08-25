@@ -210,6 +210,7 @@ function registerCreateRoute(
       listUserDesignSystemRevisions: async () => null,
       prepareDesignTokenContractRebuild: async () => ({ decision: { available: false } }) as never,
       readAvailableDesignSystem: async () => null,
+      readAvailableDesignSystemSummary: async () => null,
       readAvailableDesignSystemPackageInfo: async () => null,
       readAvailableDesignSystemStaticFile: async () => null,
       readDesignSystemWorkspaceTextFile: async () => null,
