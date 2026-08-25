@@ -164,6 +164,9 @@ export interface RunnerJob {
    *  fact is not measured; the oriented box itself is measured for every mesh
    *  regardless, being a fact about a shape rather than about Minecraft. */
   voxelGrid?: number;
+  /** Per-pair triangle-product budget for the coplanar comparison
+   *  (conventions.geometry.zFightingPairBudget). Absent = runner default. */
+  zFightingPairBudget?: number;
   /** Assembled GPU kernels to compile, execute, and bake at load time. */
   shaders?: Array<{
     name: string;

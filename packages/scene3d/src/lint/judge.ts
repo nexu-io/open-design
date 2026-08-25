@@ -219,9 +219,10 @@ const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
     target: (cx) => cx.part.partId,
     fact: (cx) => (isBase(cx) ? cx.facts.sizeOutlierZByPart.get(cx.part.partId) : undefined),
     bound: (cx) => (cx.part.budget.sizeRatio ? undefined : cx.contract.outlierZ),
-    fails: (f, b) => f > b,
+    // The fact is SIGNED (which way out); the gate is magnitude.
+    fails: (f, b) => Math.abs(f) > b,
     message: (cx, f) =>
-      `'${cx.part.familyId}' is a size outlier — ${Number(f.toFixed(1))} robust deviations from the scene's size distribution; verify it is not a unit/scale slip`,
+      `'${cx.part.familyId}' is a size outlier — ${Number(Math.abs(f).toFixed(1))} robust deviations ${f > 0 ? "larger" : "smaller"} than the scene's size distribution; verify it is not a unit/scale slip`,
     hint: () => "check this part's export units (metres vs centimetres, or an FBX 100× scale) against the rest of the scene",
     detail: (cx, f) => ({ robustZ: f, medianMaxDim: cx.facts.medianMaxDim }),
   },
@@ -236,10 +237,19 @@ const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
     target: (cx) => cx.part.partId,
     fact: (cx) => (isBase(cx) ? cx.facts.triDensityOutlierZByPart.get(cx.part.partId) : undefined),
     bound: (cx) => cx.contract.outlierZ,
-    fails: (f, b) => f > b,
+    // Signed fact, magnitude gate — and the prose reads the sign, because
+    // the low side used to get the high side's advice: the rule once told
+    // an author to decimate a 12-triangle plinth that carried ~4000× LESS
+    // geometry per m² than its neighbours.
+    fails: (f, b) => Math.abs(f) > b,
     message: (cx, f) =>
-      `'${cx.part.familyId}' has a triangle density ${Number(f.toFixed(1))} robust deviations from the scene's — a possible LOD / re-topology candidate`,
-    hint: () => "if this part carries far more geometry per m² than its neighbours, an LOD or decimation may be worth it",
+      f > 0
+        ? `'${cx.part.familyId}' has a triangle density ${Number(f.toFixed(1))} robust deviations DENSER than the scene's — a possible LOD / re-topology candidate`
+        : `'${cx.part.familyId}' has a triangle density ${Number(Math.abs(f).toFixed(1))} robust deviations SPARSER than the scene's — it reads as a proxy or plain fixture beside detailed neighbours`,
+    hint: (_cx, f) =>
+      f > 0
+        ? "if this part carries far more geometry per m² than its neighbours, an LOD or decimation may be worth it"
+        : "fine if it is a floor, plinth or blockout; subdivide or detail it only if it is meant to match its neighbours",
     detail: (cx, f) => ({ robustZ: f }),
   },
 

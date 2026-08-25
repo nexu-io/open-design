@@ -221,6 +221,8 @@ describe("renderAgentReport", () => {
       issuesResolved: [],
       contactsMade: [],
       contactsBroken: [],
+      materialsChanged: [],
+      animationChanged: [],
       unchanged: true,
     };
     expect(renderAgentReport(result({ impact: unchanged }))).toContain(
@@ -238,6 +240,8 @@ describe("renderAgentReport", () => {
       issuesResolved: [],
       contactsMade: [],
       contactsBroken: [{ a: "prp_bridge", b: "prp_pillar", before: 0, after: null }],
+      materialsChanged: [],
+      animationChanged: [],
       unchanged: false,
     };
     const text = renderAgentReport(result({ impact: changed }));
@@ -246,6 +250,67 @@ describe("renderAgentReport", () => {
     expect(text).toContain("issue APPEARED: S3D-W-325 on prp_path");
     // Consequence before mechanics: the broken support outranks the move.
     expect(text.indexOf("contact BROKEN")).toBeLessThan(text.indexOf("moved: prp_cliff"));
+  });
+
+  it("compresses the solve delta to counts and spends its lines on residuals", () => {
+    // The codec pass: authored edits and graph-predicted moves are one
+    // count line; only a change nothing authored explains earns detail.
+    const impact = {
+      partsAdded: [], partsRemoved: [],
+      partsMoved: [{ part: "prp_lid", delta: [0, 0, 0.1] as [number, number, number], distance: 0.1 }],
+      partsResized: [], issuesAppeared: [], issuesResolved: [],
+      contactsMade: [], contactsBroken: [],
+      materialsChanged: [], animationChanged: [], unchanged: false,
+    };
+    const text = renderAgentReport(
+      result({
+        impact,
+        solveDelta: {
+          authored: ["prp_post_nw", "prp_post_ne"],
+          added: [], removed: [],
+          propagated: ["prp_lid"],
+          residuals: [{ id: "prp_slat", kind: "support", from: "prp_base", to: "prp_post_nw" }],
+          steady: 2,
+        },
+      }),
+    );
+    expect(text).toContain("solve: 2 authored · 1 moved with them (2 steady)");
+    expect(text).toContain(
+      "residual: prp_slat now rests on prp_post_nw (was prp_base) — no authored cause",
+    );
+    // An empty delta earns no line at all — silence is the compressed form.
+    const quiet = renderAgentReport(
+      result({
+        impact,
+        solveDelta: { authored: [], added: [], removed: [], propagated: [], residuals: [], steady: 5 },
+      }),
+    );
+    expect(quiet).not.toContain("solve:");
+    expect(quiet).not.toContain("residual:");
+  });
+
+  it("renders a residual even when the census reads as unchanged", () => {
+    // "Unchanged" is a census verdict; a support switch moves no vertex,
+    // and a census-less fast-gear run compares two undefined censuses.
+    // The unchanged early-return used to swallow the residual on both
+    // paths — the exact signal the codec module exists to surface.
+    const unchanged = {
+      partsAdded: [], partsRemoved: [], partsMoved: [], partsResized: [],
+      issuesAppeared: [], issuesResolved: [], contactsMade: [], contactsBroken: [],
+      materialsChanged: [], animationChanged: [], unchanged: true,
+    };
+    const text = renderAgentReport(
+      result({
+        impact: unchanged,
+        solveDelta: {
+          authored: [], added: [], removed: [], propagated: [],
+          residuals: [{ id: "prp_slat", kind: "support", from: "prp_a", to: "prp_b" }],
+          steady: 4,
+        },
+      }),
+    );
+    expect(text).toContain("delta: unchanged since previous compile");
+    expect(text).toContain("residual: prp_slat now rests on prp_b (was prp_a) — no authored cause");
   });
 
   it("summarises artifacts without dumping every proof frame path", () => {
@@ -406,8 +471,10 @@ describe("renderAgentReport", () => {
     );
   });
 
-  it("says nothing about contact when every part touches something", () => {
-    // A healthy scene gains no chrome — same discipline as the kit banner.
+  it("states the healthy contact case instead of implying it by silence", () => {
+    // Absence-means-good was an unstated convention a field reader spent a
+    // compile second-guessing ("did contacts fail to run?"); one short line
+    // states it.
     const text = renderAgentReport(
       result({
         manifest: buildManifest({
@@ -422,7 +489,7 @@ describe("renderAgentReport", () => {
         }),
       }),
     );
-    expect(text).not.toContain("contact:");
+    expect(text).toContain("contact: all 2 part(s) touch another");
   });
 
   /* ---- the solved table: the parse loop's eyes ---------------------- */
@@ -450,17 +517,30 @@ describe("renderAgentReport", () => {
               from: "prp_column",
               restsOn: "prp_plinth",
             },
+            {
+              id: "prp_auger",
+              size: [0.3, 0.3, 0.6],
+              center: [0, 0.8, 0.3],
+              shape: "box",
+              axis: "z",
+              flip: false,
+              screw: { axis: "z", seconds: 4, rise: 0.25 },
+            },
           ],
           diagnostics: [],
         },
       }),
     );
-    expect(text).toContain("solved boxes (id · centre · size · rests on):");
+    expect(text).toContain("solved boxes (id · centre · world box · rests on):");
     expect(text).toContain("prp_plinth: (0mm, 0mm, 50mm) · 3m × 1m × 0.1m");
     // Provenance to the authored part and the resting fact ride the row —
     // this is what lets an agent audit placement without running Blender.
     expect(text).toContain("prp_column_2 (from prp_column)");
     expect(text).toContain("rests on prp_plinth");
+    // A mover's row reserves its whole cycle: the asymmetric screwing box
+    // grows its corner circle AND advances a quarter metre per turn.
+    expect(text).toContain("prp_auger");
+    expect(text).toMatch(/prp_auger.*sweeps ⌀.*z\+0\.25m\/turn/);
   });
 
   it("caps the solved table instead of flooding a 500-part scene", () => {
@@ -627,7 +707,7 @@ describe("renderAgentReport", () => {
       }),
     );
     expect(text).toContain("summary: pass");
-    expect(text).toContain("headroom:");
+    expect(text).toContain("built:");
     expect(text).toContain("tris");
   });
 
@@ -891,3 +971,57 @@ describe("terminal guidance", () => {
     );
     expect(text).toContain("next: structure settled? run a full compile");
   });
+
+describe("field-audit report honesty", () => {
+  it("marks a demoted code visibly so the letter never contradicts the severity", () => {
+    const text = renderAgentReport(
+      result({
+        issues: [
+          {
+            code: "S3D-E-321",
+            severity: "info",
+            message: "mesh 'prp_fox' has 1728 non-manifold edge(s)",
+            target: "prp_fox",
+          },
+        ],
+      }),
+    );
+    expect(text).toContain("S3D-E-321→info");
+    // A grep for lines that READ as errors finds none on this clean compile.
+    expect(text).not.toMatch(/S3D-E-321 \[/);
+  });
+
+  it("reports an unadjudicated ledger as checked-count, never as held", () => {
+    const issues: Issue[] = [
+      {
+        code: "S3D-W-701",
+        severity: "warning",
+        message: "claim parts could not be adjudicated: no census — unchecked is not passed",
+        detail: { claim: "parts", unadjudicated: true },
+      },
+      {
+        code: "S3D-W-701",
+        severity: "warning",
+        message: "claim grounded could not be adjudicated: no census — unchecked is not passed",
+        detail: { claim: "grounded", unadjudicated: true },
+      },
+    ];
+    const text = renderAgentReport(
+      result({
+        issues,
+        manifest: buildManifest({
+          source,
+          issues,
+          summary: { errors: 0, warnings: 2, infos: 0 },
+          proofImages: [],
+          exportedAssets: [],
+          blenderUsed: false,
+          blenderVersion: null,
+          claimsDeclared: 2,
+        }),
+      }),
+    );
+    expect(text).toContain("claims: 0/2 checked");
+    expect(text).not.toContain("2/2 held");
+  });
+});

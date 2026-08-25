@@ -31,6 +31,7 @@ import { defineConfig } from "vitest/config";
  */
 const BLENDER_FILES = [
   "tests/atelier-pipeline.test.ts",
+  "tests/contact-math.test.ts",
   "tests/findings2-real.test.ts",
   "tests/findings3-real.test.ts",
   "tests/formats.test.ts",

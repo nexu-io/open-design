@@ -20,7 +20,7 @@ Companion documents in this package:
 |---|---|
 | `README.md` (this file) | Maintainer architecture, host seam, how to change the system |
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Compiler internals: language fidelity, USD master, shaders, voxel, materials, verdict totality |
-| [`KILN.md`](./KILN.md) | Design lineage: what was adopted from Kiln, what remains worth taking |
+| [`KILN.md`](./KILN.md) | Design lineage: what was adopted from prior research artifacts, what remains worth taking |
 | [`RESEARCH.md`](./RESEARCH.md) | Historical strategy note: why this is a compiler, not a reconstruction generator |
 
 ## Contents
@@ -371,7 +371,7 @@ output.
 - **Shaders** are raw kernels (`vec4 kernel(vec2 uv)` in a `.glsl` file).
   The compiler owns uniforms, the integer-hash stdlib, both wrappers
   (Blender GPUShaderCreateInfo and WebGL2 300 es), and the bake. Time is a
-  kernel dimension: `frames: 2..64` bakes a POT atlas that registers as a
+  kernel dimension: `frames: 2..256` (powers of two) bakes a POT atlas that registers as a
   sheet.
 - **Animation currently includes** per-part `spin` / `bob`. The compiler owns
   those keyframes (24 fps, cycles modifiers), and any motion derives
@@ -451,8 +451,8 @@ Any UI that shows a bare code must show or tooltip its title via
 
 | Range | Family | Typical owner |
 |---|---|---|
-| `E-101`–`106`, `W-106`–`107` | Parse, spec, solver | `parse/`, `solve/` |
-| `E-201`–`206`, `W-205`–`208` | Blender, census, export, tweaks | `build/`, pipeline |
+| `E-101`–`106`, `W-105`–`109` | Parse, spec, solver, kinematics | `parse/`, `solve/` |
+| `E-201`–`207`, `W-205`–`209` | Blender, census, export, tweaks | `build/`, pipeline |
 | `*-301`–`306` | Naming | `lint/naming.ts` |
 | `*-321`–`336` | Topology, hygiene, print DfM, contacts | `lint/topology.ts`, `world.ts` |
 | `*-325`–`326` | Grounding, triangle budgets | `lint/world.ts` |
@@ -481,8 +481,11 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-E-104` | Invalid scene3d.json contract |
 | `S3D-E-105` | scene.json fails validation |
 | `S3D-E-106` | Layout constraints unsolvable |
+| `S3D-W-105` | Valid but suspect authoring |
 | `S3D-W-106` | Authored offset auto-adjusted |
 | `S3D-W-107` | Generated instances intersect |
+| `S3D-W-108` | Motion envelope crosses a neighbour |
+| `S3D-W-109` | Clearance thinner than declared |
 
 ### Build
 
@@ -495,8 +498,10 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-E-205` | Export failed |
 | `S3D-W-205` | Export format unavailable |
 | `S3D-E-206` | Proof render failed |
+| `S3D-E-207` | Blender version unsupported |
 | `S3D-W-207` | Imported file degraded |
 | `S3D-W-208` | Viewer edits ignored |
+| `S3D-W-209` | Deliverable write failed |
 
 ### Naming, topology, world, PBR, units, integrity
 
@@ -530,6 +535,7 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-334` | Wall too thin to print |
 | `S3D-W-335` | Triangle budget approximated |
 | `S3D-W-336` | Contact scan skipped |
+| `S3D-W-337` | Rested pair never touches |
 | `S3D-E-341` | Metallic outside convention |
 | `S3D-E-342` | Roughness out of range |
 | `S3D-W-341` | Untouched default material |

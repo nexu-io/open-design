@@ -183,12 +183,62 @@ describe.skipIf(!hasBlender)("material atelier (real assets, GPU shaders, animat
     expect(helmet.tris).toBeGreaterThan(10_000);
     expect(helmet.materials!.some((m) => m !== "mtl_gold")).toBe(true);
 
+    // The origin CONTRACT for real assets: rotation pivots at the object
+    // origin, so a file part's origin must be its solved box centre — not
+    // wherever the importer left its pivot. Was red before _import_part
+    // normalised it: the helmet's glTF origin sat at the asset's own pivot,
+    // and a spin/screw/rotate on it would have orbited that point while the
+    // kinematic sweep adjudicated the box-centred motion.
+    for (const id of ["prp_helmet", "prp_fox"]) {
+      const placed = result.solved!.parts.find((p) => p.id === id)!;
+      const obj = census.objects.find((o) => o.name === id)!;
+      expect(obj.location[0], `${id} origin x is the box centre`).toBeCloseTo(placed.center[0], 4);
+      expect(obj.location[1], `${id} origin y is the box centre`).toBeCloseTo(placed.center[1], 4);
+      expect(obj.location[2], `${id} origin z is the box centre`).toBeCloseTo(placed.center[2], 4);
+    }
+
     // Declarative animation became real keyframes: both parts move, and
     // the whole compile derives as an animation asset.
     expect(census.animation.keyframedObjects).toContain("prp_orb");
     expect(census.animation.keyframedObjects).toContain("prp_pool");
     expect(census.animation.frameEnd).toBeGreaterThan(census.animation.frameStart);
     expect(result.manifest.assetKind).toBe("animation");
+
+    // And the census measured the scene ACROSS that range, not at one pose.
+    // The orb bobs and the pool spins, so the animated envelope must exist,
+    // must have visited more than one frame, and must reach at least as high
+    // as the rest pose — a sampler that silently measured the rest pose N
+    // times (the exact failure mode of reading o.data instead of the
+    // evaluated object) would tie here rather than exceed.
+    const ab = census.animation.animatedBounds;
+    expect(ab, "an animated scene must carry bounds over time").toBeDefined();
+    expect(ab!.skipped).toBeUndefined();
+    expect(ab!.framesSampled).toBeGreaterThan(1);
+    expect(ab!.frameStep).toBeGreaterThanOrEqual(1);
+    const restMaxZ = Math.max(...census.meshes.map((m) => m.spatial?.worldMax[2] ?? -Infinity));
+    const restMinZ = Math.min(...census.meshes.map((m) => m.spatial?.worldMin[2] ?? Infinity));
+    expect(ab!.max![2]).toBeGreaterThanOrEqual(restMaxZ - 1e-6);
+    expect(ab!.min![2]).toBeLessThanOrEqual(restMinZ + 1e-6);
+    // The BOBBING pool strictly exceeds its rest pose somewhere in the
+    // cycle. (The first version asserted this of the orb — which only
+    // SPINS, and Blender measured its crest equal to rest to the last
+    // digit: the symmetry theorem confirmed by independent measurement,
+    // failing a test that had assumed the wrong part.)
+    const pool = ab!.parts!.find((p) => p.object === "prp_pool")!;
+    const poolRest = census.meshes.find((m) => m.object === "prp_pool")!.spatial!;
+    expect(pool.maxZ).toBeGreaterThan(poolRest.worldMax[2]!);
+    // And the spinning orb's vertical extent NEVER changes: two independent
+    // layers — the closed-form sweep's symmetry theorem and the sampled
+    // census — agreeing that a symmetric spinner sweeps nothing.
+    const orb = ab!.parts!.find((p) => p.object === "prp_orb")!;
+    const orbRest = census.meshes.find((m) => m.object === "prp_orb")!.spatial!;
+    expect(orb.maxZ).toBeCloseTo(orbRest.worldMax[2]!, 5);
+    expect(orb.minZ).toBeCloseTo(orbRest.worldMin[2]!, 5);
+    // A STATIC part measures identically at every frame — the control that
+    // says the sampler is reading real geometry rather than drifting.
+    const helmetAnim = ab!.parts!.find((p) => p.object === "prp_helmet")!;
+    expect(helmetAnim.maxZ).toBeCloseTo(helmet.spatial!.worldMax[2]!, 4);
+    expect(helmetAnim.minZ).toBeCloseTo(helmet.spatial!.worldMin[2]!, 4);
 
     // Deliverables: a proof frame + a GLB carrying everything.
     expect(result.proofImages.length).toBeGreaterThan(0);
@@ -214,5 +264,42 @@ describe.skipIf(!hasBlender)("material atelier (real assets, GPU shaders, animat
     expect(result.census!.animation.actionNames).toContain("Run");
     expect(result.census!.animation.actionNames).toContain("Walk");
     expect(result.census!.animation.actionNames).toContain("Survey");
+
+    // The deform path, which is the whole point of measuring from the
+    // EVALUATED object: the Fox's mesh never moves in `o.data` — the
+    // armature writes its pose onto the depsgraph. A sampler reading the
+    // original mesh would report a perfectly rigid, perfectly still fox and
+    // pass any spatial claim the walk cycle breaks. So the animated bounds
+    // must exist AND must differ from the rest pose somewhere.
+    //
+    // Branch honestly on what the import actually bound: a glTF whose clips
+    // land ORPHANED (no action on the armature) genuinely has nothing
+    // playing, and "animate nothing" must read as absent, not as measured.
+    const anim = result.census!.animation;
+    const ab = anim.animatedBounds;
+    if (anim.keyframedObjects.length === 0) {
+      expect(ab, "nothing is bound to play — there is no time to measure").toBeUndefined();
+    } else {
+      expect(ab, "a rigged import must be measured across its clip").toBeDefined();
+      expect(ab!.skipped).toBeUndefined();
+      expect(ab!.parts!.length).toBeGreaterThan(0);
+      const restMax = Math.max(
+        ...result.census!.meshes.map((m) => m.spatial?.worldMax[2] ?? -Infinity),
+      );
+      const restMin = Math.min(
+        ...result.census!.meshes.map((m) => m.spatial?.worldMin[2] ?? Infinity),
+      );
+      // Union property: the sampled envelope can only be wider than one pose.
+      expect(ab!.max![2]).toBeGreaterThanOrEqual(restMax - 1e-6);
+      expect(ab!.min![2]).toBeLessThanOrEqual(restMin + 1e-6);
+      if (anim.frameEnd > anim.frameStart) {
+        expect(ab!.framesSampled).toBeGreaterThan(1);
+        // The deformation is visible: some vertical extreme across the clip
+        // sits strictly outside the rest pose. This is the assertion that
+        // fails if the sampler ever regresses to reading `o.data` — a rest
+        // mesh sampled N times gives back exactly the rest pose.
+        expect(ab!.max![2]! > restMax + 1e-6 || ab!.min![2]! < restMin - 1e-6).toBe(true);
+      }
+    }
   });
 });

@@ -116,6 +116,9 @@ export interface Scene3dManifestMaterial {
   hasTexture: boolean;
   /** Emission strength the build actually authored, when measured. */
   emissionStrength?: number;
+  /** Measured alpha, present only when the surface is actually translucent
+   *  (alpha < 1) — a glass material's whole identity. */
+  alpha?: number;
 }
 
 export interface Scene3dManifestTexture {
@@ -165,7 +168,17 @@ export interface Scene3dManifest {
    * the measured census refuted. `declared > 0 && failed === 0` is the
    * proven badge; absent when the scene declares no claims.
    */
-  claims?: { declared: number; failed: number };
+  claims?: {
+    declared: number;
+    failed: number;
+    /** How many claims were actually ADJUDICATED (declared minus the ones
+     *  the adjudicator marked unadjudicated — no census, no measurements).
+     *  The proven badge requires `checked === declared`: a claim nobody
+     *  measured is not held. Absent on manifests written before the field. */
+    checked?: number;
+    /** Budget usage per numeric claim, tightest first: `used` = measured/limit. */
+    margins?: Array<{ claim: string; measured: number; limit: number; used: number }>;
+  };
   /** Scale readout, when the build stage produced a census. */
   metrics?: {
     worldSize: [number, number, number] | null;

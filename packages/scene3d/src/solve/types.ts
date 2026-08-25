@@ -159,6 +159,34 @@ export interface PartSpec {
    */
   bob?: { amplitude: number; seconds?: number };
   /**
+   * A SCREW: one full turn per `seconds` (default 4) about `axis` (default
+   * z) through the part's centre, composed with `rise` metres of travel
+   * ALONG that same axis per turn. Chasles' theorem made authorable — every
+   * rigid motion is a screw, and `spin` is only the pitch-zero one — so a
+   * drill bit driving, an auger lifting grain, and a spiral stair descending
+   * are all one primitive rather than three special cases.
+   *
+   * The loop is honest about what it is. A monotone rise cannot cycle back
+   * invisibly the way a turn does (2π ≡ 0, which is why `spin` loops without
+   * a seam), so the translation curve REPEATS: it advances 0 → rise over the
+   * cycle and then snaps back to 0. That snap is visible, and it is the
+   * truthful reading of a screw that keeps driving — a conveyor of thread,
+   * correct for a drill bit or an endless spiral, wrong for a lid that
+   * should unscrew once and stop. A one-shot advance is not this primitive;
+   * it would be an unlooped clip, and this language only emits looped ones.
+   *
+   * Mutually exclusive with `spin` on the same part: a screw IS a spin with
+   * a rise, and both would be two authorities over one rotation. Mutually
+   * exclusive with `bob` when the screw axis is z, for the same reason one
+   * axis-length lower: both would author z translation. A screw about x or y
+   * composes with a bob freely.
+   *
+   * `rise` may be negative (a left-hand thread, a descent) but never zero —
+   * a zero rise is a `spin` written the long way — and is capped at 10m per
+   * turn, past which the snap-back reads as a teleport rather than a thread.
+   */
+  screw?: { axis?: Axis; seconds?: number; rise: number };
+  /**
    * A STATIC rotation of the finished part about one world axis, applied at
    * its solved position — a tilted sign, a canted buttress, a ramp turned to
    * face the door.
@@ -400,12 +428,17 @@ export interface ClaimsSpec {
   parts?: number;
   /** Ceiling on total triangles across all meshes. */
   maxTriangles?: number;
-  /** No part sinks THROUGH the ground plane (within tolerance). One
-   *  direction only: floating is a composition, not a defect — a lantern
-   *  hangs, an orb hovers — and the compiler has no standing to call that
-   *  wrong. A project that wants floating reported opts into
-   *  `conventions.grounding`, where S3D-W-325 names the nearest support below.
-   *  Honours `conventions.grounding.exempt`; adjudicated at the rest pose. */
+  /** Two-sided, as the word means it: no part sinks THROUGH the ground
+   *  plane, AND no part hangs unsupported — resting on the ground or
+   *  transitively in contact with something that does. Floating stays a
+   *  composition, not a defect, through DECLARED floats: a part placed by
+   *  `above` hovers on purpose, so does anything in
+   *  `conventions.grounding.exempt`, and everything hanging from a
+   *  declared float inherits its licence. A hoverer placed with `at`
+   *  must be exempted — the claim cannot read minds, only declarations.
+   *  Adjudicated across the whole cycle where motion is measurable, at
+   *  the rest pose otherwise; UNCHECKED, never failed, when the contact
+   *  scan could not trace support. */
   grounded?: boolean;
   /** Ceiling on the scene's world-space height in metres. */
   maxHeight?: number;
@@ -463,6 +496,8 @@ export interface SolvedPart {
   material?: string;
   spin?: { axis?: Axis; seconds?: number };
   bob?: { amplitude: number; seconds?: number };
+  /** Turn-plus-rise about one axis; see PartSpec.screw. */
+  screw?: { axis?: Axis; seconds?: number; rise: number };
   /**
    * The part's own extents before rotation — the box the SHAPE fills exactly,
    * and the size the emitter builds the primitive at. Present only when
@@ -499,6 +534,9 @@ export interface SolveDiagnostic {
     | "SOLVE-UNKNOWN-PART"
     | "SOLVE-EPSILON-FLOOR"
     | "SOLVE-INTERSECTION"
+    /** Solved exactly as asked, but the result asserts something the author
+     *  almost certainly did not mean (a span bridging air). Advisory. */
+    | "SOLVE-SUSPECT"
     | "SOLVE-LIMIT";
   message: string;
   part?: string;
@@ -521,11 +559,23 @@ export interface SolvedScene {
  */
 export const MIN_CONTACT = 0.001;
 
-/** Loud ceiling on repeat expansion — a runaway count is a bug, not a world. */
-export const MAX_REPEAT_COUNT = 200;
+/**
+ * Loud ceiling on repeat expansion — a runaway count is a bug, not a world.
+ *
+ * A BACKSTOP, not a budget: it sits far above any scene an author means
+ * (a 60×60 instanced field fits), and exists only so `count: 999999` — a
+ * typo or a unit slip — refuses loudly instead of hanging Blender. Build
+ * time and census time below the ceiling are the author's own spend.
+ */
+export const MAX_REPEAT_COUNT = 4000;
 
-/** Loud ceiling on total parts after expansion. */
-export const MAX_PARTS = 500;
+/**
+ * Loud ceiling on total parts after expansion. 4000 on purpose: it is the
+ * same backstop the kit viewer's tree payload is engineered to
+ * (MAX_TREE_PARTS), so the largest scene the language will solve is also
+ * the largest scene every downstream surface has been sized for.
+ */
+export const MAX_PARTS = 4000;
 
 /**
  * The axis-aligned bound of a local box turned `deg` degrees about `axis`.

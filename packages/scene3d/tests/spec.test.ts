@@ -10,6 +10,7 @@ import {
   AUTOFIT_DISTANCE,
   CAMERA_FILL,
   CAMERA_HALF_FOV,
+  MAX_REPEAT_COUNT,
   MIN_CONTACT,
   SceneSpec,
 } from "../src/solve/types.js";
@@ -417,6 +418,93 @@ describe("validateSceneSpec", () => {
     expect(errors.some((e) => e === "parts[0].bob.seconds must be a number greater than 0.1")).toBe(true);
   });
 
+  /* ---- screw: the turn-plus-rise primitive -------------------------- */
+
+  const screwSpec = (screw: unknown, extra: Record<string, unknown> = {}): SceneSpec =>
+    ({
+      schemaVersion: 1,
+      parts: [{ id: "prp_bit", size: [0.2, 0.2, 1], shape: "cylinder", screw, ...extra }],
+      relations: [{ type: "at", part: "prp_bit", center: [0, 0, 1] }],
+    }) as unknown as SceneSpec;
+
+  it("accepts a screw and carries it through solve to the emitted script", () => {
+    const { errors, spec } = validateSceneSpec(screwSpec({ axis: "z", seconds: 2, rise: 0.4 }));
+    expect(errors).toEqual([]);
+    expect(spec!.parts[0]!.screw).toEqual({ axis: "z", seconds: 2, rise: 0.4 });
+
+    const solved = solveScene(spec!);
+    expect(solved.parts[0]!.screw).toEqual({ axis: "z", seconds: 2, rise: 0.4 });
+
+    const script = emitBlenderScript(solved);
+    expect(script).toContain('_animate_screw("prp_bit", 2, 48, 0.4)');
+    // The helper is authored beside the call, and its advance REPEATS: the
+    // loop point is a snap, and the script must say so rather than pretend.
+    expect(script).toContain("def _animate_screw(name, axis_index, period_frames, rise):");
+    expect(script).toContain('fc.modifiers.new("CYCLES")');
+  });
+
+  it("defaults the screw to z and a four-second turn", () => {
+    const { spec } = validateSceneSpec(screwSpec({ rise: -0.25 }));
+    const script = emitBlenderScript(solveScene(spec!));
+    expect(script).toContain('_animate_screw("prp_bit", 2, 96, -0.25)');
+  });
+
+  it("emits a byte-identical script for a scene with no screw in it", () => {
+    // The helper is keyword-gated at the call site precisely so adding this
+    // primitive cannot move a single byte of an unchanged spec's script.
+    const plain = emitBlenderScript(solveScene(validateSceneSpec(colonnade()).spec!));
+    expect(plain).not.toContain("_animate_screw");
+    expect(plain).toBe(emitBlenderScript(solveScene(validateSceneSpec(colonnade()).spec!)));
+  });
+
+  it("refuses spin and screw on one part — a screw IS a spin with a rise", () => {
+    const { errors } = validateSceneSpec(screwSpec({ rise: 0.2 }, { spin: { axis: "z" } }));
+    expect(errors).toContain(
+      "parts[0] declares both spin and screw — a screw IS a spin with a rise along its axis, so drop the spin and let screw.seconds carry the turn",
+    );
+  });
+
+  it("refuses a z screw beside a bob, and accepts one about x", () => {
+    const clash = validateSceneSpec(screwSpec({ rise: 0.2 }, { bob: { amplitude: 0.1 } }));
+    expect(clash.errors).toContain(
+      "parts[0] declares a screw about z and a bob — both author z travel, and two authorities over one axis is not a composition; screw about x or y composes with bob, or drop one of the two",
+    );
+    const ok = validateSceneSpec(screwSpec({ axis: "x", rise: 0.2 }, { bob: { amplitude: 0.1 } }));
+    expect(ok.errors).toEqual([]);
+  });
+
+  it("refuses a zero rise — that is a spin written the long way", () => {
+    const { errors } = validateSceneSpec(screwSpec({ rise: 0 }));
+    expect(errors).toContain(
+      "parts[0].screw.rise is 0, which is a spin written the long way — write the metres the part advances per turn, or use spin",
+    );
+  });
+
+  it("puts no ceiling on the rise — travel per turn is scale taste, in both directions", () => {
+    // The ceiling this test used to pin was a taste judgment wearing a
+    // rule's clothes; a 40m auger on a 200m crane is a sentence an author
+    // can mean. Finite and nonzero are the only structural requirements.
+    for (const rise of [10.5, -10.5, 40, 500]) {
+      expect(validateSceneSpec(screwSpec({ rise })).errors).toEqual([]);
+    }
+  });
+
+  it("reports a missing rise, a bad axis and a bad seconds as separate failures", () => {
+    const { errors } = validateSceneSpec(screwSpec({ axis: "w", seconds: 0.01 }));
+    expect(errors).toContain("parts[0].screw.axis must be x, y or z");
+    expect(errors).toContain("parts[0].screw.seconds must be a number greater than 0.1");
+    expect(errors).toContain(
+      "parts[0].screw.rise must be a finite number of metres travelled along the axis per turn",
+    );
+  });
+
+  it("names the nearest screw field on an unknown key", () => {
+    const { errors } = validateSceneSpec(screwSpec({ rise: 0.2, second: 3 }));
+    expect(errors).toContain(
+      'parts[0].screw.second is not a screw field — did you mean "seconds"? known fields: axis, seconds, rise',
+    );
+  });
+
   it("reports every bad component of a vec3, not just the first", () => {
     const { errors } = validateSceneSpec({
       schemaVersion: 1,
@@ -500,10 +588,21 @@ describe("validateSceneSpec", () => {
           spin: { axis: "z", seconds: 2 },
           bob: { amplitude: 0.05, seconds: 3 },
         },
+        // screw is exclusive with spin, so the key it reads lives on its own
+        // part — the list is still every key, just not all on one line.
+        {
+          id: "prp_bit",
+          size: [0.2, 0.2, 1],
+          shape: "cylinder",
+          screw: { axis: "z", seconds: 2, rise: 0.3 },
+        },
       ],
-      relations: [{ type: "at", part: "prp_full", center: [0, 0, 0.5] }],
+      relations: [
+        { type: "at", part: "prp_full", center: [0, 0, 0.5] },
+        { type: "at", part: "prp_bit", center: [2, 0, 0.5] },
+      ],
       camera: { azimuthDeg: 30, elevationDeg: 20, distance: 5 },
-      claims: { parts: 1, grounded: true },
+      claims: { parts: 2, grounded: true },
     });
     expect(errors).toEqual([]);
   });
@@ -1590,11 +1689,14 @@ describe("around (radial repeat)", () => {
   });
 
   it("refuses a ring past the repeat ceiling", () => {
-    const solved = solveScene(ring({ count: 201, radius: 50 }));
+    // Pinned to the constant, not a literal: the ceiling is a runaway
+    // backstop whose exact value may move, and this test guards the
+    // refusal, not the number.
+    const solved = solveScene(ring({ count: MAX_REPEAT_COUNT + 1, radius: 50 }));
     const limit = solved.diagnostics.filter((d) => d.code === "SOLVE-LIMIT");
     expect(limit).toHaveLength(1);
-    expect(limit[0]!.message).toContain("201");
-    expect(limit[0]!.message).toContain("the ceiling is 200");
+    expect(limit[0]!.message).toContain(String(MAX_REPEAT_COUNT + 1));
+    expect(limit[0]!.message).toContain(`the ceiling is ${MAX_REPEAT_COUNT}`);
   });
 
   it("refuses a minted id that collides with an authored part", () => {
@@ -1806,7 +1908,7 @@ describe("did-you-mean on unknown keys", () => {
       relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
     }).errors.find((e) => e.includes("materal"))!;
     expect(message).toBe(
-      'parts[0].materal is not a part field — did you mean "material"? known fields: id, size, shape, file, script, axis, flip, tip, thickness, material, role, spin, bob, rotate',
+      'parts[0].materal is not a part field — did you mean "material"? known fields: id, size, shape, file, script, axis, flip, tip, thickness, material, role, spin, bob, screw, rotate',
     );
   });
 
@@ -2067,5 +2169,155 @@ describe("margin notes in the name maps", () => {
     // The notes are dropped, not carried: they never reach the emitter.
     expect(Object.keys(result.spec!.materials ?? {})).toEqual(["mtl_a"]);
     expect(Object.keys(result.spec!.shaders ?? {})).toEqual(["shd_rust"]);
+  });
+});
+
+/* ---- the field-audit hardening round (valid-but-suspect + error voice) --- */
+
+describe("valid-but-suspect authoring warnings (W-105 channel)", () => {
+  it("warns on a kilometre-scale dimension with the unit-slip hint", () => {
+    const { errors, warnings } = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_m: { baseColor: [0.5, 0.5, 0.5], roughness: 0.5 } },
+      parts: [{ id: "prp_a", size: [100000, 1, 1], material: "mtl_m" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors).toEqual([]);
+    expect(warnings.some((w) => w.includes("millimetres written as metres"))).toBe(true);
+  });
+
+  it("warns that a rotation about a cylinder's own axis does nothing", () => {
+    const { errors, warnings } = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_m: { baseColor: [0.5, 0.5, 0.5], roughness: 0.5 } },
+      parts: [
+        {
+          id: "prp_spun",
+          shape: "cylinder",
+          size: [0.2, 0.2, 0.4],
+          rotate: { axis: "z", deg: 45 },
+          material: "mtl_m",
+        },
+      ],
+      relations: [{ type: "at", part: "prp_spun", center: [0, 0, 0.2] }],
+    });
+    expect(errors).toEqual([]);
+    expect(warnings.some((w) => w.includes("rotate does nothing"))).toBe(true);
+  });
+
+  it("stays silent for a rotation that actually turns something", () => {
+    const { warnings } = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_m: { baseColor: [0.5, 0.5, 0.5], roughness: 0.5 } },
+      parts: [
+        { id: "prp_tilt", size: [0.3, 0.2, 0.2], rotate: { axis: "z", deg: 37 }, material: "mtl_m" },
+      ],
+      relations: [{ type: "at", part: "prp_tilt", center: [0, 0, 0.1] }],
+    });
+    expect(warnings).toEqual([]);
+  });
+});
+
+describe("error voice (field-audit inconsistencies)", () => {
+  const minimal = (partExtra: object, relations: unknown[] = []) => ({
+    schemaVersion: 1,
+    materials: { mtl_m: { baseColor: [0.5, 0.5, 0.5], roughness: 0.5 } },
+    parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_m", ...partExtra }],
+    relations: relations.length
+      ? relations
+      : [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+  });
+
+  it("suggests the nearest shape for a one-character typo", () => {
+    const { errors } = validateSceneSpec(minimal({ shape: "cylindar" }));
+    expect(errors.some((e) => e.includes('did you mean "cylinder"'))).toBe(true);
+  });
+
+  it("says a wedge's axis is REQUIRED when none was written", () => {
+    const { errors } = validateSceneSpec(minimal({ shape: "wedge" }));
+    expect(errors.some((e) => e.includes("axis is required for a wedge"))).toBe(true);
+  });
+
+  it("maps above's `of`/`gap` to the real field names", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_m: { baseColor: [0.5, 0.5, 0.5], roughness: 0.5 } },
+      parts: [
+        { id: "prp_a", size: [1, 1, 1], material: "mtl_m" },
+        { id: "prp_b", size: [1, 1, 1], material: "mtl_m" },
+      ],
+      relations: [
+        { type: "at", part: "prp_a", center: [0, 0, 0.5] },
+        { type: "above", part: "prp_b", of: "prp_a", gap: 0.2 },
+      ],
+    });
+    expect(errors.some((e) => e.includes('.of is not a field') && e.includes('did you mean "over"'))).toBe(true);
+    expect(errors.some((e) => e.includes('.gap is not a field') && e.includes('did you mean "clearance"'))).toBe(true);
+  });
+
+  it("says schemaVersion is MISSING when it is missing", () => {
+    const { errors } = validateSceneSpec({ parts: [], relations: [] });
+    expect(errors.some((e) => e.includes("schemaVersion is missing"))).toBe(true);
+  });
+
+  it("does not cascade a broken shader into false material errors", () => {
+    // One wrong key (`file` for `kernel`) plus an array size. The material
+    // referencing the DECLARED-but-broken shader must produce no error of
+    // its own, and no baseColor-fallback demand.
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      shaders: { shd_rust: { file: "rust.glsl", size: [512, 512] } },
+      materials: { mtl_rust: { shader: "shd_rust" } },
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_rust" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors.some((e) => e.includes('did you mean "kernel"'))).toBe(true);
+    expect(errors.some((e) => e.includes("size is one number"))).toBe(true);
+    expect(errors.some((e) => e.includes("not declared in shaders"))).toBe(false);
+    expect(errors.some((e) => e.includes("baseColor"))).toBe(false);
+  });
+
+  it("names a two-node placement cycle as a cycle, not a double constraint", () => {
+    const { spec } = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_m: { baseColor: [0.5, 0.5, 0.5], roughness: 0.5 } },
+      parts: [
+        { id: "prp_a", size: [0.2, 0.2, 0.2], material: "mtl_m" },
+        { id: "prp_b", size: [0.2, 0.2, 0.2], material: "mtl_m" },
+      ],
+      relations: [
+        { type: "at", part: "prp_a", center: [0, 0, 0.1] },
+        { type: "sits_on", part: "prp_b", on: "prp_a" },
+        { type: "sits_on", part: "prp_a", on: "prp_b" },
+      ],
+    });
+    const solved = solveScene(spec!);
+    const conflict = solved.diagnostics.find((d) => d.code === "SOLVE-CONFLICT");
+    expect(conflict).toBeDefined();
+    expect(conflict!.message).toContain("cycle: prp_a → prp_b → prp_a");
+  });
+
+  it("warns when a span's body never reaches an anchor it names", () => {
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_m: { baseColor: [0.5, 0.5, 0.5], roughness: 0.5 } },
+      parts: [
+        { id: "prp_column", size: [0.3, 0.3, 1], material: "mtl_m" },
+        { id: "prp_post", size: [0.3, 0.3, 1], material: "mtl_m" },
+        { id: "prp_rail", size: [0.1, 0.05, 0.05], material: "mtl_m" },
+      ],
+      relations: [
+        { type: "at", part: "prp_column", center: [0, 0, 0.5] },
+        // Diagonal neighbour: the x span solves, the y midpoint bridges air.
+        { type: "at", part: "prp_post", center: [1.4, 1.4, 0.5] },
+        { type: "span", part: "prp_rail", from: "prp_column", to: "prp_post", axis: "x" },
+        { type: "at", part: "prp_rail", center: [null as unknown as number, undefined as unknown as number, 0.5] },
+      ].slice(0, 3),
+    });
+    expect(errors).toEqual([]);
+    const solved = solveScene(spec!);
+    const suspect = solved.diagnostics.filter((d) => d.code === "SOLVE-SUSPECT");
+    expect(suspect.length).toBeGreaterThan(0);
+    expect(suspect[0]!.message).toContain("bridging air");
   });
 });

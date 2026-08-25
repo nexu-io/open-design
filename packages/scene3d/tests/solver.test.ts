@@ -550,7 +550,10 @@ describe("the part ceiling applies to every path that mints parts", () => {
       ],
       relations: [
         { type: "at", part: "prp_ground", center: [0, 0, 0.05] },
-        { type: "scatter", part: "prp_pebble", on: "prp_ground", count: 600, seed: 1 },
+        // MAX_PARTS exactly: legal as a per-relation count, but the two
+        // authored parts push the TOTAL past the ceiling — the growth path
+        // this test exists to guard, at whatever value the ceiling holds.
+        { type: "scatter", part: "prp_pebble", on: "prp_ground", count: MAX_PARTS, seed: 1 },
       ],
     } as SceneSpec;
     const solved = solveScene(spec);

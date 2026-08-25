@@ -852,14 +852,14 @@ def bake_shaders(job):
                 # the top-left — the layout the sheet rules adjudicate.
                 cols = 2 ** math.ceil(math.log2(math.sqrt(frames)))
                 rows = frames // cols
-                # The TS validator restricts frames to {2,4,8,16,32,64},
-                # which always tile exactly. Anything else reaching here is
-                # a broken caller and must fail as a sentence, not as a
-                # numpy IndexError three stages later.
+                # The TS validator restricts frames to powers of two
+                # (2..256), which always tile exactly. Anything else
+                # reaching here is a broken caller and must fail as a
+                # sentence, not as a numpy IndexError three stages later.
                 if cols * rows != frames:
                     fail("S3D-E-801",
                          "shader '%s': %d frames do not tile a power-of-two "
-                         "atlas — frames must be one of 2, 4, 8, 16, 32, 64"
+                         "atlas — frames must be a power of two from 2 to 256"
                          % (name, frames))
                 px = np.zeros((rows * size, cols * size, 4), dtype=np.float32)
                 # Motion vectors are derived from the BEAUTY frames, so capture
@@ -984,15 +984,18 @@ def bake_shaders(job):
             return node
 
         for output in binding["outputs"]:
-            short = binding["shader"][4:]
+            # ONE name family: the shader is declared shd_rust, its file is
+            # shd_rust_baseColor.png, and the image datablock now matches —
+            # a grep for any one of the three finds the others. (The old
+            # tex_<stem> datablock name was a third alias nothing else used.)
             if output == "height":
-                normal_node = wire_image("normal", "tex_%s_normal" % short, True)
+                normal_node = wire_image("normal", "%s_normal" % binding["shader"], True)
                 if normal_node is not None and "Normal" in bsdf.inputs:
                     nm = mat.node_tree.nodes.new("ShaderNodeNormalMap")
                     mat.node_tree.links.new(normal_node.outputs["Color"], nm.inputs["Color"])
                     mat.node_tree.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
                 continue
-            node = wire_image(output, "tex_%s_%s" % (short, output),
+            node = wire_image(output, "%s_%s" % (binding["shader"], output),
                               output in ("roughness", "metallic"))
             if node is not None:
                 socket = socket_for[output]
@@ -1285,7 +1288,7 @@ def action_has_curves(action):
 ZERO_AREA_RATIO = 1e-6
 
 
-def census(scene, measure_thickness=False, voxel_grid=0.0):
+def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
     import bpy
     import bmesh
     import mathutils
@@ -1299,6 +1302,9 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
     # objects USED to be. The proof stage already carries the same call for
     # the same reason.
     bpy.context.view_layer.update()
+    # Fresh fallback ledger per census: entries surviving from an earlier
+    # census in the same process would name objects this scene never had.
+    del _EVAL_FALLBACKS[:]
 
     objects = sorted((o for o in scene.objects if o.name != "S3D_AutoCam"), key=lambda o: o.name)
     obj_rows = []
@@ -1457,8 +1463,23 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
         # Triangle count as an engine would see it after triangulation —
         # the number a per-mesh budget is actually expressed in.
         tris = sum(max(0, len(p.vertices) - 2) for p in o.data.polygons)
+        # Topological, so it needs no bmesh and no world transform.
+        spectrum = spectrum_facts(o.data)
         mesh_rows.append({
             "object": o.name, "verts": len(o.data.vertices), "faces": len(o.data.polygons),
+            # Edges complete the Euler characteristic V - E + F: a
+            # TESSELLATION-INDEPENDENT topological invariant (a tube is 0 at
+            # any segment count, a closed sphere-like solid is 2, each extra
+            # handle costs 2) that cross-checks watertightness through pure
+            # counting rather than edge-manifold inspection.
+            #
+            # PRECONDITION for the genus identity g = (2*shells - chi) / 2:
+            # closed, face-connected geometry. V/E/F count LOOSE geometry
+            # too (a stray vertex adds 1 to V and 1 to shells but 2 to
+            # 2*shells, leaving g fractional) — a non-integer genus is the
+            # SIGNAL that the mesh carries loose or open geometry, which
+            # looseVerts and nonManifoldEdges then name.
+            "edges": len(o.data.edges),
             "tris": tris,
             "ngons": ngons, "nonManifoldEdges": non_manifold, "zeroAreaFaces": zero_area,
             "nan": nan_verts or not all(math.isfinite(v) for row in o.matrix_world for v in row),
@@ -1493,6 +1514,13 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
             # budget very differently; this is the fact that says so.
             "triDensity": R6(tris / world_area) if world_area > 1e-9 else None,
             "symmetry": symmetry,
+            # Spectral shape-DNA: connected-component count (always) and the
+            # truncated, scale-normalised low spectrum of the uniform graph
+            # Laplacian (capped). Measured from mesh TOPOLOGY, so it is
+            # unaffected by the world transform applied to the bmesh above —
+            # and `shells` is what makes the Euler characteristic usable:
+            # genus = (2*shells - (V - E + F)) / 2.
+            **({} if spectrum is None else {"spectrum": spectrum}),
             # Spatial facts, measured in world space.
             #
             # An agent working from a rendered image is guessing at
@@ -1578,13 +1606,26 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
         o for o in objects
         if all(math.isfinite(v) for row in o.matrix_world for v in row)
     ]
-    zf_pairs, zf_skipped = z_fighting_pairs(finite_objects)
+    zf_pairs, zf_skipped = z_fighting_pairs(finite_objects, zf_pair_budget or COPLANAR_TRI_PRODUCT_CAP)
     contacts, contacts_skipped = contact_report(finite_objects)
     cam = scene.camera
     keyframed = sorted(
         (o.name for o in objects
          if o.animation_data and o.animation_data.action
          and action_has_curves(o.animation_data.action)))
+    # Motion the BOUND-action test cannot see: an action pushed down to an
+    # NLA track leaves animation_data.action None, and drivers author motion
+    # with no action at all. Both still play in the depsgraph the sampler
+    # evaluates, so they must open the animated-bounds gate — `keyframed`
+    # keeps its exact meaning (bound action curves; assetKind and clip
+    # facts read it), and this wider truth exists only to gate sampling.
+    animates = keyframed or any(
+        o.animation_data and (
+            any(t.strips for t in o.animation_data.nla_tracks)
+            or len(o.animation_data.drivers) > 0
+        )
+        for o in objects if o.animation_data
+    )
     # Skeletons are census facts: a rigged asset's rig must be visible in
     # the report, not discovered by opening the file in a DCC.
     armature_rows = sorted(
@@ -1592,6 +1633,21 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
          for o in objects if o.type == "ARMATURE"),
         key=lambda r: r["name"])
     action_names = sorted(a.name for a in bpy.data.actions if action_has_curves(a))
+    # Time is only a dimension when something moves. A still scene's rest pose
+    # IS the whole truth, so there is nothing left unchecked and no field to
+    # emit. The gate is `animates` — bound actions PLUS NLA strips and
+    # drivers — because "absence means nothing to measure" is only true if
+    # the gate sees every way Blender can make something move; a
+    # bound-action-only gate leaves an NLA-driven import unsampled while
+    # its actionNames advertise the clips.
+    #
+    # Computed BEFORE the return literal on purpose: off_camera_objects() below
+    # is a world-space measurement, and it must run at the frame the census
+    # found — animated_bounds restores it, and this ordering keeps that
+    # guarantee visible rather than implied.
+    anim_bounds = None
+    if animates:
+        anim_bounds = animated_bounds(scene, [o for o in finite_objects if o.type == "MESH"])
 
     return {
         "blenderVersion": bpy.app.version_string,
@@ -1606,6 +1662,19 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
         "zFightingSkipped": zf_skipped,
         "contacts": contacts,
         "contactsSkipped": contacts_skipped,
+        # Objects whose world-space facts came from the ORIGINAL data
+        # because the evaluated mesh could not be built (see
+        # face_connected_world_points). Empty for every normal scene; a
+        # named entry means that object's bounds/contacts describe its
+        # rest cage, not what ships.
+        **({"evaluationNotes": ["'%s' measured from original mesh data - evaluated mesh unavailable" % n
+                                 for n in _EVAL_FALLBACKS]}
+           if _EVAL_FALLBACKS else {}),
+        # The recording cutoff, stated: pairs farther apart than this on
+        # every tested direction are not in `contacts`, so "touches
+        # nothing" means "nothing within this range" — a different claim
+        # from "nothing anywhere", and the census says which one it makes.
+        "contactRange": CONTACT_RECORD_RANGE,
         # Object name -> {file, line} of the build-script line that created
         # it. This is what lets a reported issue point at the code that
         # caused it instead of only at the geometry that exhibits it.
@@ -1617,6 +1686,7 @@ def census(scene, measure_thickness=False, voxel_grid=0.0):
             "fps": scene.render.fps, "frameStart": scene.frame_start, "frameEnd": scene.frame_end,
             "keyframedObjects": keyframed,
             "actionNames": action_names,
+            **({} if anim_bounds is None else {"animatedBounds": anim_bounds}),
         },
         "armatures": armature_rows,
         "importNotes": list(IMPORT_NOTES),
@@ -1771,6 +1841,166 @@ DOUBLES_VERT_CAP = 250000
 # vert cap the block is omitted, and probes stride-sample down to this many.
 SYMMETRY_VERT_CAP = 100000
 SYMMETRY_PROBES = 2048
+
+
+# Spectral shape-DNA. The eigen solve is dense O(n^3), so the cap is a COST
+# gate and, per this file's cap doctrine, exceeding it RECORDS A REASON
+# rather than going quiet. 2000 on purpose: a 2000x2000 eigvalsh is a
+# couple of seconds — real spend, but it covers every size-derived
+# primitive the emitter tessellates (a 0.5m torus alone is ~1150 verts;
+# a cap below that silently halves the fact's coverage of the language's
+# own shapes). Past it the cost curve turns minutes-per-mesh, which stops
+# being a measurement and starts being the compile. There is deliberately
+# no downsampling fallback: a decimated graph has a DIFFERENT spectrum,
+# so a "cheaper approximation" here would be a fabricated fingerprint,
+# not a coarse one.
+SPECTRUM_VERT_CAP = 2000
+# How many nonzero eigenvalues travel. The low end of the spectrum carries the
+# coarse shape (the high end is tessellation noise), and 12 is enough to
+# separate a torus from a sphere while staying tiny in the manifest.
+SPECTRUM_K = 12
+
+
+def _shell_count(vert_count, edge_pairs):
+    """Connected components of the vertex graph, by union-find with path
+    compression. Near-free at any size, so — unlike the eigen solve — this is
+    measured for EVERY mesh with no cap: the Euler characteristic needs it
+    (genus = (2*shells - (V - E + F)) / 2 is undefined for one shell only when
+    you assume the mesh is one shell), and assuming 1 is exactly the assumption
+    that made chi unusable on multi-part imported meshes.
+
+    Isolated vertices count as their own shell — they are components of the
+    graph, and pretending otherwise would make `shells` disagree with the
+    number of zero eigenvalues of the very Laplacian built from it."""
+    parent = list(range(vert_count))
+
+    def find(x):
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:
+            parent[x], x = root, parent[x]
+        return root
+
+    for a, b in edge_pairs:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+    return sum(1 for i in range(vert_count) if find(i) == i)
+
+
+def spectrum_facts(mesh):
+    """Spectral shape-DNA of one mesh: `shells` (always) plus the truncated
+    low end of its Laplacian spectrum (capped).
+
+    WHICH Laplacian: the uniform-weight GRAPH Laplacian L = D - A over the
+    mesh's edge graph — deliberately NOT the cotangent Laplacian. Cotan weights
+    encode geometry, and they do it by dividing by triangle areas: on the thin,
+    sliver and near-degenerate triangles that real downloaded assets ship, the
+    weights blow up or go negative and the spectrum becomes noise. The uniform
+    graph Laplacian is a TOPOLOGY-AND-CONNECTIVITY fingerprint: it says how the
+    mesh is wired, not how it is shaped in millimetres. Two parts with the same
+    spectrum are the same wiring; that is the claim, and no more than that.
+
+    EIGENVALUES ONLY. No eigenvectors are computed or reported, so none of the
+    usual spectral-embedding ambiguity applies: eigenvectors are defined only up
+    to sign, and up to an arbitrary rotation inside any repeated-eigenvalue
+    subspace (a symmetric part has many), which would make a fingerprint built
+    from them machine-dependent. A sorted list of eigenvalues has neither
+    freedom. It is also isometry-invariant by construction — the graph does not
+    know where the mesh sits or how it is turned.
+
+    SCALE: the nonzero eigenvalues are divided by the first nonzero one, so the
+    vector is lambda_k/lambda_1 and a big copy of a part matches the small one.
+    That makes this a SHAPE fingerprint, not a size one — sizes are already
+    census facts (`spatial.size`, `dimensions`), and duplicating them here would
+    make the fingerprint fail for exactly the case it exists to catch.
+
+    DETERMINISM: eigvalsh on a symmetric matrix returns real eigenvalues sorted
+    ascending, so ordering is fixed. The VALUES still wobble at ~1e-15 across
+    LAPACK/BLAS builds (different kernels, different summation order); the
+    lambda/lambda_1 normalisation keeps them O(1) and the R6 rounding then
+    absorbs the wobble entirely — a 1e-15 difference cannot reach the 6th
+    decimal place. The matrix itself is built from integer degrees and a 0/1
+    adjacency, exactly representable, so nothing upstream of the solve varies.
+
+    ZERO THRESHOLD: the multiplicity of eigenvalue 0 equals the number of
+    connected components, but LAPACK returns those zeros as ~1e-14 noise (and
+    can return them slightly negative). The cut is |lambda| < 1e-8 * lambda_max
+    — RELATIVE, because the spectrum's magnitude scales with vertex degree, so
+    an absolute epsilon would be too tight on a dense mesh and too loose on a
+    sparse one. 1e-8 sits ~6 orders above the noise floor and ~6 below the
+    smallest genuine Fiedler value seen on connected meshes, so no genuine mode
+    is ever swallowed. `shells` is reported from union-find rather than from
+    this count, so the census never depends on the threshold for a fact it can
+    get exactly.
+
+    Returns {"shells": n} plus either "eigenvalues" or "skipped" (a reason,
+    never silence)."""
+    edge_pairs = []
+    try:
+        for e in mesh.edges:
+            a, b = e.vertices[0], e.vertices[1]
+            if a != b:
+                edge_pairs.append((a, b))
+    except Exception:
+        return None
+    n = len(mesh.vertices)
+    if n == 0:
+        return None
+    try:
+        shells = _shell_count(n, edge_pairs)
+    except Exception:
+        return None
+    out = {"shells": shells}
+    if n > SPECTRUM_VERT_CAP:
+        out["skipped"] = "vertex count %d exceeds SPECTRUM_VERT_CAP %d" % (n, SPECTRUM_VERT_CAP)
+        return out
+    try:
+        import numpy as np
+    except Exception:
+        out["skipped"] = "numpy unavailable in this Blender python"
+        return out
+    try:
+        lap = np.zeros((n, n), dtype=np.float64)
+        for a, b in edge_pairs:
+            # Multi-edges (two faces sharing a doubled edge) must not count
+            # twice: adjacency is a SET relation, and a duplicated entry would
+            # make L asymmetric with respect to the degree accumulated below.
+            if lap[a, b] == 0.0:
+                lap[a, b] = -1.0
+                lap[b, a] = -1.0
+        # Degree on the diagonal, read back off the adjacency that survived
+        # de-duplication rather than off the edge list.
+        for i in range(n):
+            lap[i, i] = -lap[i].sum()
+        vals = np.linalg.eigvalsh(lap)
+    except Exception as exc:
+        out["skipped"] = "eigen solve failed: %s" % (exc.__class__.__name__,)
+        return out
+    lam_max = float(vals[-1]) if len(vals) else 0.0
+    if not math.isfinite(lam_max) or lam_max <= 0.0:
+        out["skipped"] = "no positive spectrum (mesh has no edges)"
+        return out
+    cut = 1e-8 * lam_max
+    nonzero = [float(v) for v in vals if abs(float(v)) >= cut]
+    if not nonzero:
+        out["skipped"] = "no nonzero eigenvalues"
+        return out
+    first = nonzero[0]
+    # SIGNIFICANT digits, not decimal places. The ratios lam_k/lam_1 are
+    # unbounded above (a near-disconnected mesh — two clusters joined by a
+    # single edge — puts the Fiedler value orders below lam_max), and
+    # absolute R6 rounding stops absorbing LAPACK-build wobble exactly
+    # there: the wobble propagates as lam_k*d(lam_1)/lam_1^2, amplified by
+    # the square of the quantity the normalisation divides by. Six
+    # significant digits keep the byte-determinism promise at every
+    # magnitude, and identical clones stay byte-equal either way (their
+    # integer Laplacians are the same matrix).
+    def sig6(v):
+        return float("%.6g" % v) if math.isfinite(v) else None
+    out["eigenvalues"] = [sig6(v / first) for v in nonzero[:SPECTRUM_K]]
+    return out
 
 
 def _principal_axes(verts, stride):
@@ -2779,6 +3009,31 @@ def dfm_facts(bm, world_area, measure_thickness):
     return overhang_area, min_thickness
 
 
+def _face_connected_points(me, mw):
+    """THE bounds predicate: world positions of face-connected vertices.
+
+    Factored out so the rest-pose measurement and the animated (evaluated,
+    deformed) one are the same computation over different mesh data rather
+    than two derivations that can drift — one predicate per physical
+    relation, as the world/claims grounding pair already is.
+    """
+    import mathutils
+    verts = me.vertices
+    if not verts:
+        return []
+    used = set()
+    for p in me.polygons:
+        used.update(p.vertices)
+    idxs = sorted(used) if used else range(len(verts))
+    return [mw @ mathutils.Vector(verts[i].co) for i in idxs]
+
+
+# Objects whose EVALUATED mesh could not be built this census, so their
+# world-space facts fell back to the original (rest) data. Surfaced in the
+# census as evaluationNotes — a fallback is a fact, never a silence.
+_EVAL_FALLBACKS = []
+
+
 def face_connected_world_points(o):
     """World-space positions of the vertices that belong to at least one face.
 
@@ -2791,17 +3046,74 @@ def face_connected_world_points(o):
     broken all-loose mesh) falls back to every vertex so it still reports a
     box — T-3 / LOOSE_GEOMETRY flag that case separately. Returns [] for a
     non-mesh or an empty mesh.
+
+    Measures the EVALUATED mesh: modifiers and armatures write their result
+    into the depsgraph, not into `o.data`, so reading the original data
+    measured a rigged import's rest cage — and a Mirror's single half —
+    while the proof render and the exports showed the finished geometry.
+    Identical for unmodified meshes (the whole authored-primitive corpus).
+    Falls back to the original data only when evaluation cannot produce a
+    mesh, and NAMES the fallback in _EVAL_FALLBACKS for the census.
     """
-    import mathutils
     if o.type != "MESH" or not o.data.vertices:
         return []
-    mw = o.matrix_world
-    verts = o.data.vertices
-    used = set()
-    for p in o.data.polygons:
-        used.update(p.vertices)
-    idxs = sorted(used) if used else range(len(verts))
-    return [mw @ mathutils.Vector(verts[i].co) for i in idxs]
+    try:
+        dg = bpy.context.evaluated_depsgraph_get()
+        eo = o.evaluated_get(dg)
+        me = None
+        try:
+            me = eo.to_mesh()
+            if me is not None:
+                return _face_connected_points(me, eo.matrix_world)
+        finally:
+            if me is not None:
+                try:
+                    eo.to_mesh_clear()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    if o.name not in _EVAL_FALLBACKS:
+        _EVAL_FALLBACKS.append(o.name)
+    return _face_connected_points(o.data, o.matrix_world)
+
+
+def deformed_world_points(o, depsgraph, failures=None):
+    """The same predicate over the DEPSGRAPH-EVALUATED mesh.
+
+    Skinned geometry does not move in `o.data` — the armature modifier writes
+    its result into the evaluated object, so a census that read `o.data` at
+    frame 40 would measure the rest pose forty times and report a walking
+    character as perfectly still. `evaluated_get(...).to_mesh()` is where the
+    deformation actually lives; `to_mesh_clear()` releases it, and the caller
+    is inside a per-frame loop, so leaking it would be a real cost.
+
+    A raised evaluation is RECORDED into `failures` (when given), never
+    swallowed: a mesh dropped from the envelope is a hole in the very
+    coverage the sampler exists to provide, and the payload must be able to
+    say which limb it could not watch.
+    """
+    if o.type != "MESH":
+        return []
+    eo = o.evaluated_get(depsgraph)
+    me = None
+    try:
+        me = eo.to_mesh()
+        if me is None:
+            if failures is not None:
+                failures.add(o.name)
+            return []
+        return _face_connected_points(me, eo.matrix_world)
+    except Exception:
+        if failures is not None:
+            failures.add(o.name)
+        return []
+    finally:
+        if me is not None:
+            try:
+                eo.to_mesh_clear()
+            except Exception:
+                pass
 
 
 def spatial_facts(o):
@@ -2850,21 +3162,201 @@ def spatial_facts(o):
     }
 
 
-def contact_report(objects, limit=60):
-    """Axis-wise separation between every nearby pair of meshes.
+# Animated-bounds budget. The cost is frames x meshes vertex passes, each
+# building an evaluated mesh, so the cap is stated in that product and the
+# stride is derived from it — the same shape as DOUBLES_VERT_CAP and
+# THICKNESS_FACE_CAP: a cost gate keyed on a measured value, never a mode.
+ANIMATED_BOUNDS_SAMPLE_CAP = 3000
+# Past this many meshes even two frames is a scene-scale sweep of evaluated
+# meshes, so the measurement declines — loudly, via `skipped`.
+ANIMATED_BOUNDS_MESH_CAP = 400
+# Two frames (the ends) is the least that says anything about motion.
+ANIMATED_BOUNDS_MIN_FRAMES = 2
 
-    Positive gap on an axis means a clear space; negative means the two
-    overlap along it. A pair that overlaps on all three axes intersects.
-    This is the measurement behind questions an agent otherwise answers by
-    eye — "does the rail actually touch the lip it leans on", "is this
-    bracing clear of the walkway" — and by eye is exactly where it gets
-    those wrong.
+
+def animated_bounds(scene, meshes):
+    """World bounds across the scene's frame range, not at one pose.
+
+    A claim about height, footprint or grounding is a claim about the asset,
+    and an asset that animates occupies different space every frame. The rest
+    pose is one sample of that; measuring only it means an arm that clips the
+    floor at frame 31, or a jump whose crest doubles the silhouette, passes a
+    claim it violates. So sample the range and record the extremes.
+
+    Bounded, and the bound is REPORTED: when the range costs more than
+    ANIMATED_BOUNDS_SAMPLE_CAP frame-mesh passes the walk takes a stride, and
+    `frameStep > 1` tells the reader that the frames between samples were
+    never visited — the adjudicator downgrades to "sampled, not exhaustive"
+    on exactly that field. A bounded search that does not report what it
+    skipped is the bug class three audits found.
+
+    Leaves the scene on the frame it found it on: the census's own remaining
+    world-space facts, and the proof stage's rest-pose framing, both depend on
+    it.
+    """
+    import bpy
+    if not meshes:
+        return {"skipped": "no mesh geometry to sample"}
+    if len(meshes) > ANIMATED_BOUNDS_MESH_CAP:
+        return {"skipped": "scene has %d meshes, above the %d-mesh animated-bounds limit"
+                           % (len(meshes), ANIMATED_BOUNDS_MESH_CAP)}
+
+    start = int(scene.frame_start)
+    end = int(scene.frame_end)
+    if end < start:
+        start, end = end, start
+    span = end - start + 1
+    # How many frames the budget affords, floored at the two ends so a very
+    # heavy scene still reports SOMETHING about time rather than nothing.
+    affordable = max(ANIMATED_BOUNDS_MIN_FRAMES, ANIMATED_BOUNDS_SAMPLE_CAP // len(meshes))
+    step = 1 if span <= affordable else int(math.ceil(span / float(affordable)))
+    frames = list(range(start, end + 1, step))
+    # The last frame is where a one-shot clip's extreme usually lives; a
+    # stride that lands short of it would miss the pose the author cares most
+    # about. Always include the end.
+    if frames and frames[-1] != end:
+        frames.append(end)
+
+    saved = scene.frame_current
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    lo_frame = [saved] * 3
+    hi_frame = [saved] * 3
+    per_part = {}
+    eval_failures = set()
+    try:
+        for f in frames:
+            scene.frame_set(f)
+            bpy.context.view_layer.update()
+            # Fetched per frame: the depsgraph handle is only valid for the
+            # state it was evaluated against.
+            dg = bpy.context.evaluated_depsgraph_get()
+            for o in meshes:
+                pts = deformed_world_points(o, dg, eval_failures)
+                if not pts:
+                    continue
+                p_lo = [min(p[a] for p in pts) for a in range(3)]
+                p_hi = [max(p[a] for p in pts) for a in range(3)]
+                for a in range(3):
+                    if p_lo[a] < lo[a]:
+                        lo[a] = p_lo[a]
+                        lo_frame[a] = f
+                    if p_hi[a] > hi[a]:
+                        hi[a] = p_hi[a]
+                        hi_frame[a] = f
+                row = per_part.get(o.name)
+                if row is None:
+                    per_part[o.name] = {
+                        "object": o.name,
+                        "minZ": p_lo[2], "maxZ": p_hi[2],
+                        "minZFrame": f, "maxZFrame": f,
+                    }
+                else:
+                    if p_lo[2] < row["minZ"]:
+                        row["minZ"] = p_lo[2]
+                        row["minZFrame"] = f
+                    if p_hi[2] > row["maxZ"]:
+                        row["maxZ"] = p_hi[2]
+                        row["maxZFrame"] = f
+    except Exception:
+        return {"skipped": "animated sampling raised: %s" % traceback.format_exc(limit=2).strip().splitlines()[-1],
+                "frameStart": start, "frameEnd": end}
+    finally:
+        try:
+            scene.frame_set(saved)
+            bpy.context.view_layer.update()
+        except Exception:
+            pass
+
+    if not per_part:
+        # Say WHY nothing was measurable when the reason is known: "no
+        # geometry" and "every evaluation raised" are different scenes, and
+        # asserting the first when the truth is the second blames the file.
+        reason = ("evaluated mesh unavailable for every part (%s)" % ", ".join(sorted(eval_failures))
+                  if eval_failures else "no measurable mesh geometry across the frame range")
+        return {"skipped": reason,
+                "frameStart": start, "frameEnd": end,
+                "framesSampled": len(frames), "frameStep": step}
+
+    return {
+        "min": [R6(v) for v in lo],
+        "max": [R6(v) for v in hi],
+        "minFrame": lo_frame,
+        "maxFrame": hi_frame,
+        "framesSampled": len(frames),
+        "frameStep": step,
+        "frameStart": start,
+        "frameEnd": end,
+        # Parts the sampler could NOT watch: their motion is absent from
+        # min/max/parts, so an envelope with entries here is a partial
+        # claim and the exactness gates downstream must not treat it as
+        # a complete walk.
+        **({"skippedParts": sorted(eval_failures)} if eval_failures else {}),
+        "parts": [
+            {"object": r["object"],
+             "minZ": R6(r["minZ"]), "maxZ": R6(r["maxZ"]),
+             "minZFrame": r["minZFrame"], "maxZFrame": r["maxZFrame"]}
+            for r in sorted(per_part.values(), key=lambda r: r["object"])
+        ],
+    }
+
+
+# Pairs farther apart than this (on every tested direction) are not
+# recorded: beyond it two parts are scene neighbours, not a relationship.
+# NAMED and exported in the census (`contactRange`) because the threshold
+# changes what an empty contact list MEANS — "touches nothing" is really
+# "nothing within this range", and an undocumented cutoff reads as a
+# missing measurement.
+CONTACT_RECORD_RANGE = 0.05
+
+
+def contact_report(objects, limit=60):
+    """Separation between every nearby pair of meshes.
+
+    Two numbers per pair, from two different geometries — labelled because
+    a reader who conflates them concludes two distant parts interpenetrate:
+
+      gap        — PER-AXIS aabb slack (broad phase): positive on an axis
+                   means the world-axis slabs are clear there; negative
+                   means they overlap along that axis. Diagnostic only.
+      separation — the controlling number. For a disjoint pair it is the
+                   measured nearest SURFACE distance (a real point pair,
+                   found by alternating BVH projection and certified by a
+                   support-plane witness); for an intersecting pair it is
+                   the (negative) widest axis overlap, a penetration proxy.
+
+    The maths, because this is where a field audit caught the harness
+    lying: a directional support gap along ANY direction d is a LOWER
+    bound of the true distance (h_B(d) - h_A(d) <= |p-q| for all p in A,
+    q in B), with equality only at the optimal d. The old code reported
+    the best of four directions (three world axes + centre-to-centre) AS
+    the separation, which under-reported every diagonal proximity — a
+    cube on a cylinder's 45° diagonal read ~23mm closer than geometry
+    allows, implying a nearest point OUTSIDE the mesh. Now the projection
+    pair (p, q) is iterated to a stationary point: |p - q| is an upper
+    bound attained by real surface points, the support gap along (q - p)
+    is the matching lower bound, and when the two meet (convex pairs, and
+    every case the audit measured) the number is the distance itself.
     """
     import mathutils
     meshes = [o for o in objects if o.type == "MESH"]
     skipped = []
     if len(meshes) > limit:
         return [], ["scene has %d meshes, above the %d-mesh contact limit" % (len(meshes), limit)]
+
+    # Every degraded pair is NAMED — the docstring above promises a measured
+    # surface distance certified by a support witness, and any pair that
+    # falls back to the axis bound alone sits below that promise. Capped so
+    # a pathological scene cannot flood the census; the cap itself reports.
+    degraded_count = [0]
+    DEGRADE_NOTE_CAP = 8
+
+    def note_degraded(msg):
+        degraded_count[0] += 1
+        if degraded_count[0] <= DEGRADE_NOTE_CAP:
+            skipped.append(msg)
+        elif degraded_count[0] == DEGRADE_NOTE_CAP + 1:
+            skipped.append("further contact degradations elided (cap %d) - count rides the last entry" % DEGRADE_NOTE_CAP)
 
     def world_aabb(o):
         # The SAME box the census reports for this object. bound_box includes
@@ -2903,44 +3395,188 @@ def contact_report(objects, limit=60):
     # (the AABB verdict stands, as it always has) — the cap is the caller's
     # honesty budget, same doctrine as every other heavy measurement here.
     REFINE_VERT_CAP = 400000
+
+    # World-space BVH per mesh, built lazily (only pairs that get this far
+    # pay for it). FromPolygons over world-transformed vertices, NOT
+    # FromObject: FromObject answers in object space, and an unapplied
+    # scale would make its distances lie in exactly the way this function
+    # exists to stop.
+    from mathutils.bvhtree import BVHTree
+    bvh_cache = {}
+
+    def bvh_of(o):
+        if o.name in bvh_cache:
+            return bvh_cache[o.name]
+        tree = None
+        try:
+            # The EVALUATED mesh, like every other world-space read here —
+            # a BVH over the rest cage would certify distances for
+            # geometry that is not what ships. calc_loop_triangles keeps
+            # FromPolygons off n-gons entirely: triangles are always a
+            # shape it accepts, so an n-gon-bearing import cannot silently
+            # lose its narrow phase.
+            eo = o
+            me = None
+            owned = False
+            try:
+                dg = bpy.context.evaluated_depsgraph_get()
+                eo = o.evaluated_get(dg)
+                me = eo.to_mesh()
+                owned = me is not None
+            except Exception:
+                eo, me, owned = o, None, False
+            try:
+                if me is None:
+                    me, eo = o.data, o
+                mw = eo.matrix_world
+                verts = [tuple(mw @ v.co) for v in me.vertices]
+                me.calc_loop_triangles()
+                polys = [tuple(t.vertices) for t in me.loop_triangles]
+                if verts and polys:
+                    tree = BVHTree.FromPolygons(verts, polys)
+            finally:
+                if owned:
+                    try:
+                        eo.to_mesh_clear()
+                    except Exception:
+                        pass
+        except Exception as exc:
+            # A missing BVH downgrades every pair this mesh touches to the
+            # support-bound fallback — the caller must be able to say so.
+            note_degraded("narrow phase unavailable for '%s' (%s)" % (o.name, type(exc).__name__))
+            tree = None
+        bvh_cache[o.name] = tree
+        return tree
+
+    def support_gap(pa, pb, d):
+        """Directional support gap along unit d: a certified LOWER bound of
+        the pair's true distance (positive proves the pair disjoint)."""
+        amax = max(p[0] * d[0] + p[1] * d[1] + p[2] * d[2] for p in pa)
+        bmin = min(p[0] * d[0] + p[1] * d[1] + p[2] * d[2] for p in pb)
+        return bmin - amax
+
+    def nearest_pair(o_a, o_b, seed):
+        """Alternating projection between the two surfaces from `seed`:
+        q_k = proj_B(p_k), p_k+1 = proj_A(q_k). Each step is non-increasing
+        in |p - q|, so the pair converges to a stationary (locally nearest)
+        point pair — the global minimum for convex surfaces, and a real
+        measured witness pair either way.
+
+        Iterated to CONVERGENCE, not to a step count: the rate is only
+        linear and approaches 1 as the surfaces flatten toward parallel (a
+        cube face beside a wide cylinder converges at ~0.976/step — eight
+        steps left an 18% error a control measurement caught). A step is
+        two O(log n) BVH queries, so the honest budget is cheap; the exit
+        is "the distance stopped improving", with a hard cap as the
+        runaway backstop."""
+        ta, tb = bvh_of(o_a), bvh_of(o_b)
+        if ta is None or tb is None:
+            return None
+        p = mathutils.Vector(seed)
+        q = None
+        last = None
+        for _ in range(512):
+            hit = tb.find_nearest(p)
+            if hit is None or hit[0] is None:
+                return None
+            q = hit[0]
+            back = ta.find_nearest(q)
+            if back is None or back[0] is None:
+                return None
+            p = back[0]
+            dist = (q - p).length
+            if last is not None and last - dist < 1e-10:
+                break
+            last = dist
+        if q is None:
+            return None
+        return p, q
+
     out = []
     for i, a in enumerate(meshes):
         alo, ahi = boxes[a.name]
         for b in meshes[i + 1:]:
             blo, bhi = boxes[b.name]
-            # Separation per axis: negative where the spans overlap. Exact
-            # for the world axes — the AABB IS the support interval there.
+            # Broad phase, per axis: negative where the spans overlap.
             gap = [max(blo[k] - ahi[k], alo[k] - bhi[k]) for k in range(3)]
             widest = max(gap)
             # Only report pairs near enough to be a relationship rather than
-            # two unrelated parts of the scene.
-            if widest > 0.05:
+            # two unrelated parts of the scene (see CONTACT_RECORD_RANGE).
+            if widest > CONTACT_RECORD_RANGE:
                 continue
-            # ROTATED parts break the world axes' monopoly: two canted
-            # plates can be centimetres apart along their own face normals
-            # while every world-axis slab overlaps, and the pair then read
-            # as "intersects" forever. One more support projection — along
-            # the centre-to-centre direction — is exact (any positive gap
-            # on any axis proves disjoint) and rescues exactly that case.
             separation = widest
+            intersects = None
             pa, pb = pts_of[a.name], pts_of[b.name]
-            if widest <= 0.0 and pa and pb and len(pa) + len(pb) <= REFINE_VERT_CAP:
+            refinable = pa and pb and len(pa) + len(pb) <= REFINE_VERT_CAP
+            if not refinable:
+                # The axis bound stands alone for this pair: for a rotated
+                # pair the world-axis slabs can overlap while the surfaces
+                # are metres apart, so the recorded separation is a proxy,
+                # not a measurement — say so.
+                note_degraded("'%s <-> %s' separation is the axis bound only (%d combined verts over the %d refine cap)"
+                              % (a.name, b.name, len(pa) + len(pb), REFINE_VERT_CAP))
+            if refinable:
+                # One more support direction — centre to centre — before
+                # the narrow phase: cheap, and for rotated pairs it is the
+                # direction the world axes structurally cannot test.
                 ca = [(alo[k] + ahi[k]) / 2.0 for k in range(3)]
                 cb = [(blo[k] + bhi[k]) / 2.0 for k in range(3)]
                 axis = [cb[k] - ca[k] for k in range(3)]
                 norm = math.sqrt(sum(v * v for v in axis))
+                lower = widest
+                seed = None
                 if norm > 1e-9:
                     axis = [v / norm for v in axis]
-                    amax = max(p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2] for p in pa)
-                    bmin = min(p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2] for p in pb)
-                    separation = max(separation, bmin - amax)
+                    g = support_gap(pa, pb, axis)
+                    if g > lower:
+                        lower = g
+                    # Seed the narrow phase at A's support witness along the
+                    # centre direction — the point most exposed toward B.
+                    seed = max(pa, key=lambda p: p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2])
+                if seed is None:
+                    seed = pa[0]
+                if lower > 0.0:
+                    # Proven disjoint. The directional gap is only a lower
+                    # bound of the true distance (equality needs the optimal
+                    # direction), so refine to the measured point pair.
+                    pair = nearest_pair(a, b, seed)
+                    if pair is not None:
+                        dist = (pair[1] - pair[0]).length
+                        separation = dist if dist > lower else lower
+                    else:
+                        # Disjointness is still certified (the support gap
+                        # proved it), but the DISTANCE is only the lower
+                        # bound — the witness pair never converged.
+                        note_degraded("'%s <-> %s' separation is a lower bound only (no converged witness pair)"
+                                      % (a.name, b.name))
+                        separation = lower
+                    intersects = False
+                else:
+                    # Not yet proven either way: ask the narrow phase for a
+                    # candidate pair and test ITS direction — the GJK move.
+                    pair = nearest_pair(a, b, seed)
+                    if pair is not None and (pair[1] - pair[0]).length > 1e-9:
+                        d = (pair[1] - pair[0]).normalized()
+                        g = support_gap(pa, pb, (d.x, d.y, d.z))
+                        if g > 0.0:
+                            separation = (pair[1] - pair[0]).length
+                            intersects = False
+                    if intersects is None:
+                        if pair is None:
+                            # No witness at all: the verdict below rests on
+                            # the axis bound, which cannot distinguish a
+                            # rotated near-miss from a true overlap.
+                            note_degraded("'%s <-> %s' verdict rests on the axis bound (narrow phase yielded no witness)"
+                                          % (a.name, b.name))
+                        separation = lower
+                        intersects = separation <= 0.0
+            if intersects is None:
+                intersects = separation <= 0.0
             out.append({
                 "a": a.name, "b": b.name,
                 "gap": [R6(g) for g in gap],
-                # The controlling number: the widest PROVEN gap over the
-                # axes tested; <=0 on all of them means they intersect.
                 "separation": R6(separation),
-                "intersects": separation <= 0.0,
+                "intersects": intersects,
             })
     out.sort(key=lambda r: r["separation"])
     return out, skipped
@@ -2957,7 +3593,7 @@ def tri_count(o):
     return sum(max(0, len(p.vertices) - 2) for p in o.data.polygons)
 
 
-def z_fighting_pairs(objects):
+def z_fighting_pairs(objects, pair_budget=COPLANAR_TRI_PRODUCT_CAP):
     """Coplanar-overlap search, with an honest account of what it skipped.
 
     The search is quadratic in meshes and linear in faces, so it has caps.
@@ -3002,7 +3638,7 @@ def z_fighting_pairs(objects):
             # an empty pairs list AND an empty skipped list. A cap that cannot
             # be reported is a cap that lies.
             cost = tri_count(a) * tri_count(b)
-            if cost > COPLANAR_TRI_PRODUCT_CAP:
+            if cost > pair_budget:
                 dense.add((a.name, b.name, cost))
                 continue
             count, area, worst = coplanar_overlap(a, b)
@@ -3017,8 +3653,9 @@ def z_fighting_pairs(objects):
         skipped.append("%s exceeds the %d-face per-mesh limit" % (name, 1500))
     for a_name, b_name, cost in sorted(dense):
         skipped.append(
-            "%s vs %s is %d triangle pairs, above the %d-pair comparison limit"
-            % (a_name, b_name, cost, COPLANAR_TRI_PRODUCT_CAP)
+            "%s vs %s is %d triangle pairs, above the %d-pair comparison budget"
+            "; raise conventions.geometry.zFightingPairBudget to compare it"
+            % (a_name, b_name, cost, pair_budget)
         )
     return pairs, skipped
 
@@ -3487,7 +4124,10 @@ def _srgb_encode(u):
 
 # The id-map channel quantisation: 8 well-separated steps per channel, so a
 # web-side nearest-step decode survives dithering, mild filtering and any
-# codec rounding with ±18 of headroom. 8^3 - 1 = 511 addressable parts;
+# codec rounding with ±17 of GUARANTEED headroom — the gaps are 36/37, and
+# nearest-step decoding radius on a gap of 36 is floor(35/2) = 17; an error
+# of exactly 18 lands equidistant on the even gaps and is ambiguous, so 18
+# was always the boundary, never the budget. 8^3 - 1 = 511 addressable parts;
 # index 0 is reserved for "background / nothing".
 ID_STEPS = [round(k * 255 / 7) for k in range(8)]
 
@@ -3681,25 +4321,14 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
         screen_rects.append(rects)
         if (turntable_on or is_auto) and gone:
             off_by_frame.append({"frame": i, "objects": sorted(gone)})
-    # Id maps after every beauty frame: the pass re-shades objects with
-    # OBJECT-level slot overrides and brand-new materials, so the real
-    # material datablocks (which the material-ball stage below reads) are
-    # never touched. An enhancement, not a deliverable — a failure here is
-    # reported and the proof still ships.
-    id_maps = []
-    id_parts = []
-    try:
-        id_maps, id_parts = _proof_id_pass(scene, subjects, aim_for_step, steps, filepaths)
-    except Exception:
-        log("id-map pass skipped: %s" % traceback.format_exc(limit=4))
-    if animate_proof:
-        scene.frame_set(saved_frame)
-        bpy.context.view_layer.update()
-
-    # Material balls last: the turntable is the product, and a preview that
-    # could cost the shot is not worth having. Everything below is contained
-    # — its own scene, its own try/except — so a ball that will not render
-    # reports itself and the proof still ships its frames.
+    # Material balls BEFORE the id pass, deliberately: the balls are a
+    # beauty render that borrows this scene's view transform, and the id
+    # pass flattens it (Standard, zero filter, transparent film) with no
+    # restoration — its mutations are meant to die with the process, so it
+    # must be the scene's LAST act. Balls after it once shipped flat-lit
+    # under the wrong transform. Everything here is contained — its own
+    # scene, its own try/except — so a ball that will not render reports
+    # itself and the proof still ships its frames.
     balls = {"paths": [], "skipped": []}
     ball_dir = opts.get("materialBallDir")
     if ball_dir:
@@ -3710,6 +4339,21 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
             balls = {"paths": [], "skipped": [
                 {"material": "*", "reason": "material ball stage raised"},
             ]}
+
+    # Id maps truly last: the pass re-shades objects with OBJECT-level slot
+    # overrides and brand-new materials and flattens the scene's film/view
+    # settings without restoring either — nothing may render after it. An
+    # enhancement, not a deliverable — a failure here is reported and the
+    # proof still ships.
+    id_maps = []
+    id_parts = []
+    try:
+        id_maps, id_parts = _proof_id_pass(scene, subjects, aim_for_step, steps, filepaths)
+    except Exception:
+        log("id-map pass skipped: %s" % traceback.format_exc(limit=4))
+    if animate_proof:
+        scene.frame_set(saved_frame)
+        bpy.context.view_layer.update()
 
     emit({
         "ok": True,
@@ -3749,7 +4393,10 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
 # frames, and the restore path is exactly where that goes wrong.
 # ------------------------------------------------------------------
 
-MATERIAL_BALL_LIMIT = 24
+# A cost gate, not a judgement: each ball is one small EEVEE render, so the
+# limit sits above any authored palette (imported kits are what exceed it)
+# and every skip is named in the census rather than silently absent.
+MATERIAL_BALL_LIMIT = 64
 MATERIAL_BALL_RES = 128
 # Long material names make long paths; the dedupe below keeps the truncation
 # from ever silently merging two balls into one file.
@@ -3914,9 +4561,15 @@ def render_material_balls(scene, engine, out_dir):
     for obj in scene.objects:
         if obj.type != "MESH":
             continue
-        for slot in obj.material_slots:
-            if slot.material is not None:
-                bound[slot.material.name] = slot.material
+        # DATA-level materials, never the slots: the id-map pass overrides
+        # slots at the OBJECT level with its flat S3D_IDX_* colours, and a
+        # slot read here returned the costume, not the wardrobe — the balls
+        # once shipped as index swatches. The name filter is the belt to
+        # that suspender: an id material appended to a slot-less mesh lives
+        # at the data level too.
+        for mat in obj.data.materials:
+            if mat is not None and not mat.name.startswith("S3D_IDX_"):
+                bound[mat.name] = mat
     names = sorted(bound)
     skipped = []
     if len(names) > MATERIAL_BALL_LIMIT:
@@ -5098,6 +5751,7 @@ def main(argv):
                 bpy.context.scene,
                 bool(job.get("measureThickness")),
                 float(job.get("voxelGrid") or 0.0),
+                int(job.get("zFightingPairBudget") or 0),
             )})
         elif mode == "proof":
             load_scene(job)

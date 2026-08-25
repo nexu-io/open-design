@@ -67,8 +67,16 @@ export function validateShaderSpec(
     // key is the author talking to the next reader, never vocabulary.
     if (key.startsWith("//")) continue;
     if (!KNOWN_SHADER_KEYS.has(key)) {
+      // The one cross-vocabulary trap: a part's asset is `file:`, a
+      // shader's source is `kernel:`. Levenshtein cannot bridge that gap,
+      // so the alias is named explicitly — the exact mistake a field run
+      // paid three misleading downstream errors to decode.
+      const alias =
+        key === "file" || key === "path" || key === "src"
+          ? `did you mean "kernel"? (a part's asset is "file"; a shader's source is "kernel") — `
+          : didYouMean(key, KNOWN_SHADER_KEYS);
       errors.push(
-        `${at}.${key} is not a shader field — ${didYouMean(key, KNOWN_SHADER_KEYS)}known fields: ${[...KNOWN_SHADER_KEYS].join(", ")}`,
+        `${at}.${key} is not a shader field — ${alias}known fields: ${[...KNOWN_SHADER_KEYS].join(", ")}`,
       );
     }
   }
@@ -89,6 +97,13 @@ export function validateShaderSpec(
       (doc.size & (doc.size - 1)) === 0
     ) {
       size = doc.size;
+    } else if (typeof doc.size !== "number") {
+      // Say the ACTUAL violation. `[512, 512]` failed the old one-size-fits-
+      // all message, which told the author to re-check power-of-two
+      // arithmetic that was never wrong — the value's SHAPE was.
+      errors.push(
+        `${at}.size is one number — bakes are square (e.g. "size": 512)${Array.isArray(doc.size) ? ", not a [w, h] pair" : ""}`,
+      );
     } else {
       errors.push(`${at}.size must be a power of two in [${bake.min}, ${bake.max}]`);
     }
@@ -110,10 +125,15 @@ export function validateShaderSpec(
 
   let frames = 1;
   if (doc.frames !== undefined) {
-    if ([2, 4, 8, 16, 32, 64].includes(doc.frames as number)) {
-      frames = doc.frames as number;
+    // Power-of-two is STRUCTURAL (the atlas grid and its mip-safe cells
+    // depend on it); the 256 top is not taste — a 16×16 grid is where the
+    // atlas edge meets the 16384px PNG/GPU boundary at production cell
+    // sizes, so past it the sheet stops being encodable, not ugly.
+    const f = doc.frames as number;
+    if (typeof f === "number" && Number.isInteger(f) && f >= 2 && f <= 256 && Number.isInteger(Math.log2(f))) {
+      frames = f;
     } else {
-      errors.push(`${at}.frames must be one of 2, 4, 8, 16, 32, 64 (power-of-two atlas grids)`);
+      errors.push(`${at}.frames must be a power of two from 2 to 256 (power-of-two atlas grids)`);
     }
   }
 
@@ -123,13 +143,32 @@ export function validateShaderSpec(
     );
   }
 
+  // The JOINT bound: the atlas edge is grid columns × cell size, and 16384px
+  // is where PNG encode and common GPU texture limits both end. Checked
+  // HERE, at declaration, because the runner allocates the full float32
+  // atlas before anything measures it — an over-limit combination used to
+  // burn the whole bake and then fail at encode. Each factor was legal
+  // alone (size ≤ 4096, frames ≤ 256); only the product breaks.
+  // `frames` and `size` only hold non-default values that already passed
+  // their own checks, so this never fires on garbage — and it must not be
+  // gated on the whole error list, or an unrelated typo would hide it.
+  if (frames > 1) {
+    const cols = 2 ** Math.ceil(Math.log2(Math.sqrt(frames)));
+    const atlasEdge = cols * size;
+    if (atlasEdge > 16384) {
+      errors.push(
+        `${at}: ${frames} frames at size ${size} makes a ${atlasEdge}px atlas edge, past the 16384px encode boundary — shrink "size" or "frames" so grid columns (${cols}) × size stays within it`,
+      );
+    }
+  }
+
   let motionVectors = false;
   if (doc.motionVectors !== undefined) {
     if (typeof doc.motionVectors !== "boolean") {
       errors.push(`${at}.motionVectors must be a boolean`);
     } else if (doc.motionVectors && frames <= 1) {
       errors.push(
-        `${at}: motionVectors needs a flipbook to have motion — set "frames" (2, 4, 8, 16, 32, 64)`,
+        `${at}: motionVectors needs a flipbook to have motion — set "frames" (a power of two, 2..256)`,
       );
     } else if (doc.motionVectors && !outputs.includes("baseColor")) {
       // The flow is block-matched on the baseColor frames, so without that

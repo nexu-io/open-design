@@ -42,6 +42,98 @@ export interface DerivedFacts {
   /** Robust z-score of each part's TRIANGLE DENSITY (tris/m²) within the
    *  scene's distribution — the same statistic over a different scalar. */
   triDensityOutlierZByPart: Map<string, number>;
+  /**
+   * Meshes grouped by MEASURED shape family: parts whose spectral shape-DNA
+   * (census `spectrum`) agrees. Each group is a sorted list of object names,
+   * and the groups themselves are sorted by their first member, so the result
+   * is stable. Singletons are included — a part in a family of one is a fact
+   * too. Meshes with no measurable spectrum (over the eigen cap, no numpy) are
+   * absent entirely, never lumped into a default family.
+   *
+   * This is the measured version of "these parts are the same shape": repeat
+   * clones of one part land in one group by construction, and that is the
+   * self-check. Measurement only — nothing judges it yet.
+   */
+  spectralFamilies: string[][];
+  /** Each mesh's family key (the group's first member) — the lookup form. */
+  spectralFamilyByPart: Map<string, string>;
+}
+
+/**
+ * How far apart two normalised spectra may sit and still be one family:
+ * L∞ (worst single eigenvalue) on the λ/λ₁ vector.
+ *
+ * 0.01 is chosen from both sides. Below it: identical geometry produces
+ * IDENTICAL integer Laplacians, so the only disagreement possible between true
+ * clones is LAPACK's ~1e-15 wobble, which R6 rounding already flattens to at
+ * most 1e-6 — four orders below this tolerance, so a clone can never fall out
+ * of its own family. Above it: genuinely different shapes differ in the LOW
+ * modes, which is exactly where λ/λ₁ is most stable and where the separation is
+ * O(0.1)–O(1) (a torus and a sphere of equal vertex count are not close in λ₂/λ₁
+ * at all). The band between 1e-6 and 0.1 is empty of real cases, so the exact
+ * value inside it is not load-bearing — it only has to sit in the gap.
+ */
+const SPECTRAL_FAMILY_TOLERANCE = 0.01;
+
+/**
+ * True when two spectra describe the same wiring: same shell count, same
+ * truncation length, and no eigenvalue differing by more than the tolerance.
+ *
+ * Length must match exactly rather than compare a common prefix: a shorter
+ * vector means the mesh ran OUT of nonzero eigenvalues (fewer than 12 modes
+ * exist), which is itself a structural difference, and prefix-matching would
+ * quietly call a 6-vertex part the same family as a 600-vertex one.
+ */
+function spectraMatch(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (Math.abs(a[i]! - b[i]!) > SPECTRAL_FAMILY_TOLERANCE) return false;
+  }
+  return true;
+}
+
+/** The usable spectrum of one mesh, or undefined when it was not measured. */
+function spectrumOf(
+  mesh: Census["meshes"][number],
+): { shells: number; values: number[] } | undefined {
+  const spec = mesh.spectrum;
+  if (!spec || !Array.isArray(spec.eigenvalues) || spec.eigenvalues.length === 0) return undefined;
+  const values: number[] = [];
+  for (const v of spec.eigenvalues) {
+    if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+    values.push(v);
+  }
+  return { shells: spec.shells, values };
+}
+
+/**
+ * Group meshes into measured shape families.
+ *
+ * Greedy single-pass assignment against each family's FIRST member: meshes are
+ * visited in sorted name order, so the representative — and therefore the whole
+ * grouping — is deterministic regardless of census ordering. Greedy is the
+ * honest choice here rather than transitive closure: chaining "within 0.01 of a
+ * neighbour" across a long chain would let two clearly different shapes share a
+ * family through intermediates, which is precisely the claim this fact must not
+ * make.
+ */
+function spectralFamiliesOf(census: Census): string[][] {
+  const entries: Array<{ object: string; shells: number; values: number[] }> = [];
+  for (const mesh of census.meshes) {
+    const spec = spectrumOf(mesh);
+    if (spec) entries.push({ object: mesh.object, shells: spec.shells, values: spec.values });
+  }
+  entries.sort((a, b) => (a.object < b.object ? -1 : a.object > b.object ? 1 : 0));
+
+  const reps: Array<{ shells: number; values: number[]; members: string[] }> = [];
+  for (const entry of entries) {
+    const home = reps.find(
+      (r) => r.shells === entry.shells && spectraMatch(r.values, entry.values),
+    );
+    if (home) home.members.push(entry.object);
+    else reps.push({ shells: entry.shells, values: entry.values, members: [entry.object] });
+  }
+  return reps.map((r) => r.members);
 }
 
 /**
@@ -73,7 +165,11 @@ function robustZ(values: Map<string, number>): Map<string, number> {
   if (scale === 0) return out; // every value identical: no outliers
   for (const [key, v] of values) {
     if (!(v > 0) || !Number.isFinite(v)) continue;
-    out.set(key, Math.abs(Math.log(v) - med) / scale);
+    // SIGNED, so the judge can say WHICH way a part is out: a 12-triangle
+    // plinth among 10k-tri/m² imports scored the same as a 4000× denser
+    // hero, and the prose then recommended decimating the simplest object
+    // in the scene. Consumers gate on |z|; the sign is for the sentence.
+    out.set(key, (Math.log(v) - med) / scale);
   }
   return out;
 }
@@ -180,6 +276,13 @@ export function deriveFacts(
   const sizeOutlierZByPart = robustZ(dimByPart);
   const triDensityOutlierZByPart = robustZ(triDensityByPart);
 
+  // ---- measured shape families (spectral shape-DNA) ----
+  const spectralFamilies = spectralFamiliesOf(census);
+  const spectralFamilyByPart = new Map<string, string>();
+  for (const members of spectralFamilies) {
+    for (const object of members) spectralFamilyByPart.set(object, members[0]!);
+  }
+
   return {
     sceneTris,
     trisByFamily,
@@ -193,5 +296,7 @@ export function deriveFacts(
     texelDensityByPart,
     sizeOutlierZByPart,
     triDensityOutlierZByPart,
+    spectralFamilies,
+    spectralFamilyByPart,
   };
 }

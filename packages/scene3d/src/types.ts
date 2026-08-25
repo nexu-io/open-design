@@ -12,6 +12,7 @@
 // Type-only, so the circular reference between this file and the read
 // module costs nothing at runtime — impact.ts imports Census from here.
 import type { ImpactReport } from "./read/impact.js";
+import type { SolveDelta } from "./read/solve-delta.js";
 import type { SolvedScene } from "./solve/types.js";
 
 export type StageId = "parse" | "build" | "lint" | "proof" | "export" | "manifest";
@@ -296,6 +297,19 @@ export interface Scene3dContract {
       allowNegativeScale?: boolean;
       /** Non-1 object scale must be applied before export. */
       requireAppliedScale?: boolean;
+      /**
+       * Declared assembly tolerance in metres. Parts that are neither in
+       * designed contact nor at least this far apart are pinch points
+       * (S3D-W-109) — the Minkowski-dilation question asked with plain
+       * subtraction. Omit (or 0) to keep the rule off.
+       */
+      minClearance?: number;
+      /**
+       * Triangle-pair budget for the coplanar (z-fighting) comparison, per
+       * mesh pair. Pairs above it are skipped LOUDLY (S3D-W-323); raising
+       * it buys the check on dense pairs at quadratic cost. Default 200000.
+       */
+      zFightingPairBudget?: number;
     };
   };
   /**
@@ -437,6 +451,15 @@ export interface CompileResult {
    */
   impact?: ImpactReport;
   /**
+   * The solve classified against the previous compile's solve, codec-style:
+   * authored edits and their graph-predicted propagation compress to
+   * counts, and only the residual — a part that moved or switched support
+   * though nothing it depends on was touched — earns detail. Absent on a
+   * first compile, for non-spec scenes, and when the solve basis changed
+   * (a global input moved everything, so per-part attribution would lie).
+   */
+  solveDelta?: SolveDelta;
+  /**
    * The solver's output, when the scene is authored from scene.json: every
    * part's solved box, what it rests on, and where each instance came from.
    *
@@ -525,6 +548,14 @@ export interface CensusMesh {
   object: string;
   verts: number;
   faces: number;
+  /**
+   * Edge count, completing the Euler characteristic χ = V − E + F — a
+   * TESSELLATION-INDEPENDENT topological invariant: a closed sphere-like
+   * solid is 2 at any segment count, a tube (one handle) is 0, and every
+   * further handle costs 2. Cross-checks watertightness through pure
+   * counting; optional because older censuses predate it.
+   */
+  edges?: number;
   /** Triangle count after triangulation — the unit budgets are stated in. */
   tris?: number;
   ngons: number;
@@ -623,6 +654,41 @@ export interface CensusMesh {
    */
   symmetry?: { axis: "x"; maxError: number; meanError: number; sampled: boolean } | null;
   /**
+   * Spectral shape-DNA — an isometry-invariant fingerprint of the mesh's
+   * wiring, measured from topology alone.
+   *
+   * `shells` is the number of connected components of the vertex graph, and it
+   * is what makes the Euler characteristic usable: for a closed orientable
+   * surface, genus = (2·shells − (V − E + F)) / 2. It is always present when
+   * the block is (union-find is near-free), including above the eigen cap.
+   * PRECONDITION on that identity: closed, face-connected geometry. V/E/F
+   * count loose geometry too (a stray vertex adds 1 to V and 2 to 2·shells,
+   * leaving the formula fractional), so a non-integer genus is the SIGNAL
+   * that the mesh carries loose or open geometry — read `looseVerts` and
+   * `nonManifoldEdges` beside it, never round it.
+   *
+   * `eigenvalues` are the smallest ≤12 NONZERO eigenvalues of the uniform-weight
+   * graph Laplacian L = D − A, each divided by the first nonzero one and rounded
+   * to 6 SIGNIFICANT digits (the ratios are unbounded above, and absolute
+   * decimal rounding stops absorbing LAPACK wobble exactly where the ratios
+   * grow — near-disconnected meshes). Uniform weights, not cotangent: cotan
+   * weights divide by triangle
+   * areas and turn to noise on the slivers real assets ship, so this is a
+   * topology/connectivity fingerprint, not a metric one. The λ/λ₁ normalisation
+   * makes it SIZE-INVARIANT on purpose — sizes are already census facts, and a
+   * fingerprint that carried scale could not match a part against its own
+   * resized copy. Eigenvalues only: no eigenvectors, hence no sign or
+   * repeated-subspace ambiguity, hence fully deterministic once R6-rounded.
+   *
+   * `skipped` carries the reason the eigen solve did not run (over the vertex
+   * cap, no numpy, no edges). Absence of `eigenvalues` is never "no structure".
+   */
+  spectrum?: {
+    shells: number;
+    eigenvalues?: Array<number | null>;
+    skipped?: string;
+  };
+  /**
    * World-space measurements of this object, or null if it has no
    * vertices. Optional because a census from an older runner will not
    * carry it.
@@ -708,9 +774,15 @@ export interface CensusSpatial {
 export interface CensusContact {
   a: string;
   b: string;
-  /** Per-axis separation; negative where the two spans overlap. */
+  /** BROAD-PHASE per-axis AABB slack; negative where the world-axis spans
+   *  overlap. Diagnostic only — a diagonal pair can be negative on all
+   *  three axes while metres apart, so never read this as interpenetration;
+   *  `separation` is the controlling number. */
   gap: [number, number, number];
-  /** The largest per-axis gap — the distance apart, or <=0 if intersecting. */
+  /** The controlling number. Disjoint pair: the measured nearest SURFACE
+   *  distance (alternating-BVH point pair, certified by a support-plane
+   *  witness — see contact_report in runner.py for the maths). Intersecting
+   *  pair: the (negative) widest axis overlap, a penetration proxy. */
   separation: number;
   intersects: boolean;
 }
@@ -790,6 +862,61 @@ export interface CensusCamera {
   staging?: boolean;
 }
 
+/**
+ * One mesh's vertical extremes ACROSS the sampled frame range, plus the frame
+ * each extreme was measured at.
+ *
+ * `minZ` is the cycle's true worst dip — the fact a rest-pose `groundGap`
+ * structurally cannot carry, because the rest pose is one frame of many.
+ */
+export interface CensusAnimatedPart {
+  object: string;
+  minZ: number;
+  maxZ: number;
+  /** Sampled frame at which `minZ` / `maxZ` occurred. */
+  minZFrame: number;
+  maxZFrame: number;
+}
+
+/**
+ * World bounds measured over TIME rather than at the rest pose.
+ *
+ * Measured for every scene that carries keyframed animation, from the
+ * DEPSGRAPH-EVALUATED mesh at each sampled frame — so armature deformation
+ * (an imported Fox/CesiumMan clip, not just compiler-owned spin/bob) is inside
+ * the box rather than outside it.
+ *
+ * Bounded like every heavy measurement in the runner, and the bound is
+ * REPORTED: `frameStep > 1` means the frames between samples were never
+ * visited and an extreme could hide there, which is a fact the reader owns.
+ * `skipped` (with no bounds) means the measurement did not run at all.
+ */
+export interface CensusAnimatedBounds {
+  /** Scene-level min/max over every sampled frame. Absent when `skipped`. */
+  min?: [number, number, number];
+  max?: [number, number, number];
+  /** The sampled frame each axis extreme was measured at (x, y, z). */
+  minFrame?: [number, number, number];
+  maxFrame?: [number, number, number];
+  /** How many frames were actually visited. */
+  framesSampled?: number;
+  /** 1 = every frame in the range. >1 = a stride, and the gaps are unmeasured. */
+  frameStep?: number;
+  /** The range the stride walks — the scene's own frame_start/frame_end. */
+  frameStart?: number;
+  frameEnd?: number;
+  /** Per-mesh vertical extremes over the same samples. */
+  parts?: CensusAnimatedPart[];
+  /** Why nothing was measured, when nothing was. Never silently absent. */
+  skipped?: string;
+  /**
+   * Meshes the sampler could NOT evaluate (to_mesh failed) — their motion
+   * is absent from min/max/parts, so an envelope carrying entries here is
+   * a PARTIAL walk and must not be treated as exact by any adjudicator.
+   */
+  skippedParts?: string[];
+}
+
 export interface CensusAnimation {
   fps: number;
   frameStart: number;
@@ -797,6 +924,12 @@ export interface CensusAnimation {
   keyframedObjects: string[];
   /** Names of actions that actually animate something (both action APIs). */
   actionNames?: string[];
+  /**
+   * Bounds over the frame range, present only when the scene animates.
+   * Absent means nothing moves — the rest pose IS the whole truth, and there
+   * is nothing over time left unchecked.
+   */
+  animatedBounds?: CensusAnimatedBounds;
 }
 
 /** A skeleton in the scene — a census fact, not a DCC discovery. */
@@ -856,6 +989,18 @@ export interface Census {
   contacts?: CensusContact[];
   /** Pairs the contact scan did not examine, and why. */
   contactsSkipped?: string[];
+  /**
+   * Objects whose world-space facts fell back to the ORIGINAL mesh data
+   * because the evaluated mesh could not be built — their bounds and
+   * contacts describe the rest cage, not what ships. Empty/absent for
+   * every normal scene; a fallback is a fact, never a silence.
+   */
+  evaluationNotes?: string[];
+  /** The recording cutoff (m): pairs farther apart than this on every
+   *  tested direction are not in `contacts`. "Touches nothing" therefore
+   *  means "nothing within this range" — the census states which claim it
+   *  makes instead of leaving the threshold implicit. */
+  contactRange?: number;
   /**
    * Object name to the build-script line that created it.
    *
@@ -1141,7 +1286,20 @@ export interface Scene3dManifest {
    * PROVED what it says it is — and the UI may wear it as a quiet badge.
    * Absent when the scene declares no claims (which is not a failure).
    */
-  claims?: { declared: number; failed: number };
+  claims?: {
+    declared: number;
+    failed: number;
+    /** How many claims were actually ADJUDICATED — declared minus the ones
+     *  the adjudicator marked unadjudicated (no census, no measurements).
+     *  The proven badge and the report's claims line both require
+     *  checked === declared: a claim nobody measured is not held. */
+    checked?: number;
+    /** Budget usage per numeric claim, tightest first — the adjudicator's
+     *  own measurements (never a re-derivation). `used` is measured/limit;
+     *  a claim at 0.96 and one at 0.12 are different facts for an author
+     *  about to add a part. */
+    margins?: Array<{ claim: string; measured: number; limit: number; used: number }>;
+  };
   /**
    * Scale sanity readout. Authors derive dimensions by arithmetic and the
    * mistakes (a 2mm straw tuft, a 40m crate) are invisible until rendered;
@@ -1171,6 +1329,9 @@ export interface ManifestMaterial {
   metallic: number | null;
   roughness: number | null;
   hasTexture: boolean;
+  /** Measured alpha, present only when the surface is actually translucent
+   *  (alpha < 1) — a glass material's whole identity. */
+  alpha?: number;
   /** Emission strength the build actually authored, when measured. */
   emissionStrength?: number;
 }

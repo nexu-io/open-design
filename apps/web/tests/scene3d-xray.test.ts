@@ -113,3 +113,44 @@ describe('idMapUrlFor', () => {
     expect(idMapUrlFor('/x/y.png?v=2')).toBe('/x/y.idx.png?v=2');
   });
 });
+
+describe('ghost modes (x+1 / x+2 / x+3)', () => {
+  const W = 8;
+  const H = 8;
+  const codes = new Uint16Array(W * H);
+  // part 1 (selected) in the middle-left, part 2 (ghosted) middle-right.
+  for (let y = 2; y < 6; y++) {
+    for (let x = 1; x < 4; x++) codes[y * W + x] = 1;
+    for (let x = 4; x < 7; x++) codes[y * W + x] = 2;
+  }
+  const beauty = imageData(W, H, () => [128, 128, 128, 255]);
+  const run = (mode: 0 | 1 | 2) => {
+    const out = imageData(W, H, () => [0, 0, 0, 0]);
+    renderXrayComposite(beauty, codes, new Set([1]), out, mode);
+    return out;
+  };
+
+  it('every mode keeps the selection real and only restyles the ghost world', () => {
+    const ghostPixel = (3 * W + 5) * 4;
+    const selectedPixel = (3 * W + 2) * 4;
+    const seen = new Set<string>();
+    for (const mode of [0, 1, 2] as const) {
+      const out = run(mode);
+      expect(out.data[selectedPixel]).toBe(Math.min(255, Math.round(128 * 1.06)));
+      seen.add(`${out.data[ghostPixel]},${out.data[ghostPixel + 1]},${out.data[ghostPixel + 2]}`);
+    }
+    // Three modes, three distinct ghost stylings.
+    expect(seen.size).toBe(3);
+  });
+
+  it('structure mode sits darkest; curvature carries the ramp brightest', () => {
+    const ghostPixel = (3 * W + 5) * 4;
+    const lumOf = (d: Uint8ClampedArray) =>
+      0.2126 * d[ghostPixel]! + 0.7152 * d[ghostPixel + 1]! + 0.0722 * d[ghostPixel + 2]!;
+    const curvature = lumOf(run(0).data);
+    const normals = lumOf(run(1).data);
+    const structure = lumOf(run(2).data);
+    expect(structure).toBeLessThan(normals);
+    expect(curvature).toBeGreaterThan(structure);
+  });
+});

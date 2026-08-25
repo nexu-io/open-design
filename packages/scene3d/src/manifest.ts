@@ -85,6 +85,9 @@ export function buildManifest(input: {
   sheets?: ReadonlyArray<{ kind: "sprite" | "flipbook" | "particle" | "beam" | "sky" }>;
   /** How many claims the spec declared, when it declared any. */
   claimsDeclared?: number;
+  /** Budget usage per numeric claim, from the adjudicator's own
+   *  measurements (lint/claims.ts claimMargins). Tightest first. */
+  claimMargins?: Array<{ claim: string; measured: number; limit: number; used: number }>;
 }): Scene3dManifest {
   const { census } = input;
   const issueCodes = [...new Set(input.issues.map((i) => i.code))].sort();
@@ -100,21 +103,36 @@ export function buildManifest(input: {
     ...new Set(input.issues.filter((i) => i.severity !== "info").map((i) => i.code)),
   ].sort();
   // The claims ledger: failures counted from the adjudicator's own code so
-  // the badge can never disagree with the issue list it summarises.
-  const claims =
-    input.claimsDeclared !== undefined && input.claimsDeclared > 0
-      ? {
-          declared: input.claimsDeclared,
-          failed: new Set(
-            input.issues
-              .filter((i) => i.code === "S3D-E-701")
-              // Distinct by the claim KEY when the detail names one; an
-              // adjudication issue without it must still count rather than
-              // collapse into a single fabricated "undefined" claim.
-              .map((i, index) => (i.detail?.claim != null ? String(i.detail.claim) : `#${index}`)),
-          ).size,
-        }
-      : undefined;
+  // the badge can never disagree with the issue list it summarises. The
+  // `checked` count is the other half of that honesty: a claim the
+  // adjudicator marked UNADJUDICATED (W-701 with detail.unadjudicated —
+  // no census, no measurements) is not held, and the ledger a reader scans
+  // must never say "3/3 held" about a build that never ran.
+  const claims = (() => {
+    if (input.claimsDeclared === undefined || input.claimsDeclared <= 0) return undefined;
+    const declared = input.claimsDeclared;
+    const failed = new Set(
+      input.issues
+        .filter((i) => i.code === "S3D-E-701")
+        // Distinct by the claim KEY when the detail names one; an
+        // adjudication issue without it must still count rather than
+        // collapse into a single fabricated "undefined" claim.
+        .map((i, index) => (i.detail?.claim != null ? String(i.detail.claim) : `#${index}`)),
+    ).size;
+    const unadjudicated = new Set(
+      input.issues
+        .filter((i) => i.code === "S3D-W-701" && i.detail?.unadjudicated === true)
+        .map((i) => String(i.detail?.claim ?? "")),
+    ).size;
+    return {
+      declared,
+      failed,
+      checked: Math.max(0, declared - unadjudicated),
+      ...(input.claimMargins && input.claimMargins.length > 0
+        ? { margins: input.claimMargins }
+        : {}),
+    };
+  })();
 
   // Index both collections once. Every part used to cost three linear scans of
   // `meshes` (a `some` and two `find`s returning the same row) plus a scan per
@@ -220,6 +238,12 @@ export function buildManifest(input: {
         // open Blender — the census measured it, so the manifest carries it.
         ...(m.principled.emissionStrength !== undefined
           ? { emissionStrength: m.principled.emissionStrength }
+          : {}),
+        // ...and the fourth: a glass material's whole identity is its
+        // alpha, and the report's materials line used to print exactly the
+        // two properties that needed no review while omitting this one.
+        ...(m.principled.alpha !== undefined && m.principled.alpha < 1
+          ? { alpha: m.principled.alpha }
           : {}),
       })) ?? [],
     textures:

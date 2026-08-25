@@ -437,7 +437,7 @@
    chrome; the wording lives on as its hover title. */
 .orbitHint {
   position: absolute;
-  right: 10px;
+  left: 10px;
   bottom: 8px;
   display: grid;
   place-items: center;
@@ -451,6 +451,198 @@
 
 .orbitHintHidden {
   opacity: 0;
+}
+
+/* ---- x-ray cluster ------------------------------------------------- */
+
+/* The kit page's x-ray chrome, seated in the same corner it owns there:
+   toggle + caret sharing one pill, mode menu opening upward with ramp
+   strips and X1..X3 key chips. Same geometry as kit.ts's .xray-cluster;
+   colours ride the panel's tokens so it sits native here. */
+.xrayCluster {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.xrayBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  background: color-mix(in srgb, var(--surface-raised, #fff) 88%, transparent);
+  backdrop-filter: blur(4px);
+  color: var(--text-secondary, #667081);
+  /* Longhands on purpose: `font:` shorthand silently drops the whole
+     declaration when the family is `inherit` — the exact trap the kit
+     page documents at its own button rule. */
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.xrayBtn[aria-pressed='true'] {
+  background: var(--accent, #2c2723);
+  color: var(--surface-raised, #fff);
+  border-color: transparent;
+}
+
+.xrayBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.xrayIcon {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+
+.xrayCaret {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  padding: 0;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--surface-raised, #fff) 88%, transparent);
+  backdrop-filter: blur(4px);
+  color: var(--text-secondary, #667081);
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.xrayCaret svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.xrayCaret:hover,
+.xrayBtn:hover:not(:disabled):not([aria-pressed='true']) {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.xrayCaret[aria-expanded='true'] {
+  background: var(--accent, #2c2723);
+  color: var(--surface-raised, #fff);
+  border-color: transparent;
+}
+
+.xrayCaret[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.xrayMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  min-width: 240px;
+  padding: 6px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 14%);
+  animation: xrayMenuIn 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes xrayMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+
+.xrayMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  /* Explicit auto height: the app ships global button primitives that fix
+     a control height, which clamped these rows and stacked them into each
+     other — the row must grow to its name + desc + ramp. */
+  height: auto;
+  min-height: 0;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.xrayMenuItem:hover {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.xrayMenuItem[aria-checked='true'] {
+  background: var(--accent, #2c2723);
+  color: var(--surface-raised, #fff);
+}
+
+.miText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.miName {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.miDesc {
+  font-size: 10.5px;
+  line-height: 1.3;
+  opacity: 0.66;
+}
+
+.xrayMenuItem[aria-checked='true'] .miDesc {
+  opacity: 0.82;
+}
+
+.miRamp {
+  height: 5px;
+  margin-top: 1px;
+  border-radius: 3px;
+  border: 1px solid rgb(0 0 0 / 12%);
+}
+
+.xrayMenuItem[aria-checked='true'] .miRamp {
+  border-color: rgb(255 255 255 / 25%);
+}
+
+.miKey {
+  flex: none;
+  align-self: center;
+  padding: 3px 5px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 4px;
+  font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.7;
 }
 
 /* ---- on-picture selection ----------------------------------------- */
@@ -600,6 +792,15 @@
   border-radius: 7px;
   box-shadow: 0 0 0 1px color-mix(in srgb, #3fbcc9 45%, transparent);
   background: color-mix(in srgb, #3fbcc9 5%, transparent);
+  transition: box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Ctrl/cmd held: this click will ALSO jump to the part in the rail — the
+   box turns gizmo-red (the same #e5484d the X axis wears) so the promise
+   is visible before the click. Middle-click does it without the tell. */
+.hoverBoxJump {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, #e5484d 75%, transparent);
+  background: color-mix(in srgb, #e5484d 7%, transparent);
 }
 
 /* The player row reads as a scrubber, not a form: a hairline track with a

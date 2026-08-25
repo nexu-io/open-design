@@ -33,7 +33,6 @@ import {
 } from "./build/blender.js";
 import { validateCensus } from "./build/census.js";
 import { runLint } from "./lint/rules.js";
-import { isExempt } from "./lint/exempt.js";
 import { validateGltf } from "./lint/gltf-oracle.js";
 import { validateUsd } from "./lint/usd-oracle.js";
 import { collectSheets } from "./sheet/collect.js";
@@ -44,6 +43,10 @@ import { changeImpact, formatImpact, type ImpactReport } from "./read/impact.js"
 import { renderOrthoSvg, orthoDimensions } from "./read/ortho.js";
 import { validateSceneSpec, specDeclarationLines } from "./solve/validate.js";
 import { solveScene } from "./solve/solver.js";
+import { motionEnvelopeIssues } from "./solve/sweep.js";
+import { claimMargins } from "./lint/claims.js";
+import { clearanceIssues } from "./solve/clearance.js";
+import { classifySolveDelta, snapshotSolve, type SolveSnapshot } from "./read/solve-delta.js";
 import { emitBlenderScript } from "./solve/emit-bpy.js";
 import type { SceneSpec, SolvedScene } from "./solve/types.js";
 import { validateShaderSpec } from "./shade/validate.js";
@@ -141,13 +144,18 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     // silently disable a rule or drive a 100k-px render. Reject it exactly like
     // a bad file and fall back to the default rather than normalise garbage.
     contractIssues = validateContract(request.contract);
+    // One issue PER problem, matching scene.json's granularity — the two
+    // validators used to answer the same class of mistake in two shapes
+    // (fifteen separate E-105 lines vs one semicolon-joined E-104 string).
     if (contractIssues.length > 0) {
-      issues.push({
-        code: ISSUE_CODES.INVALID_CONTRACT,
-        severity: "error",
-        message: `contract is invalid: ${contractIssues.join("; ")}`,
-        file: "(request.contract)",
-      });
+      for (const problem of contractIssues) {
+        issues.push({
+          code: ISSUE_CODES.INVALID_CONTRACT,
+          severity: "error",
+          message: `contract is invalid: ${problem}`,
+          file: "(request.contract)",
+        });
+      }
       contract = DEFAULT_CONTRACT;
     } else {
       authoredKeys = collectAuthoredKeys(request.contract.conventions);
@@ -160,12 +168,14 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         const raw = JSON.parse(fs.readFileSync(contractFile, "utf8").replace(/^\uFEFF/, ""));
         contractIssues = validateContract(raw);
         if (contractIssues.length > 0) {
-          issues.push({
-            code: ISSUE_CODES.INVALID_CONTRACT,
-            severity: "error",
-            message: `scene3d.json is invalid: ${contractIssues.join("; ")}`,
-            file: "scene3d.json",
-          });
+          for (const problem of contractIssues) {
+            issues.push({
+              code: ISSUE_CODES.INVALID_CONTRACT,
+              severity: "error",
+              message: `scene3d.json is invalid: ${problem}`,
+              file: "scene3d.json",
+            });
+          }
         } else {
           contract = raw as Scene3dContract;
           authoredKeys = collectAuthoredKeys(contract.conventions);
@@ -201,6 +211,8 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
      author writes relations; the compiler owns every coordinate. */
   let spec: SceneSpec | undefined;
   let solved: SolvedScene | undefined;
+  /** This solve frozen as the NEXT compile's prediction frame. */
+  let solveSnapshot: SolveSnapshot | undefined;
   let specScript: string | undefined;
   let specLines: Record<string, number> = {};
   /* ---- Minecraft model import (.bbmodel / Java model.json) --------- */
@@ -319,12 +331,24 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             });
           }
         }
+        // Valid-but-suspect authoring rides its own advisory code, so a
+        // kilometre part or a provably inert rotation is named without
+        // blocking the compile.
+        for (const message of result.warnings) {
+          issues.push({
+            code: ISSUE_CODES.SPEC_SUSPECT,
+            severity: "warning",
+            message,
+            file: "scene.json",
+          });
+        }
       } catch (err) {
         issues.push({
           code: ISSUE_CODES.SPEC_INVALID,
           severity: "error",
-          message: `scene.json is not valid JSON: ${(err as Error).message}`,
+          message: `scene.json is not valid JSON: ${jsonSyntaxDetail(err as Error, rawText)}`,
           file: "scene.json",
+          hint: "fix the JSON syntax at the line and column shown, then compile again",
         });
       }
     }
@@ -383,20 +407,45 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         // Both are warnings about geometry the author should look at; the rest
         // mean the graph could not be solved at all.
         const buildable =
-          diagnostic.code === "SOLVE-EPSILON-FLOOR" || diagnostic.code === "SOLVE-INTERSECTION";
+          diagnostic.code === "SOLVE-EPSILON-FLOOR" ||
+          diagnostic.code === "SOLVE-INTERSECTION" ||
+          diagnostic.code === "SOLVE-SUSPECT";
         issues.push({
           code:
             diagnostic.code === "SOLVE-EPSILON-FLOOR"
               ? ISSUE_CODES.SPEC_ADJUSTED
               : diagnostic.code === "SOLVE-INTERSECTION"
                 ? ISSUE_CODES.SPEC_INSTANCES_INTERSECT
-                : ISSUE_CODES.SPEC_UNRESOLVED,
+                : diagnostic.code === "SOLVE-SUSPECT"
+                  ? ISSUE_CODES.SPEC_SUSPECT
+                  : ISSUE_CODES.SPEC_UNRESOLVED,
           severity: buildable ? "warning" : "error",
           message: diagnostic.message,
           file: "scene.json",
           ...(diagnostic.part ? { target: diagnostic.part } : {}),
         });
       }
+      /* The kinematic linter: motion adjudicated across its whole cycle as
+         static geometry, at parse time — swept envelopes vs neighbours
+         (W-108). Costs no Blender: the fast gear catches a mid-cycle
+         collision the rest pose hides. Claims are NOT judged here: the one
+         adjudicator (lint/claims.ts) consumes the same swept facts, so the
+         analytic and sampled oracles can never contradict each other about
+         one claim. */
+      issues.push(...motionEnvelopeIssues(solved));
+      // Minkowski clearance: parts inside the declared assembly tolerance
+      // without being in designed contact. Parse-time box subtraction.
+      issues.push(...clearanceIssues(solved, normalized.geometry.minClearance));
+      /* Freeze this solve as the next compile's prediction frame. The basis
+         carries the non-spec solve inputs (the voxel grid constraint), so a
+         contract flip that moves everything reads as "not comparable"
+         rather than a fabricated per-part delta. */
+      solveSnapshot = snapshotSolve(
+        spec,
+        solved,
+        normalized.voxel.enabled ? { grid: normalized.voxel.gridSize } : {},
+        hashJson,
+      );
       const unresolved = solved.diagnostics.some(
         (d) => d.code !== "SOLVE-EPSILON-FLOOR" && d.code !== "SOLVE-INTERSECTION",
       );
@@ -615,6 +664,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
      point where every measurement this run will produce is final. */
   let impact: ImpactReport | undefined;
   let digest: string | undefined;
+  let solveDelta: CompileResult["solveDelta"];
   const sourceFiles = existingSourceFiles(request.projectDir, source);
 
   // Viewport edits are a source input: they change the geometry that gets
@@ -708,6 +758,9 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             // every mesh regardless, and this decides only whether the
             // grid-relative half of that measurement runs.
             ...(normalized.voxel.enabled ? { voxelGrid: normalized.voxel.gridSize } : {}),
+            ...(normalized.geometry.zFightingPairBudget !== 200_000
+              ? { zFightingPairBudget: normalized.geometry.zFightingPairBudget }
+              : {}),
             ...shaderPayload,
           };
           const result = await runRunner(probe, job, timeoutMs, request.env);
@@ -809,7 +862,13 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           fs.existsSync(path.join(request.projectDir, a)),
         )
       ) {
-        proofImages.push(...cached.artifacts);
+        /* The entry's artifacts hold BOTH the beauty frames and their
+           `.idx.png` object-index maps (they must: a hit has to prove both
+           still exist). Only the frames are proofImages — pushing the maps
+           in doubled the frame count on every cached recompile, and the
+           frame player, the ascii sampler and the panel all read that list
+           as one orbit of one subject. */
+        proofImages.push(...cached.artifacts.filter((a) => !a.toLowerCase().endsWith(".idx.png")));
         materialBalls.push(...cachedBalls);
         const cachedNames = (cached.data as { materialBallsSkippedNames?: unknown } | null)
           ?.materialBallsSkippedNames;
@@ -1369,57 +1428,32 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       ...(sheets ? { sheets } : {}),
       ...(spec?.claims ? { claims: spec.claims } : {}),
       ...(solved ? { solved } : {}),
+      // The language's own sentence for "this hovers on purpose": a part
+      // placed by `above` is a declared float, and the two-sided grounded
+      // claim honours it instead of demanding a support chain for it.
+      ...(spec
+        ? {
+            declaredFloating: spec.relations
+              .filter((r) => r.type === "above")
+              .map((r) => r.part),
+          }
+        : {}),
       sourceKind: source.kind,
       // Only what the author actually wrote. A target preset fills in
       // conventions too, but a preset is a default, not a statement of intent,
       // and must not cancel the relaxation on their behalf.
       authoredKeys,
     });
-    // A claim is adjudicated at the rest pose; a bobbing part leaves that
-    // pose every cycle — but the CYCLE is adjudicable too, and "unchecked"
-    // for a motion whose envelope the solver just computed was a permanent
-    // warning an author could never answer. A field run's ember bobbed
-    // ±18mm at 470mm altitude, provably unable to reach the floor, and the
-    // coexistence warning blocked `--fail-on warning` forever. So: judge.
-    //  - a resting part's bob is TROUGH-anchored by the emitter (it only
-    //    rises from the solved pose; see _animate_bob) — grounded all cycle;
-    //  - a floating part's bob is centred: its worst dip is bottom minus
-    //    amplitude, measured against the same ground tolerance the claim
-    //    itself uses — silent when it provably clears, a REAL claim failure
-    //    when it provably sinks mid-cycle;
-    //  - exempt parts are outside the claim entirely, exactly as they are
-    //    in the rest-pose adjudication;
-    //  - only a part the solver did not place keeps the unchecked warning.
-    if (spec?.claims?.grounded) {
-      const exempt = normalized.grounding.exempt;
-      const tolerance = normalized.grounding.tolerance;
-      for (const part of spec.parts) {
-        if (!part.bob) continue;
-        if (isExempt(part.id, exempt)) continue;
-        const placed = solved?.parts.find((p) => p.id === part.id);
-        if (placed) {
-          if (placed.restsOn) continue; // trough-anchored: never dips below rest
-          const worstBottom = placed.center[2] - placed.size[2] / 2 - part.bob.amplitude;
-          if (worstBottom >= -tolerance) continue; // clears the floor all cycle
-          lintIssues.push({
-            code: ISSUE_CODES.CLAIM_FAILED,
-            severity: "error",
-            message: `claim grounded failed: '${part.id}' bobs ±${part.bob.amplitude}m and sinks ${(-worstBottom).toFixed(4)}m below the ground plane at its trough`,
-            target: part.id,
-            hint: "raise the part, shrink the bob amplitude, or exempt it via conventions.grounding.exempt",
-            detail: { claim: "grounded", amplitude: part.bob.amplitude, worstBottom },
-          });
-          continue;
-        }
-        lintIssues.push({
-          code: ISSUE_CODES.CLAIM_UNCHECKED,
-          severity: "warning",
-          message: `claim grounded is adjudicated at the rest pose only — '${part.id}' bobs ±${part.bob.amplitude}m and its cycle envelope could not be derived`,
-          target: part.id,
-          detail: { claim: "grounded", amplitude: part.bob.amplitude },
-        });
-      }
-    }
+    /* The two animated-claim oracles both live in lint/claims.ts now —
+       the sampled census envelope AND the analytic swept envelope
+       (solve/sweep.ts), joined by one interval calculus: samples prove
+       failures, exact swept boxes prove failures, the full envelope proves
+       passes, and a conservative bound over a claim is said to be UNPROVEN
+       rather than either passed or failed. The two hard-coded bob/screw
+       blocks that used to sit here were special cases of the exact swept
+       box and were deleted when the calculus generalised them (they could
+       also contradict the census layer about the same claim, two lines
+       apart — the D7 field finding). */
     // Hand every exported .glb to Khronos's reference validator — a second,
     // independent authority on the bytes that ship, in ADDITION to our rules.
     // The UNCHECKED warning is NOT filtered here (unlike USD below): the
@@ -1472,6 +1506,14 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
      */
     const prior = previousReadModel(request.projectDir);
     impact = changeImpact(prior?.census, census, prior?.issues ?? [], allIssues);
+    /* The codec pass: classify this solve against the previous one —
+       authored edits and their graph-predicted propagation compress to
+       counts; only the residual (a change nothing authored explains)
+       earns lines in the report. Absent baseline or basis mismatch
+       degrades to no delta, never a fabricated one. */
+    if (solveSnapshot && prior?.solve) {
+      solveDelta = classifySolveDelta(prior.solve, solveSnapshot);
+    }
     digest = census ? describeScene(census, allIssues) : "no census — build stage did not run";
     try {
       writeReadModel(request.projectDir, {
@@ -1480,6 +1522,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         issues: allIssues,
         digest,
         impact,
+        ...(solveSnapshot ? { solve: solveSnapshot } : {}),
       });
     } catch (err: any) {
       /* Disk full / permissions. The compile finished; the response still
@@ -1508,6 +1551,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       bakedTweaks: bakedTweaksForManifest,
       sheets: [...normalized.sheets, ...derivedSheets],
       ...(spec?.claims ? { claimsDeclared: Object.keys(spec.claims).length } : {}),
+      ...(spec?.claims ? { claimMargins: claimMargins(spec.claims, census, solved?.parts) } : {}),
     });
     try {
       finalManifest = writeManifest(request.projectDir, manifest);
@@ -1564,6 +1608,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         bakedTweaks: bakedTweaksForManifest,
         sheets: [...normalized.sheets, ...derivedSheets],
         ...(spec?.claims ? { claimsDeclared: Object.keys(spec.claims).length } : {}),
+      ...(spec?.claims ? { claimMargins: claimMargins(spec.claims, census, solved?.parts) } : {}),
       }),
     proofImages,
     materialBalls,
@@ -1573,6 +1618,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     summary,
     digest,
     impact,
+    ...(solveDelta ? { solveDelta } : {}),
     ...(solved ? { solved } : {}),
   };
 }
@@ -1656,6 +1702,10 @@ interface ReadModel {
   issues: Issue[];
   digest: string;
   impact: ImpactReport;
+  /** The solve frozen as the next compile's prediction frame — absent for
+   *  non-spec scenes and for baselines written before it existed, which
+   *  degrades to "no solve delta", never to a wrong one. */
+  solve?: SolveSnapshot;
 }
 
 /**
@@ -1666,6 +1716,27 @@ interface ReadModel {
  * Absent on a first compile, which is not an error: there is simply nothing
  * to have changed from.
  */
+/**
+ * A JSON syntax error located the way every SEMANTIC error already is: with
+ * a line, a column, and the text around it. The raw V8 message carries only
+ * a byte offset (and mangles the quoting), which made malformed JSON the
+ * one mistake this compiler located worse than `python -m json.tool` —
+ * every other error in the file gets a precise JSON path.
+ */
+function jsonSyntaxDetail(err: Error, raw: string | undefined): string {
+  const msg = err.message;
+  const pos = /position (\d+)/.exec(msg);
+  if (!raw || !pos) return msg;
+  const at = Math.min(Number(pos[1]), raw.length);
+  const before = raw.slice(0, at);
+  const line = before.split("\n").length;
+  const col = at - before.lastIndexOf("\n");
+  const from = Math.max(0, at - 30);
+  const to = Math.min(raw.length, at + 30);
+  const snippet = raw.slice(from, to).replace(/\s+/g, " ").trim();
+  return `${msg} — scene.json line ${line}, column ${col}, near: ${snippet}`;
+}
+
 function previousReadModel(projectDir: string): ReadModel | undefined {
   try {
     const parsed = JSON.parse(

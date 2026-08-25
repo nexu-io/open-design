@@ -35,6 +35,36 @@ const run = (raw: unknown, kernel?: string) => {
 };
 
 describe("validateShaderSpec", () => {
+  it("accepts any power-of-two frame count from 2 to 256, rejects the rest", () => {
+    // The POT-ness is structural (the atlas grid and mip-safe cells depend
+    // on it); the 256 top is where a 16-wide grid meets the 16384px encode
+    // boundary at production cell sizes. Both edges pinned from both sides.
+    for (const frames of [2, 4, 8, 16, 32, 64, 128, 256]) {
+      const ok = run(spec({ frames }), KERNEL);
+      expect(ok.errors, `frames: ${frames} is legal`).toEqual([]);
+      expect(ok.result!.frames).toBe(frames);
+    }
+    for (const frames of [1, 3, 48, 100, 512, 1.5, -8]) {
+      const bad = run(spec({ frames }), KERNEL);
+      expect(
+        bad.errors.some((e) => /frames must be a power of two from 2 to 256/.test(e)),
+        `frames: ${frames} is refused`,
+      ).toBe(true);
+    }
+  });
+
+  it("bounds the JOINT atlas edge, not just each factor", () => {
+    // 16 columns × 1024 = 16384 sits exactly on the encode boundary; the
+    // same grid at 2048 is a 32768px edge the runner would allocate in
+    // full before anything could refuse it. Each factor is legal alone.
+    expect(run(spec({ frames: 256, size: 1024 }), KERNEL).errors).toEqual([]);
+    const over = run(spec({ frames: 256, size: 2048 }), KERNEL);
+    expect(over.errors.some((e) => /32768px atlas edge, past the 16384px encode boundary/.test(e))).toBe(true);
+    // The old ceiling had the same hole: 8 columns × 4096 = 32768.
+    const legacy = run(spec({ frames: 64, size: 4096 }), KERNEL);
+    expect(legacy.errors.some((e) => /past the 16384px encode boundary/.test(e))).toBe(true);
+  });
+
   it("accepts motionVectors on a flipbook and rejects it without frames", () => {
     // Motion vectors describe motion BETWEEN frames, so they are meaningless
     // on a static texture.

@@ -87,7 +87,7 @@ making the raw mode a second-class path.
 | Shaders | `shaders` block: kernel file + typed uniforms + outputs + size (+frames) | see below |
 | Animation (current subset) | per-part `spin{axis,seconds}`, `bob{amplitude,seconds}` | compiler-owned keyframes, looped (cycles modifiers), GLB carries clips, assetKind derives `animation`; sequenced and skeletal/deformation animation remain future language work |
 | Staging | derived camera (`camera{azimuthDeg,elevationDeg,distance}` steers) + `light: studio\|sun` | shot always contains the subject; never raw coordinates |
-| Claims | `parts, maxTriangles, grounded, maxHeight, footprint, watertight, materialsUsed` | adjudicated against the census (E-701); unadjudicable = W-701, never a silent pass; rest-pose caveat for bobbing parts reported |
+| Claims | `parts, maxTriangles, grounded, maxHeight, footprint, watertight, materialsUsed` | adjudicated against the census (E-701); unadjudicable = W-701, never a silent pass; motion adjudicated across the cycle where measurable (sampled + exact envelope), with every hole in the walk named |
 
 Identifier discipline holds everywhere. Part ids and material names are
 charset-gated (`[A-Za-z][A-Za-z0-9_]{2,63}`), and shader uniforms are
@@ -392,11 +392,28 @@ Behaviours that keep the compiled surfaces honest across the compile loop:
   selection. The panel decodes the map, composes the full-energize
   frame on a canvas, and crossfades with the kit's exact
   200ms-in/140ms-out easeOutCubic — opacity IS uXray. Occlusion is
-  free: the map only marks pixels a part won in the render. Reticle
-  brackets stand down while energized; missing maps fall back to the
-  reticle. Keep the constants in step across FRAG ↔ scene3d-xray.ts ↔
-  runner ID_STEPS ↔ XRAY_ID_STEPS (pinned in
-  apps/web/tests/scene3d-xray.test.ts).
+  free: the map only marks pixels a part won in the render. THREE ghost
+  stylings ride the kit page's own chord — X held + 1/2/3 = curvature
+  (the full inspection ramp over the geometry's shading, percentile-
+  normalized 5th–95th so the amber-cream end actually speaks) / normals
+  (translucent teal, the default) / structure (contour lines on near-
+  ink) — one keyboard grammar across both scene3d surfaces, and the SAME
+  corner chrome: the kit page's x-ray cluster (eye-labelled toggle +
+  caret + upward mode menu with ramp strips and X1..X3 key chips) sits
+  in the stage's bottom-right, panel-token skinned, geometry kept in
+  step with kit.ts's `.xray-cluster`; the toggle stands the effect down
+  without clearing the selection, and picking a menu mode re-arms it
+  exactly as the kit's menu does. (The orbit hint yielded the corner
+  and lives bottom-left.) Stage click
+  grammar: plain click selects WITHOUT scrolling the rail; shift-click
+  keeps its multi-select toggle untouched; ctrl/cmd-click or
+  MIDDLE-click selects AND jumps to the part's rail row (the hover box
+  turns gizmo-red #e5484d while ctrl is held as the tell; prototype
+  rows are findable by ANY member via the space-joined
+  `data-s3d-part-row` + `~=` selector). Reticle brackets stand down
+  while energized; missing maps fall back to the reticle. Keep the
+  constants in step across FRAG ↔ scene3d-xray.ts ↔ runner ID_STEPS ↔
+  XRAY_ID_STEPS (pinned in apps/web/tests/scene3d-xray.test.ts).
 - **The proof frames are pickable.** The runner already projected every
   part through the render camera for the off-camera check; the same pass
   now records each part's screen rect per frame
@@ -609,25 +626,27 @@ epsilon: hand-authored blocky assets overlap junctions by a whole pixel, and
 an embed window sized to the solver's own 1mm called every such joint
 unsupported.
 
-Making the claim two-sided was a mistake, and it is worth recording as one.
-It failed the atelier capstone on its deliberately levitating lava orb; the
-first repair taught the solver to record "declared suspension" from `above`
-relations so the claim could tell a hovering lamp from an accident. That was
-clever and still wrong: it rescued only parts placed one particular way, so a
-part positioned with `at` was still told it was broken.
+The claim's two-sidedness has reversed twice, and both reversals are
+worth keeping. The first two-sided attempt was recorded here as a mistake:
+it failed the atelier capstone on its deliberately levitating lava orb, and
+the repair — reading `above` relations as declared suspension — rescued
+only parts placed one particular way, so a part positioned with `at` was
+still told it was broken. The claim went back to one direction ("nothing
+sinks through the floor"), with floating reported only through the
+opt-in `conventions.grounding` policy (W-325).
 
-**Floating is a composition, not a defect.** A lantern hangs, an orb hovers, a
-cliff overhangs, a bird flies. The field has always documented one direction —
-"rests on or above the ground plane" — and this repo's own showcase asserts
-`grounded: true` over a floating orb, which is the clearest statement of what
-its author meant by the word. What went wrong upstream of the code: an audit
-observed that a claim named `grounded` passes for a scene where things hover,
-and that was read as a missing check. It was a vocabulary collision: two
-things, both called grounded. The fix for a vocabulary collision is never
-to make one of them stricter. `claims.grounded` means nothing sinks through
-the floor. A project that wants floating reported opts into
-`conventions.grounding`, where W-325 names the nearest support below: their
-policy, chosen, rather than the compiler's opinion, imposed.
+A field audit (D2) then re-opened it from the other side: an author who
+writes `grounded: true` over a scene where the contact line says "2 touch
+nothing" is being told "held" about an assertion the census can see is
+false. The second two-sided implementation (lint/claims.ts, "direction
+two") answers the first attempt's recorded objection with a wider licence:
+`above` parts AND `conventions.grounding.exempt` entries are declared
+floats, and everything transitively hanging from a declared float inherits
+the licence through measured contacts. The known residual cost, stated
+rather than hidden: a hoverer placed with `at` must be exempted explicitly
+— the failure message names both escape hatches. If that friction proves
+worse in the field than the false "held" it prevents, this paragraph is
+where the third reversal starts from.
 
 **The oriented box is the voxel authority** (see the voxel section). The
 census recovered it and one consumer read it; grid deviation, element extent,
@@ -773,6 +792,144 @@ art does not belong in the repository.
 - Fuzz: validator shape-fuzz, uniform-name injection fuzz, GPU
   hostile-uniform fuzz riding the E-804 oracle, RNG known-answer +
   insertion-stability.
+
+## The interval calculus over time (the false-pass round)
+
+A black-box field audit proved a claims false pass with hand arithmetic: a
+1.4 m plate spinning at 6 frames/revolution samples θ ∈ {0°, 60°, …} and
+never 45°, so the sampled envelope measured 1.9124 m of a true 1.4·√2 =
+1.9799 m sweep and a 1.95 m footprint claim "held at 98% of its bound".
+The mechanism was structural: the analytic swept envelope (exact for the
+breach) lived parse-side and could only ever emit a W-701 advisory, while
+the sampled census owned the verdict — the verdict belonged to the weaker
+of two oracles, printed two lines apart with two different numbers (that
+was the audit's D7 too).
+
+The fix is one adjudicator running one interval argument (`lint/claims.ts`,
+fed by `solve/sweep.ts` `sweptSceneFacts`):
+
+- **Samples are lower bounds.** A sampled breach is a real visited pose →
+  proven failure (frame named).
+- **Exact swept boxes are attained.** `sweptBox` now carries an exactness
+  flag with a theorem behind it: over a full turn the swept region of any
+  rigid shape is rotationally symmetric with radius max‖p⊥‖, so a BOX's
+  cross extent is exactly its local cross diagonal (corners are the hull's
+  extreme points; some θ carries the far corner onto each axis). Bob and
+  the screw advance are exact translations; a spin-symmetric part sweeps
+  to itself. `file`/`script` parts are never exact (content is fitted
+  inside the box and can carry its own clips). An exact envelope over a
+  claim → proven failure, closed form, **no census needed** — the fast
+  gear catches it at parse time.
+- **The full envelope is an upper bound** (conservative parts over-
+  reserve) — an envelope inside the claim proves the pass over ALL time
+  and suppresses the stride caveat. Gated on a fully procedural scene
+  (imported clips deform beyond solved boxes).
+- **Conservative bound over the claim** → W-701 saying *unproven either
+  way, not failed* — never "adjudicated at the rest pose" prose beside a
+  contradicting E-701.
+
+`claimMargins` folds the exact swept extents in, so the margin line can
+never print 98% about a claim the part provably exceeds. The two
+hard-coded bob/screw blocks in `pipeline.ts` were special cases of the
+exact swept box and were deleted when the calculus generalised them.
+
+The same audit round fixed the ledger and the claim's other direction:
+
+- **`claims.checked`** (manifest + kit payload + report): declared minus
+  the claims marked `detail.unadjudicated` in W-701. `claims: 3/3 held`
+  used to print on compiles where the build never ran; now it reads
+  `0/3 checked — nothing was measured`. The proven badge (kit ident `✓N`,
+  panel ProvenBadge) requires `checked === declared`.
+- **`grounded` is two-sided.** Direction one: nothing sinks (rest pose ∪
+  sampled cycle ∪ exact swept minimum). Direction two: everything is
+  SUPPORTED — `groundedSupport` in `solve/contact.ts` BFS-es the measured
+  contact graph from ground-touching roots; contact (not strictly-below)
+  is the edge so lateral attachments count. Declared floats are the
+  author's: a part placed by `above` (and everything hanging from it, and
+  `conventions.grounding.exempt`) is licensed to hover. An earlier
+  two-sided attempt failed the showcase's levitating orb because it had no
+  notion of declared intent; `above` IS that declaration, already in the
+  language. Unverifiable support (contact scan skipped) is UNCHECKED,
+  never failed.
+
+## Contact separation is a certified distance (the 23mm round)
+
+The same audit measured `census.contacts[].separation` under-reporting a
+diagonal cylinder–cube gap by ~23 mm — the number implied a nearest point
+at radius 0.5233 on a mesh of radius 0.5. Root: separation was the best
+DIRECTIONAL support gap over four directions (three world axes +
+centre-to-centre), and a directional gap is a lower bound of the true
+distance with equality only at the optimal direction; the centre direction
+had a z component the geometry didn't. `contact_report` now runs a narrow
+phase: alternating BVH projection (p→proj_B→proj_A→…, non-increasing, so
+it converges to a stationary point pair) gives an attained upper bound,
+and the support gap along (q−p) is the matching lower-bound certificate —
+the GJK move. Disjoint pairs report the measured point-pair distance;
+intersecting pairs keep the negative widest-axis overlap as the
+penetration proxy (embeds still read −0.001). Two labels were also made
+honest: `gap` is documented as broad-phase AABB slack (diagnostic only —
+all-negative does NOT mean interpenetration), and the 50 mm recording
+cutoff is a named constant exported as `census.contactRange`, because
+"touches nothing" means "nothing within this range".
+
+## Error-channel honesty (codes, cascades, JSON)
+
+- **A demoted code shows its demotion**: `report.ts` prints
+  `S3D-E-321→info` when provenance reclassification drops severity below
+  the code letter — a grep for `S3D-E-` on a clean compile no longer
+  returns lines that read as errors. The code stays stable; the arrow is
+  the posture.
+- **Poisoned, not missing**: a material referencing a shader whose own
+  declaration failed gets NO error of its own and no baseColor-fallback
+  demand (`declaredShaders` beside `declaredMaterials`); a shader `size`
+  that is an array is told its SHAPE is wrong ("one number — bakes are
+  square"), not that 512 isn't a power of two; `file:` in a shader block
+  names the cross-vocabulary alias (`kernel`).
+- **Cycles are named as cycles**: the solver's double-constraint path asks
+  the relation graph first (`placementCycle` DFS) and prints
+  `prp_a → prp_b → prp_a` instead of "constrained twice"; the one-node
+  case already did. Cascade "has no placement" lines are suppressed when
+  the relation that would have placed the part already errored.
+- **One issue per problem for E-104** (matching E-105's granularity), JSON
+  syntax errors carry line/column/snippet (`jsonSyntaxDetail`), float
+  noise is formatted (`0.299`, not `0.29900000000000004`), a wedge with no
+  axis is told the field is REQUIRED (the default was always invalid),
+  shape values get did-you-mean, and `above.of`/`above.gap` map to
+  `over`/`clearance` via an explicit alias table.
+- **S3D-W-105 (SPEC_SUSPECT)** is the valid-but-suspect family: a
+  dimension over 10 km (millimetres-as-metres, mirroring the 1e-5 m
+  floor's hint), a rotation about a shape's own symmetry axis (provably
+  inert — `rotationIsInert`), and a span whose body never overlaps an
+  anchor it names (bridging air, measured per transverse axis). The
+  report's `scale:` line adds a `spread N:1 — verify units` note past
+  10⁴:1, and `conventions.geometry.zFightingPairBudget` is the audit's
+  requested knob for the W-323 pair cap (validated 1e3..5e6; plumbed
+  through the build job to `z_fighting_pairs`).
+- **Signed outliers**: `robustZ` keeps the sign; I-951's prose reads it
+  (DENSER → LOD/decimation, SPARSER → proxy/fixture, subdivide only if it
+  should match) — the rule used to advise decimating a 12-triangle plinth.
+- **Override orphans**: an unused material on a scene whose spec overrides
+  a `file` part's materials is reclassified to info with the reason —
+  wholesale replacement is documented behaviour, and "bind or delete" was
+  advice the author could not take on a material inside a third-party GLB.
+
+## Report voice (one word, one number)
+
+From the same audit's inconsistency list: the `parts (…)` header counts by
+kind (`31 mesh · 1 camera · 1 light`) so "parts" can't mean two numbers in
+one report; the solved-boxes header says `world box` (the column was
+always the world box — rotated rows just made it visible); the materials
+line prints emission×N and alpha (the two properties that needed review
+were the two it omitted); `scale:` appends the measured cycle sweep for
+animated assets; the healthy contact case is stated (`contact: all N
+part(s) touch another`) instead of implied by absence; `headroom:` became
+`built:` (no declared budget = nothing to have headroom against); the
+proof line names the animation frame range the turntable stepped; and the
+delta channel diffs MATERIALS (principled properties + node-graph
+fingerprint) and ANIMATION (frame range, clips, cycle bounds), so a
+roughness edit no longer reads "unchanged since previous compile". Shader
+bake images now wear ONE name family (`shd_rust_baseColor` as datablock
+AND file — the `tex_` datablock alias is gone).
 
 ## Known gaps (alpha)
 

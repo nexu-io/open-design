@@ -30,6 +30,13 @@ export const ISSUE_CODES = {
   /* The relation graph could not place every part (unresolved axis, cycle,
      conflicting constraints, unknown reference, expansion over a limit). */
   SPEC_UNRESOLVED: "S3D-E-106",
+  /* The spec is VALID but says something almost certainly unintended — a
+     kilometre-scale size (millimetres read as metres?), a rotation about a
+     shape's own symmetry axis that provably does nothing, a span whose body
+     never reaches the anchors it names. Warnings, never errors: each of
+     these CAN be meant, and the compiler names the suspicion instead of
+     refusing the sentence. */
+  SPEC_SUSPECT: "S3D-W-105",
   /* The solver adjusted an authored offset (contact floor, repeat pitch)
      to keep coplanar faces structurally impossible. The scene builds; this
      names what was changed and why. */
@@ -39,6 +46,20 @@ export const ISSUE_CODES = {
      authored decision produced geometry that interpenetrates itself, which
      nobody writes on purpose: they would have authored one larger shape. */
   SPEC_INSTANCES_INTERSECT: "S3D-W-107",
+  /* The kinematic linter: a moving part's SWEPT envelope (spin = the box's
+     corner circle unless the shape is symmetric about the spin axis; bob =
+     an exact translation) presses deeper into a neighbour mid-cycle than
+     the rest pose does. W-107 and the claims judge the rest pose; a blade
+     that cleared its post at frame 1 and split it at 90 degrees used to
+     compile clean. Conservative bound, so a warning — may-collide, with
+     the measured envelope in the detail. */
+  MOTION_ENVELOPE_CROSSES: "S3D-W-108",
+  /* Minkowski clearance: two parts closer than the project's declared
+     assembly tolerance without being in designed contact — a pinch point
+     that fuses on a printer or grazes under animation. Only fires when
+     conventions.geometry.minClearance is declared; boxes, so conservative
+     for round shapes, never an under-report. */
+  CLEARANCE_THIN: "S3D-W-109",
 
   /* build */
   BLENDER_NOT_FOUND: "S3D-E-201",

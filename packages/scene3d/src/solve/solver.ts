@@ -93,7 +93,12 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
     size.set(part.id, rotatedShapeSize(part, part.size, rotationOf(part)));
   }
 
-  const unknown = (id: string, relation: string): void => {
+  /** Parts whose placing relation already failed loudly — their "has no
+   *  placement" line would be a cascade echo of an error the author has
+   *  already been handed (two errors, one edit), so it is suppressed. */
+  const placementBlocked = new Set<string>();
+  const unknown = (id: string, relation: string, blockedPart?: string): void => {
+    if (blockedPart) placementBlocked.add(blockedPart);
     diagnostics.push({
       code: "SOLVE-UNKNOWN-PART",
       message: `relation '${relation}' references unknown part '${id}'`,
@@ -103,15 +108,60 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
 
   const solvedAxes = (id: string): boolean => center.get(id)?.every((v) => v !== null) ?? false;
 
+  /**
+   * Does the relation graph loop back through `start`? A two-node cycle
+   * (A sits_on B, B sits_on A) does not stall the fixpoint the way an
+   * unresolvable one does — each hop places, and the SECOND visit surfaces
+   * as a double-constraint. Diagnosing that as "constrained twice" sent
+   * authors hunting a duplicate relation instead of the loop, so the
+   * conflict path asks the graph first and names the cycle when there is
+   * one. DFS over part → its relations' references, bounded by the part
+   * count.
+   */
+  const placementCycle = (start: string): string[] | null => {
+    const edges = new Map<string, string[]>();
+    for (const r of spec.relations) {
+      const refs =
+        r.type === "sits_on" ? [r.on]
+        : r.type === "above" ? [r.over]
+        : r.type === "align" ? [r.to]
+        : r.type === "inset_from" ? [r.from]
+        : r.type === "span" ? [r.from, r.to]
+        : r.type === "scatter" ? [r.on]
+        : r.type === "around" ? [r.center]
+        : [];
+      if (refs.length > 0) {
+        (edges.get(r.part) ?? edges.set(r.part, []).get(r.part)!).push(...refs);
+      }
+    }
+    const chain: string[] = [start];
+    const walk = (current: string, depth: number): string[] | null => {
+      if (depth > spec.parts.length) return null;
+      for (const next of edges.get(current) ?? []) {
+        if (next === start) return [...chain, next];
+        if (chain.includes(next)) continue;
+        chain.push(next);
+        const found = walk(next, depth + 1);
+        if (found) return found;
+        chain.pop();
+      }
+      return null;
+    };
+    return walk(start, 0);
+  };
+
   const setAxis = (id: string, axis: Axis, value: number, relation: string): void => {
     const slot = center.get(id);
     if (!slot) return;
     const index = AXES.indexOf(axis);
     const existing = slot[index];
     if (existing !== null && Math.abs(existing - value) > 1e-9) {
+      const cycle = placementCycle(id);
       diagnostics.push({
         code: "SOLVE-CONFLICT",
-        message: `'${id}' ${axis} is constrained twice to different values (${existing} vs ${value}) — the later relation '${relation}' was ignored`,
+        message: cycle
+          ? `'${id}' ${axis} is re-constrained through a cycle: ${cycle.join(" → ")} — a part cannot be placed from a part that was placed from it; the later relation '${relation}' was ignored`
+          : `'${id}' ${axis} is constrained twice to different values (${fmtNum(existing)} vs ${fmtNum(value)}) — the later relation '${relation}' was ignored`,
         part: id,
       });
       return;
@@ -154,7 +204,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
 
       case "sits_on": {
         if (!parts.has(relation.part)) return unknown(relation.part, "sits_on"), true;
-        if (!parts.has(relation.on)) return unknown(relation.on, "sits_on"), true;
+        if (!parts.has(relation.on)) return unknown(relation.on, "sits_on", relation.part), true;
         if (!solvedAxes(relation.on)) return false;
         // The axis the stack climbs. `z` is gravity and the default; any
         // other axis is the same face-to-face placement used as an
@@ -176,7 +226,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
 
       case "above": {
         if (!parts.has(relation.part)) return unknown(relation.part, "above"), true;
-        if (!parts.has(relation.over)) return unknown(relation.over, "above"), true;
+        if (!parts.has(relation.over)) return unknown(relation.over, "above", relation.part), true;
         if (!solvedAxes(relation.over)) return false;
         const axis = relation.axis ?? "z";
         const under = bounds(relation.over, axis);
@@ -189,7 +239,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
 
       case "align": {
         if (!parts.has(relation.part)) return unknown(relation.part, "align"), true;
-        if (!parts.has(relation.to)) return unknown(relation.to, "align"), true;
+        if (!parts.has(relation.to)) return unknown(relation.to, "align", relation.part), true;
         if (!solvedAxes(relation.to)) return false;
         for (const axis of relation.axes) {
           const target = center.get(relation.to)![AXES.indexOf(axis)];
@@ -201,7 +251,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
 
       case "inset_from": {
         if (!parts.has(relation.part)) return unknown(relation.part, "inset_from"), true;
-        if (!parts.has(relation.from)) return unknown(relation.from, "inset_from"), true;
+        if (!parts.has(relation.from)) return unknown(relation.from, "inset_from", relation.part), true;
         if (!solvedAxes(relation.from)) return false;
         const by = contact(relation.by, relation.part, "inset");
         for (const face of relation.faces) {
@@ -219,8 +269,8 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
 
       case "span": {
         if (!parts.has(relation.part)) return unknown(relation.part, "span"), true;
-        if (!parts.has(relation.from)) return unknown(relation.from, "span"), true;
-        if (!parts.has(relation.to)) return unknown(relation.to, "span"), true;
+        if (!parts.has(relation.from)) return unknown(relation.from, "span", relation.part), true;
+        if (!parts.has(relation.to)) return unknown(relation.to, "span", relation.part), true;
         if (!solvedAxes(relation.from) || !solvedAxes(relation.to)) return false;
         // A second span on an axis a part already spans is two authorities
         // over one extent; the first wins and the second is reported, the
@@ -279,7 +329,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
 
       case "around": {
         if (!parts.has(relation.part)) return unknown(relation.part, "around"), true;
-        if (!parts.has(relation.center)) return unknown(relation.center, "around"), true;
+        if (!parts.has(relation.center)) return unknown(relation.center, "around", relation.part), true;
         // The circle waits for its hub exactly as `sits_on` waits for its
         // support — one dependency, expressed the one way this solver has.
         if (!solvedAxes(relation.center)) return false;
@@ -297,7 +347,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
 
       case "scatter": {
         if (!parts.has(relation.part)) return unknown(relation.part, "scatter"), true;
-        if (!parts.has(relation.on)) return unknown(relation.on, "scatter"), true;
+        if (!parts.has(relation.on)) return unknown(relation.on, "scatter", relation.part), true;
         if (!solvedAxes(relation.on)) return false;
         // Scatters on one support see each other: rocks placed by an
         // earlier relation are obstacles to the shoots placed by a later
@@ -446,6 +496,40 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
     }
   }
 
+  // A span whose body never overlaps an anchor it names is a rail bridging
+  // air: the transverse midpoint default (above) does exactly what was
+  // asked on the span axis and can still land the beam beside both
+  // anchors, with nothing louder than a contact info line to say so. The
+  // geometry is checked here — box overlap per transverse axis against
+  // each named anchor — because the author's sentence ("span FROM a TO b")
+  // asserts a joint the solver can verify.
+  for (const relation of spec.relations) {
+    if (relation.type !== "span") continue;
+    const c = center.get(relation.part);
+    const s = size.get(relation.part);
+    if (!c || c.some((v) => v === null) || !s) continue;
+    for (const anchor of [relation.from, relation.to]) {
+      const ac = center.get(anchor);
+      const as = size.get(anchor);
+      if (!ac || ac.some((v) => v === null) || !as) continue;
+      const misses: Array<{ axis: Axis; gap: number }> = [];
+      for (const axis of AXES) {
+        if (axis === relation.axis) continue;
+        const ai = AXES.indexOf(axis);
+        const gap = Math.abs(c[ai]! - ac[ai]!) - (s[ai]! + as[ai]!) / 2;
+        if (gap > 1e-9) misses.push({ axis, gap });
+      }
+      if (misses.length > 0) {
+        const worst = misses.reduce((a, b) => (b.gap > a.gap ? b : a));
+        diagnostics.push({
+          code: "SOLVE-SUSPECT",
+          message: `span '${relation.part}' does not reach its anchor '${anchor}' on ${misses.map((m) => m.axis).join("/")} — its end passes ${fmtNum(worst.gap)}m clear, so the joint is bridging air; align the anchors on those axes, or add an align on the spanning part`,
+          part: relation.part,
+        });
+      }
+    }
+  }
+
   // The parts a relation reads from before it can place its own part — the
   // same set `apply()` above checks `solvedAxes()` on. Repeat never appears
   // here: it is excluded from `pending` from the start.
@@ -515,11 +599,20 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
   for (const part of spec.parts) {
     const c = center.get(part.id)!;
     if (c.some((v) => v === null)) {
-      diagnostics.push({
-        code: "SOLVE-UNRESOLVED",
-        message: `'${part.id}' has no placement on ${AXES.filter((a) => c[AXES.indexOf(a)] === null).join("/")} — anchor it with a relation`,
-        part: part.id,
-      });
+      // Cascade suppression: when the relation that would have placed this
+      // part already failed loudly (unknown reference, never resolved),
+      // "has no placement" is the same fact said twice — two errors, one
+      // edit. The root error is still an error, so nothing gets quieter.
+      const alreadyBlamed =
+        placementBlocked.has(part.id) ||
+        diagnostics.some((d) => d.code === "SOLVE-UNRESOLVED" && d.part === part.id);
+      if (!alreadyBlamed) {
+        diagnostics.push({
+          code: "SOLVE-UNRESOLVED",
+          message: `'${part.id}' has no placement on ${AXES.filter((a) => c[AXES.indexOf(a)] === null).join("/")} — anchor it with a relation`,
+          part: part.id,
+        });
+      }
       continue;
     }
     solved.push({
@@ -539,6 +632,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
       ...(part.material !== undefined ? { material: part.material } : {}),
       ...(part.spin !== undefined ? { spin: part.spin } : {}),
       ...(part.bob !== undefined ? { bob: part.bob } : {}),
+      ...(part.screw !== undefined ? { screw: part.screw } : {}),
       // Both halves of a rotated box travel: `size` above is the world box
       // every consumer means, `localSize` is the box the emitter builds the
       // primitive at. Absent when nothing is rotated, so an unrotated scene
@@ -1145,4 +1239,9 @@ export function findCoplanarFaces(
     }
   }
   return hits;
+}
+
+/** Strip float noise from user-facing diagnostics: 0.29900000000000004 reads as the 0.299 it is. */
+function fmtNum(v: number): string {
+  return String(Number(v.toFixed(6)));
 }

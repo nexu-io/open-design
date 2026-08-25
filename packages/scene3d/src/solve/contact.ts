@@ -74,6 +74,82 @@ export function nearestSupportBelow(
   return best;
 }
 
+/**
+ * The set of mesh parts transitively supported by the ground: every part
+ * whose bottom sits at (or below) the ground plane within tolerance, plus
+ * everything reachable from those through measured contacts.
+ *
+ * This predicate answers ONE of the grounded claim's two questions — "does
+ * a load path reach the ground" — and deliberately not the other. A SUNK
+ * part seeds the closure on purpose: a chain standing on a sunk plinth
+ * really does reach the ground, so calling the chain unsupported would be a
+ * second, wrong finding about the plinth's one defect. The sinking itself
+ * is adjudicated by the claim's other direction (the per-part groundGap
+ * check in lint/claims.ts), which fails the claim for the sunk part no
+ * matter what this closure contains — membership here can never launder a
+ * sunk part past the ledger or the proven badge.
+ *
+ * Contact, not stacking: a side-mounted pommel on a grounded grip is
+ * supported (it is rigidly attached to something that reaches the ground),
+ * so the edge relation is the census's own measured contact within
+ * tolerance — the same pairs the connectivity line counts — rather than a
+ * strictly-below test that would fail every lateral attachment.
+ *
+ * `verified` is false when the census could not measure contacts (the scan
+ * was skipped, or never ran): an unverifiable support chain must surface as
+ * UNCHECKED, never as a failure — a part is not "floating" because the
+ * oracle that would have seen its support was over budget.
+ *
+ * `assumedRoots` are parts the CALLER vouches for — declared floats
+ * (`above` relations), grounding exemptions — that seed the flood fill
+ * beside the measured ground contacts, so a lamp hanging from a
+ * declared-floating chandelier inherits its licence. A parameter rather
+ * than a second flood fill at the call site: what counts as a support
+ * edge is this module's one predicate ("one predicate per physical
+ * relation"), and the adjudicator re-implementing the propagation is
+ * exactly how the two authorities last drifted.
+ */
+export function groundedSupport(
+  census: Census,
+  tolerance: number,
+  assumedRoots: Iterable<string> = [],
+): { supported: Set<string>; verified: boolean } {
+  const supported = new Set<string>();
+  const verified =
+    census.contacts !== undefined && (census.contactsSkipped?.length ?? 0) === 0;
+  const adjacency = new Map<string, string[]>();
+  for (const contact of census.contacts ?? []) {
+    if (contact.separation > tolerance) continue; // near, but not touching
+    (adjacency.get(contact.a) ?? adjacency.set(contact.a, []).get(contact.a)!).push(contact.b);
+    (adjacency.get(contact.b) ?? adjacency.set(contact.b, []).get(contact.b)!).push(contact.a);
+  }
+  const queue: string[] = [];
+  for (const root of assumedRoots) {
+    if (!supported.has(root)) {
+      supported.add(root);
+      queue.push(root);
+    }
+  }
+  for (const mesh of census.meshes) {
+    const gap = mesh.spatial?.groundGap;
+    if (gap === undefined) continue;
+    if (groundVerdict(gap, tolerance) !== "floating") {
+      supported.add(mesh.object);
+      queue.push(mesh.object);
+    }
+  }
+  while (queue.length > 0) {
+    const name = queue.pop()!;
+    for (const next of adjacency.get(name) ?? []) {
+      if (!supported.has(next)) {
+        supported.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return { supported, verified };
+}
+
 /** Do two AABBs share any ground footprint (x and y)? */
 function overlapsInPlan(
   a: { worldMin?: number[] | null; worldMax?: number[] | null },

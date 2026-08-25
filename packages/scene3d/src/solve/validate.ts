@@ -45,15 +45,24 @@ export function validateSceneSpec(
    *  pxPerBlock). Omitted = the PBR default [64, 4096], so non-voxel callers and
    *  the language's own tests are unaffected. */
   opts: { bake?: { min: number; max: number } } = {},
-): { spec?: SceneSpec; errors: string[] } {
+): { spec?: SceneSpec; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
+  /** Valid-but-suspect authoring (mapped to S3D-W-105 by the pipeline):
+   *  the spec compiles exactly as written; each entry names something the
+   *  author almost certainly did not mean. */
+  const warnings: string[] = [];
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    return { errors: ["scene.json must be a JSON object"] };
+    return { errors: ["scene.json must be a JSON object"], warnings };
   }
   const doc = raw as Record<string, unknown>;
 
   if (doc.schemaVersion !== 1) {
-    errors.push("schemaVersion must be 1");
+    // Missing and wrong are different edits; say which one this is.
+    errors.push(
+      doc.schemaVersion === undefined
+        ? 'schemaVersion is missing — add "schemaVersion": 1'
+        : `schemaVersion must be 1 (got ${JSON.stringify(doc.schemaVersion)})`,
+    );
   }
   if (doc.name !== undefined && typeof doc.name !== "string") {
     errors.push("name must be a string");
@@ -64,6 +73,15 @@ export function validateSceneSpec(
   // checked against the declared set. Kernel-text checks happen in the
   // pipeline, which owns file I/O; this layer owns the declaration shape.
   const shaders: Record<string, ShaderSpec> = {};
+  // Every shader name the author WROTE, valid or not — the same split the
+  // materials below keep. "Is this declared" and "is the declaration well-
+  // formed" are different questions: a material referencing a shader whose
+  // own block just failed used to be told "not declared — declare it or fix
+  // the name", advice for a problem the author did not have, and then got a
+  // second false error demanding the baseColor fallback the (declared!)
+  // shader makes unnecessary. One wrong key produced three errors, two of
+  // them pointing away from the cause.
+  const declaredShaders = new Set<string>();
   if (doc.shaders !== undefined) {
     if (doc.shaders === null || typeof doc.shaders !== "object" || Array.isArray(doc.shaders)) {
       errors.push("shaders must be an object of name -> shader");
@@ -73,6 +91,7 @@ export function validateSceneSpec(
         // sibling of shd_rust used to be refused as a badly named shader,
         // steering the author toward renaming their own comment.
         if (isCommentKey(name)) continue;
+        declaredShaders.add(name);
         const result = validateShaderSpec(name, value, undefined, errors, opts.bake);
         if (result) shaders[name] = result.spec;
       }
@@ -99,7 +118,7 @@ export function validateSceneSpec(
           );
           continue;
         }
-        const mat = validateMaterial(name, value, new Set(Object.keys(shaders)), errors);
+        const mat = validateMaterial(name, value, new Set(Object.keys(shaders)), declaredShaders, errors);
         if (mat) materials[name] = mat;
       }
     }
@@ -122,19 +141,74 @@ export function validateSceneSpec(
         } else {
           partIds.add(part.id);
           parts.push(part);
+          // The MIRROR of the tiny-size unit-slip floor: metres-read-as-
+          // millimetres is an error at 1e-5m, but millimetres-read-as-
+          // metres sailed through with no comment at any size. A warning,
+          // not an error — a 15km terrain can be meant — with the same
+          // hint the floor carries.
+          const hugeAxis = part.size.findIndex((v) => v > MAX_SANE_DIMENSION);
+          if (hugeAxis >= 0) {
+            warnings.push(
+              `parts[${index}].size[${hugeAxis}] is ${part.size[hugeAxis]}m — ${(part.size[hugeAxis]! / 1000).toFixed(0)}km of one part; verify the units (millimetres written as metres?)`,
+            );
+          }
+          // A rotation about a shape's own continuous symmetry axis maps
+          // the shape onto itself — the box is unchanged, the geometry is
+          // unchanged, nothing downstream can see it. The same "you wrote
+          // something that does nothing" family as W-801 (unused shader).
+          if (part.rotate && rotationIsInert(part)) {
+            warnings.push(
+              `parts[${index}].rotate does nothing — a ${part.shape ?? "box"} is rotationally symmetric about its ${part.rotate.axis} axis, so this rotation has no geometric effect; delete it or rotate about a different axis`,
+            );
+          }
         }
       }
     });
   }
 
   /* ---- relations --------------------------------------------------- */
+  // Every part id the author WROTE, valid or not — the declared/validated
+  // split again, so a relation referencing a part whose own declaration
+  // failed is not also told the part "is not declared" (the D4 cascade
+  // class, at the parts layer).
+  const declaredPartIds = new Set<string>(
+    Array.isArray(doc.parts)
+      ? doc.parts
+          .map((p) => (p as { id?: unknown } | null)?.id)
+          .filter((id): id is string => typeof id === "string")
+      : [],
+  );
   const relations: Relation[] = [];
   if (!Array.isArray(doc.relations)) {
     errors.push("relations must be an array");
   } else {
     doc.relations.forEach((value, index) => {
       const relation = validateRelation(index, value, errors);
-      if (relation) relations.push(relation);
+      if (relation) {
+        relations.push(relation);
+        // Reference integrity at SCHEMA time, matching materials: a
+        // relation naming a part that does not exist is the same class of
+        // mistake as a part naming an undeclared material, and it used to
+        // earn a different code (E-106) a stage later, plus a cascade.
+        // Same code, same shape, same did-you-mean, right here.
+        const refs: Array<[string, string]> = [["part", relation.part]];
+        if (relation.type === "sits_on") refs.push(["on", relation.on]);
+        if (relation.type === "above") refs.push(["over", relation.over]);
+        if (relation.type === "align") refs.push(["to", relation.to]);
+        if (relation.type === "inset_from") refs.push(["from", relation.from]);
+        if (relation.type === "span") refs.push(["from", relation.from], ["to", relation.to]);
+        if (relation.type === "scatter") refs.push(["on", relation.on]);
+        if (relation.type === "around") refs.push(["center", relation.center]);
+        for (const [field, id] of refs) {
+          if (declaredPartIds.has(id)) continue;
+          const known = [...declaredPartIds];
+          const shown = known.slice(0, 8).join(", ");
+          const more = known.length > 8 ? ` +${known.length - 8} more` : "";
+          errors.push(
+            `relations[${index}].${field} '${id}' is not a declared part — ${didYouMean(id, declaredPartIds)}declared parts: ${shown}${more}`,
+          );
+        }
+      }
     });
   }
 
@@ -256,8 +330,9 @@ export function validateSceneSpec(
     }
   }
 
-  if (errors.length > 0) return { errors };
+  if (errors.length > 0) return { errors, warnings };
   return {
+    warnings,
     spec: {
       schemaVersion: 1,
       ...(typeof doc.name === "string" ? { name: doc.name } : {}),
@@ -276,6 +351,44 @@ export function validateSceneSpec(
 const SHAPES: readonly PartShape[] = [
   "box", "cylinder", "sphere", "cone", "torus", "wedge", "tube", "capsule",
 ];
+
+/**
+ * One part dimension past this (in metres) is almost always millimetres
+ * written as metres — the mirror of the 1e-5m floor, warned rather than
+ * refused because a 15km terrain CAN be meant.
+ */
+const MAX_SANE_DIMENSION = 10_000;
+
+/**
+ * True when the authored `rotate` maps the shape's occupied volume onto
+ * itself — a continuous symmetry, so the rotation is provably invisible to
+ * every downstream consumer. The exact mirror of the sweep module's
+ * spinSymmetric, over the authored (local) box: revolution solids about
+ * their own axis with a circular cross-section, and spheroids about any
+ * principal axis with equal cross extents. `file`/`script` parts never
+ * qualify (their content is not the declared shape).
+ */
+function rotationIsInert(part: PartSpec): boolean {
+  const rotate = part.rotate;
+  if (!rotate || part.file || part.script) return false;
+  const shape = part.shape ?? "box";
+  const equalCross = (about: Axis): boolean => {
+    const [u, v] = crossExtents(part.size, about);
+    return Math.abs(u - v) <= CIRCULAR_TOLERANCE;
+  };
+  if (shape === "sphere") return equalCross(rotate.axis);
+  if (
+    shape === "cylinder" ||
+    shape === "cone" ||
+    shape === "tube" ||
+    shape === "capsule" ||
+    shape === "torus"
+  ) {
+    const own = part.axis ?? "z";
+    return rotate.axis === own && equalCross(own);
+  }
+  return false;
+}
 
 /**
  * How far two extents may differ and still count as the same measurement.
@@ -328,7 +441,13 @@ function validatePart(
   let shape: PartShape = "box";
   if (part.shape !== undefined) {
     if (SHAPES.includes(part.shape as PartShape)) shape = part.shape as PartShape;
-    else errors.push(`${at}.shape must be one of ${SHAPES.join(", ")}`);
+    else {
+      // Enum VALUES deserve the same near-miss rescue field names get:
+      // "cylindar" is one character from a listed shape, and a message
+      // that only recites the list makes the author diff it by eye.
+      const guess = typeof part.shape === "string" ? didYouMean(part.shape, SHAPES).trim() : "";
+      errors.push(`${at}.shape must be one of ${SHAPES.join(", ")}${guess ? ` — ${guess}` : ""}`);
+    }
   }
   let file: string | undefined;
   if (part.file !== undefined) {
@@ -495,6 +614,69 @@ function validatePart(
     }
   }
 
+  let screw: PartSpec["screw"];
+  if (part.screw !== undefined) {
+    if (part.screw === null || typeof part.screw !== "object" || Array.isArray(part.screw)) {
+      errors.push(`${at}.screw must be an object with a rise`);
+    } else {
+      const w = part.screw as Record<string, unknown>;
+      const screwBefore = errors.length;
+      const KNOWN_SCREW_KEYS = new Set(["axis", "seconds", "rise"]);
+      for (const key of Object.keys(w)) {
+        if (isCommentKey(key)) continue;
+        if (!KNOWN_SCREW_KEYS.has(key)) {
+          errors.push(
+            `${at}.screw.${key} is not a screw field — ${didYouMean(key, KNOWN_SCREW_KEYS)}known fields: axis, seconds, rise`,
+          );
+        }
+      }
+      if (w.axis !== undefined && !AXES.includes(w.axis as Axis)) {
+        errors.push(`${at}.screw.axis must be x, y or z`);
+      }
+      if (
+        w.seconds !== undefined &&
+        !(typeof w.seconds === "number" && Number.isFinite(w.seconds) && w.seconds > 0.1)
+      ) {
+        errors.push(`${at}.screw.seconds must be a number greater than 0.1`);
+      }
+      if (!(typeof w.rise === "number" && Number.isFinite(w.rise))) {
+        errors.push(
+          `${at}.screw.rise must be a finite number of metres travelled along the axis per turn`,
+        );
+      } else if (w.rise === 0) {
+        // Refused for the reason rotate.deg refuses a whole turn: it is a
+        // sentence the author believes they said. A screw with no rise is a
+        // spin, and the language already has that word. The rise carries no
+        // ceiling on purpose: how far one turn travels is scale taste (a
+        // crane's auger is not a wristwatch's), and taste is the author's.
+        errors.push(
+          `${at}.screw.rise is 0, which is a spin written the long way — write the metres the part advances per turn, or use spin`,
+        );
+      }
+      if (errors.length === screwBefore) {
+        screw = {
+          rise: w.rise as number,
+          ...(w.axis !== undefined ? { axis: w.axis as Axis } : {}),
+          ...(w.seconds !== undefined ? { seconds: w.seconds as number } : {}),
+        };
+      }
+    }
+  }
+
+  // Two authorities over one degree of freedom, refused where the author can
+  // still see both sentences. A screw IS a spin with a rise; and a screw
+  // about z translates on z, which is the only axis a bob has.
+  if (screw && spin) {
+    errors.push(
+      `${at} declares both spin and screw — a screw IS a spin with a rise along its axis, so drop the spin and let screw.seconds carry the turn`,
+    );
+  }
+  if (screw && bob && (screw.axis ?? "z") === "z") {
+    errors.push(
+      `${at} declares a screw about z and a bob — both author z travel, and two authorities over one axis is not a composition; screw about x or y composes with bob, or drop one of the two`,
+    );
+  }
+
   let rotate: PartSpec["rotate"];
   if (part.rotate !== undefined) {
     if (part.rotate === null || typeof part.rotate !== "object" || Array.isArray(part.rotate)) {
@@ -554,13 +736,17 @@ function validatePart(
     }
   }
 
-  // A wedge slopes ALONG its axis, so the axis has to be a horizontal one.
-  // Reported against the resolved axis, not the authored key, because the
-  // default is z: a wedge with no axis at all is the same mistake as one
-  // that names z, and both deserve the same sentence.
+  // A wedge slopes ALONG its axis, so the axis has to be a horizontal one —
+  // which makes the z DEFAULT always invalid for a wedge. The two roads
+  // here are different mistakes and deserve different sentences: an absent
+  // axis is a required field ("write one"), an explicit z is a wrong value
+  // ("change it"). The old single sentence explained a default the author
+  // may never have invoked.
   if (shape === "wedge" && axis === "z") {
     errors.push(
-      `${at}: a wedge's axis is the direction its top face slopes UP, so it must be x or y — the slope must run along a horizontal axis, and z (the default when no axis is written) is the direction the wedge is tall in`,
+      part.axis === undefined
+        ? `${at}.axis is required for a wedge — x or y, the direction its top face slopes UP (there is no usable default: z is the direction the wedge is tall in)`
+        : `${at}.axis: a wedge's axis is the direction its top face slopes UP, so it must be x or y — z is the direction the wedge is tall in`,
     );
   }
 
@@ -608,7 +794,7 @@ function validatePart(
   // the author learns what exists instead of trusting what does not.
   const KNOWN_PART_KEYS = new Set([
     "id", "size", "shape", "file", "script", "axis", "flip", "tip", "thickness",
-    "material", "role", "spin", "bob", "rotate",
+    "material", "role", "spin", "bob", "screw", "rotate",
   ]);
   for (const key of Object.keys(part)) {
     if (isCommentKey(key)) continue;
@@ -634,6 +820,7 @@ function validatePart(
     ...(typeof part.role === "string" ? { role: part.role } : {}),
     ...(spin ? { spin } : {}),
     ...(bob ? { bob } : {}),
+    ...(screw ? { screw } : {}),
     ...(rotate ? { rotate } : {}),
   };
 }
@@ -642,6 +829,11 @@ function validateMaterial(
   name: string,
   value: unknown,
   shaderNames: Set<string>,
+  /** Every shader name the author wrote, including invalid declarations —
+   *  see the note at the declaration site: a reference to a declared-but-
+   *  broken shader is POISONED, not missing, and must produce no error of
+   *  its own (the shader's own errors already name the cause). */
+  declaredShaders: Set<string>,
   errors: string[],
 ): MaterialSpec | undefined {
   const at = `materials.${name}`;
@@ -652,19 +844,26 @@ function validateMaterial(
   const mat = value as Record<string, unknown>;
   const before = errors.length;
   let shader: string | undefined;
+  let shaderPoisoned = false;
   if (mat.shader !== undefined) {
     if (typeof mat.shader !== "string") {
       errors.push(`${at}.shader must be a string`);
-    } else if (!shaderNames.has(mat.shader)) {
-      errors.push(`${at}.shader '${mat.shader}' is not declared in shaders — declare it or fix the name`);
-    } else {
+    } else if (shaderNames.has(mat.shader)) {
       shader = mat.shader;
+    } else if (declaredShaders.has(mat.shader)) {
+      // Declared, but its declaration failed above. Say nothing here — the
+      // real errors carry the shader's own JSON path — and suppress the
+      // baseColor fallback demand below: the binding will be fine the
+      // moment the shader itself is fixed.
+      shaderPoisoned = true;
+    } else {
+      errors.push(`${at}.shader '${mat.shader}' is not declared in shaders — declare it or fix the name`);
     }
   }
   // A shader material's surface comes from the bake; without a shader the
   // base colour is the material, so it is required.
   let baseColor: [number, number, number] | undefined;
-  if (mat.baseColor !== undefined || shader === undefined) {
+  if (mat.baseColor !== undefined || (shader === undefined && !shaderPoisoned)) {
     baseColor = validateColor(`${at}.baseColor`, mat.baseColor, errors);
   }
   const roughness = validateUnit(`${at}.roughness`, mat.roughness, errors);
@@ -763,13 +962,27 @@ function validateRelation(index: number, value: unknown, errors: string[]): Rela
   // sits_on, `"to"` on an `align`-shaped `inset_from`) compiled clean and
   // was silently ignored. Checked per case, against exactly the fields that
   // case reads, so the refusal names the vocabulary the AUTHORED type has.
+  /* Field names another relation (or plain English) uses for the same
+     concept: Levenshtein cannot bridge `of` → `over` or `gap` →
+     `clearance`, so the mapping is named. Keyed by relation type so `on`
+     stays legal where it IS the field. */
+  const RELATION_FIELD_ALIASES: Record<string, string> = {
+    "above.of": "over",
+    "above.on": "over",
+    "above.gap": "clearance",
+    "sits_on.over": "on",
+    "sits_on.gap": "embed",
+    "span.between": "from",
+  };
   const unknownRelationKeys = (known: readonly string[]): void => {
     const knownSet = new Set(known);
     for (const key of Object.keys(rel)) {
       if (isCommentKey(key)) continue;
       if (!knownSet.has(key)) {
+        const alias = RELATION_FIELD_ALIASES[`${rel.type as string}.${key}`];
+        const suggestion = alias ? `did you mean "${alias}"? ` : didYouMean(key, known);
         errors.push(
-          `${at}.${key} is not a field of relation '${rel.type as string}' — ${didYouMean(key, known)}known fields: ${known.join(", ")}`,
+          `${at}.${key} is not a field of relation '${rel.type as string}' — ${suggestion}known fields: ${known.join(", ")}`,
         );
       }
     }

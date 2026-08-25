@@ -1,5 +1,6 @@
 import { KIT_RUNTIME_JS } from "./kit-runtime.js";
 import { KIT_MATH_JS } from "./kit-math.generated.js";
+import { XRAY_MODES } from "./xray-modes.js";
 
 /**
  * One asset in a kit page.
@@ -83,8 +84,9 @@ export interface KitEntry {
   >;
   /** Animation clip names in the scene, shown on rig rows' cards. */
   clips?: string[];
-  /** The claims ledger, for the ident's quiet badge. */
-  claims?: { declared: number; failed: number };
+  /** The claims ledger, for the ident's quiet badge. `checked` gates the
+   *  badge: unadjudicated claims (no census) are not held. */
+  claims?: { declared: number; failed: number; checked?: number };
   /** Scene path the entry compiled from — also the tweak write-back target. */
   scenePath?: string;
   issueCodes?: string[];
@@ -158,6 +160,11 @@ export function renderKitHtml(page: KitPage): string {
     .replace(/&/g, '\\u0026')
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029');
+  // The shared x-ray mode catalogue, serialised into the page so the menu
+  // is built from the same source the host panel's mirror pins against.
+  const xrayModesJson = JSON.stringify(XRAY_MODES)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e');
   // String.raw, not a plain template: the viewer's script is authored in
   // here, and a plain literal silently eats every backslash — so a regex
   // written as \d compiles as d and quietly matches the wrong thing. That
@@ -6686,20 +6693,9 @@ document.getElementById('xray').addEventListener('click', () => setXray(!state.x
    pointing the wrong way, clearance finds gaps and buried parts. Each carries
    its own legend ramp because its colour LANGUAGE differs (diverging, binary,
    sequential+alarm); the legend states the ends, the menu states the purpose. */
-const XRAY_MODES = [
-  {
-    name: 'Curvature', lo: 'cavity', hi: 'ridge', desc: 'How the form is built — hollows to ridges',
-    ramp: 'linear-gradient(90deg, #123a5a, #8fa6a3, #c8963c)',
-  },
-  {
-    name: 'Normals', lo: 'outward', hi: 'flipped', desc: 'Faces pointing the wrong way',
-    ramp: 'linear-gradient(90deg, #1e7a8c 0 50%, #e5594a 50% 100%)',
-  },
-  {
-    name: 'Clearance', lo: 'clear', hi: 'touching', desc: 'Gaps, contacts and buried parts',
-    ramp: 'linear-gradient(90deg, #0b1026, #123a5a, #1e7a8c, #8fa6a3, #c8963c, #e5594a)',
-  },
-];
+/* Injected from src/viewer/xray-modes.ts — the ONE mode catalogue this
+   page shares with the host compile panel (via its contracts mirror). */
+const XRAY_MODES = ${xrayModesJson};
 
 function closeXrayMenu() {
   const menu = document.getElementById('xrayMenu');
@@ -7193,9 +7189,16 @@ function updateIdent(entry, statsText) {
      itself, worn as two quiet characters. A failed claim shows nothing
      here (the verdict colour and issue codes already own failure), and a
      scene with no claims shows nothing at all — the badge cannot be
-     cheapened by appearing by default. */
+     cheapened by appearing by default. The checked count gates it the
+     same way: a claim nobody adjudicated (no census) is not held, so an
+     unadjudicated ledger earns no shield. The checked count must be
+     PRESENT and full — every manifest this compiler writes carries it, so
+     an absent count means a manifest that predates adjudication counting,
+     and an unknown is never worn as a pass. A stale page loses its
+     shield until the recompile that can actually vouch for it. */
   const proven =
-    entry.claims && entry.claims.declared > 0 && entry.claims.failed === 0
+    entry.claims && entry.claims.declared > 0 && entry.claims.failed === 0 &&
+    entry.claims.checked === entry.claims.declared
       ? entry.claims.declared
       : 0;
   const meta = document.getElementById('meta');

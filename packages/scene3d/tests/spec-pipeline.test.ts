@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { compile, probeBlender } from "../src/index.js";
+import { compile, probeBlender, renderAgentReport } from "../src/index.js";
 import { ISSUE_CODES } from "../src/errors.js";
+import { deriveFacts } from "../src/lint/facts.js";
 import { rmForSetup } from "./helpers/fs.js";
 import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
@@ -87,6 +88,89 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
       expect(mesh.ngons, `${mesh.object} has ngons`).toBe(0);
     }
 
+    // Topology as pure counting: the Euler characteristic χ = V − E + F is
+    // TESSELLATION-INDEPENDENT — these numbers cannot move when segment
+    // counts, chord tolerances, or the whole emitter change, only when the
+    // shape's genus does. A sphere-like closed solid is 2; each handle
+    // (torus ring, tube bore) costs exactly 2. This is watertightness
+    // cross-checked through an entirely different mathematics than the
+    // edge-manifold scan above: two independent oracles on one property.
+    const chi = (name: string) => {
+      const m = byName.get(name)!;
+      expect(m.edges, `${name} census carries edge counts`).toBeDefined();
+      return m.verts - m.edges! + m.faces;
+    };
+    expect(chi("prp_lamp"), "sphere is genus 0").toBe(2);
+    expect(chi("prp_planter"), "frustum is genus 0").toBe(2);
+    expect(chi("prp_ramp"), "wedge is genus 0").toBe(2);
+    expect(chi("prp_lantern"), "capsule is genus 0").toBe(2);
+    expect(chi("prp_ring"), "torus is genus 1 — one handle costs χ exactly 2").toBe(0);
+    expect(chi("prp_socket"), "tube is genus 1 — a bore is a handle").toBe(0);
+
+    // ---- spectral shape-DNA -------------------------------------------
+    // Every primitive here is one solid, so `shells` is 1 — and that is what
+    // makes the χ above usable as genus: genus = (2·shells − χ) / 2 is only
+    // "χ/2 off 1" when the shell count is known rather than assumed.
+    for (const m of result.census!.meshes) {
+      expect(m.spectrum, `${m.object} carries spectral shape-DNA`).toBeDefined();
+      expect(m.spectrum!.shells, `${m.object} is one shell`).toBe(1);
+      // The genus identity, closed with a measured shell count instead of
+      // an assumption: a non-negative integer for every closed mesh here.
+      const genus = (2 * m.spectrum!.shells - (m.verts - m.edges! + m.faces)) / 2;
+      expect(Number.isInteger(genus), `${m.object} genus ${genus} is an integer`).toBe(true);
+      expect(genus, `${m.object} genus is non-negative`).toBeGreaterThanOrEqual(0);
+      // The eigen solve is capped; under the cap it must have RUN, and over it
+      // must say why it did not. Silence is not one of the options.
+      // (2000 mirrors SPECTRUM_VERT_CAP in runner.py — move them together.)
+      if (m.verts <= 2000) {
+        expect(m.spectrum!.eigenvalues, `${m.object} is under the cap so it must carry eigenvalues`)
+          .toBeDefined();
+        expect(m.spectrum!.eigenvalues!.length).toBeGreaterThan(0);
+        expect(m.spectrum!.eigenvalues!.length).toBeLessThanOrEqual(12);
+        // Normalised by the first nonzero eigenvalue, so the vector opens at 1
+        // and rises — the size-invariance that makes this a SHAPE fingerprint.
+        expect(m.spectrum!.eigenvalues![0]).toBeCloseTo(1, 6);
+      } else {
+        expect(m.spectrum!.skipped, `${m.object} is over the cap so it must say so`).toBeTruthy();
+      }
+    }
+
+    // The measured families. The four repeat clones of one column are the
+    // self-check: identical geometry MUST land in one family, or the
+    // fingerprint does not fingerprint.
+    const spectral = deriveFacts(result.census!, new Map());
+    const familyOf = (name: string) => spectral.spectralFamilyByPart.get(name);
+    const columnFamily = familyOf("prp_column");
+    expect(columnFamily, "the column's spectrum was measured").toBeTruthy();
+    for (const clone of ["prp_column_2", "prp_column_3", "prp_column_4"]) {
+      expect(familyOf(clone), `${clone} shares the base column's shape family`).toBe(columnFamily);
+    }
+    // And it discriminates, phrased against MEASUREMENT rather than a cap
+    // value — a pin on one named mesh's family goes undefined the moment
+    // tessellation pushes that mesh over the eigen cap. So: the
+    // always-measured pair — an 8-vertex box against the sphere, the two
+    // tessellation extremes — must never merge; EVERY measured genus-1 mesh
+    // must land outside the sphere's family; and the genus-1 set may not be
+    // empty, or a cap regression would silently vacate this loop.
+    expect(familyOf("prp_lamp")).toBeTruthy();
+    expect(familyOf("prp_plinth")).toBeTruthy();
+    expect(familyOf("prp_plinth"), "box and sphere are not one family").not.toBe(
+      familyOf("prp_lamp"),
+    );
+    const measuredGenus1 = result.census!.meshes.filter(
+      (m) => m.spectrum?.eigenvalues && m.verts - m.edges! + m.faces === 0,
+    );
+    expect(
+      measuredGenus1.length,
+      "at least one genus-1 mesh is under the eigen cap",
+    ).toBeGreaterThan(0);
+    for (const handled of measuredGenus1) {
+      expect(
+        familyOf(handled.object),
+        `${handled.object} (genus 1) shares no family with the sphere`,
+      ).not.toBe(familyOf("prp_lamp"));
+    }
+
     // The columns solved where the relations put them: a 2x2 colonnade
     // inset 0.15 from the plinth corners.
     const column = result.census!.objects.find((o) => o.name === "prp_column")!;
@@ -117,9 +201,11 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     // The manifest wears the claims ledger, and the kit page carries the
     // census-derived part facts: watertight glyph flags, provenance lines,
     // material swatch colours, and the proven-claims badge data.
-    expect(result.manifest.claims).toEqual({ declared: 7, failed: 0 });
+    // toMatchObject, not toEqual: the ledger now also carries `margins`
+    // (budget usage per numeric claim) — the badge facts are what this pins.
+    expect(result.manifest.claims).toMatchObject({ declared: 7, failed: 0 });
     const kitHtml = fs.readFileSync(path.join(dir, "out", "kit.html"), "utf8");
-    expect(kitHtml).toContain('"claims":{"declared":7,"failed":0}');
+    expect(kitHtml).toMatch(/"claims":\{"declared":7,"failed":0/);
     expect(kitHtml).toMatch(/"y":"w"/); // watertight primitives earn the glyph
     expect(kitHtml).toMatch(/"o":\d+/); // scene.json provenance lines
     expect(kitHtml).toMatch(/"matColors":\{[^}]*"mtl_stone":"#[0-9a-f]{6}"/);
@@ -216,6 +302,93 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     });
     expect(second.stages.find((s) => s.id === "build")!.status).toBe("cached");
     expect(second.census!.meshes).toHaveLength(13);
+  });
+
+  it("keeps a grounded bob's frame-1 pose on its solved contact", async () => {
+    // Red before _animate_bob anchored the FIRST keyframe: a resting bob
+    // used to open its cycle at mid (+amplitude), and since an animated
+    // object's evaluated pose comes from its fcurves — not from a location
+    // write after keying — the census measured the part a full amplitude
+    // off the contact the solver had floored. Phantom W-337, false E-701.
+    // The amplitude here is far above the grounding tolerance on purpose.
+    const dir = path.join(__dirname, ".work", `spec-bob-rest-${++workSeq}`);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "scene.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        materials: { mtl_mat: { baseColor: [0.5, 0.5, 0.5], roughness: 0.8 } },
+        parts: [
+          { id: "prp_pad", size: [1, 1, 0.1], material: "mtl_mat" },
+          {
+            id: "prp_buoy", size: [0.3, 0.3, 0.3], material: "mtl_mat",
+            bob: { amplitude: 0.1, seconds: 2 },
+          },
+        ],
+        relations: [
+          { type: "at", part: "prp_pad", center: [0, 0, 0.05] },
+          { type: "sits_on", part: "prp_buoy", on: "prp_pad" },
+        ],
+        claims: { grounded: true },
+      }),
+      "utf8",
+    );
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
+    const buoy = result.census!.meshes.find((m) => m.object === "prp_buoy")!;
+    // Rest = the solved contact: pad top 0.1 minus the 1mm embed.
+    expect(buoy.spatial!.groundGap).toBeCloseTo(0.099, 3);
+    // The rested pair really touches, and the grounded claim holds all cycle.
+    expect(result.issues.map((i) => i.code)).not.toContain("S3D-W-337");
+    expect(result.issues.map((i) => i.code)).not.toContain(ISSUE_CODES.CLAIM_FAILED);
+    expect(result.ok).toBe(true);
+  });
+
+  it("classifies the second compile's solve against the first, codec-style", async () => {
+    // Two compiles of a three-part stack with one edit between: the edit
+    // itself is `authored`, the part the graph moves in response is
+    // `propagated`, and nothing is a residual — a deterministic solver
+    // moving a part for no authored reason would be the actual news.
+    const dir = path.join(__dirname, ".work", `spec-delta-${++workSeq}`);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    const scene = (plinthHeight: number) =>
+      JSON.stringify({
+        schemaVersion: 1,
+        parts: [
+          { id: "prp_ground", size: [2, 2, 0.1] },
+          { id: "prp_plinth", size: [0.5, 0.5, plinthHeight] },
+          { id: "prp_orb", shape: "sphere", size: [0.3, 0.3, 0.3] },
+        ],
+        relations: [
+          { type: "at", part: "prp_ground", center: [0, 0, 0.05] },
+          { type: "sits_on", part: "prp_plinth", on: "prp_ground" },
+          { type: "sits_on", part: "prp_orb", on: "prp_plinth" },
+        ],
+      });
+    fs.writeFileSync(path.join(dir, "scene.json"), scene(0.4), "utf8");
+    const first = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: LONG });
+    expect(first.ok).toBe(true);
+    // First compile: no baseline, so no delta — silence, not a guess.
+    expect(first.solveDelta).toBeUndefined();
+
+    fs.writeFileSync(path.join(dir, "scene.json"), scene(0.6), "utf8");
+    const second = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: LONG });
+    expect(second.ok).toBe(true);
+    expect(second.solveDelta).toBeDefined();
+    expect(second.solveDelta!.authored).toEqual(["prp_plinth"]);
+    expect(second.solveDelta!.propagated).toEqual(["prp_orb"]);
+    expect(second.solveDelta!.residuals).toEqual([]);
+    expect(second.solveDelta!.steady).toBe(1);
+    // And the report carries the compressed line, not a part-by-part dump.
+    const report = renderAgentReport(second);
+    expect(report).toContain("solve: 1 authored · 1 moved with them (1 steady)");
+    expect(report).not.toContain("residual:");
   });
 
   it("fails every false claim with the measured truth, and only those", async () => {
@@ -370,5 +543,42 @@ describe.skipIf(!hasBlender)("script parts vs a hostile selection", () => {
     const base = result.census!.objects.find((o) => o.name === "prp_base")!;
     expect(base.dimensions[0]).toBeCloseTo(1, 3);
     expect(base.dimensions[2]).toBeCloseTo(0.12, 3);
+  }, 400_000);
+});
+
+describe.skipIf(!hasBlender)("claim margins against the real build", () => {
+  it("reports margins the census independently confirms", async () => {
+    // Anti-confirmation check: the ledger's numbers are recomputed HERE from
+    // the raw census, by different arithmetic than claimMargins owns. If the
+    // two ever disagree, one of them is lying about the same scene.
+    const dir = path.join(__dirname, ".work", "margins-pavilion");
+    rmForSetup(dir);
+    fs.cpSync(path.join(__dirname, "fixtures", "good/spec_pavilion"), dir, { recursive: true });
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint", "manifest"],
+      timeoutMs: 300_000,
+      noCache: true,
+    });
+    expect(result.ok).toBe(true);
+    const margins = result.manifest.claims?.margins ?? [];
+    expect(margins.length).toBeGreaterThan(0);
+
+    const spatials = result.census!.meshes
+      .map((m) => m.spatial)
+      .filter((s): s is NonNullable<typeof s> => Boolean(s));
+    const measuredTop = Math.max(...spatials.map((s) => s.worldMax[2]!));
+    const height = margins.find((m) => m.claim === "maxHeight");
+    expect(height).toBeDefined();
+    expect(height!.measured).toBeCloseTo(measuredTop, 5);
+    expect(height!.used).toBeCloseTo(measuredTop / height!.limit, 5);
+    // Every margin of a held claim sits at or under its bound.
+    for (const m of margins) {
+      expect(m.used).toBeLessThanOrEqual(1 + 1e-6);
+    }
+    // Tightest-first ordering is a property of the data, not the printer.
+    for (let i = 1; i < margins.length; i++) {
+      expect(margins[i - 1]!.used).toBeGreaterThanOrEqual(margins[i]!.used);
+    }
   }, 400_000);
 });

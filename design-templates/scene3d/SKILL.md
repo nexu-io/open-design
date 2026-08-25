@@ -125,7 +125,7 @@ them.
 | **Downloaded asset** | A scene dir of `.glb`/`.gltf`/`.obj`/`.fbx`, *or* a `file:` part inside a declared box | Imports, frames, measures, repackages. `material:` on a `file` part reskins it wholesale |
 | **Freeform shape** | `"script": "hull.py"` with `def build(ctx)` creating exactly one mesh | First-class procedural authoring path; fits that mesh into the declared box like any other part, so relations still work |
 | **GPU material** | A `.glsl` kernel `vec4 kernel(vec2 uv)` plus a `shaders` block | Bakes textures (even a height field → normal map), wires them, shows them in the proof and the GLB |
-| **Motion (current subset)** | Per-part `spin` / `bob` | Owns the keyframes, loops them, derives an animation asset, keeps clips on imported rigs; richer timelines and deformation systems are future language work |
+| **Motion (current subset)** | Per-part `spin` / `bob` / `screw` | Owns the keyframes, loops them, derives an animation asset, keeps clips on imported rigs; richer timelines and deformation systems are future language work |
 | **Sprite / flipbook / VFX / sky** | A sheet file, *or* a kernel with `"frames": 16` | Measures the atlas (grid, bleed, seams, motion). A frames kernel *is* a sheet, so materials do not bind it |
 | **Voxel / Minecraft** | Same language, on the pixel grid; or drop a Blockbench `.bbmodel` / Java `model.json` | Snaps `repeat`/`scatter` to the grid, warns about format facts, emits the JSON the game loads |
 
@@ -345,8 +345,9 @@ that arithmetic is what this relation deletes.
 `repeat` × `scatter` on the same part is refused, and so is `around`
 beside `repeat`, `scatter`, another `around`, or a `span`. Contacts and repeat
 pitches floor 1 mm from flush. Loud ceilings, never a silent shortfall:
-`repeat` refuses past 200 instances, and a scene refuses past 500 parts
-after expansion. Below those, a big scatter still changes what the
+`repeat` refuses past 4000 instances, and a scene refuses past 4000 parts
+after expansion — backstops against a runaway count, far above any scene
+you would mean. Below those, a big scatter still changes what the
 compiler can *measure*: past ~60 meshes the contact scan (grounding,
 touching-faces, the rested-pair check) reports itself skipped rather
 than guessing, so a claim that leans on contacts is unchecked, not
@@ -380,18 +381,28 @@ artifact: `parts`, `maxTriangles`, `grounded`, `maxHeight`, `footprint`
 count: every listed material must be bound to some part in the built
 scene. It is a subset check — a bound material you did not list passes
 silently, so it guards against losing a material, not against gaining
-one. `grounded` means nothing
-sinks through the floor. Floating is a legitimate composition — a
-lantern hangs, an orb hovers — and if a part is *meant* to float or bed
-while the rest of the scene stays grounded, declare it in
-`conventions.grounding.exempt` (an array of part ids) rather than
-dropping the scene-level claim; the same list also keeps a bobbing part
-honest across its whole cycle (a trough-anchored rest passes, a
-provably-clearing floater passes, a slow sinker fails with the measured
-numbers — exempt parts skip the check entirely). Claim what matters. A
-failed claim carries the measured truth, and the report now echoes a
-ledger (`claims: 7/7 held`) so you see the tally without hunting through
-individual issues.
+one. `grounded` means what the word means, in both directions: nothing
+sinks through the floor, AND everything is supported — resting on the
+ground or transitively in contact with something that is. A part you
+*mean* to float already says so in the language: placing it with an
+`above` relation declares the float (and anything hanging from it
+inherits the licence); a bedded rock or mount that has no relation to
+carry the intent goes in `conventions.grounding.exempt` (an array of
+part ids). A part floating with neither is a claim failure with the
+measured height and the nearest surface named. The same machinery keeps
+a moving part honest across its whole cycle (a trough-anchored rest
+passes, a provably-clearing floater passes, a slow sinker fails with
+the measured numbers). Claim what matters. A failed claim carries the
+measured truth; the report echoes a ledger (`claims: 7/7 held`, with a
+margin line saying how close the tightest one ran), and the ledger only
+counts what was actually adjudicated — a compile whose build never ran
+reports `0/7 checked`, never "held". Spatial claims are judged across
+TIME with an interval calculus: sampled frames prove failures, the
+closed-form swept envelope of compiler-owned motion proves failures
+(a fast spin's corner sweep is exact for boxes — integer-frame samples
+that never land on 45° cannot save it) and proves passes (an envelope
+inside the bound suppresses the stride caveat), and a conservative
+bound over the claim is reported as UNPROVEN rather than either.
 
 ### GPU kernels
 
@@ -452,7 +463,7 @@ and a height-only shader (`["height"]`) defines just `kernel_height`,
 no plain `kernel` at all. An output declared with no matching function
 is a wasted round trip, not a partial bake.
 
-**Time is a kernel dimension.** `"frames": 16` (2/4/8/16/32/64) bakes a
+**Time is a kernel dimension.** `"frames": 16` (any power of two, 2..256) bakes a
 power-of-two atlas with `uS3dTime` ∈ [0, 1). Loop through the unit circle
 (`cos/sin(uS3dTime * 6.2832)`) so the last frame flows into the first. A
 frames shader is a sheet product, so materials cannot bind it.
@@ -473,12 +484,36 @@ composed previews on the full one.
 
 ```json
 "spin": { "axis": "z", "seconds": 5 },
-"bob": { "amplitude": 0.05, "seconds": 4 }
+"bob": { "amplitude": 0.05, "seconds": 4 },
+"screw": { "axis": "z", "seconds": 4, "rise": 0.3 }
 ```
+
+`screw` is the general one: a full turn per `seconds` about `axis`
+composed with `rise` metres of travel along it — a bit driving, an auger
+lifting, a spiral descending (`rise` may be negative; any finite nonzero
+number is legal — how far one turn travels is your scale to judge).
+Because the clip loops, the advance REPEATS: it drives 0 → rise
+and snaps back to start the next thread, which is what an endless screw
+looks like and not what a lid that unscrews once does. A screw IS a spin
+with a rise, so the two are refused together; and a screw about z is
+refused beside a `bob`, since both would author z travel (screw about x
+or y composes with a bob freely).
 
 Compiler-owned, looped. Any motion makes the compile an `animation`.
 Imported rigs keep their skeletons and clip names: the report hands them
 to you as facts, no excavation required.
+
+Motion is adjudicated across its WHOLE cycle, at parse time, as static
+geometry — no simulation. A spinning part reserves its box's corner
+circle (a shape symmetric about its spin axis — an orb, a column turning
+in place — reserves nothing extra); a bob reserves its exact travel; a
+screw reserves both, so a symmetric auger reserves only its rise. The
+solved-boxes table annotates moving rows (`· sweeps ⌀0.42, z+0.05`),
+S3D-W-108 warns when a cycle presses into a neighbour the rest pose
+clears, claims that hold at rest but not across the cycle warn as
+unchecked — and a bob crest provably over a claimed `maxHeight` is a
+hard claim failure, measured, because a translation's arithmetic is
+exact.
 
 ### 2D sheets
 
@@ -537,6 +572,18 @@ flattened key you might guess: `conventions.grounding.exempt` (part
 ids, see Claims above), `conventions.grounding.tolerance`, and
 `conventions.uv.texelDensity.maxRatio` / `conventions.uv.texelDensity.target`
 (nested under `texelDensity`, never `uv.texelDensityMaxRatio`).
+
+`conventions.geometry.minClearance` (metres, default 0 = off) declares
+the assembly's working tolerance: any two parts closer than it without
+being in designed contact get a W-109 pinch warning. Set it when the kit
+must survive printing, kitbashing, or physics — leave it off for scenes
+where near-touching is composition, not error.
+
+`conventions.geometry.zFightingPairBudget` (default 200000) is the
+per-pair triangle-product cap on the coplanar comparison. A dense pair
+over it is skipped LOUDLY (W-323 names the pair and the cost); raise the
+budget when a correct sphere-on-cylinder joint must be verified rather
+than skipped — the quadratic cost is then your declared trade.
 
 Deliverables ride `export.formats`. Omit it and you get the default set
 — `usda`, `usdz`, `glb`, `obj`, `fbx` — plus `stl` when `target` is

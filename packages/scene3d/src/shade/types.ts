@@ -63,7 +63,9 @@ export interface ShaderSpec {
    * a kernel that ignores uS3dTime fails the static-flipbook rule, blank
    * cells fail the blank-frame rule — and the compile derives as a
    * `flipbook` asset. A frames shader is a sheet product: materials may
-   * not reference it. Allowed values: 2, 4, 8, 16, 32, 64.
+   * not reference it. Allowed values: any power of two from 2 to 256 (the
+   * top is where a 16-wide grid meets the 16384px atlas encode boundary at
+   * production cell sizes, not a taste).
    */
   frames?: number;
   /**

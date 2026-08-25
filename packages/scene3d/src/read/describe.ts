@@ -204,8 +204,14 @@ export function describeScene(
   // the end is a budget spent backwards.
   if (issues.length > 0) {
     const byCode = new Map<string, { severity: string; targets: string[] }>();
+    const rankOf = (s: string) => (s === "error" ? 0 : s === "warning" ? 1 : 2);
     for (const issue of issues) {
       const row = byCode.get(issue.code) ?? { severity: issue.severity, targets: [] };
+      // A code can carry mixed severities in one scene (authored vs
+      // reclassified imported findings) — the row wears the worst, so the
+      // demotion marker below never demotes a line that still has a real
+      // error in it.
+      if (rankOf(issue.severity) < rankOf(row.severity)) row.severity = issue.severity;
       if (issue.target) row.targets.push(issue.target);
       byCode.set(issue.code, row);
     }
@@ -217,7 +223,13 @@ export function describeScene(
     for (const [code, row] of codes) {
       const shown = row.targets.slice(0, 3).join(", ");
       const more = row.targets.length > 3 ? ` +${row.targets.length - 3} more` : "";
-      push(`  ${code} ×${row.targets.length || 1}${shown ? `: ${shown}${more}` : ""}`);
+      // Same demotion marker the report wears: a code letter must never
+      // contradict the adjudicated severity a reclassification chose.
+      const letter = /^S3D-([EWI])-/.exec(code)?.[1];
+      const letterSeverity =
+        letter === "E" ? "error" : letter === "W" ? "warning" : letter === "I" ? "info" : undefined;
+      const label = letterSeverity && letterSeverity !== row.severity ? `${code}→${row.severity}` : code;
+      push(`  ${label} ×${row.targets.length || 1}${shown ? `: ${shown}${more}` : ""}`);
     }
   }
 

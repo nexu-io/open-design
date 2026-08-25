@@ -87,7 +87,7 @@ it again; read this, then act.
   fixture: `tests/atelier-pipeline.test.ts` builds marble(height→normal) +
   lava(emission,spin) + water(alpha,bob) + real helmet + gold-overridden
   Fox in one compile — keep it green.
-  **Time is a kernel dimension**: `frames: 2..64` bakes per-cell
+  **Time is a kernel dimension**: `frames: 2..256 (POT)` bakes per-cell
   (`uS3dTime` system uniform) into a POT atlas with a structural 2px
   anti-bleed inset; the atlas REGISTERS AS A SHEET so the existing 2D
   rules adjudicate GPU output (static kernel → W-601 emergent). Flipbook

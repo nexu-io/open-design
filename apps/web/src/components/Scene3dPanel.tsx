@@ -21,6 +21,7 @@ import {
   buildPartTreeLayout,
   primPaths,
   scene3dIssueTitle,
+  SCENE3D_XRAY_GHOST_MODES,
   type Scene3dArtifactRef,
   type Scene3dAssetKind,
   type Scene3dIssue,
@@ -44,7 +45,12 @@ import {
   resolveAssetKind,
   totalTriangles,
 } from '../runtime/scene3d-assets';
-import { decodeIdMap, idMapUrlFor, renderXrayComposite } from '../runtime/scene3d-xray';
+import {
+  decodeIdMap,
+  idMapUrlFor,
+  renderXrayComposite,
+  type XrayGhostMode,
+} from '../runtime/scene3d-xray';
 import {
   getScene3dSelection,
   getScene3dSelectionServerSnapshot,
@@ -241,9 +247,22 @@ function compactCount(value: number): string {
  * differentiator that was computed into every manifest yet drawn nowhere in
  * the app's own compile panel.
  */
-function ProvenBadge({ claims }: { claims?: { declared: number; failed: number } }) {
+function ProvenBadge({ claims }: { claims?: { declared: number; failed: number; checked?: number } }) {
   const t = useT();
-  if (!claims || claims.declared <= 0 || claims.failed !== 0) return null;
+  // ONE statement for the whole appearance rule — absence, emptiness,
+  // failure, and the `checked` gate — so the `!claims` guard and every
+  // dereference it protects can never be read, or edited, apart. `checked`
+  // must be PRESENT and full, mirroring the kit page exactly: every
+  // manifest this compiler writes carries it, so an absent count is a
+  // pre-adjudication manifest, and an unknown is never worn as a pass.
+  if (
+    !claims ||
+    claims.declared <= 0 ||
+    claims.failed !== 0 ||
+    claims.checked !== claims.declared
+  ) {
+    return null;
+  }
   const label = t('scene3d.claimsProven', { count: claims.declared });
   return (
     /* Same mark grammar as the verdict — a drawn shield with the count —
@@ -445,7 +464,13 @@ function Scene3dScenePanel({
      tells a click apart from a drag. */
   const [stageSize, setStageSize] = useState<{ w: number; h: number } | null>(null);
   const [hoverPart, setHoverPart] = useState<string | null>(null);
-  const downRef = useRef<{ x: number; y: number; shift: boolean } | null>(null);
+  const downRef = useRef<{
+    x: number;
+    y: number;
+    shift: boolean;
+    ctrl: boolean;
+    button: number;
+  } | null>(null);
   const frameRects = manifest?.proofRects?.[frameIndex];
 
   useEffect(() => {
@@ -503,10 +528,20 @@ function Scene3dScenePanel({
     ((index % frames.length) + frames.length) % frames.length;
 
   const onStagePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
+    // Left picks (and rotates); MIDDLE is the jump-to-list pick — kill the
+    // browser's autoscroll widget so the gesture belongs to the stage.
+    if (event.button !== 0 && event.button !== 1) return;
+    if (event.button === 1) event.preventDefault();
     // Recorded before the rotatable gate: a single still cannot rotate but
     // its parts are still clickable.
-    downRef.current = { x: event.clientX, y: event.clientY, shift: event.shiftKey };
+    downRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      shift: event.shiftKey,
+      ctrl: event.ctrlKey || event.metaKey,
+      button: event.button,
+    };
+    if (event.button !== 0) return;
     if (!rotatable) return;
     const width = stageRef.current?.clientWidth ?? 600;
     // One full revolution over ~65% of the stage width: direct enough to
@@ -557,9 +592,12 @@ function Scene3dScenePanel({
     /* A press that never travelled is a pick: resolve the click through
        the same transform the reticle draws with, and mirror the kit
        viewport's grammar — click selects, shift-click toggles into the
-       set, empty space clears. A scene compiled before rects existed has
-       no frameRects and the click stays a no-op rather than a surprise. */
-    if (!down || event.button !== 0) return;
+       set, empty space clears. A plain pick deliberately does NOT scroll
+       the rail (finding the row is a choice, not a side effect): ctrl/cmd-
+       click or MIDDLE-click is that choice, and jumps to the part in the
+       list. A scene compiled before rects existed has no frameRects and
+       the click stays a no-op rather than a surprise. */
+    if (!down || (event.button !== 0 && event.button !== 1)) return;
     if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > 4) return;
     if (!frameRects || !stageRef.current) return;
     const bounds = stageRef.current.getBoundingClientRect();
@@ -570,16 +608,21 @@ function Scene3dScenePanel({
       event.clientY - bounds.top,
     );
     const current = new Set(selectionState.selected);
+    const jump = name !== null && (down.ctrl || down.button === 1);
     let next: string[];
     if (name === null) {
+      if (down.button !== 0) return; // middle on empty space: nothing to find
       next = [];
     } else if (down.shift) {
       if (current.has(name)) current.delete(name);
       else current.add(name);
       next = [...current];
+    } else if (jump) {
+      next = [name];
     } else {
       next = current.has(name) && selectionState.selected.length === 1 ? [] : [name];
     }
+    scrollOnSelectRef.current = jump;
     setScene3dSelection(assetName, scenePath, allSelectionParts, next);
   };
 
@@ -630,15 +673,18 @@ function Scene3dScenePanel({
     [selectionState.selected],
   );
 
-  /* A pick on the picture answers in the rail too: the selected part's row
-     slides into view (nearest, so an already-visible row never jumps the
-     scroll). Scoped to this panel's own rail, not the document. */
+  /* The rail scrolls to a picked part ONLY when the pick asked for it
+     (ctrl/cmd-click or middle-click on the picture) — a plain pick leaves
+     the list where the user left it. `nearest`, so an already-visible row
+     never jumps the scroll; scoped to this panel's own rail. */
   const sideRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
+    if (!scrollOnSelectRef.current) return;
+    scrollOnSelectRef.current = false;
     const first = selectionState.selected[0];
     if (!first || !sideRef.current) return;
     sideRef.current
-      .querySelector(`[data-s3d-part-row="${CSS.escape(first)}"]`)
+      .querySelector(`[data-s3d-part-row~="${CSS.escape(first)}"]`)
       ?.scrollIntoView({ block: 'nearest' });
   }, [selectionState.selected]);
 
@@ -657,6 +703,77 @@ function Scene3dScenePanel({
     frames: Map<number, { beauty: ImageData; codes: Uint16Array } | 'error'>;
   }>({ key: '', frames: new Map() });
   const [xrayOn, setXrayOn] = useState(false);
+  /* The ghost styling, switched with the kit page's own chord: X held +
+     1/2/3 (curvature / normals / structure). One keyboard grammar across
+     both scene3d surfaces. Ctrl/cmd is tracked for the jump-to-list
+     gesture: while held, the hover box turns gizmo-red to say "this click
+     will also find the part in the rail" (middle-click does the same
+     without the modifier). Shift keeps its multi-select toggle untouched. */
+  const [ghostMode, setGhostMode] = useState<XrayGhostMode>(1);
+  const [ctrlHeld, setCtrlHeld] = useState(false);
+  const scrollOnSelectRef = useRef(false);
+  /* The corner cluster's own state: the effect can be stood down without
+     clearing the selection, and the caret opens the mode menu. */
+  const [xrayEnabled, setXrayEnabled] = useState(true);
+  const [xrayMenuOpen, setXrayMenuOpen] = useState(false);
+  const xrayClusterRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!xrayMenuOpen) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!xrayClusterRef.current?.contains(event.target as Node)) setXrayMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setXrayMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [xrayMenuOpen]);
+
+  useEffect(() => {
+    let xHeld = false;
+    const isTyping = () => {
+      const active = document.activeElement;
+      return (
+        active !== null &&
+        (active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          (active as HTMLElement).isContentEditable)
+      );
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Control' || event.key === 'Meta') setCtrlHeld(true);
+      if (isTyping()) return;
+      if (event.key.toLowerCase() === 'x' && !event.repeat) {
+        xHeld = true;
+      } else if (xHeld && (event.key === '1' || event.key === '2' || event.key === '3')) {
+        event.preventDefault();
+        setGhostMode((Number(event.key) - 1) as XrayGhostMode);
+        // Picking a mode is asking for the effect — same as the kit's menu.
+        setXrayEnabled(true);
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Control' || event.key === 'Meta') setCtrlHeld(false);
+      if (event.key.toLowerCase() === 'x') xHeld = false;
+    };
+    const onBlur = () => {
+      setCtrlHeld(false);
+      xHeld = false;
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
 
   const selectedCodes = useMemo(() => {
     if (!idParts) return null;
@@ -669,7 +786,7 @@ function Scene3dScenePanel({
   }, [idParts, selectionState.selected]);
 
   useEffect(() => {
-    if (!xrayCapable || !selectedCodes || selectedCodes.size === 0) {
+    if (!xrayCapable || !xrayEnabled || !selectedCodes || selectedCodes.size === 0) {
       setXrayOn(false);
       return undefined;
     }
@@ -728,14 +845,14 @@ function Scene3dScenePanel({
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const out = ctx.createImageData(canvas.width, canvas.height);
-      renderXrayComposite(entry.beauty, entry.codes, selectedCodes, out);
+      renderXrayComposite(entry.beauty, entry.codes, selectedCodes, out, ghostMode);
       ctx.putImageData(out, 0, 0);
       if (!cancelled) setXrayOn(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [xrayCapable, selectedCodes, frames, frameIndex]);
+  }, [xrayCapable, xrayEnabled, selectedCodes, frames, frameIndex, ghostMode]);
 
   const allSelectionParts = useMemo((): Scene3dSelectionPart[] => {
     if (!manifest || !manifest.partTree) return [];
@@ -877,6 +994,9 @@ function Scene3dScenePanel({
             onPointerUp={onStagePointerEnd}
             onPointerCancel={onStagePointerCancel}
             onPointerLeave={() => setHoverPart(null)}
+            /* Some browsers fire their middle-click autoscroll from auxclick
+               even after pointerdown was cancelled; the gesture is ours. */
+            onAuxClick={(event) => event.preventDefault()}
             style={hoverPart && !dragging ? { cursor: 'pointer' } : undefined}
           >
             {currentFrame ? (
@@ -921,7 +1041,7 @@ function Scene3dScenePanel({
                             const box = proofRectToStage(frameRects[hoverPart]!, vp);
                             return (
                               <div
-                                className={styles.hoverBox}
+                                className={`${styles.hoverBox} ${ctrlHeld ? styles.hoverBoxJump : ''}`}
                                 style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
                               />
                             );
@@ -979,6 +1099,76 @@ function Scene3dScenePanel({
                   <path d="M12.1 1.4l.4 1.75 1.75-.4" />
                 </svg>
               </span>
+            ) : null}
+            {/* The kit page's x-ray cluster, seated in the same corner it
+                owns there: eye-labelled toggle, caret, and the upward mode
+                menu with ramp strips and X1..X3 key chips. Pointer events
+                stop here — a click on chrome must never scrub the orbit
+                or pick a part through it. */}
+            {xrayCapable ? (
+              <div
+                className={styles.xrayCluster}
+                ref={xrayClusterRef}
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                onPointerMove={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className={styles.xrayBtn}
+                  aria-pressed={xrayOn}
+                  disabled={!selectedCodes || selectedCodes.size === 0}
+                  title={
+                    !selectedCodes || selectedCodes.size === 0
+                      ? 'X-ray — click a part to energize (X+1/2/3 pick the view)'
+                      : 'X-ray — ghost the world around the selection (X+1/2/3 pick the view)'
+                  }
+                  onClick={() => setXrayEnabled((on) => !on)}
+                >
+                  <svg className={styles.xrayIcon} viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M2 8s2.2-4 6-4 6 4 6 4-2.2 4-6 4-6-4-6-4Z" />
+                    <circle cx="8" cy="8" r="1.8" />
+                  </svg>
+                  X-ray
+                </button>
+                <button
+                  type="button"
+                  className={styles.xrayCaret}
+                  aria-haspopup="true"
+                  aria-expanded={xrayMenuOpen}
+                  aria-label="Choose x-ray mode"
+                  onClick={() => setXrayMenuOpen((open) => !open)}
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M4 6.5 8 10.5l4-4" />
+                  </svg>
+                </button>
+                {xrayMenuOpen ? (
+                  <div className={styles.xrayMenu} role="menu">
+                    {SCENE3D_XRAY_GHOST_MODES.map((modeEntry, index) => (
+                      <button
+                        key={modeEntry.name}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={ghostMode === index}
+                        className={styles.xrayMenuItem}
+                        onClick={() => {
+                          setGhostMode(index as XrayGhostMode);
+                          setXrayEnabled(true);
+                          setXrayMenuOpen(false);
+                        }}
+                      >
+                        <span className={styles.miText}>
+                          <span className={styles.miName}>{modeEntry.name}</span>
+                          <span className={styles.miDesc}>{modeEntry.desc}</span>
+                          <span className={styles.miRamp} style={{ background: modeEntry.ramp }} />
+                        </span>
+                        <span className={styles.miKey}>X{index + 1}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
           </div>
           {rotatable ? (
@@ -1123,7 +1313,12 @@ function Scene3dScenePanel({
                         className={`${styles.treeRow} ${isSelected ? styles.treeRowSelected : ''}`}
                         style={{ paddingLeft: `${8 + row.depth * 11}px` }}
                         title={partRowTooltip(row)}
-                        data-s3d-part-row={row.targetNames[0] ?? ''}
+                        /* Space-joined so a collapsed prototype row (Pawn
+                           ×16) is findable by ANY of its members via the
+                           ~= attribute selector — the jump gesture must
+                           land on the row that REPRESENTS the part, not
+                           only on rows named exactly after it. */
+                        data-s3d-part-row={row.targetNames.join(' ')}
                         onClick={(e) => handleRowClick(e, row)}
                       >
                         <span className={styles.treeRowName}>

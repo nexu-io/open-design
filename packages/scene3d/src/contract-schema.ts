@@ -158,7 +158,16 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
   { path: "conventions.geometry.allowDoubleVertices", kind: "boolean" },
   { path: "conventions.geometry.allowInconsistentWinding", kind: "boolean" },
   { path: "conventions.geometry.allowNegativeScale", kind: "boolean" },
+  { path: "conventions.geometry.minClearance", kind: "number", min: 0 },
   { path: "conventions.geometry.requireAppliedScale", kind: "boolean" },
+  // Per-pair triangle-product budget for the coplanar comparison. The
+  // ceiling is a typo backstop only (a pasted 2e12 must refuse loudly, not
+  // stall the compile for hours); it sits orders of magnitude above any
+  // declared trade an author means, and within it the cost is theirs.
+  // `integer: true` because the runner consumes this with int(): without the
+  // gate a fractional budget was silently floored — the schema is the ONE
+  // validator, so the truncation must be a refusal here, not a quiet edit.
+  { path: "conventions.geometry.zFightingPairBudget", kind: "number", min: 1000, max: 1_000_000_000, integer: true },
 
   /* print (DfM) — was normalized but never validated */
   { path: "conventions.print.minThicknessMm", kind: "number", min: 0, exclusiveMin: true },

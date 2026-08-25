@@ -36,6 +36,9 @@ export interface LintInput {
   sheets?: Omit<SheetLintInput, "specs"> & { specs: SheetLintInput["specs"] };
   /** The scene spec's claims block, adjudicated against the census. */
   claims?: ClaimsSpec;
+  /** Parts the author placed with an `above` relation — declared floats the
+   *  two-sided grounded claim treats as supported on purpose. */
+  declaredFloating?: readonly string[];
   /** The solved scene, when authored from scene.json — carries each part's
    *  `role`, the intent the budget judge resolves to a standard. */
   solved?: SolvedScene;
@@ -119,6 +122,10 @@ export function runLint(input: LintInput): Issue[] {
     lintClaims(input.claims, input.census, issues, {
       groundTolerance: input.contract.grounding.tolerance,
       groundExempt: input.contract.grounding.exempt,
+      // The analytic layer: swept envelopes over the solved boxes, the
+      // closed-form oracle that works with or without a census.
+      ...(input.solved ? { solved: input.solved.parts } : {}),
+      ...(input.declaredFloating ? { declaredFloating: input.declaredFloating } : {}),
     });
   }
   // Scene size comes from the census the rest of the linter already uses:
@@ -153,6 +160,33 @@ export function runLint(input: LintInput): Issue[] {
     }
   }
   applyImportedPosture(issues, imported, input.authoredKeys ?? new Set(), materialUsers);
+
+  // A `material:` override on a `file:` part is DOCUMENTED wholesale
+  // replacement — the import's own materials are orphaned by design, and
+  // W-344 ("bind the material or delete it") is then advice the author can
+  // neither take (the material lives inside a third-party GLB) nor needs.
+  // Reclassify those orphans to info with the reason; a spec-authored
+  // material that ends up unused keeps the real warning.
+  {
+    const overrideParts = (input.solved?.parts ?? []).filter((p) => p.file && p.material);
+    if (overrideParts.length > 0) {
+      const authored = new Set(
+        (input.solved?.parts ?? []).map((p) => p.material).filter((m): m is string => Boolean(m)),
+      );
+      for (const issue of issues) {
+        if (issue.code !== ISSUE_CODES.MATERIAL_UNUSED || issue.severity === "info") continue;
+        const name = issue.target ?? "";
+        const isAuthored =
+          authored.has(name) || [...authored].some((a) => name.startsWith(`${a}__`));
+        if (isAuthored) continue;
+        issue.severity = "info";
+        issue.message += ` — orphaned by the material override on '${overrideParts[0]!.id}': wholesale replacement is the documented behaviour for a file part's material`;
+        issue.hint =
+          "nothing to fix — the imported asset's own material was deliberately replaced and ships nowhere";
+        issue.detail = { ...issue.detail, provenance: "imported, overridden" };
+      }
+    }
+  }
 
   const seen = new Set<string>();
   const deduped: Issue[] = [];

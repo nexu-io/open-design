@@ -469,12 +469,18 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     "    low = base_z if rests_on_ground else base_z - amplitude",
     "    mid = low + amplitude",
     "    high = low + 2.0 * amplitude",
-    "    for step, z in enumerate((mid, high, mid, low, mid)):",
+    "    # The FIRST keyframe is the anchor, because frame 1 is where the",
+    "    # census measures: an animated object's evaluated pose comes from",
+    "    # its fcurves, so writing obj.location after keying changes nothing.",
+    "    # A grounded part's anchor is its trough (the solved contact — the",
+    "    # cycle only rises from it); a hoverer's is the middle of the swing",
+    "    # (mid == base_z for the centred case). Starting a grounded part at",
+    "    # mid measured it a full amplitude off the contact the solver had",
+    "    # just floored: phantom W-337, false grounded failures.",
+    "    cycle = (low, mid, high, mid, low) if rests_on_ground else (mid, high, mid, low, mid)",
+    "    for step, z in enumerate(cycle):",
     "        obj.location.z = z",
     "        obj.keyframe_insert(\"location\", index=2, frame=1 + step * quarter)",
-    "    # Rest pose is the anchor the census measures, which for a grounded",
-    "    # part is its contact and for a hoverer is the middle of the swing.",
-    "    obj.location.z = base_z",
     "    _loop_fcurves(obj, \"location\", linear=False)",
     "",
     "",
@@ -503,7 +509,7 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     "    INSIDE the box — uniform scale, centred on x/y, resting on the box's",
     "    bottom — so relations behave exactly as for primitives. The asset's",
     '    own materials and textures are kept untouched."""',
-    "    from mathutils import Vector",
+    "    from mathutils import Vector, Matrix",
     "    before = set(o.name for o in bpy.data.objects)",
     "    ext = filepath.rsplit(\".\", 1)[-1].lower()",
     '    if ext in ("glb", "gltf"):',
@@ -578,6 +584,18 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     "        obj.location[2] + (center[2] - size[2] / 2.0) - lo[2],",
     "    )",
     "    bpy.context.view_layer.update()",
+    "    # Rotation pivots at the object ORIGIN, and the language's contract",
+    "    # is that a part IS its declared box — so the origin must be the box",
+    "    # centre, not wherever the importer left its pivot. Without this,",
+    "    # spin/screw/rotate on a file part orbit an arbitrary point while the",
+    "    # kinematic sweep and the claims adjudicate the box-centred motion.",
+    "    # Data-level, like _fit_box: geometry stays where the fit put it;",
+    "    # only the pivot moves. matrix_world is translation-only here",
+    "    # (rotation and scale were applied above), so world delta == local.",
+    "    delta = Vector(center) - obj.location",
+    "    obj.data.transform(Matrix.Translation(-delta))",
+    "    obj.location = (center[0], center[1], center[2])",
+    "    bpy.context.view_layer.update()",
     "    if material:",
     "        # Deliberate override: replace the asset's own materials.",
     "        obj.data.materials.clear()",
@@ -648,7 +666,7 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
       "    resting on the box's bottom. The box is the placement envelope;",
       "    the script only decides what fills it.",
       '    """',
-      "    from mathutils import Vector",
+      "    from mathutils import Vector, Matrix",
       "    obj = _run_script(filepath, size)",
       "    obj.name = name",
       "    # transform_apply acts on the SELECTION, and the script just ran",
@@ -677,6 +695,13 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
       "        obj.location[1] + center[1] - (lo[1] + hi[1]) / 2.0,",
       "        obj.location[2] + (center[2] - size[2] / 2.0) - lo[2],",
       "    )",
+      "    bpy.context.view_layer.update()",
+      "    # Same origin normalisation as _import_part, for the same reason:",
+      "    # the script may have built its mesh about any pivot, and rotation",
+      "    # (spin/screw/rotate) must orbit the box centre the language means.",
+      "    delta = Vector(center) - obj.location",
+      "    obj.data.transform(Matrix.Translation(-delta))",
+      "    obj.location = (center[0], center[1], center[2])",
       "    bpy.context.view_layer.update()",
       "    if material:",
       "        # Deliberate override: replace whatever the script bound.",
@@ -769,9 +794,14 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
   // frame range covers the longest single cycle; every curve loops via a
   // cycles modifier, so any playhead position is valid.
   const FPS = 24;
-  const animated = scene.parts.filter((p) => p.spin || p.bob);
+  const animated = scene.parts.filter((p) => p.spin || p.bob || p.screw);
   if (animated.length > 0) {
     let maxFrames = 0;
+    // The screw helper is authored only when a screw exists, the same
+    // keyword-gating the shape parameters use at their call sites: a scene
+    // that never screws must emit the byte-identical script it always did,
+    // because the cache key and every determinism pin are the script bytes.
+    if (animated.some((p) => p.screw)) lines.push(...SCREW_HELPER, "");
     for (const part of animated) {
       if (part.spin) {
         const frames = Math.max(2, Math.round((part.spin.seconds ?? 4) * FPS));
@@ -790,6 +820,17 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
         // is the same rule applied to the part the author actually wrote.
         lines.push(
           `_animate_bob(${py(part.id)}, ${num(part.bob.amplitude)}, ${frames}, ${part.restsOn ? "True" : "False"})`,
+        );
+      }
+      if (part.screw) {
+        // One turn AND one rise share the period: they are one motion, and
+        // splitting them across two frame counts would be a screw whose
+        // thread slips.
+        const frames = Math.max(2, Math.round((part.screw.seconds ?? 4) * FPS));
+        maxFrames = Math.max(maxFrames, frames);
+        const axisIndex = { x: 0, y: 1, z: 2 }[part.screw.axis ?? "z"];
+        lines.push(
+          `_animate_screw(${py(part.id)}, ${axisIndex}, ${frames}, ${num(part.screw.rise)})`,
         );
       }
     }
@@ -952,6 +993,67 @@ export function frameScene(
 }
 
 /** Fixed precision keeps the emitted script byte-stable for the cache. */
+/**
+ * The screw keyframer, authored into the script only when a scene screws.
+ *
+ * It does its own fcurve looping rather than calling `_loop_fcurves`, because
+ * that helper filters by data path alone: a part that screws about x while
+ * bobbing shares the `location` path with the bob, and looping the path
+ * wholesale would flatten the bob's sine to LINEAR and hang a second CYCLES
+ * modifier on it. The array-index filter below is sufficient precisely
+ * because of the exclusivity the validator enforces — a screw about z cannot
+ * coexist with a bob, and no part both spins and screws — so the only curve
+ * on this index is the one this function just authored.
+ */
+const SCREW_HELPER: readonly string[] = [
+  "def _animate_screw(name, axis_index, period_frames, rise):",
+  '    """One full turn per period about a world axis, composed with a straight',
+  "    advance of `rise` metres along that SAME axis — Chasles' screw, the",
+  "    general rigid motion, of which _animate_spin is the pitch-zero case.",
+  "",
+  "    The turn loops seamlessly because a full turn is congruent to none; the",
+  "    advance does not. Its curve REPEATS rather than mirrors, so the part",
+  "    drives from 0 to rise and then snaps back to start the next thread.",
+  "    That snap is the honest reading of a screw that KEEPS driving — a bit",
+  "    boring in, an auger lifting grain — and it is why a screw is not a lid",
+  "    that unscrews once and stops: this language emits looped clips only,",
+  "    and a one-shot advance is not one.",
+  "",
+  "    The solved pose is the START of the cycle, not its middle: the census",
+  "    measures where the solver placed the part, and the sweep envelope is",
+  '    written from that same anchor."""',
+  "    obj = bpy.data.objects[name]",
+  '    obj.rotation_mode = "XYZ"',
+  "    base = obj.location[axis_index]",
+  '    obj.keyframe_insert("rotation_euler", frame=1)',
+  '    obj.keyframe_insert("location", index=axis_index, frame=1)',
+  "    obj.rotation_euler[axis_index] = 6.283185307179586",
+  "    obj.location[axis_index] = base + rise",
+  '    obj.keyframe_insert("rotation_euler", frame=1 + period_frames)',
+  '    obj.keyframe_insert("location", index=axis_index, frame=1 + period_frames)',
+  "    obj.rotation_euler[axis_index] = 0.0",
+  "    obj.location[axis_index] = base",
+  "    action = obj.animation_data.action if obj.animation_data else None",
+  "    if action is None:",
+  "        return",
+  "    try:",
+  "        curves = list(action.fcurves)",
+  "    except AttributeError:",
+  "        # Blender 5 layered actions",
+  "        curves = [fc for layer in action.layers for strip in layer.strips",
+  "                  for bag in strip.channelbags for fc in bag.fcurves]",
+  "    for fc in curves:",
+  '        if fc.data_path not in ("rotation_euler", "location"):',
+  "            continue",
+  "        # A bob on this object owns location index 2 and must keep its",
+  "        # sine; only the screw's own axis is linearised and cycled here.",
+  '        if fc.data_path == "location" and fc.array_index != axis_index:',
+  "            continue",
+  "        for kp in fc.keyframe_points:",
+  '            kp.interpolation = "LINEAR"',
+  '        fc.modifiers.new("CYCLES")',
+];
+
 function num(value: number): string {
   const rounded = Number(value.toFixed(6));
   return Object.is(rounded, -0) ? "0" : String(rounded);

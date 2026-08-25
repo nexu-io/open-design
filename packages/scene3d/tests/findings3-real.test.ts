@@ -416,15 +416,17 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     expect(notGrounded!.message).toContain("rests on 'prp_base'");
   });
 
-  it("lets a scene float: grounded claims what it says, not what it implies", async () => {
-    // Floating is a composition, not a defect — a lantern hangs, an orb
-    // hovers, a cliff overhangs — and the compiler has no standing to call
-    // those wrong. This claim was briefly made two-sided, on the reasoning
-    // that a claim named "grounded" should not pass for a hovering scene;
-    // that mistook a vocabulary collision for a missing check, and it failed
-    // this repo's own showcase on its deliberately levitating orb the first
-    // time it ran. The field documents one direction, and one direction is
-    // what it adjudicates.
+  it("grounded means the word: an undeclared float fails, a declared one passes", async () => {
+    // The claim's history, so nobody relitigates it blind: an early
+    // two-sided version failed this repo's own showcase on its levitating
+    // orb, was reverted to one direction ("nothing sinks"), and a field
+    // audit then proved the revert over-corrected — a scene whose contact
+    // line said "2 touch nothing" answered `grounded: true` with "held".
+    // The missing piece was never the check; it was DECLARED INTENT, and
+    // the language already had the sentence for it: a part placed by
+    // `above` hovers on purpose. So: a bare `at` float fails the claim
+    // with the measured height; the same float declared via `above` (or
+    // grounding.exempt) passes.
     const dir = mkProject({
       "scene.json": JSON.stringify({
         schemaVersion: 1,
@@ -441,8 +443,31 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
       }),
     });
     const r = await run(dir);
-    expect(r.issues.filter((i) => i.code === "S3D-E-701")).toEqual([]);
-    expect(r.ok).toBe(true);
+    const failed = r.issues.filter((i) => i.code === "S3D-E-701");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.message).toContain("floats");
+    expect(failed[0]!.message).toContain("4.8000m");
+    expect(failed[0]!.target).toBe("prp_orb");
+
+    const declared = mkProject({
+      "scene.json": JSON.stringify({
+        schemaVersion: 1,
+        name: "float-declared",
+        parts: [
+          { id: "prp_base", size: [1, 1, 0.2] },
+          { id: "prp_orb", size: [0.4, 0.4, 0.4], shape: "sphere" },
+        ],
+        relations: [
+          { type: "at", part: "prp_base", center: [0, 0, 0.1] },
+          { type: "above", part: "prp_orb", over: "prp_base", clearance: 4.6 },
+          { type: "align", part: "prp_orb", to: "prp_base", axes: ["x", "y"] },
+        ],
+        claims: { grounded: true },
+      }),
+    });
+    const r2 = await run(declared);
+    expect(r2.issues.filter((i) => i.code === "S3D-E-701")).toEqual([]);
+    expect(r2.ok).toBe(true);
   });
 
   it("still fails a grounded claim for a part sunk through the floor", async () => {

@@ -218,6 +218,13 @@ export interface NormalizedContract {
     allowInconsistentWinding: boolean;
     allowNegativeScale: boolean;
     requireAppliedScale: boolean;
+    /** Declared assembly/print/animation tolerance in metres; 0 = off. */
+    minClearance: number;
+    /** Triangle-pair budget for the coplanar (z-fighting) comparison, per
+     *  mesh pair. Above it the pair is skipped LOUDLY (S3D-W-323). A knob,
+     *  because a correct sphere-on-cylinder scene can exceed the default
+     *  and the author's only prior recourse was "split the scene". */
+    zFightingPairBudget: number;
   };
   sheets: NonNullable<Scene3dContract["sheets"]>;
   /** Thresholds for the 2D sheet rules — contract data like every other lint
@@ -424,6 +431,13 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
       allowInconsistentWinding: boolOr(geo.allowInconsistentWinding, false),
       allowNegativeScale: boolOr(geo.allowNegativeScale, false),
       requireAppliedScale: boolOr(geo.requireAppliedScale, true),
+      // 0 = the rule is off. A declared value is a real assembly/print/
+      // animation tolerance in metres; W-109 reports pairs inside it.
+      minClearance: numOr(geo.minClearance, 0),
+      // The runner default, kept in one place: raising it buys the coplanar
+      // check on dense pairs at quadratic cost, which is the author's
+      // trade to make, not the module's.
+      zFightingPairBudget: numOr(geo.zFightingPairBudget, 200_000),
     },
     sheets: asArray(c.sheets, []) as NonNullable<Scene3dContract["sheets"]>,
     tessellation: {

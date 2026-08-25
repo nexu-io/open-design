@@ -73,7 +73,7 @@ camelCase). Shapes: `box`, `cylinder`, `sphere`, `cone` (+`tip`), `torus`,
 `wedge`, `tube`, `capsule` — or fill a box with `"file": "asset.glb"`
 or `"script": "hull.py"`. Relations: `at`, `sits_on`, `above`, `align`,
 `inset_from`, `span`, `repeat`, `scatter`, `around`, plus per-part
-`rotate`, `spin`, `bob`. GPU materials are a `.glsl`
+`rotate`, `spin`, `bob`, `screw`. GPU materials are a `.glsl`
 `vec4 kernel(vec2 uv)` plus a `shaders` block (`baseColor` is `kernel`;
 any other output gets its own `kernel_<output>`); `"frames": 16` bakes a
 flipbook. Kernels use the integer-hash noise stdlib — `s3d_hash21`,

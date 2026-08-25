@@ -4,7 +4,9 @@ import { CompileResult, Issue, Severity } from "./types.js";
 import { ISSUE_CODES } from "./errors.js";
 import { formatAsciiFrame, renderAsciiFrame } from "./read/ascii.js";
 import { formatImpact } from "./read/impact.js";
+import { solveDeltaIsEmpty } from "./read/solve-delta.js";
 import { assessVerdict, type Verdict } from "./verdict.js";
+import { isMover, sweptBox } from "./solve/sweep.js";
 
 /**
  * Render a compile result as the `<scene3d-report>` block that gets spliced
@@ -72,7 +74,21 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
 
   const parts = result.manifest.partTree;
   if (parts.length > 0) {
-    lines.push(`parts (${parts.length}): ${parts.map(describePart).join(", ")}`);
+    // Count by kind, so "parts" can never mean two different numbers in
+    // one report: the claims adjudicator counts MESHES, and this line used
+    // to fold the camera and light into the same word 15 lines away.
+    const meshCount = parts.filter((p) => p.type === "MESH").length;
+    const byType = new Map<string, number>();
+    for (const p of parts) {
+      if (p.type === "MESH") continue;
+      byType.set(p.type.toLowerCase(), (byType.get(p.type.toLowerCase()) ?? 0) + 1);
+    }
+    const others = [...byType.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([type, n]) => `${n} ${type}`)
+      .join(" · ");
+    const head = others ? `${meshCount} mesh · ${others}` : `${meshCount} mesh`;
+    lines.push(`parts (${head}): ${parts.map(describePart).join(", ")}`);
   }
   // The solver's own output, as a table the parse loop can read. Parse runs
   // in milliseconds and resolves every relation, but "relations resolved" is
@@ -83,7 +99,10 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
   // says how many it folded away.
   if (result.solved && result.solved.parts.length > 0) {
     lines.push("");
-    lines.push("solved boxes (id · centre · size · rests on):");
+    // "world box", not "size": every row prints the WORLD-space box — for a
+    // rotated part that is the derived rotated bound, not the authored
+    // size, and the old header let one column mean two things per row.
+    lines.push("solved boxes (id · centre · world box · rests on):");
     const CAP = 40;
     for (const part of result.solved.parts.slice(0, CAP)) {
       const centre = part.center.map((v: number) => fmtM(v)).join(", ");
@@ -94,7 +113,23 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
       // rotated part's row otherwise reads as a part the author never
       // authored. Naming the rotation is what makes the number explicable.
       const rot = part.rotate ? ` · rot ${part.rotate.axis} ${part.rotate.deg}°` : "";
-      lines.push(`  ${part.id}${origin}: (${centre}) · ${size}${rot}${rests}`);
+      // A moving part's row shows the space its CYCLE reserves, not only
+      // its rest pose — the same envelope W-108 and the cycle claims judge.
+      // `isMover` is the one predicate for "has a cycle", so a motion added
+      // to the language reaches this row without it learning the name.
+      const env = isMover(part) ? sweptBox(part) : undefined;
+      const sweepBits: string[] = [];
+      if (env?.spinGrew) sweepBits.push(`⌀${fmtM(env.max[0] - env.min[0])}`);
+      if (env && (env.bobRise > 0 || env.bobDip > 0)) {
+        sweepBits.push(env.bobDip > 0 ? `z±${fmtM(env.bobRise)}` : `z+${fmtM(env.bobRise)}`);
+      }
+      if (env && env.screwRise !== 0) {
+        const axis = part.screw?.axis ?? "z";
+        const sign = env.screwRise > 0 ? "+" : "-";
+        sweepBits.push(`${axis}${sign}${fmtM(Math.abs(env.screwRise))}/turn`);
+      }
+      const sweep = sweepBits.length > 0 ? ` · sweeps ${sweepBits.join(", ")}` : "";
+      lines.push(`  ${part.id}${origin}: (${centre}) · ${size}${rot}${sweep}${rests}`);
     }
     const total = result.solved.parts.length;
     if (total > CAP) {
@@ -102,9 +137,19 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     }
   }
   if (result.manifest.materials.length > 0) {
+    // Print the properties that DEFINE each material, not only the two
+    // every material has: a lamp's whole purpose is its emission and a
+    // glass's is its alpha, and this line used to omit both.
     lines.push(
       `materials: ${result.manifest.materials
-        .map((m) => `${m.name}[metallic=${fmt(m.metallic)} roughness=${fmt(m.roughness)}]`)
+        .map((m) => {
+          const bits = [`metallic=${fmt(m.metallic)}`, `roughness=${fmt(m.roughness)}`];
+          if (m.emissionStrength !== undefined && m.emissionStrength > 0) {
+            bits.push(`emission×${Number(m.emissionStrength.toFixed(2))}`);
+          }
+          if (m.alpha !== undefined) bits.push(`alpha=${Number(m.alpha.toFixed(2))}`);
+          return `${m.name}[${bits.join(" ")}]`;
+        })
         .join(", ")}`,
     );
   }
@@ -116,7 +161,30 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     const small = metrics.smallestPart
       ? `smallest ${metrics.smallestPart.name} (${fmtM(metrics.smallestPart.minDimension)})`
       : null;
-    const parts = [size, small, `${metrics.totalTriangles.toLocaleString()} tris`].filter(Boolean);
+    // An animated asset's rest pose is one frame of many: when the measured
+    // cycle bounds exceed the rest size, say what the scene actually
+    // occupies over time, on the same line the reading guide points at.
+    const anim = result.census?.animation?.animatedBounds;
+    let sweep: string | null = null;
+    if (anim?.min && anim.max && metrics.worldSize) {
+      const spans = [0, 1, 2].map((i) => anim.max![i]! - anim.min![i]!);
+      if (spans.some((v, i) => v > metrics.worldSize![i]! + 0.001)) {
+        sweep = `sweeps ${spans.map((v) => fmtM(v)).join(" × ")} over the cycle`;
+      }
+    }
+    // The mirror of the tiny-size unit-slip hint: a 100km part beside a
+    // 0.2m one is almost always millimetres read as metres, and "scale:"
+    // exists to catch unit slips — in both directions.
+    let spread: string | null = null;
+    if (metrics.worldSize && metrics.smallestPart && metrics.smallestPart.minDimension > 0) {
+      const ratio = Math.max(...metrics.worldSize) / metrics.smallestPart.minDimension;
+      if (ratio > 10_000) {
+        spread = `spread ${Math.round(ratio).toLocaleString()}:1 — verify units (millimetres read as metres?)`;
+      }
+    }
+    const parts = [size, sweep, small, `${metrics.totalTriangles.toLocaleString()} tris`, spread].filter(
+      Boolean,
+    );
     lines.push(`scale: ${parts.join(" · ")}`);
   }
   if (result.proofImages.length > 0) {
@@ -126,8 +194,21 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
        render as if it photographed today's geometry. */
     const proofStage = result.stages.find((s) => s.id === "proof");
     const carried = !proofStage || proofStage.status === "skipped";
+    // For an animated asset, say WHICH slice of time the frames photograph:
+    // "8 frames over a 73-frame cycle" is a different fact from 8 arbitrary
+    // pictures, and a reader hunting the crest deserves to know the frames
+    // were spread evenly rather than guessing.
+    const animRange = result.census?.animation;
+    const sampled =
+      animRange &&
+      animRange.keyframedObjects.length > 0 &&
+      typeof animRange.frameStart === "number" &&
+      typeof animRange.frameEnd === "number" &&
+      animRange.frameEnd > animRange.frameStart
+        ? ` (turntable steps evenly across animation frames ${animRange.frameStart}–${animRange.frameEnd})`
+        : "";
     lines.push(
-      `proof: ${result.proofImages.length} frame(s) — ${result.proofImages[0]}` +
+      `proof: ${result.proofImages.length} frame(s)${sampled} — ${result.proofImages[0]}` +
         (carried ? " (carried from a previous compile — proof did not run this time)" : "") +
         " · real PNGs: open them directly if you can read images",
     );
@@ -158,11 +239,36 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
      claims could not tell "adjudicated and held" from "ignored". */
   const ledger = result.manifest.claims;
   if (ledger) {
-    lines.push(
-      ledger.failed === 0
-        ? `claims: ${ledger.declared}/${ledger.declared} held`
-        : `claims: ${ledger.declared - ledger.failed}/${ledger.declared} held — ${ledger.failed} failed (S3D-E-701 below)`,
-    );
+    // The rate signal, not just the verdict: a claim held at 96% of its
+    // bound and one held at 12% are different facts for an author about to
+    // add a part. Tightest margin only — the full table rides the manifest.
+    //
+    // And the honesty gate: `checked` is how many claims were actually
+    // adjudicated. This line used to print "3/3 held" on compiles where the
+    // build never ran and the adjudicator had said, in its own words,
+    // "unchecked is not passed" — the reassuring number in the friendliest
+    // place was the one that lied.
+    const checked = ledger.checked ?? ledger.declared;
+    const tightest = ledger.margins?.[0];
+    const margin =
+      ledger.failed === 0 && tightest
+        ? ` — tightest: ${tightest.claim} at ${Math.round(tightest.used * 100)}% of its bound (${tightest.measured} of ${tightest.limit})`
+        : "";
+    if (ledger.failed > 0) {
+      lines.push(
+        `claims: ${Math.max(0, checked - ledger.failed)}/${ledger.declared} held — ${ledger.failed} failed (S3D-E-701 below)`,
+      );
+    } else if (checked === 0) {
+      lines.push(
+        `claims: 0/${ledger.declared} checked — nothing was measured (S3D-W-701); unchecked is not passed`,
+      );
+    } else if (checked < ledger.declared) {
+      lines.push(
+        `claims: ${checked}/${ledger.declared} checked, all checked ones held${margin} — ${ledger.declared - checked} unadjudicated (S3D-W-701)`,
+      );
+    } else {
+      lines.push(`claims: ${ledger.declared}/${ledger.declared} held${margin}`);
+    }
   }
   // What the frames MEASURED, always — not only when a rule complains.
   // These numbers already existed and reached the linter alone, so the only
@@ -193,6 +299,11 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
       `contact: ${connectivity.touching} part(s) touch another, ${connectivity.isolated} touch nothing` +
         ` — ${names}${more > 0 ? ` +${more} more` : ""}`,
     );
+  } else if (connectivity && connectivity.touching > 0) {
+    // Absence used to mean good — an unstated convention a reader spent a
+    // compile second-guessing ("did contacts fail to run?"). One short line
+    // states the healthy case instead of implying it.
+    lines.push(`contact: all ${connectivity.touching} part(s) touch another`);
   }
   appendFrames(lines, result, options);
 
@@ -383,15 +494,56 @@ function appendDelta(lines: string[], result: CompileResult): void {
   lines.push("");
   if (!impact) {
     lines.push("delta: first compile — no baseline");
+    // A first compile can still carry a solve delta in principle (a prior
+    // read-model with no census); render whatever exists rather than gate.
+    appendSolveDelta(lines, result.solveDelta);
     return;
   }
   if (impact.unchanged) {
     lines.push("delta: unchanged since previous compile");
+    // "Unchanged" is a CENSUS verdict, and the solve delta sees what the
+    // census cannot: a support switch that moved no vertex, or any solve
+    // change on a census-less fast-gear run (two undefined censuses read
+    // as unchanged). The early return here used to swallow the residual —
+    // the one signal the codec module exists to surface — precisely when
+    // it was most surprising, so the solve lines render on EVERY path.
+    appendSolveDelta(lines, result.solveDelta);
     return;
   }
   lines.push("delta (since previous compile):");
   for (const line of formatImpact(impact, { maxLines: 20 }).split("\n")) {
     lines.push(`  ${line}`);
+  }
+  appendSolveDelta(lines, result.solveDelta);
+}
+
+/**
+ * The codec line under the delta: authored edits and their graph-predicted
+ * propagation compress to one count line, because the author's own mental
+ * model already predicts them. Only residuals — a part that moved or
+ * switched support though nothing it depends on was touched — get a line
+ * each, because with a deterministic solver they should not exist, and a
+ * change the author cannot explain is exactly what the report is FOR.
+ */
+function appendSolveDelta(lines: string[], delta: CompileResult["solveDelta"]): void {
+  if (!delta || solveDeltaIsEmpty(delta)) return;
+  const bits: string[] = [];
+  if (delta.authored.length > 0) bits.push(`${delta.authored.length} authored`);
+  if (delta.added.length > 0) bits.push(`${delta.added.length} added`);
+  if (delta.removed.length > 0) bits.push(`${delta.removed.length} removed`);
+  if (delta.propagated.length > 0) bits.push(`${delta.propagated.length} moved with them`);
+  if (bits.length > 0) lines.push(`  solve: ${bits.join(" · ")} (${delta.steady} steady)`);
+  for (const residual of delta.residuals.slice(0, 6)) {
+    lines.push(
+      residual.kind === "support"
+        ? `  residual: ${residual.id} now rests on ${residual.to ?? "nothing"}${
+            residual.from ? ` (was ${residual.from})` : ""
+          } — no authored cause`
+        : `  residual: ${residual.id} moved with no authored cause`,
+    );
+  }
+  if (delta.residuals.length > 6) {
+    lines.push(`  residual: +${delta.residuals.length - 6} more`);
   }
 }
 
@@ -416,7 +568,8 @@ function appendVerdict(lines: string[], verdict: Verdict, options: ReportOptions
     lines.push("fix first:");
     top.forEach((a, i) => {
       const title = options.issueTitle?.(a.code);
-      const named = title ? `${a.code} (${title})` : a.code;
+      const shown = displayCode(a.code, a.severity);
+      const named = title ? `${shown} (${title})` : shown;
       const target = a.target ? ` [${a.target}]` : "";
       const where = a.origin ? ` (${a.origin})` : "";
       const more = a.count > 1 ? ` ×${a.count}` : "";
@@ -433,7 +586,26 @@ function appendVerdict(lines: string[], verdict: Verdict, options: ReportOptions
   if (h.totalTextureBytes !== undefined) {
     facts.push(`${Number((h.totalTextureBytes / (1024 * 1024)).toFixed(1))} MiB textures`);
   }
-  if (facts.length > 0) lines.push(`headroom: ${facts.join(" · ")}`);
+  // "built:", not "headroom:" — with no declared budget there is nothing to
+  // have headroom AGAINST, and the old label read as a remaining allowance
+  // the reader should compare to something that does not exist.
+  if (facts.length > 0) lines.push(`built: ${facts.join(" · ")}`);
+}
+
+/**
+ * A code whose letter disagrees with the issue's ADJUDICATED severity wears
+ * the demotion visibly: `S3D-E-321→info`. The code is the rule's stable
+ * identity and never changes; the arrow is the reclassification (imported-
+ * geometry posture, mostly) made machine-visible — a grep for `S3D-E-` on a
+ * clean compile used to return hits that read as errors, and any script
+ * filtering on the prefix got the wrong answer. The prose already explained
+ * the posture; only the code letter lied.
+ */
+function displayCode(code: string, severity: Severity): string {
+  const letter = /^S3D-([EWI])-/.exec(code)?.[1];
+  const letterSeverity =
+    letter === "E" ? "error" : letter === "W" ? "warning" : letter === "I" ? "info" : undefined;
+  return letterSeverity && letterSeverity !== severity ? `${code}→${severity}` : code;
 }
 
 function appendSection(
@@ -449,7 +621,8 @@ function appendSection(
   lines.push(`${title}:`);
   for (const issue of matching) {
     const codeTitle = options.issueTitle?.(issue.code);
-    const named = codeTitle ? `${issue.code} (${codeTitle})` : issue.code;
+    const shown = displayCode(issue.code, issue.severity);
+    const named = codeTitle ? `${shown} (${codeTitle})` : shown;
     const target = issue.target ? ` [${issue.target}]` : "";
     // attributeIssues resolves each target to the source line that
     // authored it (detail.origin, pre-formatted "scene.json:47"); the
