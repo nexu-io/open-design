@@ -374,6 +374,42 @@ describe('waitForPrintableContent', () => {
     expect(settled).toBe(true);
   });
 
+  test('recognizes an already-loaded sandboxed frame without timing out or stopping the renderer', async () => {
+    vi.useFakeTimers();
+    try {
+      const events = new EventEmitter();
+      const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+      const sandboxedFrame = {
+        url: 'https://example.test/sandboxed-adapter.html',
+        processId: 12,
+        routingId: 30,
+        // Electron executes inside the child frame, so cross-origin DOM
+        // unreadability in the parent does not hide its current readyState.
+        executeJavaScript: vi.fn().mockResolvedValue('complete'),
+      };
+      mainFrame.framesInSubtree = [mainFrame, sandboxedFrame];
+      const stop = vi.fn();
+      const webContents = Object.assign(events, {
+        mainFrame,
+        executeJavaScript: vi.fn().mockResolvedValue({ stalled: false }),
+        stop,
+      });
+
+      const waiting = waitForPrintableContent(
+        { webContents } as unknown as Parameters<typeof waitForPrintableContent>[0],
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await waiting;
+
+      expect(sandboxedFrame.executeJavaScript).toHaveBeenCalledWith('document.readyState');
+      expect(stop).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Regression boundary for the packaged export hang.
   //
   // The injected script waits on `document.fonts.ready`, every `<img>`'s
