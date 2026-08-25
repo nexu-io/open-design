@@ -148,6 +148,10 @@ export function createBackgroundPullSizeGuard(
    *  counted for decisions this guard actually allowed, so a project deferred
    *  for size never consumes budget it did not spend. */
   let cumulativeEntries = 0;
+  /** Versions deferred because the session budget was spent. Kept apart from
+   *  `deferredVersions` (which means "permanently too big") so the two reasons
+   *  stay distinguishable, while both avoid re-probing. */
+  const budgetDeferredVersions = new Map<string, number>();
   /** Exact version whose probe last said 'pull', per scope. Retry loops for
    *  the same version must not re-authorize against the cloud. */
   const allowedVersions = new Map<string, number>();
@@ -179,30 +183,12 @@ export function createBackgroundPullSizeGuard(
       allowedVersions.set(key, version);
       return 'pull';
     }
-    const cumulativeLimit = deps.maxCumulativeEntries ?? 0;
-    if (
-      cumulativeLimit > 0 &&
-      cumulativeEntries + inspection.entryCount > cumulativeLimit
-    ) {
-      // Budget exhausted for this process. Deliberately NOT remembered in
-      // `deferredVersions`: that map means "this version is too big", a
-      // permanent property of the version, whereas this is a transient
-      // session limit. Recording it there would suppress the project even
-      // after a restart reset the budget.
-      try {
-        deps.onDeferred?.({
-          projectId: scope.projectId,
-          workspaceId: scope.workspaceId,
-          version,
-          entryCount: inspection.entryCount,
-          maxEntries: deps.maxEntries,
-          reason: 'budget-exhausted',
-        });
-      } catch {
-        // Observation must never affect the decision.
-      }
-      return 'defer';
-    }
+    // Per-project ceiling FIRST. Exceeding it is a permanent property of the
+    // version, so it must be decided (and cached) regardless of how much
+    // budget happens to remain — checking the budget first mislabelled an
+    // oversized project as `budget-exhausted` whenever the remainder was
+    // smaller than it, and cost a fresh probe on every later round because it
+    // never reached the oversized cache.
     if (inspection.entryCount > deps.maxEntries) {
       const previous = deferredVersions.get(key);
       if (previous == null || version > previous) {
@@ -216,6 +202,31 @@ export function createBackgroundPullSizeGuard(
           entryCount: inspection.entryCount,
           maxEntries: deps.maxEntries,
           reason: 'oversized',
+        });
+      } catch {
+        // Observation must never affect the decision.
+      }
+      return 'defer';
+    }
+    const cumulativeLimit = deps.maxCumulativeEntries ?? 0;
+    if (
+      cumulativeLimit > 0 &&
+      cumulativeEntries + inspection.entryCount > cumulativeLimit
+    ) {
+      // Remembered like any other deferral. A budget deferral cannot change
+      // until the process restarts, and every map here is process-local — so
+      // caching it costs nothing on restart and saves an authorize-only probe
+      // (plus a duplicate log line) on every subsequent catch-up round, which
+      // otherwise repeat for as long as the head stays unmaterialized.
+      budgetDeferredVersions.set(key, version);
+      try {
+        deps.onDeferred?.({
+          projectId: scope.projectId,
+          workspaceId: scope.workspaceId,
+          version,
+          entryCount: inspection.entryCount,
+          maxEntries: deps.maxEntries,
+          reason: 'budget-exhausted',
         });
       } catch {
         // Observation must never affect the decision.
@@ -240,6 +251,8 @@ export function createBackgroundPullSizeGuard(
       const key = scopeKey(scope);
       const deferred = deferredVersions.get(key);
       if (deferred != null && version <= deferred) return 'defer';
+      const budgetDeferred = budgetDeferredVersions.get(key);
+      if (budgetDeferred != null && version <= budgetDeferred) return 'defer';
       if (allowedVersions.get(key) === version) return 'pull';
       const probeKey = `${key}#${version}`;
       const existing = probesInFlight.get(probeKey);

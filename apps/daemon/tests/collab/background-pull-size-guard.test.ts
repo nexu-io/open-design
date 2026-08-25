@@ -144,6 +144,73 @@ describe('createBackgroundPullSizeGuard', () => {
     }));
   });
 
+  it('does not re-probe a project the budget already deferred', async () => {
+    // Review finding on #7403. A deferral is terminal only for the current work
+    // item; later catch-up rounds revisit the still-unmaterialized head. With
+    // the budget branch recording nothing, every round repeated the remote
+    // authorize-only probe and emitted another deferral log for every project
+    // past the budget — unbounded remote calls for a decision that cannot
+    // change until the process restarts.
+    //
+    // Caching it is safe: every map in this guard is process-local already, so
+    // a restart clears the budget and these entries together.
+    const inspect = vi.fn(async () => countedInspect(12));
+    const onDeferred = vi.fn();
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      maxCumulativeEntries: 12,
+      inspect,
+      onDeferred,
+    });
+
+    await expect(guard.assess({ ...scope, projectId: 'p-1' }, 1)).resolves.toBe('pull');
+    await expect(guard.assess({ ...scope, projectId: 'p-2' }, 1)).resolves.toBe('defer');
+    const probesAfterFirstDeferral = inspect.mock.calls.length;
+
+    // Two more sweep rounds hit the same project + version.
+    await expect(guard.assess({ ...scope, projectId: 'p-2' }, 1)).resolves.toBe('defer');
+    await expect(guard.assess({ ...scope, projectId: 'p-2' }, 1)).resolves.toBe('defer');
+
+    expect(inspect.mock.calls.length).toBe(probesAfterFirstDeferral);
+    expect(onDeferred).toHaveBeenCalledTimes(1);
+  });
+
+  it('classifies an oversized project as oversized even when the budget is low', async () => {
+    // Review finding on #7403. Checking the cumulative ceiling first meant a
+    // project that independently exceeds `maxEntries` got labelled
+    // `budget-exhausted` whenever the remaining budget happened to be smaller —
+    // pointing at the wrong knob AND missing the oversized-version cache, so it
+    // was re-probed on every later round. The per-project ceiling is a
+    // permanent property of the version and must be decided first.
+    const inspect = vi.fn(async (s: { projectId: string }) =>
+      countedInspect(s.projectId === 'small' ? 12 : 5000),
+    );
+    const onDeferred = vi.fn();
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      // Budget large enough to admit the small project, then too small to
+      // admit the oversized one — the exact window where ordering decides
+      // which label (and which cache) the oversized project gets.
+      maxCumulativeEntries: 100,
+      inspect,
+      onDeferred,
+    });
+
+    await expect(
+      guard.assess({ ...scope, projectId: 'small' }, 1),
+    ).resolves.toBe('pull');
+    await expect(guard.assess(scope, 4)).resolves.toBe('defer');
+    expect(onDeferred).toHaveBeenCalledWith(expect.objectContaining({
+      entryCount: 5000,
+      reason: 'oversized',
+    }));
+
+    // And it is remembered as oversized, so later rounds cost no probe.
+    const probes = inspect.mock.calls.length;
+    await expect(guard.assess(scope, 4)).resolves.toBe('defer');
+    expect(inspect.mock.calls.length).toBe(probes);
+  });
+
   it('leaves the cumulative budget disabled by default', async () => {
     // Absent an explicit budget the guard must behave exactly as before, so
     // enabling this cannot silently change existing deployments.
