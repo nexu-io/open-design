@@ -657,6 +657,27 @@ async function materializeTeamDesignSystems(
  */
 const CATALOG_SINGLE_FLIGHT_ONLY_MS = 0;
 
+/**
+ * Bumped by every successful LOCAL catalog mutation, and part of the read key.
+ *
+ * `ttl = 0` stops a settled result from being reused; it does not stop a new
+ * caller from JOINING a request that is still in flight. The callers that follow
+ * a mutation are exactly the ones that must not join: `DesignSystemsTab` awaits
+ * `deleteDesignSystemDraft` / `updateDesignSystemDraft` and then calls its plain
+ * `onSystemsRefresh()` — no `forceTeamMaterialization`, because nothing remote
+ * changed — and the daemon answers `/api/design-systems` from a snapshot taken
+ * when the request arrived. Joining a pre-mutation GET would leave the deleted
+ * system on screen, or show the old published/draft status.
+ *
+ * Every mutating export below must bump this on success. `forceTeamMaterialization`
+ * stays as it is: that is the REMOTE (team-invalidation) signal, this is the local one.
+ */
+let designSystemCatalogMutationGeneration = 0;
+
+function noteDesignSystemCatalogMutation(): void {
+  designSystemCatalogMutationGeneration += 1;
+}
+
 async function readDesignSystemCatalog(
   workspaceContext: WorkspaceCollabContext | null | undefined,
   options?: FetchDesignSystemsOptions,
@@ -671,7 +692,8 @@ async function readDesignSystemCatalog(
   // authority behind them has changed, and ttl 0 would not catch it — it stops
   // settled-result reuse, not a post-boundary reader joining a request issued
   // before the boundary.
-  const cacheKey = `design-system-catalog:${workspaceAccountScopedCacheKey(workspaceContext)}`;
+  const cacheKey = `design-system-catalog:${designSystemCatalogMutationGeneration}`
+    + `:${workspaceAccountScopedCacheKey(workspaceContext)}`;
   // Same rule as the Team index above: a forced call is an authoritative read
   // for one mutation and must never join a snapshot issued before it.
   if (options?.forceTeamMaterialization) evictCoalescedGet(cacheKey);
@@ -810,6 +832,7 @@ export async function createDesignSystemDraft(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     return parseDesignSystemDetail(await resp.json());
   } catch {
     return null;
@@ -910,6 +933,7 @@ export async function updateDesignSystemRevisionStatus(
       },
     );
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     const json = (await resp.json()) as { revision?: DesignSystemRevision };
     return json.revision ?? null;
   } catch {
@@ -975,6 +999,7 @@ export async function updateDesignSystemDraft(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     return parseDesignSystemDetail(await resp.json());
   } catch {
     return null;
@@ -1004,6 +1029,7 @@ export async function syncDesignSystemAssetsFromWorkspace(
       },
     });
     if (!resp.ok) return null;
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as { synced: string[] };
   } catch {
     return null;
@@ -1041,6 +1067,7 @@ export async function deleteDesignSystemDraft(
         ?? (/^[A-Z][A-Z0-9_]+$/.test(errorBody.message) ? errorBody.message : undefined);
       throw new DesignSystemDeleteError(errorBody.message, resp.status, code);
     }
+    if (resp.ok) noteDesignSystemCatalogMutation();
     return resp.ok;
   } catch (error) {
     if (error instanceof DesignSystemDeleteError) throw error;
@@ -1060,6 +1087,7 @@ export async function importLocalDesignSystem(
     if (!resp.ok) {
       return { error: await readImportError(resp) };
     }
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as ImportLocalDesignSystemResponse;
   } catch (err) {
     return {
@@ -1080,6 +1108,7 @@ export async function importGitHubDesignSystem(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return { error: await readImportError(resp) };
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as ImportGitHubDesignSystemResponse;
   } catch (err) {
     return {
@@ -1100,6 +1129,7 @@ export async function importShadcnDesignSystem(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return { error: await readImportError(resp) };
+    noteDesignSystemCatalogMutation();
     return (await resp.json()) as ImportShadcnDesignSystemResponse;
   } catch (err) {
     return {
@@ -3514,6 +3544,7 @@ export async function installDesignSystem(
     });
     const json = await resp.json();
     if (!resp.ok) return { error: json.error ?? 'Install failed' };
+    noteDesignSystemCatalogMutation();
     return json as InstallDesignSystemResponse;
   } catch {
     return { error: 'Network error' };

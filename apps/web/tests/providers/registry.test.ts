@@ -525,6 +525,46 @@ describe('design-system Workspace scope', () => {
     expect(catalogReads).toBe(2);
   });
 
+  it('starts a fresh catalog read when a local mutation lands mid-flight', async () => {
+    // Review catch. `DesignSystemsTab` awaits `deleteDesignSystemDraft` (and
+    // `updateDesignSystemDraft` for publish/unpublish) and then calls its plain
+    // `onSystemsRefresh()` — no `forceTeamMaterialization`, because nothing
+    // remote changed. That refresh is precisely the caller that must not join a
+    // GET issued before the mutation: `ttl = 0` stops settled-result reuse, not
+    // in-flight joining, so the tab would commit the pre-mutation rows and leave
+    // the deleted system on screen.
+    const context = personalWorkspaceContext();
+    const pending = deferred<Response>();
+    let rows = [{ id: 'user:doomed', title: 'Doomed', source: 'user', status: 'published' }];
+    let catalogGets = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      if ((init?.method ?? 'GET') === 'DELETE') {
+        rows = [];
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      }
+      catalogGets += 1;
+      if (catalogGets === 1) return pending.promise;
+      return Promise.resolve(new Response(JSON.stringify({ designSystems: rows }), { status: 200 }));
+    }));
+
+    const inFlightBeforeMutation = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogGets).toBe(1));
+    await expect(deleteDesignSystemDraft('user:doomed', context)).resolves.toBeTruthy();
+
+    const afterMutation = fetchDesignSystemsResult(context);
+    pending.resolve(new Response(
+      JSON.stringify({ designSystems: [{ id: 'user:doomed', title: 'Doomed', source: 'user', status: 'published' }] }),
+      { status: 200 },
+    ));
+
+    await expect(afterMutation).resolves.toMatchObject({ ok: true, designSystems: [] });
+    await inFlightBeforeMutation;
+  });
+
   it('never lets a pre-account-boundary catalog read answer a post-boundary one', async () => {
     // A sign-out/sign-in cycle can leave every context field identical while the
     // authority behind them has changed — that is exactly why the app keys the

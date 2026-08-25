@@ -15,6 +15,7 @@ import {
   getProjectDetail,
   importClaudeDesignZip,
   importFolderProject,
+  deleteTemplate,
   invalidateWorkspaceProjectLists,
   listTemplates,
   installGeneratedPluginFolder,
@@ -2541,6 +2542,50 @@ describe('listTemplates request coalescing', () => {
       expect.objectContaining({ id: 'tpl-new' }),
     ]);
     expect(reads).toBe(2);
+  });
+
+  it('starts a fresh template read when a mutation lands mid-flight', async () => {
+    // Review catch. `ttl = 0` stops settled-result reuse but not in-flight
+    // joining, and the post-mutation refresh is exactly the caller that must
+    // never join: `handleDeleteTemplate` awaits `deleteTemplate` and then calls
+    // `refreshTemplates`. The daemon answers `/api/templates` from a synchronous
+    // `listTemplates(db)` snapshot, so a GET issued before the DELETE returns
+    // the row that was just deleted — and joining it would leave the deleted
+    // template on screen until something else happened to refetch.
+    const pending = deferred<Response>();
+    const urls: string[] = [];
+    let templateRows = [{ id: 'tpl-doomed', name: 'Doomed' }];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      urls.push(`${init?.method ?? 'GET'} ${url}`);
+      if ((init?.method ?? 'GET') === 'DELETE') {
+        templateRows = [];
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      // The first GET is issued before the delete and answers the pre-delete
+      // snapshot; it stays pending across the mutation.
+      if (urls.filter((u) => u.startsWith('GET')).length === 1) return pending.promise;
+      return Promise.resolve(new Response(
+        JSON.stringify({ templates: templateRows }),
+        { status: 200 },
+      ));
+    }));
+
+    const inFlightBeforeMutation = listTemplates();
+    await expect(deleteTemplate('tpl-doomed')).resolves.toBe(true);
+
+    const afterMutation = listTemplates();
+    // Release the pre-delete GET. If the refresh joined it, it now resolves to
+    // the stale row instead of issuing its own read.
+    pending.resolve(new Response(
+      JSON.stringify({ templates: [{ id: 'tpl-doomed', name: 'Doomed' }] }),
+      { status: 200 },
+    ));
+
+    await expect(afterMutation).resolves.toEqual([]);
+    await expect(inFlightBeforeMutation).resolves.toEqual([
+      expect.objectContaining({ id: 'tpl-doomed' }),
+    ]);
   });
 
   it('lets the next caller retry instead of joining a failed read', async () => {
