@@ -669,8 +669,21 @@ const CATALOG_SINGLE_FLIGHT_ONLY_MS = 0;
  * when the request arrived. Joining a pre-mutation GET would leave the deleted
  * system on screen, or show the old published/draft status.
  *
- * Every mutating export below must bump this on success. `forceTeamMaterialization`
- * stays as it is: that is the REMOTE (team-invalidation) signal, this is the local one.
+ * The rule, stated so it stays checkable: every export that SYNCHRONOUSLY changes
+ * catalog membership or a summary field bumps this on success — create, update,
+ * update-revision-status, delete, uninstall, the three imports, install, and
+ * asset sync.
+ *
+ * Two groups deliberately do not, and should not be "fixed" later:
+ *   - the job starters (`startDesignSystemGenerationJob`,
+ *     `startDesignSystemRevisionJob`,
+ *     `startDesignSystemTokenContractRebuildJob`) — nothing has changed when they
+ *     return; the finished job arrives through the invalidation path;
+ *   - `ensureDesignSystemWorkspace` — it materializes an editing workspace and
+ *     leaves the catalog rows alone.
+ *
+ * `forceTeamMaterialization` also stays as it is: that is the REMOTE
+ * (team-invalidation) signal, this is the local one.
  */
 let designSystemCatalogMutationGeneration = 0;
 
@@ -3562,9 +3575,15 @@ export async function uninstallDesignSystem(
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
     });
-    const json = await resp.json();
-    if (!resp.ok) return { error: json.error ?? 'Uninstall failed' };
-    return { ok: true };
+    // Success is decided by the status, not by a parsed body: this route can
+    // answer an empty 204, and parsing first threw straight into the catch —
+    // which also made any bump placed on the success path unreachable.
+    if (resp.ok) {
+      noteDesignSystemCatalogMutation();
+      return { ok: true };
+    }
+    const json = (await resp.json().catch(() => null)) as { error?: string } | null;
+    return { error: json?.error ?? 'Uninstall failed' };
   } catch {
     return { error: 'Network error' };
   }

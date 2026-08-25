@@ -13,6 +13,7 @@ import {
   connectConnector,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deleteDesignSystemDraft,
+  uninstallDesignSystem,
   DesignSystemDeleteError,
   deletePreviewComment,
   deployProjectFile,
@@ -558,6 +559,48 @@ describe('design-system Workspace scope', () => {
     const afterMutation = fetchDesignSystemsResult(context);
     pending.resolve(new Response(
       JSON.stringify({ designSystems: [{ id: 'user:doomed', title: 'Doomed', source: 'user', status: 'published' }] }),
+      { status: 200 },
+    ));
+
+    await expect(afterMutation).resolves.toMatchObject({ ok: true, designSystems: [] });
+    await inFlightBeforeMutation;
+  });
+
+  it('starts a fresh catalog read after an uninstall, including on an empty 204', async () => {
+    // `uninstallDesignSystem` sends the same `DELETE /api/design-systems/:id` as
+    // the draft-delete helper, so it is a catalog mutation and the generation
+    // must advance for it too. It has no callers today; the spec exists so the
+    // invariant holds the moment one is wired up.
+    //
+    // The 204 is the load-bearing half: the function used to `await resp.json()`
+    // before checking `resp.ok`, so an empty success body threw straight into
+    // the catch and the success path — and therefore any bump placed on it —
+    // was unreachable.
+    const context = personalWorkspaceContext();
+    const pending = deferred<Response>();
+    let rows = [{ id: 'user:installed', title: 'Installed', source: 'user', status: 'published' }];
+    let catalogGets = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      if ((init?.method ?? 'GET') === 'DELETE') {
+        rows = [];
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      catalogGets += 1;
+      if (catalogGets === 1) return pending.promise;
+      return Promise.resolve(new Response(JSON.stringify({ designSystems: rows }), { status: 200 }));
+    }));
+
+    const inFlightBeforeMutation = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogGets).toBe(1));
+    await expect(uninstallDesignSystem('user:installed', context)).resolves.toEqual({ ok: true });
+
+    const afterMutation = fetchDesignSystemsResult(context);
+    pending.resolve(new Response(
+      JSON.stringify({ designSystems: [{ id: 'user:installed', title: 'Installed', source: 'user', status: 'published' }] }),
       { status: 200 },
     ));
 
