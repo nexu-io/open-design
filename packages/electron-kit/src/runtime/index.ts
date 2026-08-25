@@ -11,9 +11,11 @@ import { focusElectronWindow, resolveElectronPresentationMode } from "./presenta
 import { ELECTRON_BOOTSTRAP_SCHEMA_VERSION, validateElectronBootstrapResult } from "../bootstrap/contracts.js";
 import { ElectronActivationAttempt } from "./activation.js";
 import { claimElectronSingleInstanceLock, ElectronLaunchHandoffQueue } from "./single-instance.js";
+import { ElectronRuntimeLog } from "./logging.js";
 
 export * from "./presentation.js";
 export * from "./single-instance.js";
+export * from "./logging.js";
 
 const placeholder = (title: string) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${title}</title><style>html{font-family:ui-sans-serif,system-ui;background:#f7f7f4;color:#20201e}body{margin:0;display:grid;min-height:100vh;place-items:center}.card{max-width:560px;padding:48px;border:1px solid #deded8;border-radius:20px;background:#fff;box-shadow:0 18px 70px #00000012}small{color:#777}h1{font-size:32px;margin:12px 0}p{line-height:1.65}</style></head><body><main class="card"><small>Electron Shell Foundation</small><h1>${title}</h1><p>Electron + electron-kit 已完成冷启动、显式 readiness 与占位渲染闭环。</p></main><script>document.documentElement.dataset.electronKitMounted="1"</script></body></html>`;
 
@@ -38,7 +40,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   }
 }
 
-type ElectronRuntimeContext = { activation: ElectronActivationAttempt | null };
+type ElectronRuntimeContext = { activation: ElectronActivationAttempt | null; log: ElectronRuntimeLog | null };
 
 async function resolveCarrierWithRecovery(input: Readonly<{
   lockPath: string;
@@ -72,6 +74,16 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   app.setName(manifest.productName);
   protocol.registerSchemesAsPrivileged([{ scheme: manifest.protocol, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
   if (!await claimElectronSingleInstanceLock(app)) { app.quit(); return; }
+  const runtimeRoot = join(app.getPath("userData"), "electron-kit", manifest.namespace);
+  context.log = new ElectronRuntimeLog(runtimeRoot);
+  context.log.write("preflight.complete", {
+    namespace: manifest.namespace,
+    pid: process.pid,
+    platform: process.platform,
+    presentation,
+    runtimeRoot,
+  });
+  context.activation = await ElectronActivationAttempt.begin(runtimeRoot);
 
   let mainWindow: BrowserWindow | null = null;
   let splash: BrowserWindow | null = null;
@@ -107,8 +119,6 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   }
   setSplashStage(splash, "Starting the local foundation…");
 
-  const runtimeRoot = join(app.getPath("userData"), "electron-kit", manifest.namespace);
-  context.activation = await ElectronActivationAttempt.begin(runtimeRoot);
   const nodeLockPath = join(app.getAppPath(), "node-lock.json");
   setSplashStage(splash, "Verifying the official Node carrier…");
   const carrier = await resolveCarrierWithRecovery({
@@ -163,6 +173,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   focusElectronWindow(mainWindow, presentation, pendingHandoffs.focusRequested ? "second-instance" : "initial-reveal");
   if (splash != null && !splash.isDestroyed()) splash.destroy();
   await context.activation.commit();
+  context.log.write("startup.committed", { generationId: generation.id, presentation });
   for (const link of pendingHandoffs.deepLinks) dispatch(link);
 
   let heartbeatInFlight = Promise.resolve();
@@ -184,6 +195,8 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     const released = ownsAttachment ? await ports.lifecycle.release(scope, attachment.id) : current;
     if (released.references === 0 && released.state === "running") await ports.lifecycle.stop(scope, released.fence);
     await context.activation?.stop();
+    context.log?.write("shutdown.complete");
+    await context.log?.flush();
   };
   app.on("before-quit", (event) => {
     if (closing) return;
@@ -220,10 +233,12 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
 }
 
 export async function runElectronShell(definition: ElectronShellDefinition): Promise<void> {
-  const context: ElectronRuntimeContext = { activation: null };
+  const context: ElectronRuntimeContext = { activation: null, log: null };
   try { await runElectronShellSession(definition, context); }
   catch (error) {
     await context.activation?.fail(error).catch(() => undefined);
+    context.log?.write("startup.failed", { error });
+    await context.log?.flush();
     console.error("[electron-kit] Electron Shell startup failed", error);
     for (const window of BrowserWindow.getAllWindows()) window.destroy();
     app.exit(1);
