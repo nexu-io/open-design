@@ -23,6 +23,7 @@ import {
   savePrintReadyDocumentAsPdf,
   waitForEmbeddedFrames,
   waitForPrintableContent,
+  waitForPrintReadyHandshake,
   waitForPrintReadyPdfContent,
   type PrintReadyPdfTarget,
 } from '../../src/main/pdf-export.js';
@@ -127,9 +128,14 @@ describe('savePrintReadyDocumentAsPdf', () => {
     const events = new EventEmitter();
     const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
     const pendingFrame = {
+      frameTreeNodeId: 73,
+      url: 'https://example.test/adapter.html',
       processId: 41,
       routingId: 73,
-      executeJavaScript: vi.fn().mockResolvedValue('loading'),
+      executeJavaScript: vi.fn().mockResolvedValue({
+        readyState: 'loading',
+        url: 'https://example.test/adapter.html',
+      }),
     };
     mainFrame.framesInSubtree = [mainFrame, pendingFrame];
     const webContents = Object.assign(events, {
@@ -155,6 +161,10 @@ describe('savePrintReadyDocumentAsPdf', () => {
     expect(calls).toContain('waitUntilReady');
     expect(calls).not.toContain('printToPdf');
 
+    pendingFrame.executeJavaScript.mockResolvedValue({
+      readyState: 'complete',
+      url: pendingFrame.url,
+    });
     events.emit(
       'did-frame-finish-load',
       {},
@@ -173,6 +183,87 @@ describe('savePrintReadyDocumentAsPdf', () => {
       'write',
       'dispose',
     ]);
+  });
+
+  test('does not accept an initial about:blank document before the iframe target commits', async () => {
+    const events = new EventEmitter();
+    const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+    const provisionalFrame = {
+      frameTreeNodeId: 91,
+      url: '',
+      processId: 50,
+      routingId: 60,
+      // Electron reports the initial about:blank document as complete even
+      // while an assigned, delayed src has not committed.
+      executeJavaScript: vi.fn().mockResolvedValue({
+        readyState: 'complete',
+        url: 'about:blank',
+      }),
+    };
+    mainFrame.framesInSubtree = [mainFrame, provisionalFrame];
+    const webContents = Object.assign(events, {
+      mainFrame,
+      executeJavaScript: vi.fn(async (script: string) =>
+        script.includes('__odPrintReady') ? true : { stalled: false },
+      ),
+      stop: vi.fn(),
+    });
+    const window = { webContents };
+    const { target, calls } = createStubTarget();
+    target.waitUntilReady = async (nonce) => {
+      calls.push('waitUntilReady');
+      await waitForPrintReadyPdfContent(
+        window as unknown as Parameters<typeof waitForPrintReadyPdfContent>[0],
+        nonce,
+      );
+    };
+
+    const saving = savePrintReadyDocumentAsPdf(
+      '<iframe src="https://example.test/delayed-adapter.html"></iframe>',
+      'nonce-provisional-frame',
+      target,
+    );
+    await vi.waitFor(() => expect(provisionalFrame.executeJavaScript).toHaveBeenCalled());
+
+    expect(calls).not.toContain('printToPdf');
+
+    // Creating the iframe can finish its initial about:blank document after
+    // the readiness observer is installed. That event is not the assigned
+    // target src and must not release capture either.
+    events.emit(
+      'did-frame-finish-load',
+      {},
+      false,
+      provisionalFrame.processId,
+      provisionalFrame.routingId,
+    );
+    await Promise.resolve();
+    expect(calls).not.toContain('printToPdf');
+
+    // A cross-origin commit may replace process/routing IDs. Electron's
+    // frameTreeNodeId stays fixed for the iframe element's lifetime.
+    const committedFrame = {
+      ...provisionalFrame,
+      url: 'https://example.test/delayed-adapter.html',
+      processId: 51,
+      routingId: 61,
+      executeJavaScript: vi.fn().mockResolvedValue({
+        readyState: 'complete',
+        url: 'https://example.test/delayed-adapter.html',
+      }),
+    };
+    mainFrame.framesInSubtree = [mainFrame, committedFrame];
+    events.emit(
+      'did-frame-finish-load',
+      {},
+      false,
+      committedFrame.processId,
+      committedFrame.routingId,
+    );
+    await saving;
+
+    expect(calls).toContain('printToPdf');
+    expect(calls.indexOf('waitUntilReady')).toBeLessThan(calls.indexOf('printToPdf'));
   });
 
   test('renders with CSS page size preference, zero margins, and inferred page size by default', async () => {
@@ -392,16 +483,21 @@ describe('waitForPrintableContent', () => {
     const sharedUrl = 'https://example.test/adapter.html';
     const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
     const loadedFrame = {
+      frameTreeNodeId: 20,
       url: sharedUrl,
       processId: 10,
       routingId: 20,
-      executeJavaScript: vi.fn().mockResolvedValue('complete'),
+      executeJavaScript: vi.fn().mockResolvedValue({ readyState: 'complete', url: sharedUrl }),
     };
     const pendingFrame = {
+      frameTreeNodeId: 21,
       url: sharedUrl,
       processId: 10,
       routingId: 21,
-      executeJavaScript: vi.fn().mockResolvedValue('loading'),
+      executeJavaScript: vi
+        .fn()
+        .mockResolvedValueOnce({ readyState: 'loading', url: sharedUrl })
+        .mockResolvedValue({ readyState: 'complete', url: sharedUrl }),
     };
     mainFrame.framesInSubtree = [mainFrame, loadedFrame, pendingFrame];
     const webContents = Object.assign(events, { mainFrame });
@@ -433,12 +529,16 @@ describe('waitForPrintableContent', () => {
       const events = new EventEmitter();
       const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
       const sandboxedFrame = {
+        frameTreeNodeId: 30,
         url: 'https://example.test/sandboxed-adapter.html',
         processId: 12,
         routingId: 30,
         // Electron executes inside the child frame, so cross-origin DOM
         // unreadability in the parent does not hide its current readyState.
-        executeJavaScript: vi.fn().mockResolvedValue('complete'),
+        executeJavaScript: vi.fn().mockResolvedValue({
+          readyState: 'complete',
+          url: 'https://example.test/sandboxed-adapter.html',
+        }),
       };
       mainFrame.framesInSubtree = [mainFrame, sandboxedFrame];
       const stop = vi.fn();
@@ -455,12 +555,257 @@ describe('waitForPrintableContent', () => {
       await Promise.resolve();
       await waiting;
 
-      expect(sandboxedFrame.executeJavaScript).toHaveBeenCalledWith('document.readyState');
+      expect(sandboxedFrame.executeJavaScript).toHaveBeenCalledWith(
+        '({ readyState: document.readyState, url: location.href })',
+      );
       expect(stop).not.toHaveBeenCalled();
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test('binds readyState to the document URL observed in the same renderer evaluation', async () => {
+    const events = new EventEmitter();
+    const targetUrl = 'https://example.test/same-process-target.html';
+    const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+    const frame = {
+      frameTreeNodeId: 40,
+      // Models frame.url advancing after the evaluated initial document state
+      // was captured but before the main-process promise callback runs.
+      url: targetUrl,
+      processId: 13,
+      routingId: 31,
+      executeJavaScript: vi
+        .fn()
+        .mockResolvedValueOnce({ readyState: 'complete', url: 'about:blank' })
+        .mockResolvedValue({ readyState: 'complete', url: targetUrl }),
+    };
+    mainFrame.framesInSubtree = [mainFrame, frame];
+    const webContents = Object.assign(events, { mainFrame });
+    let settled = false;
+
+    const waiting = waitForEmbeddedFrames(
+      webContents as unknown as Parameters<typeof waitForEmbeddedFrames>[0],
+    ).then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+
+    events.emit('did-frame-finish-load', {}, false, frame.processId, frame.routingId);
+    await waiting;
+    expect(settled).toBe(true);
+  });
+
+  test('does not combine a malformed renderer result with the main-process frame URL', async () => {
+    const events = new EventEmitter();
+    const targetUrl = 'https://example.test/malformed-state.html';
+    const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+    const frame = {
+      frameTreeNodeId: 401,
+      url: targetUrl,
+      processId: 131,
+      routingId: 311,
+      executeJavaScript: vi
+        .fn()
+        .mockResolvedValueOnce('complete')
+        .mockResolvedValue({ readyState: 'complete', url: targetUrl }),
+    };
+    mainFrame.framesInSubtree = [mainFrame, frame];
+    const webContents = Object.assign(events, { mainFrame });
+    let settled = false;
+    const waiting = waitForEmbeddedFrames(
+      webContents as unknown as Parameters<typeof waitForEmbeddedFrames>[0],
+    ).then(() => {
+      settled = true;
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    events.emit('did-frame-finish-load', {}, false, frame.processId, frame.routingId);
+    await waiting;
+    expect(settled).toBe(true);
+  });
+
+  test('re-probes the replacement renderer when the target commits before its finish event is observed', async () => {
+    const events = new EventEmitter();
+    const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+    const provisionalFrame = {
+      frameTreeNodeId: 41,
+      url: 'about:blank',
+      processId: 14,
+      routingId: 32,
+      executeJavaScript: vi.fn().mockRejectedValue(new Error('frame detached')),
+    };
+    mainFrame.framesInSubtree = [mainFrame, provisionalFrame];
+    const webContents = Object.assign(events, { mainFrame });
+    const waiting = waitForEmbeddedFrames(
+      webContents as unknown as Parameters<typeof waitForEmbeddedFrames>[0],
+    );
+    const committedFrame = {
+      ...provisionalFrame,
+      url: 'https://example.test/replacement.html',
+      processId: 15,
+      routingId: 33,
+      executeJavaScript: vi.fn().mockResolvedValue({
+        readyState: 'complete',
+        url: 'https://example.test/replacement.html',
+      }),
+    };
+    mainFrame.framesInSubtree = [mainFrame, committedFrame];
+
+    await expect(waiting).resolves.toEqual({ stalled: false });
+    expect(committedFrame.executeJavaScript).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not treat a transiently missing renderer as a removed iframe', async () => {
+    vi.useFakeTimers();
+    try {
+      const events = new EventEmitter();
+      const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+      const provisionalFrame = {
+        frameTreeNodeId: 42,
+        url: 'about:blank',
+        processId: 16,
+        routingId: 34,
+        executeJavaScript: vi.fn().mockRejectedValue(new Error('renderer detached')),
+      };
+      mainFrame.framesInSubtree = [mainFrame, provisionalFrame];
+      const webContents = Object.assign(events, { mainFrame });
+      const waiting = waitForEmbeddedFrames(
+        webContents as unknown as Parameters<typeof waitForEmbeddedFrames>[0],
+      );
+      let settled = false;
+      void waiting.then(() => {
+        settled = true;
+      });
+
+      // Electron can expose a short gap between detaching the old renderer and
+      // registering its cross-process replacement. That gap must not be mistaken
+      // for DOM removal and release capture early.
+      mainFrame.framesInSubtree = [mainFrame];
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(settled).toBe(false);
+
+      const committedFrame = {
+        ...provisionalFrame,
+        url: 'https://example.test/committed.html',
+        processId: 17,
+        routingId: 35,
+        executeJavaScript: vi.fn().mockResolvedValue({
+          readyState: 'complete',
+          url: 'https://example.test/committed.html',
+        }),
+      };
+      mainFrame.framesInSubtree = [mainFrame, committedFrame];
+      events.emit(
+        'did-frame-finish-load',
+        {},
+        false,
+        committedFrame.processId,
+        committedFrame.routingId,
+      );
+
+      await expect(waiting).resolves.toEqual({ stalled: false });
+      expect(committedFrame.executeJavaScript).toHaveBeenCalledTimes(1);
+      expect(events.listenerCount('did-frame-finish-load')).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('uses one shared finish listener for iframe-heavy documents', async () => {
+    const events = new EventEmitter();
+    const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+    const frames = Array.from({ length: 20 }, (_, index) => ({
+      frameTreeNodeId: 100 + index,
+      url: `https://example.test/frame-${index}.html`,
+      processId: 20,
+      routingId: 100 + index,
+      executeJavaScript: vi
+        .fn()
+        .mockResolvedValueOnce({
+          readyState: 'loading',
+          url: `https://example.test/frame-${index}.html`,
+        })
+        .mockResolvedValue({
+          readyState: 'complete',
+          url: `https://example.test/frame-${index}.html`,
+        }),
+    }));
+    mainFrame.framesInSubtree = [mainFrame, ...frames];
+    const webContents = Object.assign(events, { mainFrame });
+    const waiting = waitForEmbeddedFrames(
+      webContents as unknown as Parameters<typeof waitForEmbeddedFrames>[0],
+    );
+
+    expect(events.listenerCount('did-frame-finish-load')).toBe(1);
+    for (const frame of frames) {
+      events.emit('did-frame-finish-load', {}, false, frame.processId, frame.routingId);
+    }
+
+    await expect(waiting).resolves.toEqual({ stalled: false });
+    expect(events.listenerCount('did-frame-finish-load')).toBe(0);
+  });
+
+  test('rescans for frames inserted while the page-side resource wait is settling', async () => {
+    const events = new EventEmitter();
+    const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+    let releasePage: ((value: { stalled: boolean }) => void) | undefined;
+    const pageSettled = new Promise<{ stalled: boolean }>((resolve) => {
+      releasePage = resolve;
+    });
+    const stop = vi.fn();
+    const webContents = Object.assign(events, {
+      mainFrame,
+      executeJavaScript: vi.fn().mockReturnValue(pageSettled),
+      stop,
+    });
+    let settled = false;
+    const waiting = waitForPrintableContent(
+      { webContents } as unknown as Parameters<typeof waitForPrintableContent>[0],
+    ).then(() => {
+      settled = true;
+    });
+    const lateFrame = {
+      frameTreeNodeId: 200,
+      url: 'https://example.test/late-frame.html',
+      processId: 30,
+      routingId: 200,
+      executeJavaScript: vi
+        .fn()
+        .mockResolvedValueOnce({
+          readyState: 'loading',
+          url: 'https://example.test/late-frame.html',
+        })
+        .mockResolvedValue({
+          readyState: 'complete',
+          url: 'https://example.test/late-frame.html',
+        }),
+    };
+    mainFrame.framesInSubtree = [mainFrame, lateFrame];
+    releasePage?.({ stalled: false });
+    await vi.waitFor(() => expect(lateFrame.executeJavaScript).toHaveBeenCalled());
+
+    expect(settled).toBe(false);
+
+    events.emit(
+      'did-frame-finish-load',
+      {},
+      false,
+      lateFrame.processId,
+      lateFrame.routingId,
+    );
+    await waiting;
+
+    expect(settled).toBe(true);
+    expect(stop).not.toHaveBeenCalled();
   });
 
   // Regression boundary for the packaged export hang.
@@ -653,5 +998,91 @@ describe('waitForPrintableContent', () => {
     // stalled single resource drop out while the rest of the page still
     // finishes normally, instead of every export paying the full outer bound.
     expect(scripts[0]).toContain('setTimeout');
+  });
+
+  test('shares one frame deadline across the initial and post-page-settle scans', async () => {
+    vi.useFakeTimers();
+    try {
+      const events = new EventEmitter();
+      const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+      const pendingFrame = {
+        frameTreeNodeId: 300,
+        url: 'https://example.test/never-finishes.html',
+        processId: 40,
+        routingId: 300,
+        executeJavaScript: vi.fn().mockResolvedValue({
+          readyState: 'loading',
+          url: 'https://example.test/never-finishes.html',
+        }),
+      };
+      mainFrame.framesInSubtree = [mainFrame, pendingFrame];
+      const stop = vi.fn();
+      const webContents = Object.assign(events, {
+        mainFrame,
+        executeJavaScript: vi.fn().mockResolvedValue({ stalled: false }),
+        stop,
+      });
+      const waiting = waitForPrintableContent(
+        { webContents } as unknown as Parameters<typeof waitForPrintableContent>[0],
+      );
+
+      await vi.advanceTimersByTimeAsync(10_001);
+      await waiting;
+
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(events.listenerCount('did-frame-finish-load')).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('waitForPrintReadyHandshake', () => {
+  test('serializes an untrusted nonce instead of interpolating executable JavaScript', async () => {
+    const nonce = `x' || (window.pwned = true) || '`;
+    let messageHandler: ((event: unknown) => void) | undefined;
+    const browserWindow = {
+      __odPrintReady: false,
+      pwned: false,
+      addEventListener(_type: string, handler: (event: unknown) => void) {
+        messageHandler = handler;
+      },
+      removeEventListener() {},
+    };
+    const webContents = {
+      executeJavaScript(script: string) {
+        const evaluate = new Function('window', `return ${script};`);
+        return evaluate(browserWindow) as Promise<boolean>;
+      },
+    };
+
+    const waiting = waitForPrintReadyHandshake(
+      webContents as unknown as Parameters<typeof waitForPrintReadyHandshake>[0],
+      nonce,
+    );
+    expect(messageHandler).toBeTypeOf('function');
+    messageHandler?.({ data: { type: 'OD_PRINT_READY', nonce } });
+    await waiting;
+
+    expect(browserWindow.pwned).toBe(false);
+  });
+
+  test('clears its timeout after the cached handshake resolves', async () => {
+    vi.useFakeTimers();
+    try {
+      const webContents = {
+        executeJavaScript: vi.fn().mockResolvedValue(true),
+      };
+
+      await waitForPrintReadyHandshake(
+        webContents as unknown as Parameters<typeof waitForPrintReadyHandshake>[0],
+        'nonce',
+      );
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
