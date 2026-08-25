@@ -4,6 +4,8 @@ import type {
   StandaloneShellIdentity,
   StandaloneShellUpdaterPort,
 } from "@open-design/standalone";
+import type { ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest } from "../installer/contracts.js";
+import type { ElectronBootstrapPort } from "../bootstrap/contracts.js";
 
 export const ELECTRON_KIT_CONTRACT_VERSION = 1 as const;
 
@@ -40,9 +42,11 @@ export type ElectronShellManifest = Readonly<{
 
 export type ElectronShellHandlers = Readonly<{
   openDeepLink?(url: string): void | Promise<void>;
+  installUpdate?(request: ElectronInstallerHandoffRequest): ElectronInstallerHandoffReceipt | Promise<ElectronInstallerHandoffReceipt>;
 }>;
 
 export type ElectronClosurePorts = Readonly<{
+  bootstrap: ElectronBootstrapPort;
   lifecycle: LifecyclePort;
   updater: StandaloneShellUpdaterPort;
   observeFeedback?(event: StandaloneFeedbackEvent): void | Promise<void>;
@@ -52,7 +56,7 @@ export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
   headless?: boolean;
   handlers?: ElectronShellHandlers;
-  createPorts(input: Readonly<{ runtimeRoot: string; sidecarEntryPath: string }>): ElectronClosurePorts;
+  createPorts(input: Readonly<{ runtimeRoot: string; sidecarEntryPath: string; nodeExecutablePath: string }>): ElectronClosurePorts;
 }>;
 
 const token = /^[a-z][a-z0-9.-]{1,127}$/u;

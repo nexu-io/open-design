@@ -1,4 +1,9 @@
 import { createServer } from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import type { LifecyclePort } from "@open-design/standalone";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -30,11 +35,54 @@ describe("Electron Shell updater provider", () => {
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-    const updater = new ElectronFixtureShellUpdater(`${origin}/beta/latest/metadata.json`, shell);
-
-    expect((await updater.invoke("check")).snapshot.state).toBe("available");
-    expect((await updater.invoke("download")).snapshot.state).toBe("ready");
-    expect((await updater.invoke("install")).snapshot.state).toBe("handed-off");
-    expect((await updater.confirmInstalled(shell)).snapshot.state).toBe("installed");
+    const cacheRoot = await mkdtemp(join(tmpdir(), "electron-updater-"));
+    const scope = { channel: "beta", namespace: "electron" };
+    const lifecycle = {
+      beginTransition: async () => ({
+        state: "acquired" as const,
+        transition: {
+          fence: 0,
+          expiresAt: new Date(Date.now() + 30_000).toISOString(),
+          heartbeatIntervalMs: 5_000,
+          occupants: [],
+          renew: async () => undefined,
+          release: async () => undefined,
+          forceStop: async () => undefined,
+          completeStart: async () => { throw new Error("not used"); },
+        },
+      }),
+    } as unknown as LifecyclePort;
+    try {
+      const updater = new ElectronFixtureShellUpdater({
+        metadataUrl: `${origin}/beta/latest/metadata.json`,
+        shell,
+        cacheRoot,
+        lifecycle,
+        scope,
+      });
+      expect((await updater.invoke("check")).snapshot.state).toBe("available");
+      const resumed = new ElectronFixtureShellUpdater({
+        metadataUrl: `${origin}/beta/latest/metadata.json`,
+        shell,
+        cacheRoot,
+        lifecycle,
+        scope,
+      });
+      const downloaded = (await resumed.invoke("download")).snapshot;
+      expect(downloaded.state).toBe("ready");
+      expect(downloaded.handoff?.artifact.path).toMatch(/blobs/u);
+      expect((await resumed.invoke("install")).snapshot.state).toBe("handed-off");
+      const reloaded = new ElectronFixtureShellUpdater({
+        metadataUrl: `${origin}/beta/latest/metadata.json`,
+        shell,
+        cacheRoot,
+        lifecycle,
+        scope,
+      });
+      expect((await reloaded.readSnapshot()).state).toBe("handed-off");
+      expect((await reloaded.confirmInstalled(shell)).snapshot.state).toBe("installed");
+    } finally {
+      await rm(cacheRoot, { force: true, recursive: true });
+    }
   });
 });

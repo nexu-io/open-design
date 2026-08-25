@@ -7,6 +7,12 @@ import electronPath from "electron";
 import { assembleElectronScene } from "../build/index.js";
 import { validateElectronShellManifest, type ElectronShellManifest } from "../boundary/index.js";
 
+export function normalizeElectronDevArgv(argv: readonly string[]): string[] {
+  const normalized = [...argv];
+  while (normalized[0] === "--") normalized.shift();
+  return normalized;
+}
+
 export async function devElectronShell(input: Readonly<{
   entryPath: string;
   manifestPath: string;
@@ -22,7 +28,7 @@ export async function devElectronShell(input: Readonly<{
     fixtureSidecarPath: input.fixtureSidecarPath,
     nodeCarrierLockPath: input.nodeCarrierLockPath,
   });
-  const child = spawn(electronPath as unknown as string, [scene.sceneRoot, ...(input.argv ?? [])], { env: process.env, stdio: "inherit" });
+  const child = spawn(electronPath as unknown as string, [scene.sceneRoot, ...normalizeElectronDevArgv(input.argv ?? [])], { env: process.env, stdio: "inherit" });
   return await new Promise<number>((resolveCode, reject) => {
     child.once("error", reject);
     child.once("exit", (exitCode) => resolveCode(exitCode ?? 1));

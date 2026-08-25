@@ -1,8 +1,10 @@
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElectronFixtureLifecyclePort } from "@/lifecycle/fixture-port.js";
+
+afterEach(() => vi.unstubAllEnvs());
 
 const generation = {
   schemaVersion: 3 as const,
@@ -22,7 +24,7 @@ const attachment = {
 
 describe("Electron fixture lifecycle", () => {
   it("crosses readiness, heartbeat and a fenced Shell-install transition", async () => {
-    const lifecycle = new ElectronFixtureLifecyclePort(fileURLToPath(new URL("../../dist/lifecycle/fixture-sidecar.cjs", import.meta.url)));
+    const lifecycle = new ElectronFixtureLifecyclePort(fileURLToPath(new URL("../../dist/lifecycle/fixture-sidecar.cjs", import.meta.url)), process.execPath);
     const started = await lifecycle.start(scope, generation, attachment);
     expect(started.state).toBe("running");
     await expect(lifecycle.awaitReady(scope, {
@@ -46,5 +48,28 @@ describe("Electron fixture lifecycle", () => {
     const released = await lifecycle.release(scope, attachment.id);
     await lifecycle.stop(scope, released.fence);
     await expect(lifecycle.status(scope)).resolves.toMatchObject({ state: "stopped", references: 0 });
+  });
+
+  it("lets fixture Closure schedule the exposed Shell updater before readiness", async () => {
+    vi.stubEnv("ELECTRON_KIT_FIXTURE_PREPARE_UPDATE", "1");
+    const lifecycle = new ElectronFixtureLifecyclePort(fileURLToPath(new URL("../../dist/lifecycle/fixture-sidecar.cjs", import.meta.url)), process.execPath);
+    const actions: string[] = [];
+    let state = "idle";
+    lifecycle.exposeShellUpdater({
+      shellType: "electron",
+      readSnapshot: async () => ({ state } as any),
+      waitForChange: async () => ({ state } as any),
+      invoke: async (action) => {
+        actions.push(action);
+        state = action === "check" ? "available" : "ready";
+        return { outcome: "accepted", snapshot: { state } as any };
+      },
+      confirmInstalled: async () => ({ outcome: "unsupported", snapshot: { state } as any }),
+    });
+    const started = await lifecycle.start(scope, generation, attachment);
+    await lifecycle.awaitReady(scope, { generationId: generation.id, instanceId: started.instanceId!, attachmentId: attachment.id });
+    expect(actions).toEqual(["check", "download"]);
+    const released = await lifecycle.release(scope, attachment.id);
+    await lifecycle.stop(scope, released.fence);
   });
 });

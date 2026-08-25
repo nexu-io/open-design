@@ -19,6 +19,18 @@
       "types": "./dist/boundary/index.d.ts",
       "default": "./dist/boundary/index.mjs"
     },
+    "./bootstrap": {
+      "types": "./dist/bootstrap/index.d.ts",
+      "default": "./dist/bootstrap/index.mjs"
+    },
+    "./carrier": {
+      "types": "./dist/carrier/index.d.ts",
+      "default": "./dist/carrier/index.mjs"
+    },
+    "./installer": {
+      "types": "./dist/installer/index.d.ts",
+      "default": "./dist/installer/index.mjs"
+    },
     "./lifecycle": {
       "types": "./dist/lifecycle/fixture-port.d.ts",
       "default": "./dist/lifecycle/fixture-port.mjs"

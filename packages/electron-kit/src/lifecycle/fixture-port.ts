@@ -9,18 +9,33 @@ import {
   type LifecycleReadiness,
   type LifecycleScope,
   type LifecycleStatus,
+  type StandaloneShellUpdaterPort,
   type StandaloneLifecycleTransitionResult,
   type SharedLifecycleState,
 } from "@open-design/standalone";
 
 type ReadyMessage = Readonly<{ type: "ready"; readiness: LifecycleReadiness }>;
+type UpdaterRequest = Readonly<{
+  type: "shell-updater-request";
+  correlationId: string;
+  operation: "read" | "wait" | "invoke" | "confirm-installed";
+  afterRevision?: number;
+  timeoutMs?: number;
+  action?: Parameters<StandaloneShellUpdaterPort["invoke"]>[0];
+  proof?: Parameters<StandaloneShellUpdaterPort["confirmInstalled"]>[0];
+}>;
 
 export class ElectronFixtureLifecyclePort implements LifecyclePort {
   private stateByScope = new Map<string, SharedLifecycleState>();
   private child: ChildProcess | null = null;
   private readiness: Promise<LifecycleReadiness> | null = null;
+  private shellUpdater: StandaloneShellUpdaterPort | null = null;
 
-  constructor(private readonly sidecarEntryPath: string, private readonly heartbeatIntervalMs = 1_000) {}
+  constructor(
+    private readonly sidecarEntryPath: string,
+    private readonly nodeExecutablePath: string,
+    private readonly heartbeatIntervalMs = 1_000,
+  ) {}
 
   private key(scope: LifecycleScope): string { return `${scope.channel}/${scope.namespace}`; }
   private state(scope: LifecycleScope): SharedLifecycleState {
@@ -31,16 +46,52 @@ export class ElectronFixtureLifecyclePort implements LifecyclePort {
     return SHARED_LIFECYCLE_ALGEBRA.project(state, this.heartbeatIntervalMs);
   }
 
+  exposeShellUpdater(updater: StandaloneShellUpdaterPort): void {
+    if (this.child != null) throw new Error("fixture Shell updater must be exposed before lifecycle start");
+    if (this.shellUpdater != null) throw new Error("fixture Shell updater is already exposed");
+    this.shellUpdater = updater;
+  }
+
+  private async handleUpdaterRequest(child: ChildProcess, message: UpdaterRequest): Promise<void> {
+    if (this.shellUpdater == null) throw new Error("fixture Closure requested an unavailable Shell updater");
+    let result: unknown;
+    if (message.operation === "read") result = await this.shellUpdater.readSnapshot();
+    else if (message.operation === "wait") {
+      if (!Number.isSafeInteger(message.afterRevision) || !Number.isSafeInteger(message.timeoutMs)) throw new Error("invalid fixture updater wait request");
+      result = await this.shellUpdater.waitForChange(message.afterRevision!, message.timeoutMs!);
+    } else if (message.operation === "invoke") {
+      if (message.action == null) throw new Error("invalid fixture updater invoke request");
+      result = await this.shellUpdater.invoke(message.action);
+    } else if (message.operation === "confirm-installed") {
+      if (message.proof == null) throw new Error("invalid fixture updater confirmation request");
+      result = await this.shellUpdater.confirmInstalled(message.proof);
+    } else throw new Error("unsupported fixture updater request");
+    if (child.connected) child.send({ type: "shell-updater-response", correlationId: message.correlationId, ok: true, result });
+  }
+
   private spawnSidecar(readiness: LifecycleReadiness): void {
     if (this.child != null) throw new Error("fixture sidecar is already running");
     this.child = fork(this.sidecarEntryPath, [], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-      execPath: process.execPath,
+      env: process.env,
+      execPath: this.nodeExecutablePath,
       stdio: ["ignore", "ignore", "inherit", "ipc"],
     });
     this.readiness = new Promise<LifecycleReadiness>((resolve, reject) => {
       const child = this.child!;
       const onMessage = (value: unknown) => {
+        const updaterRequest = value as Partial<UpdaterRequest>;
+        if (updaterRequest.type === "shell-updater-request" && typeof updaterRequest.correlationId === "string") {
+          void this.handleUpdaterRequest(child, updaterRequest as UpdaterRequest).catch((error: unknown) => {
+            if (!child.connected) return;
+            child.send({
+              type: "shell-updater-response",
+              correlationId: updaterRequest.correlationId,
+              ok: false,
+              error: { code: "shell-updater-handler-failed", message: error instanceof Error ? error.message : String(error) },
+            });
+          });
+          return;
+        }
         const message = value as Partial<ReadyMessage>;
         if (message.type !== "ready" || message.readiness == null) return;
         child.off("error", reject);

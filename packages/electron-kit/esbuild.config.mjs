@@ -24,6 +24,9 @@ await build({
 });
 const publicEntries = {
   "boundary/index": "boundary/index",
+  "bootstrap/index": "bootstrap/index",
+  "carrier/index": "carrier/index",
+  "installer/index": "installer/index",
   "lifecycle/fixture-port": "lifecycle/fixture-port",
   "updater/fixture-provider": "updater/fixture-provider",
   "build/index": "build/index",
