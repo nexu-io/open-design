@@ -3063,7 +3063,7 @@ export const ptBR: Dict = {
   'fileViewer.versions.promptTitle': 'Prompt',
   'fileViewer.versions.copyPrompt': 'Copiar prompt',
   'fileViewer.versions.fullscreen': 'Prévia em tela cheia',
-  'fileViewer.versions.open': 'Abrir prévia',
+  'fileViewer.versions.open': 'Abrir prévia em uma nova janela',
   'fileViewer.versions.currentHelp': 'Esta já é a versão atual.',
   'fileViewer.versions.restoreHelp': 'Ao alternar, este HTML será restaurado como uma nova versão atual.',
   'fileViewer.versions.restore': 'Alternar para esta versão',

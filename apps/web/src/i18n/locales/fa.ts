@@ -3063,7 +3063,7 @@ export const fa: Dict = {
   'fileViewer.versions.promptTitle': 'پرامپت',
   'fileViewer.versions.copyPrompt': 'کپی پرامپت',
   'fileViewer.versions.fullscreen': 'پیش‌نمایش تمام‌صفحه',
-  'fileViewer.versions.open': 'باز کردن پیش‌نمایش',
+  'fileViewer.versions.open': 'باز کردن پیش‌نمایش در پنجره جدید',
   'fileViewer.versions.currentHelp': 'این نسخه هم‌اکنون نسخه فعلی است.',
   'fileViewer.versions.restoreHelp': 'با تغییر، این HTML به عنوان نسخه فعلی جدید بازیابی می‌شود.',
   'fileViewer.versions.restore': 'تغییر به این نسخه',

@@ -3063,7 +3063,7 @@ export const ko: Dict = {
   'fileViewer.versions.promptTitle': '프롬프트',
   'fileViewer.versions.copyPrompt': '프롬프트 복사',
   'fileViewer.versions.fullscreen': '전체 화면 미리보기',
-  'fileViewer.versions.open': '미리보기 열기',
+  'fileViewer.versions.open': '새 창에서 미리보기 열기',
   'fileViewer.versions.currentHelp': '이미 현재 버전입니다.',
   'fileViewer.versions.restoreHelp': '전환하면 이 HTML이 새로운 현재 버전으로 복원됩니다.',
   'fileViewer.versions.restore': '이 버전으로 전환',

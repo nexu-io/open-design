@@ -3063,7 +3063,7 @@ export const ru: Dict = {
   'fileViewer.versions.promptTitle': 'Промпт',
   'fileViewer.versions.copyPrompt': 'Скопировать промпт',
   'fileViewer.versions.fullscreen': 'Полноэкранный предпросмотр',
-  'fileViewer.versions.open': 'Открыть предпросмотр',
+  'fileViewer.versions.open': 'Открыть предпросмотр в новом окне',
   'fileViewer.versions.currentHelp': 'Это уже текущая версия.',
   'fileViewer.versions.restoreHelp': 'Переключение восстановит этот HTML как новую текущую версию.',
   'fileViewer.versions.restore': 'Переключиться на эту версию',

@@ -4448,7 +4448,7 @@ export const zhCN: Dict = {
   'fileViewer.versions.promptTitle': '提示词',
   'fileViewer.versions.copyPrompt': '复制提示词',
   'fileViewer.versions.fullscreen': '全屏预览',
-  'fileViewer.versions.open': '打开预览',
+  'fileViewer.versions.open': "在新窗口打开预览",
   'fileViewer.versions.currentHelp': '这已经是当前版本。',
   'fileViewer.versions.restoreHelp': '切换会把此 HTML 恢复为新的当前版本。',
   'fileViewer.versions.restore': '切换到此版本',

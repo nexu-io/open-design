@@ -3063,7 +3063,7 @@ export const uk: Dict = {
   'fileViewer.versions.promptTitle': 'Промпт',
   'fileViewer.versions.copyPrompt': 'Копіювати промпт',
   'fileViewer.versions.fullscreen': 'Повноекранний перегляд',
-  'fileViewer.versions.open': 'Відкрити перегляд',
+  'fileViewer.versions.open': 'Відкрити перегляд у новому вікні',
   'fileViewer.versions.currentHelp': 'Це вже поточна версія.',
   'fileViewer.versions.restoreHelp': 'Перемикання відновить цей HTML як нову поточну версію.',
   'fileViewer.versions.restore': 'Перемкнутися на цю версію',

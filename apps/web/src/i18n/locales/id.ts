@@ -3063,7 +3063,7 @@ export const id: Dict = {
   'fileViewer.versions.promptTitle': 'Prompt',
   'fileViewer.versions.copyPrompt': 'Salin prompt',
   'fileViewer.versions.fullscreen': 'Pratinjau layar penuh',
-  'fileViewer.versions.open': 'Buka pratinjau',
+  'fileViewer.versions.open': 'Buka pratinjau di jendela baru',
   'fileViewer.versions.currentHelp': 'Ini sudah versi saat ini.',
   'fileViewer.versions.restoreHelp': 'Beralih akan memulihkan HTML ini sebagai versi saat ini yang baru.',
   'fileViewer.versions.restore': 'Beralih ke versi ini',

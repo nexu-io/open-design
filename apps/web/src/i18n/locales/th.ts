@@ -3063,7 +3063,7 @@ export const th: Dict = {
   'fileViewer.versions.promptTitle': 'พรอมป์',
   'fileViewer.versions.copyPrompt': 'คัดลอกพรอมป์',
   'fileViewer.versions.fullscreen': 'ตัวอย่างเต็มหน้าจอ',
-  'fileViewer.versions.open': 'เปิดตัวอย่าง',
+  'fileViewer.versions.open': 'เปิดตัวอย่างในหน้าต่างใหม่',
   'fileViewer.versions.currentHelp': 'นี่คือเวอร์ชันปัจจุบันอยู่แล้ว',
   'fileViewer.versions.restoreHelp': 'การสลับจะกู้คืน HTML นี้เป็นเวอร์ชันปัจจุบันใหม่',
   'fileViewer.versions.restore': 'สลับไปเวอร์ชันนี้',
