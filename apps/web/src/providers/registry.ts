@@ -636,20 +636,61 @@ async function materializeTeamDesignSystems(
   }
 }
 
+/**
+ * Read the unified catalog once per burst of identical concurrent readers.
+ *
+ * Several independent surfaces want this catalog on the same launch or
+ * navigation pass: bootstrap, the Workspace-identity effect, the home-route
+ * effect, plus LibrarySection, DesignSystemsSection and DesignSystemSwitchPicker
+ * as they mount. None of them can drop its read — each owns its own latest-wins
+ * bookkeeping and must settle its own loading state — but on the wire they are
+ * one request, and the browser's ~6-connections-per-host cap makes the extra
+ * copies queue behind everything else the launch is already fetching.
+ *
+ * SINGLE-FLIGHT ONLY (ttl 0, no shared settled result). Some of those call
+ * sites exist precisely to observe a change that just happened out of band:
+ * returning home re-reads so an in-project brand extraction appears, and a
+ * `forceTeamMaterialization` caller is announcing a realtime mutation. Sharing
+ * a settled answer — for even a second — would hand exactly those reads the
+ * state they were fired to replace.
+ */
+const CATALOG_SINGLE_FLIGHT_ONLY_MS = 0;
+
+async function readDesignSystemCatalog(
+  workspaceContext: WorkspaceCollabContext | null | undefined,
+  options?: FetchDesignSystemsOptions,
+): Promise<DesignSystemSummary[]> {
+  // Keyed by the exact identity the request will carry. `/api/design-systems`
+  // is fail-closed on a missing scope, so a headerless read is a different,
+  // smaller catalog — never an answer a Workspace-scoped read may join.
+  const cacheKey = `design-system-catalog:${workspaceIdentityCacheKey(workspaceContext)}`;
+  // Same rule as the Team index above: a forced call is an authoritative read
+  // for one mutation and must never join a snapshot issued before it.
+  if (options?.forceTeamMaterialization) evictCoalescedGet(cacheKey);
+  return coalescedGet(cacheKey, async () => {
+    const resp = await fetch('/api/design-systems', {
+      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+    });
+    // Throw rather than return a sentinel: `coalescedGet` never caches a
+    // failure, so the next reader retries instead of joining a dead entry.
+    if (!resp.ok) throw new Error(`design-systems ${resp.status}`);
+    const json = (await resp.json()) as { designSystems?: DesignSystemSummary[] };
+    return json.designSystems ?? [];
+  }, CATALOG_SINGLE_FLIGHT_ONLY_MS);
+}
+
 export async function fetchDesignSystemsResult(
   workspaceContext?: WorkspaceCollabContext | null,
   options?: FetchDesignSystemsOptions,
 ): Promise<DesignSystemsResult> {
   try {
     const teamSharedIds = await materializeTeamDesignSystems(workspaceContext, options);
-    const resp = await fetch('/api/design-systems', {
-      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
-    });
-    if (!resp.ok) return { ok: false };
-    const json = (await resp.json()) as { designSystems?: DesignSystemSummary[] };
+    const designSystems = await readDesignSystemCatalog(workspaceContext, options);
     return {
       ok: true,
-      designSystems: (json.designSystems ?? []).map((system) => (
+      // Mapped per caller: readers sharing one catalog read still resolve the
+      // Team-shared flag against their own Team-index witness.
+      designSystems: designSystems.map((system) => (
         teamSharedIds.has(system.id)
           ? { ...system, teamShared: true }
           : system

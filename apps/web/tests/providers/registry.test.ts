@@ -466,6 +466,99 @@ describe('design-system Workspace scope', () => {
       }),
     }));
   });
+
+  it('collapses concurrent catalog reads for one identity into a single request', async () => {
+    // Bootstrap, the workspace-identity effect and the home-route effect all
+    // want the catalog on the same launch pass, and LibrarySection /
+    // DesignSystemsSection / DesignSystemSwitchPicker each read it again as
+    // they mount. Every one of those owns its own latest-wins bookkeeping, so
+    // none can drop its read — but on the wire they are one request.
+    const context = personalWorkspaceContext();
+    const gate = deferred<Response>();
+    let catalogReads = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      catalogReads += 1;
+      return gate.promise;
+    }));
+
+    const reads = [
+      fetchDesignSystemsResult(context),
+      fetchDesignSystemsResult(context),
+      fetchDesignSystemsResult(context),
+    ];
+    await vi.waitFor(() => expect(catalogReads).toBeGreaterThan(0));
+    expect(catalogReads).toBe(1);
+
+    gate.resolve(new Response(
+      JSON.stringify({ designSystems: [{ id: 'user:brand', title: 'Brand', source: 'user', status: 'published' }] }),
+      { status: 200 },
+    ));
+    for (const read of reads) {
+      await expect(read).resolves.toMatchObject({
+        ok: true,
+        designSystems: [expect.objectContaining({ id: 'user:brand' })],
+      });
+    }
+  });
+
+  it('re-reads the catalog for a read issued after the previous one settled', async () => {
+    // Single-flight ONLY: several call sites exist precisely to observe a
+    // change that just happened out of band — returning home re-reads so an
+    // in-project brand extraction shows up. Sharing a settled answer for even
+    // a second would hand those reads the state they were fired to replace.
+    const context = personalWorkspaceContext();
+    let catalogReads = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      catalogReads += 1;
+      return Promise.resolve(new Response(JSON.stringify({ designSystems: [] }), { status: 200 }));
+    }));
+
+    await fetchDesignSystemsResult(context);
+    await fetchDesignSystemsResult(context);
+    expect(catalogReads).toBe(2);
+  });
+
+  it('never lets a headerless catalog read answer a Workspace-scoped one', async () => {
+    // A read issued before `/api/workspace/context` settles carries no identity
+    // headers, and `/api/design-systems` is fail-closed on a missing scope — it
+    // is a different, smaller catalog, not a cheaper copy of the scoped answer.
+    const context = personalWorkspaceContext();
+    const scopedIds: string[] = [];
+    let headerlessReads = 0;
+    // Each read gets its own Response: a shared body can only be read once, so
+    // reusing one would hide a join behind a parse error instead of a count.
+    const gates: Array<ReturnType<typeof deferred<Response>>> = [];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const workspaceId = headers['x-od-workspace-id'];
+      if (workspaceId) scopedIds.push(workspaceId);
+      else headerlessReads += 1;
+      const gate = deferred<Response>();
+      gates.push(gate);
+      return gate.promise;
+    }));
+
+    const headerless = fetchDesignSystemsResult(null);
+    const scoped = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(headerlessReads + scopedIds.length).toBe(2));
+    expect(headerlessReads).toBe(1);
+    expect(scopedIds).toEqual([context.workspaceId]);
+
+    for (const gate of gates) {
+      gate.resolve(new Response(JSON.stringify({ designSystems: [] }), { status: 200 }));
+    }
+    await Promise.all([headerless, scoped]);
+  });
+
 });
 
 describe('fetchAgentsStream', () => {
