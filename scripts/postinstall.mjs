@@ -24,6 +24,7 @@ const buildTargets = [
   "packages/sidecar",
   "packages/diagnostics",
   "packages/dsh-runtime",
+  "packages/scene3d",
   "apps/daemon",
   "tools/dev",
   "tools/pack",
