@@ -329,10 +329,90 @@ describe('waitForPrintableContent', () => {
     expect(scripts[0]).toContain("document.querySelectorAll('iframe')");
     expect(scripts[0]).toContain("frame.addEventListener('load'");
     expect(scripts[0]).toContain("frame.addEventListener('error'");
+    expect(scripts[0]).not.toContain('performance.getEntriesByName');
     expect(scripts[0]).toContain('style.backgroundImage');
     expect(scripts[0]).toContain('style.borderImageSource');
     expect(scripts[0]).toContain('style.listStyleImage');
     expect(scripts[0]).toContain('.then(nextFrame)');
+  });
+
+  test('does not treat another completed frame with the same URL as proof a pending frame loaded', async () => {
+    vi.useFakeTimers();
+    try {
+      const pendingListeners: Record<string, (() => void) | undefined> = {};
+      const sharedUrl = 'https://example.test/adapter.html';
+      const loadedFrame = {
+        src: sharedUrl,
+        contentDocument: { readyState: 'complete' },
+        addEventListener: vi.fn(),
+      };
+      const pendingFrame = {
+        src: sharedUrl,
+        get contentDocument() {
+          throw new Error('cross-origin');
+        },
+        addEventListener(event: string, listener: () => void) {
+          pendingListeners[event] = listener;
+        },
+      };
+      const document = {
+        fonts: undefined,
+        images: [],
+        querySelectorAll(selector: string) {
+          return selector === 'iframe' ? [loadedFrame, pendingFrame] : [];
+        },
+      };
+      const browserWindow = {
+        getComputedStyle() {
+          return { backgroundImage: 'none', borderImageSource: 'none', listStyleImage: 'none' };
+        },
+      };
+      const resourceTiming = {
+        getEntriesByName(url: string) {
+          return url === sharedUrl ? [{ responseEnd: 1 }] : [];
+        },
+      };
+      let settled = false;
+      const window = {
+        webContents: {
+          async executeJavaScript(script: string) {
+            const evaluate = new Function(
+              'document',
+              'window',
+              'Image',
+              'requestAnimationFrame',
+              'performance',
+              `return ${script};`,
+            );
+            return evaluate(
+              document,
+              browserWindow,
+              class {},
+              (callback: () => void) => callback(),
+              resourceTiming,
+            ) as Promise<unknown>;
+          },
+        },
+      };
+
+      const waiting = waitForPrintableContent(
+        window as unknown as Parameters<typeof waitForPrintableContent>[0],
+      ).then(() => {
+        settled = true;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(settled).toBe(false);
+      expect(pendingListeners.load).toBeTypeOf('function');
+
+      pendingListeners.load?.();
+      await waiting;
+
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // Regression boundary for the packaged export hang.

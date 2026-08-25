@@ -381,27 +381,16 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
 
       function waitForEmbeddedFrames() {
         return Promise.all(Array.from(document.querySelectorAll('iframe')).map(function(frame) {
-          // Same-origin/srcdoc frames expose readiness directly. For an
-          // already-loaded cross-origin frame, Resource Timing is the only
-          // parent-readable completion signal; otherwise subscribe before its
-          // load/error event and retain the same bounded-wait behavior as
-          // images and fonts.
+          // Same-origin/srcdoc frames expose readiness directly. Cross-origin
+          // frames must settle through this specific element's load/error
+          // lifecycle; a URL-level resource entry is not proof that this frame
+          // finished, because another frame (or an older navigation) can share
+          // the same URL.
           try {
             if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
               return Promise.resolve();
             }
           } catch {}
-          var frameUrl = frame.src;
-          if (
-            frameUrl &&
-            typeof performance !== 'undefined' &&
-            typeof performance.getEntriesByName === 'function' &&
-            performance.getEntriesByName(frameUrl).some(function(entry) {
-              return Number(entry.responseEnd) > 0;
-            })
-          ) {
-            return Promise.resolve();
-          }
           return withDeadline(new Promise(function(resolve) {
             frame.addEventListener('load', resolve, { once: true });
             frame.addEventListener('error', resolve, { once: true });
