@@ -111,6 +111,14 @@ export interface OdNextStrategyStableRequestContextV2 {
    * the staged shells on disk.
    */
   deviceFrame?: OdNextDeviceFrameContextV2 | undefined;
+  /**
+   * The structure-only layout primitives stylesheet the prototype profile
+   * ships (`layout.css`), quoted as a fact for every prototype run so the
+   * Build holds real classes for stacked text, truncation, rails, and screen
+   * chrome instead of re-deriving them per component. Omitted for profiles
+   * that ship none.
+   */
+  layoutPrimitivesCss?: string | undefined;
   craftBody?: string | undefined;
   craftSections?: string[] | undefined;
   memoryBody?: string | undefined;
@@ -508,6 +516,7 @@ export function composeOdNextStrategyStableRequestContextV2(
     });
     factualText('device-frame-shell', context.deviceFrame.shellHtml);
   }
+  factualText('layout-primitives', context.layoutPrimitivesCss);
   instructionText('personal-memory', context.memoryBody);
   instructionText('user-custom-instructions', context.userInstructions);
   instructionText('project-custom-instructions', context.projectInstructions);

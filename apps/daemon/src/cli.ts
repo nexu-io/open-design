@@ -439,6 +439,14 @@ Inspect or reset the OD Next safety latch for this daemon instance. Reset is
 compare-and-swap protected; when --expected-revision is omitted the CLI first
 reads status and submits that exact revision.
 
+OD Next is opt-in and off until this installation asks for it:
+
+  od config set odNextStrategyMode active    Opt in; takes effect next run.
+  od config set odNextStrategyMode off       Opt back out.
+
+The status subcommand reports which authority set the mode in effect (env /
+app_config / default), so you can confirm the configuration landed.
+
 Options:
   --expected-revision <n>  Reset only the status revision you inspected.
   --json                   Emit the daemon response as JSON.
@@ -449,6 +457,7 @@ function printStrategyRolloutStatus(status) {
   console.log(`Strategy\t${status.strategyId}`);
   console.log(`Scope\t${status.scope}`);
   console.log(`Requested mode\t${status.requestedMode}`);
+  if (status.requestedModeSource) console.log(`Requested by\t${status.requestedModeSource}`);
   console.log(`Effective mode\t${status.effectiveMode}`);
   console.log(`Latch\t${status.latch?.mode ?? 'none'}`);
   if (status.latch?.reasonCode) console.log(`Reason\t${status.latch.reasonCode}`);
@@ -2366,6 +2375,14 @@ Options:
                        before calls and safely retries reads when the
                        daemon changes ports, so an existing task can
                        survive an OpenDesign restart.
+
+Environment:
+  OD_MCP_STDIO_IDLE_EXIT_MS
+                       Milliseconds without MCP activity before this
+                       stdio process exits. Defaults to 1800000 (30
+                       minutes), is capped at 86400000 (24 hours), and
+                       can be set to 0 to keep the process alive until
+                       the MCP client disconnects.
 
 Tools exposed:
   list_projects                  list every OpenDesign project

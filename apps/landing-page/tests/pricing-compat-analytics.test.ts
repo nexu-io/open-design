@@ -90,7 +90,7 @@ describe('migrated Pricing compatibility analytics', () => {
     assert.deepEqual(testHarness.requests, []);
   });
 
-  it('emits resolved Go Plus Pro Max yearly exposures with literal legacy facts', () => {
+  it('emits resolved Free Plus Pro Max yearly exposures with literal legacy facts', () => {
     const testHarness = harness();
     resolve(testHarness);
 

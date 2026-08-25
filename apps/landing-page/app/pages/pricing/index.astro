@@ -5,11 +5,12 @@
  * Card LAYOUT + COPY mirror the vela subscription modal (`pricing-plans.tsx`).
  * Plus/Pro/Max and Team NUMBERS come from `PRICING_SNAPSHOT` at build time.
  * Go's confirmed launch prices come from the colocated `GO_PLAN` source shared
- * with SEO and tests. The localized TEXT comes from
+ * with SEO metadata. The localized TEXT comes from
  * app/_lib/pricing-content.ts and app/_lib/pricing-team-content.ts.
  */
 import Layout from '../../_components/sub-page-layout.astro';
 import PricingIndividualPlans from '../../_components/pricing-individual-plans.astro';
+import PricingCampaignBanner from '../../_components/pricing-campaign-banner.astro';
 import {
   CLOUD_CONSOLE_BASE_PARAM,
   CLOUD_CONSOLE_URL,
@@ -37,10 +38,8 @@ import {
 } from '../../_lib/pricing-extras-content';
 import { localeFromPath, localizedHref } from '../../i18n';
 import { DEEPSEEK_V4_PRO_CAMPAIGN } from '../../_lib/deepseek-v4-pro-campaign';
-import { getPricingCampaignContent } from '../../_lib/pricing-campaign-content';
 
 const locale = localeFromPath(Astro.url.pathname);
-const isZh = locale === 'zh' || locale === 'zh-tw';
 const href = (path: string) => localizedHref(path, locale);
 const content = getPricingContent(locale);
 const planActionLabels = getPricingPlanActionLabels(locale);
@@ -108,7 +107,6 @@ function teamView(tier: TeamPlanTierConfig, interval: 'monthly' | 'yearly') {
 
 const initialTeamView = teamView(initialTeamTier, 'yearly');
 
-const deepSeekCampaign = getPricingCampaignContent(locale);
 const comingSoonLabel = L.comingSoon
   .trim()
   .replace(/^[（(]\s*/, '')
@@ -135,7 +133,7 @@ const jsonLd = [
         name: 'OpenDesign Go',
         price: String(GO_PLAN.monthly.priceUsd),
         priceCurrency: 'USD',
-        url: cloudSubscribeUrl('go', 'monthly'),
+        url: CLOUD_CONSOLE_URL,
       },
       ...tiers.map((t) => ({
         '@type': 'Offer',
@@ -182,6 +180,8 @@ const jsonLd = [
   jsonLd={jsonLd}
   showHeaderAccount
 >
+  <PricingCampaignBanner locale={locale} />
+
   <nav class="breadcrumb" aria-label="Breadcrumb">
     <a href={href('/')}>OpenDesign</a>
     <span>/</span>
@@ -197,6 +197,7 @@ const jsonLd = [
     data-cloud-console-environment="production"
     data-billing-api-origin={apiOrigin}
     data-current-plan-label={planActionLabels.current}
+    data-subscribe-plan-label={planActionLabels.subscribe}
     data-current-canceling-label={planActionLabels.currentCanceling}
     data-downgrade-plan-label={planActionLabels.downgrade}
     data-upgrade-plan-label={planActionLabels.upgrade}
@@ -211,7 +212,7 @@ const jsonLd = [
     data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive}
   >
     <header class="pr-hero">
-      <h1 class="pr-hero-heading">{isZh ? '零配置，只为结果付费' : locale === 'en' ? 'Zero setup. Pay only for results.' : L.heroTitle}</h1>
+      <h1 class="pr-hero-heading">{L.heroTitle}</h1>
       <div class="pr-controls-row">
         <div class="pr-toggle" role="tablist" aria-label={teamContent.billingIntervalLabel}>
           <button type="button" class="pr-toggle-btn" role="tab" data-interval-btn="monthly" aria-selected="false">
@@ -233,7 +234,7 @@ const jsonLd = [
             aria-selected="true"
             tabindex="0"
           >
-            {isZh ? '个人' : locale === 'en' ? 'Individual' : teamContent.creatorTab}
+            {teamContent.creatorTab}
           </button>
           <span class="pr-audience-separator" aria-hidden="true">/</span>
           <button
@@ -246,7 +247,7 @@ const jsonLd = [
             aria-selected="false"
             tabindex="-1"
           >
-            {isZh ? '团队' : locale === 'en' ? 'Team' : teamContent.teamTab}
+            {teamContent.teamTab}
           </button>
         </div>
       </div>
@@ -399,27 +400,6 @@ const jsonLd = [
             {fillTemplate(teamContent.minSeatsNote, { count: String(initialTeamTier.minSeats) })}
           </p>
 
-          <div class="pr-team-model-offer" data-pricing-campaign-surface hidden>
-            <span class="pr-team-model-offer-copy">
-              <strong>{deepSeekCampaign.teamOfferTitle}</strong>
-              <small>{deepSeekCampaign.teamOfferModels}</small>
-            </span>
-            <span
-              class="pr-team-offer-countdown"
-              data-team-campaign-countdown
-              aria-label={deepSeekCampaign.windowLabel}
-            >
-              <b data-team-countdown-days data-day-unit={deepSeekCampaign.dayUnit}>
-                0{deepSeekCampaign.dayUnit}
-              </b>
-              <b data-team-countdown-hours>00</b>
-              <i aria-hidden="true">:</i>
-              <b data-team-countdown-minutes>00</b>
-              <i aria-hidden="true">:</i>
-              <b data-team-countdown-seconds>00</b>
-            </span>
-          </div>
-
           <ul class="pr-team-feature-list">
             {teamContent.teamFeatures.map((feature) => <li>{feature}</li>)}
           </ul>
@@ -458,20 +438,19 @@ const jsonLd = [
     </div>
 
     <p class="pr-foot" set:html={footnoteHtml} />
-    <p class="pr-campaign-disclaimer" data-pricing-campaign-surface hidden>{deepSeekCampaign.disclaimer}</p>
-  </article>
 
-  <section class="pr-faq" aria-label={faqTitle}>
-    <h2 class="pr-faq-title">{faqTitle}</h2>
-    <div class="pr-faq-list">
-      {faqs.map((faq) => (
-        <details class="pr-faq-item">
-          <summary class="pr-faq-q">{faq.q}</summary>
-          <div class="pr-faq-a">{faq.a}</div>
-        </details>
-      ))}
-    </div>
-  </section>
+    <section class="pr-faq" aria-label={faqTitle}>
+      <h2 class="pr-faq-title">{faqTitle}</h2>
+      <div class="pr-faq-list">
+        {faqs.map((faq) => (
+          <details class="pr-faq-item">
+            <summary class="pr-faq-q">{faq.q}</summary>
+            <div class="pr-faq-a">{faq.a}</div>
+          </details>
+        ))}
+      </div>
+    </section>
+  </article>
 
   {/* Enterprise lead-capture modal — opened by the Enterprise card CTA.
       Renders the SAME shared lead form as /enterprise
@@ -495,37 +474,14 @@ const jsonLd = [
       const root = document.querySelector('[data-pricing-root]');
       if (!root) return;
 
-      const campaignSurfaces = root.querySelectorAll('[data-pricing-campaign-surface]');
       const campaignStartAt = Date.parse(root.getAttribute('data-campaign-start-at') || '');
       const campaignEndAt = Date.parse(root.getAttribute('data-campaign-end-at') || '');
-      const teamCampaignCountdown = root.querySelector('[data-team-campaign-countdown]');
-      const teamCountdownDays = root.querySelector('[data-team-countdown-days]');
-      const teamCountdownHours = root.querySelector('[data-team-countdown-hours]');
-      const teamCountdownMinutes = root.querySelector('[data-team-countdown-minutes]');
-      const teamCountdownSeconds = root.querySelector('[data-team-countdown-seconds]');
       let campaignEligible = false;
       let campaignVisible = false;
-      const updateTeamCampaignCountdown = (now) => {
-        if (!teamCampaignCountdown) return;
-        const remaining = Math.max(0, campaignEndAt - now);
-        const totalSeconds = Math.floor(remaining / 1000);
-        const days = Math.floor(totalSeconds / 86400);
-        const hours = Math.floor((totalSeconds % 86400) / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-        if (teamCountdownDays) {
-          teamCountdownDays.textContent = `${days}${teamCountdownDays.getAttribute('data-day-unit') || ''}`;
-        }
-        if (teamCountdownHours) teamCountdownHours.textContent = String(hours).padStart(2, '0');
-        if (teamCountdownMinutes) teamCountdownMinutes.textContent = String(minutes).padStart(2, '0');
-        if (teamCountdownSeconds) teamCountdownSeconds.textContent = String(seconds).padStart(2, '0');
-      };
       const updateCampaignVisibility = () => {
         const now = Date.now();
         campaignEligible = now >= campaignStartAt && now < campaignEndAt;
         campaignVisible = campaignEligible;
-        campaignSurfaces.forEach((surface) => { surface.hidden = !campaignVisible; });
-        updateTeamCampaignCountdown(now);
         return campaignVisible;
       };
       updateCampaignVisibility();
@@ -668,10 +624,6 @@ const jsonLd = [
             continue;
           }
           const tier = cta.getAttribute('data-tier') || '';
-          if (tier === 'free') {
-            cta.setAttribute('href', cloudConsoleDashboardUrl);
-            continue;
-          }
           if (tier === 'team') {
             const selectedTier = teamTiers.find(
               (candidate) =>
@@ -1140,6 +1092,7 @@ const jsonLd = [
       const apiOrigin = pricingRoot.getAttribute('data-billing-api-origin') || '';
       const personalTiers = new Set(['go', 'plus', 'pro', 'max']);
       const actionLabels = {
+        subscribe: pricingRoot.getAttribute('data-subscribe-plan-label') || '',
         current: pricingRoot.getAttribute('data-current-plan-label') || '',
         currentCanceling: pricingRoot.getAttribute('data-current-canceling-label') || '',
         downgrade: pricingRoot.getAttribute('data-downgrade-plan-label') || '',
@@ -1218,7 +1171,7 @@ const jsonLd = [
           } else if (action.kind === 'checkout_unavailable') {
             text = actionLabels.checkoutUnavailable;
           } else if (action.kind === 'downgrade_unavailable') {
-            text = fillActionLabel(actionLabels.downgrade, { plan });
+            text = actionLabels.subscribe;
           }
           if (label) label.textContent = text;
           if (action.enabled) {
@@ -1378,7 +1331,6 @@ const jsonLd = [
 </Layout>
 
 <style>
-  .pr-page [data-pricing-campaign-surface][hidden] { display: none !important; }
   .pr-page[data-first-month-intro-eligible='false'] [data-intro-only] { display: none !important; }
   .pr-subscription-status {
     max-width: 720px;
@@ -1406,41 +1358,6 @@ const jsonLd = [
     line-height: 1.5;
     text-align: center;
   }
-  .pr-campaign-disclaimer {
-    width: 100%;
-    max-width: none;
-    margin: 0 0 36px;
-    padding: 0;
-    color: var(--ink-soft, #666);
-    font-size: .82rem;
-    line-height: 1.6;
-    text-align: center;
-    opacity: .76;
-  }
-  .pr-feat.pr-campaign-model-benefit,
-  .pr-team-feature-list .pr-campaign-model-benefit {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-left: -8px;
-    margin-right: -8px;
-    padding: 8px 10px 8px 30px;
-    border: 1px solid color-mix(in srgb, #68f22e 30%, transparent);
-    border-radius: 10px;
-    color: inherit;
-    background: color-mix(in srgb, #68f22e 7%, transparent);
-  }
-  .pr-campaign-model-benefit > div {
-    display: grid;
-    gap: 2px;
-    min-width: 0;
-  }
-  .pr-campaign-model-benefit strong { font-weight: 780; }
-  .pr-campaign-model-benefit small { color: var(--muted); font-size: .72rem; font-weight: 500; }
-  /* The highlighted row expands 8px beyond the regular list. Offset its
-     checkmark back by the same amount so it shares the column below. */
-  .pr-campaign-model-benefit::before { left: 8px; }
   /* ---- Hero ---- */
   .pr-hero {
     display: flex;
@@ -1557,9 +1474,9 @@ const jsonLd = [
     grid-template-columns: minmax(0, 1.35fr) minmax(420px, 1fr);
     gap: 36px;
     align-items: center;
-    width: min(1160px, calc(100vw - 48px));
+    width: min(1200px, 96vw);
     max-width: none;
-    margin: 28px auto 0;
+    margin: 64px 0 0;
     padding: 30px 34px;
     overflow: hidden;
     transform: translateX(-50%);
@@ -1909,60 +1826,6 @@ const jsonLd = [
   .pr-team-stepper button:disabled { cursor: not-allowed; opacity: 0.35; }
   .pr-team-stepper output { min-width: 2ch; text-align: center; color: #2e302c; font-size: 13px; font-weight: 400; }
   .pr-team-min-seats { margin: 9px 0 0; font-size: 9px; }
-  .pr-team-model-offer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    min-height: 68px;
-    margin-top: 18px;
-    padding: 12px 14px;
-    border-radius: 8px;
-    background: #eef5e9;
-  }
-  .pr-team-model-offer-copy {
-    display: block;
-    min-width: 0;
-  }
-  .pr-team-model-offer-copy strong {
-    display: block;
-    color: #292b27;
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1.35;
-  }
-  .pr-team-model-offer-copy small {
-    display: block;
-    margin-top: 3px;
-    color: #565a53;
-    font-size: 9px;
-    font-weight: 400;
-    line-height: 1.35;
-  }
-  .pr-team-offer-countdown {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 5px;
-  }
-  .pr-team-offer-countdown b {
-    display: grid;
-    min-width: 34px;
-    height: 38px;
-    place-items: center;
-    padding: 0 7px;
-    border-radius: 8px;
-    background: #dcf2d4;
-    color: #188c10;
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-  .pr-team-offer-countdown i {
-    color: #188c10;
-    font-size: 12px;
-    font-style: normal;
-  }
   .pr-team-feature-list {
     list-style: none;
     margin: 18px 0 22px;
@@ -1987,15 +1850,6 @@ const jsonLd = [
     color: #188c10;
     font-size: 14px;
     line-height: 1.2;
-  }
-  /* The campaign row extends 8px outside the list. Match that offset with a
-     more specific rule so its checkmark stays on the exact same x-axis as
-     every standard team benefit below it. */
-  .pr-team-feature-list li.pr-campaign-model-benefit::before {
-    left: 8px;
-    top: 18px;
-    line-height: 1;
-    transform: translateY(-50%);
   }
   .pr-team-checkout {
     width: calc(100% - 2px);
@@ -2022,7 +1876,6 @@ const jsonLd = [
   @media (max-width: 520px) {
     .pr-team-card { padding: 22px; }
     .pr-team-controls { grid-template-columns: 1fr; }
-    .pr-team-model-offer { align-items: flex-start; flex-direction: column; }
     .pr-audience-btn { min-width: 0; flex: 1; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -2033,7 +1886,12 @@ const jsonLd = [
   }
 
   /* ---- FAQ ---- */
-  .pr-faq { max-width: 760px; margin: 72px auto 0; }
+  .pr-faq {
+    width: 100%;
+    max-width: 760px;
+    margin: 72px auto 0;
+    padding: 0;
+  }
   .pr-faq-title {
     margin: 0 0 28px;
     text-align: center;

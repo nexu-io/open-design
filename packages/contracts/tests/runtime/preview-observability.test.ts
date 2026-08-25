@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PREVIEW_OBSERVABILITY_BRIDGE_MARKER,
   PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
+  PREVIEW_OBSERVABILITY_PROTOCOL_VERSION,
   buildPreviewObservabilityBridge,
   parsePreviewObservabilityMessage,
 } from '../../src/runtime/preview-observability.js';
@@ -21,6 +22,30 @@ describe('preview observability contract', () => {
     expect(bridge).toContain('detail.source_url = text(event && event.filename, 1000)');
     expect(bridge).toContain('var MAX_EVENTS = 12');
     expect(bridge).not.toContain('JSON.stringify(arguments)');
+  });
+
+  // OPEND-2147: a deck whose stage collapses to scale ~0 renders as an empty
+  // frame while every existing signal stays clean -- the artifact loaded, no
+  // script threw, and `visiblePaintCount()` still sees painted chrome, so
+  // `white_screen` never fires.
+  //
+  // This only checks that the bridge carries the probe and its fields at all.
+  // Whether the probe fires on the shapes decks are actually authored in --
+  // `<deck-stage>` shadow canvas, `.deck-stage`, template `.stage` -- is
+  // behavioural and is covered by executing the bridge in
+  // apps/web/tests/observability/preview-deck-stage-probe.test.ts. A
+  // string-contains assertion cannot tell those apart.
+  it('carries the deck stage probe and its measurement fields', () => {
+    const bridge = buildPreviewObservabilityBridge();
+    expect(bridge).toContain('deck_stage_unscaled');
+    for (const field of ['stage_scale_permille', 'stage_transform', 'stage_kind', 'canvas_width', 'elapsed_ms']) {
+      expect(bridge).toContain(field);
+    }
+    // The selector family the export path already targets, so the two cannot
+    // drift apart silently.
+    for (const selector of ['deck-stage', '#deck-stage, .deck-stage', '.canvas']) {
+      expect(bridge).toContain(selector);
+    }
   });
 
   it('accepts only the versioned preview observability wire shape', () => {
@@ -67,6 +92,32 @@ describe('preview observability contract', () => {
       sample_interval_ms: 1_500,
     });
     expect(parsed).not.toHaveProperty('ignored');
+  });
+
+  it('accepts the deck stage measurement as a versioned event', () => {
+    expect(parsePreviewObservabilityMessage({
+      type: PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
+      version: PREVIEW_OBSERVABILITY_PROTOCOL_VERSION,
+      event: 'deck_stage_unscaled',
+      stage_scale_permille: 0,
+      stage_transform: 'matrix',
+      stage_kind: 'deck-stage',
+      stage_width: 0,
+      stage_height: 0,
+      canvas_width: 1920,
+      canvas_height: 1080,
+      viewport_width: 1075,
+      viewport_height: 530,
+      elapsed_ms: 5000,
+    })).toMatchObject({
+      event: 'deck_stage_unscaled',
+      stage_kind: 'deck-stage',
+      stage_transform: 'matrix',
+      stage_width: 0,
+      canvas_width: 1920,
+      canvas_height: 1080,
+      elapsed_ms: 5000,
+    });
   });
 
   it('rejects known fields with invalid types', () => {

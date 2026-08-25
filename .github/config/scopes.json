@@ -5,6 +5,7 @@
     "web_tests_required",
     "tools_dev_tests_required",
     "tools_pack_tests_required",
+    "terminal_scene_required",
     "windows_tools_pack_payload_tests_required",
     "ui_critical_validation_required",
     "ui_p0_validation_required",
@@ -155,6 +156,14 @@
         "exclude": ["match://packaged-leaf"]
       },
       "effects": ["tools_pack_tests_required"], "confidence": "medium"
+    },
+    {
+      "id": "terminal-scene-sources",
+      "match": {
+        "prefixes": ["apps/closure/", "packages/standalone/", "shells/terminal/"],
+        "exact": [".github/scripts/pack.py", ".github/scripts/release.py", ".github/workflows/release-exact.yml"]
+      },
+      "effects": ["terminal_scene_required", "workspace_validation_required"], "confidence": "certain"
     },
     {
       "id": "workspace-manifests-and-ci",

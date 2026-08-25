@@ -616,3 +616,14 @@ describe('handheld device shell in the stable request context', () => {
     expect(composeOdNextStrategyStableRequestContextV2({})).toBe('');
   });
 });
+
+describe('layout primitives in the stable request context', () => {
+  it('quotes the stylesheet as a fact and omits the block when the profile ships none', () => {
+    const css = '/* OD-LAYOUT-PRIMITIVES v1 */\n@layer od-layout { .od-stack { display: flex; } }\n/* /OD-LAYOUT-PRIMITIVES v1 */';
+    const prompt = composeOdNextStrategyStableRequestContextV2({ layoutPrimitivesCss: css });
+    expect(prompt).toContain('<od-next-context kind="fact" name="layout-primitives">');
+    expect(prompt).toContain(css);
+    expect(prompt).not.toContain('kind="instruction" name="layout-primitives"');
+    expect(composeOdNextStrategyStableRequestContextV2({ memoryBody: 'x' })).not.toContain('layout-primitives');
+  });
+});

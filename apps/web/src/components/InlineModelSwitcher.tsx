@@ -34,7 +34,7 @@ import {
   type AmrEntryAttribution,
 } from '../analytics/amr-attribution';
 import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
-import { isUnlimitedModelForPlanTier } from '../runtime/amr-unlimited-models';
+import { codingPlanModelDecision } from '../runtime/amr-unlimited-models';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
   trackDeepSeekCampaignModelBenefitSurfaceView,
@@ -51,9 +51,7 @@ import {
   useWorkspaceBillingResponse,
   useWorkspaceContext,
   workspaceBillingBalanceUsd,
-  workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
-import { resolvePlanLabelTier } from '../collab/team-plan';
 import { KNOWN_PROVIDERS } from '../state/config';
 import { fetchProviderModels } from '../providers/provider-models';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
@@ -741,24 +739,6 @@ export function InlineModelSwitcher({
     && config.mode === 'daemon'
     && currentAgent?.id === 'amr';
 
-  // The 「无限使用」 badge has TWO sources and the campaign is only one of them.
-  // The standing one is the subscription itself: Pricing sells an unlimited set
-  // per tier (3 models on Go … 8 on Max), so a Pro subscriber's Kimi K2.7 Code
-  // is unlimited whether or not a campaign is running. Wiring the badge to the
-  // campaign alone left every one of those models unmarked.
-  const planTier = resolvePlanLabelTier({
-    billing: workspaceBillingSummaryForContext(
-      workspaceBillingResponse,
-      workspaceContext,
-    ),
-    context: workspaceContext,
-    // Account-scoped plan is a personal-workspace answer only — a team
-    // workspace's entitlement is never named by the signed-in account's tier.
-    accountPlan:
-      workspaceContextLoading || workspaceContext?.workspaceType === 'team'
-        ? null
-        : amrStatus?.account?.plan,
-  });
   const unlimitedBadgeForModel = useCallback(
     (
       modelId: string | null | undefined,
@@ -777,7 +757,14 @@ export function InlineModelSwitcher({
           stateClass: campaignBadgeStateClass,
         };
       }
-      if (!isUnlimitedModelForPlanTier(modelId, planTier)) return null;
+      if (
+        workspaceContextLoading
+        || workspaceContext?.workspaceType !== 'personal'
+      ) return null;
+      if (
+        codingPlanModelDecision(amrWalletSnapshot?.codingPlanModels, modelId)
+        !== true
+      ) return null;
       // Badge text only — the campaign's rule-summary tooltip is campaign copy
       // and there is no product-written line for the plan case, so this branch
       // carries no tooltip rather than an invented one.
@@ -794,7 +781,9 @@ export function InlineModelSwitcher({
       config.mode,
       currentAgent?.id,
       deepSeekCampaignVisibleForCurrentExecution,
-      planTier,
+      amrWalletSnapshot?.codingPlanModels,
+      workspaceContext?.workspaceType,
+      workspaceContextLoading,
       t,
     ],
   );

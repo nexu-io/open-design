@@ -154,6 +154,9 @@ export const GO_PLAN = {
   yearly: { priceUsd: 60 },
 } as const;
 
+/** New Go checkouts are closed; existing Go subscribers keep current-plan actions. */
+export const GO_PLAN_SOLD_OUT = true;
+
 /**
  * Stable Vela contract for opening the generic billing entry. Specific plan
  * CTAs use `cloudSubscribeUrl` so Vela can start checkout without reopening a

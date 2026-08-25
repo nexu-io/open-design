@@ -23,6 +23,30 @@ describe('runLifecycleMarkersForStreamEvent', () => {
       firstArtifactWrite: false,
     });
   });
+
+  // The plain / BYOK / antigravity family answers on `stdout`, not on the
+  // structured `agent` stream. Without this the whole family reports no visible
+  // output and falls back to its first token — which for antigravity (stdout is
+  // buffered until close) hides the entire wait the user actually sat through.
+  it('counts stdout chunks as visible model output', () => {
+    expect(
+      runLifecycleMarkersForStreamEvent('stdout', { chunk: 'Here is your answer.' }),
+    ).toEqual({
+      firstVisibleOutput: true,
+      firstArtifactWrite: false,
+    });
+  });
+
+  // stderr is a diagnostic channel. A CLI warning is not the model's answer and
+  // must not satisfy "the user can see something".
+  it('does not count stderr as visible model output', () => {
+    expect(
+      runLifecycleMarkersForStreamEvent('stderr', { chunk: 'warning: slow start' }),
+    ).toEqual({
+      firstVisibleOutput: false,
+      firstArtifactWrite: false,
+    });
+  });
 });
 
 describe('createRunLifecycleTracer', () => {

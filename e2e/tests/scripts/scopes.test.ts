@@ -120,6 +120,27 @@ describe("workflow scope planner", () => {
     }
   });
 
+  test("routes Terminal exact sources and release orchestration to scene validation", () => {
+    for (const file of [
+      "apps/closure/src/index.ts",
+      "packages/standalone/src/store.ts",
+      "shells/terminal/src/cli.ts",
+      ".github/scripts/pack.py",
+      ".github/scripts/release.py",
+      ".github/workflows/release-exact.yml",
+    ]) {
+      expect(plan("pr", [file]), file).toMatchObject({
+        scopes: { terminal_scene_required: true, workspace_validation_required: true },
+        enabled: { terminal_scene: true, workspace_unit_tests: true },
+        trace: { escalations: [] },
+      });
+    }
+    expect(plan("pr", ["docs/spec.md"])).toMatchObject({
+      scopes: { terminal_scene_required: false },
+      enabled: { terminal_scene: false },
+    });
+  });
+
   test("directly owns promoted merge-queue routing", () => {
     expect(plan("merge-queue", ["docs/spec.md"])).toMatchObject({
       enabled: { preflight: true, workspace_unit_tests: false, e2e_vitest: false },

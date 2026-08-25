@@ -64,7 +64,8 @@ function personalPlanFacts(
   interval: BillingInterval,
   firstMonthEligible: boolean,
 ) {
-  const introOfferApplied = firstMonthEligible && interval === 'monthly';
+  const introOfferApplied =
+    firstMonthEligible && interval === 'monthly';
   const priceUsd = interval === 'monthly'
     ? introOfferApplied
       ? tier.monthly.introPriceUsd

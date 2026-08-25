@@ -6,6 +6,7 @@ import type {
   OdNextRolloutClearReasonCode,
   OdNextRolloutControlReasonCode,
   OdNextRolloutMode,
+  OdNextRolloutModeSource,
   OdNextRolloutStopReasonCode,
   OdNextRolloutTaskType,
 } from '@open-design/contracts';
@@ -13,11 +14,22 @@ import type {
 export type {
   OdNextRolloutDecision,
   OdNextRolloutMode,
+  OdNextRolloutModeSource,
   OdNextRolloutTaskType,
 } from '@open-design/contracts';
 
+/**
+ * The single app-config field this policy consults. Structural on purpose: the
+ * daemon's `AppConfigPrefs`, a partially read config, and a test literal all
+ * satisfy it without this module depending on the config reader.
+ */
+export interface OdNextRolloutAppConfig {
+  odNextStrategyMode?: OdNextRolloutMode | null | undefined;
+}
+
 export interface OdNextRolloutPolicy {
   requestedMode: OdNextRolloutMode;
+  requestedModeSource: OdNextRolloutModeSource;
   assignmentPercent: number;
   assignmentSalt: string;
   contentEnabled: boolean;
@@ -45,13 +57,43 @@ function list(value: string | undefined): string[] {
   return (value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-function mode(value: string | undefined): OdNextRolloutMode {
-  if (value === undefined || value.trim() === '') return 'active';
-  return value === 'observe' || value === 'active' ? value : 'off';
+function envMode(value: string | undefined): OdNextRolloutMode | null {
+  const trimmed = value?.trim() ?? '';
+  if (trimmed === '') return null;
+  return trimmed === 'observe' || trimmed === 'active' ? trimmed : 'off';
+}
+
+function configuredMode(value: unknown): OdNextRolloutMode | null {
+  return value === 'off' || value === 'observe' || value === 'active' ? value : null;
+}
+
+/**
+ * Which authority decides the requested mode, and what it decided.
+ *
+ * OD Next is opt-in. An installation that configured nothing runs `off` — the
+ * ordinary strategy route — so shipping the strategy in a build never changes
+ * how a run behaves until someone asks for it.
+ *
+ * `OD_NEXT_STRATEGY_ROLLOUT` outranks the saved `odNextStrategyMode` so that a
+ * pinned process stays pinned: an operator debugging one daemon, a packaged
+ * smoke run, and a test all set the mode for one process without overwriting
+ * the user's choice, and without a user's saved choice overriding theirs. The
+ * config is what survives a restart; the env var is what wins inside one.
+ */
+function resolveRequestedMode(
+  env: NodeJS.ProcessEnv,
+  appConfig: OdNextRolloutAppConfig | null | undefined,
+): { mode: OdNextRolloutMode; source: OdNextRolloutModeSource } {
+  const fromEnv = envMode(env.OD_NEXT_STRATEGY_ROLLOUT);
+  if (fromEnv) return { mode: fromEnv, source: 'env' };
+  const fromConfig = configuredMode(appConfig?.odNextStrategyMode);
+  if (fromConfig) return { mode: fromConfig, source: 'app_config' };
+  return { mode: 'off', source: 'default' };
 }
 
 export function readOdNextRolloutPolicy(
   env: NodeJS.ProcessEnv = process.env,
+  appConfig?: OdNextRolloutAppConfig | null,
 ): OdNextRolloutPolicy {
   const taskTypes = list(env.OD_NEXT_STRATEGY_TASK_TYPES).filter(
     (value): value is OdNextRolloutTaskType => (
@@ -59,8 +101,10 @@ export function readOdNextRolloutPolicy(
     ),
   );
   const percent = Number(env.OD_NEXT_STRATEGY_ASSIGNMENT_PERCENT ?? '100');
+  const requested = resolveRequestedMode(env, appConfig);
   return {
-    requestedMode: mode(env.OD_NEXT_STRATEGY_ROLLOUT),
+    requestedMode: requested.mode,
+    requestedModeSource: requested.source,
     assignmentPercent: Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0,
     assignmentSalt: env.OD_NEXT_STRATEGY_ASSIGNMENT_SALT?.trim() || 'od-next-v2-rollout',
     contentEnabled: bool(env.OD_NEXT_STRATEGY_CONTENT_ENABLED, true),
@@ -371,10 +415,12 @@ export function resetOdNextRolloutStop(
 export function readOdNextRolloutControlStatus(
   db: Database.Database,
   env: NodeJS.ProcessEnv = process.env,
+  appConfig?: OdNextRolloutAppConfig | null,
 ): {
   strategyId: 'od-next-strategy';
   scope: 'daemon_instance';
   requestedMode: OdNextRolloutMode;
+  requestedModeSource: OdNextRolloutModeSource;
   effectiveMode: OdNextRolloutMode;
   latch: null | {
     mode: 'off' | 'observe';
@@ -390,7 +436,7 @@ export function readOdNextRolloutControlStatus(
   };
   resetAllowed: boolean;
 } {
-  const policy = readOdNextRolloutPolicy(env);
+  const policy = readOdNextRolloutPolicy(env, appConfig);
   const row = readOdNextRolloutControlRow(db);
   const latch = row?.mode && row.reasonCode && row.latchedAt != null
     ? { mode: row.mode, reasonCode: row.reasonCode, latchedAt: row.latchedAt }
@@ -404,6 +450,7 @@ export function readOdNextRolloutControlStatus(
     strategyId: 'od-next-strategy',
     scope: 'daemon_instance',
     requestedMode: policy.requestedMode,
+    requestedModeSource: policy.requestedModeSource,
     effectiveMode,
     latch,
     revision: row?.revision ?? 0,

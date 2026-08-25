@@ -1119,11 +1119,26 @@ function PreviewViewportControls({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false);
     };
+    // The click-outside above can only see pointer events that reach THIS
+    // document, and the preview is a sandboxed opaque-origin iframe: a click
+    // landing on it dispatches inside the frame and never reaches the host.
+    // Since the preview is the largest surface on screen, that left the menu
+    // stuck open exactly where users reach to dismiss it (OPEND-2035).
+    //
+    // Focus moving into a frame is the one signal the host does get for that
+    // click. Requiring the frame to actually hold focus keeps an ordinary
+    // app switch — which blurs the window without handing focus to a frame —
+    // from closing a menu the user never dismissed.
+    const onWindowBlur = () => {
+      if (document.activeElement instanceof HTMLIFrameElement) setOpen(false);
+    };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('blur', onWindowBlur);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('blur', onWindowBlur);
     };
   }, [open]);
 
@@ -4021,7 +4036,7 @@ function FileVersionManagerModal({
           <div className="artifact-version-panel__head-actions">
             <button
               type="button"
-              className="artifact-version-panel__close"
+              className="artifact-version-panel__open"
               aria-label={t('fileViewer.versions.open')}
               title={t('fileViewer.versions.open')}
               disabled={!selectedContentMatchesVersion || loadingContent}
@@ -17493,6 +17508,22 @@ function HtmlViewer({
               src={activePreviewSrcUrl}
             />
           )}
+          {/* The overlay covers the whole window, so this is the only exit the
+              user can still reach. Esc is not a substitute: the moment they
+              click a slide to advance, focus moves into the sandboxed preview
+              frame and keyboard events stop reaching the host — leaving the OS
+              window button as the only thing left that looks like "close",
+              which quits the app (OPEND-2156). This control lives in the host
+              document, so it keeps working wherever focus went. */}
+          <button
+            type="button"
+            className="present-exit-btn"
+            onClick={() => closeInTabPresentation()}
+            title={t('fileViewer.exitPresentation')}
+            aria-label={t('fileViewer.exitPresentation')}
+          >
+            <Icon name="close" size={14} />
+          </button>
           {/* Lives INSIDE the overlay (not a body-portaled toast) so it stays
               visible when the overlay is the fullscreen element — a sibling
               toast would be clipped out of the fullscreen render. */}

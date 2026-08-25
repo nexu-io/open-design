@@ -1,6 +1,7 @@
 ---
 import {
   GO_PLAN,
+  GO_PLAN_SOLD_OUT,
   PRICING_SNAPSHOT,
   formatUsd,
   type PlanTierConfig,
@@ -24,8 +25,6 @@ const skillsCount = catalogCounts.skills.toLocaleString('en-US');
 const systemsCount = catalogCounts.systems.toLocaleString('en-US');
 
 type TierId = 'go' | PlanTierId;
-type ModelCategory = 'popular' | 'flagship' | 'image';
-
 interface ModelItem {
   name: string;
   icon: string;
@@ -71,23 +70,7 @@ const imageModels: ModelItem[] = [
   { name: 'GPT Image 2', icon: '/agents/openai.svg' },
 ];
 
-const unlimitedByTier: Record<TierId, Set<string>> = {
-  go: new Set(['DeepSeek V4 Flash Vision Exp', 'DeepSeek V4 Flash', 'DeepSeek V4 Pro', 'GLM-5.2']),
-  plus: new Set(['DeepSeek V4 Flash Vision Exp', 'DeepSeek V4 Flash', 'DeepSeek V4 Pro', 'GLM-5.2', 'Kimi K2.7 Code']),
-  // Pro includes GLM-5.2, not MiniMax M2.7: every tier from Go up carries
-  // GLM-5.2, while MiniMax M2.7 stays metered until Max.
-  pro: new Set([
-    'DeepSeek V4 Flash Vision Exp',
-    'DeepSeek V4 Flash',
-    'DeepSeek V4 Pro',
-    'GLM-5.2',
-    'Kimi K2.7 Code',
-    'MiMo V2.5 Pro',
-  ]),
-  max: new Set(popularModels.map((model) => model.name)),
-};
-
-const popularModelDisplayOrder = [
+const cardPopularModels = [
   'DeepSeek V4 Flash Vision Exp',
   'DeepSeek V4 Flash',
   'DeepSeek V4 Pro',
@@ -97,10 +80,7 @@ const popularModelDisplayOrder = [
   'MiniMax M2.7',
   'Kimi K2.6',
   'GLM-5.1',
-];
-
-const orderedPopularModels = () =>
-  popularModelDisplayOrder.map((name) => popularModels.find((model) => model.name === name)!);
+].map((name) => popularModels.find((model) => model.name === name)!);
 
 const renderCatalogLabel = (label: string) => fillTemplate(label, {
   skillsCount,
@@ -108,11 +88,6 @@ const renderCatalogLabel = (label: string) => fillTemplate(label, {
 });
 
 const apiKeyBenefit = renderCatalogLabel(P.bringYourOwnApiKey);
-const apiKeyHelp = locale === 'zh'
-  ? '可绑定其他模型服务商的 API Key，在 Open Design 中调用对应模型；本套餐不提供对外 API 服务。'
-  : locale === 'zh-tw'
-    ? '可綁定其他模型服務商的 API Key，在 Open Design 中調用對應模型；本方案不提供對外 API 服務。'
-    : 'Connect API keys from other model providers and use their models in Open Design. This plan does not provide public API access.';
 
 const tierCopy = {
   go: content.go,
@@ -125,24 +100,16 @@ const tierTaglines: Record<TierId, string> = {
   max: content.plans.max.tagline,
 };
 
-const customDomainsByTier: Record<PlanTierId, number | null> = {
-  plus: 10,
-  pro: 40,
-  max: null,
-};
 const paidTierBenefits = (tier: PlanTierId) => {
   const config = tiers.find((candidate) => candidate.tier === tier)!;
   const plan = content.plans[tier];
-  const customDomains = customDomainsByTier[tier];
   return [
     fillTemplate(L.creditBenefit, { amount: formatUsd(config.monthly.grantUsd) }),
-    fillTemplate(P.unlimitedPopularModels, { count: String(unlimitedByTier[tier].size) }),
-    customDomains == null
-      ? P.unlimitedCustomDomains
-      : fillTemplate(P.customDomains, { count: String(customDomains) }),
     plan.concurrency,
     P.bringYourOwnApiKey,
-    ...plan.features,
+    plan.features[0]!,
+    P.publishAndShare,
+    ...plan.features.slice(1),
     ...(tier === 'max' ? [P.creatorDeveloperSupport] : []),
   ].map(renderCatalogLabel);
 };
@@ -246,94 +213,18 @@ const cardData = [
   })),
 ];
 
-const popularModel = (name: string) => popularModels.find((model) => model.name === name)!;
-const usageRows = [
-  { ...popularModel('DeepSeek V4 Flash'), value: 13000 },
-  { ...popularModel('MiMo V2.5 Pro'), value: 11000 },
-  { ...popularModel('DeepSeek V4 Flash Vision Exp'), value: 8000 },
-  { ...popularModel('DeepSeek V4 Pro'), value: 4300 },
-  { ...popularModel('MiniMax M2.7'), value: 2800 },
-  { ...popularModel('Kimi K2.6'), value: 1000 },
-  { ...popularModel('Kimi K2.7 Code'), value: 900 },
-  { ...popularModel('GLM-5.2'), value: 670 },
-  { ...popularModel('GLM-5.1'), value: 670 },
-];
-
-const comparisonPopular = orderedPopularModels();
-
-const comparisonFlagship = [
-  'Kimi-K3',
-  'GPT-5.6-Sol',
-  'Claude Opus 4.7',
-  'Claude Opus 4.8',
-  'Claude Sonnet 5',
-  'Claude Opus 4.6',
-  'Claude Sonnet 4.6',
-  'GPT-5.5',
-  'Grok-4.5',
-  'Claude Fable 5',
-  'Claude Opus 5',
-  'GPT-5.5-Pro',
-].map((name) => flagshipModels.find((model) => model.name === name)!);
-
-const categoryCopy: Record<ModelCategory, { title: string; count: string }> = {
-  popular: {
-    title: P.popularModels,
-    count: fillTemplate(P.modelCount, { count: String(comparisonPopular.length) }),
-  },
-  flagship: {
-    title: P.flagshipModels,
-    count: fillTemplate(P.modelCount, { count: '12' }),
-  },
-  image: {
-    title: P.imageModels,
-    count: fillTemplate(P.modelCount, { count: '3' }),
-  },
-};
-
-function popularAccessStatus(modelName: string, tier: TierId) {
-  if (unlimitedByTier[tier].has(modelName)) {
-    return { kind: 'unlimited', text: P.unlimited };
-  }
-  if (tier === 'go') return { kind: 'ample', text: P.ample };
-  return { kind: 'more-ample', text: P.moreAmple };
-}
-
-function accessStatus(category: ModelCategory, modelName: string, tier: TierId) {
-  if (category === 'image') {
-    if (tier === 'go') return { kind: 'unavailable', text: P.notAvailable };
-    return {
-      kind: 'resolution',
-      text: fillTemplate(P.upToResolution, {
-        resolution: tier === 'plus' ? '1K' : tier === 'pro' ? '2K' : '4K',
-      }),
-    };
-  }
-  if (category === 'flagship') {
-    const unavailable = tier === 'go' || (tier === 'plus' && ['Claude Fable 5', 'Claude Opus 5', 'GPT-5.5-Pro'].includes(modelName));
-    return unavailable
-      ? { kind: 'unavailable', text: P.notAvailable }
-      : { kind: 'included', text: P.included };
-  }
-  return popularAccessStatus(modelName, tier);
-}
-
-const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-Max, GPT-5.3-Codex, Gemini 3 Flash, GPT-5.4 mini, GPT-5.6-Luna, Kimi-K2.5, GLM-5';
 ---
 
 <section
   class="demo-individual-pricing"
   data-demo-pricing
-  data-benefits-expanded="false"
   data-view-all-label={P.viewAll}
   data-show-less-label={P.showLess}
-  data-view-more-benefits-label={P.viewMoreBenefits}
-  data-show-fewer-benefits-label={P.showFewerBenefits}
 >
   <div class="benefits-summary-stage">
     <div class="four-tier-grid decision-grid">
       {cardData.map(({ tier, logo, view, regularMonthlyPrice }) => {
-        const popular = orderedPopularModels();
+        const popular = cardPopularModels;
         const flagship = tier === 'plus' ? plusFlagshipModels : flagshipModels;
         const imageResolution = tier === 'plus' ? '1K' : tier === 'pro' ? '2K' : '4K';
         const bonusPct = tier === 'go' ? null : CREDIT_BONUS_PCT[tier];
@@ -389,36 +280,29 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
               data-tier={tier}
               data-plan-name={tier.charAt(0).toUpperCase() + tier.slice(1)}
               data-default-label={tierCopy[tier].ctaLabel}
+              aria-disabled={tier === 'go' && GO_PLAN_SOLD_OUT ? 'true' : undefined}
+              tabindex={tier === 'go' && GO_PLAN_SOLD_OUT ? -1 : undefined}
+              data-subscription-disabled={tier === 'go' && GO_PLAN_SOLD_OUT ? '' : undefined}
             >
               <span>{tierCopy[tier].ctaLabel}</span>
             </a>
 
             <div class="plan-feature-details">
               <div class="plan-model-modules">
-                <section class="plan-model-module unlimited-module" data-model-module>
+                <section class:list={['plan-model-module', 'popular-model-module', { 'recommended-model-module': tier === 'pro' || tier === 'max' }]} data-model-module>
                   <header>
-                    <div class="plan-model-title-with-help">
-                      <h4>{fillTemplate(P.unlimitedPopularModels, { count: String(unlimitedByTier[tier].size) })}</h4>
-                      <details class="plan-model-help">
-                        <summary aria-label={P.aboutModelEntitlements}>?</summary>
-                        <span class="plan-model-help-copy">{P.modelEntitlementActivationNote}</span>
-                      </details>
-                    </div>
+                    <h4>{P.popularModels}</h4>
                   </header>
                   <ul>
-                    {popular.map((model) => {
-                      const popularStatus = popularAccessStatus(model.name, tier);
-                      return (
-                        <li class="model-with-status">
+                    {popular.map((model) => (
+                        <li>
                           <span class:list={['model-logo', model.iconClass]}><img src={model.icon} alt="" loading="lazy" /></span>
                           <span
                             class:list={{ 'long-model-name': model.name.length > 24 }}
                             title={model.name}
                           >{model.name}</span>
-                          {popularStatus.kind === 'unlimited' && <em class={popularStatus.kind}>{popularStatus.text}</em>}
                         </li>
-                      );
-                    })}
+                    ))}
                   </ul>
                   <button type="button" class="model-module-toggle" aria-expanded="false" data-module-toggle data-total={popular.length}>
                     <span>{fillTemplate(P.viewAll, { count: String(popular.length) })}</span><span class="toggle-symbol">+</span>
@@ -472,14 +356,14 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
                           <button
                             type="button"
                             class="benefit-help-trigger"
-                            aria-label={apiKeyHelp}
+                            aria-label={P.bringYourOwnApiKeyHelp}
                             aria-describedby={`api-key-help-${tier}`}
                           >?</button>
                           <span
                             id={`api-key-help-${tier}`}
                             class="benefit-help-tooltip"
                             role="tooltip"
-                          >{apiKeyHelp}</span>
+                          >{P.bringYourOwnApiKeyHelp}</span>
                         </span>
                       )}
                     </span>
@@ -491,108 +375,8 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
         );
       })}
     </div>
-    <div class="shared-benefits-toggle-wrap">
-      <button type="button" class="shared-benefits-toggle" aria-expanded="false" data-benefits-toggle>
-        <span>{P.viewMoreBenefits}</span><span class="shared-benefits-chevron" aria-hidden="true"></span>
-      </button>
-    </div>
   </div>
 
-  <section class="individual-usage-module" aria-labelledby="individual-usage-title" data-usage-module>
-    <div class="individual-usage-heading">
-      <div>
-        <h2 id="individual-usage-title">{P.usageTitle}</h2>
-        <p>{P.estimatedRequests}</p>
-      </div>
-    </div>
-    <div class="individual-usage-surface">
-      <div class="individual-usage-chart" role="table" aria-label={P.estimatedRequestsAria}>
-        {usageRows.map((row, index) => (
-          <div class="individual-usage-row" role="row">
-            <div class="individual-usage-model" role="cell">
-              <span class:list={['model-logo', row.iconClass]}><img src={row.icon} alt="" loading="lazy" /></span><strong>{row.name}</strong>
-            </div>
-            <div class="individual-usage-meter" role="cell">
-              <i style={`--usage-width:${(row.value / 13000) * 100}%;--usage-delay:${index * 0.045}s`}></i>
-              <b>{row.value.toLocaleString('en-US')}</b>
-            </div>
-          </div>
-        ))}
-        <div class="individual-usage-axis" aria-hidden="true">
-          <span></span><div><b>0</b><b>3.25K</b><b>6.5K</b><b>9.75K</b><b>13K</b></div>
-        </div>
-      </div>
-    </div>
-    <div class="individual-usage-note">
-      <p>{P.usageAllowanceNote}</p>
-      <p>{P.usageEstimatesNote}</p>
-    </div>
-  </section>
-
-  <section class="all-models-comparison" aria-labelledby="all-models-title">
-    <div class="all-models-heading"><h2 id="all-models-title">{P.comparisonTitle}</h2></div>
-    <div class="model-compare-shell">
-      <div class="model-compare-scroll">
-        <table class="model-compare-table">
-          <thead>
-            <tr>
-              <th class="category-column">{P.category}</th>
-              <th class="model-column">{P.model}</th>
-              {(['go', 'plus', 'pro', 'max'] as TierId[]).map((tier) => (
-                <th>
-                  {tier === 'go' ? (
-                    <svg class="comparison-wordmark plan-go-wordmark" viewBox="0 0 88 49" role="img" aria-label="go"><path d="M1 2.5h63c12 0 21.5 9.8 21.5 22S76 46.5 64 46.5H1" /><path d="M29 17c-2.4-3.6-6.4-5.5-11.4-5.5C8.8 11.5 2 17 2 24.5s6.8 13 15.6 13c5.7 0 10-2.3 12.3-6.5v-7H17.5" /><ellipse cx="50.5" cy="24.5" rx="12.5" ry="13" /></svg>
-                  ) : <img src={`/pricing/plan-${tier}.svg`} alt={tier} />}
-                  <small>{P.tierUse[tier]}</small>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {([
-              ['popular', comparisonPopular],
-              ['flagship', comparisonFlagship],
-              ['image', imageModels],
-            ] as [ModelCategory, ModelItem[]][]).flatMap(([category, models]) =>
-              models.map((model, index) => (
-                <tr>
-                  {index === 0 && (
-                    <th class="model-group-cell" rowspan={models.length} scope="rowgroup">
-                      <span class="model-group-title">
-                        <span>{categoryCopy[category].title}</span>
-                        {category === 'popular' && (
-                          <details class="model-group-help">
-                            <summary aria-label={P.aboutPopularAllowance}>?</summary>
-                            <span class="model-group-help-copy">{P.usageAllowanceNote}</span>
-                          </details>
-                        )}
-                      </span>
-                      <small>{categoryCopy[category].count}</small>
-                    </th>
-                  )}
-                  <td class="model-name-cell"><span class:list={['model-logo', model.iconClass]}><img src={model.icon} alt="" loading="lazy" /></span><span>{model.name}</span></td>
-                  {(['go', 'plus', 'pro', 'max'] as TierId[]).map((tier) => {
-                    const status = accessStatus(category, model.name, tier);
-                    const checkOnly = status.kind === 'more-ample' || status.kind === 'ample' || status.kind === 'included';
-                    return checkOnly ? (
-                      <td><span class={`model-access-status ${status.kind}`} aria-label={status.text}><i class="status-icon check"></i></span></td>
-                    ) : (
-                      <td><span class={`model-access-status ${status.kind}`}><i class:list={['status-icon', { infinity: status.kind === 'unlimited' }]}>{status.kind === 'unlimited' ? '∞' : ''}</i>{status.text}</span></td>
-                    );
-                  })}
-                </tr>
-              )),
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div class="other-models-note">
-        <h3>{P.otherModelsTitle}</h3>
-        <p class="other-models-list">{otherModels}</p>
-        <p>{P.otherModelsDescription}</p>
-      </div>
-    </div>
-  </section>
 </section>
 
 <style>
@@ -658,7 +442,9 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
 
   .pricing-card:has(.plan-model-help[open]),
   .pricing-card:has(.plan-model-help:hover),
-  .pricing-card:has(.plan-model-help:focus-within) {
+  .pricing-card:has(.plan-model-help:focus-within),
+  .pricing-card:has(.benefit-help:hover),
+  .pricing-card:has(.benefit-help:focus-within) {
     z-index: 20;
   }
 
@@ -830,7 +616,7 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
   .compact-price-detail {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
+    align-items: center;
     gap: 7px;
     min-height: 46px;
     color: #555a52;
@@ -851,8 +637,18 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     font-size: 12px;
     font-weight: 400;
     text-align: right;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .free-price-detail {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .free-price-detail > small {
+    margin-left: 0;
+    text-align: left;
   }
 
   .plan-max .compact-price-detail > span.price-savings-note { color: #83d96c; }
@@ -931,20 +727,31 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     transition: background-color 0.2s;
   }
 
-  .plan-model-module.unlimited-module {
+  .plan-model-module.limited-time-unlimited-module {
+    min-height: 0;
     background:
-      radial-gradient(circle at 92% 4%, rgba(120, 234, 87, 0.26), transparent 42%),
-      linear-gradient(135deg, rgba(120, 234, 87, 0.2), rgba(120, 234, 87, 0.07));
+      radial-gradient(circle at 92% 4%, rgba(120, 234, 87, 0.16), transparent 50%),
+      linear-gradient(135deg, #effbea 0%, #f7fcf5 52%, #e6f6e1 100%);
   }
 
-  .plan-go .plan-model-module.unlimited-module,
-  .plan-plus .plan-model-module.unlimited-module {
-    background: #f7f8f3;
+  .limited-time-unlimited-module > header {
+    align-items: flex-start;
+    flex-wrap: nowrap;
   }
 
-  .plan-go .plan-model-module.unlimited-module h4,
-  .plan-plus .plan-model-module.unlimited-module h4 {
-    color: #30332d;
+  .limited-time-countdown {
+    flex: none;
+    margin-left: auto;
+    padding: 3px 7px;
+    color: #1f7e16;
+    font-size: 9.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(120, 234, 87, 0.24);
+    border-radius: 999px;
   }
 
   .plan-model-module.recommended-model-module {
@@ -955,10 +762,6 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
   .plan-model-module.unavailable-model-module {
     opacity: 0.62;
     background: #f1f2ee;
-  }
-
-  .plan-go .plan-model-module.unavailable-model-module {
-    background: transparent;
   }
 
   .plan-model-module header {
@@ -1043,7 +846,7 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     display: none;
   }
 
-  .plan-model-module.unlimited-module h4,
+  .plan-model-module.limited-time-unlimited-module h4,
   .plan-model-module.recommended-model-module h4 { color: #1f7e16; }
 
   .plan-model-module header > span {
@@ -1318,8 +1121,14 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
 
   .plan-max .plan-model-module,
   .plan-max .plan-model-module.recommended-model-module,
-  .plan-max .plan-model-module.unlimited-module {
+  .plan-max .plan-model-module.limited-time-unlimited-module {
     background: #192318;
+  }
+
+  .plan-max .limited-time-countdown {
+    color: #91dc7b;
+    background: rgba(120, 234, 87, 0.1);
+    border-color: rgba(120, 234, 87, 0.2);
   }
 
   .plan-max .plan-model-module h4 { color: var(--pricing-accent); }
@@ -1355,53 +1164,6 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
     border: 1px solid rgba(120, 234, 87, 0.14);
   }
   .plan-max .plan-benefit-list li > b { color: var(--pricing-accent); }
-
-  .demo-individual-pricing[data-benefits-expanded='false'] .plan-benefit-list li:nth-child(n + 4) {
-    display: none;
-  }
-
-  .shared-benefits-toggle-wrap {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: auto;
-    margin: 16px 0 0;
-    padding: 0;
-  }
-
-  .shared-benefits-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    width: auto;
-    height: auto;
-    padding: 8px 5px;
-    color: #565b53;
-    font-size: 13px;
-    font-weight: 400;
-    cursor: pointer;
-    background: transparent;
-    border: 0;
-    transition: color 0.18s;
-  }
-
-  .shared-benefits-toggle:hover { color: #23831b; }
-
-  .shared-benefits-chevron {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    color: inherit;
-    border-right: 1px solid;
-    border-bottom: 1px solid;
-    transition: transform 0.2s;
-    transform: translateY(2px) rotate(225deg);
-  }
-
-  .shared-benefits-toggle[aria-expanded='false'] .shared-benefits-chevron {
-    transform: translateY(-2px) rotate(45deg);
-  }
 
   .individual-usage-module {
     width: min(1200px, 100%);
@@ -1934,29 +1696,5 @@ const otherModels = 'Gemini-3.1-Pro, Grok-4.5, GPT-5.4, GPT-5.6-Terra, Qwen3.7-M
       });
     });
 
-    const usageModule = root.querySelector<HTMLElement>('[data-usage-module]');
-    if (usageModule) {
-      if (!('IntersectionObserver' in window)) {
-        usageModule.classList.add('is-visible');
-      } else {
-        const observer = new IntersectionObserver(([entry]) => {
-          if (!entry?.isIntersecting) return;
-          usageModule.classList.add('is-visible');
-          observer.disconnect();
-        }, { threshold: 0.22 });
-        observer.observe(usageModule);
-      }
-    }
-
-    const benefitsToggle = root.querySelector<HTMLButtonElement>('[data-benefits-toggle]');
-    benefitsToggle?.addEventListener('click', () => {
-      const expanded = benefitsToggle.getAttribute('aria-expanded') !== 'true';
-      benefitsToggle.setAttribute('aria-expanded', String(expanded));
-      root.dataset.benefitsExpanded = String(expanded);
-      const label = benefitsToggle.querySelector('span');
-      if (label) label.textContent = expanded
-        ? root.dataset.showFewerBenefitsLabel ?? ''
-        : root.dataset.viewMoreBenefitsLabel ?? '';
-    });
   });
 </script>

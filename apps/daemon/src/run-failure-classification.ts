@@ -10,6 +10,7 @@ import { isModelWindowLimitFailure } from '@open-design/contracts';
 
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
+import { isAcpHandshakeRpcErrorText } from './runtimes/acp-handshake-id.js';
 import { classifyAgentServiceFailure } from './runtimes/auth.js';
 import type { RunResult, RunStatusForAnalytics } from './run-result.js';
 
@@ -529,6 +530,32 @@ function isProcessCrashText(text: string): boolean {
     .test(text);
 }
 
+/**
+ * True when the failure text is an agent CLI reporting that a runtime IT
+ * manages failed to start — not a statement about the CLI's own build.
+ *
+ * vela wraps every bundled-OpenCode startup failure this way before answering
+ * `session/new` / `session/load` (`acp_runtime.go`: `start opencode server:
+ * %v`, over `opencode_process.go`'s `opencode exited before readiness`), so the
+ * text arrives inside a handshake-numbered JSON-RPC frame while describing a
+ * CHILD OF THE CLI that never came up: a port collision, an OOM kill, a
+ * half-written config, a binary the release package is missing.
+ *
+ * The distinction the classifier needs from this is which variable the user can
+ * move. An agent CLI that answered `initialize` and then refused to open a
+ * session with no reason has only its own build left to blame; a CLI that
+ * reports its managed runtime never became ready has named the moving part
+ * itself, and pointing that user at the CLI version sends them after a fix that
+ * cannot apply. These startups are also the transient half of the pair — a port
+ * race clears on the next attempt — which is the retry the refusal reading
+ * withdraws.
+ *
+ * @param text - Failure text as surfaced by the ACP session (`rpcErrorMessage`).
+ */
+function isManagedRuntimeStartupFailureText(text: string): boolean {
+  return /\bstart opencode server\b|\bopencode exited before readiness\b/i.test(text);
+}
+
 // The child binary executed an instruction this CPU does not implement — in
 // practice a Bun-compiled agent (bundled opencode) built for AVX2 running on a
 // CPU without it (Intel Atom/Celeron/Pentium N-series through 2021, and
@@ -538,10 +565,10 @@ function isProcessCrashText(text: string): boolean {
 //   machines. Unconditional — the feature line itself is the proof.
 // - Windows STATUS_ILLEGAL_INSTRUCTION (hex 0xC000001D or Go/Node's decimal
 //   exit-status rendering 3221225501), but ONLY inside vela's bundled-opencode
-//   startup wrapper text ("start opencode server" / "opencode exited before
-//   readiness"). The raw status code is a generic Windows SIGILL that any
-//   agent binary could die with for unrelated reasons; every bannerless
-//   production trace carries the vela wrapper, so the gate costs no recall.
+//   startup wrapper text (`isManagedRuntimeStartupFailureText`). The raw status
+//   code is a generic Windows SIGILL that any agent binary could die with for
+//   unrelated reasons; every bannerless production trace carries the vela
+//   wrapper, so the gate costs no recall.
 // A bare "Illegal instruction" line is deliberately NOT matched: any
 // unrelated SIGILL (a runtime bug on an AVX2-capable machine) would then be
 // mislabeled as a processor limitation and lose its retry. The same binary on
@@ -551,7 +578,7 @@ function isCpuUnsupportedCrashText(text: string): boolean {
   if (/\bno_avx2\b/i.test(text)) return true;
   return (
     /0xc000001d|\b3221225501\b/i.test(text) &&
-    /\bstart opencode server\b|\bopencode exited before readiness\b/i.test(text)
+    isManagedRuntimeStartupFailureText(text)
   );
 }
 
@@ -824,7 +851,15 @@ function classifyRunFailureBase(
     );
   }
 
-  if (isAgentProtocolErrorText(text)) {
+  // A protocol failure from AFTER the handshake: a session existed, so the run
+  // may simply have hit a bad moment and the old transient treatment stands.
+  // Handshake-numbered frames (ids 1 and 2) are deliberately NOT claimed here
+  // — the wording an agent chooses for its rejection (`Internal error`,
+  // `Method not found`, `Invalid params`) is not a signal, and matching on it
+  // made the verdict depend on which layer of the CLI happened to refuse.
+  // Those fall through every cause branch below and are answered once, at
+  // `isAcpHandshakeRpcErrorText` further down.
+  if (isAgentProtocolErrorText(text) && !isAcpHandshakeRpcErrorText(text)) {
     return classification(
       'process_exit',
       processExitDetail(errorCode, text),
@@ -985,6 +1020,49 @@ function classifyRunFailureBase(
     );
   }
 
+  // Last word on an ACP handshake rejection, and deliberately the last: every
+  // branch above has already had its chance to name a cause, so reaching here
+  // means the agent CLI answered `initialize`, refused `session/new` /
+  // `session/load`, and gave no reason the daemon recognises. Its build is then
+  // the only variable left — file it at `session_init`, which is the stage the
+  // retry policy refuses to re-run, and point the user at the CLI rather than
+  // at the model or the stream.
+  //
+  // Placing this AFTER the cause branches is what makes the precedence a fact
+  // rather than a promise: a signed-out CLI is filed under auth, a throttled
+  // one under rate_limit, an over-long prompt under prompt_too_large, and only
+  // an unexplained refusal reaches this line. `isAcpCliSessionRefusalText` is
+  // this same reading, exposed so the ACP payload rewrite prescribes exactly
+  // what the telemetry records.
+  //
+  // The deferrals are not about wording. Both are texts where the handshake
+  // frame is the ENVELOPE rather than the evidence — something other than the
+  // agent CLI's own build failed, and the CLI merely carried the report:
+  //
+  // - An OS-level crash banner (a Bun panic, a Windows
+  //   STATUS_ILLEGAL_INSTRUCTION from the bundled opencode) describes a child
+  //   that DIED; `signalInterruptClassification` below owns that reading, the
+  //   same reason `isCpuUnsupportedCrashText` is checked above.
+  // - A managed runtime that never became ready describes a child that never
+  //   STARTED. AMR is the population this reaches — vela reports its bundled
+  //   OpenCode's startup failures from inside `session/new` — and a startup
+  //   race is exactly the shape the fatal_rpc_error path below recovers by
+  //   retrying. Filing it here would tell that user to replace a healthy CLI
+  //   and take the recovery away at the same time.
+  if (
+    isAcpHandshakeRpcErrorText(text)
+    && !isProcessCrashText(text)
+    && !isManagedRuntimeStartupFailureText(text)
+  ) {
+    return classification(
+      'process_exit',
+      'agent_protocol_error',
+      'session_init',
+      false,
+      'install_cli',
+    );
+  }
+
   // ACP fatal paths ask the host to terminate the child after the protocol
   // failure. The resulting exit/signal is therefore cleanup, not the cause.
   // Prefer the runtime_close reason once specific text classifiers above have
@@ -1042,6 +1120,39 @@ function classifyRunFailureBase(
     retryableHint ?? false,
     retryableHint ? 'retry' : 'none',
   );
+}
+
+/**
+ * The error code the text-only probe below classifies under: the generic
+ * "the agent failed and said this" code, so the verdict is decided by the text
+ * and nothing else.
+ */
+const TEXT_ONLY_PROBE_ERROR_CODE = 'AGENT_EXECUTION_FAILED';
+
+/**
+ * True when this failure text reads as an ACP handshake rejection the agent CLI
+ * gave no reason for — the one shape "this CLI build cannot start a session;
+ * change it, then retry" actually answers, because the build is the only
+ * variable left.
+ *
+ * Answered by running the classifier itself rather than by a second signature
+ * list, so the prescription the user reads and the bucket the run is filed
+ * under are the same decision. A handshake failure that names a cause the
+ * classifier recognises — signed out, throttled, out of balance, upstream down,
+ * prompt too long — is claimed by that cause's branch and reported false here,
+ * so the user is sent after the fix that actually applies.
+ *
+ * @param text - Failure text as surfaced by the ACP session (`rpcErrorMessage`).
+ */
+export function isAcpCliSessionRefusalText(text: string | null | undefined): boolean {
+  if (typeof text !== 'string' || !isAcpHandshakeRpcErrorText(text)) return false;
+  const failure = classifyRunFailureBase({
+    result: 'failed',
+    status: { status: 'failed', error: text },
+    errorCode: TEXT_ONLY_PROBE_ERROR_CODE,
+  });
+  return failure?.failure_detail === 'agent_protocol_error'
+    && failure.failure_stage === 'session_init';
 }
 
 export function classifyRunFailure(

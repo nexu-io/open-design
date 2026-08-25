@@ -25,8 +25,6 @@ export const CAMPAIGN_DISMISSAL_STORAGE: Record<string, string> = {
   // id, so a new campaign needs its own entry here — otherwise its modal opens
   // over every spec on the first home render, exactly what this file prevents.
   'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026': '1',
-  // Live 8/20-9/3 Go plan launch window.
-  'open-design:campaign-seen:go-plan-launch-2026': '1',
 };
 
 export async function seedCampaignDismissals(context: BrowserContext): Promise<void> {

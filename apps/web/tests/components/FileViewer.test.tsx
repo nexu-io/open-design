@@ -7367,7 +7367,7 @@ describe('FileViewer SVG artifacts', () => {
     // preview action becomes enabled from the same
     // selectedContentMatchesVersion/loadingContent state that enables deck
     // keyboard routing.
-    const openPreview = within(versionDialog).getByRole('button', { name: 'Open preview' }) as HTMLButtonElement;
+    const openPreview = within(versionDialog).getByRole('button', { name: 'Open preview in a new window' }) as HTMLButtonElement;
     await waitFor(() => expect(openPreview.disabled).toBe(false));
     const previewFrame = await waitFor(() => {
       const frame = versionDialog.querySelector('iframe[title="index.html v4"]') as HTMLIFrameElement | null;
@@ -7699,7 +7699,7 @@ describe('FileViewer SVG artifacts', () => {
     const versionDialog = await screen.findByRole('dialog', { name: 'Versions' });
     fireEvent.click(within(versionDialog).getByRole('option', { name: /Prior prompt/ }));
     const switchButton = within(versionDialog).getByRole('button', { name: 'Switch to this version' }) as HTMLButtonElement;
-    const openButton = within(versionDialog).getByRole('button', { name: 'Open preview' }) as HTMLButtonElement;
+    const openButton = within(versionDialog).getByRole('button', { name: 'Open preview in a new window' }) as HTMLButtonElement;
     await waitFor(() => expect(switchButton.disabled).toBe(false));
     expect(openButton.disabled).toBe(false);
 

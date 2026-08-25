@@ -130,6 +130,50 @@ test('allows a brand-new personal checkout when no usable subscription exists', 
   );
 });
 
+test('marks new Go checkouts as sold out without blocking existing Go subscribers', () => {
+  const emptyContext = {
+    current: null,
+    checkoutAllowed: true,
+    firstMonthIntroEligible: true,
+    cancelAtPeriodEnd: false,
+    pendingChange: null,
+    billingPortalAvailable: false,
+  } as const;
+
+  assert.deepEqual(
+    resolvePersonalPlanAction(emptyContext, { tier: 'go', interval: 'monthly' }),
+    { kind: 'sold_out', enabled: false },
+  );
+  assert.deepEqual(
+    resolvePersonalPlanAction(
+      {
+        current: { tier: 'plus', interval: 'monthly' },
+        checkoutAllowed: true,
+        firstMonthIntroEligible: false,
+        cancelAtPeriodEnd: false,
+        pendingChange: null,
+        billingPortalAvailable: true,
+      },
+      { tier: 'go', interval: 'monthly' },
+    ),
+    { kind: 'sold_out', enabled: false },
+  );
+  assert.deepEqual(
+    resolvePersonalPlanAction(
+      {
+        current: { tier: 'go', interval: 'monthly' },
+        checkoutAllowed: true,
+        firstMonthIntroEligible: false,
+        cancelAtPeriodEnd: false,
+        pendingChange: null,
+        billingPortalAvailable: true,
+      },
+      { tier: 'go', interval: 'monthly' },
+    ),
+    { kind: 'current', enabled: false },
+  );
+});
+
 test('marks only the exact tier and interval as the current plan', () => {
   const context = {
     current: { tier: 'pro', interval: 'yearly' } as const,

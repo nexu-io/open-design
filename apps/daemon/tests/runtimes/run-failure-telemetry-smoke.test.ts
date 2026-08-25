@@ -227,6 +227,12 @@ describe('run failure telemetry smoke', () => {
       await putConfig(started.url, {
         telemetry: { metrics: true, content: true, artifactManifest: false },
         privacyDecisionAt: Date.now(),
+        // The task-hierarchy cases are about how an ADMITTED Run reports, so
+        // the installation has to be opted into OD Next. The single-Run case
+        // stays single-Run on top of the same opt-in, because deepseek sits
+        // outside the capability gate — which is the contrast this table is
+        // drawing in the first place.
+        odNextStrategyMode: 'active',
       });
       await putConfig(started.url, { agentId: item.agentId, ...item.config });
       const run = await createAndWaitForRun(started.url, {
@@ -453,6 +459,8 @@ describe('run failure telemetry smoke', () => {
       agentCliEnv: { claude: { CLAUDE_BIN: path.join(binDir, 'claude-terminal-failure') } },
       telemetry: { metrics: true, content: true, artifactManifest: false },
       privacyDecisionAt: Date.now(),
+      // Task-hierarchy reporting only exists for an admitted Run.
+      odNextStrategyMode: 'active',
     });
 
     const run = await createAndWaitForRun(started.url, {
@@ -486,6 +494,8 @@ describe('run failure telemetry smoke', () => {
       agentCliEnv: { claude: { CLAUDE_BIN: path.join(binDir, 'claude-buffered-fallback') } },
       telemetry: { metrics: true, content: true, artifactManifest: false },
       privacyDecisionAt: Date.now(),
+      // Task-hierarchy reporting only exists for an admitted Run.
+      odNextStrategyMode: 'active',
     });
 
     const run = await createAndWaitForRun(started.url, {

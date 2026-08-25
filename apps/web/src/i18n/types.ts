@@ -1261,6 +1261,7 @@ export interface Dict {
   'entry.authExpiredBody': string;
   'home.createFailed': string;
   'home.daemonRecovering': string;
+  'home.bundledScenarioMissing': string;
   'entry.cloudCalloutBody': string;
   'entry.cloudCalloutDismissAria': string;
   'entry.workspaceLockedNote': string;
@@ -2911,6 +2912,7 @@ export interface Dict {
   'chat.runError.title.sessionExpired': string;
   'chat.runError.title.gitBashMissing': string;
   'chat.runError.title.cpuUnsupported': string;
+  'chat.runError.title.cliSessionRefused': string;
   'chat.runError.title.strategyTaskHalted': string;
   'chat.runError.title.generic': string;
   'chat.runError.title.artifactMissing': string;
@@ -2934,6 +2936,7 @@ export interface Dict {
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
   'chat.runError.cpuUnsupportedMessage': string;
+  'chat.runError.cliSessionRefusedMessage': string;
   'chat.runError.strategyTaskStateMismatchMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;

@@ -1248,7 +1248,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
-  it('surfaces autosave progress, success, and failure states in the modal chrome', async () => {
+  it('surfaces autosave progress, success, and failure states outside the modal chrome', async () => {
     const first = renderSettingsDialog();
 
     fireEvent.change(screen.getByLabelText('API key'), {
@@ -1261,6 +1261,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText('All changes saved')).toBeTruthy();
     });
+    const savedStatus = screen.getByText('All changes saved').closest('[role="status"]');
+    expect(savedStatus?.parentElement).toHaveClass('settings-autosave-layer');
+    expect(savedStatus?.closest('.settings-chrome')).toBeNull();
     expect(first.onPersist).toHaveBeenCalledWith(
       expect.objectContaining({ apiKey: 'sk-ant-saved' }),
       expect.any(Object),
@@ -1281,6 +1284,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Couldn’t save changes/i)).toBeTruthy();
     });
+    const errorStatus = screen.getByText(/Couldn’t save changes/i).closest('[role="status"]');
+    expect(errorStatus?.parentElement).toHaveClass('settings-autosave-layer');
   });
 
   it('closes BYOK via the close button or backdrop', () => {

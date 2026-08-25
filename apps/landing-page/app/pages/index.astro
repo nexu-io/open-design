@@ -10,7 +10,6 @@ import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
 import DownloadEngagementPrompt from '../_components/download-engagement-prompt.astro';
-import GoBanner from '../_components/go-banner.astro';
 import {
   heroBgImage,
   heroBgSrcset,
@@ -230,7 +229,6 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     <script is:inline type="application/ld+json" set:html={JSON.stringify(homepageGraph)} />
   </head>
   <body>
-    <GoBanner locale={locale} />
     <div class="home-campaign-banner" data-home-campaign-banner data-campaign-window-label={campaignCopy.windowLabel} data-campaign-day-unit={campaignCopy.dayUnit} data-campaign-start-at={DEEPSEEK_V4_PRO_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive} hidden>
       <a class="home-campaign-banner__link" href={campaignPricingHref} aria-label={`${campaignCopy.title} · ${campaignCopy.linkLabel}`}>
         <span class="home-campaign-banner__badge" data-home-campaign-countdown>{campaignCopy.badge}</span>
@@ -369,10 +367,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         const updateCampaignVisibility = () => {
           const now = Date.now();
           const active = now >= startAt && now < endAt;
-          const goOwns =
-            document.documentElement.classList.contains('go-banner-active') ||
-            document.documentElement.classList.contains('go-banner-pending');
-          const visible = active && !dismissed && !goOwns;
+          const visible = active && !dismissed;
           if (banner) banner.hidden = !visible;
           document.documentElement.classList.toggle('home-campaign-banner-active', visible);
           if (!active || !countdown) return active;
@@ -388,12 +383,10 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           }
           return active;
         };
-        window.addEventListener('go-banner:state-change', updateCampaignVisibility);
         updateCampaignVisibility();
         const campaignTimer = window.setInterval(updateCampaignVisibility, 1000);
         window.addEventListener('pagehide', () => {
           window.clearInterval(campaignTimer);
-          window.removeEventListener('go-banner:state-change', updateCampaignVisibility);
         }, { once: true });
         campaignLink?.addEventListener('click', (event) => {
           const eligible = Date.now() >= startAt && Date.now() < endAt;

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   OD_NEXT_DEVICE_FRAME_ROOT,
+  OD_NEXT_MANAGED_RESOURCE_FILES,
   detectOdNextDevicePlatformFromText,
+  detectOdNextLayoutPrimitives,
+  odNextManagedResourceName,
+  selectOdNextLayoutPrimitivesCss,
   hasOdNextDeviceShell,
   odNextDeviceFramePath,
   resolveOdNextDevicePlatform,
@@ -148,5 +152,33 @@ describe('hasOdNextDeviceShell', () => {
     expect(hasOdNextDeviceShell('<div class="card" style="border-radius:24px"></div>')).toBe(false);
     expect(hasOdNextDeviceShell('')).toBe(false);
     expect(hasOdNextDeviceShell(null)).toBe(false);
+  });
+});
+
+describe('layout primitives resource', () => {
+  const css = '/* OD-LAYOUT-PRIMITIVES v1 — structure only */\n@layer od-layout {\n  .od-stack { display: flex; }\n}\n/* /OD-LAYOUT-PRIMITIVES v1 */\n';
+  const resources = [
+    { path: './assets/task-profiles/prototype/device-frames/iphone.html', text: '<div data-phone-shell></div>' },
+    { path: './assets/task-profiles/prototype/layout.css', text: css },
+    { path: './assets/task-profiles/prototype/notes.md', text: 'not managed' },
+  ];
+
+  it('names the managed files and selects the stylesheet out of the resources', () => {
+    expect(OD_NEXT_MANAGED_RESOURCE_FILES).toEqual(['iphone.html', 'android.html', 'neutral.html', 'layout.css']);
+    expect(odNextManagedResourceName('./x/device-frames/android.html')).toBe('android.html');
+    expect(odNextManagedResourceName('./x/layout.css')).toBe('layout.css');
+    expect(odNextManagedResourceName('./x/notes.md')).toBeNull();
+    expect(selectOdNextLayoutPrimitivesCss(resources)).toBe(css);
+    expect(selectOdNextLayoutPrimitivesCss(resources.slice(0, 1))).toBeNull();
+    expect(selectOdNextLayoutPrimitivesCss(undefined)).toBeNull();
+  });
+
+  it('classifies how a document carries the primitives', () => {
+    expect(detectOdNextLayoutPrimitives(`<style>${css}</style>`, css)).toBe('verbatim');
+    expect(detectOdNextLayoutPrimitives(`<style>\n  ${css.replace(/\n/g, '\n    ')}</style>`, css)).toBe('verbatim');
+    expect(detectOdNextLayoutPrimitives('<style>/* OD-LAYOUT-PRIMITIVES v1 */ .od-stack{display:grid} /* /OD-LAYOUT-PRIMITIVES v1 */</style>', css)).toBe('modified');
+    expect(detectOdNextLayoutPrimitives('<link rel="stylesheet" href=".od-frames/layout.css">', css)).toBe('linked');
+    expect(detectOdNextLayoutPrimitives('<div class="od-stack"></div>', css)).toBe('absent');
+    expect(detectOdNextLayoutPrimitives('', css)).toBe('absent');
   });
 });

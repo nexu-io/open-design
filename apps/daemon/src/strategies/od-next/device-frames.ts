@@ -3,11 +3,13 @@ import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-  OD_NEXT_DEVICE_FRAME_FILES,
   OD_NEXT_DEVICE_FRAME_ROOT,
+  OD_NEXT_MANAGED_RESOURCE_FILES,
   OD_NEXT_STRATEGY_ID,
+  detectOdNextLayoutPrimitives,
   hasOdNextDeviceShell,
-  odNextDevicePlatformForResource,
+  odNextManagedResourceName,
+  type OdNextLayoutPrimitivesPresenceV1,
   type AppliedPluginSnapshot,
   type OdNextDevicePlatformResolutionV1,
 } from '@open-design/contracts';
@@ -55,7 +57,7 @@ const OD_NEXT_DEVICE_FRAME_MANIFEST_SCHEMA = 'open-design.od-next-device-frames/
  * manifest lives in a directory the project controls, so this set — not the
  * manifest's own key list — is what bounds the files it may touch.
  */
-const MANAGED_SHELL_FILES: ReadonlySet<string> = new Set(Object.values(OD_NEXT_DEVICE_FRAME_FILES));
+const MANAGED_SHELL_FILES: ReadonlySet<string> = new Set(OD_NEXT_MANAGED_RESOURCE_FILES);
 
 interface OdNextDeviceFrameManifestV1 {
   schema: typeof OD_NEXT_DEVICE_FRAME_MANIFEST_SCHEMA;
@@ -183,7 +185,10 @@ export async function materializeOdNextDeviceFrames(input: {
   cwd: string;
   resources: ReadonlyArray<OdNextTaskResource>;
 }): Promise<OdNextDeviceFrameStagingResult> {
-  const shells = input.resources.filter((resource) => odNextDevicePlatformForResource(resource.path));
+  // Shells and the layout primitives stylesheet share one root, one manifest,
+  // and one ownership rule; anything else the profile declares stays in the
+  // package and is never written to the project.
+  const shells = input.resources.filter((resource) => odNextManagedResourceName(resource.path));
   if (shells.length === 0) return { staged: [], skipped: [] };
   const root = path.join(input.cwd, OD_NEXT_DEVICE_FRAME_ROOT);
   const rootStat = await lstat(root).catch(() => null);
@@ -296,4 +301,32 @@ export async function observeOdNextDeviceShell(input: {
     entryFile: input.entryFile,
     shellPresent: hasOdNextDeviceShell(html),
   };
+}
+
+export interface OdNextLayoutPrimitivesObservation {
+  entryFile: string;
+  presence: OdNextLayoutPrimitivesPresenceV1;
+}
+
+/**
+ * Did the delivered entry carry the staged layout primitives, and how? Pure
+ * observation for run analytics (see {@link observeOdNextDeviceShell}); it
+ * decides nothing about the run.
+ */
+export async function observeOdNextLayoutPrimitives(input: {
+  projectRoot: string;
+  entryFile: string | null | undefined;
+  primitivesCss: string | null | undefined;
+}): Promise<OdNextLayoutPrimitivesObservation | null> {
+  if (typeof input.entryFile !== 'string' || !input.entryFile) return null;
+  const target = path.resolve(input.projectRoot, input.entryFile);
+  const relative = path.relative(input.projectRoot, target);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
+  let html: string;
+  try {
+    html = await readFile(target, 'utf8');
+  } catch {
+    return null;
+  }
+  return { entryFile: input.entryFile, presence: detectOdNextLayoutPrimitives(html, input.primitivesCss) };
 }

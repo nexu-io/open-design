@@ -4241,6 +4241,23 @@ function AppInner() {
     [iframeKeepAlivePool, refreshDesignSystems],
   );
 
+  /**
+   * Invariant: leaving `/design-systems/create` returns the user to whatever
+   * surface opened it — the project conversation they were mid-task in, the
+   * composer's design-system picker, the Library, a home card — instead of a
+   * fixed destination. The page is reachable from all of those, so a hardcoded
+   * exit route silently abandons the work the user was in the middle of
+   * (OPEND-2249: creating a design system from inside a project conversation
+   * dropped them on the Design systems tab).
+   *
+   * The Design systems tab stays the fallback: it is where the standalone
+   * entry lives, so a deep link or fresh load — the only case with no in-app
+   * layer to step back to — still lands somewhere that makes sense.
+   */
+  const handleDesignSystemCreateBack = useCallback(() => {
+    goBack({ kind: 'home', view: 'design-systems' });
+  }, []);
+
   const handlePluginsChanged = useCallback((
     context: WorkspaceCollabContext | null,
     accountGeneration: number,
@@ -5062,7 +5079,7 @@ function AppInner() {
   } else if (route.kind === 'design-system-create') {
     appMain = (
       <DesignSystemCreationFlow
-        onBack={() => navigate({ kind: 'home', view: 'design-systems' })}
+        onBack={handleDesignSystemCreateBack}
         designSystems={enabledDS}
         onCreated={(projectId, project, conversationId) => {
           if (project) {

@@ -403,6 +403,8 @@ interface ChatRun {
     entryFile: string;
     shellPresent: boolean;
   };
+  /** Run-finish observation: how the delivered entry carries the staged layout primitives. */
+  odNextLayoutPrimitives?: 'verbatim' | 'modified' | 'linked' | 'absent';
   analyticsTelemetry?: RunTelemetryTimestamps;
   resolvedModelId?: string | null;
   preflightAgentCliVersion?: string | null;
@@ -1957,7 +1959,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         explicitExecutablePlugin
         || suppliedContextPluginWasNamed
       );
-      const rolloutPolicy = readOdNextRolloutPolicy();
+      // Read per request, not at boot: `odNextStrategyMode` is how a user opts
+      // this installation into OD Next, and "configure it and it takes effect"
+      // has to mean the next run, not the next daemon restart.
+      //
+      // Deliberately uncaught. `readAppConfig` already answers `{}` for the
+      // states that mean "nothing configured" — no file, unparseable file — and
+      // only throws when the daemon genuinely cannot read its own config. That
+      // is not the same as an opt-out, and swallowing it would silently run the
+      // ordinary route (with no `agentCliEnv` either) while telling the
+      // operator the installation was never opted in.
+      const rolloutAppConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const rolloutPolicy = readOdNextRolloutPolicy(process.env, rolloutAppConfig);
       const rolloutTaskType = odNextTaskTypeForProjectScenarioBinding(
         verifiedStrategyBinding ?? verifiedScenarioBinding,
       );
@@ -1996,9 +2009,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (routeApplicability === 'eligible' && rolloutPlugin) {
         try {
           if (effectiveAgentId) {
-            const appCfg = await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}));
             const agentCliEnv = agentCliEnvForAgent(
-              (appCfg as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
+              (rolloutAppConfig as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
               effectiveAgentId,
             );
             // Both probes read the same resolved launch path. The `--version`
@@ -3416,13 +3428,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
         ...configureGlobals,
         ...odNextRolloutAnalyticsProperties(strategyRolloutDecision),
-        ...(run.odNextDeviceShell
-          ? {
-              od_next_device_platform: run.odNextDeviceShell.platform,
-              od_next_device_platform_source: run.odNextDeviceShell.resolvedFrom,
-              od_next_device_shell_present: run.odNextDeviceShell.shellPresent,
-            }
-          : {}),
         runtime_type: runtimeTypeForRunAnalytics({
           derived: configureGlobals.runtime_type,
           hint: analyticsHints.runtimeType,
@@ -3817,6 +3822,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             ...(activationMilestones ? { $set_once: activationMilestones } : {}),
             model_id: finishedModelId,
             artifact_count: artifactCount,
+            // Finish-time observations live on the run object only after the
+            // physical run resolved; baseProps was frozen at creation, so
+            // these must be read live here or they never reach analytics.
+            ...(run.odNextDeviceShell
+              ? {
+                  od_next_device_platform: run.odNextDeviceShell.platform,
+                  od_next_device_platform_source: run.odNextDeviceShell.resolvedFrom,
+                  od_next_device_shell_present: run.odNextDeviceShell.shellPresent,
+                }
+              : {}),
+            ...(run.odNextLayoutPrimitives
+              ? { od_next_layout_primitives: run.odNextLayoutPrimitives }
+              : {}),
             ...(run.externalPluginAnalytics
               ? {
                   deliverable_valid: deliverable?.valid === true,

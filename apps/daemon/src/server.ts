@@ -37,11 +37,13 @@ import {
   detectOdNextDevicePlatformFromText,
   resolveOdNextDevicePlatform,
   selectOdNextDeviceFrameContextV2,
+  selectOdNextLayoutPrimitivesCss,
 } from '@open-design/contracts';
 import {
   loadOdNextTaskResourcesForSnapshot,
   materializeOdNextDeviceFrames,
   observeOdNextDeviceShell,
+  observeOdNextLayoutPrimitives,
 } from './strategies/od-next/device-frames.js';
 import {
   composeSystemPrompt,
@@ -242,6 +244,7 @@ import {
   resolveModelForServiceTier,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
+import { withAcpHandshakeFailureGuidance } from './runtimes/acp-handshake-failure.js';
 import { preflightCodexDefaultModel } from './runtimes/codex-model-preflight.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
@@ -531,6 +534,7 @@ import { runtimeResumesSessionById } from './runtimes/types.js';
 import {
   createRunLifecycleTracer,
   runLifecycleMarkersForStreamEvent,
+  type RunLifecycleStreamEventMarkers,
 } from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
@@ -2499,7 +2503,29 @@ function rewriteKnownAgentStreamError(agentId, message, failureText = '') {
   ) {
     return 'The run failed due to an unknown upstream streaming error. Please retry.';
   }
+  // An ACP handshake refusal that reaches one of the stderr-tail fallbacks is
+  // deliberately NOT reworded here. The daemon has no locale, so a sentence
+  // composed at this layer lands in `run.error` untranslated and the chat
+  // renders it verbatim. The failure is NAMED instead: each `send('error', …)`
+  // below wraps its payload in `withAcpHandshakeFailureGuidance`, which stamps
+  // `AGENT_CLI_SESSION_REFUSED` plus the runtime identity and leaves the
+  // agent's own line alone.
   return rawMessage;
+}
+
+/**
+ * The runtime identity a failure ships as structured data: the runtime's
+ * display name, which is the one fact the localized copy interpolates.
+ *
+ * Read straight off the already-resolved `RuntimeAgentDef` — a pure lookup on
+ * a value this run resolved before it spawned, so naming the failure adds no
+ * work and no waiting to the failure path.
+ *
+ * @param def - The resolved `RuntimeAgentDef` for this run.
+ * @returns An `AcpAgentIdentity`, with `null` when the runtime is unknown.
+ */
+function agentFailureIdentity(def) {
+  return { agentName: def?.name ?? null };
 }
 
 function createAmrModelUnavailablePayload(model, init = {}) {
@@ -7406,6 +7432,9 @@ export async function startServer({
     analytics: analyticsService,
     getAppVersion: () => telemetry.getCachedAppVersion()?.version ?? '0.0.0',
     requireLocalDaemonRequest,
+    // Uncaught on purpose: an operator asking which mode is in effect must get
+    // an error when the config cannot be read, never `off` / `default`.
+    readOdNextPreference: () => readAppConfig(RUNTIME_DATA_DIR),
   });
   const latchOdNextRolloutForRun = (run, mode, reasonCode) => {
     latchOdNextRolloutStopOperationally({
@@ -7415,6 +7444,11 @@ export async function startServer({
       appVersion: telemetry.getCachedAppVersion()?.version ?? '0.0.0',
       mode,
       reasonCode,
+      // A thunk, not a value: the latch is the safety action and must land
+      // even if this read fails. Sync because run-terminal bookkeeping cannot
+      // await, and read at all so the reported effective mode matches the mode
+      // the run was admitted under.
+      readAppConfig: () => readAppConfigSync(RUNTIME_DATA_DIR),
     });
   };
   workspaceAnalyticsService = analyticsService;
@@ -9952,6 +9986,12 @@ export async function startServer({
           taskResources: odNextStrategyRecipe.taskResources,
         })
       : null;
+    // Structure-only layout primitives travel with every prototype run as a
+    // fact, so stacked text, truncation, rails, and screen chrome are composed
+    // from classes that already behave instead of re-derived per component.
+    const odNextLayoutPrimitivesCss = odNextStrategyRecipe?.taskType === 'prototype'
+      ? selectOdNextLayoutPrimitivesCss(odNextStrategyRecipe.taskResources)
+      : null;
     const odNextStableRequestContext = odNextStrategyRecipe
       ? {
           agentId,
@@ -9961,6 +10001,7 @@ export async function startServer({
           template,
           exampleReference: odNextExampleReference,
           ...(odNextDeviceFrame ? { deviceFrame: odNextDeviceFrame } : {}),
+          ...(odNextLayoutPrimitivesCss ? { layoutPrimitivesCss: odNextLayoutPrimitivesCss } : {}),
           designSystemBody,
           designSystemTitle,
           designSystemUsageMd,
@@ -9994,6 +10035,7 @@ export async function startServer({
           template,
           exampleReference: odNextExampleReference,
           deviceFrame: odNextDeviceFrame,
+          layoutPrimitivesCss: odNextLayoutPrimitivesCss,
           designSystemBody,
           designSystemTitle,
           craftBody,
@@ -11510,6 +11552,50 @@ export async function startServer({
     // by the artifact finalizer (see the emit handler below). 8 MiB comfortably
     // covers realistic artifact-bearing runs while bounding per-run memory.
     const PLAIN_ARTIFACT_STDOUT_CAP = 8 * 1024 * 1024;
+    // Run instrumentation sits ON the path the model's bytes travel: `send`
+    // is the single choke point every stream event passes through on its way
+    // to the user, and the strategy's close-time tail is broadcast from the
+    // child-close handler. A throw from instrumentation there does not cost an
+    // analytics field, it costs the user the entire reply — so every mark goes
+    // through here and its failures are contained to itself. The guard is
+    // scoped to the marks alone; nothing that decides what the user receives
+    // is inside it.
+    let lifecycleTelemetryFaultWarned = false;
+    const recordRunTelemetry = (label: string, record: () => void): void => {
+      try {
+        record();
+      } catch (error) {
+        // One line per run, not per event: a broken classifier would otherwise
+        // log once per delta and bury the runs around it.
+        if (lifecycleTelemetryFaultWarned) return;
+        lifecycleTelemetryFaultWarned = true;
+        console.warn(
+          `[telemetry] run lifecycle instrumentation failed (${label}); run timing will be incomplete`,
+          error,
+        );
+      }
+    };
+    // The single rule for "did the user actually receive something". Both
+    // emission paths apply it: `send` for the live stream, and the strategy's
+    // close-time tail, which cannot re-enter `send` because the protocol is
+    // already finished. Keeping one rule is what stops the two paths from
+    // disagreeing about what counts as visible output.
+    const applyVisibleOutputMarks = (
+      markers: RunLifecycleStreamEventMarkers,
+    ): void => {
+      // Sole owner of `first_visible_output`. A mark here means the bytes
+      // really did leave the daemon — past the title-marker stripper, past the
+      // role-marker guard, past the strategy protocol, past close-time
+      // buffering. Do not stamp this mark from a decode site: doing so is what
+      // made `time_to_first_visible_output_ms` identical to
+      // `time_to_first_token_ms` on every run.
+      if (markers.firstVisibleOutput) {
+        lifecycle.mark('first_visible_output');
+      }
+      if (markers.firstArtifactWrite) {
+        lifecycle.mark('first_artifact_write');
+      }
+    };
     const send = (event, data) => {
       if (strategyProtocol && event === 'agent' && data?.type === 'tool_use') {
         strategyToolUseCount += 1;
@@ -11534,23 +11620,25 @@ export async function startServer({
         strategyVisibleEmitted += chunk;
         data = { ...data, chunk };
       }
-      const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
-      if (lifecycleMarkers.firstModelEventType) {
-        // Second argument is the PRODUCER's start, used only for the phase
-        // anchor. ACP emits `tool_use` at terminal status, so without it the
-        // anchor lands at tool completion. `time_to_first_model_event_ms`
-        // still measures to arrival and is unaffected.
-        lifecycle.markFirstModelEvent(
-          lifecycleMarkers.firstModelEventType,
-          lifecycleMarkers.firstModelEventAt,
-        );
-      }
-      if (lifecycleMarkers.firstVisibleOutput) {
-        lifecycle.mark('first_visible_output');
-      }
-      if (lifecycleMarkers.firstArtifactWrite) {
-        lifecycle.mark('first_artifact_write');
-      }
+      recordRunTelemetry(`stream event ${event}`, () => {
+        const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
+        if (lifecycleMarkers.firstModelEventType) {
+          // Second argument is the PRODUCER's start, used only for the phase
+          // anchor. ACP emits `tool_use` at terminal status, so without it the
+          // anchor lands at tool completion. `time_to_first_model_event_ms`
+          // still measures to arrival and is unaffected.
+          //
+          // Stamped only from this live path. It records when the daemon SAW
+          // the model respond, so the close-time tail below — a re-emission of
+          // something seen long before — must not claim it, or a withheld
+          // reply would drag every phase boundary to the end of the run.
+          lifecycle.markFirstModelEvent(
+            lifecycleMarkers.firstModelEventType,
+            lifecycleMarkers.firstModelEventAt,
+          );
+        }
+        applyVisibleOutputMarks(lifecycleMarkers);
+      });
       if (
         event === 'agent' &&
         data &&
@@ -13666,10 +13754,24 @@ export async function startServer({
       'text_delta',
       'thinking_delta',
     ]);
+    // Stamps ONLY `first_token`. `first_visible_output` deliberately does not
+    // ride along: it belongs to the single emission choke point in `send()`,
+    // which runs after the title-marker stripper and the fabricated-role-marker
+    // guard have decided whether these bytes reach the client at all. Stamping
+    // both here made `time_to_first_visible_output_ms` a byte-for-byte copy of
+    // `time_to_first_token_ms` — the mark is first-write-wins, so this call
+    // always won and the `send()` mark could never fire. The two are equal
+    // whenever output streams straight through (the common case, and correct);
+    // they diverge exactly when the daemon HOLDS bytes back, which is the
+    // window the metric exists to measure.
     const noteFirstTokenAt = (timestamp = Date.now()) => {
-      if (run.analyticsTelemetry?.firstTokenAt) return;
-      lifecycle.mark('first_token', timestamp);
-      lifecycle.mark('first_visible_output', timestamp);
+      // Telemetry-only, and every call site sits inside a live stream handler
+      // that is mid-way through delivering a delta. Same contract as the marks
+      // in `send`: a fault here costs a timing field, never the reply.
+      recordRunTelemetry('first token', () => {
+        if (run.analyticsTelemetry?.firstTokenAt) return;
+        lifecycle.mark('first_token', timestamp);
+      });
     };
     // Subsegment markers inside `processSpawnedAt -> firstTokenAt` (#3408 §4).
     // `cliReadyAt` is the first well-formed adapter output and is stamped for
@@ -13923,9 +14025,12 @@ export async function startServer({
           }));
           return;
         }
-        send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
-          details: ev.raw ? { raw: ev.raw } : undefined,
-        }));
+        send('error', withAcpHandshakeFailureGuidance(
+          createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
+            details: ev.raw ? { raw: ev.raw } : undefined,
+          }),
+          agentFailureIdentity(def),
+        ));
         return;
       }
       // First well-formed decoded stream event = CLI ready for the
@@ -13954,8 +14059,16 @@ export async function startServer({
       noteAgentActivity();
       // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
       if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+        // Decode time, captured BEFORE the emit. The gate has to run first to
+        // learn whether these bytes are a token at all, but the emit inside it
+        // fans the delta out to every SSE client and stamps
+        // `first_visible_output` on the way — reading the clock afterwards
+        // charges our own write latency to TTFT and can leave the visible-output
+        // mark a millisecond AHEAD of the token that produced it. See the
+        // matching sites in the Copilot and ACP handlers.
+        const decodedAt = Date.now();
         if (emitTitleFilteredGuardedTextDelta(ev.delta)) {
-          noteFirstTokenAt();
+          noteFirstTokenAt(decodedAt);
           agentProducedOutput = true;
         }
         return;
@@ -14079,16 +14192,19 @@ export async function startServer({
               ?? rewriteKnownAgentStreamError(agentId, message, failureText);
           agentStreamErrorObservedBeforeCancellation = true;
           run.runtimeFailureObservedBeforeCancellation = true;
-          send('error', createSseErrorPayload(
-            structuredCode ?? diagnostic?.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED',
-            agentStreamError,
-            {
-              retryable: structuredCode
-                ? false
-                : diagnostic?.retryable
-                  ?? (serviceCode === 'AGENT_AUTH_REQUIRED' || serviceCode === 'RATE_LIMITED'),
-              ...(diagnostic ? { details: { detail: diagnostic.detail } } : {}),
-            },
+          send('error', withAcpHandshakeFailureGuidance(
+            createSseErrorPayload(
+              structuredCode ?? diagnostic?.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED',
+              agentStreamError,
+              {
+                retryable: structuredCode
+                  ? false
+                  : diagnostic?.retryable
+                    ?? (serviceCode === 'AGENT_AUTH_REQUIRED' || serviceCode === 'RATE_LIMITED'),
+                ...(diagnostic ? { details: { detail: diagnostic.detail } } : {}),
+              },
+            ),
+            agentFailureIdentity(def),
           ));
           return;
         }
@@ -14174,8 +14290,10 @@ export async function startServer({
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
         if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+          // Decode time, read before the emit — see `sendAgentEvent`.
+          const decodedAt = Date.now();
           if (emitTitleFilteredGuardedTextDelta(ev.delta)) {
-            noteFirstTokenAt();
+            noteFirstTokenAt(decodedAt);
           }
           return;
         }
@@ -14358,17 +14476,31 @@ export async function startServer({
             return;
           }
           if (event === 'agent' && data?.type === 'text_delta' && typeof data.delta === 'string') {
+            // Decode time, read before the emit — see `sendAgentEvent`.
+            const decodedAt = Date.now();
             if (emitTitleFilteredGuardedTextDelta(data.delta)) {
-              noteFirstTokenAt();
+              noteFirstTokenAt(decodedAt);
             }
             return;
           }
           if (event === 'agent') {
             noteFirstTokenFromAgentEvent(data);
             emitAgentEvent(data);
-          } else {
-            send(event, data);
+            return;
           }
+          if (event === 'error') {
+            // This payload is the whole user-visible surface of an ACP failure:
+            // `send` streams it to SSE clients and `design.runs.emit` reads
+            // `run.error` out of it, and the close handler below returns on
+            // `hasFatalError()` before any later rewrite can run. Explain a
+            // handshake rejection here or nowhere.
+            send(event, withAcpHandshakeFailureGuidance(
+              data,
+              agentFailureIdentity(def),
+            ));
+            return;
+          }
+          send(event, data);
         },
         ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
       });
@@ -15006,10 +15138,13 @@ export async function startServer({
               `${agentStderrTail}\n${agentStdoutTail}`,
             );
             if (rewritten !== 'Agent stream error') {
-              send('error', createSseErrorPayload(
-                'AGENT_EXECUTION_FAILED',
-                rewritten,
-                { retryable: true },
+              send('error', withAcpHandshakeFailureGuidance(
+                createSseErrorPayload(
+                  'AGENT_EXECUTION_FAILED',
+                  rewritten,
+                  { retryable: true },
+                ),
+                agentFailureIdentity(def),
               ));
             }
           }
@@ -15221,6 +15356,21 @@ export async function startServer({
             const tailData = tailEvent === 'stdout'
               ? { chunk: tail }
               : { type: 'text_delta', delta: tail };
+            // The protocol withholds any text that might still turn out to be
+            // a reserved `<open-design-…>` block; `finish()` is what finally
+            // rules that out, so this tail is the first moment those bytes are
+            // user-visible. It cannot go back through `send` — `push` throws
+            // once the protocol is finished — so it applies the same visible
+            // output rule here. For a reply whose visible text was withheld in
+            // its entirety this is the ONLY thing the run ever puts on screen;
+            // without the mark the run reports no visible output at all and
+            // the analytics fallback collapses a real close-time wait back to
+            // `firstTokenAt`.
+            recordRunTelemetry('strategy close-time tail', () => {
+              applyVisibleOutputMarks(
+                runLifecycleMarkersForStreamEvent(tailEvent, tailData),
+              );
+            });
             persistRunEventToAssistantMessage(db, run, tailEvent, tailData);
             design.runs.emit(run, tailEvent, tailData);
             strategyVisibleEmitted += tail;
@@ -15311,6 +15461,24 @@ export async function startServer({
                   resolvedFrom: observation.resolvedFrom,
                   entryFile: observation.entryFile,
                   shellPresent: observation.shellPresent,
+                });
+              }
+              const primitives = await observeOdNextLayoutPrimitives({
+                projectRoot: resolveProjectDir(PROJECTS_DIR, run.projectId, projectRecord.metadata),
+                entryFile: deliverable.entryFile,
+                primitivesCss: typeof run.appliedPluginSnapshotId === 'string'
+                  ? selectOdNextLayoutPrimitivesCss(await loadOdNextTaskResourcesForSnapshot({
+                      bundledPluginsDir: BUNDLED_PLUGINS_DIR,
+                      snapshot: getSnapshot(db, run.appliedPluginSnapshotId),
+                    }))
+                  : null,
+              });
+              if (primitives) {
+                run.odNextLayoutPrimitives = primitives.presence;
+                console.info('[od-next-layout-primitives]', {
+                  runId: run.id,
+                  entryFile: primitives.entryFile,
+                  presence: primitives.presence,
                 });
               }
             } catch (err) {

@@ -650,24 +650,26 @@ test('qwen args check promptViaStdin, base args, model args and exclude `-` sent
 // `agy` exposes `-p` (print mode, alias for `--print`) plus `-` as
 // the stdin sentinel — confirmed against `agy --help` on v1.0.3, where
 // `Available subcommands` is `changelog / help / install / plugin /
-// update` (no `chat`). Earlier review iterations pinned `['chat', '-']`
-// based on a different agy build the looper reviewer environment uses;
-// the installed CLI does not recognise it, exits 0 with no stdout, and
-// the daemon would render the resulting empty reply as a "successful"
-// agent response — exactly the failure mode the auth/quota guard at
-// server.ts ~12090 is meant to catch but for the wrong reason.
-test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
+// update` (no `chat`). Current agy treats `agy -p -` as a literal
+// prompt of "-" (stdin is ignored) — see #7161. OD therefore passes
+// the real prompt as the `-p` argument.
+test('antigravity passes prompt via -p argument (print mode)', () => {
   assert.equal(antigravity.bin, 'agy');
   assert.equal(antigravity.streamFormat, 'plain');
-  assert.equal(antigravity.promptViaStdin, true);
+  assert.equal(antigravity.promptViaStdin, false);
 
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
-  assert.deepEqual(args, ['-p', '-']);
+  assert.deepEqual(args, ['-p', 'write hello world']);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
   });
-  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+  assert.deepEqual(argsWithLog, [
+    '--log-file',
+    '/tmp/od-agy-test.log',
+    '-p',
+    'write hello world',
+  ]);
 
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
@@ -682,7 +684,12 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
       antigravitySettingsPath: join(settingsDir, 'settings.json'),
     });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+    assert.deepEqual(withModel, [
+      '--log-file',
+      '/tmp/od-agy-test.log',
+      '-p',
+      'hi',
+    ]);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -698,13 +705,13 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   const followUp = antigravity.buildArgs('next message', [], [], {}, {
     hasPriorAssistantTurn: true,
   });
-  assert.deepEqual(followUp, ['-p', '-']);
+  assert.deepEqual(followUp, ['-p', 'next message']);
   assert.equal(followUp.includes('-c'), false);
 
   const firstTurn = antigravity.buildArgs('first', [], [], {}, {
     hasPriorAssistantTurn: false,
   });
-  assert.deepEqual(firstTurn, ['-p', '-']);
+  assert.deepEqual(firstTurn, ['-p', 'first']);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
   assert.equal(antigravity.maxPromptArgBytes, undefined);

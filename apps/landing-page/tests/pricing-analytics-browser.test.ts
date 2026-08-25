@@ -113,6 +113,7 @@ after(async () => {
 
 async function openPricing(input: {
   billing?: BillingFixture;
+  billingStatus?: number;
   browserLocale?: string;
   sourcePath?: '/dashboard' | '/wallet' | '/not-a-pricing-source' | null;
   signedIn?: boolean;
@@ -157,7 +158,12 @@ async function openPricing(input: {
       return;
     }
     if (pathname === '/api/v1/billing/summary') {
-      await route.fulfill({ status: 200, headers: cors, body: JSON.stringify(billing) });
+      const billingStatus = input.billingStatus ?? 200;
+      await route.fulfill({
+        status: billingStatus,
+        headers: cors,
+        body: billingStatus >= 400 ? 'error' : JSON.stringify(billing),
+      });
       return;
     }
     if (pathname === '/api/v1/analytics/pricing-events') {
@@ -206,6 +212,194 @@ function flattened(requests: BridgeRequest[]): BridgeEvent[] {
 }
 
 describe('authenticated Pricing compatibility browser wiring', { concurrency: false }, () => {
+  it('shows Go as sold out for a signed-out visitor', async (t) => {
+    const { page } = await openPricing({
+      browserLocale: 'zh-CN',
+      signedIn: false,
+      targetHref: '/zh/pricing/',
+    });
+    t.after(() => page.context().close());
+    const go = page.locator('[data-pricing-cta][data-tier="go"]');
+    await go.waitFor();
+
+    assert.equal((await go.textContent())?.trim(), '已停售');
+    assert.equal(await go.getAttribute('aria-disabled'), 'true');
+    assert.equal(await go.getAttribute('href'), null);
+    assert.equal(
+      await page.locator('[data-pricing-root]').getAttribute(
+        'data-personal-pricing-context-resolved',
+      ),
+      null,
+    );
+  });
+
+  it('renders yearly first without an interval swap for a signed-out visitor', async (t) => {
+    const html = await (await fetch(`${baseUrl}/zh/pricing/`)).text();
+    const pricingRootTag = html.match(/<article[^>]*data-pricing-root[^>]*>/)?.[0];
+    assert.match(pricingRootTag ?? '', /data-interval="yearly"/);
+    assert.match(
+      html,
+      /data-interval-btn="yearly"[^>]*aria-selected="true"/,
+    );
+
+    const { page } = await openPricing({
+      browserLocale: 'zh-CN',
+      signedIn: false,
+      targetHref: '/zh/pricing/',
+    });
+    t.after(() => page.context().close());
+    await page.locator('[data-pricing-cta][data-tier="go"]').waitFor();
+
+    assert.equal(
+      await page.locator('[data-pricing-root]').getAttribute('data-interval'),
+      'yearly',
+    );
+    assert.equal(
+      await page.locator('[data-interval-btn="yearly"]').getAttribute('aria-selected'),
+      'true',
+    );
+  });
+
+  it('shows first-month prices on monthly cards for a signed-out visitor', async (t) => {
+    const { page } = await openPricing({
+      browserLocale: 'zh-CN',
+      signedIn: false,
+      targetHref: '/zh/pricing/',
+    });
+    t.after(() => page.context().close());
+    await page.locator('[data-pricing-cta][data-tier="go"]').waitFor();
+    await page.locator('[data-interval-btn="monthly"]').click();
+
+    const prices = await page.locator(
+      '.pricing-card:not([data-tier="go"]) [data-monthly-price]',
+    ).allTextContents();
+    const originalPrices = await page.locator(
+      '.pricing-card:not([data-tier="go"]) .price[data-when="monthly"] del',
+    ).allTextContents();
+
+    assert.deepEqual(prices.map((price) => price.trim()), ['16', '70', '120']);
+    assert.deepEqual(
+      originalPrices.map((price) => price.trim()),
+      ['$20', '$100', '$200'],
+    );
+  });
+
+  it('keeps paid yearly upgrades enabled for a signed-out visitor', async (t) => {
+    const { page } = await openPricing({
+      browserLocale: 'zh-CN',
+      signedIn: false,
+      targetHref: '/zh/pricing/',
+    });
+    t.after(() => page.context().close());
+    await page.locator('[data-pricing-cta][data-tier="go"]').waitFor();
+    await page.locator('[data-interval-btn="yearly"]').click();
+
+    const states = await page.locator('[data-pricing-cta]').evaluateAll((ctas) =>
+      ctas.slice(0, 4).map((cta) => ({
+        tier: cta.getAttribute('data-tier'),
+        text: cta.textContent?.trim(),
+        disabled: cta.getAttribute('aria-disabled'),
+      })),
+    );
+    assert.deepEqual(states, [
+      { tier: 'go', text: '已停售', disabled: 'true' },
+      { tier: 'plus', text: '升级 Plus', disabled: null },
+      { tier: 'pro', text: '升级 Pro', disabled: null },
+      { tier: 'max', text: '升级 Max', disabled: null },
+    ]);
+  });
+
+  it('leaves static CTAs unchanged when billing summary fails', async (t) => {
+    const { page } = await openPricing({
+      browserLocale: 'zh-CN',
+      signedIn: true,
+      billingStatus: 500,
+      targetHref: '/zh/pricing/',
+    });
+    t.after(() => page.context().close());
+    await page.locator('[data-pricing-cta][data-tier="go"]').waitFor();
+    await page.waitForTimeout(300);
+
+    assert.equal(
+      await page.locator('[data-pricing-root]').getAttribute(
+        'data-personal-pricing-context-resolved',
+      ),
+      null,
+    );
+    const states = await page.locator('[data-pricing-cta]').evaluateAll((ctas) =>
+      ctas.slice(0, 4).map((cta) => ({
+        tier: cta.getAttribute('data-tier'),
+        text: cta.textContent?.trim(),
+        disabled: cta.getAttribute('aria-disabled'),
+      })),
+    );
+    assert.deepEqual(states, [
+      { tier: 'go', text: '已停售', disabled: 'true' },
+      { tier: 'plus', text: '升级 Plus', disabled: null },
+      { tier: 'pro', text: '升级 Pro', disabled: null },
+      { tier: 'max', text: '升级 Max', disabled: null },
+    ]);
+  });
+
+  it('ignores legacy demo_plan query and keeps live billing current plan', async (t) => {
+    // Regression: ?demo_plan=pro used to synthesize a Pro context and mark Pro
+    // as current even when live billing said otherwise. Public demo_plan is gone.
+    const { page } = await openPricing({
+      browserLocale: 'zh-CN',
+      targetHref: '/zh/pricing/?demo_plan=pro',
+      billing: { membershipTier: 'plus', billingInterval: 'yearly' },
+    });
+    t.after(() => page.context().close());
+    await page.waitForFunction(() =>
+      document.querySelector('[data-pricing-root]')?.getAttribute(
+        'data-personal-pricing-context-resolved',
+      ) === 'true',
+    );
+
+    assert.match(page.url(), /[?&]demo_plan=pro(?:&|$)/);
+    const states = await page.locator('[data-pricing-cta]').evaluateAll((ctas) =>
+      ctas.slice(0, 4).map((cta) => ({
+        tier: cta.getAttribute('data-tier'),
+        text: cta.textContent?.trim(),
+        disabled: cta.getAttribute('aria-disabled'),
+      })),
+    );
+    assert.deepEqual(states, [
+      { tier: 'go', text: '已停售', disabled: 'true' },
+      { tier: 'plus', text: '当前套餐', disabled: 'true' },
+      { tier: 'pro', text: '升级 Pro', disabled: null },
+      { tier: 'max', text: '升级 Max', disabled: null },
+    ]);
+  });
+
+  it('shows lower tiers as disabled Subscribe buttons for a current Pro user', async (t) => {
+    const { page } = await openPricing({
+      browserLocale: 'zh-CN',
+      targetHref: '/zh/pricing/',
+      billing: { membershipTier: 'pro', billingInterval: 'yearly' },
+    });
+    t.after(() => page.context().close());
+    await page.waitForFunction(() =>
+      document.querySelector('[data-pricing-root]')?.getAttribute(
+        'data-personal-pricing-context-resolved',
+      ) === 'true',
+    );
+
+    const states = await page.locator('[data-pricing-cta]').evaluateAll((ctas) =>
+      ctas.slice(0, 4).map((cta) => ({
+        tier: cta.getAttribute('data-tier'),
+        text: cta.textContent?.trim(),
+        disabled: cta.getAttribute('aria-disabled'),
+      })),
+    );
+    assert.deepEqual(states, [
+      { tier: 'go', text: '已停售', disabled: 'true' },
+      { tier: 'plus', text: '订阅', disabled: 'true' },
+      { tier: 'pro', text: '当前套餐', disabled: 'true' },
+      { tier: 'max', text: '升级 Max', disabled: null },
+    ]);
+  });
+
   it('sends corrected Go Plus Pro Max context on the first trusted dashboard exposure', async (t) => {
     const { page, requests, navigations } = await openPricing({
       billing: {

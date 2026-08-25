@@ -51,6 +51,26 @@ afterEach(() => {
 });
 
 describe('createVelaWalletSnapshotReader balance validation', () => {
+  it('projects the authenticated Vela Coding Plan model list into the wallet snapshot', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const pathname = new URL(input.toString()).pathname;
+      const body = pathname.endsWith('/billing/coding-plan-models')
+        ? { membershipTier: 'go', models: ['deepseek-v4-flash', 'glm-5.2'] }
+        : { balanceUsd: '0.00', updatedAt: '2026-08-23T00:00:00.000Z' };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const reader = createVelaWalletSnapshotReader({ fetch: fetchMock as typeof fetch });
+
+    await expect(reader.read()).resolves.toMatchObject({
+      status: 'available',
+      balanceUsd: '0.00',
+      codingPlanModels: ['deepseek-v4-flash', 'glm-5.2'],
+    });
+  });
+
   it.each([
     { label: 'missing', balanceUsd: undefined },
     { label: 'numeric', balanceUsd: 20 },

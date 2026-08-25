@@ -716,6 +716,12 @@ export function HomeView({
   const [promptEditedByUser, setPromptEditedByUser] = useState(
     () => restoredDraft.prompt.trim().length > 0,
   );
+  // The exact Website-clone scaffold currently sitting in the composer, or null.
+  // Storing the string we wrote — rather than re-deriving it from `t()` when we
+  // need to compare — keeps the release below correct across a locale switch,
+  // which would otherwise translate the scaffold out from under the check and
+  // leave it stranded in the composer.
+  const webCloneScaffoldRef = useRef<string | null>(null);
   // Persist the composer draft on every change so it survives the unmount that
   // a tab switch triggers (see the module note above). Empty values clear the
   // key rather than storing "".
@@ -2472,6 +2478,26 @@ export function HomeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAuthoringChipId, pendingAuthoringPrompt, pendingAuthoringInputs, pluginsLoading, plugins]);
 
+  /**
+   * Website clone is the only create chip that writes into the composer, and
+   * what it writes is host-authored scaffolding standing in for an empty
+   * composer — not something the user typed. Every other create chip preserves
+   * the draft on switch, so a scaffold left behind rides along into Slide deck,
+   * Image, Document and every other type it means nothing in.
+   *
+   * Leaving the chip hands the composer back the empty state the scaffold
+   * replaced. The moment the user types into it, it stops being ours and the
+   * draft-preserving rule that governs every other chip takes over.
+   */
+  function releaseWebCloneScaffold(nextChipId: string) {
+    const scaffold = webCloneScaffoldRef.current;
+    if (scaffold === null || nextChipId === 'web-clone') return;
+    webCloneScaffoldRef.current = null;
+    if (prompt !== scaffold) return;
+    setPrompt('');
+    setPromptEditedByUser(false);
+  }
+
   // Stage B of plugin-driven-flow-plan: the chip rail dispatcher.
   // Pure UI-state mapping — the heavy lifting is delegated back to
   // existing handlers. Migration chips that don't have a bound plugin
@@ -2487,6 +2513,7 @@ export function HomeView({
     },
   ) {
     setError(null);
+    releaseWebCloneScaffold(chip.id);
     const activeChipId = chip.id;
     const prototypeSubtypeId = selection?.prototypeSubtypeId ?? null;
     // P0 ui_click area=chat_composer element=plugin_chip|action_chip. The
@@ -2511,9 +2538,7 @@ export function HomeView({
         const targetId = chip.action.pluginId;
         const record = plugins.find((p) => p.id === targetId);
         if (!record) {
-          setError(
-            `Bundled scenario "${targetId}" is not installed. Reinstall the daemon to restore the default plugin set.`,
-          );
+          setError(t('home.bundledScenarioMissing', { scenarioId: targetId }));
           return;
         }
         const mediaSurface = homeMediaSurfaceForChipId(chip.id);
@@ -2577,6 +2602,12 @@ export function HomeView({
             ? t('homeHero.chip.webClonePromptSeed')
             : null;
         if (chip.group === 'create') {
+          // Only claim ownership when we actually wrote the scaffold. Re-picking
+          // Website clone while the scaffold is already there produces no seed
+          // (the composer is not empty), and clearing the ref on that pass would
+          // orphan the scaffold — leaving it to ride into the next chip after
+          // all. Releasing is the release path's job, not this one's.
+          if (promptSeed !== null) webCloneScaffoldRef.current = promptSeed;
           void usePlugin(record, promptSeed ?? undefined, {
             ...pluginOptions,
             suppressPromptUpdate: promptSeed === null,
