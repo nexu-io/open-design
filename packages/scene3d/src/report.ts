@@ -141,7 +141,14 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
      turntable rounds to tune one emissive material because nothing cheaper
      could show the composition. */
   if ((result.materialBalls?.length ?? 0) > 0) {
-    const skipped = result.materialBallsSkipped ? ` (${result.materialBallsSkipped} skipped)` : "";
+    // Skipped previews are NAMED, not just counted: a cap and a bake
+    // failure look identical in a count, and the runner measured the names.
+    const names = result.materialBallsSkippedNames ?? [];
+    const shownNames = names.slice(0, 6).join(", ");
+    const more = names.length > 6 ? ` +${names.length - 6} more` : "";
+    const skipped = result.materialBallsSkipped
+      ? ` (${result.materialBallsSkipped} skipped${shownNames ? `: ${shownNames}${more}` : ""})`
+      : "";
     lines.push(
       `material balls: ${result.materialBalls!.length} lit-sphere preview(s) in out/materials/${skipped} — judge emission/alpha here before paying for a turntable`,
     );
@@ -220,13 +227,29 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
        shipped a cage whose bars stood beside their ring: the plan view
        showed it unmissably, and the author never opened the file because
        nothing named it. The turntable is a photograph; these are the
-       drawings. */
-    lines.push(
-      "  out/ortho.svg — dimensioned plan/front/side drawings (SVG = text-readable); a 2-second look catches proportion and overlap mistakes the turntable obscures",
-    );
+       drawings.
+
+       Every line is gated on the file actually existing this compile: the
+       block's whole worth is that following it never hits a wall, and a
+       first --fast pass writes no frame player and a census-less pass no
+       ortho. A read: that can name an absent file teaches the reader to
+       stop following it. */
+    if (result.census) {
+      lines.push(
+        "  out/ortho.svg — dimensioned plan/front/side drawings (SVG = text-readable); a 2-second look catches proportion and overlap mistakes the turntable obscures",
+      );
+    }
     lines.push("  out/digest.md — the census in prose, with the per-part dimensions table");
     lines.push("  out/read-model.json — the full census, machine-readable");
-    lines.push("  out/index.html (frame player) · kit.html at the project root (live viewer)");
+    if (result.manifest.textures.length > 0) {
+      lines.push("  out/textures/ — the baked shader maps and atlases, as real pixels");
+    }
+    if ((result.materialBalls?.length ?? 0) > 0) {
+      lines.push("  out/materials/ — lit-sphere previews, one per material, under the proof's own lighting");
+    }
+    if (result.proofImages.length > 0) {
+      lines.push("  out/index.html (frame player) · kit.html at the project root (live viewer)");
+    }
   }
 
   // Synthesis header: the ranked "fix first" summary an agent reads before the
@@ -239,16 +262,52 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
   appendSection(lines, "warnings", result.issues, "warning", options);
   if (infos > 0) appendSection(lines, "info", result.issues, "info", options);
 
+  /* The verdict is the last thing a blind reader sees before deciding the
+     next move, so it points FORWARD — one sentence, matched to where the
+     loop actually stands. Guidance lives here and at other terminal
+     moments, never per-issue: an agent drowning in cheer reads none of it. */
+  lines.push("");
   if (result.ok) {
-    lines.push("");
     lines.push(
       warnings > 0
-        ? "verdict: compiles clean; warnings above are advisory."
+        ? "verdict: compiles clean; warnings above are advisory — fix what matters, or tune the named contract knob when one fights a deliberate choice."
         : "verdict: compiles clean.",
     );
+    const proofRan = result.stages.some((s) => s.id === "proof" && s.status !== "skipped");
+    if (!proofRan) {
+      // The natural next move after a restricted pass — phrased around the
+      // OUTCOME (a full compile), not any one flag, because API callers
+      // restricted stages without ever holding a --fast. Suppressed when
+      // Blender itself is absent: "run a full compile" is a wall there, and
+      // the E-201/E-207 line above already names the real next step.
+      /* Shown when a full compile is genuinely the next step: Blender ran
+         this pass (the fast gear), OR no Blender-needing stage was even
+         requested (a parse-only look at the solved boxes). Suppressed only
+         when a Blender stage was WANTED and the runtime was absent — there,
+         "run a full compile" is a wall, and the E-201/E-207 line above
+         already names the real next step. */
+      const blenderStageWanted = result.stages.some((s) =>
+        s.id === "build" || s.id === "proof" || s.id === "export",
+      );
+      if (result.manifest.blender?.used || !blenderStageWanted) {
+        lines.push("next: structure settled? run a full compile to photograph, export, and see the piece.");
+      }
+    } else {
+      lines.push(
+        "next: before calling it done, walk one proof frame and out/ortho.svg — a clean compile proves the build, not the design.",
+      );
+    }
+    // A spec with no claims is a shape nothing re-verifies. One nudge, only
+    // on success, only when the author has not already answered it.
+    if (result.source.kind === "spec" && !result.manifest.claims) {
+      lines.push(
+        "tip: this spec declares no claims — a claims block (parts, watertight, footprint…) makes the compiler re-check your intent on every future compile, free.",
+      );
+    }
   } else {
-    lines.push("");
-    lines.push("verdict: fix every error above, then compile again.");
+    lines.push(
+      "verdict: fix every error above, then compile again — the fix: lines name the change and the data: lines carry the measured numbers.",
+    );
   }
 
   lines.push("</scene3d-report>");

@@ -175,7 +175,7 @@ const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
     fails: (f, b) => f > b,
     message: (cx, f, b) =>
       `'${cx.part.familyId}' (role ${cx.part.role}) binds ${mib(f)} of texture, over the ${mib(b)} its role budgets`,
-    hint: () => "shrink or share the textures, or raise the budget for this role",
+    hint: () => "shrink or share the textures, or raise this role's budget in conventions.budgets.roles",
     detail: (cx, f, b) => ({ textureBytes: f, budget: b }),
   },
 
@@ -278,7 +278,7 @@ const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
     fails: (f, b) => f < b,
     message: (cx, f, b) =>
       `'${cx.part.familyId}' (role ${cx.part.role}) is textured at ${Math.round(f)} px/m, under the ${b} px/m its role expects`,
-    hint: () => "raise this part's texel density (bigger maps or tighter UVs), or relax the role",
+    hint: () => "raise this part's texel density (bigger maps or tighter UVs), or relax its role's floor in conventions.budgets.roles",
     detail: (cx, f, b) => ({ texelDensity: f, budget: b }),
   },
 ];

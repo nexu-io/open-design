@@ -294,6 +294,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         severity: "error",
         message:
           "both scene.json and build.py exist — two authorities over the same geometry; keep one",
+        hint: "scene.json is the declarative path (solver, claims, provenance); build.py is raw bpy. Rename the other aside (e.g. build.py.bak) and compile again — nothing is lost either way",
         file: "scene.json",
       });
     } else {
@@ -766,6 +767,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
      list as a turntable, and a ball is not a frame of one. */
   const materialBalls: string[] = [];
   let materialBallsSkipped = 0;
+  let materialBallsSkippedNames: string[] = [];
   let proofFrames: ProofFrameStats[] | undefined;
   /** Per-frame off-camera facts from the proof turntable, when it ran. */
   let offByFrame: Array<{ frame: number; objects: string[] }> | undefined;
@@ -809,6 +811,11 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       ) {
         proofImages.push(...cached.artifacts);
         materialBalls.push(...cachedBalls);
+        const cachedNames = (cached.data as { materialBallsSkippedNames?: unknown } | null)
+          ?.materialBallsSkippedNames;
+        materialBallsSkippedNames = Array.isArray(cachedNames)
+          ? cachedNames.filter((m): m is string => typeof m === "string")
+          : [];
         materialBallsSkipped =
           typeof (cached.data as { materialBallsSkipped?: unknown } | null)?.materialBallsSkipped === "number"
             ? ((cached.data as { materialBallsSkipped: number }).materialBallsSkipped)
@@ -889,6 +896,16 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           materialBalls.push(...ballFiles.map((n) => `${MATERIALS_DIR}/${n}`));
           const skippedRaw = (result.data as { materialBallsSkipped?: unknown } | undefined)?.materialBallsSkipped;
           materialBallsSkipped = typeof skippedRaw === "number" ? skippedRaw : 0;
+          /* The NAMES of the unpreviewed materials, not just their count.
+             The runner measures them ({material, reason}); a bare count
+             left the reader unable to tell which surfaces went unpreviewed
+             — a cap and a bake failure looked identical. */
+          const rawNotes = (result.data as { materialBallNotes?: unknown } | undefined)?.materialBallNotes;
+          materialBallsSkippedNames = Array.isArray(rawNotes)
+            ? rawNotes
+                .map((n) => (n as { material?: unknown })?.material)
+                .filter((m): m is string => typeof m === "string")
+            : [];
           proofFrames = asProofFrames((result.data as { frames?: unknown } | undefined)?.frames);
           offByFrame = (result.data as { offByFrame?: unknown } | undefined)?.offByFrame as
             | Array<{ frame: number; objects: string[] }>
@@ -918,6 +935,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
                    would read as the feature coming and going. */
                 materialBalls,
                 materialBallsSkipped,
+                materialBallsSkippedNames,
               },
             });
           }
@@ -1550,6 +1568,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     proofImages,
     materialBalls,
     ...(materialBallsSkipped > 0 ? { materialBallsSkipped } : {}),
+    ...(materialBallsSkippedNames.length > 0 ? { materialBallsSkippedNames } : {}),
     exportedAssets,
     summary,
     digest,

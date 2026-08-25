@@ -88,8 +88,9 @@ Inside Open Design:
 ```
 
 While the structure is still moving, stay on the fast gear: parse, build,
-lint. No photographs, no export. A full compile spends seconds of proof on
-findings these stages already produce:
+lint, manifest. No photographs, no export — a full compile spends seconds
+of proof on findings these stages already produce, and the manifest rides
+along free so `scene3d manifest --json` never reads stale:
 
 ```bash
 "$OD_NODE_BIN" "$OD_BIN" scene3d compile \
@@ -103,6 +104,14 @@ is produced, validated, and lowered.
 
 A compile that finds errors is still a successful run. The report tells
 you what the bench saw; read it, change the source, go again.
+
+You start every run blind, and the harness is built for that: misspelled
+keys come back with `did you mean …?`, tunable warnings name their exact
+contract knob in the `fix:` line, and the report carries a `read:` block
+naming every diagnostic on disk — with clean compiles closing on a
+`next:` step matched to where the loop stands, when one applies. When any message and this
+document disagree, trust the message — it is measuring the build in
+front of you; this page is memory.
 
 ## What you can make
 
@@ -244,8 +253,10 @@ dimensions and joint tolerances.
 ```
 
 That is a complete scene and a teaching skeleton. Your parts come from
-the brief. Ids are `[A-Za-z][A-Za-z0-9_]{2,63}`: `prp_deck`, `mtl_hull`,
-`shd_rust`. A name is design information.
+the brief. Part and material ids are `[A-Za-z][A-Za-z0-9_]{2,63}`:
+`prp_deck`, `mtl_hull`. Shader names are stricter — `shd_` then
+lower_snake, 5-45 chars (`shd_rust`, never `shd_rustMetal`). A name is
+design information.
 
 **Parts.** `size` is the AABB in metres. `shape` fills it exactly: `box`
 (default), `cylinder`, `sphere`, `cone`, `torus`, `wedge`, `tube`,
@@ -280,10 +291,13 @@ the right primitive:
 rotation of the finished part about one world axis, at its solved
 position — a tilted sign, a canted buttress, a ramp turned to face the
 door. `size` stays the part's own box; the solver reasons in the ROTATED
-BOUND of that box, so every relation still places the space the part
-actually occupies. `deg` is strictly between -360 and 360 and never a
-whole turn (that rotates nothing, and is refused). Not combinable with
-`span`, whose whole job is to solve a size on a world axis.
+BOUND of the part, shape-aware — exact for boxes and the round shapes
+(a cylinder turned about its own axis keeps its box), conservative for
+wedges and imported parts (extra clearance, never interpenetration) — and
+canted clones are separated by an exact oriented test rather than their
+swollen AABBs. `deg` is strictly between -360 and 360 and never a whole turn
+(that rotates nothing, and is refused). Not combinable with `span`,
+whose whole job is to solve a size on a world axis.
 
 Fill the box another way:
 
@@ -295,14 +309,26 @@ Fill the box another way:
   works). Create **exactly one mesh**. The compiler fits it into the box;
   placement stays the relations' job.
 
+**Roles.** `role` on a part names its job — `hero`, `character`, `prop`,
+`background`, or `decor` — and the intent judge budgets triangle share
+and texel density by it (the `S3D-W-95x` family). Tune per role in
+`conventions.budgets.roles` or per part id in
+`conventions.budgets.parts`; a scene with no roles is judged by its
+scene-wide budgets alone.
+
+**Margin notes.** Any key beginning `//` is a comment to the next
+reader, ignored by every unknown-key check — in scene.json, the shader
+block, and scene3d.json alike:
+`"//": "the ring is oversized on purpose; see the brief"`.
+
 **Relations.** Any order; the solver is a fixpoint. Every declarative spec
 scene needs at least one `at`.
 
 | Relation | Meaning |
 |---|---|
 | `at` | absolute anchor |
-| `sits_on` (`embed`) | rest on top, sunk so faces overlap; takes the support's x/y unless something else speaks |
-| `above` (`clearance`) | float over a part with a measured gap |
+| `sits_on` (`embed`, `axis`) | rest on top, sunk so faces overlap; takes the support's x/y unless something else speaks. `axis` (default `z`) is the direction "on top of" means — any other axis is an ATTACHMENT (a pommel capping a Y-up grip): same face-to-face placement and the support's x/y still fill in as usual, but it says nothing about gravity, records no resting support, and leaves z open — give the part a z of its own (an `align` on z, or a real `sits_on`) |
+| `above` (`clearance`, `axis`) | float past a part with a measured gap, along `axis` (default z) |
 | `align` (`axes`) | centre on another part along named axes |
 | `inset_from` (`faces`, `by`) | pull named faces in from a reference; it only insets |
 | `span` (`from`, `to`, `axis`, `embed`) | stretch between two parts, biting into both |
@@ -350,7 +376,11 @@ the one mistake this knob invites — the default already fits.
 **Claims** are your signature on the work, checked against the *built*
 artifact: `parts`, `maxTriangles`, `grounded`, `maxHeight`, `footprint`
 `[x,y]`, `watertight`, `materialsUsed`. Numerics are upper bounds except
-`parts` and `materialsUsed`, which are exact. `grounded` means nothing
+`parts`, which is exact. `materialsUsed` is an ARRAY OF NAMES, not a
+count: every listed material must be bound to some part in the built
+scene. It is a subset check — a bound material you did not list passes
+silently, so it guards against losing a material, not against gaining
+one. `grounded` means nothing
 sinks through the floor. Floating is a legitimate composition — a
 lantern hangs, an orb hovers — and if a part is *meant* to float or bed
 while the rest of the scene stays grounded, declare it in
@@ -399,16 +429,28 @@ Core stdlib (integer-hash, identical on every GPU): `s3d_hash21(vec2)`,
 `s3d_hash22(vec2)`, `s3d_vnoise(vec2)`, `s3d_fbm(vec2)`, `s3d_voronoi(vec2)`.
 `s3d_fbm` takes one argument — the coordinate, pre-scaled by you
 (`s3d_fbm(uv * uScale)`) — octave count, lacunarity and gain are fixed,
-not extra parameters.
+not extra parameters. The base fields do NOT tile: for anything that
+repeats — a beam strip, a sky face, a trim texture — use the seamless
+`_tiled` variants, which take a SECOND argument, the period:
+`s3d_fbm_tiled(uv * 6.0, vec2(6.0))`. The period must equal the integer
+cell count you pre-scaled by — same number both places — or the wrap
+lands at the wrong frequency and the seam returns. (`s3d_vnoise_tiled`,
+`s3d_fbm_tiled`, `s3d_voronoi_tiled`, with `s3d_wrap_cell` underneath.) Two more declaration keys beside `uniforms`:
+`ints` declares integer uniforms, and `motionVectors: true` on a
+`frames` kernel additionally bakes a `<name>_mv.png` atlas a real-time
+engine interpolates with (`baseColor` must be among the outputs). `ints`
+is an array of NAMES re-typing entries already in `uniforms`
+(`"ints": ["uSteps"]`); a name with no matching uniform is refused.
 
 Outputs: `baseColor`, `emission` (sRGB), `roughness`, `metallic`
 (Non-Color), `height` (you author bump; the compiler derives a wrap-aware
-normal, `normalStrength` 0–10). The FIRST output is the plain
-`vec4 kernel(vec2 uv)` you already wrote. Every ADDITIONAL output in the
-`outputs` array needs its OWN entry point named `kernel_<output>` — a
-two-output shader (`["baseColor", "roughness"]`) means the file defines
-both `kernel` and `kernel_roughness`; a compile with an output declared
-but no matching function is a wasted round trip, not a partial bake.
+normal, `normalStrength` 0–10). Entry points are named BY OUTPUT, not by
+position: `baseColor` is the plain `vec4 kernel(vec2 uv)`; every other
+output needs its own `vec4 kernel_<output>(vec2 uv)`. So
+`["baseColor", "roughness"]` defines `kernel` and `kernel_roughness` —
+and a height-only shader (`["height"]`) defines just `kernel_height`,
+no plain `kernel` at all. An output declared with no matching function
+is a wasted round trip, not a partial bake.
 
 **Time is a kernel dimension.** `"frames": 16` (2/4/8/16/32/64) bakes a
 power-of-two atlas with `uS3dTime` ∈ [0, 1). Loop through the unit circle
@@ -416,12 +458,16 @@ power-of-two atlas with `uS3dTime` ∈ [0, 1). Loop through the unit circle
 frames shader is a sheet product, so materials cannot bind it.
 
 Iterating a kernel does not need a full compile: `--fast` still bakes
-shader textures to `out/textures/`, so you can judge the actual pixels
-cheap and save the photograph for when the composition is right. And
-every proof render — fast or full — also writes a lit-sphere preview
-per material to `out/materials/ball-<name>.png`, under the proof's own
-lighting: the cheap way to judge emission, alpha, and metallic
-composition before paying for a turntable.
+shader textures to `out/textures/` (the bake happens at build time), so
+you can judge the actual pixels cheap and save the photograph for when
+the composition is right. A FULL compile's proof additionally writes a
+lit-sphere preview per material (capped at 24, alphabetical — the
+report counts the skipped and names the first six) to
+`out/materials/ball-<name>.png`, under the
+proof's own lighting — the cheap way to judge emission, alpha, and
+metallic composition without walking a whole turntable.
+`--fast` skips proof, so no balls there: raw bakes on the fast gear,
+composed previews on the full one.
 
 ### Motion
 
@@ -549,6 +595,9 @@ Operational facts worth knowing before they surprise you:
 - **Resolve the daemon port fresh every session** via `pnpm tools-dev
   status --json`; never trust an inherited `OD_DAEMON_URL`, it changes
   on every restart.
+- **`od` in a printed `run:` hint names this CLI**, not necessarily a
+  command on your PATH — invoke it through your session's prefix
+  (`"$OD_NODE_BIN" "$OD_BIN" …`) when bare `od` is not available.
 - **On Windows, never write scene sources with PowerShell
   `Set-Content`** — it stamps a UTF-8 BOM. The compiler tolerates a BOM
   on `scene.json`/`scene3d.json` now, but other tools reading your files
@@ -571,7 +620,7 @@ errors:
     fix: offset one surface by at least 1e-3
     data: …
 
-verdict: fix every error above, then compile again.
+verdict: fix every error above, then compile again — the fix: lines name the change and the data: lines carry the measured numbers.
 </scene3d-report>
 ```
 
@@ -604,10 +653,12 @@ How to read it. This is the whole method:
    build once shipped a defective cage because nothing told its author
    to look here.
 
-A full compile's report ends with a `read:` block naming every one of
-these paths (`out/ortho.svg`, `out/digest.md`, `out/read-model.json`,
-`out/index.html`, `kit.html`) — follow it rather than guessing what
-exists. `out/digest.md` is the prose twin of the report: issues first,
+Every compile whose manifest stage ran — `--fast` included — carries a
+`read:` block, and each line appears only when the file exists this
+pass: `out/digest.md` and `out/read-model.json` always, `out/ortho.svg`
+with a census, `out/textures/` and `out/materials/` when bakes and ball
+previews landed, `out/index.html` and `kit.html` when frames exist.
+Follow it rather than guessing what exists — a path it names is there. `out/digest.md` is the prose twin of the report: issues first,
 then what this compile changed. Contacts that broke are included,
 because that is how an edit can move nothing and still stop one part
 supporting another. `out/read-model.json` is the same census,
@@ -626,8 +677,8 @@ Fix the source. Compile again. Do not argue with the measurement.
 ## The user's bench
 
 After a compile, the user has a turntable (`out/index.html`) and a live
-kit (`out/kit.html`) where they can orbit, pick parts, move them, and
-restyle materials. The host Export menu owns shipping files; the page
+kit (`kit.html`, at the project root) where they can orbit, pick parts,
+move them, and restyle materials. The host Export menu owns shipping files; the page
 itself is picture and bench.
 
 When they edit, their intent lands in `tweaks.json` beside the sources

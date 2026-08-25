@@ -13,7 +13,8 @@ import {
   SolvedScene,
   Vec3,
   normalizeTurn,
-  rotatedBoxSize,
+  obbSeparation,
+  rotatedShapeSize,
 } from "./types.js";
 import { Rng } from "./rng.js";
 
@@ -87,7 +88,9 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
     // the rotated bound is the only box any of them may see. Splitting it
     // here rather than at each relation is what keeps `rotate` invisible to
     // sits_on, inset_from, repeat, scatter and the intersection report.
-    size.set(part.id, rotatedBoxSize(part.size, rotationOf(part)));
+    // Shape-aware: a cylinder turned about its own axis keeps its box; a
+    // box uses the exact rectangle bound (see rotatedShapeSize).
+    size.set(part.id, rotatedShapeSize(part, part.size, rotationOf(part)));
   }
 
   const unknown = (id: string, relation: string): void => {
@@ -153,13 +156,21 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
         if (!parts.has(relation.part)) return unknown(relation.part, "sits_on"), true;
         if (!parts.has(relation.on)) return unknown(relation.on, "sits_on"), true;
         if (!solvedAxes(relation.on)) return false;
-        const support = bounds(relation.on, "z");
+        // The axis the stack climbs. `z` is gravity and the default; any
+        // other axis is the same face-to-face placement used as an
+        // ATTACHMENT (a pommel on a Y-up grip) — the sword assembly that
+        // used to be impossible without hand-computed `at` centres.
+        const axis = relation.axis ?? "z";
+        const support = bounds(relation.on, axis);
         if (!support) return false;
         const embed = contact(relation.embed, relation.part, "embed");
-        const half = size.get(relation.part)![2] / 2;
+        const half = size.get(relation.part)![AXES.indexOf(axis)]! / 2;
         // Sink the part into its support: the faces overlap rather than touch.
-        setAxis(relation.part, "z", support.max - embed + half, "sits_on");
-        restsOn.set(relation.part, relation.on);
+        setAxis(relation.part, axis, support.max - embed + half, "sits_on");
+        // Only a gravity stack records a resting support: the grounding
+        // rules and the claims adjudicator reason about what holds a part
+        // UP, and a sideways attachment says nothing about that.
+        if (axis === "z") restsOn.set(relation.part, relation.on);
         return true;
       }
 
@@ -167,11 +178,12 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
         if (!parts.has(relation.part)) return unknown(relation.part, "above"), true;
         if (!parts.has(relation.over)) return unknown(relation.over, "above"), true;
         if (!solvedAxes(relation.over)) return false;
-        const under = bounds(relation.over, "z");
+        const axis = relation.axis ?? "z";
+        const under = bounds(relation.over, axis);
         if (!under) return false;
         const gap = contact(relation.clearance, relation.part, "clearance");
-        const half = size.get(relation.part)![2] / 2;
-        setAxis(relation.part, "z", under.max + gap + half, "above");
+        const half = size.get(relation.part)![AXES.indexOf(axis)]! / 2;
+        setAxis(relation.part, axis, under.max + gap + half, "above");
         return true;
       }
 
@@ -649,6 +661,19 @@ function reportGeneratedIntersections(parts: SolvedPart[], diagnostics: SolveDia
       }
       // The contact floor is the boundary between "touching" and "inside".
       if (depth <= MIN_CONTACT) continue;
+      // The AABB depth above over-reports for ROTATED clones: an oriented
+      // ring's turned bars have world boxes that interpenetrate while the
+      // boxes themselves stand clear. When either part is rotated, the
+      // exact SAT verdict on the true oriented boxes decides — and its
+      // penetration replaces the inflated AABB depth in the report.
+      if (a.rotate || b.rotate) {
+        const separation = obbSeparation(
+          { center: a.center, size: a.localSize ?? a.size, rotate: a.rotate },
+          { center: b.center, size: b.localSize ?? b.size, rotate: b.rotate },
+        );
+        if (-separation <= MIN_CONTACT) continue;
+        depth = -separation;
+      }
       // Two instances that REST ON THE SAME SUPPORT legitimately share its
       // top plane: each is embedded by MIN_CONTACT on z (the solver's own
       // floor), so their boxes interpenetrate by up to 2*MIN_CONTACT there —
@@ -941,7 +966,7 @@ function expandArounds(
         ...base,
         id,
         center,
-        size: rotate ? rotatedBoxSize(local, rotate) : ([...local] as Vec3),
+        size: rotate ? rotatedShapeSize(base, local, rotate) : ([...local] as Vec3),
         from: relation.part,
       };
       // Both halves of the rotated box travel together or neither does — a

@@ -330,6 +330,11 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
             code: ISSUE_CODES.SHEET_STATIC_FLIPBOOK,
             severity: "warning",
             message: "every frame is identical — this flipbook does not animate",
+            // The uniform's NAME must reach the reader here: a kernel-baked
+            // flipbook goes static precisely when the author never read
+            // uS3dTime, and no other message will ever utter that word to
+            // someone who does not already know it.
+            hint: "for a kernel-baked sheet, animate from uS3dTime (0..1 across the frames) — loop on the unit circle (cos/sin(uS3dTime * 6.2832)) so the last frame flows into the first; for hand-drawn art, vary the cells",
             ...at,
           });
         }
@@ -364,7 +369,10 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
           code: ISSUE_CODES.SHEET_NOT_TILEABLE,
           severity: "error",
           message: `first and last columns differ by ${m.seamLeftRight.toFixed(1)} — the strip will not tile`,
-          hint: "make the two ends identical so the repeat is seamless; governed by conventions.sheets.beamSeamMax",
+          // The stdlib's answer is NAMED here for the same reason the static-
+          // flipbook hint names uS3dTime: no other message will ever utter
+          // "_tiled" to an author who does not already know the family exists.
+          hint: "make the two ends identical so the repeat is seamless — for a kernel bake, use the two-argument tiled stdlib, e.g. s3d_fbm_tiled(uv * 6.0, vec2(6.0)) with the period matching your pre-scale; governed by conventions.sheets.beamSeamMax",
           ...at,
         });
       }

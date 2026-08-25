@@ -417,6 +417,10 @@ export interface CompileResult {
    * has to be read as "zero or unmeasured".
    */
   materialBallsSkipped?: number;
+  /** WHICH materials went unpreviewed (over-cap or a per-ball failure) —
+   *  the runner measures the names; a bare count could not distinguish a
+   *  cap from a bake failure. Present only when non-empty. */
+  materialBallsSkippedNames?: string[];
   /** Project-relative paths of exported assets. */
   exportedAssets: string[];
   summary: IssueSummary;

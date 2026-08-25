@@ -81,7 +81,7 @@ making the raw mode a second-class path.
 | Parts | `size` (AABB, metres) + `shape`: box/cylinder/sphere/cone/torus/wedge/tube/capsule (+ `tip` frustum ratio on a cone, `thickness` wall on a tube) | every shape fills its box exactly; TRIFAN caps and all-quad tube rings → zero ngons by construction |
 | Real assets as parts | `file:` .glb/.gltf/.obj/.fbx | joined, scaffolding-swept, fitted inside the box (bottom-rest); `material:` = wholesale override |
 | Static rotation | per-part `rotate{axis, deg}` | one world axis, applied at the solved centre; the solver reasons in the ROTATED BOUND of the local box, so every relation stays correct without knowing rotation exists; a whole turn (`deg % 360 == 0`) and `span`+`rotate` are refused |
-| Placement | `at`, `sits_on(embed)`, `above(clearance)`, `align`, `inset_from`, `span` | relation fixpoint, order-independent; 1mm contact floor → z-fighting structurally impossible; span extents floored + conflict-checked |
+| Placement | `at`, `sits_on(embed, axis)`, `above(clearance, axis)`, `align`, `inset_from`, `span` | relation fixpoint, order-independent; 1mm contact floor → z-fighting structurally impossible; span extents floored + conflict-checked; `axis` defaults to z (gravity — records a resting support), any other axis is a face-to-face ATTACHMENT (a pommel on a Y-up grip) that grounding ignores |
 | Multiplicity | `repeat(count, along, every)`; grids compose. `scatter(on, count, seed, minGap, sizeJitter)` | path-addressed RNG: adding parts cannot reshuffle a scatter; cross-scatter collision-free; repeat×scatter statically rejected |
 | Materials | named PBR: baseColor/roughness/`metallic(0\|1)`/emission/alpha, or `shader:` | undeclared reference = parse error; every generated material authored |
 | Shaders | `shaders` block: kernel file + typed uniforms + outputs + size (+frames) | see below |
@@ -273,6 +273,82 @@ census, and the format is niche).
   per-face atlas UVs for Java, Bedrock bones/animation. Shared exporter helpers
   (frame map, texture synthesis, atlas tiles) live in `src/mc/common.ts`.
 
+## Rotated bounds are support functions, and the box contract is enforced
+
+The sword-assembly field report ("my boxes are flush but the compile says
+0.01m apart") had three distinct roots, all fixed at the math:
+
+- **`rotatedShapeSize` replaces the rectangle-only bound.** The old
+  `rotatedBoxSize` folded every shape through `w' = w|cosθ| + h|sinθ|`,
+  which inflated a cylinder turned about its OWN axis by up to 41% — the
+  solver then placed the fat box flush and the real meshes sat apart by
+  the padding. The world extent of a convex shape under rotation R along
+  axis e is `h_S(Rᵀe) + h_S(−Rᵀe)` (support function, evaluated in closed
+  form per shape in `solve/types.ts:shapeWidthAlong`): exact for box,
+  ellipsoidal sphere, cylinder, tube, cone/frustum (both rims), capsule
+  and torus; the box hull for wedge/file/script. The rotation rides a
+  quaternion sandwich, so compound rotations compose by multiplication
+  when the language grows them — no Euler-order convention to defend.
+- **`_fit_box` makes "every shape fills its box exactly" literally true.**
+  An n-gon's flats sit cos(π/n) inside its circle, so every revolution
+  shape shipped up to 0.5% smaller than its box — phantom hairline gaps
+  the census then honestly reported. The emitter now measures the built
+  mesh's local bounds and corrects the DATA (per-axis scale + recentre, no
+  object transform) so mesh AABB ≡ declared box for every shape at every
+  segment count.
+- **`sits_on`/`above` take an `axis`** (default z). Z remains gravity and
+  records `restsOn` for grounding/claims; any other axis is the same
+  face-to-face placement used as an attachment and deliberately records no
+  resting support. Pinned in `tests/spec.test.ts` ("rotatedShapeSize",
+  "sits_on / above along an authored axis").
+
+Contact separation itself was already honest (world-AABB axis gaps,
+box-to-box — `contact_report` in runner.py); the phantom gaps came from
+the two bound errors above, not the measurement.
+
+Related validator posture: keys that begin with `//` are the JSON comment
+convention (the golem fixture and field scenes both carry them) and every
+unknown-key check ignores them (`isCommentKey` in solve/validate.ts) — the
+typo strictness stays, the margin notes stay legal.
+
+A follow-up audit swept the rest of the compiler/linter for the same
+inflated-AABB and hardcoded-axis classes; four more were confirmed by
+reproduction and fixed:
+
+- **`obbSeparation` (solve/types.ts)**: exact 15-axis SAT between oriented
+  boxes (quaternion basis; positive = a proven-gap witness, negative =
+  exact minimum translation distance). `reportGeneratedIntersections` uses
+  it whenever either clone is rotated, so an oriented ring's turned bars —
+  whose world AABBs interpenetrate freely — no longer draw a false
+  `SOLVE-INTERSECTION`; unrotated pairs keep the identical AABB arithmetic.
+- **Census `contact_report`** keeps its per-world-axis gaps (exact support
+  intervals there) but adds ONE more support projection — along the
+  centre-to-centre axis — before calling a pair "intersects": any positive
+  gap on any axis proves disjoint, and this is the axis where canted
+  plates actually separate. Verified: two 45°-turned plates 0.1m apart
+  (AABB overlap −0.3m) now read `separation 0.1, intersects false`.
+  Vert-capped (400k combined) with the AABB verdict standing beyond the
+  cap, per the honesty-budget doctrine.
+- **`symmetry_facts`** no longer assumes the mirror plane is world X on a
+  world-space (rotation-baked) mesh: it tests six candidate planes — three
+  world axes plus the three PRINCIPAL planes of the vertex covariance
+  (Jacobi eigensolver, dependency-free; for a bilaterally symmetric body
+  the mirror normal IS a principal axis) — and reports the best, with the
+  nearest world-axis letter as the axis label. A 45°-turned box now reads
+  maxError 0 instead of a spurious asymmetry proportional to the turn.
+- **Kit viewer `heat`/`touchingParts` (kit-runtime.ts)**: world AABBs stay
+  as the broad phase, but the verdict is `obbGap` — a JS mirror of
+  `obbSeparation` built from each draw's LOCAL bounds and node matrix
+  (scale folded into extents; shear collapses to the nearest orthogonal
+  frame, still strictly tighter than the AABB). `_obb` is cached per draw
+  and cleared by `applyEditsToDraws`, the one funnel that rewrites model
+  matrices. A canted plate no longer glows "buried" beside a neighbour it
+  never touches. Keep obbGap and obbSeparation in step.
+
+The torus branch of `shapeWidthAlong` is exact for a circular major radius
+and documented CONSERVATIVE (ellipse ⊕ ball) for anisotropic boxes — never
+an under-estimate.
+
 ## The USDA lexer skips bulk data (the chess-set OOM)
 
 The structure parser (`parse/usda.ts`) used to tokenize the ENTIRE stage —
@@ -304,19 +380,23 @@ Behaviours that keep the compiled surfaces honest across the compile loop:
   alpha-0 background; `_proof_id_pass` in runner.py — no restoration,
   the proof process rebuilds from source and exits). The manifest
   advertises `proofIdParts` only when every frame's map exists.
-  `apps/web/src/runtime/scene3d-xray.ts` is a constant-for-constant port
-  of kit-runtime's spectral pass (inspectionRamp stops, filmArc cosine,
-  rim mix 0.32 toward skin·0.45+film·0.85, edge tint (0.55,0.72,0.80)·
-  0.16, stage ink (0.03,0.035,0.05)) with 2D data sources: part-
-  normalized smoothed luminance drives the fill, silhouette proximity is
-  the grazing angle, Sobel gives the structure lines. The panel decodes
-  the map, composes the full-energize frame on a canvas, and crossfades
-  it with the kit's exact 200ms-in/140ms-out easeOutCubic — opacity IS
-  uXray. Occlusion is free: the map only marks pixels the part won in
-  the render. Reticle brackets stand down while energized (the part is
-  the highlight); missing maps fall back to the reticle. Keep the
-  constants in step across FRAG ↔ scene3d-xray.ts ↔ runner ID_STEPS ↔
-  XRAY_ID_STEPS (pinned in apps/web/tests/scene3d-xray.test.ts).
+  `apps/web/src/runtime/scene3d-xray.ts` speaks the kit shader's exact
+  vocabulary (ghost teal = inspectionRamp's deep-teal stop, filmArc
+  cosine, edge tint (0.55,0.72,0.80), stage ink (0.03,0.035,0.05)) with
+  the emphasis INVERTED to match how a selection reads in the kit: the
+  SELECTED part keeps its real rendered pixels (+6% lift), and the REST
+  of the world drops into the spectral ghost — ink stage, translucent
+  teal bodies lit by their own smoothed luminance, Sobel feature lines
+  plus the id map's exact part-boundary outlines (sharper than the GL
+  pass can draw), and a film-arc rim where the ghost meets the
+  selection. The panel decodes the map, composes the full-energize
+  frame on a canvas, and crossfades with the kit's exact
+  200ms-in/140ms-out easeOutCubic — opacity IS uXray. Occlusion is
+  free: the map only marks pixels a part won in the render. Reticle
+  brackets stand down while energized; missing maps fall back to the
+  reticle. Keep the constants in step across FRAG ↔ scene3d-xray.ts ↔
+  runner ID_STEPS ↔ XRAY_ID_STEPS (pinned in
+  apps/web/tests/scene3d-xray.test.ts).
 - **The proof frames are pickable.** The runner already projected every
   part through the render camera for the off-camera check; the same pass
   now records each part's screen rect per frame

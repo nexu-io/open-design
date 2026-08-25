@@ -63,6 +63,9 @@ export function validateShaderSpec(
     "kernel", "size", "outputs", "frames", "motionVectors", "normalStrength", "ints", "uniforms",
   ]);
   for (const key of Object.keys(doc)) {
+    // The `//` margin-note convention holds here as everywhere: a comment
+    // key is the author talking to the next reader, never vocabulary.
+    if (key.startsWith("//")) continue;
     if (!KNOWN_SHADER_KEYS.has(key)) {
       errors.push(
         `${at}.${key} is not a shader field — ${didYouMean(key, KNOWN_SHADER_KEYS)}known fields: ${[...KNOWN_SHADER_KEYS].join(", ")}`,
@@ -169,6 +172,10 @@ export function validateShaderSpec(
       errors.push(`${at}.uniforms must be an object of name -> value`);
     } else {
       for (const [uname, value] of Object.entries(doc.uniforms as Record<string, unknown>)) {
+        // The margin-note convention reaches the last name map in the
+        // shader block: a `//` note here was refused as a badly named
+        // uniform, with an error that never revealed the real cause.
+        if (uname.startsWith("//")) continue;
         // The identifier gate: this regex is what makes the assembled
         // GLSL injection-proof. Nothing outside it ever reaches source.
         if (!/^u[A-Z][A-Za-z0-9]{0,30}$/.test(uname)) {

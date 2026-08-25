@@ -338,10 +338,26 @@ export function unknownFieldProblems(raw: unknown): string[] {
   ]);
   const dotless = (p: string) => p.replace(/\./g, "").toLowerCase();
   const byDotless = new Map<string, string>([...legal].map((p) => [dotless(p), p]));
+  /* The mirror of scene.json's CONTRACT_KEYS net: scene vocabulary written
+     into the contract gets pointed at the right file, because no within-file
+     suggestion can rescue a key whose whole family lives next door. */
+  const SCENE_KEYS = new Set([
+    "parts", "relations", "claims", "materials", "shaders", "camera", "light", "name",
+  ]);
 
   const walk = (node: Record<string, unknown>, prefix: string): void => {
     for (const key of Object.keys(node)) {
+      // The `//` margin-note convention holds in the contract exactly as it
+      // does in scene.json: refusing a comment here used to be an E-104
+      // that silently reverted EVERY authored convention to defaults.
+      if (key.startsWith("//")) continue;
       const full = prefix ? `${prefix}.${key}` : key;
+      if (prefix === "" && SCENE_KEYS.has(key)) {
+        problems.push(
+          `${key} is not a contract field — it belongs in scene.json beside this contract; move it there and compile again`,
+        );
+        continue;
+      }
       if (legal.has(full)) {
         if (opaque.has(full)) continue;
         const child = node[key];
@@ -356,11 +372,16 @@ export function unknownFieldProblems(raw: unknown): string[] {
         .map((s) => ({ s, d: editDistance(key.toLowerCase(), s.toLowerCase()) }))
         .filter((c) => c.d > 0 && c.d <= 2)
         .sort((a, b) => a.d - b.d)[0];
+      /* Never a refusal with nothing to steer by: when no suggestion fires,
+         the legal keys at this level ARE the map — the same "known fields:"
+         tail every scene.json gate already provides. */
       const suggestion = rewrapped
         ? ` — did you mean ${rewrapped}? (note the nesting)`
         : near
           ? ` — did you mean "${near.s}"?`
-          : "";
+          : siblings.length > 0
+            ? ` — known fields here: ${siblings.sort().join(", ")}`
+            : "";
       problems.push(
         `${full} is not a contract field${suggestion}; an unknown key would otherwise be ignored and its default would silently win`,
       );

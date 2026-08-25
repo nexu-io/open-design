@@ -3683,6 +3683,9 @@ function applyEditsToDraws() {
      key noticing. Drop it here rather than trying to detect the change. */
   occupancy = null;
   for (const d of renderer.draws) {
+    /* The oriented-box cache follows the model matrix; this is the one
+       funnel that rewrites it (see obbOf in the runtime). */
+    d._obb = null;
     const e = edits[d.name];
     const t = (e && e.translate) || [0, 0, 0];
     const q = (e && e.quat) || [0, 0, 0, 1];

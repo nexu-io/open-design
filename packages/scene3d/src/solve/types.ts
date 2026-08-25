@@ -223,8 +223,17 @@ export interface MaterialSpec {
 export type Relation =
   /** Absolute anchor. Every scene needs at least one. */
   | { type: "at"; part: string; center: Vec3 }
-  /** `part` rests on top of `on`, sunk into it by `embed` so faces overlap. */
-  | { type: "sits_on"; part: string; on: string; embed?: number }
+  /**
+   * `part` rests on top of `on`, sunk into it by `embed` so faces overlap.
+   *
+   * `axis` is the world axis the stack climbs — the direction "on top of"
+   * means. Default `z` (gravity), which also records a resting support for
+   * grounding. Any other axis is an ATTACHMENT along that axis (a pommel
+   * capping a Y-up grip, a finial ahead of a beam): the same face-to-face
+   * placement, but it says nothing about gravity, so it records no resting
+   * support and the grounding rules ignore it.
+   */
+  | { type: "sits_on"; part: string; on: string; embed?: number; axis?: Axis }
   /** `part`'s named faces pull in from `from`'s matching faces by `by`. */
   | { type: "inset_from"; part: string; from: string; faces: Face[]; by?: number }
   /** Centre `part` on `to` along the given axes. */
@@ -232,7 +241,8 @@ export type Relation =
   /** `part` stretches between `from` and `to` along `axis`, biting into both. */
   | { type: "span"; part: string; from: string; to: string; axis: Axis; embed?: number }
   /** `part` floats above `over` with a measured gap — a seating clearance. */
-  | { type: "above"; part: string; over: string; clearance?: number }
+  /** `part` floats past `over` by `clearance`, along `axis` (default z). */
+  | { type: "above"; part: string; over: string; clearance?: number; axis?: Axis }
   /**
    * Array `part` into `count` instances along an axis at a centre-to-centre
    * pitch. Instance ids are `part_2`..`part_N`; the base keeps its id and
@@ -564,5 +574,195 @@ export function rotatedBoxSize(size: Vec3, rotate: { axis: Axis; deg: number } |
   const out = [...size] as Vec3;
   out[u] = w * c + h * s;
   out[v] = w * s + h * c;
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Shape-aware rotated bounds                                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * `rotatedBoxSize` is exact for a box and CONSERVATIVE for everything
+ * rounder — and that conservatism was not hypothetical: rotating a cylinder
+ * about its own axis (a rotation the shape cannot even perceive) inflated
+ * its world box by up to 41%, so the solver placed the fat box flush and
+ * the real meshes sat apart by the padding. An author doing the arithmetic
+ * on their own numbers then saw "flush" boxes report a measured gap.
+ *
+ * The correct raw math is the support function. Every shape in the language
+ * is convex (or bounded by a convex revolution surface), and for a convex
+ * body S the world extent along a unit direction e after a rotation R is
+ *
+ *     width(e) = h_S(Rᵀe) + h_S(−Rᵀe)      where h_S(d) = max{ d·x : x ∈ S }
+ *
+ * — no trigonometric special cases, no per-axis folklore. The rotation is
+ * applied as a quaternion sandwich, so a future compound `rotate` composes
+ * by multiplication instead of growing an Euler-order convention.
+ */
+
+type Quat = [number, number, number, number]; // x, y, z, w
+
+function quatFromAxisAngle(axis: Axis, deg: number): Quat {
+  const half = (deg * Math.PI) / 360;
+  const s = Math.sin(half);
+  const q: Quat = [0, 0, 0, Math.cos(half)];
+  q[AXES.indexOf(axis)] = s;
+  return q;
+}
+
+/** v' = q · v · q⁻¹ for a unit quaternion, via the expanded sandwich. */
+function quatRotate(q: Quat, v: Vec3): Vec3 {
+  const [qx, qy, qz, qw] = q;
+  // t = 2 · (q_vec × v)
+  const tx = 2 * (qy * v[2] - qz * v[1]);
+  const ty = 2 * (qz * v[0] - qx * v[2]);
+  const tz = 2 * (qx * v[1] - qy * v[0]);
+  // v' = v + w·t + q_vec × t
+  return [
+    v[0] + qw * tx + (qy * tz - qz * ty),
+    v[1] + qw * ty + (qz * tx - qx * tz),
+    v[2] + qw * tz + (qx * ty - qy * tx),
+  ];
+}
+
+/** The shape facts the width function needs; a subset of Spec/SolvedPart. */
+export interface ShapeFacts {
+  shape?: PartShape;
+  axis?: Axis;
+  tip?: number;
+}
+
+/**
+ * Total extent of a shape (in its local box of `size`) along a LOCAL unit
+ * direction `d` — support(d) + support(−d), evaluated in closed form.
+ *
+ * Exact for box, sphere (an ellipsoid when the box is not a cube),
+ * cylinder, tube (its outer surface governs the bound), cone and frustum
+ * (both rims tested), capsule and torus with circular sections;
+ * conservative (the box hull) for wedge and for file/script parts, whose
+ * geometry the solver cannot see. `flip` never changes a width, so it is
+ * not consulted.
+ */
+export function shapeWidthAlong(facts: ShapeFacts, size: Vec3, d: Vec3): number {
+  const a = [size[0]! / 2, size[1]! / 2, size[2]! / 2] as Vec3;
+  const m = AXES.indexOf(facts.axis ?? "z");
+  const [p, q] = [0, 1, 2].filter((i) => i !== m) as [number, number];
+  const ellipse = Math.hypot(a[p]! * d[p]!, a[q]! * d[q]!);
+  switch (facts.shape) {
+    case "sphere":
+      return 2 * Math.hypot(a[0]! * d[0]!, a[1]! * d[1]!, a[2]! * d[2]!);
+    case "cylinder":
+    case "tube":
+      return 2 * (a[m]! * Math.abs(d[m]!) + ellipse);
+    case "capsule": {
+      // Spheroidal caps of the cross radii, shaft covering the remainder.
+      const r = Math.min(a[p]!, a[q]!, a[m]!);
+      const shaft = Math.max(a[m]! - r, 0);
+      return 2 * (shaft * Math.abs(d[m]!) + Math.hypot(a[p]! * d[p]!, a[q]! * d[q]!, r * d[m]!));
+    }
+    case "cone": {
+      // A frustum's extreme points lie on its two rims: the base ellipse at
+      // −a_m and the tip ellipse (scaled by `tip`) at +a_m. Which end is
+      // which (`flip`) cannot change a total width.
+      const t = facts.tip ?? 0;
+      const support = (dm: number, e: number) => Math.max(e - a[m]! * dm, t * e + a[m]! * dm);
+      return support(d[m]!, ellipse) + support(-d[m]!, ellipse);
+    }
+    case "torus": {
+      // Minor radius is the half-extent along the hole axis; the major
+      // ellipse is what remains of the cross half-extents. This is the
+      // support of (major ellipse) ⊕ (BALL of the minor radius): exact for
+      // the circular-major torus every square box authors, and for an
+      // anisotropic box a CONSERVATIVE bound — the ball contains the
+      // per-angle oriented tube disc — never an under-estimate.
+      const r = a[m]!;
+      const major = Math.hypot(Math.max(a[p]! - r, 0) * d[p]!, Math.max(a[q]! - r, 0) * d[q]!);
+      return 2 * (major + r);
+    }
+    default:
+      // box, wedge, file, script: the box hull.
+      return 2 * (a[0]! * Math.abs(d[0]!) + a[1]! * Math.abs(d[1]!) + a[2]! * Math.abs(d[2]!));
+  }
+}
+
+/**
+ * Exact separating-axis verdict between two oriented boxes.
+ *
+ * The world-AABB penetration test is a strict OVER-approximation for
+ * rotated parts: an oriented ring's turned bars can have AABBs that
+ * interpenetrate by centimetres while the boxes themselves are cleanly
+ * apart — and `SOLVE-INTERSECTION` then scolds a scene that is fine. For
+ * two OBBs the 15 SAT axes (3 + 3 face normals, 9 edge cross products) are
+ * COMPLETE: a positive gap on any axis proves disjoint, and if every axis
+ * overlaps the boxes intersect, with the smallest overlap the exact
+ * minimum translation distance. Orientations ride the same quaternion the
+ * rotated-bounds math uses.
+ *
+ * Returns a signed separation: any positive value is a PROVEN gap (the
+ * search stops at the first separating axis, so it is a witness, not the
+ * maximum); negative = minus the exact minimum translation distance.
+ */
+export function obbSeparation(
+  a: { center: Vec3; size: Vec3; rotate?: { axis: Axis; deg: number } },
+  b: { center: Vec3; size: Vec3; rotate?: { axis: Axis; deg: number } },
+): number {
+  const basis = (r: { axis: Axis; deg: number } | undefined): [Vec3, Vec3, Vec3] => {
+    if (!r) return [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    const q = quatFromAxisAngle(r.axis, r.deg);
+    return [quatRotate(q, [1, 0, 0]), quatRotate(q, [0, 1, 0]), quatRotate(q, [0, 0, 1])];
+  };
+  const ua = basis(a.rotate);
+  const ub = basis(b.rotate);
+  const ha = [a.size[0]! / 2, a.size[1]! / 2, a.size[2]! / 2];
+  const hb = [b.size[0]! / 2, b.size[1]! / 2, b.size[2]! / 2];
+  const d: Vec3 = [
+    b.center[0]! - a.center[0]!,
+    b.center[1]! - a.center[1]!,
+    b.center[2]! - a.center[2]!,
+  ];
+  const dot = (u: Vec3, v: Vec3) => u[0]! * v[0]! + u[1]! * v[1]! + u[2]! * v[2]!;
+  const cross = (u: Vec3, v: Vec3): Vec3 => [
+    u[1]! * v[2]! - u[2]! * v[1]!,
+    u[2]! * v[0]! - u[0]! * v[2]!,
+    u[0]! * v[1]! - u[1]! * v[0]!,
+  ];
+  const axes: Vec3[] = [...ua, ...ub];
+  for (const p of ua) for (const q of ub) axes.push(cross(p, q));
+  let best = -Infinity;
+  for (const axis of axes) {
+    const len = Math.hypot(axis[0]!, axis[1]!, axis[2]!);
+    // Parallel edges cross to ~zero; that direction is already covered by
+    // the face normals, so it is skipped rather than divided by nothing.
+    if (len < 1e-9) continue;
+    const L: Vec3 = [axis[0]! / len, axis[1]! / len, axis[2]! / len];
+    const ra = ha[0]! * Math.abs(dot(L, ua[0]!)) + ha[1]! * Math.abs(dot(L, ua[1]!)) + ha[2]! * Math.abs(dot(L, ua[2]!));
+    const rb = hb[0]! * Math.abs(dot(L, ub[0]!)) + hb[1]! * Math.abs(dot(L, ub[1]!)) + hb[2]! * Math.abs(dot(L, ub[2]!));
+    const gap = Math.abs(dot(L, d)) - (ra + rb);
+    if (gap > best) best = gap;
+    if (best > 0) return best; // proven disjoint — no need to finish
+  }
+  return best;
+}
+
+/**
+ * The world box a rotated shape actually occupies — `rotatedBoxSize`, made
+ * shape-aware. Each world axis is carried into the shape's local frame by
+ * the inverse rotation and measured with the exact width function above; a
+ * cylinder turned about its own axis therefore keeps its box to the last
+ * bit, and a turned frustum reserves exactly the space its rims sweep.
+ */
+export function rotatedShapeSize(
+  facts: ShapeFacts,
+  size: Vec3,
+  rotate: { axis: Axis; deg: number } | undefined,
+): Vec3 {
+  if (!rotate) return [...size] as Vec3;
+  const inverse = quatFromAxisAngle(rotate.axis, -rotate.deg);
+  const out = [0, 0, 0] as Vec3;
+  for (let i = 0; i < 3; i++) {
+    const e: Vec3 = [0, 0, 0];
+    e[i] = 1;
+    out[i] = shapeWidthAlong(facts, size, quatRotate(inverse, e));
+  }
   return out;
 }

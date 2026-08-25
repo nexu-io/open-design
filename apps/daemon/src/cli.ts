@@ -767,7 +767,7 @@ Exit codes: 0 clean at threshold · 1 issues at/above --fail-on ·
 Options:
   --project <id>           Project id (default: OD_PROJECT_ID)
   --scene <path>           Project-relative scene directory (default: project root)
-  --fast                   Structure loop: parse,build,lint — no proofs, no export.
+  --fast                   Structure loop: parse,build,lint,manifest — no proofs, no export.
                            The default iteration gear; a full compile pays ~7s of
                            proof for findings these stages already produce.
   --stages <a,b,c>         Restrict the pipeline (${SCENE3D_STAGE_IDS.join(', ')})
@@ -776,7 +776,7 @@ Options:
   --turntable-steps <n>    Turntable frame count (1-64)
   --no-turntable           Render one still instead of a turntable
   --no-cache               Bypass the per-stage content-hash cache
-  --frames                 Show the proof frames as text in the report even when clean
+  --frames                 Show the proof frames as ASCII in the report even when clean (implies --agent-message)
   --fail-on <sev>          error | warning | none — exit 1 threshold (default error)
   --agent-message          Also print the <scene3d-report> block for agent splicing
 
@@ -855,7 +855,14 @@ async function runScene3d(args) {
       return;
     }
     if (!result.manifest) {
+      // A dead end with a door: the reader is one command away from a
+      // manifest, so hand them that command instead of only the absence.
       console.log(`${scenePath}: never compiled`);
+      // Paste-safe in every environment: echo the resolved project id back
+      // rather than assuming OD_PROJECT_ID is set for the next invocation.
+      console.log(
+        `run: od scene3d compile --project ${projectId} --scene ${scenePath} --agent-message`,
+      );
       return;
     }
     printScene3dManifest(result.manifest, scenePath);
@@ -967,7 +974,7 @@ async function runScene3d(args) {
     // Edits are not live until the scene recompiles; saying so here saves
     // the reader the round trip of wondering why nothing changed.
     if (!flags.json && !result.cleared) {
-      console.log(`run: od scene3d compile --scene ${scenePath} --no-cache`);
+      console.log(`run: od scene3d compile --project ${projectId} --scene ${scenePath} --no-cache`);
     }
     return;
   }
@@ -1091,7 +1098,17 @@ async function runScene3d(args) {
     if (result.exportedAssets.length > 0) {
       console.log(`assets: ${result.exportedAssets.map((a) => a.path).join(', ')}`);
     }
-    if (flags['agent-message'] && result.agentMessage) console.log(`\n${result.agentMessage}`);
+    // --frames implies the letter: the ASCII ramps live INSIDE agentMessage,
+    // so honouring the flag while withholding the message printed nothing —
+    // and the reader who cannot open a PNG concluded the ramps do not exist.
+    if ((flags['agent-message'] || flags.frames) && result.agentMessage) {
+      console.log(`\n${result.agentMessage}`);
+    } else if (summary.errors + summary.warnings > 0) {
+      // The terse listing above shows WHAT fired; the letter explains each
+      // finding with its fix and measured numbers. Point there once, only
+      // when there is something the letter would actually explain.
+      console.log('full letter: re-run with --agent-message for per-issue fixes and measured data');
+    }
   }
   if (failed) process.exitCode = 1;
 }

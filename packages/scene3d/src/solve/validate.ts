@@ -29,6 +29,16 @@ import type { ShaderSpec } from "../shade/types.js";
  * stopping at the first, so one compile round-trip reports the whole
  * distance to a valid spec.
  */
+/**
+ * The JSON comment convention: a key that is (or begins with) `//` is the
+ * author talking to the next reader, not vocabulary — the golem fixture and
+ * real field scenes both carry them. Ignored by every unknown-key check, so
+ * strictness about typos never costs the language its margin notes.
+ */
+export function isCommentKey(key: string): boolean {
+  return key.startsWith("//");
+}
+
 export function validateSceneSpec(
   raw: unknown,
   /** Contract-derived shader bake bounds (pixel-art scenes lower the floor to
@@ -59,6 +69,10 @@ export function validateSceneSpec(
       errors.push("shaders must be an object of name -> shader");
     } else {
       for (const [name, value] of Object.entries(doc.shaders as Record<string, unknown>)) {
+        // The margin-note convention holds inside the NAME MAPS too: a `//`
+        // sibling of shd_rust used to be refused as a badly named shader,
+        // steering the author toward renaming their own comment.
+        if (isCommentKey(name)) continue;
         const result = validateShaderSpec(name, value, undefined, errors, opts.bake);
         if (result) shaders[name] = result.spec;
       }
@@ -77,6 +91,7 @@ export function validateSceneSpec(
       errors.push("materials must be an object of name -> material");
     } else {
       for (const [name, value] of Object.entries(doc.materials as Record<string, unknown>)) {
+        if (isCommentKey(name)) continue;
         declaredMaterials.add(name);
         if (!/^[A-Za-z][A-Za-z0-9_]{2,63}$/.test(name)) {
           errors.push(
@@ -225,10 +240,18 @@ export function validateSceneSpec(
   const KNOWN_TOP_LEVEL_KEYS = new Set([
     "schemaVersion", "name", "shaders", "materials", "parts", "relations", "camera", "light", "claims",
   ]);
+  /* Keys that are real vocabulary in the OTHER file. `target` written into
+     scene.json is the likeliest cross-file slip (the voxel/minecraft switch
+     lives in the contract), and no within-file did-you-mean can rescue it —
+     nothing in this file's vocabulary is near it. Say which file wants it. */
+  const CONTRACT_KEYS = new Set(["target", "conventions", "proof", "export", "sheets"]);
   for (const key of Object.keys(doc)) {
+    if (isCommentKey(key)) continue;
     if (!KNOWN_TOP_LEVEL_KEYS.has(key)) {
       errors.push(
-        `${key} is not a scene.json field — ${didYouMean(key, KNOWN_TOP_LEVEL_KEYS)}known fields: ${[...KNOWN_TOP_LEVEL_KEYS].join(", ")}`,
+        CONTRACT_KEYS.has(key)
+          ? `${key} is not a scene.json field — it belongs in scene3d.json (the contract) beside this file; move it there and compile again`
+          : `${key} is not a scene.json field — ${didYouMean(key, KNOWN_TOP_LEVEL_KEYS)}known fields: ${[...KNOWN_TOP_LEVEL_KEYS].join(", ")}`,
       );
     }
   }
@@ -481,6 +504,7 @@ function validatePart(
       const rotateBefore = errors.length;
       const KNOWN_ROTATE_KEYS = new Set(["axis", "deg"]);
       for (const key of Object.keys(r)) {
+        if (isCommentKey(key)) continue;
         if (!KNOWN_ROTATE_KEYS.has(key)) {
           errors.push(
             `${at}.rotate.${key} is not a rotate field — ${didYouMean(key, KNOWN_ROTATE_KEYS)}known fields: axis, deg`,
@@ -587,6 +611,7 @@ function validatePart(
     "material", "role", "spin", "bob", "rotate",
   ]);
   for (const key of Object.keys(part)) {
+    if (isCommentKey(key)) continue;
     if (!KNOWN_PART_KEYS.has(key)) {
       errors.push(
         `${at}.${key} is not a part field — ${didYouMean(key, KNOWN_PART_KEYS)}known fields: ${[...KNOWN_PART_KEYS].join(", ")}`,
@@ -689,6 +714,7 @@ function validateMaterial(
     "shader", "baseColor", "roughness", "metallic", "emission", "emissionStrength", "alpha",
   ]);
   for (const key of Object.keys(mat)) {
+    if (isCommentKey(key)) continue;
     if (!KNOWN_MATERIAL_KEYS.has(key)) {
       errors.push(
         `${at}.${key} is not a material field — ${didYouMean(key, KNOWN_MATERIAL_KEYS)}known fields: ${[...KNOWN_MATERIAL_KEYS].join(", ")}`,
@@ -740,6 +766,7 @@ function validateRelation(index: number, value: unknown, errors: string[]): Rela
   const unknownRelationKeys = (known: readonly string[]): void => {
     const knownSet = new Set(known);
     for (const key of Object.keys(rel)) {
+      if (isCommentKey(key)) continue;
       if (!knownSet.has(key)) {
         errors.push(
           `${at}.${key} is not a field of relation '${rel.type as string}' — ${didYouMean(key, known)}known fields: ${known.join(", ")}`,
@@ -757,20 +784,34 @@ function validateRelation(index: number, value: unknown, errors: string[]): Rela
       return { type: "at", part, center };
     }
     case "sits_on": {
-      unknownRelationKeys(["type", "part", "on", "embed"]);
+      unknownRelationKeys(["type", "part", "on", "embed", "axis"]);
       const part = str("part");
       const on = str("on");
       const embed = optNum("embed");
+      const axis = rel.axis === undefined ? undefined : axisOf("axis");
       if (errors.length > before || !part || !on) return undefined;
-      return { type: "sits_on", part, on, ...(embed !== undefined ? { embed } : {}) };
+      return {
+        type: "sits_on",
+        part,
+        on,
+        ...(embed !== undefined ? { embed } : {}),
+        ...(axis !== undefined ? { axis } : {}),
+      };
     }
     case "above": {
-      unknownRelationKeys(["type", "part", "over", "clearance"]);
+      unknownRelationKeys(["type", "part", "over", "clearance", "axis"]);
       const part = str("part");
       const over = str("over");
       const clearance = optNum("clearance");
+      const axis = rel.axis === undefined ? undefined : axisOf("axis");
       if (errors.length > before || !part || !over) return undefined;
-      return { type: "above", part, over, ...(clearance !== undefined ? { clearance } : {}) };
+      return {
+        type: "above",
+        part,
+        over,
+        ...(clearance !== undefined ? { clearance } : {}),
+        ...(axis !== undefined ? { axis } : {}),
+      };
     }
     case "align": {
       unknownRelationKeys(["type", "part", "to", "axes"]);
@@ -995,6 +1036,7 @@ function validateCamera(value: unknown, errors: string[]): SceneSpec["camera"] {
   // — the author believed they had aimed the shot and had not.
   const KNOWN_CAMERA_KEYS = new Set(["azimuthDeg", "elevationDeg", "distance"]);
   for (const key of Object.keys(cam)) {
+    if (isCommentKey(key)) continue;
     if (!KNOWN_CAMERA_KEYS.has(key)) {
       errors.push(
         `camera.${key} is not a camera field — ${didYouMean(key, KNOWN_CAMERA_KEYS)}known fields: ${[...KNOWN_CAMERA_KEYS].join(", ")}`,
@@ -1069,6 +1111,7 @@ function validateClaims(value: unknown, errors: string[]): ClaimsSpec | undefine
     "parts", "maxTriangles", "grounded", "maxHeight", "footprint", "watertight", "materialsUsed",
   ]);
   for (const key of Object.keys(claims)) {
+    if (isCommentKey(key)) continue;
     if (!KNOWN_CLAIM_KEYS.has(key)) {
       errors.push(
         `claims.${key} has no oracle — ${didYouMean(key, KNOWN_CLAIM_KEYS)}it would compile unchecked forever. Claims that adjudicate: ${[...KNOWN_CLAIM_KEYS].join(", ")}`,

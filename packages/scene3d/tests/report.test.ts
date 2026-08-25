@@ -118,7 +118,7 @@ describe("renderAgentReport", () => {
     expect(text).toContain("errors:\n  S3D-E-324 [a <-> b] coplanar overlap");
     expect(text).toContain("    fix: offset one surface by at least 1e-3");
     expect(text).toContain("warnings:\n  S3D-W-341 [mtl_x] material 'mtl_x' is still at Principled");
-    expect(text).toContain("verdict: fix every error above, then compile again.");
+    expect(text).toContain("verdict: fix every error above, then compile again");
   });
 
   it("reports warnings as advisory when the compile still passes", () => {
@@ -127,7 +127,7 @@ describe("renderAgentReport", () => {
         issues: [{ code: "S3D-W-381", severity: "warning", message: "scene has no lights" }],
       }),
     );
-    expect(text).toContain("verdict: compiles clean; warnings above are advisory.");
+    expect(text).toContain("verdict: compiles clean; warnings above are advisory");
   });
 
   it("renders the measured detail behind a finding, minus the origin it already printed", () => {
@@ -686,6 +686,9 @@ describe("renderAgentReport", () => {
   /* ---- the digest pointer -------------------------------------------- */
 
   it("points to the digest once the manifest stage has actually run", () => {
+    // Every read: line is gated on the file EXISTING this compile — a
+    // block that can name an absent file teaches the reader to stop
+    // following it. No census here, so no ortho; no frames, so no player.
     const text = renderAgentReport(
       result({
         stages: [
@@ -695,9 +698,26 @@ describe("renderAgentReport", () => {
       }),
     );
     expect(text).toContain("read:");
-    expect(text).toContain("out/ortho.svg — dimensioned plan/front/side");
     expect(text).toContain("out/digest.md");
     expect(text).toContain("out/read-model.json");
+    expect(text).not.toContain("out/ortho.svg");
+    expect(text).not.toContain("out/index.html");
+  });
+
+  it("names ortho and the frame player only when this compile produced them", () => {
+    const text = renderAgentReport(
+      result({
+        stages: [
+          { id: "parse", status: "ran", durationMs: 2 },
+          { id: "proof", status: "ran", durationMs: 3 },
+          { id: "manifest", status: "ran", durationMs: 1 },
+        ],
+        census: censusWith(["prp_a"]),
+        proofImages: ["out/proof/proof-abc-000.png"],
+      }),
+    );
+    expect(text).toContain("out/ortho.svg — dimensioned plan/front/side");
+    expect(text).toContain("out/index.html (frame player)");
   });
 
   it("stays silent about the digest pointer when the manifest stage did not run", () => {
@@ -774,3 +794,100 @@ describe("renderAgentReport", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+/**
+ * Terminal guidance: one forward-pointing line, matched to where the loop
+ * actually stands, and NEVER advice that is wrong for the state (the
+ * skipped-proof-without-Blender case shipped exactly that once).
+ */
+describe("terminal guidance", () => {
+  it("points at the proofs and ortho when the compile photographed the scene", () => {
+    const text = renderAgentReport(
+      result({
+        stages: [
+          { id: "parse", status: "ran", durationMs: 1 },
+          { id: "proof", status: "ran", durationMs: 1 },
+        ],
+      }),
+    );
+    expect(text).toContain("next: before calling it done, walk one proof frame and out/ortho.svg");
+  });
+
+  it("points at a full compile after a restricted pass — without naming any flag", () => {
+    const text = renderAgentReport(
+      result({
+        stages: [
+          { id: "parse", status: "ran", durationMs: 1 },
+          { id: "build", status: "ran", durationMs: 1 },
+        ],
+        manifest: buildManifest({
+          source, issues: [], summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [], exportedAssets: [], blenderUsed: true, blenderVersion: "5.0.1",
+        }),
+      }),
+    );
+    expect(text).toContain("next: structure settled? run a full compile");
+    expect(text).not.toContain("--fast");
+  });
+
+  it("gives no full-compile advice when Blender itself was absent", () => {
+    const text = renderAgentReport(
+      result({
+        stages: [
+          { id: "parse", status: "ran", durationMs: 1 },
+          { id: "proof", status: "skipped", durationMs: 0 },
+        ],
+        manifest: buildManifest({
+          source, issues: [], summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [], exportedAssets: [], blenderUsed: false, blenderVersion: null,
+        }),
+      }),
+    );
+    expect(text).not.toContain("next: structure settled?");
+  });
+
+  it("nudges a claimless spec toward claims exactly once, and only a spec", () => {
+    const specSource = { kind: "spec" as const, files: ["scene.json"] };
+    const claimless = renderAgentReport(
+      result({
+        source: specSource,
+        manifest: buildManifest({
+          source: specSource, issues: [], summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [], exportedAssets: [], blenderUsed: true, blenderVersion: "5.0.1",
+        }),
+      }),
+    );
+    expect(claimless).toContain("tip: this spec declares no claims");
+
+    const claimed = renderAgentReport(
+      result({
+        source: specSource,
+        manifest: buildManifest({
+          source: specSource, issues: [], summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [], exportedAssets: [], blenderUsed: true, blenderVersion: "5.0.1",
+          claimsDeclared: 3,
+        }),
+      }),
+    );
+    expect(claimed).not.toContain("tip: this spec declares no claims");
+    // And a bpy scene is never nudged: claims are spec vocabulary.
+    expect(renderAgentReport(result())).not.toContain("tip: this spec declares no claims");
+  });
+});
+
+  it("still offers the full-compile step after a parse-only pass with no Blender involved", () => {
+    // A parse-only look at the solved boxes never probes Blender, so
+    // blender.used is false — but "run a full compile" is exactly the next
+    // step there. Suppression is only for a WANTED Blender stage that had
+    // no runtime to run on.
+    const text = renderAgentReport(
+      result({
+        stages: [{ id: "parse", status: "ran", durationMs: 1 }],
+        manifest: buildManifest({
+          source, issues: [], summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [], exportedAssets: [], blenderUsed: false, blenderVersion: null,
+        }),
+      }),
+    );
+    expect(text).toContain("next: structure settled? run a full compile");
+  });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Rng } from "../src/solve/rng.js";
+import { obbSeparation, rotatedBoxSize, rotatedShapeSize } from "../src/solve/types.js";
 import { validateSceneSpec, specDeclarationLines } from "../src/solve/validate.js";
 import { findCoplanarFaces, solveScene } from "../src/solve/solver.js";
 import { emitBlenderScript, frameScene } from "../src/solve/emit-bpy.js";
@@ -1882,5 +1883,189 @@ describe("did-you-mean on unknown keys", () => {
     // Same answer every call: the suggestion is a fact about the strings, not
     // about iteration order.
     expect(nearestKey("offste", ["onset", "offset"])).toBe("offset");
+  });
+});
+
+describe("cross-file key guidance", () => {
+  it("tells the author that target belongs in scene3d.json, not scene.json", () => {
+    // No within-file did-you-mean can rescue this one: nothing in
+    // scene.json vocabulary is near "target", and deleting the key loses
+    // the voxel discipline silently. The message must name the other file.
+    const result = validateSceneSpec({
+      schemaVersion: 1,
+      target: "minecraft",
+      parts: [{ id: "prp_a", size: [1, 1, 1] }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(result.spec).toBeUndefined();
+    expect(result.errors.some((e) => e.includes("target is not a scene.json field"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("scene3d.json"))).toBe(true);
+  });
+});
+
+/*
+ * Shape-aware rotated bounds and axis-general stacking — the sword-assembly
+ * round. rotatedBoxSize's rectangle formula inflated any round shape's box
+ * (a cylinder turned about its OWN axis grew 41% at 45°, so "flush" boxes
+ * shipped meshes a centimetre apart), and sits_on could only stack along Z.
+ */
+describe("rotatedShapeSize", () => {
+  it("a cylinder turned about its own axis keeps its box exactly", () => {
+    const size = rotatedShapeSize(
+      { shape: "cylinder", axis: "y" },
+      [0.08, 0.01, 0.08],
+      { axis: "y", deg: 45 },
+    );
+    expect(size[0]).toBeCloseTo(0.08, 12);
+    expect(size[1]).toBeCloseTo(0.01, 12);
+    expect(size[2]).toBeCloseTo(0.08, 12);
+  });
+
+  it("a sphere is rotation-invariant when its box is a cube", () => {
+    const size = rotatedShapeSize({ shape: "sphere" }, [0.04, 0.04, 0.04], { axis: "x", deg: 33 });
+    for (const extent of size) expect(extent).toBeCloseTo(0.04, 12);
+  });
+
+  it("an ellipsoid (sphere in a non-cubic box) rotates exactly, not by the box formula", () => {
+    // Semi-axes 0.2 and 0.1 turned 45° about z: the support is
+    // sqrt((a·dx)² + (b·dy)²) with d = (√½, ±√½, 0) → √(a²+b²)/√2 each way.
+    const size = rotatedShapeSize({ shape: "sphere" }, [0.4, 0.2, 0.2], { axis: "z", deg: 45 });
+    // width = 2·√((a·dx)² + (b·dy)²) with d = (√½, −√½, 0) → √2·√(a² + b²).
+    expect(size[0]).toBeCloseTo(Math.sqrt(2) * Math.sqrt(0.2 ** 2 + 0.1 ** 2), 12);
+    expect(size[1]).toBeCloseTo(size[0]!, 12);
+    expect(size[2]).toBeCloseTo(0.2, 12);
+    // Strictly tighter than the rectangle bound the old formula gave.
+    expect(size[0]!).toBeLessThan(rotatedBoxSize([0.4, 0.2, 0.2], { axis: "z", deg: 45 })[0]!);
+  });
+
+  it("a box still gets the exact rectangle bound", () => {
+    const viaShape = rotatedShapeSize({ shape: "box" }, [0.8, 0.2, 0.6], { axis: "z", deg: 31 });
+    const viaBox = rotatedBoxSize([0.8, 0.2, 0.6], { axis: "z", deg: 31 });
+    for (let i = 0; i < 3; i++) expect(viaShape[i]).toBeCloseTo(viaBox[i]!, 12);
+  });
+
+  it("a quarter turn swaps a cylinder's axes exactly", () => {
+    const size = rotatedShapeSize(
+      { shape: "cylinder", axis: "z" },
+      [0.4, 0.4, 1.0],
+      { axis: "x", deg: 90 },
+    );
+    expect(size[0]).toBeCloseTo(0.4, 12);
+    expect(size[1]).toBeCloseTo(1.0, 12);
+    expect(size[2]).toBeCloseTo(0.4, 12);
+  });
+
+  it("a frustum's rims govern its turned box", () => {
+    // tip 0 cone, axis z, half-height 0.5, base radius 0.2, turned 90° about
+    // x: the base disc now spans z, the apex reaches along y.
+    const size = rotatedShapeSize(
+      { shape: "cone", axis: "z", tip: 0 },
+      [0.4, 0.4, 1.0],
+      { axis: "x", deg: 90 },
+    );
+    expect(size[0]).toBeCloseTo(0.4, 12);
+    expect(size[1]).toBeCloseTo(1.0, 12);
+    expect(size[2]).toBeCloseTo(0.4, 12);
+  });
+});
+
+describe("sits_on / above along an authored axis", () => {
+  const sword = {
+    schemaVersion: 1 as const,
+    materials: { mtl_steel: { baseColor: [0.6, 0.6, 0.62] as [number, number, number] } },
+    parts: [
+      { id: "prp_grip", shape: "cylinder" as const, axis: "y" as const, size: [0.03, 0.12, 0.03] as [number, number, number], material: "mtl_steel" },
+      { id: "prp_rainguard", shape: "cylinder" as const, axis: "y" as const, size: [0.08, 0.01, 0.08] as [number, number, number], material: "mtl_steel" },
+    ],
+    relations: [
+      { type: "at" as const, part: "prp_grip", center: [0, -0.08, 0.1] as [number, number, number] },
+      { type: "sits_on" as const, part: "prp_rainguard", on: "prp_grip", axis: "y" as const },
+      { type: "align" as const, part: "prp_rainguard", to: "prp_grip", axes: ["x", "z"] as Array<"x" | "z"> },
+    ],
+  };
+
+  it("stacks along Y with the 1mm embed, and records no gravity support", () => {
+    const solved = solveScene(sword as never);
+    expect(solved.diagnostics).toEqual([]);
+    const guard = solved.parts.find((p) => p.id === "prp_rainguard")!;
+    // grip top at -0.02; embed floor 1mm; guard half-height 0.005.
+    expect(guard.center[1]).toBeCloseTo(-0.02 - 0.001 + 0.005, 9);
+    // A Y attachment is not a gravity rest: grounding must not think the
+    // rainguard is held up by the grip.
+    expect(guard.restsOn).toBeUndefined();
+  });
+
+  it("validates the axis field instead of refusing it", () => {
+    const result = validateSceneSpec({
+      ...sword,
+      relations: [
+        sword.relations[0],
+        { type: "sits_on", part: "prp_rainguard", on: "prp_grip", axis: "w" },
+      ],
+    });
+    expect(result.errors.join("\n")).toContain("axis must be x, y or z");
+  });
+});
+
+describe("obbSeparation", () => {
+  it("proves two canted bars apart where their AABBs interpenetrate", () => {
+    // Two parallel 45°-turned bars, offset 0.2m perpendicular to their
+    // length: true face gap 0.1m, while each AABB spans ~0.778m per axis
+    // and the AABBs overlap deeply — the false SOLVE-INTERSECTION case.
+    const a = { center: [0, 0, 0] as [number, number, number], size: [1, 0.1, 0.1] as [number, number, number], rotate: { axis: "z" as const, deg: 45 } };
+    const b = {
+      center: [-0.2 * Math.SQRT1_2, 0.2 * Math.SQRT1_2, 0] as [number, number, number],
+      size: [1, 0.1, 0.1] as [number, number, number],
+      rotate: { axis: "z" as const, deg: 45 },
+    };
+    expect(obbSeparation(a, b)).toBeGreaterThan(0.099);
+    // AABB overlap for contrast: rotated world extent ≈ 0.778 each.
+    const world = rotatedShapeSize({ shape: "box" }, a.size, a.rotate);
+    expect(world[0]!).toBeGreaterThan(0.7);
+  });
+
+  it("reports the exact minimum translation distance when they do intersect", () => {
+    const a = { center: [0, 0, 0] as [number, number, number], size: [1, 0.1, 0.1] as [number, number, number], rotate: { axis: "z" as const, deg: 45 } };
+    const b = {
+      center: [-0.05 * Math.SQRT1_2, 0.05 * Math.SQRT1_2, 0] as [number, number, number],
+      size: [1, 0.1, 0.1] as [number, number, number],
+      rotate: { axis: "z" as const, deg: 45 },
+    };
+    expect(obbSeparation(a, b)).toBeCloseTo(-0.05, 9);
+  });
+
+  it("reduces to the AABB verdict for unrotated boxes", () => {
+    const a = { center: [0, 0, 0] as [number, number, number], size: [1, 1, 1] as [number, number, number] };
+    const b = { center: [1.25, 0, 0] as [number, number, number], size: [1, 1, 1] as [number, number, number] };
+    expect(obbSeparation(a, b)).toBeCloseTo(0.25, 12);
+    const c = { center: [0.75, 0, 0] as [number, number, number], size: [1, 1, 1] as [number, number, number] };
+    expect(obbSeparation(a, c)).toBeCloseTo(-0.25, 12);
+  });
+});
+
+describe("margin notes in the name maps", () => {
+  it("ignores // keys as siblings of shader and material names", () => {
+    // The convention's doc says "every unknown-key check" — which must
+    // include the NAME MAPS, where a comment used to be refused as a badly
+    // named shader, steering the author toward renaming their own note.
+    const result = validateSceneSpec({
+      schemaVersion: 1,
+      "//": "top-level note",
+      materials: {
+        "//": "palette note",
+        mtl_a: { baseColor: [0.5, 0.5, 0.5], roughness: 0.5, metallic: 0 },
+      },
+      shaders: {
+        "//": "kernel note",
+        shd_rust: { kernel: "rust.glsl", size: 128, outputs: ["baseColor"] },
+      },
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_a" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.spec).toBeDefined();
+    // The notes are dropped, not carried: they never reach the emitter.
+    expect(Object.keys(result.spec!.materials ?? {})).toEqual(["mtl_a"]);
+    expect(Object.keys(result.spec!.shaders ?? {})).toEqual(["shd_rust"]);
   });
 });

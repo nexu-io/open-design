@@ -12,11 +12,13 @@
  * What differs is the DATA a prerendered frame can offer. The GL pass reads
  * normals and view angles; a frame offers its own shading and, through the
  * runner's object-index map (`<frame>.idx.png`), its exact per-part
- * silhouette. So: the fill drives the ramp with the part's normalized
- * luminance (shading encodes form), grazing angle becomes proximity to the
- * silhouette, and the structure lines come from a Sobel over the part's own
- * pixels. Occlusion is free — the id map only marks pixels the part
- * actually won in the render.
+ * silhouette. The emphasis is the one the kit's x-ray gives a selection:
+ * the SELECTED part stays the real render, and the REST of the world drops
+ * into the spectral ghost — ink stage, translucent teal bodies lit by
+ * their own shading, cool structure lines (Sobel feature lines + the id
+ * map's exact part outlines), and a film-arc rim where the ghost world
+ * meets the selection. Occlusion is free — the id map only marks pixels a
+ * part actually won in the render.
  */
 
 /** Channel quantisation of the id map — MUST match ID_STEPS in runner.py. */
@@ -104,17 +106,22 @@ export function filmArc(p: number): [number, number, number] {
 /** The stage ink the kit's clear colour energizes to, as display bytes. */
 const INK: readonly [number, number, number] = [8, 9, 13]; // (0.03, 0.035, 0.05) × 255
 
-/** Grazing band width, in px of the frame — the 2D stand-in for fresnel. */
-const RIM_PX = 7;
+/** The kit x-ray's ghost teal — inspectionRamp's deep-teal stop, the body
+ *  colour of the normals-mode ghost. */
+const GHOST_TEAL: readonly [number, number, number] = [0.118, 0.478, 0.549];
+/** The cool structure-line tint, verbatim from the shader's edge term. */
+const EDGE_TINT: readonly [number, number, number] = [0.55, 0.72, 0.8];
 
 /**
- * Compose the full-energize x-ray frame: selected parts wear the spectral
- * skin, everything else recedes toward the stage ink so the energized part
- * reads as lit from within the world. Returns pixels at mix = 1; the caller
- * animates the crossfade by compositing this over the real frame with the
- * kit's own 200ms-in / 140ms-out ease-out-cubic (opacity IS the front
- * pass's uXray: over the beauty pixels, alpha-blending this equals
- * mix(disp, skin, a)).
+ * Compose the full-energize frame with the emphasis the kit's x-ray puts on
+ * a selection: the SELECTED part keeps its real rendered pixels — it is the
+ * one thing in the scene that stays matter — while everything else drops
+ * into the spectral ghost: the dark stage ink, translucent teal bodies lit
+ * by their own shading, cool structure lines (Sobel feature lines plus the
+ * id map's exact part-boundary lines — sharper outlines than the GL pass
+ * itself can draw), and a thin film-arc rim where the world meets the
+ * selection. Returns pixels at mix = 1; the caller crossfades with the
+ * kit's own 200ms-in / 140ms-out ease-out-cubic (canvas opacity IS uXray).
  */
 export function renderXrayComposite(
   beauty: ImageData,
@@ -127,34 +134,32 @@ export function renderXrayComposite(
   const dst = out.data;
   const n = width * height;
 
-  /* Mask + the part's own luminance statistics: the ramp is driven by
-     shading normalized across the PART, the way curvature centres on the
-     steel midpoint — a dark part and a bright part both use the full arc. */
-  const mask = new Uint8Array(n);
+  /* Luminance field + ghost-side statistics: the ghost's body brightness is
+     the geometry's own shading, normalized over the GHOSTED pixels so the
+     translucent world keeps its light and form. */
   const lum = new Float32Array(n);
-  let lumMin = Infinity;
-  let lumMax = -Infinity;
-  let any = false;
+  let ghostMin = Infinity;
+  let ghostMax = -Infinity;
+  let anySelected = false;
   for (let i = 0, p = 0; i < n; i++, p += 4) {
     const L = 0.2126 * src[p]! + 0.7152 * src[p + 1]! + 0.0722 * src[p + 2]!;
     lum[i] = L;
-    if (codes[i] !== 0 && selected.has(codes[i]!)) {
-      mask[i] = 1;
-      any = true;
-      if (L < lumMin) lumMin = L;
-      if (L > lumMax) lumMax = L;
+    const code = codes[i]!;
+    if (code !== 0 && selected.has(code)) {
+      anySelected = true;
+    } else if (code !== 0) {
+      if (L < ghostMin) ghostMin = L;
+      if (L > ghostMax) ghostMax = L;
     }
   }
-  if (!any) {
+  if (!anySelected) {
     dst.set(src);
     return;
   }
-  const lumSpan = Math.max(8, lumMax - lumMin);
+  const ghostSpan = Math.max(8, ghostMax - ghostMin);
 
-  /* Separable 3×3 box smooth of the luminance field. The beauty pass
-     carries EEVEE sampling noise, and feeding it raw into the ramp made
-     the fill speckle; the GL pass never had this problem because normals
-     are smooth. One blur, used for both the fill and the structure lines. */
+  /* Separable 3×3 box smooth: the beauty pass carries EEVEE sampling noise,
+     and raw luminance speckles both the ghost body and the feature lines. */
   const lumH = new Float32Array(n);
   for (let y = 0; y < height; y++) {
     const row = y * width;
@@ -175,66 +180,65 @@ export function renderXrayComposite(
     }
   }
 
-  /* Distance to the silhouette (two-pass chamfer, capped at the rim band):
-     the 2D grazing angle. */
-  const BIG = RIM_PX + 1;
-  const dist = new Float32Array(n).fill(BIG);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = y * width + x;
-      if (!mask[i]) {
-        dist[i] = 0;
-        continue;
-      }
-      let d = dist[i]!;
-      if (x > 0) d = Math.min(d, dist[i - 1]! + 1);
-      if (y > 0) d = Math.min(d, dist[i - width]! + 1, x > 0 ? dist[i - width - 1]! + 1.4 : BIG, x < width - 1 ? dist[i - width + 1]! + 1.4 : BIG);
-      dist[i] = d;
-    }
-  }
-  for (let y = height - 1; y >= 0; y--) {
-    for (let x = width - 1; x >= 0; x--) {
-      const i = y * width + x;
-      if (!mask[i]) continue;
-      let d = dist[i]!;
-      if (x < width - 1) d = Math.min(d, dist[i + 1]! + 1);
-      if (y < height - 1) d = Math.min(d, dist[i + width]! + 1, x < width - 1 ? dist[i + width + 1]! + 1.4 : BIG, x > 0 ? dist[i + width - 1]! + 1.4 : BIG);
-      dist[i] = d;
-    }
-  }
-
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
       const p = i * 4;
-      if (!mask[i]) {
-        /* The rest of the world recedes — the kit energizes its stage to a
-           deep near-black for the same reason: additive spectral light
-           needs a dark ground to bloom against. Geometry keeps more of
-           itself than empty backdrop so the scene stays legible. */
-        const keep = src[p + 3]! >= 32 ? 0.5 : 0.3;
-        dst[p] = src[p]! * keep + INK[0] * (1 - keep);
-        dst[p + 1] = src[p + 1]! * keep + INK[1] * (1 - keep);
-        dst[p + 2] = src[p + 2]! * keep + INK[2] * (1 - keep);
-        dst[p + 3] = Math.max(src[p + 3]!, 200);
+      const code = codes[i]!;
+      const isSelected = code !== 0 && selected.has(code);
+
+      /* Boundary structure from the id map: a pixel whose 4-neighbourhood
+         crosses into a different part (or the void) is an OUTLINE pixel —
+         the exact contour the wireframe look wants. Selection boundaries
+         are remembered separately for the film rim. */
+      let boundary = false;
+      let touchesSelection = false;
+      if (x > 0 && codes[i - 1] !== code) {
+        boundary = true;
+        if (selected.has(codes[i - 1]!)) touchesSelection = true;
+      }
+      if (x < width - 1 && codes[i + 1] !== code) {
+        boundary = true;
+        if (selected.has(codes[i + 1]!)) touchesSelection = true;
+      }
+      if (y > 0 && codes[i - width] !== code) {
+        boundary = true;
+        if (selected.has(codes[i - width]!)) touchesSelection = true;
+      }
+      if (y < height - 1 && codes[i + width] !== code) {
+        boundary = true;
+        if (selected.has(codes[i + width]!)) touchesSelection = true;
+      }
+
+      if (isSelected) {
+        /* The selection is the one real thing on the stage: its pixels pass
+           through untouched, with a whisper of lift so it reads lit against
+           the dark ghost world. */
+        dst[p] = Math.min(255, src[p]! * 1.06);
+        dst[p + 1] = Math.min(255, src[p + 1]! * 1.06);
+        dst[p + 2] = Math.min(255, src[p + 2]! * 1.06);
+        dst[p + 3] = 255;
         continue;
       }
 
-      // 1. FILL — the ramp, driven by the part's own normalized shading.
-      const t = (lum[i]! - lumMin) / lumSpan;
-      const fill = inspectionRamp(0.12 + 0.76 * t);
+      if (code === 0 && src[p + 3]! < 32) {
+        // The stage itself: the kit's deep ink, full stop.
+        dst[p] = INK[0];
+        dst[p + 1] = INK[1];
+        dst[p + 2] = INK[2];
+        dst[p + 3] = 255;
+        continue;
+      }
 
-      // 2. SILHOUETTE SHEEN — grazing from silhouette proximity; the same
-      //    rim window and blend weights as the shader.
-      const graze = 1 - Math.min(1, dist[i]! / RIM_PX);
-      const rim = smoothstep(0.55, 0.98, graze);
-      const film = filmArc(0.15 + 0.55 * graze);
-      let r = fill[0] + (fill[0] * 0.45 + film[0] * 0.85 - fill[0]) * rim * 0.32;
-      let g = fill[1] + (fill[1] * 0.45 + film[1] * 0.85 - fill[1]) * rim * 0.32;
-      let b = fill[2] + (fill[2] * 0.45 + film[2] * 0.85 - fill[2]) * rim * 0.32;
+      /* Ghosted geometry: a translucent teal body whose brightness is the
+         part's own shading, over the ink — the normals-mode look. */
+      const t = code === 0 ? 0.3 : (lum[i]! - ghostMin) / ghostSpan;
+      const body = 0.16 + 0.5 * Math.min(1, Math.max(0, t));
+      let r = INK[0] / 255 + (GHOST_TEAL[0] - INK[0] / 255) * body;
+      let g = INK[1] / 255 + (GHOST_TEAL[1] - INK[1] / 255) * body;
+      let b = INK[2] / 255 + (GHOST_TEAL[2] - INK[2] / 255) * body;
 
-      // 3. EDGES — thin cool structure lines from the part's own pixels
-      //    (Sobel over luminance), the shader's fwidth(n) analogue.
+      // Feature lines inside a part (Sobel over smoothed luminance)…
       let edge = 0;
       if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
         const gx =
@@ -243,11 +247,22 @@ export function renderXrayComposite(
         const gy =
           lum[i + width - 1]! + 2 * lum[i + width]! + lum[i + width + 1]! -
           lum[i - width - 1]! - 2 * lum[i - width]! - lum[i - width + 1]!;
-        edge = smoothstep(0.12, 0.5, Math.hypot(gx, gy) / (4 * lumSpan));
+        edge = smoothstep(0.14, 0.55, Math.hypot(gx, gy) / (4 * ghostSpan));
       }
-      r += 0.55 * edge * 0.16;
-      g += 0.72 * edge * 0.16;
-      b += 0.8 * edge * 0.16;
+      // …and the id map's exact outlines, brighter — the wireframe bones.
+      if (boundary) edge = Math.max(edge, 0.85);
+      r += EDGE_TINT[0] * edge * 0.55;
+      g += EDGE_TINT[1] * edge * 0.55;
+      b += EDGE_TINT[2] * edge * 0.55;
+
+      // Where the ghost world meets the SELECTION, a thin film-arc rim —
+      // the spectral jewellery, marking exactly what stayed real.
+      if (touchesSelection) {
+        const film = filmArc(0.35);
+        r = r * 0.35 + film[0] * 0.85;
+        g = g * 0.35 + film[1] * 0.85;
+        b = b * 0.35 + film[2] * 0.85;
+      }
 
       dst[p] = Math.min(255, r * 255);
       dst[p + 1] = Math.min(255, g * 255);

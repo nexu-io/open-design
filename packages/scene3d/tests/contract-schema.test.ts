@@ -253,3 +253,13 @@ describe("unknown contract keys", () => {
     expect(problems[0]).toContain("conventions.budgets.rolse is not a contract field");
     expect(problems[0]).toContain('did you mean "roles"?');
   });
+
+  it("points scene vocabulary written into the contract back at scene.json", () => {
+    const problems = validateFields({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1] }],
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("parts is not a contract field");
+    expect(problems[0]).toContain("scene.json");
+  });

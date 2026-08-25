@@ -129,10 +129,19 @@ describe("validateShaderSpec", () => {
         errors,
       );
       if (result) {
-        // Accepted names are pure identifiers — inert by construction.
-        expect(name).toMatch(/^u[A-Z][A-Za-z0-9]{0,30}$/);
-        const source = assembleWebgl2Fragment(KERNEL, ["baseColor"], result.uniforms);
-        expect(source).toContain(`uniform float ${name};`);
+        if (name.startsWith("//")) {
+          // A margin note: legal, silently DROPPED, and provably absent
+          // from the assembled source — the injection property holds by
+          // omission rather than by the identifier gate.
+          expect(result.uniforms.some((u) => u.name === name)).toBe(false);
+          const source = assembleWebgl2Fragment(KERNEL, ["baseColor"], result.uniforms);
+          expect(source).not.toContain(name);
+        } else {
+          // Accepted names are pure identifiers — inert by construction.
+          expect(name).toMatch(/^u[A-Z][A-Za-z0-9]{0,30}$/);
+          const source = assembleWebgl2Fragment(KERNEL, ["baseColor"], result.uniforms);
+          expect(source).toContain(`uniform float ${name};`);
+        }
       } else {
         expect(errors.length).toBeGreaterThan(0);
       }
@@ -246,5 +255,26 @@ describe("scene.json integration", () => {
       relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
     });
     expect(bad.errors.some((e) => e.includes("mtl_x.baseColor"))).toBe(true);
+  });
+});
+
+describe("margin notes in the uniforms map", () => {
+  it("ignores a // key beside real uniforms", () => {
+    // The last name map in the shader block: a note here was refused as a
+    // badly named uniform, with an error that never named the real cause.
+    const errors: string[] = [];
+    const result = validateShaderSpec(
+      "shd_rust",
+      {
+        kernel: "rust.glsl",
+        size: 128,
+        outputs: ["baseColor"],
+        uniforms: { "//": "6 cells across the trim", uScale: 6 },
+      },
+      undefined,
+      errors,
+    );
+    expect(errors).toEqual([]);
+    expect(result?.uniforms.map((u) => u.name)).toEqual(["uScale"]);
   });
 });

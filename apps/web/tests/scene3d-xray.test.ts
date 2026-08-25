@@ -82,17 +82,19 @@ describe('renderXrayComposite', () => {
   for (let y = 2; y < 6; y++) for (let x = 2; x < 6; x++) codes[y * W + x] = 1;
   const beauty = imageData(W, H, () => [128, 128, 128, 255]);
 
-  it('re-skins the selected part and recedes the rest toward the stage ink', () => {
+  it('keeps the selected part real and drops the world into the teal ghost', () => {
     const out = imageData(W, H, () => [0, 0, 0, 0]);
     renderXrayComposite(beauty, codes, new Set([1]), out);
     const inside = (3 * W + 3) * 4;
-    const outside = 0;
-    // Part pixels are spectral (not the grey they were)…
-    expect(out.data[inside]).not.toBe(128);
+    const corner = 0;
+    // The selection stays matter: its pixels survive (with the 6% lift).
+    expect(out.data[inside]).toBe(Math.min(255, Math.round(128 * 1.06)));
     expect(out.data[inside + 3]).toBe(255);
-    // …and the world outside dims toward the ink rather than vanishing.
-    expect(out.data[outside]!).toBeLessThan(128);
-    expect(out.data[outside]!).toBeGreaterThan(0);
+    // The world outside goes spectral: darker than it was, teal-leaning
+    // (blue channel above red — the ghost body), never vanished.
+    expect(out.data[corner]!).toBeLessThan(128);
+    expect(out.data[corner + 2]!).toBeGreaterThan(out.data[corner]!);
+    expect(out.data[corner + 3]).toBe(255);
   });
 
   it('passes the frame through untouched when nothing is selected', () => {

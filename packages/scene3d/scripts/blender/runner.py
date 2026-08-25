@@ -1773,12 +1773,76 @@ SYMMETRY_VERT_CAP = 100000
 SYMMETRY_PROBES = 2048
 
 
+def _principal_axes(verts, stride):
+    """Unit eigenvectors of the sampled vertex covariance, by cyclic Jacobi
+    rotations on the 3x3 symmetric matrix — deterministic, dependency-free.
+
+    For a bilaterally symmetric body the mirror plane's normal IS a
+    principal axis (the covariance commutes with the reflection), so the
+    true plane of a ROTATED part is found here rather than assumed to be
+    world X."""
+    import mathutils
+    n = 0
+    mean = [0.0, 0.0, 0.0]
+    for i in range(0, len(verts), stride):
+        co = verts[i].co
+        mean[0] += co[0]; mean[1] += co[1]; mean[2] += co[2]
+        n += 1
+    if n < 4:
+        return []
+    mean = [m / n for m in mean]
+    # Covariance, upper triangle.
+    c = [[0.0] * 3 for _ in range(3)]
+    for i in range(0, len(verts), stride):
+        co = verts[i].co
+        d = (co[0] - mean[0], co[1] - mean[1], co[2] - mean[2])
+        for a in range(3):
+            for b in range(a, 3):
+                c[a][b] += d[a] * d[b]
+    for a in range(3):
+        for b in range(a):
+            c[a][b] = c[b][a]
+    # Jacobi eigen-decomposition: V accumulates the rotations.
+    v = [[1.0 if a == b else 0.0 for b in range(3)] for a in range(3)]
+    for _ in range(24):
+        # Largest off-diagonal element.
+        p, q = 0, 1
+        if abs(c[0][2]) > abs(c[p][q]):
+            p, q = 0, 2
+        if abs(c[1][2]) > abs(c[p][q]):
+            p, q = 1, 2
+        if abs(c[p][q]) < 1e-12:
+            break
+        theta = 0.5 * math.atan2(2.0 * c[p][q], c[q][q] - c[p][p])
+        s, co_ = math.sin(theta), math.cos(theta)
+        for k in range(3):
+            cp, cq = c[k][p], c[k][q]
+            c[k][p] = co_ * cp - s * cq
+            c[k][q] = s * cp + co_ * cq
+        for k in range(3):
+            cp, cq = c[p][k], c[q][k]
+            c[p][k] = co_ * cp - s * cq
+            c[q][k] = s * cp + co_ * cq
+        for k in range(3):
+            vp, vq = v[k][p], v[k][q]
+            v[k][p] = co_ * vp - s * vq
+            v[k][q] = s * vp + co_ * vq
+    return [mathutils.Vector((v[0][k], v[1][k], v[2][k])).normalized() for k in range(3)]
+
+
 def symmetry_facts(bm):
-    """Bilateral symmetry error of one WORLD-space bmesh about its own
-    bbox-centre X plane: for sampled vertices, the distance from the
-    mirrored point to the nearest actual vertex. Exact symmetry reads as
-    ~0; a lumpy scanned or generated half reads in millimetres. Returns
-    None (unmeasured, never 'fine') on empty or over-cap meshes."""
+    """Bilateral symmetry error of one WORLD-space bmesh: for sampled
+    vertices, the distance from the mirrored point to the nearest actual
+    vertex, across the BEST of six candidate mirror planes — the three
+    world-axis planes and the three principal planes of the vertex
+    covariance. The principal candidates are what make the probe honest
+    for ROTATED parts: a part symmetric about its own local X, built with
+    a 30-degree turn, has no world-X symmetry at all, and the old
+    world-X-only probe reported a spurious asymmetry proportional to the
+    turn. Exact symmetry reads as ~0; a lumpy scanned or generated half
+    reads in millimetres. Returns None (unmeasured, never 'fine') on empty
+    or over-cap meshes."""
+    import mathutils
     import mathutils.kdtree
     # Face-connected vertices only (B-11): a loose vertex shifts the mirror
     # centre and reports a meaningless metres-large asymmetry. Fall back to all
@@ -1789,34 +1853,57 @@ def symmetry_facts(bm):
     if n == 0 or n > SYMMETRY_VERT_CAP:
         return None
     try:
-        lo = min(v.co.x for v in verts)
-        hi = max(v.co.x for v in verts)
-        cx = (lo + hi) / 2.0
         kd = mathutils.kdtree.KDTree(n)
         for i, v in enumerate(verts):
             kd.insert(v.co, i)
         kd.balance()
         stride = max(1, n // SYMMETRY_PROBES)
-        total = 0.0
-        worst = 0.0
-        probes = 0
-        for i in range(0, n, stride):
-            co = verts[i].co
-            mirrored = (2.0 * cx - co.x, co.y, co.z)
-            found = kd.find(mirrored)
-            dist = found[2] if found and found[2] is not None else None
-            if dist is None:
+        candidates = [
+            mathutils.Vector((1, 0, 0)),
+            mathutils.Vector((0, 1, 0)),
+            mathutils.Vector((0, 0, 1)),
+        ]
+        for axis_vec in _principal_axes(verts, stride):
+            # A principal axis within a degree of a world axis adds nothing.
+            if all(abs(axis_vec.dot(c)) < 0.9998 for c in candidates[:3]):
+                candidates.append(axis_vec)
+        best = None
+        for normal in candidates:
+            projections = [normal.dot(v.co) for v in verts]
+            mid = (min(projections) + max(projections)) / 2.0
+            total = 0.0
+            worst = 0.0
+            probes = 0
+            for i in range(0, n, stride):
+                co = verts[i].co
+                offset = 2.0 * (normal.dot(co) - mid)
+                mirrored = (
+                    co[0] - offset * normal[0],
+                    co[1] - offset * normal[1],
+                    co[2] - offset * normal[2],
+                )
+                found = kd.find(mirrored)
+                dist = found[2] if found and found[2] is not None else None
+                if dist is None:
+                    continue
+                total += dist
+                worst = max(worst, dist)
+                probes += 1
+            if probes == 0:
                 continue
-            total += dist
-            worst = max(worst, dist)
-            probes += 1
-        if probes == 0:
+            mean_err = total / probes
+            if best is None or mean_err < best[0]:
+                # Reported axis: the world axis nearest the winning normal —
+                # the same vocabulary the field always spoke.
+                letter = "xyz"[max(range(3), key=lambda k: abs(normal[k]))]
+                best = (mean_err, worst, letter, stride > 1)
+        if best is None:
             return None
         return {
-            "axis": "x",
-            "maxError": R6(worst),
-            "meanError": R6(total / probes),
-            "sampled": stride > 1,
+            "axis": best[2],
+            "maxError": R6(best[1]),
+            "meanError": R6(best[0]),
+            "sampled": best[3],
         }
     except Exception:
         return None
@@ -2797,26 +2884,63 @@ def contact_report(objects, limit=60):
             [max(c[a] for c in corners) for a in range(3)],
         )
 
-    boxes = {o.name: world_aabb(o) for o in meshes}
+    # Points retained per mesh for the oblique-axis refinement below; the
+    # AABB is exact support along the WORLD axes, but those three axes are
+    # not always where the separation lives.
+    pts_of = {o.name: face_connected_world_points(o) for o in meshes}
+
+    def world_aabb_of(o):
+        pts = pts_of[o.name]
+        if pts:
+            return (
+                [min(p[k] for p in pts) for k in range(3)],
+                [max(p[k] for p in pts) for k in range(3)],
+            )
+        return world_aabb(o)
+
+    boxes = {o.name: world_aabb_of(o) for o in meshes}
+    # Above this many combined vertices the oblique refinement is skipped
+    # (the AABB verdict stands, as it always has) — the cap is the caller's
+    # honesty budget, same doctrine as every other heavy measurement here.
+    REFINE_VERT_CAP = 400000
     out = []
     for i, a in enumerate(meshes):
         alo, ahi = boxes[a.name]
         for b in meshes[i + 1:]:
             blo, bhi = boxes[b.name]
-            # Separation per axis: negative where the spans overlap.
+            # Separation per axis: negative where the spans overlap. Exact
+            # for the world axes — the AABB IS the support interval there.
             gap = [max(blo[k] - ahi[k], alo[k] - bhi[k]) for k in range(3)]
             widest = max(gap)
             # Only report pairs near enough to be a relationship rather than
             # two unrelated parts of the scene.
             if widest > 0.05:
                 continue
+            # ROTATED parts break the world axes' monopoly: two canted
+            # plates can be centimetres apart along their own face normals
+            # while every world-axis slab overlaps, and the pair then read
+            # as "intersects" forever. One more support projection — along
+            # the centre-to-centre direction — is exact (any positive gap
+            # on any axis proves disjoint) and rescues exactly that case.
+            separation = widest
+            pa, pb = pts_of[a.name], pts_of[b.name]
+            if widest <= 0.0 and pa and pb and len(pa) + len(pb) <= REFINE_VERT_CAP:
+                ca = [(alo[k] + ahi[k]) / 2.0 for k in range(3)]
+                cb = [(blo[k] + bhi[k]) / 2.0 for k in range(3)]
+                axis = [cb[k] - ca[k] for k in range(3)]
+                norm = math.sqrt(sum(v * v for v in axis))
+                if norm > 1e-9:
+                    axis = [v / norm for v in axis]
+                    amax = max(p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2] for p in pa)
+                    bmin = min(p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2] for p in pb)
+                    separation = max(separation, bmin - amax)
             out.append({
                 "a": a.name, "b": b.name,
                 "gap": [R6(g) for g in gap],
-                # The controlling number: <=0 on every axis means they
-                # intersect, and the largest gap is the distance apart.
-                "separation": R6(widest),
-                "intersects": widest <= 0.0,
+                # The controlling number: the widest PROVEN gap over the
+                # axes tested; <=0 on all of them means they intersect.
+                "separation": R6(separation),
+                "intersects": separation <= 0.0,
             })
     out.sort(key=lambda r: r["separation"])
     return out, skipped

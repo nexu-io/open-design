@@ -120,7 +120,15 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       }
 
       if (inFlight.has(sceneDir)) {
-        return sendApiError(res, 409, 'CONFLICT', 'a compile is already running for this scene');
+        // The refusal tells the caller what to DO, not just what happened: a
+        // blind agent that only hears "conflict" forks the scene directory
+        // to route around it, which is worse than the race the 409 prevents.
+        return sendApiError(
+          res,
+          409,
+          'CONFLICT',
+          'a compile is already running for this scene — wait for it and retry; its finished stages will come back cached, so nothing is wasted',
+        );
       }
       inFlight.add(sceneDir);
       let result;

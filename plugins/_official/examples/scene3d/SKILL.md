@@ -3,21 +3,16 @@ name: example-scene3d
 description: Author 3D models, scenes, GPU materials, sprite sheets, flipbook animations, skyboxes, voxel/Minecraft models, and kits as code, then compile them with one call (`od scene3d compile`). Use when the user asks for a 3D model, prop, scene, asset kit, texture, shader, flipbook, skybox, voxel model, or a GLB/USD export.
 ---
 
-# 3D Scene & Assets
+# 3D Scene & Assets — quickstart
 
 You are the fabricator. The shop floor is a compiler.
 
-Decide what the piece should **be**: its silhouette, its material story,
-its true scale, the one idea the light will carry. Write that as source.
-The compiler builds it through headless Blender, lights it, photographs
-it, measures every part, and sends back a letter from the bench. Nothing
-ships on eyeballs and hope. Facts arrive. You refine against them. The
-piece gets better because you can see. The pipeline carries the physics
-so your attention stays on the design.
-
-Treat the examples in this file as **grammar, never vocabulary**: derive
-every shape, name, proportion, and colour from the brief. A scene that
-could pass for a doc example has not been designed yet.
+Decide what the piece should **be** — silhouette, material story, true
+scale in metres, one light idea — and write that as source. The compiler
+builds it through headless Blender, photographs it, measures every part,
+and sends back a letter from the bench. Facts arrive; you refine against
+them. Treat the example below as **grammar, never vocabulary**: derive
+every shape, name, and proportion from the brief.
 
 ## The loop
 
@@ -25,108 +20,23 @@ could pass for a doc example has not been designed yet.
 design  →  write sources  →  compile  →  read the report  →  refine by code  →  compile again
 ```
 
-One command. No second tool for "check naming" or "preview the turntable".
-
 ```bash
 "$OD_NODE_BIN" "$OD_BIN" scene3d compile \
   --project "$OD_PROJECT_ID" --scene scenes/<name> --agent-message
 ```
 
-While structure is moving, stay on the fast gear (parse + build + lint,
-no photographs):
+While structure is still moving, add `--fast` (no photographs — seconds,
+and it still bakes shader textures and refreshes the manifest). Drop
+`--fast` when you want eyes: proof frames, exports, material previews.
+Add `--no-cache` only when you suspect a stale cache. With the same
+invocation prefix and `--project`/`--scene` arguments,
+`scene3d manifest --json` reads the last compile without Blender and
+`scene3d tweaks --json` reads the user's viewport edits (fold them into
+source, then `--clear`).
 
-```bash
-"$OD_NODE_BIN" "$OD_BIN" scene3d compile \
-  --project "$OD_PROJECT_ID" --scene scenes/<name> --fast --agent-message
-```
+## A first scene
 
-You never choose file formats. You write geometry and materials; the
-contract ships containers. The report tells you what the bench saw;
-read it, change the source, go again.
-
-Also on this surface:
-
-| Command | When |
-|---|---|
-| `compile --fast --agent-message` | Default iteration |
-| `compile --agent-message` | Photographs + export; the pass you call done |
-| `compile --no-cache` | Cache is stale |
-| `compile --fail-on warning` | Final pass |
-| `compile --json` | Scripting |
-| `manifest --json` | Last compile, no Blender |
-| `tweaks --json` | Read the user's bench |
-| `tweaks --set '<json>' --merge` | Write bench edits |
-| `tweaks --clear` | After you have folded intent into source |
-
-## What you can make
-
-One shop. Pick the job from the brief.
-
-| Job | You write | The compiler |
-|---|---|---|
-| **Prop / assembly** | Parts + relations + materials + claims | Solves placement, keeps contacts from z-fighting, photographs, ships |
-| **Scene** | Several props — `repeat`, `scatter`, stacking | Scatter that does not reshuffle when you add a part; camera that contains the subject |
-| **Downloaded asset** | A dir of `.glb`/`.gltf`/`.obj`/`.fbx`, or `"file":` inside a box | Imports, frames, measures, repackages. `material` on a file part reskins it |
-| **Freeform shape** | `"script": "hull.py"`, `def build(ctx)`, exactly one mesh | Fits it into the declared box; relations still work |
-| **GPU material** | `.glsl` kernel `vec4 kernel(vec2 uv)` + a `shaders` block | Bakes (height → normal map too), wires it, shows it in the proof and the GLB |
-| **Motion** | Per-part `spin` / `bob` | Owns keyframes, derives an animation, keeps clips on imported rigs |
-| **Sprite / flipbook / VFX / sky** | A sheet file, or a kernel with `"frames": 16` | Measures the atlas. A frames kernel *is* a sheet, so materials do not bind it |
-| **Voxel / Minecraft** | Same language on the pixel grid, or drop a `.bbmodel` / Java `model.json` | Grid-snaps, format warnings, emits the JSON the game loads |
-
-If the brief is a flame atlas, a sky cube, a rusted helmet, or a golem
-the game can wear, that is this shop.
-
-## Design before fabrication
-
-From the brief, before a file:
-
-- **Silhouette.** One dominant mass, plus something that breaks symmetry.
-- **Material story.** Two or three materials that mean something beat six
-  that decorate. Metallic is 0 or 1; roughness carries the life.
-- **Scale honesty.** Metres. A door ~2 m, a mug ~9 cm; read `scale:` on
-  every report.
-- **One light idea.** What the key is *for* before you set energy.
-
-## Two disciplines
-
-**Continuous (default).** Hard-surface, imported meshes, shaders, sheets.
-Contacts floor 1 mm from flush. Units are metres.
-
-**Voxel.** `"target": "voxel"` for any engine (ships GLB/USD/OBJ), or
-`"target": "minecraft"` when the destination is the game.
-
-What changes: `repeat`/`scatter` snap to the grid; sizes and `at` want
-multiples of 1/16 m (0.0625); height is Z; standing models rest on
-`z = 0`; even pixel sizes keep centred boxes on-grid. Minecraft also
-wants cuboid `box` parts and emits `out/minecraft/model.json` (or
-Bedrock `geometry.json`, via `conventions.minecraft.dialect: "bedrock"`).
-Drop a Blockbench
-file instead of `scene.json` to import and refine (a derived spec lands
-at `.scene3d/imported.scene.json`: promote it and iterate).
-
-A voxel sphere is fine under `voxel`. It is not a Minecraft element.
-That is a format fact, not a taste. Engine names are not styles here.
-
-## Lay out the job
-
-```
-scenes/<name>/
-├── scene.json        # default source
-├── scene3d.json      # contract
-├── tweaks.json       # user's bench; fold this
-└── out/              # product, after compile
-```
-
-One authority per directory. `scene.json` + `build.py` together is two
-people claiming the same geometry. Bare meshes inspect-and-repackage
-(relax naming, allow open meshes). `build.py` is the escape hatch for
-booleans, curves, modifiers: you then build the whole scene, named
-camera and light included.
-
-## The language
-
-Parts fill stated boxes. Relations place them. The solver does the
-arithmetic.
+`scenes/<name>/scene.json` (+ optional `scene3d.json` contract):
 
 ```json
 {
@@ -155,95 +65,90 @@ arithmetic.
 }
 ```
 
-Ids follow `[A-Za-z][A-Za-z0-9_]{2,63}` (`prp_`, `mtl_`, `shd_`). Shapes:
-`box` (default), `cylinder`, `sphere`, `cone`, `torus`, or fill the box
-with `"file": "assets/helmet.glb"` / `"script": "hull.py"`. A script
-defines `def build(ctx)` (`ctx.size`, `ctx.material(name)`; item access
-also works), creates exactly one mesh, and does not place itself.
+Parts fill declared boxes (metres); relations place them; the solver
+does the arithmetic; claims are re-checked against the *built* artifact
+on every compile. Ids: `[A-Za-z][A-Za-z0-9_]{2,63}` (`prp_`, `mtl_`);
+shader names are stricter — `shd_` then lower_snake (`shd_rust`, never
+camelCase). Shapes: `box`, `cylinder`, `sphere`, `cone` (+`tip`), `torus`,
+`wedge`, `tube`, `capsule` — or fill a box with `"file": "asset.glb"`
+or `"script": "hull.py"`. Relations: `at`, `sits_on`, `above`, `align`,
+`inset_from`, `span`, `repeat`, `scatter`, `around`, plus per-part
+`rotate`, `spin`, `bob`. GPU materials are a `.glsl`
+`vec4 kernel(vec2 uv)` plus a `shaders` block (`baseColor` is `kernel`;
+any other output gets its own `kernel_<output>`); `"frames": 16` bakes a
+flipbook. Kernels use the integer-hash noise stdlib — `s3d_hash21`,
+`s3d_hash22`, `s3d_vnoise`, `s3d_fbm`, `s3d_voronoi`, plus seamless
+`_tiled` variants for anything that repeats — those take a second
+period argument matching your pre-scale, `s3d_fbm_tiled(uv * 6.0,
+vec2(6.0))`, same number both places — never hand-rolled
+`fract(sin(...))`, which renders
+differently per GPU driver; a `frames` kernel animates from
+`uS3dTime` ∈ [0, 1). A part that is *meant* to float or bed while the
+scene claims `grounded` goes in `conventions.grounding.exempt` — a
+contract key, in scene3d.json like all `conventions.*`. Keys beginning
+`//` are margin notes, ignored by every unknown-key check in both
+files. In
+**scene3d.json** (the contract, beside scene.json — never in
+scene.json itself): `"target": "voxel"` / `"minecraft"` moves the same
+language onto the pixel grid, and 2D sheets are declared like
+`"sheets": [{ "file": "flame.png", "kind": "flipbook", "grid": [4, 4] }]`
+— kinds are `sprite`, `flipbook`, `particle`, `beam`, and `sky`
+(a skybox is six `sky` faces, `ft bk up dn lf rt`).
 
-Relations (any order; need one `at`): `sits_on`, `above`, `align`,
-`inset_from`, `span`, `repeat`, `scatter`. `scatter` owns placement;
-`repeat` × `scatter` on the same part is refused.
+## The compiler teaches you the rest
 
-Steer framing with `"camera": { "azimuthDeg", "elevationDeg", "distance" }`
-and `"light": "studio" | "sun"`.
+You start every run blind; the harness is built for that. Trust its
+messages over memory — when a message and any doc disagree, the message
+is measuring the current build:
 
-**Claims** (`parts`, `maxTriangles`, `grounded`, `maxHeight`,
-`footprint`, `watertight`, `materialsUsed`) are checked against the
-build. `grounded` means nothing sinks through the floor; floating is a
-legitimate composition, and a failed claim always carries its measured
-truth. Claim what matters.
+- **Misspell any key** — in scene.json, a shader block, or the contract —
+  and validation refuses it with a `did you mean …?` naming the legal
+  field. Guessing a spelling costs one fast parse, never a Blender run.
+- **Every warning names its lever.** The `fix:` line carries the exact
+  contract knob when the rule is tunable, and `data:` carries the
+  measured numbers. You never need a rule catalogue.
+- **The report carries its own map** — a `read:` block naming every
+  diagnostic on disk (`out/ortho.svg` dimensioned drawings,
+  `out/digest.md` census prose, `out/read-model.json`), and clean
+  compiles close with a `next:`/`tip:` line matched to where the loop
+  stands, when one applies. Follow them; they are cheaper than
+  re-deriving the state of the world.
+- **You are never actually blind to the shot.** Open the proof PNGs if
+  you can read images; pass `--frames` if you cannot and the frames
+  arrive as ASCII luminance ramps sampled around the orbit. Every proof
+  also writes per-material lit-sphere previews to `out/materials/` —
+  judge emission and alpha there before paying for a turntable.
 
-**Kernel.** You write `vec4 kernel(vec2 uv)`. Uniforms `uCamelCase`,
-used bare. Stdlib: `s3d_hash21`, `s3d_hash22`, `s3d_vnoise`, `s3d_fbm`,
-`s3d_voronoi`. Outputs: `baseColor`, `emission`, `roughness`,
-`metallic`, `height` (compiler derives the normal). `"frames": 16`
-bakes a flipbook atlas with `uS3dTime` ∈ [0, 1); loop on the unit
-circle; materials cannot bind a frames shader.
+## Reading the letter
 
-**Sheets** on the contract: `sprite`, `flipbook` (`grid`), `particle`,
-`beam`, `sky` (six faces `ft bk up dn lf rt`). `tint: true` means keep
-the art neutral, ready to colour downstream.
+1. `ok` and the counts — errors first; info is a hint, not a gate.
+2. `scale:` — catch unit slips before trusting any render.
+3. Solved boxes — placement you can read without a viewport.
+4. `out/ortho.svg` after every structural change — a 2-second look
+   catches proportion and overlap mistakes the turntable hides.
 
-**Motion:** `"spin": { "axis": "z", "seconds": 5 }`, `"bob": { "amplitude": 0.05, "seconds": 4 }`.
+Fix the source, compile again; do not argue with the measurement. The
+harness validates what was **built** — comparing it to what was *meant*
+is your job, and claims are how you write that intent down so the
+compiler holds it for you.
 
-Contract sketch (continuous):
+## Going deeper
 
-```json
-{
-  "schemaVersion": 1,
-  "conventions": {
-    "naming": {
-      "objectPattern": "^[a-z]{3}_[a-z0-9_]{2,60}$",
-      "forbidDefaultNames": true,
-      "partPrefixes": ["prp_", "cam_", "lgt_", "mtl_", "shd_"]
-    },
-    "pbr": { "metallicValues": [0, 1] }
-  },
-  "proof": { "resolution": 512, "turntable": true, "background": "#1a1d22" }
-}
-```
+The full grammar — every shape's fields, `rotate`/`around` semantics,
+kernel outputs and time, contract knobs with exact nesting, sheet
+disciplines, raw `build.py` mode, and the operational facts (ports,
+409s, Windows BOM) — lives in the **`scene3d` design template skill**
+(`design-templates/scene3d/SKILL.md` in the Open Design repo). It may
+not be staged in your session; do not hunt for it. When this page runs
+out: lean on the compiler's messages first (they carry the exact key,
+knob, or fix at the moment you miss), and if you genuinely need the
+reference, ask the user to enable the scene3d design template skill.
+For most props and scenes, this page plus the compiler's own letters
+are enough.
 
-Minecraft: `{ "schemaVersion": 1, "target": "minecraft" }`.
-Voxel-not-game: `{ "schemaVersion": 1, "target": "voxel" }`.
+One convention for every `run:` hint the harness prints: `od` names
+this CLI — invoke it through your session's prefix
+(`"$OD_NODE_BIN" "$OD_BIN" …`) if bare `od` is not on your PATH.
 
-Iterate lighting cheap (`resolution: 256`, `turntableSteps: 1`).
-
-## How to read the report
-
-The `<scene3d-report>` is a letter from the shop floor.
-
-1. **`ok` and the counts.** Errors first.
-2. **The code is a handle.** There is no catalogue to memorize. The line
-   already carries the target, the measured fact, and a `fix:`; the
-   `data:` lines carry the numbers. When `origin` is present it names
-   the source line that made the geometry, so start there.
-3. **`scale:`** world size and the smallest part. Catch unit slips
-   before you trust a render.
-4. **Solved boxes** on spec scenes: centre, size, what it rests on.
-5. **Proof frames** when a finding is about how the shot looks, and
-   always before you call it done. A perfect mesh can still photograph
-   black. For a ~1 m prop, a key AREA around 50–80 W; if frames blow
-   out, quarter the energy.
-
-`out/digest.md` names contacts that broke. Fix the source, compile
-again. Do not argue with the measurement.
-
-## The user's bench
-
-`out/kit.html` is where they orbit, pick, move, restyle. The host
-Export menu ships files. Their edits land in `tweaks.json`. Read them
-(`tweaks --json`), fold them into source the next time you touch the
-scene, then `--clear` so the bench does not fight you on the next
-compile.
-
-## Craft
-
-- One authority per directory.
-- Names are design (`prp_lantern_cage`, not `Cube.001`).
-- True scale, metres. Metallic 0 or 1.
-- Fast while it is moving; full compile when you need eyes. Walk the
-  proofs. Fold the bench.
-
-When `ok="true"`, the claims still hold, the proofs show the brief,
-and bench edits are folded or left on purpose: the piece is made.
+When `ok="true"`, the claims hold, the proofs show the brief, and the
+user's bench edits are folded or left on purpose: the piece is made.

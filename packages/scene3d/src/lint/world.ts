@@ -120,10 +120,10 @@ export function lintWorld(
               ? `'${object.name}' floats ${fmt(support.gap)}m above '${support.name}' (lowest point ${fmt(lowest)}m above the ground plane)`
               : `'${object.name}' floats ${fmt(lowest)}m above the ground plane`,
           hint: resting
-            ? `nothing to fix if the stack is intended — exempt '${object.name}' to stop reporting it`
+            ? `nothing to fix if the stack is intended — add '${object.name}' to conventions.grounding.exempt to stop reporting it`
             : support
-              ? `drop it onto '${support.name}', or exempt it if it is mounted or airborne`
-              : "drop it onto the ground, or exempt it if it is mounted or airborne",
+              ? `drop it onto '${support.name}', or add '${object.name}' to conventions.grounding.exempt if it is mounted or airborne`
+              : `drop it onto the ground, or add '${object.name}' to conventions.grounding.exempt if it is mounted or airborne`,
           target: object.name,
           detail: { lowest, ...(support ? { nearestSupport: support.name, gap: support.gap } : {}) },
         });

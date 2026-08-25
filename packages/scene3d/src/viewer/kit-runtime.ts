@@ -603,6 +603,84 @@ function renderMatBall(renderer, props, out2d, azimuth) {
   ctx.putImageData(img, 0, 0);
 }
 
+/**
+ * The draw's ORIENTED box: centre, unit axes and half-extents from its
+ * local bounds and node matrix, scale folded into the extents. Shear —
+ * which a glTF node can technically carry — collapses onto the nearest
+ * orthogonal frame, still strictly tighter than the world AABB this
+ * replaces. Cached; anything that rewrites draw.model (a gizmo drag)
+ * must clear draw._obb alongside min/max.
+ */
+function obbOf(draw) {
+  if (draw._obb) return draw._obb;
+  if (!draw.localMin) return null;
+  const m = draw.model;
+  const cols = [[m[0], m[1], m[2]], [m[4], m[5], m[6]], [m[8], m[9], m[10]]];
+  const axes = [];
+  const half = [];
+  for (let i = 0; i < 3; i++) {
+    const len = Math.hypot(cols[i][0], cols[i][1], cols[i][2]) || 1;
+    axes.push([cols[i][0] / len, cols[i][1] / len, cols[i][2] / len]);
+    half.push(len * (draw.localMax[i] - draw.localMin[i]) / 2);
+  }
+  const c = [
+    (draw.localMin[0] + draw.localMax[0]) / 2,
+    (draw.localMin[1] + draw.localMax[1]) / 2,
+    (draw.localMin[2] + draw.localMax[2]) / 2,
+  ];
+  draw._obb = {
+    center: [
+      m[0]*c[0] + m[4]*c[1] + m[8]*c[2] + m[12],
+      m[1]*c[0] + m[5]*c[1] + m[9]*c[2] + m[13],
+      m[2]*c[0] + m[6]*c[1] + m[10]*c[2] + m[14],
+    ],
+    axes: axes,
+    half: half,
+  };
+  return draw._obb;
+}
+
+/**
+ * Signed SAT separation between two draws' oriented boxes: positive = a
+ * proven gap, negative = minus the exact minimum translation distance.
+ * The 15 axes (6 face normals + 9 edge crosses) are COMPLETE for a pair
+ * of boxes. Mirror of obbSeparation in solve/types.ts — keep in step.
+ * Falls back to the world-AABB gap when either draw carries no local
+ * bounds (identical to the old arithmetic, which for identity-rotation
+ * draws this whole function also reduces to).
+ */
+function obbGap(a, b) {
+  const A = obbOf(a);
+  const B = obbOf(b);
+  if (!A || !B) {
+    let gap = -Infinity;
+    for (let k = 0; k < 3; k++) {
+      const apart = Math.max(b.min[k] - a.max[k], a.min[k] - b.max[k]);
+      if (apart > gap) gap = apart;
+    }
+    return gap;
+  }
+  const d = [B.center[0] - A.center[0], B.center[1] - A.center[1], B.center[2] - A.center[2]];
+  const axes = A.axes.concat(B.axes);
+  for (const p of A.axes) {
+    for (const q of B.axes) {
+      axes.push([p[1]*q[2] - p[2]*q[1], p[2]*q[0] - p[0]*q[2], p[0]*q[1] - p[1]*q[0]]);
+    }
+  }
+  let best = -Infinity;
+  for (const axis of axes) {
+    const len = Math.hypot(axis[0], axis[1], axis[2]);
+    if (len < 1e-9) continue; // parallel edges: covered by the face normals
+    const L = [axis[0] / len, axis[1] / len, axis[2] / len];
+    const ra = A.half[0]*Math.abs(dot(L, A.axes[0])) + A.half[1]*Math.abs(dot(L, A.axes[1])) + A.half[2]*Math.abs(dot(L, A.axes[2]));
+    const rb = B.half[0]*Math.abs(dot(L, B.axes[0])) + B.half[1]*Math.abs(dot(L, B.axes[1])) + B.half[2]*Math.abs(dot(L, B.axes[2]));
+    const gap = Math.abs(dot(L, d)) - (ra + rb);
+    if (gap > best) best = gap;
+    if (best > 0) return best;
+  }
+  return best;
+}
+
 /** Flatten a glTF scene graph into draw calls with baked world matrices. */
 function loadModel(renderer, buffer) {
   const gl = renderer.gl;
@@ -699,6 +777,13 @@ function loadModel(renderer, buffer) {
         // is what connects a pixel to that name.
         const plo = [Infinity, Infinity, Infinity];
         const phi = [-Infinity, -Infinity, -Infinity];
+        /* LOCAL bounds too: with the node's matrix they form the part's
+           true ORIENTED box, which is what proximity math must reason in —
+           a rotated part's world AABB is up to sqrt(3) times its own
+           volume, and judging contact by it is how a canted plate glowed
+           "buried" beside a neighbour it never touched. */
+        const llo = [Infinity, Infinity, Infinity];
+        const lhi = [-Infinity, -Infinity, -Infinity];
         for (let i = 0; i < positions.length; i += 3) {
           const p = [positions[i], positions[i + 1], positions[i + 2]];
           const w = [
@@ -711,6 +796,8 @@ function loadModel(renderer, buffer) {
             if (w[a] > hi[a]) hi[a] = w[a];
             if (w[a] < plo[a]) plo[a] = w[a];
             if (w[a] > phi[a]) phi[a] = w[a];
+            if (p[a] < llo[a]) llo[a] = p[a];
+            if (p[a] > lhi[a]) lhi[a] = p[a];
           }
         }
 
@@ -765,6 +852,8 @@ function loadModel(renderer, buffer) {
           blend: !!(material && material.alphaMode === "BLEND"),
           min: plo,
           max: phi,
+          localMin: llo,
+          localMax: lhi,
           // The mesh itself, kept for picking. The world AABB above is a
           // BROAD phase and nothing more: a rotated part's box is up to
           // sqrt(3) times its own volume, a sphere's box is 91% empty at the
@@ -801,7 +890,10 @@ function loadModel(renderer, buffer) {
   // spectral pass reads this so buried or colliding geometry glows hot in
   // every colour mode — x-ray's original job, made continuous. The tolerance
   // scales to the smaller part of each pair, matching touchingParts: a
-  // millimetre is contact on a rivet and a chasm on a crate.
+  // millimetre is contact on a rivet and a chasm on a crate. The gap itself
+  // is the ORIENTED-box separation (obbGap): world AABBs of rotated parts
+  // interpenetrate freely while the parts stand clear, and a canted plate
+  // used to glow "buried" beside a neighbour it never touched.
   for (const a of renderer.draws) {
     const aspan = Math.min(a.max[0]-a.min[0], a.max[1]-a.min[1], a.max[2]-a.min[2]);
     let heat = 0;
@@ -813,14 +905,15 @@ function loadModel(renderer, buffer) {
       // read two well-separated rivets as touching — the exact scale
       // dependence the pair-relative tolerance was built to avoid.
       const tol = Math.max(1e-6, 0.05 * Math.min(aspan, bspan));
+      // Broad phase on the world AABBs (a superset, so it can only ever
+      // ADMIT too much, never miss); the oriented boxes then decide.
       let near = true;
-      let gap = -Infinity;
       for (let k = 0; k < 3; k++) {
-        const apart = Math.max(b.min[k] - a.max[k], a.min[k] - b.max[k]);
-        if (apart > tol) { near = false; break; }
-        if (apart > gap) gap = apart;
+        if (Math.max(b.min[k] - a.max[k], a.min[k] - b.max[k]) > tol) { near = false; break; }
       }
       if (!near) continue;
+      const gap = obbGap(a, b);
+      if (gap > tol) continue;
       // Map the binding gap across [+tol .. -tol] onto [0 .. 1]: a comfortable
       // gap is 0, flush face-contact (gap 0) is 0.5, and true interpenetration
       // (gap < 0) climbs to 1. This is what separates a crate's touching
@@ -1314,14 +1407,16 @@ function touchingParts(renderer, name, slack) {
     const pad = slack === undefined
       ? Math.max(0.0005, Math.min(0.01, 0.02 * Math.min(selfSpan, span(d))))
       : slack;
-    let touches = true;
-    let gap = -Infinity;
+    // Broad phase on world AABBs, verdict on the ORIENTED boxes: a rotated
+    // part's AABB reaches into neighbours it never touches, and this panel
+    // used to report those as contacts.
+    let near = true;
     for (let a = 0; a < 3; a++) {
-      const apart = Math.max(d.min[a] - self.max[a], self.min[a] - d.max[a]);
-      if (apart > pad) { touches = false; break; }
-      if (apart > gap) gap = apart;
+      if (Math.max(d.min[a] - self.max[a], self.min[a] - d.max[a]) > pad) { near = false; break; }
     }
-    if (!touches) continue;
+    if (!near) continue;
+    const gap = obbGap(self, d);
+    if (gap > pad) continue;
     const c = drawCenter(d);
     out.push({
       name: d.name,
