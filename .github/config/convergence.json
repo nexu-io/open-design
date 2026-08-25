@@ -35,6 +35,12 @@
       "packages/sidecar/",
       "packages/sidecar-proto/"
     ],
+    "terminal-scene": [
+      "suite://workspace-install",
+      "apps/closure/",
+      "packages/standalone/",
+      "shells/terminal/"
+    ],
     "daemon": [
       "suite://workspace-install",
       "apps/daemon/",
@@ -168,6 +174,12 @@
           "runnerClass": "visual_hot",
           "products": "manifest",
           "reusable": false
+        },
+        "terminal_scene": {
+          "inputs": ["suite://terminal-scene"],
+          "runnerClass": "workspace_unit",
+          "products": "manifest",
+          "reusable": true
         }
       }
     }

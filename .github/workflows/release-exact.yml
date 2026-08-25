@@ -1,0 +1,261 @@
+name: Release exact Terminal reference
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full 40-character source commit to build
+        required: true
+        type: string
+      channel:
+        description: Isolated exact channel
+        required: true
+        type: choice
+        options: [betahyx, previewhyx]
+      release_version:
+        description: Counted version, for example 0.1.0-betahyx.1
+        required: true
+        type: string
+      standalone_version:
+        description: Independent standalone protocol/runtime version
+        required: true
+        default: 0.1.0
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-exact-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  scene:
+    name: Resolve release-neutral Terminal scene
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Validate immutable inputs
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CHANNEL" == "betahyx" || "$CHANNEL" == "previewhyx" ]]
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-${CHANNEL}\.[0-9]+$ ]]
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checkout identity
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Restore converged Terminal scene when available
+        id: convergence
+        env:
+          OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/runners.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          workloads = ['static_gate', 'preflight', 'workspace_unit_tests', 'daemon_unit_tests', 'windows_tools_pack_payload_tests', 'web_workspace_tests', 'e2e_vitest', 'playwright_critical', 'ui_p0', 'playwright_visual', 'terminal_scene']
+          Path('.tmp/exact').mkdir(parents=True, exist_ok=True)
+          Path('.tmp/exact/scope-plan.json').write_text(json.dumps({'enabled': {name: name == 'terminal_scene' for name in workloads}}, sort_keys=True) + '\n')
+          PY
+          RUNNER_PLAN_JSON="$(python3 - <<'PY'
+          import os
+          from pathlib import Path
+          lines = Path(os.environ['GITHUB_OUTPUT']).read_text().splitlines()
+          print(next(line.split('=', 1)[1] for line in lines if line.startswith('runs_on=')))
+          PY
+          )"
+          python3 .github/scripts/convergence.py github-output --workflow ci --scope-plan .tmp/exact/scope-plan.json --runner-plan-json "$RUNNER_PLAN_JSON" --mode enforce --pending .tmp/exact/pending-convergence.json
+          python3 - <<'PY'
+          import hashlib, json, os, urllib.request, zipfile
+          from pathlib import Path, PurePosixPath
+          root = Path('.tmp/exact')
+          workload = json.loads((root / 'pending-convergence.json').read_text())['workloads']['terminal_scene']
+          result = workload.get('result')
+          if not workload.get('resultHit') or not result:
+              with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+                  output.write('hit=false\n')
+              raise SystemExit(0)
+          product = result['products']['scene']
+          archive = root / 'terminal-scene.zip'
+          urllib.request.urlretrieve(product['source'], archive)
+          if hashlib.sha256(archive.read_bytes()).hexdigest() != product['data']['sha256']:
+              raise SystemExit('converged Terminal scene digest mismatch')
+          destination = root / 'scene'
+          destination.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(archive) as source:
+              for entry in source.infolist():
+                  path = PurePosixPath(entry.filename)
+                  if entry.filename.startswith(('/', '\\')) or '\\' in entry.filename or '..' in path.parts:
+                      raise SystemExit(f'unsafe converged scene entry: {entry.filename!r}')
+              source.extractall(destination)
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+              output.write('hit=true\n')
+          PY
+
+      - name: Fetch locked official Node carriers on convergence miss
+        if: steps.convergence.outputs.hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp/exact/node
+          python3 - <<'PY'
+          import hashlib, json, urllib.request
+          from pathlib import Path
+          lock = json.loads(Path('shells/terminal/node-lock.json').read_text())
+          root = Path('.tmp/exact/node')
+          for value in lock['targets'].values():
+              destination = root / value['archive']
+              urllib.request.urlretrieve(value['url'], destination)
+              if hashlib.sha256(destination.read_bytes()).hexdigest() != value['sha256']:
+                  raise SystemExit(f"official Node digest mismatch: {destination.name}")
+          PY
+
+      - name: Build Terminal-owned scene on convergence miss
+        if: steps.convergence.outputs.hit != 'true'
+        run: |
+          set -euo pipefail
+          pnpm --filter @open-design/closure build
+          pnpm --filter @open-design/terminal build
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          lock = json.loads(Path('shells/terminal/node-lock.json').read_text())
+          closure = json.loads(Path('apps/closure/package.json').read_text())
+          standalone = json.loads(Path('packages/standalone/package.json').read_text())
+          targets = [{'target': target, 'nodeArchiveFile': str((Path('.tmp/exact/node') / value['archive']).resolve()), 'nodeArchiveSha256': value['sha256']} for target, value in lock['targets'].items()]
+          request = {'schemaVersion': 1, 'operation': 'terminal.scene.build', 'standaloneVersion': standalone['version'], 'closureVersion': closure['version'], 'closureArtifactFile': str(Path('apps/closure/dist/fixture.mjs').resolve()), 'targets': targets, 'sceneDirectory': str(Path('.tmp/exact/scene').resolve())}
+          Path('.tmp/exact/scene-request.json').write_text(json.dumps(request, sort_keys=True, separators=(',', ':')) + '\n')
+          PY
+          node shells/terminal/dist/exact-pack.mjs --request .tmp/exact/scene-request.json --receipt .tmp/exact/scene-receipt.json
+
+      - name: Verify scene remains release-neutral
+        run: |
+          test -f .tmp/exact/scene/scene.json
+          ! grep -Eq 'betahyx|previewhyx|publishedAt|artifactBaseUrl|signatures' .tmp/exact/scene/scene.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-terminal-scene-${{ inputs.source_sha }}
+          path: .tmp/exact/scene
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Promote, sign, and publish exact release
+    needs: [scene]
+    runs-on: ubuntu-latest
+    environment: standalone-exact-release
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checkout identity
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-terminal-scene-${{ inputs.source_sha }}
+          path: .tmp/exact/scene
+
+      - name: Write promotion request
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          STANDALONE_VERSION: ${{ inputs.standalone_version }}
+          STORAGE_ENDPOINT: ${{ secrets.EXACT_RELEASE_ENDPOINT }}
+          STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          root = Path('.tmp/exact')
+          output = root / 'output'
+          output.mkdir(parents=True, exist_ok=True)
+          channel = os.environ['CHANNEL']
+          version = os.environ['RELEASE_VERSION']
+          published_at = subprocess.check_output(['git', 'show', '--no-patch', '--format=%cI', os.environ['SOURCE_SHA']], text=True).strip()
+          prefix = f"{os.environ['STORAGE_ENDPOINT'].rstrip('/')}/{os.environ['STORAGE_BUCKET'].strip('/')}/{channel}/{version}"
+          lock = json.loads(Path('shells/terminal/node-lock.json').read_text())
+          targets = [{'target': target, 'nodeArchiveFile': f"/convergence-scene/{value['archive']}", 'nodeArchiveSha256': value['sha256']} for target, value in lock['targets'].items()]
+          request = {'schemaVersion': 1, 'operation': 'exact.pack', 'channel': channel, 'releaseVersion': version, 'standaloneVersion': os.environ['STANDALONE_VERSION'], 'sourceCommit': os.environ['SOURCE_SHA'], 'publishedAt': published_at, 'artifactBaseUrl': prefix, 'outputDirectory': str(output.resolve()), 'sceneDirectory': str((root / 'scene').resolve()), 'targets': targets}
+          (root / 'pack-request.json').write_text(json.dumps(request, sort_keys=True, separators=(',', ':')) + '\n')
+          PY
+
+      - name: Promote and sign Terminal scene
+        env:
+          OD_EXACT_SIGNING_KEY_ID: ${{ secrets.EXACT_SIGNING_KEY_ID }}
+          OD_EXACT_ED25519_PRIVATE_KEY: ${{ secrets.EXACT_ED25519_PRIVATE_KEY }}
+          OD_EXACT_SIGNING_KEY_ID_NEXT: ${{ secrets.EXACT_SIGNING_KEY_ID_NEXT }}
+          OD_EXACT_ED25519_PRIVATE_KEY_NEXT: ${{ secrets.EXACT_ED25519_PRIVATE_KEY_NEXT }}
+        run: python3 .github/scripts/pack.py --request .tmp/exact/pack-request.json --receipt .tmp/exact/pack-receipt.json
+
+      - name: Publish immutable release and channel-head CAS
+        env:
+          OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
+          STORAGE_ENDPOINT: ${{ secrets.EXACT_RELEASE_ENDPOINT }}
+          STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          value = {'schemaVersion': 1, 'operation': 'exact.release', 'packReceipt': str(Path('.tmp/exact/pack-receipt.json').resolve()), 'endpointUrl': os.environ['STORAGE_ENDPOINT'], 'bucket': os.environ['STORAGE_BUCKET']}
+          Path('.tmp/exact/release-request.json').write_text(json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n')
+          PY
+          python3 .github/scripts/release.py --request .tmp/exact/release-request.json --receipt .tmp/exact/release-receipt.json
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: exact-${{ inputs.channel }}-${{ inputs.release_version }}-receipts
+          path: |
+            .tmp/exact/*-request.json
+            .tmp/exact/*-receipt.json
+            .tmp/exact/output/.contracts/*.json
+          if-no-files-found: error
+          retention-days: 30
