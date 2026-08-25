@@ -1137,6 +1137,20 @@ function sampleScatter(
   }
   const ATTEMPTS = 200;
 
+  // The resting plane, computed ONCE: it depends on the support and the
+  // embed, never on a jittered instance size, and the adjustment
+  // announcement below must fire once per authored decision, not once per
+  // instance. See the bottom-snap note at the use site.
+  const intendedBottom = support.z.max - embed;
+  const bottomPlane = snap(intendedBottom);
+  if (Math.abs(bottomPlane - intendedBottom) > MIN_CONTACT + 1e-9) {
+    diagnostics.push({
+      code: "SOLVE-EPSILON-FLOOR",
+      message: `scatter on '${relation.part}': the grid moved the resting plane ${bottomPlane - intendedBottom >= 0 ? "up" : "down"} by ${Math.abs(bottomPlane - intendedBottom).toFixed(4)}m from the authored embed to stay on-grid`,
+      part: relation.part,
+    });
+  }
+
   const placed: Array<{ center: Vec3; size: Vec3 }> = [];
   for (let i = 0; i < relation.count; i++) {
     const scale = jitter > 0 ? 1 + jitter * (2 * rng.next() - 1) : 1;
@@ -1158,7 +1172,14 @@ function sampleScatter(
     // The resting height snaps to the grid too, so a voxel sits flush on a
     // grid-aligned support instead of the sub-grid contact embed leaving it
     // off-grid (flush is fine — the z-fighting check is direction-aware).
-    const z = snap(support.z.max - embed + size[2] / 2);
+    //
+    // Snap the CONTACT PLANE (the bottom), never the centre: a jittered
+    // height makes the centre land anywhere relative to the grid, and
+    // centre-snapping shifted the bottom by up to half a step — instances
+    // measurably floating above or sunk into the very support the scatter
+    // placed them on. The bottom is the fact the support relation is
+    // about, so the bottom is what aligns (computed once, above the loop).
+    const z = bottomPlane + size[2] / 2;
     let found = false;
     for (let attempt = 0; attempt < ATTEMPTS && !found; attempt++) {
       // Snap the sampled position onto the grid. A snap can push a candidate

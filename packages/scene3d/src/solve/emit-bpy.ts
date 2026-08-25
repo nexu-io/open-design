@@ -7,6 +7,7 @@ import {
   MaterialSpec,
   SolvedScene,
 } from "./types.js";
+import { sweptBox } from "./sweep.js";
 
 /**
  * Backend adapter: solved scene → Blender Python.
@@ -465,7 +466,11 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     '    """',
     "    obj = bpy.data.objects[name]",
     "    base_z = obj.location.z",
-    "    quarter = max(1, period_frames // 4)",
+    "    # FLOAT quarters — Blender keyframes accept fractional frames, and",
+    "    # integer flooring warped every period not divisible by four (a",
+    "    # 22-frame request cycled in 20; anything under 4 was forced to 4).",
+    "    # The cycle span IS the period now, exactly, at any legal seconds.",
+    "    quarter = max(0.25, period_frames / 4.0)",
     "    low = base_z if rests_on_ground else base_z - amplitude",
     "    mid = low + amplitude",
     "    high = low + 2.0 * amplitude",
@@ -539,15 +544,22 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     "            bpy.data.objects.remove(o, do_unlink=True)",
     "    bpy.ops.object.select_all(action=\"DESELECT\")",
     "    mesh_names = [o.name for o in meshes]",
+    "    selectable = []",
     "    for o in meshes:",
     "        try:",
     "            o.select_set(True)",
+    "            selectable.append(o)",
     "        except RuntimeError:",
     "            # Not in the view layer (importer scaffolding like bone",
     "            # custom-shape meshes); join cannot absorb it — the sweep",
     "            # below removes it by name instead.",
     "            pass",
-    "    bpy.context.view_layer.objects.active = meshes[0]",
+    "    if not selectable:",
+    "        raise ValueError(\"no mesh in %s is reachable in the view layer\" % filepath)",
+    "    # Active must be a mesh the view layer can SEE: meshes[0] may be the",
+    "    # scaffolding the except above skipped, and assigning an off-layer",
+    "    # object as active fails exactly when an asset leads with one.",
+    "    bpy.context.view_layer.objects.active = selectable[0]",
     "    if len(meshes) > 1:",
     "        bpy.ops.object.join()",
     "    obj = bpy.context.view_layer.objects.active",
@@ -978,10 +990,15 @@ export function frameScene(
   const lo: [number, number, number] = [Infinity, Infinity, Infinity];
   const hi: [number, number, number] = [-Infinity, -Infinity, -Infinity];
   for (const part of scene.parts) {
+    // Frame the CYCLE, not the rest pose: a bobbing lamp or a screwing bit
+    // leaves its rest box every second of playback, and a camera fitted to
+    // rest cropped it mid-cycle. The swept box is the same envelope W-108
+    // and the cycle claims judge — one predicate, another consumer.
+    const env = sweptBox(part);
     for (let axis = 0; axis < 3; axis++) {
       const half = part.size[axis]! / 2;
-      lo[axis] = Math.min(lo[axis]!, part.center[axis]! - half);
-      hi[axis] = Math.max(hi[axis]!, part.center[axis]! + half);
+      lo[axis] = Math.min(lo[axis]!, env ? env.min[axis]! : part.center[axis]! - half);
+      hi[axis] = Math.max(hi[axis]!, env ? env.max[axis]! : part.center[axis]! + half);
     }
   }
   const center: [number, number, number] = [

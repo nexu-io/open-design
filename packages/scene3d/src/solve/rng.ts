@@ -41,6 +41,11 @@ export class Rng {
   private root: bigint;
 
   constructor(seed: number | string, path = "") {
+    if (path.includes(SEP)) {
+      throw new Error(
+        "Rng path must not contain the NUL separator (\\u0000): it would alias a nested path and collapse two independent streams into one",
+      );
+    }
     const seedHash = fnv1a64(typeof seed === "number" ? `n:${seed}` : `s:${seed}`);
     this.root = path === "" ? seedHash : fnv1a64(SEP + path, seedHash);
     this.state = this.root;
@@ -50,8 +55,19 @@ export class Rng {
    * Derive an independent child stream. Streams are addressed, never
    * split-off: the child depends only on (seed, this path, child path),
    * not on how much this stream has drawn.
+   *
+   * The separator byte is REFUSED in a path rather than merely documented
+   * as unavailable: `.at("a").at("b")` and `.at("a\x00b")` would hash the
+   * same byte sequence, silently aliasing two streams the caller believes
+   * are independent — and an aliased randomness source fails in the one
+   * way a determinism substrate must not: quietly, identically, every run.
    */
   at(path: string): Rng {
+    if (path.includes(SEP)) {
+      throw new Error(
+        "Rng path must not contain the NUL separator (\\u0000): it would alias a nested path and collapse two independent streams into one",
+      );
+    }
     const child = new Rng(0);
     child.root = fnv1a64(SEP + path, this.root);
     child.state = child.root;

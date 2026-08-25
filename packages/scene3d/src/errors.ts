@@ -210,6 +210,10 @@ export const ISSUE_CODES = {
      compile-failing error that EVERY frame black is — 7 of 8 good angles is a
      materially milder defect. */
   PARTIAL_EMPTY_PROOF: "S3D-W-386",
+  /* Proof frames exist but their pixels could not be measured (unreadable
+     PNG, a stats pass that returned nulls) — unmeasured is not evidence the
+     render is fine. Same discipline as Z_FIGHTING_UNCHECKED. */
+  PROOF_UNCHECKED: "S3D-W-387",
 
   /* lint: world placement + budgets (325-339) */
   NOT_GROUNDED: "S3D-W-325",

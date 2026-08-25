@@ -530,6 +530,24 @@ describe("validateSceneSpec", () => {
     expect(commented.errors).toEqual([]);
   });
 
+  it("refuses a prototype-key material name that was never declared", () => {
+    // `"toString" in {}` is true — the `in` operator walks the prototype
+    // chain, so a part could reference an undeclared material named after
+    // any Object.prototype member and validate clean, then resolve to an
+    // inherited FUNCTION downstream. The maps are null-prototype now.
+    for (const name of ["toString", "constructor", "hasOwnProperty"]) {
+      const { errors } = validateSceneSpec({
+        schemaVersion: 1,
+        parts: [{ id: "prp_a", size: [0.2, 0.2, 0.2], material: name }],
+        relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.1] }],
+      });
+      expect(
+        errors.some((e) => e.includes("is not declared in materials")),
+        `undeclared material '${name}' must be refused`,
+      ).toBe(true);
+    }
+  });
+
   it("validates the floor claims and refuses an impossible floor/ceiling pair", () => {
     const spec = (claims: object): unknown => ({
       schemaVersion: 1,

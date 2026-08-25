@@ -56,22 +56,61 @@ function isRealBlenderSuite(source: string): boolean {
   return REAL_BLENDER_GATE.test(source);
 }
 
+/**
+ * The wider net behind the exact gate: a file that both PROBES a live
+ * Blender and conditionally skips is almost certainly a real-Blender suite
+ * whatever it named its boolean. The exact-gate check keeps precision (the
+ * probe's own unit test must NOT match); this net turns an unrecognised
+ * spelling from invisible drift into a loud demand to either use the
+ * canonical gate or extend it here.
+ */
+function looksBlenderGatedSomehow(source: string): boolean {
+  return /await\s+probeBlender\s*\(/.test(source) && /\.skipIf\s*\(/.test(source);
+}
+
+/** Every `*.test.ts` under tests/, recursively — a suite moved into a
+ *  subdirectory must not fall out of this guard's sight. Fixture and
+ *  scratch dirs are excluded by name, not by depth. `helpers` is NOT
+ *  excluded: a test file placed there would dodge this guard while also
+ *  never running (the config includes only `tests/*.test.ts`) — exactly
+ *  the silence the nested-file check below exists to refuse. */
+function walkTestFiles(dir: string, prefix = ""): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (entry.name === "fixtures" || entry.name === ".work") continue;
+      out.push(...walkTestFiles(path.join(dir, entry.name), `${prefix}${entry.name}/`));
+    } else if (entry.name.endsWith(".test.ts")) {
+      out.push(`${prefix}${entry.name}`);
+    }
+  }
+  return out.sort();
+}
+
 describe("vitest.config.ts BLENDER_FILES stays in sync", () => {
   const blenderFiles = readBlenderFilesFromConfig();
 
   it("lists every test file gated on a real Blender probe", () => {
-    const testFiles = fs
-      .readdirSync(TESTS_DIR)
-      .filter((name) => name.endsWith(".test.ts"))
-      .sort();
+    const testFiles = walkTestFiles(TESTS_DIR);
 
     const shouldBeListed: string[] = [];
+    const unrecognised: string[] = [];
     for (const name of testFiles) {
+      // This guard's own source spells the canonical gate inside an error
+      // message, which is a mention, not a use — it must not match itself.
+      if (name === "vitest-blender-files.test.ts") continue;
       const source = fs.readFileSync(path.join(TESTS_DIR, name), "utf8");
       if (isRealBlenderSuite(source)) {
         shouldBeListed.push(`tests/${name}`);
+      } else if (looksBlenderGatedSomehow(source)) {
+        unrecognised.push(`tests/${name}`);
       }
     }
+
+    expect(
+      unrecognised,
+      `these test files probe Blender and conditionally skip, but not with the canonical gate this guard recognises — use \`describe.skipIf(!hasBlender)\` or extend REAL_BLENDER_GATE: ${unrecognised.join(", ")}`,
+    ).toEqual([]);
 
     const listed = new Set(blenderFiles);
     const missing = shouldBeListed.filter((f) => !listed.has(f));
@@ -79,6 +118,19 @@ describe("vitest.config.ts BLENDER_FILES stays in sync", () => {
     expect(
       missing,
       `these test files gate on a real Blender probe (see REAL_BLENDER_GATE) but are missing from BLENDER_FILES in vitest.config.ts: ${missing.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("refuses nested test files — both project includes are flat, so they would silently never run", () => {
+    // vitest.config.ts includes `tests/*.test.ts` (unit) and the flat
+    // BLENDER_FILES list. A `*.test.ts` in any subdirectory (helpers/
+    // included) matches neither: it is dead weight that LOOKS like
+    // coverage. Move it to tests/ top level, or rename it off the
+    // test-file pattern if it is a helper.
+    const nested = walkTestFiles(TESTS_DIR).filter((name) => name.includes("/"));
+    expect(
+      nested,
+      `these test files sit in subdirectories where neither vitest project includes them — they never run: ${nested.join(", ")}`,
     ).toEqual([]);
   });
 

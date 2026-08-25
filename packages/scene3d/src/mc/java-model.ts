@@ -149,6 +149,14 @@ export function buildJavaModel(census: Census, _contract: NormalizedContract): J
       continue;
     }
     const [from, to] = boxToMc(min, max);
+    // Same one-tile-per-cube constraint as the Bedrock exporter: extra
+    // material slots are named, never silently dropped.
+    if ((mesh.materials?.length ?? 0) > 1) {
+      skipped.push({
+        object: mesh.object,
+        reason: `wears ${mesh.materials!.length} materials — a Java element carries one texture key, exported with '${mesh.materials![0]}'`,
+      });
+    }
     const key = ensureTextureKey(mesh.materials?.[0]);
     const faces: Record<string, JavaFace> = {};
     for (const dir of FACE_DIRS) {

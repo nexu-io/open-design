@@ -172,3 +172,43 @@ describe("dimensionOf", () => {
     expect(dimensionOf("S3D-E-501")).toBe("conformance");
   });
 });
+
+describe("assessVerdict hardening (bug-shaker round)", () => {
+  it("keeps an error's action at error severity even when a warning carries the bigger overrun", () => {
+    // Red before the fix: the max-overrun member became the representative
+    // regardless of severity, so the one BLOCKING finding sorted below
+    // every warning and the action list read as advisory.
+    const v = assessVerdict(
+      result([
+        issue("S3D-E-326", "error", { message: "mesh over budget", target: "prp_big" }),
+        issue("S3D-E-326", "warning", { message: "scene near budget", detail: { overrun: 5.63 } }),
+      ]),
+    );
+    const action = v.actions.find((a) => a.code === "S3D-E-326")!;
+    expect(action.severity).toBe("error");
+    expect(action.message).toBe("mesh over budget");
+    // The magnitude tag comes from the SAME tier as the sentence — a
+    // warning's +563% must not decorate the error's message.
+    expect(action.overrun).toBeUndefined();
+  });
+
+  it("survives a malformed string origin instead of throwing the whole verdict away", () => {
+    const v = assessVerdict(
+      result([
+        issue("S3D-W-325", "warning", {
+          file: "scene.json",
+          detail: { origin: "scene.json:41" as never },
+        }),
+      ]),
+    );
+    expect(v.grade).toBe("attention");
+    expect(v.actions[0]!.origin).toBe("scene.json");
+  });
+
+  it("never summarises a result that claims failure as pass", () => {
+    // ok and the error count agree at the one real construction site; this
+    // exported API must hold the invariant for callers that do not.
+    const v = assessVerdict(result([], { ok: false }));
+    expect(v.grade).toBe("fail");
+  });
+});

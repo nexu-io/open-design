@@ -111,6 +111,55 @@ describe("decodePng chroma-key transparency (tRNS)", () => {
   });
 });
 
+describe("decodePng structural refusals (bug-shaker round)", () => {
+  it("refuses a palette index past the palette instead of fabricating black pixels", () => {
+    // CRC-valid but structurally invalid: index 5 into a 2-entry PLTE. The
+    // old `?? 0` measured it as black — a fabricated pixel fact feeding the
+    // sheet rules.
+    const png = buildPng(3, 2, 1, [[0, 5]], [{ type: "PLTE", data: [255, 0, 0, 0, 255, 0] }]);
+    expect(() => decodePng(png)).toThrow(PngDecodeError);
+    expect(() => decodePng(png)).toThrow(/palette index 5 out of range/);
+  });
+
+  it("refuses a PLTE whose length is not a multiple of three", () => {
+    const png = buildPng(3, 1, 1, [[0]], [{ type: "PLTE", data: [255, 0, 0, 9] }]);
+    expect(() => decodePng(png)).toThrow(/not a multiple of 3/);
+  });
+
+  it("refuses a short IHDR as PngDecodeError, never a leaked RangeError", () => {
+    // The 13-byte body was read before any length check: a truncated IHDR
+    // either read the next chunk's bytes as garbage fields or threw
+    // DataView's RangeError past the SHEET_UNREADABLE contract.
+    const crcTable = Array.from({ length: 256 }, (_, n) => {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      return c >>> 0;
+    });
+    const crc = (buf: Buffer): number => {
+      let c = 0xffffffff;
+      for (const b of buf) c = crcTable[(c ^ b) & 0xff]! ^ (c >>> 8);
+      return (c ^ 0xffffffff) >>> 0;
+    };
+    const chunk = (type: string, data: Buffer): Buffer => {
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(data.length);
+      const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+      const tail = Buffer.alloc(4);
+      tail.writeUInt32BE(crc(body));
+      return Buffer.concat([len, body, tail]);
+    };
+    const shortIhdr = new Uint8Array(
+      Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        chunk("IHDR", Buffer.alloc(8)), // 8 bytes, not the required 13
+        chunk("IEND", Buffer.alloc(0)),
+      ]),
+    );
+    expect(() => decodePng(shortIhdr)).toThrow(PngDecodeError);
+    expect(() => decodePng(shortIhdr)).toThrow(/IHDR chunk is 8 bytes/);
+  });
+});
+
 describe("decodePng refuses what it cannot safely allocate", () => {
   /** A PNG header declaring any dimensions, with a tiny IDAT. */
   function headerOnly(width: number, height: number): Uint8Array {
@@ -163,7 +212,22 @@ describe("decodePng refuses what it cannot safely allocate", () => {
     // decoder allows it and S3D-E-604 decides whether it is too big.
     const img = { width: 4, height: 4, data: new Uint8Array(4 * 4 * 4).fill(255) };
     expect(decodePng(encodePng(img)).width).toBe(4);
-    expect(() => decodePng(headerOnly(16384, 1))).not.toThrow(/decoder limit/);
+    // The fixture's IDAT is deliberately truncated, so the sharp assertion
+    // is WHICH refusal fires: reaching "data ended early" proves the
+    // dimensions passed every size gate and decoding actually began — a
+    // not.toThrow(/limit/) alone would also pass if the input were rejected
+    // for an unrelated structural reason.
+    expect(() => decodePng(headerOnly(16384, 1))).toThrow(/could not be decoded|ended early/);
+  });
+
+  it("caps the AREA independently of the edges — 16384² is a 1 GiB RGBA bomb", () => {
+    // Each edge passes the edge cap, so a square at the full edge used to
+    // reach allocation: ~1 GiB for the RGBA expansion alone from a
+    // few-hundred-byte file. Tall atlas strips at the full edge stay legal.
+    expect(() => decodePng(headerOnly(16384, 16384))).toThrow(/pixel decoder limit/);
+    // Same sharp form as above: the strip must get PAST both size gates
+    // and fail only on its (deliberately truncated) image data.
+    expect(() => decodePng(headerOnly(16384, 4096))).toThrow(/could not be decoded|ended early/);
   });
 
   it("refuses an IDAT that inflates past what the image can hold", () => {

@@ -20,7 +20,10 @@ import type { Axis, PartShape, ShapeFacts, SolvedPart, Vec3 } from "../src/solve
  *   - the rotation is composed here as a 3×3 matrix product (sweep.ts and
  *     types.ts both use quaternions, and those helpers are not exported),
  *   - the per-angle world extent comes from `shapeWidthAlong` — the support
- *     function, the honest independent path, NOT sweptBox's diagonal,
+ *     function, NOT sweptBox's diagonal. That function is PRODUCTION code,
+ *     so a defect shared with it would blind this oracle; the corner-
+ *     enumeration audit at the bottom of this file closes that hole for
+ *     the box family, which is the family the exactness claims rest on,
  *   - the full turn is sampled at 720 angles and the per-axis maximum is
  *     then ternary-refined, so the union is a true maximum rather than a
  *     sample of one (a raw 720-sample max under-reads a 14m diagonal by
@@ -701,5 +704,61 @@ describe("motionEnvelopeIssues boundary", () => {
 
   it("is silent just BELOW the floor", () => {
     expect(motionEnvelopeIssues(scene(0.5 + MIN_CONTACT - 1e-6))).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Independence audit: the oracle's own width function, cross-checked  */
+/* ------------------------------------------------------------------ */
+
+describe("shapeWidthAlong vs corner enumeration (shared-defect audit)", () => {
+  /**
+   * The oracle above imports the production support function, so a defect
+   * shared by `shapeWidthAlong` and `sweptBox` would let implementation and
+   * oracle agree while both are wrong. For the BOX family — the family every
+   * exactness claim in this file ultimately rests on — there is a second,
+   * fully independent derivation: rotate the eight corners explicitly (the
+   * file's own Mat3 machinery, no production code) and take max−min of
+   * their projections. If the support function and the corners ever
+   * disagree, the whole oracle's foundation is the thing that broke.
+   */
+  it("agrees with explicit corner projection for 200 random rotated boxes", () => {
+    const rng = new Rng("width-independence");
+    for (let caseId = 0; caseId < 200; caseId++) {
+      const r = rng.at(`case/${caseId}`);
+      const size: Vec3 = [
+        0.05 + r.next() * 4,
+        0.05 + r.next() * 4,
+        0.05 + r.next() * 4,
+      ];
+      const axis = AXES[Math.floor(r.next() * 3)]!;
+      const deg = r.next() * 720 - 360;
+      const rot = rotationAbout(axis, (deg * Math.PI) / 180);
+
+      // Eight corners of the local box, rotated into world by the matrix.
+      const corners: Vec3[] = [];
+      for (const sx of [-0.5, 0.5]) for (const sy of [-0.5, 0.5]) for (const sz of [-0.5, 0.5]) {
+        const local: Vec3 = [sx * size[0]!, sy * size[1]!, sz * size[2]!];
+        corners.push([
+          rot[0]![0]! * local[0]! + rot[0]![1]! * local[1]! + rot[0]![2]! * local[2]!,
+          rot[1]![0]! * local[0]! + rot[1]![1]! * local[1]! + rot[1]![2]! * local[2]!,
+          rot[2]![0]! * local[0]! + rot[2]![1]! * local[1]! + rot[2]![2]! * local[2]!,
+        ]);
+      }
+
+      for (let i = 0; i < 3; i++) {
+        const projections = corners.map((c) => c[i]!);
+        const cornerWidth = Math.max(...projections) - Math.min(...projections);
+        const supportWidth = shapeWidthAlong(
+          { shape: "box", axis: "z" } as ShapeFacts,
+          size,
+          inverseApplyBasis(rot, i),
+        );
+        expect(
+          supportWidth,
+          `case ${caseId}: box ${size.map((v) => v.toFixed(3)).join("×")} rot ${axis} ${deg.toFixed(1)}° axis ${i}`,
+        ).toBeCloseTo(cornerWidth, 9);
+      }
+    }
   });
 });

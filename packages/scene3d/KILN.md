@@ -2,7 +2,7 @@
 
 Design lineage, not the maintainer map. Start at `README.md` for how the
 system is shaped and how to change it. This file records what scene3d took
-from Kiln, a deterministic compiler for 3D assets that predates it, and
+from Kiln, a deterministic VR-orientated compiler for 3D assets that predates it, and
 what remains worth taking.
 
 Kiln lives in a private research repository and will stay there. This file

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as zlib from "node:zlib";
 import { decodePng, encodePng, DecodedImage } from "../src/sheet/png.js";
 import { measureSheet } from "../src/sheet/measure.js";
 import { collectSheets } from "../src/sheet/collect.js";
@@ -160,7 +161,20 @@ describe("PNG codec", () => {
   it("refuses an interlaced PNG instead of returning scrambled pixels", () => {
     const bytes = encodePng(flipbook(16));
     bytes[8 + 8 + 12] = 1; // IHDR interlace flag
+    // A GENUINE interlaced PNG carries a valid CRC over its flipped flag,
+    // so the fixture must too — without the recompute this now (rightly)
+    // dies at the CRC check instead of exercising the interlace refusal.
+    const crc = zlib.crc32(bytes.subarray(12, 12 + 4 + 13)) >>> 0;
+    new DataView(bytes.buffer, bytes.byteOffset).setUint32(12 + 4 + 13, crc);
     expect(() => decodePng(bytes)).toThrow(/interlaced/);
+  });
+
+  it("refuses a corrupted chunk instead of fabricating pixel facts", () => {
+    // The inverse case: a flipped byte with a STALE CRC is corruption, and
+    // measuring it would hand the sheet rules confidently wrong pixels.
+    const bytes = encodePng(flipbook(16));
+    bytes[8 + 8 + 12] = 1; // same flip, CRC left stale
+    expect(() => decodePng(bytes)).toThrow(/CRC mismatch/);
   });
 });
 

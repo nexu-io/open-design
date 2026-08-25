@@ -43,6 +43,31 @@ export function lintUnits(ctx: LintContext, issues: Issue[]): void {
         detail: { actual: stage.upAxis, expected: ctx.contract.upAxis },
       });
     }
+    /* UNAUTHORED metadata is not neutral: USD's spec fallbacks are
+       metersPerUnit 0.01 (centimetres) and upAxis Y, and a consumer opens
+       the stage with those regardless of what this project's contract
+       says. A stage that authors neither used to pass this linter clean
+       and then land 100x wrong in the consuming DCC — the mismatch was
+       real, just written in silence instead of a number. Warning, not
+       error: the stage is legal USD; the landing is what differs. */
+    if (stage.metersPerUnit === undefined && !unitsClose(0.01, ctx.contract.metersPerUnit)) {
+      issues.push({
+        code: ISSUE_CODES.UNITS_MISMATCH,
+        severity: "warning",
+        message: `the stage does not author metersPerUnit — USD consumers will assume 0.01 (centimetres), but the contract says ${ctx.contract.metersPerUnit}`,
+        hint: "author metersPerUnit in the stage header so consumers agree with the contract",
+        detail: { actual: 0.01, expected: ctx.contract.metersPerUnit, unauthored: true },
+      });
+    }
+    if (stage.upAxis === undefined && ctx.contract.upAxis !== "Y") {
+      issues.push({
+        code: ISSUE_CODES.UP_AXIS_MISMATCH,
+        severity: "warning",
+        message: `the stage does not author upAxis — USD consumers will assume Y, but the contract says ${ctx.contract.upAxis}`,
+        hint: "author upAxis in the stage header so consumers agree with the contract",
+        detail: { actual: "Y", expected: ctx.contract.upAxis, unauthored: true },
+      });
+    }
   }
 
   const census = ctx.census;

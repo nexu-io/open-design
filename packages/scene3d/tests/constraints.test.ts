@@ -218,3 +218,51 @@ describe("1D & 2D Projective Constraint Geometry (constraints.ts)", () => {
     expect(svdEdge.sigmaMin).toBeLessThan(svdFront.sigmaMin * 0.1);
   });
 });
+
+describe("degenerate-input escapes (bug-shaker round)", () => {
+  it("returns a 180° turn, not the identity, for an antipodal arcball drag", () => {
+    // Red before the fix: opposite sphere points produced [0,0,0,-1] — the
+    // identity in quaternion clothing — so the largest drag did nothing.
+    const q = shoemakeArcballQuat([0, 0, 1], [0, 0, -1]);
+    // Unit quaternion with w = 0: a half turn about SOME perpendicular axis.
+    expect(Math.hypot(q[0], q[1], q[2], q[3])).toBeCloseTo(1, 9);
+    expect(Math.abs(q[3])).toBeLessThan(1e-6);
+    // The axis must be perpendicular to the drag start.
+    expect(q[0] * 0 + q[1] * 0 + q[2] * 1).toBeCloseTo(0, 6);
+    // And an ordinary drag is untouched by the escape: for unit vectors
+    // 45° apart, Shoemake's construction yields w = cos 45° exactly (the
+    // quat encodes the DOUBLE-angle 90° turn — that is the arcball's
+    // defining property, not an approximation to assert loosely).
+    const plain = shoemakeArcballQuat([0, 0, 1], [Math.SQRT1_2, 0, Math.SQRT1_2]);
+    expect(plain[3]).toBeCloseTo(Math.SQRT1_2, 9);
+    expect(Math.hypot(plain[0], plain[1], plain[2], plain[3])).toBeCloseTo(1, 9);
+  });
+
+  it("returns an orthonormal, non-zero ring basis for a pick ON the rotation axis", () => {
+    // Red before the fix: the projection of an on-axis pick is the zero
+    // vector, and normalising it collapsed every ring point to the pivot.
+    const { a, b } = buildPickedRingBasis([0, 0, 0], [0, 0, 1], [0, 0, 2.5]);
+    expect(Math.hypot(...a)).toBeCloseTo(1, 9);
+    expect(Math.hypot(...b)).toBeCloseTo(1, 9);
+    expect(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]).toBeCloseTo(0, 9);
+    // Both perpendicular to the axis — a real ring plane.
+    expect(a[2]).toBeCloseTo(0, 9);
+    expect(b[2]).toBeCloseTo(0, 9);
+    // An ordinary off-axis pick keeps its anchored phase.
+    const { a: a2 } = buildPickedRingBasis([0, 0, 0], [0, 0, 1], [3, 0, 0.4]);
+    expect(a2[0]).toBeCloseTo(1, 9);
+  });
+});
+
+describe("degenerate rotation axes (bug-shaker round)", () => {
+  it("substitutes a deterministic axis for a zero axis instead of collapsing the ring basis", () => {
+    // normalizeVec3 maps zero to zero, and a zero u zeroes b = u×a even
+    // with a good anchor: every ring point became the pivot and the LM
+    // solver lost rotation entirely. Red before the fix: |a| and |b| were 0.
+    const { a, b } = buildPickedRingBasis([0, 0, 0], [0, 0, 0], [1, 0, 0]);
+    expect(Math.hypot(a[0], a[1], a[2])).toBeCloseTo(1, 12);
+    expect(Math.hypot(b[0], b[1], b[2])).toBeCloseTo(1, 12);
+    // Orthogonal to each other — a real basis, arbitrary phase.
+    expect(Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2])).toBeLessThan(1e-9);
+  });
+});

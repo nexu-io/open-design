@@ -111,9 +111,29 @@ export function runLint(input: LintInput): Issue[] {
   lintIntegrity(ctx, issues);
   lintWorld(input.contract, input.census, issues, input.solved);
   // The turntable's own framing facts: which mesh fell out of which orbit
-  // frame. Runs after the census-level check so the two never double-report
-  // — this one carries the frame index the census cannot know.
-  if (input.offByFrame) lintTurntableFraming(input.offByFrame, issues);
+  // frame. An object off the CENSUS camera is (near-always) off turntable
+  // frames too, and ordering alone does not stop both findings from firing
+  // for it — the messages differ, so the final dedup pass would keep both
+  // and print the same fix twice under two spellings. One finding per
+  // object, carrying the richest evidence: the turntable row names the
+  // failing frames (which the census cannot know), so where both fired the
+  // frame-carrying row stands and the census-level row is dropped.
+  if (input.offByFrame) {
+    const turntableFlagged = lintTurntableFraming(input.offByFrame, issues);
+    if (turntableFlagged.size > 0) {
+      for (let i = issues.length - 1; i >= 0; i--) {
+        const issue = issues[i]!;
+        if (
+          issue.code === ISSUE_CODES.OFF_CAMERA &&
+          issue.detail?.frames === undefined &&
+          issue.target !== undefined &&
+          turntableFlagged.has(issue.target)
+        ) {
+          issues.splice(i, 1);
+        }
+      }
+    }
+  }
   lintVoxel(input.contract, input.census, issues, input.solved);
   // Thresholds come from the contract, not from whatever the caller happened
   // to build, so the sheet family is tunable like every other one.
@@ -173,6 +193,17 @@ export function runLint(input: LintInput): Issue[] {
       const authored = new Set(
         (input.solved?.parts ?? []).map((p) => p.material).filter((m): m is string => Boolean(m)),
       );
+      // Attribution is honest, not guessed: the census cannot say WHICH
+      // import an orphaned material came from, so the message only names a
+      // part when every file part carries an override (then the source set
+      // is unambiguous). With a mix of overridden and plain file parts the
+      // orphan may equally be an unused material the plain import shipped;
+      // the demotion still holds (a non-authored material on the spec path
+      // can only come from an import — somebody else's asset either way)
+      // but the blame is left open instead of pinned on the wrong part.
+      const fileParts = (input.solved?.parts ?? []).filter((p) => p.file);
+      const unambiguous = overrideParts.length === fileParts.length;
+      const overrideIds = overrideParts.map((p) => `'${p.id}'`).join(", ");
       for (const issue of issues) {
         if (issue.code !== ISSUE_CODES.MATERIAL_UNUSED || issue.severity === "info") continue;
         const name = issue.target ?? "";
@@ -180,9 +211,11 @@ export function runLint(input: LintInput): Issue[] {
           authored.has(name) || [...authored].some((a) => name.startsWith(`${a}__`));
         if (isAuthored) continue;
         issue.severity = "info";
-        issue.message += ` — orphaned by the material override on '${overrideParts[0]!.id}': wholesale replacement is the documented behaviour for a file part's material`;
+        issue.message += unambiguous
+          ? ` — orphaned by the material override on ${overrideIds}: wholesale replacement is the documented behaviour for a file part's material`
+          : ` — it ships inside an imported asset: either orphaned by the material override on ${overrideIds}, or never bound by its own import`;
         issue.hint =
-          "nothing to fix — the imported asset's own material was deliberately replaced and ships nowhere";
+          "nothing to fix — the imported asset's own material ships nowhere in this build";
         issue.detail = { ...issue.detail, provenance: "imported, overridden" };
       }
     }
@@ -213,7 +246,7 @@ export function runLint(input: LintInput): Issue[] {
 function lintTurntableFraming(
   offByFrame: ReadonlyArray<{ frame: number; objects: string[] }>,
   issues: Issue[],
-): void {
+): Set<string> {
   // One issue per object naming every frame that lost it — not one per
   // (frame, object) pair, which would print the same fix four times.
   const byObject = new Map<string, number[]>();
@@ -241,4 +274,5 @@ function lintTurntableFraming(
       detail: { frames },
     });
   }
+  return new Set(byObject.keys());
 }

@@ -970,3 +970,27 @@ section above.)
   unknown kwargs one at a time, so a different Blender point release can
   export a narrower payload with no issue code. An `*_UNCHECKED`-family
   code for a dropped kwarg would make the variance visible.
+- **Stage-model authoring has four verified rough edges** (whole-tree
+  audit; each confirmed by reading, none yet repaired): `assetInfo` is
+  authored at stage scope where USD consumers inspect the ROOT PRIM for
+  it; the `purpose` splice can land after a single-line prim's closing
+  brace (invalid USDA for that shape); the structural scan does not skip
+  comments, so a brace inside one can desync a splice; and inline prim
+  metadata is appended to rather than replaced, risking duplicate
+  declarations. All four live in `src/usd/stage-model.ts`, whose splice
+  tests pin current behaviour — repairs need those pins moved with them.
+- **Compiler-owned motion quantizes periods to whole frames** (`seconds ×
+  24` rounded, quarter-frames floored at 1), so a 0.125s bob plays as a
+  4-frame ≈0.167s cycle with no notice. Sub-frame periods are near the
+  validator's 0.1s floor and rarely visible, but the quantization is
+  unstated anywhere the author can read.
+- **The contact-scan mesh cap (60) and the language's part ceiling (4000)
+  disagree by two orders of magnitude** — above the cap every contact
+  fact degrades at once (loudly, but wholesale). A spatial-hash broad
+  phase would let the scan scale with the language.
+- **The pxr oracle inspects less than its name implies** (whole-tree
+  audit): material-binding conformance checks a subset of binding shapes,
+  and stages with unresolved sublayers/references can come back "ok" —
+  composition errors are not read off the stage. Host-optional second
+  authority, so the gap narrows confidence rather than fabricating it,
+  but the report should say which questions the oracle did not ask.

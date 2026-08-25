@@ -58,14 +58,34 @@ function readAccessor(gltf, bin, index) {
   const accessor = gltf.accessors[index];
   const Type = COMPONENT[accessor.componentType];
   const per = COMPONENTS_PER[accessor.type];
-  if (accessor.bufferView === undefined) return new Type(accessor.count * per);
+  // A NORMALIZED accessor's integers are fixed-point fractions, decoded
+  // here — once, for every consumer — with the glTF spec's own rules.
+  // Every attribute upload in this file declares gl.FLOAT, so returning
+  // the raw integers made the GPU read packed coordinate bytes as float
+  // bit patterns: a legal quantized-UV asset rendered with corrupt
+  // texturing while its accessor said exactly what it was.
+  const denormalize = (arr) => {
+    if (!accessor.normalized || Type === Float32Array || Type === Uint32Array) return arr;
+    const scale =
+      Type === Uint8Array ? 1 / 255
+      : Type === Uint16Array ? 1 / 65535
+      : Type === Int8Array ? 1 / 127
+      : 1 / 32767; // Int16
+    const floats = new Float32Array(arr.length);
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i] * scale;
+      floats[i] = v < -1 ? -1 : v; // signed types clamp at -1 per spec
+    }
+    return floats;
+  };
+  if (accessor.bufferView === undefined) return denormalize(new Type(accessor.count * per));
   const bufferView = gltf.bufferViews[accessor.bufferView];
   const base = (bufferView.byteOffset || 0) + (accessor.byteOffset || 0);
   const stride = bufferView.byteStride;
   // Interleaved buffers need element-by-element extraction; tightly packed
   // ones can alias the ArrayBuffer directly.
   if (!stride || stride === per * Type.BYTES_PER_ELEMENT) {
-    return new Type(bin, base, accessor.count * per);
+    return denormalize(new Type(bin, base, accessor.count * per));
   }
   const out = new Type(accessor.count * per);
   const bytes = new DataView(bin);
@@ -84,7 +104,36 @@ function readAccessor(gltf, bin, index) {
         : bytes.getUint8(at);
     }
   }
-  return out;
+  return denormalize(out);
+}
+
+/* Area-weighted vertex normals from triangle geometry, for primitives
+   that ship none. The unnormalised cross product IS the area weighting;
+   per-vertex accumulation then averages adjacent faces, and a vertex no
+   triangle references (or a degenerate fan) falls back to +Z rather than
+   the zero vector the shader cannot normalize. */
+function generateFlatNormals(positions, indices) {
+  const normals = new Float32Array(positions.length);
+  const idx = (t) => (indices ? indices[t] : t);
+  const triCount = Math.floor((indices ? indices.length : positions.length / 3) / 3);
+  for (let t = 0; t < triCount; t++) {
+    const a = idx(t * 3) * 3, b = idx(t * 3 + 1) * 3, c = idx(t * 3 + 2) * 3;
+    const ux = positions[b] - positions[a], uy = positions[b + 1] - positions[a + 1], uz = positions[b + 2] - positions[a + 2];
+    const vx = positions[c] - positions[a], vy = positions[c + 1] - positions[a + 1], vz = positions[c + 2] - positions[a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    for (const o of [a, b, c]) {
+      normals[o] += nx; normals[o + 1] += ny; normals[o + 2] += nz;
+    }
+  }
+  for (let i = 0; i < normals.length; i += 3) {
+    const m = Math.hypot(normals[i], normals[i + 1], normals[i + 2]);
+    if (m > 1e-12) {
+      normals[i] /= m; normals[i + 1] /= m; normals[i + 2] /= m;
+    } else {
+      normals[i + 2] = 1;
+    }
+  }
+  return normals;
 }
 
 /* ---------- Minimal linear algebra ----------------------------------- */
@@ -151,7 +200,13 @@ const VERT = [
   "void main() {",
   "  vec4 world = uModel * vec4(aPos, 1.0);",
   "  vWorld = world.xyz;",
-  "  vNormal = mat3(uModel) * aNormal;",
+  // The NORMAL matrix, not the model matrix: normals transform by the
+  // inverse-transpose, and under non-uniform scale the two differ — a
+  // squashed node's lighting bent toward the squash axis and the
+  // normals-mode diagnostic flagged correctly-authored faces. Computed
+  // in-shader (WebGL2 has inverse/transpose); identical to mat3(uModel)
+  // for the rigid+uniform transforms scene3d's own exports use.
+  "  vNormal = transpose(inverse(mat3(uModel))) * aNormal;",
   "  vUv = aUv;",
   "  gl_Position = uProj * uView * world;",
   "}",
@@ -186,6 +241,8 @@ const FRAG = [
   // binary facing flag), 2 clearance (gaps, contacts and buried parts — the
   // per-part proximity in uHeat). Only clearance ever alarms.
   "uniform float uXray; uniform float uGhost; uniform float uMode; uniform float uHeat;",
+  // MASK-mode cutoff from the material's alphaMode; negative disables.
+  "uniform float uAlphaCutoff;",
   "out vec4 outColor;",
   // The inspection ramp: ink indigo -> deep teal -> steel neutral -> amber
   // gold -> cream white-hot. Luminance climbs monotonically so it reads as
@@ -253,7 +310,16 @@ const FRAG = [
   "  float rough = clamp(uRough * mix(1.0, mrTex.x, uMrGate.x), 0.0, 1.0);",
   "  float metal = clamp(uMetallic * mix(1.0, mrTex.y, uMrGate.y), 0.0, 1.0);",
   "  float spec = pow(max(dot(n, hv), 0.0), mix(8.0, 128.0, 1.0 - rough)) * mix(0.12, 0.9, metal);",
-  "  vec3 base = uColor.rgb * (uHasMap > 0.5 ? texture(uMap, vUv).rgb : vec3(1.0));",
+  // The FULL texel, alpha included: sampling .rgb alone rendered every
+  // cutout leaf and decal opaque — the coverage a MASK/BLEND material
+  // declares lives in the texture's alpha, and dropping it there dropped
+  // it everywhere downstream.
+  "  vec4 texel = uHasMap > 0.5 ? texture(uMap, vUv) : vec4(1.0);",
+  "  vec3 base = uColor.rgb * texel.rgb;",
+  "  float alpha = uColor.a * texel.a;",
+  // MASK cutoff (uAlphaCutoff < 0 = off): discarded texels also vanish
+  // from the depth buffer, which is what a cutout MEANS.
+  "  if (uAlphaCutoff >= 0.0 && alpha < uAlphaCutoff) discard;",
   "  vec3 lit = base * (0.22 + d * 0.9) + vec3(spec) * mix(vec3(1.0), base, metal);",
   "  lit += uHasEm > 0.5 ? texture(uEmMap, vUv).rgb * uEmissive : uEmissive;",
   // Approximate sRGB for display; the GLB carries linear factors.
@@ -313,7 +379,7 @@ const FRAG = [
   // Front pass: crossfade the real material into the OPAQUE spectral skin as
   // x-ray energizes. Opaque and depth-tested, so the readable fill lives on
   // the surface you are looking at and can never stack toward white.
-  "    outColor = vec4(mix(disp, skin, uXray), uColor.a);",
+  "    outColor = vec4(mix(disp, skin, uXray), alpha);",
   "    return;",
   "  }",
   // Ghost pass: a faint additive reveal of what is behind, drawn depth-off.
@@ -360,7 +426,7 @@ function createRenderer(canvas) {
   gl.enable(gl.DEPTH_TEST);
   const u = {};
   for (const name of ["uModel","uView","uProj","uColor","uEye","uMetallic","uRough","uMap","uHasMap",
-    "uEmissive","uMrMap","uMrGate","uEmMap","uHasEm","uXray","uGhost","uMode","uHeat"]) {
+    "uEmissive","uMrMap","uMrGate","uEmMap","uHasEm","uXray","uGhost","uMode","uHeat","uAlphaCutoff"]) {
     u[name] = gl.getUniformLocation(program, name);
   }
   // Fixed unit assignment: baseColor 0, metallic-roughness 1, emissive 2.
@@ -543,6 +609,9 @@ function renderMatBall(renderer, props, out2d, azimuth) {
   const color = props.color || [0.8, 0.8, 0.8, 1];
   gl.uniform4f(renderer.u.uColor, color[0], color[1], color[2],
     color[3] === undefined ? 1 : color[3]);
+  // Balls never cut out; without this they inherit the LAST part's mask
+  // state and a cutout material's own preview ball punches holes in itself.
+  gl.uniform1f(renderer.u.uAlphaCutoff, -1);
   gl.uniform1f(renderer.u.uMetallic, props.metallic || 0);
   gl.uniform1f(renderer.u.uRough, props.rough === undefined ? 0.6 : props.rough);
   const em = props.emissive || [0, 0, 0];
@@ -710,12 +779,16 @@ function loadModel(renderer, buffer) {
       for (const prim of gltf.meshes[node.mesh].primitives) {
         if (prim.mode !== undefined && prim.mode !== 4) continue;
         const positions = readAccessor(gltf, bin, prim.attributes.POSITION);
-        const normals = prim.attributes.NORMAL !== undefined
-          ? readAccessor(gltf, bin, prim.attributes.NORMAL)
-          : new Float32Array(positions.length);
         const indices = prim.indices !== undefined
           ? readAccessor(gltf, bin, prim.indices)
           : null;
+        // A primitive without normals gets FLAT ones generated from its
+        // triangles, never a zero fill: normalize(vec3(0)) is undefined in
+        // GLSL, so the zero fill lit such assets with driver-dependent
+        // garbage (NaN black on some GPUs) instead of a readable surface.
+        const normals = prim.attributes.NORMAL !== undefined
+          ? readAccessor(gltf, bin, prim.attributes.NORMAL)
+          : generateFlatNormals(positions, indices);
 
         const vao = gl.createVertexArray();
         // Tracked so a reload can free them: deleting only the VAO leaves
@@ -850,6 +923,11 @@ function loadModel(renderer, buffer) {
           // stay opaque (a cutout approximated as opaque beats one that
           // vanishes into additive mist).
           blend: !!(material && material.alphaMode === "BLEND"),
+          // MASK cutouts discard below the declared threshold — the shader
+          // reads these; a cutout leaf card rendered as an opaque quad
+          // without them.
+          alphaMode: material ? material.alphaMode : undefined,
+          alphaCutoff: material ? material.alphaCutoff : undefined,
           min: plo,
           max: phi,
           localMin: llo,
@@ -1498,6 +1576,10 @@ function render(renderer, state) {
     );
     gl.uniform1f(renderer.u.uMetallic, draw.metallic);
     gl.uniform1f(renderer.u.uRough, draw.rough);
+    // MASK materials cut out at their declared threshold; everything else
+    // disables the discard (-1). glTF's default cutoff is 0.5.
+    gl.uniform1f(renderer.u.uAlphaCutoff,
+      draw.alphaMode === "MASK" ? (draw.alphaCutoff === undefined ? 0.5 : draw.alphaCutoff) : -1);
     const em = draw.emissive;
     const emitting = em && (em[0] > 0 || em[1] > 0 || em[2] > 0);
     gl.uniform3f(renderer.u.uEmissive, emitting ? em[0] : 0, emitting ? em[1] : 0,

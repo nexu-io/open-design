@@ -37,6 +37,8 @@ function garbageFor(spec: FieldSpec): unknown {
       return "yes"; // truthy: `?? default` would adopt it
     case "string":
       return 42;
+    case "pattern":
+      return "["; // a string, but not a compilable regular expression
     case "enum":
       return "nope";
     case "object":

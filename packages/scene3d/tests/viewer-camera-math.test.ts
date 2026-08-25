@@ -244,8 +244,15 @@ describe("viewer camera math (kit-runtime.ts)", () => {
           for (const targetPx of [78, 137, 190]) {
             const perPixel = math.worldPerPixel(stateAt(depth), { clientHeight: height });
             const worldLength = targetPx * perPixel;
-            // Project a span perpendicular to the view axis back to pixels.
-            const backToPixels = worldLength / perPixel;
+            // Project the world span back to pixels through the CAMERA
+            // MODEL, not through the helper's own inverse: a span of w at
+            // depth d covers w / (2·d·tan(fov/2)) of the frustum height,
+            // i.e. that fraction of the viewport. Dividing by perPixel
+            // here only proved that multiplication and division cancel —
+            // the independent projection is what makes a broken
+            // worldPerPixel actually fail this loop.
+            const frustumHeight = 2 * depth * Math.tan(math.FOV_Y / 2);
+            const backToPixels = (worldLength / frustumHeight) * height;
             expect(backToPixels).toBeCloseTo(targetPx, 6);
             // And it must be a real world length, not a degenerate one.
             expect(worldLength).toBeGreaterThan(0);

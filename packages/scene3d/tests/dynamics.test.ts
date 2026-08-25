@@ -137,3 +137,33 @@ describe("Snap State Machine & Dynamics (dynamics.ts)", () => {
     expect(step2.v).toBeCloseTo(combinedStep.v, 8);
   });
 });
+
+describe("NaN snap distances (bug-shaker round)", () => {
+  it("rejects a candidate whose resolved distance is NaN instead of latching it", () => {
+    // Red before the fix: `distanceCss >= OUT` let NaN through (every NaN
+    // comparison is false) and the blend carried NaN into the manipulation
+    // state. The positive-form gate rejects it like the latched path does.
+    const nanCandidate = {
+      id: "c_nan",
+      branchKey: "b",
+      kind: "grid" as never,
+      priorityTier: 0,
+      labels: [],
+      resolve: () => ({
+        xiSnap: Number.NaN,
+        distanceCss: Number.NaN,
+        contactWorld: [0, 0, 0] as [number, number, number],
+        valid: true,
+      }),
+    };
+    const result = evaluateSnapStep(
+      { candidateId: null, branchKey: null, kind: null },
+      [nanCandidate as never],
+      0.5,
+      {} as never,
+    );
+    expect(result.activeConstraint).toBeNull();
+    expect(result.snapped).toBe(false);
+    expect(Number.isFinite(result.xiOut as number)).toBe(true);
+  });
+});

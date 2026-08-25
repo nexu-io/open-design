@@ -105,6 +105,10 @@ export function resolveBudgets(
     // `texelDiscipline: "pbr" | "pixelArt"`, an enum whose whole content was
     // which arm of a `??` had fired two lines earlier in normalizeContract.
     // An explicit per-role or per-part override still layers on top.
+    // One null-check covers BOTH authorities: declaring pxPerBlock defines
+    // conventions.voxel (or minecraft), which enables voxel, and
+    // normalizeContract then folds the value into texelDensityTarget — so a
+    // pxPerBlock contract can never reach here with a null target.
     if (profile && contract.uv.texelDensityTarget !== null && profile.texelDensity) {
       const { texelDensity: _drop, ...rest } = profile;
       profile = rest;

@@ -562,6 +562,7 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-384` | Turntable shows no motion |
 | `S3D-W-385` | Proof overexposed |
 | `S3D-W-386` | Some proof angles empty |
+| `S3D-W-387` | Proof frames unmeasured |
 
 ### Exported stage, UVs, oracles
 

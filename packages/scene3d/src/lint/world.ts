@@ -101,7 +101,24 @@ export function lintWorld(
       if (object.type !== "MESH") continue;
       if (isExempt(object.name, grounding.exempt)) continue;
       const measured = groundGapByObject.get(object.name);
-      const lowest = measured ?? (object.worldMin ? object.worldMin[upIndex] : undefined);
+      // Vertex-exact or NOT JUDGED. The old fallback to object.worldMin is
+      // the very measure the comment above rules out: for a rotated part
+      // the AABB-of-the-OBB dips below the real geometry, so the fallback
+      // called correctly-grounded canted parts sunk. Unmeasured degrades
+      // to a named note, never to a verdict from the wrong instrument.
+      if (measured === undefined) {
+        if (object.worldMin) {
+          issues.push({
+            code: ISSUE_CODES.NOT_GROUNDED,
+            severity: "info",
+            message: `grounding for '${object.name}' was not judged — no vertex-exact spatial measurement in this census (its box bound alone cannot say sunk or floating for a rotated part)`,
+            target: object.name,
+            detail: { unmeasured: true },
+          });
+        }
+        continue;
+      }
+      const lowest = measured;
       if (lowest === null || lowest === undefined || !Number.isFinite(lowest)) continue;
 
       // One predicate, shared with claims.grounded — see solve/contact.ts.
@@ -123,21 +140,30 @@ export function lintWorld(
         const support = nearestSupportBelow(census, object.name);
         // A support in CONTACT is being rested on, not floated above — the
         // solver embeds a `sits_on` part by MIN_CONTACT on purpose, and
-        // "floats -0.001m above" describes that as a defect it is not.
-        const resting = support !== null && support.gap <= grounding.tolerance;
+        // "floats -0.001m above" describes that as a defect it is not. But
+        // contact has a lower bound too: a gap far below -tolerance is deep
+        // INTERPENETRATION, and wearing the "rests on / nothing to fix"
+        // message for it would direct the author to exempt visibly broken
+        // geometry — so the three states get three messages.
+        const resting = support !== null && Math.abs(support.gap) <= grounding.tolerance;
+        const penetrating = support !== null && support.gap < -grounding.tolerance;
         issues.push({
           code: ISSUE_CODES.NOT_GROUNDED,
           severity: "warning",
           message: resting
             ? `'${object.name}' rests on '${support!.name}', whose lowest point is ${fmt(lowest)}m above the ground plane`
-            : support
-              ? `'${object.name}' floats ${fmt(support.gap)}m above '${support.name}' (lowest point ${fmt(lowest)}m above the ground plane)`
-              : `'${object.name}' floats ${fmt(lowest)}m above the ground plane`,
+            : penetrating
+              ? `'${object.name}' sinks ${fmt(-support!.gap)}m INTO '${support!.name}' (lowest point ${fmt(lowest)}m above the ground plane)`
+              : support
+                ? `'${object.name}' floats ${fmt(support.gap)}m above '${support.name}' (lowest point ${fmt(lowest)}m above the ground plane)`
+                : `'${object.name}' floats ${fmt(lowest)}m above the ground plane`,
           hint: resting
             ? `nothing to fix if the stack is intended — add '${object.name}' to conventions.grounding.exempt to stop reporting it`
-            : support
-              ? `drop it onto '${support.name}', or add '${object.name}' to conventions.grounding.exempt if it is mounted or airborne`
-              : `drop it onto the ground, or add '${object.name}' to conventions.grounding.exempt if it is mounted or airborne`,
+            : penetrating
+              ? `raise it out of '${support!.name}', or add '${object.name}' to conventions.grounding.exempt if the embed is meant`
+              : support
+                ? `drop it onto '${support.name}', or add '${object.name}' to conventions.grounding.exempt if it is mounted or airborne`
+                : `drop it onto the ground, or add '${object.name}' to conventions.grounding.exempt if it is mounted or airborne`,
           target: object.name,
           detail: { lowest, ...(support ? { nearestSupport: support.name, gap: support.gap } : {}) },
         });

@@ -213,6 +213,19 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
       hint: "the scan's mesh ceiling was exceeded; joints placed by relation are still floored by the solver, but no measured contact facts exist for this scene",
       detail: { skipped: contactsSkipped },
     });
+  } else if (contactsSkipped.length > 0) {
+    // PARTIAL coverage is its own state, not the intersection of the other
+    // two: the scan measured some pairs and degraded or skipped others, and
+    // saying nothing here let "measured, with holes" read exactly like
+    // "measured completely" — a rest relationship inside one of the holes
+    // had no contact word and no notice that the word was missing.
+    issues.push({
+      code: ISSUE_CODES.CONTACTS_UNCHECKED,
+      severity: "info",
+      message: `contact scan is PARTIAL: ${(census.contacts ?? []).length} pair(s) measured, ${contactsSkipped.length} degraded or skipped — a pair inside the holes has no measured word`,
+      hint: "the skipped entries name each pair and why; the support-chain claims already treat partial scans as unverifiable",
+      detail: { skipped: contactsSkipped },
+    });
   }
 }
 

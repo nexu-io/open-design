@@ -289,6 +289,25 @@ if (/[A-Za-z_]/.test(ch)) {
         this.pos = end + 1;
         continue;
       }
+      /* COMMENTS, with the same three spellings the main lexer skips: a
+         bracket (or an unpaired quote) inside `# note ]` used to count
+         toward the depth walk and close the array early — everything after
+         it misparsed, in a file that was perfectly legal USDA. */
+      if (c === 35 /* # */) {
+        while (this.pos < src.length && src.charCodeAt(this.pos) !== 10) this.pos++;
+        continue;
+      }
+      if (c === 47 /* / */ && src.charCodeAt(this.pos + 1) === 47) {
+        while (this.pos < src.length && src.charCodeAt(this.pos) !== 10) this.pos++;
+        continue;
+      }
+      if (c === 47 /* / */ && src.charCodeAt(this.pos + 1) === 42 /* * */) {
+        const end = src.indexOf("*/", this.pos + 2);
+        if (end === -1) throw new UsdaParseError("unterminated block comment", this.line, this.file);
+        for (let k = this.pos; k < end; k++) if (src.charCodeAt(k) === 10) this.line++;
+        this.pos = end + 2;
+        continue;
+      }
       this.pos++;
     }
     throw new UsdaParseError("unterminated array", line, this.file);
@@ -654,7 +673,18 @@ parts.push(t.value);
       if (depth !== 0) throw new UsdaParseError("unterminated prim metadata block", metaLine, file);
       primMeta = parts.join(" ");
     }
-const prim: UsdaPrim = {
+/* Payload arcs OUT of the reference list: the catch-all over the
+       joined metadata string scooped `payload = @heavy.usda@` into
+       `references` and left `payloads` empty, so a consumer that
+       distinguishes lazy payload loading from eager references saw a
+       composition that does not exist. The keyed metadata pairs say which
+       arc each path belongs to; everything else in the metadata (assetInfo
+       paths and the like) keeps riding `references` as the catch-all it
+       always was. */
+    const payloadArcs = [...metadata.entries()]
+      .filter(([k]) => k === "payload" || k === "payloads")
+      .flatMap(([, v]) => collectRefs(v));
+    const prim: UsdaPrim = {
       name,
       kind: specifier === "scope" || typeName === "Scope" ? "scope" : (specifier as UsdaPrim["kind"]),
       typeName,
@@ -662,8 +692,8 @@ const prim: UsdaPrim = {
       children: [],
       attributes: new Map(),
       metadata,
-      references: collectRefs(primMeta),
-      payloads: [],
+      references: collectRefs(primMeta).filter((r) => !payloadArcs.includes(r)),
+      payloads: payloadArcs,
       line: defLine,
       sourceFile: file,
     };

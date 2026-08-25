@@ -72,7 +72,8 @@ export function validateSceneSpec(
   // Validated before materials so a material's `shader` reference can be
   // checked against the declared set. Kernel-text checks happen in the
   // pipeline, which owns file I/O; this layer owns the declaration shape.
-  const shaders: Record<string, ShaderSpec> = {};
+  // Null-prototype for the same reason as `materials` below.
+  const shaders: Record<string, ShaderSpec> = Object.create(null);
   // Every shader name the author WROTE, valid or not — the same split the
   // materials below keep. "Is this declared" and "is the declaration well-
   // formed" are different questions: a material referencing a shader whose
@@ -99,7 +100,13 @@ export function validateSceneSpec(
   }
 
   /* ---- materials -------------------------------------------------- */
-  const materials: Record<string, MaterialSpec> = {};
+  // NULL-prototype: every membership test on this map (`in`, indexing,
+  // hasOwnProperty via a part's material reference) must see only what the
+  // author declared. A plain `{}` inherits Object.prototype, so a part
+  // whose material was named `toString` or `constructor` validated against
+  // a declaration that does not exist and then resolved to an inherited
+  // FUNCTION downstream.
+  const materials: Record<string, MaterialSpec> = Object.create(null);
   // Every name the author WROTE, valid or not. Kept apart from `materials`,
   // which holds only the ones that survived validation, because "did you
   // declare this" and "is this declaration well-formed" are different

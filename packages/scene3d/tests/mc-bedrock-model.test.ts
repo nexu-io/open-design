@@ -125,3 +125,24 @@ describe("buildBedrockModel", () => {
     expect(build()).toBe(build());
   });
 });
+
+describe("multi-material cubes (bug-shaker round)", () => {
+  it("names the flatten when a cube wears more than one material", () => {
+    // A cube maps to one atlas row; the export proceeds on the first slot,
+    // but the degradation must be SAID — a silent [0] read painted
+    // multi-material cuboids wrong with nothing in the report.
+    const m = mesh("prp_multi", "mtl_a");
+    (m as { materials?: string[] }).materials = ["mtl_a", "mtl_b"];
+    const c = census([m], [mat("mtl_a", [0.6, 0.4, 0.3]), mat("mtl_b", [0.2, 0.5, 0.9])], {
+      prp_multi: [0, 0, 0, 1, 1, 1],
+    });
+    const { model, skipped } = buildBedrockModel(c, contract);
+    // The cube still ships (with the first material's row)…
+    expect(model["minecraft:geometry"][0]!.bones[0]!.cubes).toHaveLength(1);
+    // …and the flatten is named.
+    const note = skipped.find((s) => s.object === "prp_multi");
+    expect(note).toBeDefined();
+    expect(note!.reason).toContain("2 materials");
+    expect(note!.reason).toContain("mtl_a");
+  });
+});

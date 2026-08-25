@@ -91,6 +91,22 @@ export async function validateUsd(projectDir: string, rel: string): Promise<Issu
     ];
   }
 
+  // An EXPLICIT verdict or no verdict at all: a response that says neither
+  // `ok: true` nor `ok: false` (schema drift, a partial dict from a
+  // crashed run that still printed JSON) used to fall through both
+  // branches and read as a clean pass — the oracle's silence adopted as
+  // its blessing.
+  if (result.ok !== true && result.ok !== false) {
+    return [
+      {
+        code: ISSUE_CODES.USD_UNCHECKED,
+        severity: "warning",
+        message: "USD oracle returned no verdict (response carries no ok field) — the stage was not conformance-checked",
+        file: rel,
+      },
+    ];
+  }
+
   const issues: Issue[] = [];
   if (result.ok === false) {
     issues.push({

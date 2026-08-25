@@ -178,7 +178,8 @@ export function decomposePolarTRSWithContinuity(
   const sy = syRaw > collapseEpsilon ? syRaw : 1;
   const sz = szRaw > collapseEpsilon ? szRaw : 1;
 
-  // Raw rotation columns
+  // Raw rotation columns — the frame the SHEAR RESIDUAL is measured on
+  // (their mutual dot products ARE the shear; see below).
   const r0: Vec3 = [c0[0] / sx, c0[1] / sx, c0[2] / sx];
   const r1: Vec3 = [c1[0] / sy, c1[1] / sy, c1[2] / sy];
   const r2: Vec3 = [c2[0] / sz, c2[1] / sz, c2[2] / sz];
@@ -189,8 +190,41 @@ export function decomposePolarTRSWithContinuity(
     r1[0] * (r0[1] * r2[2] - r0[2] * r2[1]) +
     r2[0] * (r0[1] * r1[2] - r0[2] * r1[1]);
 
+  /* The ROTATION, however, must come from an orthonormal frame:
+   * quatFromRotationMatrix over sheared columns manufactures a quaternion
+   * that is not the rotation of any decomposition — reconstructing from it
+   * changes the authored transform even for callers that dutifully read
+   * `shearResidual`. Full Gram-Schmidt (no cross products) preserves the
+   * raw frame's handedness, so the det<0 reflection machinery below still
+   * fires; on an already-orthonormal frame it is the identity to floating
+   * point, so clean transforms are untouched. A column annihilated by the
+   * projection (coplanar frame) keeps its raw direction — the `degenerate`
+   * flag family already owns that report. */
+  // A projection that annihilates a column (coplanar/collinear frame) keeps
+  // the raw direction, but that leaves finalR SINGULAR — no recoverable
+  // rotation — and the length-based `degenerate` above cannot see it (the
+  // columns are nonzero, just not independent). The flag owns this report
+  // too, or a caller trusting it writes back a placeholder transform.
+  let gsCollapsed = false;
+  const gs = (v: Vec3, ...basis: Vec3[]): Vec3 => {
+    const out: Vec3 = [v[0], v[1], v[2]];
+    for (const b of basis) {
+      const d = out[0] * b[0] + out[1] * b[1] + out[2] * b[2];
+      out[0] -= d * b[0];
+      out[1] -= d * b[1];
+      out[2] -= d * b[2];
+    }
+    const m = Math.hypot(out[0], out[1], out[2]);
+    if (m > 1e-12) return [out[0] / m, out[1] / m, out[2] / m];
+    gsCollapsed = true;
+    return v;
+  };
+  const o0 = gs(r0);
+  const o1 = gs(r1, o0);
+  const o2 = gs(r2, o0, o1);
+
   let finalScale: Vec3 = [sx, sy, sz];
-  let finalR: number[] = [r0[0], r0[1], r0[2], r1[0], r1[1], r1[2], r2[0], r2[1], r2[2]];
+  let finalR: number[] = [o0[0], o0[1], o0[2], o1[0], o1[1], o1[2], o2[0], o2[1], o2[2]];
   let chosenAxis: "none" | "X" | "Y" | "Z" = "none";
   let rotation = quatFromRotationMatrix(finalR);
 
@@ -228,10 +262,13 @@ export function decomposePolarTRSWithContinuity(
 
     for (const cand of F_candidates) {
       const sCandidate: Vec3 = [sx * cand.F[0], sy * cand.F[1], sz * cand.F[2]];
+      // Candidates built from the ORTHONORMALISED frame, same as the
+      // direct branch: a sign flip of an orthonormal column stays
+      // orthonormal, so every candidate quaternion is a real rotation.
       const rCandidate = [
-        r0[0] * cand.F[0], r0[1] * cand.F[0], r0[2] * cand.F[0],
-        r1[0] * cand.F[1], r1[1] * cand.F[1], r1[2] * cand.F[1],
-        r2[0] * cand.F[2], r2[1] * cand.F[2], r2[2] * cand.F[2],
+        o0[0] * cand.F[0], o0[1] * cand.F[0], o0[2] * cand.F[0],
+        o1[0] * cand.F[1], o1[1] * cand.F[1], o1[2] * cand.F[1],
+        o2[0] * cand.F[2], o2[1] * cand.F[2], o2[2] * cand.F[2],
       ];
       const qCandidate = quatFromRotationMatrix(rCandidate);
 
@@ -287,7 +324,7 @@ export function decomposePolarTRSWithContinuity(
     shearResidual,
     isSheared: shearResidual > shearTolerance,
     chosenReflectionAxis: chosenAxis,
-    degenerate,
+    degenerate: degenerate || gsCollapsed,
   };
 }
 
@@ -307,6 +344,7 @@ export function computeVolumeWeightedBarycenter(parts: PartBoundingVolume[]): Ve
 
   let sumWeights = 0;
   let sumX = 0, sumY = 0, sumZ = 0;
+  const centers: Vec3[] = [];
 
   for (const part of parts) {
     const M = part.worldTransform;
@@ -316,6 +354,7 @@ export function computeVolumeWeightedBarycenter(parts: PartBoundingVolume[]): Ve
     const wx = M[0] * lc[0] + M[4] * lc[1] + M[8] * lc[2] + M[12];
     const wy = M[1] * lc[0] + M[5] * lc[1] + M[9] * lc[2] + M[13];
     const wz = M[2] * lc[0] + M[6] * lc[1] + M[10] * lc[2] + M[14];
+    centers.push([wx, wy, wz]);
 
     // Compute determinant of linear 3x3 to scale volume
     const detLin =
@@ -323,22 +362,32 @@ export function computeVolumeWeightedBarycenter(parts: PartBoundingVolume[]): Ve
       M[4] * (M[1] * M[10] - M[2] * M[9]) +
       M[8] * (M[1] * M[6] - M[2] * M[5]);
 
-    const weight = Math.max(1e-6, part.localVolume * Math.abs(detLin));
+    /* Zero for anything unweighable, never an epsilon floor. The old
+     * `Math.max(1e-6, …)` had two failure modes: it made the fallback
+     * branch unreachable (n parts always sum past the threshold), and
+     * `Math.max(1e-6, NaN)` is NaN, so one part with a missing volume
+     * poisoned every sum and the pivot came back as NaN³. A part with no
+     * measurable volume contributes position through the fallback, not a
+     * manufactured weight. */
+    const raw = part.localVolume * Math.abs(detLin);
+    const weight = Number.isFinite(raw) && raw > 0 ? raw : 0;
     sumWeights += weight;
     sumX += wx * weight;
     sumY += wy * weight;
     sumZ += wz * weight;
   }
 
-  if (sumWeights <= 1e-6) {
-    // Arithmetic mean fallback
+  if (sumWeights <= 0) {
+    // Nothing weighable: the unweighted mean of the WORLD CENTERS — the
+    // same points the weighted path averages — so a selection of flat
+    // planes pivots where it visually sits, not at its transform origins.
     let ax = 0, ay = 0, az = 0;
-    for (const p of parts) {
-      ax += p.worldTransform[12];
-      ay += p.worldTransform[13];
-      az += p.worldTransform[14];
+    for (const c of centers) {
+      ax += c[0];
+      ay += c[1];
+      az += c[2];
     }
-    return [ax / parts.length, ay / parts.length, az / parts.length];
+    return [ax / centers.length, ay / centers.length, az / centers.length];
   }
 
   return [sumX / sumWeights, sumY / sumWeights, sumZ / sumWeights];

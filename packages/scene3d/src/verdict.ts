@@ -89,8 +89,17 @@ const gradeOf = (issues: Issue[]): Grade =>
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
 
 function originOf(issue: Issue): string | undefined {
-  const origin = issue.detail?.origin as Array<{ at: string }> | undefined;
-  if (origin && origin.length > 0) return [...new Set(origin.map((o) => o.at))].join(", ");
+  // Shape-checked, not cast: `detail` crosses caches and hand-edited
+  // sidecars, and a string origin's `.length > 0` passed the old guard
+  // straight into `.map` — one malformed legacy issue could throw the
+  // whole verdict away.
+  const origin = issue.detail?.origin;
+  if (Array.isArray(origin)) {
+    const ats = origin
+      .map((o) => (o as { at?: unknown })?.at)
+      .filter((a): a is string => typeof a === "string");
+    if (ats.length > 0) return [...new Set(ats)].join(", ");
+  }
   return issue.file;
 }
 
@@ -120,21 +129,29 @@ export function assessVerdict(result: CompileResult): Verdict {
   for (const issue of issues) (byCode.get(issue.code) ?? byCode.set(issue.code, []).get(issue.code)!).push(issue);
 
   const actions: VerdictAction[] = [...byCode.entries()].map(([code, group]) => {
-    const overruns = group
-      .map((i) => i.detail?.overrun)
-      .filter((v): v is number => typeof v === "number");
-    /* The member whose overrun IS the group's magnitude tag. Taking group[0]
-       here let "fix first" print one part's +563% beside a different part's
-       sentence — the first thing a model acts on, attributed wrong. */
+    /* Representative selection, two rules that must not trade against each
+       other: the action's SEVERITY is the group's worst (an error must
+       never hide behind a warning that happened to carry a bigger
+       overrun — the action sorts by severity, so a downgraded
+       representative buried the one blocking finding), and WITHIN that
+       severity tier the member whose overrun IS the magnitude tag speaks
+       (taking group[0] once printed one part's +563% beside a different
+       part's sentence). The overrun number comes from the same tier for
+       the same reason. */
+    const topRank = Math.min(...group.map((i) => SEVERITY_RANK[i.severity]));
+    const tier = group.filter((i) => SEVERITY_RANK[i.severity] === topRank);
     const overrunOf = (i: Issue) =>
       typeof i.detail?.overrun === "number" ? (i.detail.overrun as number) : -Infinity;
-    const worst = group.reduce((best, i) => (overrunOf(i) > overrunOf(best) ? i : best), group[0]!);
+    const worst = tier.reduce((best, i) => (overrunOf(i) > overrunOf(best) ? i : best), tier[0]!);
+    const tierOverruns = tier
+      .map((i) => i.detail?.overrun)
+      .filter((v): v is number => typeof v === "number");
     return {
       code,
       severity: worst.severity,
       count: group.length,
       ...(worst.target ? { target: worst.target } : {}),
-      ...(overruns.length > 0 ? { overrun: Math.max(...overruns) } : {}),
+      ...(tierOverruns.length > 0 ? { overrun: Math.max(...tierOverruns) } : {}),
       message: worst.message,
       ...(originOf(worst) ? { origin: originOf(worst) } : {}),
       ...(worst.hint ? { hint: worst.hint } : {}),
@@ -154,7 +171,18 @@ export function assessVerdict(result: CompileResult): Verdict {
   const bytes = totalTextureBytes(result);
   if (bytes !== undefined) headroom.totalTextureBytes = bytes;
 
-  return { grade: gradeOf(issues), dimensions, actions, headroom };
+  // The grade honours `ok` as well as the issue scan: `ok` is derived from
+  // the error count at the one construction site, so the two normally
+  // agree — but this function is exported API, and a result claiming
+  // failure must never be summarised as "pass" because its issue list was
+  // assembled differently. Belt to the invariant's suspender.
+  const scanned = gradeOf(issues);
+  return {
+    grade: !result.ok && scanned === "pass" ? "fail" : scanned,
+    dimensions,
+    actions,
+    headroom,
+  };
 }
 
 const SEVERITY_GRADE: Record<Grade, number> = { fail: 0, attention: 1, pass: 2 };

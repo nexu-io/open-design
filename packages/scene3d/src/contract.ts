@@ -1,5 +1,5 @@
 import { Budget, EngineTarget, Scene3dContract } from "./types.js";
-import { validateFields } from "./contract-schema.js";
+import { EXPORT_FORMAT_VALUES, validateFields } from "./contract-schema.js";
 import { SHEET_DEFAULTS } from "./lint/sheet.js";
 import { TESSELLATION_DEFAULTS, type Tessellation } from "./solve/emit-bpy.js";
 import { DEFAULT_PROOF_THRESHOLDS } from "./lint/proof.js";
@@ -489,9 +489,14 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
      * default would put two lossy files in every download menu.
      */
     exportFormats: (() => {
-      const fmts = asArray<"usda" | "usdz" | "glb" | "obj" | "fbx" | "stl" | "ply">(
-        c.export?.formats,
-        [],
+      // FILTERED to the schema's own legal set, never cast: `["blend"]`
+      // used to be adopted straight into exportFormats — a value the
+      // validator (now) rejects must degrade to the same contract as
+      // omitting it, per the reject-loudly/degrade-safely discipline.
+      const fmts = asArray<unknown>(c.export?.formats, []).filter(
+        (f): f is (typeof EXPORT_FORMAT_VALUES)[number] =>
+          typeof f === "string" &&
+          (EXPORT_FORMAT_VALUES as readonly string[]).includes(f),
       );
       if (fmts.length > 0) return fmts;
       const preset = (c.target ? TARGET_EXPORT_FORMATS[c.target] : undefined)

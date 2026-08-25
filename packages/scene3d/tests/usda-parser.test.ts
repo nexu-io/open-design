@@ -68,6 +68,36 @@ def Xform "Root"
     expect(mesh.attributes.get("material:binding")).toBe("</Root/M/mtl_x>");
   });
 
+  it("parses bulk payloads without tokenizing them — an allocation oracle, not just a shell check", () => {
+    /* The shell assertions above cannot see a tokenize-then-discard
+       regression: a lexer that mints a Token per number and throws them
+       away still stores the short shell. The production failure was
+       allocation (multi-GB heap on hundreds of MB of vertex data), so the
+       pin measures allocation. A ~25 MB payload holds ~2.8M numbers; the
+       old per-number tokenization allocated gigabytes for it, while the
+       one-walk skip allocates little beyond the source string. 200 MB is
+       an order of magnitude of headroom over GC noise in both directions. */
+    const tuples = new Array(400_000).fill("(0.123456, 1.234567, 2.345678)").join(", ");
+    const src = `#usda 1.0
+(
+    defaultPrim = "Root"
+)
+
+def Xform "Root"
+{
+    def Mesh "m"
+    {
+        point3f[] points = [${tuples}]
+    }
+}
+`;
+    const before = process.memoryUsage().heapUsed;
+    const tree = parseUsda(src, "huge.usda");
+    const grown = process.memoryUsage().heapUsed - before;
+    expect(tree.prims.find((p) => p.name === "m")).toBeDefined();
+    expect(grown).toBeLessThan(200 * 1024 * 1024);
+  });
+
   it("tracks line numbers for issue reporting", () => {
     const tree = parseUsda(fs.readFileSync(fixtures("bad-names.usda"), "utf8"), "bad-names.usda");
     const cube = tree.prims.find((p) => p.name === "Cube")!;
@@ -261,5 +291,48 @@ def Shader "S" {
     expect(attrs).toContain("outputs:surface");
     expect(attrs).toContain("inputs:roughness");
     expect(s.attributes.get("inputs:roughness")).toBe("0.5");
+  });
+});
+describe("bulk-array comment safety (bug-shaker round)", () => {
+  it("ignores brackets and quotes inside comments within a bulk array", () => {
+    // Red before the fix: the fast bulk-array walk counted a `]` inside a
+    // `# note` comment toward its depth, closing the array early and
+    // misparsing everything after it in a perfectly legal file.
+    const src = [
+      "#usda 1.0",
+      'def Mesh "prp_box" {',
+      "  int[] faceVertexIndices = [",
+      "    0, 1, 2, # closing ] bracket and a stray \" quote in a comment",
+      "    3, 4, 5, // another ] here",
+      "    6, 7, 8 /* and ] one \" more */",
+      "  ]",
+      '  custom string note = "after the array"',
+      "}",
+    ].join("\n");
+    const tree = parseUsda(src, "comment-array.usda");
+    const prim = tree.root.children[0]!;
+    expect(prim.name).toBe("prp_box");
+    // The attribute AFTER the array survived the walk intact.
+    expect([...prim.attributes.keys()].some((k) => k.includes("note"))).toBe(true);
+  });
+});
+
+describe("payload arcs (bug-shaker round)", () => {
+  it("records a metadata payload arc as a payload, not a reference", () => {
+    // Red before the fix: the metadata catch-all scooped payload paths
+    // into `references` and left `payloads` empty, fabricating an eager
+    // composition from a lazy one.
+    const src = [
+      "#usda 1.0",
+      'def Xform "prp_world" (',
+      "  payload = @heavy_terrain.usda@",
+      "  references = @props.usda@",
+      ") {",
+      "}",
+    ].join("\n");
+    const tree = parseUsda(src, "payload.usda");
+    const prim = tree.root.children[0]!;
+    expect(prim.payloads).toEqual(["heavy_terrain.usda"]);
+    expect(prim.references).toEqual(["props.usda"]);
   });
 });

@@ -40,13 +40,16 @@ export interface ShaderSpec {
   /** Bake resolution (square, power of two, 64-4096). Default 512. */
   size?: number;
   /**
-   * Uniform values, keyed by name (`^u[A-Za-z][A-Za-z0-9_]*$`). The type
-   * is derived from the value shape: number → float, int when integral
-   * AND named `uCount`-style? No — numbers are float unless declared via
-   * the `ints` list; arrays of 2/3/4 → vec2/vec3/vec4.
+   * Uniform values, keyed by name — `uCamelCase`, exactly
+   * `^u[A-Z][A-Za-z0-9]{0,30}$` (no underscores, no lowercase second
+   * letter). The gate is the GLSL injection boundary, so this doc must
+   * describe the validator's regex verbatim and never a looser one. The
+   * type is derived from the value shape: a number is a float unless the
+   * name appears in `ints`; arrays of 2/3/4 numbers are vec2/vec3/vec4.
    */
   uniforms?: Record<string, ShaderUniformValue>;
-  /** Names in `uniforms` that are ints rather than floats. */
+  /** Names in `uniforms` that are SCALAR ints rather than floats — a
+   *  vector value under a declared int name is refused. */
   ints?: string[];
   /** Output channels to bake. Default ["baseColor"]. */
   outputs?: ShaderOutput[];

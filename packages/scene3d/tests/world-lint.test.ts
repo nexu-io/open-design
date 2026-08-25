@@ -34,6 +34,17 @@ function census(
         zeroAreaFaces: 0,
         nan: false,
         uvLayers: ["UVMap"],
+        // Real censuses always carry the vertex-exact spatial for real
+        // geometry (it is null only for empty/all-loose meshes), and
+        // grounding refuses to judge without it — so the fixture ships it.
+        spatial: {
+          worldMin: [0, 0, o.min] as [number, number, number],
+          worldMax: [1, 1, o.min + 1] as [number, number, number],
+          size: [1, 1, 1] as [number, number, number],
+          bboxCenter: [0.5, 0.5, o.min + 0.5] as [number, number, number],
+          centroid: [0.5, 0.5, o.min + 0.5] as [number, number, number],
+          groundGap: o.min,
+        },
       })),
     materials: [],
     textures: [],
@@ -121,6 +132,60 @@ describe("grounding", () => {
       groundGap: 0.001, // vertices rest on the floor within tolerance
     };
     expect(codes(grounded, c)).toEqual([]);
+  });
+
+  it("degrades to a named note — never a verdict from the AABB — when the vertex-exact spatial is missing", () => {
+    // A mesh with no spatial (empty/all-loose geometry) used to be judged on
+    // object.worldMin — the exact AABB-of-the-OBB measure the module's own
+    // header rules out, so a canted part could be called sunk by an
+    // instrument the vertex-based claims.grounded disagrees with.
+    const c = census([{ name: "prp_shard", min: -0.05 }]);
+    c.meshes[0]!.spatial = null;
+    const issues: Issue[] = [];
+    lintWorld(normalizeContract(grounded), c, issues);
+    const grounding = issues.filter(
+      (i) => i.code === "S3D-W-325" || i.code === "S3D-E-325",
+    );
+    expect(grounding).toHaveLength(1);
+    expect(grounding[0]!.code).toBe("S3D-W-325");
+    expect(grounding[0]!.severity).toBe("info");
+    expect(grounding[0]!.message).toContain("not judged");
+    expect(grounding[0]!.detail).toMatchObject({ unmeasured: true });
+  });
+
+  it("calls deep interpenetration what it is, not resting", () => {
+    // A part 50mm INTO its support used to satisfy `gap <= tolerance` and
+    // wear the "rests on / nothing to fix" message — advice to exempt
+    // visibly broken geometry. Contact has a lower bound too.
+    const c = census([
+      { name: "prp_top", min: 0.5 },
+      { name: "prp_base", min: 0 },
+    ]);
+    c.objects[1]!.worldMax = [1, 1, 0.55];
+    c.contacts = [
+      { a: "prp_top", b: "prp_base", gap: [0, 0, -0.05], separation: -0.05, intersects: true },
+    ];
+    const issues: Issue[] = [];
+    lintWorld(normalizeContract(grounded), c, issues);
+    const top = issues.find((i) => i.code === "S3D-W-325" && i.target === "prp_top")!;
+    expect(top.message).toContain("INTO 'prp_base'");
+    expect(top.message).not.toContain("rests on");
+    expect(top.hint).toContain("raise it out of 'prp_base'");
+  });
+
+  it("still reads the solver's deliberate 1mm embed as resting", () => {
+    const c = census([
+      { name: "prp_top", min: 0.5 },
+      { name: "prp_base", min: 0 },
+    ]);
+    c.objects[1]!.worldMax = [1, 1, 0.501];
+    c.contacts = [
+      { a: "prp_top", b: "prp_base", gap: [0, 0, -0.001], separation: -0.001, intersects: true },
+    ];
+    const issues: Issue[] = [];
+    lintWorld(normalizeContract(grounded), c, issues);
+    const top = issues.find((i) => i.code === "S3D-W-325" && i.target === "prp_top")!;
+    expect(top.message).toContain("rests on 'prp_base'");
   });
 
   it("does not let a bare exempt prefix leak across a word boundary (W-1)", () => {

@@ -528,9 +528,13 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(issues.find((i) => i.code === ISSUE_CODES.CONTACTS_UNCHECKED)).toBeUndefined();
   });
 
-  it("does not flag when contacts exist despite partial skips", () => {
-    // Some pairs measured, some skipped: the report has facts AND the
-    // z-fight-style confession rides separately. No double-doom here.
+  it("names partial contact coverage as an INFO note, never a warning", () => {
+    // Some pairs measured, some skipped. The old pin here asserted total
+    // silence, which made "measured, with holes" read exactly like
+    // "measured completely" — a field audit found rest relationships
+    // inside the holes with no contact word and no notice the word was
+    // missing. What the old pin actually protected — no warning-level
+    // doom for a scan that mostly ran — still holds: the note is info.
     const issues = runLint({
       contract: contract(),
       census: census({
@@ -538,7 +542,11 @@ describe("lint: pbr/topology/integrity over census", () => {
         contactsSkipped: ["pair cap exceeded"],
       }),
     });
-    expect(issues.find((i) => i.code === ISSUE_CODES.CONTACTS_UNCHECKED)).toBeUndefined();
+    const note = issues.find((i) => i.code === ISSUE_CODES.CONTACTS_UNCHECKED);
+    expect(note).toBeDefined();
+    expect(note!.severity).toBe("info");
+    expect(note!.message).toContain("PARTIAL");
+    expect(note!.detail?.skipped).toEqual(["pair cap exceeded"]);
   });
 
   it("flags bad metallic values, roughness range and untouched defaults", () => {
@@ -753,18 +761,88 @@ describe("lint: pbr/topology/integrity over census", () => {
   });
 
   it("does not double-report an object both census and turntable flagged", () => {
-    // The census-level OFF_CAMERA has no `frames` detail; the turntable one
-    // does. Same code, different evidence — dedupe is by code+target+message,
-    // so they coexist deliberately rather than merging into one ambiguous row.
+    // Same code, same object, same fix — two rows would print the fix twice
+    // under two spellings. The frame-carrying turntable row is the richer
+    // evidence (the census cannot know WHICH orbit angle lost it), so it
+    // stands alone and the census-level row is dropped.
     const issues = runLint({
       contract: contract(),
       census: census({ offCameraObjects: ["prp_far"] }),
       offByFrame: [{ frame: 1, objects: ["prp_far"] }],
     });
     const hits = issues.filter((i) => i.code === ISSUE_CODES.OFF_CAMERA && i.target === "prp_far");
-    expect(hits).toHaveLength(2);
-    expect(hits.some((i) => i.message.includes("outside the camera frustum"))).toBe(true);
-    expect(hits.some((i) => i.message.includes("turntable frame"))).toBe(true);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.message).toContain("turntable frame");
+    expect(hits[0]!.detail).toMatchObject({ frames: [1] });
+  });
+
+  it("keeps the census-level off-camera row when the turntable never lost the object", () => {
+    // The drop above is scoped to objects the turntable ALSO flagged; an
+    // object off the hero camera but inside every orbit frame keeps its
+    // census-level finding.
+    const issues = runLint({
+      contract: contract(),
+      census: census({ offCameraObjects: ["prp_far"] }),
+      offByFrame: [{ frame: 1, objects: ["prp_other"] }],
+    });
+    const far = issues.filter((i) => i.code === ISSUE_CODES.OFF_CAMERA && i.target === "prp_far");
+    expect(far).toHaveLength(1);
+    expect(far[0]!.message).toContain("outside the camera frustum");
+  });
+
+  it("attributes an orphaned material to the override only when every file part is overridden", () => {
+    // One file part, overridden: attribution is unambiguous and names it.
+    const orphanCensus = () =>
+      census({
+        materials: [
+          {
+            name: "fox_material",
+            usedByObjectCount: 0,
+            textureNames: [],
+            principled: { present: false },
+          },
+        ] as never,
+      });
+    const sole = runLint({
+      contract: contract(),
+      census: orphanCensus(),
+      solved: { parts: [{ id: "prp_fox", file: "fox.glb", material: "gold" }] } as never,
+    });
+    const soleHit = sole.find((i) => i.code === ISSUE_CODES.MATERIAL_UNUSED)!;
+    expect(soleHit.severity).toBe("info");
+    expect(soleHit.message).toContain("orphaned by the material override on 'prp_fox'");
+  });
+
+  it("leaves the blame open when a plain file part could equally have shipped the orphan", () => {
+    // Two file parts, only one overridden: the census cannot say which
+    // import the unused material came from, so pinning it on the override
+    // would misattribute it. Still info (a non-authored material on the
+    // spec path can only come from an import), but the message states the
+    // ambiguity instead of naming the wrong part.
+    const mixed = runLint({
+      contract: contract(),
+      census: census({
+        materials: [
+          {
+            name: "helmet_glass",
+            usedByObjectCount: 0,
+            textureNames: [],
+            principled: { present: false },
+          },
+        ] as never,
+      }),
+      solved: {
+        parts: [
+          { id: "prp_fox", file: "fox.glb", material: "gold" },
+          { id: "prp_helm", file: "helm.glb" },
+        ],
+      } as never,
+    });
+    const hit = mixed.find((i) => i.code === ISSUE_CODES.MATERIAL_UNUSED)!;
+    expect(hit.severity).toBe("info");
+    expect(hit.message).toContain("either orphaned by the material override on 'prp_fox'");
+    expect(hit.message).toContain("never bound by its own import");
+    expect(hit.message).not.toContain("wholesale replacement is the documented behaviour");
   });
 
   it("checks hierarchy depth from the census parent chain for build.py/spec scenes (N-2)", () => {

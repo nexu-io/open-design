@@ -30,7 +30,15 @@ interface RawSpec {
   schemaVersion: 1;
   name?: string;
   materials: Record<string, { baseColor: [number, number, number]; roughness: number }>;
-  parts: Array<{ id: string; size: [number, number, number]; shape: "box"; material: string }>;
+  parts: Array<{
+    id: string;
+    size: [number, number, number];
+    shape: "box";
+    material: string;
+    /** Single-axis static rotation — the exact image of a Java element's
+     *  `rotation`, frame-mapped into Blender axes. */
+    rotate?: { axis: "x" | "y" | "z"; deg: number };
+  }>;
   relations: Array<{ type: "at"; part: string; center: [number, number, number] }>;
 }
 
@@ -69,22 +77,87 @@ export function importJavaModel(
       skipped.push({ element: label, reason: "missing or malformed from/to" });
       return;
     }
-    // A rotated element has no axis-aligned representation in scene.json.
+    /* A single-axis rotated element IS representable now: the language's
+       `rotate` is exactly a Java element rotation (one axis, one angle,
+       local extents kept). The old skip predates `rotate` existing. An
+       off-centre `rotation.origin` folds into the placement — rotating a
+       box about an external pivot equals rotating it about its own centre
+       at the PIVOTED centre position — so the conversion is exact. Only
+       the genuinely inexpressible keeps the loud skip: multi-axis eulers
+       and Java's `rescale` stretch. */
     const rot = raw.rotation;
-    if (isObject(rot) && typeof rot.angle === "number" && rot.angle !== 0) {
-      skipped.push({ element: label, reason: `rotated ${rot.angle}° (scene.json is axis-aligned)` });
+    let mcRotation: { axis: "x" | "y" | "z"; deg: number; origin: [number, number, number] } | null = null;
+    // Finite-only: NaN/Infinity angles would ride cos/sin into non-finite
+    // centres and angles in the returned spec, failing far from here.
+    // (asVec3 already refuses non-finite origins.)
+    if (isObject(rot) && typeof rot.angle === "number" && !Number.isFinite(rot.angle)) {
+      skipped.push({ element: label, reason: `rotation angle ${String(rot.angle)} is not a finite number` });
       return;
     }
-    if (Array.isArray(rot) && rot.some((v) => typeof v === "number" && v !== 0)) {
-      skipped.push({ element: label, reason: "rotated (scene.json is axis-aligned)" });
-      return;
+    if (isObject(rot) && typeof rot.angle === "number" && rot.angle !== 0) {
+      if ((rot as { rescale?: unknown }).rescale === true) {
+        skipped.push({ element: label, reason: `rotated ${rot.angle}° with rescale (the compensating stretch has no representation)` });
+        return;
+      }
+      const axis = (rot as { axis?: unknown }).axis;
+      if (axis !== "x" && axis !== "y" && axis !== "z") {
+        skipped.push({ element: label, reason: "rotation has no valid axis" });
+        return;
+      }
+      const origin = asVec3((rot as { origin?: unknown }).origin) ?? [8, 8, 8];
+      mcRotation = { axis, deg: rot.angle, origin: origin as [number, number, number] };
+    }
+    if (Array.isArray(rot)) {
+      if (rot.some((v) => typeof v === "number" && !Number.isFinite(v))) {
+        skipped.push({ element: label, reason: "rotation array carries a non-finite value" });
+        return;
+      }
+      const nonzero = rot
+        .map((v, axisIdx) => ({ v: typeof v === "number" ? v : 0, axisIdx }))
+        .filter((e) => e.v !== 0);
+      if (nonzero.length > 1) {
+        skipped.push({ element: label, reason: "rotated about more than one axis (rotate is single-axis)" });
+        return;
+      }
+      if (nonzero.length === 1) {
+        mcRotation = {
+          axis: (["x", "y", "z"] as const)[nonzero[0]!.axisIdx]!,
+          deg: nonzero[0]!.v,
+          origin: [8, 8, 8],
+        };
+      }
     }
     const dims: [number, number, number] = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
     if (dims.some((d) => d <= 0)) {
       skipped.push({ element: label, reason: "zero or negative extent" });
       return;
     }
-    const centre: [number, number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, (from[2] + to[2]) / 2];
+    let centre: [number, number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, (from[2] + to[2]) / 2];
+    let rotateSpec: { axis: "x" | "y" | "z"; deg: number } | undefined;
+    if (mcRotation) {
+      // Pivot the centre in MC pixel space, then convert the axis/angle
+      // through the same frame map as everything else: MC x stays x; MC y
+      // (up) becomes Blender z; MC z becomes Blender −y, i.e. axis y with
+      // the angle negated (rotation about −u by θ is rotation about u by −θ).
+      const rad = (mcRotation.deg * Math.PI) / 180;
+      const c = Math.cos(rad);
+      const s = Math.sin(rad);
+      const [px0, py0, pz0] = mcRotation.origin;
+      const d: [number, number, number] = [centre[0] - px0, centre[1] - py0, centre[2] - pz0];
+      const r: [number, number, number] =
+        mcRotation.axis === "x"
+          ? [d[0], d[1] * c - d[2] * s, d[1] * s + d[2] * c]
+          : mcRotation.axis === "y"
+            ? [d[0] * c + d[2] * s, d[1], -d[0] * s + d[2] * c]
+            : [d[0] * c - d[1] * s, d[0] * s + d[1] * c, d[2]];
+      centre = [px0 + r[0], py0 + r[1], pz0 + r[2]];
+      rotateSpec =
+        mcRotation.axis === "x"
+          ? { axis: "x", deg: mcRotation.deg }
+          : mcRotation.axis === "y"
+            ? { axis: "z", deg: mcRotation.deg }
+            : { axis: "y", deg: -mcRotation.deg };
+    }
 
     // Inverse of the exporter's frame map: MC px (X,Y,Z) -> Blender m (X,-Z,Y)/16.
     // nz() folds a negative zero (from −0/16) back to 0 so the spec is clean.
@@ -101,7 +174,7 @@ export function importJavaModel(
     const material = ensureMaterial(faceTextures.ref, materialRefs);
     const id = uniqueId(sanitizeId(isObject(raw) && typeof raw.name === "string" ? raw.name : `elem_${i}`), usedIds);
 
-    parts.push({ id, size, shape: "box", material });
+    parts.push({ id, size, shape: "box", material, ...(rotateSpec ? { rotate: rotateSpec } : {}) });
     relations.push({ type: "at", part: id, center });
   });
 
@@ -195,7 +268,16 @@ function dominantTexture(faces: unknown): { ref: string; dropped: string[] } {
 function ensureMaterial(texRef: string, refs: Map<string, string>): string {
   const existing = refs.get(texRef);
   if (existing) return existing;
-  const id = `mtl_${sanitizeId(texRef)}`;
+  // UNIQUE per distinct reference, not merely sanitised: `a-b` and `a_b`
+  // both sanitise to `a_b`, and long resource paths truncate to a shared
+  // stem — either collision made one material silently overwrite the
+  // other and parts with different textures share the wrong colour.
+  const taken = new Set(refs.values());
+  const base = `mtl_${sanitizeId(texRef)}`;
+  let id = base;
+  for (let n = 2; taken.has(id); n++) {
+    id = `${base.slice(0, MAX_ID - 1 - String(n).length)}_${n}`;
+  }
   refs.set(texRef, id);
   return id;
 }
@@ -236,7 +318,23 @@ function resolveBytes(
   textureMap: Map<string, string>,
   resolver: TextureResolver | undefined,
 ): Uint8Array | undefined {
-  const src = textureMap.get(ref);
+  /* Java texture INDIRECTION: `textures.all = "#stone"` aliases another
+     key, and faces referencing `#all` legally resolve through the chain.
+     One flat lookup stopped at the alias and every such model fell to the
+     neutral placeholder while its real texture sat in the map. Chased with
+     a seen-set so a cyclic alias terminates as unresolved, not as a hang. */
+  let key = ref;
+  const seen = new Set<string>();
+  while (!seen.has(key)) {
+    seen.add(key);
+    const next = textureMap.get(key);
+    if (typeof next === "string" && next.startsWith("#")) {
+      key = next.slice(1);
+      continue;
+    }
+    break;
+  }
+  const src = textureMap.get(key);
   // An embedded data URI (Blockbench) carries the bytes inline.
   if (src && /^data:image\/png;base64,/i.test(src)) {
     try {
@@ -246,9 +344,16 @@ function resolveBytes(
     }
   }
   if (!resolver) return undefined;
-  // Try the reference, its basename, and the mapped resource path's basename.
-  const candidates = new Set<string>([ref, basename(ref)]);
-  if (src) candidates.add(basename(src));
+  // Try the reference (original and alias-resolved), the mapped resource
+  // path, and every basename. The FULL mapped path matters: a resolver
+  // keyed by `minecraft:block/stone` never saw it when only its basename
+  // was offered, and the importer fell to the placeholder with a valid
+  // mapping in hand.
+  const candidates = new Set<string>([ref, basename(ref), key, basename(key)]);
+  if (src) {
+    candidates.add(src);
+    candidates.add(basename(src));
+  }
   for (const c of candidates) {
     const bytes = resolver(c);
     if (bytes) return bytes;

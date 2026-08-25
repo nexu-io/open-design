@@ -55,6 +55,11 @@ export function lintUv(ctx: LintContext, issues: Issue[]): void {
     // everything; the census still records the measurements either way.
     if (!needsUv) continue;
 
+    // `sampled` gates ONLY the raster-grid facts (overlap/coverage): the
+    // runner sets it from `grid is not None`, while flippedFaces,
+    // outOfBoundsFraction, and stretch are per-face/per-point measurements
+    // taken regardless of the raster budget — so the rules below this
+    // else-if chain legitimately judge an unsampled mesh.
     if (!uv.sampled) {
       // Silence past the raster cap is not evidence — same discipline as
       // Z_FIGHTING_UNCHECKED.

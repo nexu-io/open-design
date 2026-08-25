@@ -207,9 +207,20 @@ export function changeImpact(
         : typeof v === "number"
           ? String(Number(v.toFixed(4)))
           : String(v);
+    // Added and removed materials are reported HERE, not assumed to ride
+    // the part diff: swapping a mesh's material moves no box, so a
+    // replacement on an otherwise unchanged part used to produce
+    // "unchanged since previous compile" while the render visibly changed.
+    const nextNames = new Set((next?.materials ?? []).map((m) => m.name));
+    for (const was of previous?.materials ?? []) {
+      if (!nextNames.has(was.name)) materialsChanged.push({ name: was.name, changes: ["removed"] });
+    }
     for (const mat of next?.materials ?? []) {
       const was = prevMats.get(mat.name);
-      if (!was) continue; // added/removed materials ride the part diff's coattails
+      if (!was) {
+        materialsChanged.push({ name: mat.name, changes: ["added"] });
+        continue;
+      }
       const changes: string[] = [];
       const props: Array<keyof typeof mat.principled> = [
         "metallic", "roughness", "ior", "baseColor", "emission", "emissionStrength", "alpha",
@@ -234,6 +245,22 @@ export function changeImpact(
       }
       if (changes.length > 0) materialsChanged.push({ name: mat.name, changes });
     }
+    // Reassignment: a mesh switched from existing material A to existing
+    // material B. Both material RECORDS are unchanged, no box moved — the
+    // per-object binding is the only fact that differs, so it is diffed
+    // directly or the visible render change reads as "unchanged".
+    const prevWear = new Map((previous?.meshes ?? []).map((m) => [m.object, m.materials ?? []]));
+    for (const mesh of next?.meshes ?? []) {
+      const was = prevWear.get(mesh.object);
+      if (was === undefined) continue; // added parts already ride the part diff
+      const now = mesh.materials ?? [];
+      if (was.join(" ") !== now.join(" ")) {
+        materialsChanged.push({
+          name: mesh.object,
+          changes: [`wears [${now.join(", ") || "none"}] (was [${was.join(", ") || "none"}])`],
+        });
+      }
+    }
     materialsChanged.sort((a, b) => (a.name < b.name ? -1 : 1));
   }
 
@@ -242,6 +269,19 @@ export function changeImpact(
   if (previous && next) {
     const a = previous.animation;
     const b = next.animation;
+    if (Boolean(a) !== Boolean(b)) {
+      // One census carries no animation block (an older runner, a partial
+      // census). Nested comparisons would all silently skip, making "the
+      // scene started animating" read as no change — the presence flip is
+      // itself the finding, with whatever detail the present side carries.
+      const present = (a ?? b)!;
+      const moving = (present.keyframedObjects ?? []).join(", ");
+      animationChanged.push(
+        b
+          ? `animation facts appeared (animated objects [${moving || "none"}])`
+          : `animation facts no longer measured (previously animated: [${moving || "none"}])`,
+      );
+    }
     if (a && b) {
       if (a.frameStart !== b.frameStart || a.frameEnd !== b.frameEnd) {
         animationChanged.push(
@@ -251,6 +291,17 @@ export function changeImpact(
       const clipsA = ((a as { actionNames?: string[] }).actionNames ?? []).join(", ");
       const clipsB = ((b as { actionNames?: string[] }).actionNames ?? []).join(", ");
       if (clipsA !== clipsB) animationChanged.push(`clips [${clipsA}] → [${clipsB}]`);
+      // Which objects MOVE — compiler-owned spin/bob/screw keyframes carry
+      // no clip names, so a part starting or stopping its motion was
+      // invisible to the clip diff and to every geometric one (a spinning
+      // part's rest box does not move).
+      const movingA = (a.keyframedObjects ?? []).join(", ");
+      const movingB = (b.keyframedObjects ?? []).join(", ");
+      if (movingA !== movingB) {
+        animationChanged.push(
+          `animated objects [${movingA || "none"}] → [${movingB || "none"}]`,
+        );
+      }
       const boundsA = (a as { animatedBounds?: { min?: number[]; max?: number[] } }).animatedBounds;
       const boundsB = (b as { animatedBounds?: { min?: number[]; max?: number[] } }).animatedBounds;
       if (boundsA?.min && boundsA.max && boundsB?.min && boundsB.max) {
@@ -351,6 +402,15 @@ export interface FormatImpactOptions {
 export function formatImpact(report: ImpactReport, options: FormatImpactOptions = {}): string {
   if (report.unchanged) return "no change since the previous compile";
   const out: string[] = [];
+  // A no-census compile with no issue delta used to render as the EMPTY
+  // STRING — the one report shape that says nothing at all. The state is
+  // itself the finding, so it always prints, before whatever issue lines
+  // exist.
+  if (report.noBuild) {
+    out.push(
+      "this compile produced no measured world (the build failed or never ran) — geometric diffs withheld",
+    );
+  }
   const fmt = (n: number) => String(Math.round(n * 1000) / 1000);
 
   // 1. Broken contacts — the action-at-a-distance failure, first and unmissable.

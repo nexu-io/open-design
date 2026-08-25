@@ -57,7 +57,11 @@ export interface ValidatorMessage {
 export function messagesToIssues(messages: ValidatorMessage[], rel: string): Issue[] {
   const issues: Issue[] = [];
   for (const m of messages) {
-    if (SUPPRESSED.has(m.code)) continue;
+    // Severity first, suppression second: the list's own contract says
+    // "never suppress an error severity", and checking the code before
+    // the severity would let a suppressed code smuggle an ERROR past the
+    // oracle if the validator ever escalates it.
+    if (m.severity !== 0 && SUPPRESSED.has(m.code)) continue;
     const hint = HINTS[m.code] ? { hint: HINTS[m.code]! } : {};
     if (m.severity === 0) {
       issues.push({

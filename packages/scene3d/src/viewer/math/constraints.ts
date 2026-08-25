@@ -91,6 +91,21 @@ export function solveProjectedLineParameterAdmissible(
       lambdaMin = (ctx.camera.far - c0[3]) / c1[3];
       lambdaMax = (ctx.camera.near - c0[3]) / c1[3];
     }
+  } else if (c0[3] < ctx.camera.near || c0[3] > ctx.camera.far) {
+    // A depth-constant line (the direction contributes no w) sits at ONE
+    // depth for its whole length: when that depth is outside [near, far]
+    // the entire line is inadmissible, and leaving the interval infinite
+    // here let an out-of-frustum manipulation solve and apply anyway.
+    // Returned as DEGENERATE immediately — an empty interval fed to the
+    // clamp below would come back as lambda = Infinity wearing
+    // `degenerate: false`, which is worse than the hole it closes.
+    return {
+      lambda: lambda0,
+      rawLambda: lambda0,
+      clamped: false,
+      admissibleInterval: { min: Infinity, max: -Infinity },
+      degenerate: true,
+    };
   }
 
   if (admissibleDomainOverride) {
@@ -99,6 +114,14 @@ export function solveProjectedLineParameterAdmissible(
   }
 
   const admissibleInterval: Interval = { min: lambdaMin, max: lambdaMax };
+
+  // The override can be DISJOINT from the depth window (a caller's domain
+  // entirely behind the camera, say). An empty interval fed to the clamp
+  // below returns lambdaMin wearing `clamped: true` — a value OUTSIDE the
+  // very interval the result reports as admissible.
+  if (lambdaMin > lambdaMax) {
+    return { lambda: lambda0, rawLambda: lambda0, clamped: false, admissibleInterval, degenerate: true };
+  }
 
   // Tangent at start point
   const p0: Vec3 = [p[0] + lambda0 * u[0], p[1] + lambda0 * u[1], p[2] + lambda0 * u[2]];
@@ -137,6 +160,14 @@ export function solveProjectedLineParameterAdmissible(
     rawLambda = (c0[0] - nx * c0[3]) / denomX;
   } else {
     rawLambda = (c0[1] - ny * c0[3]) / denomY;
+  }
+
+  // The horizon singularity: a cursor at the projected line's vanishing
+  // point makes BOTH denominators vanish, and 0/0 is NaN — which sails
+  // through the min/max clamp below (every comparison with NaN is false)
+  // and out of the function as a "solved" parameter.
+  if (!Number.isFinite(rawLambda)) {
+    return { lambda: lambda0, rawLambda: lambda0, clamped: false, admissibleInterval, degenerate: true };
   }
 
   const clampedLambda = Math.max(lambdaMin, Math.min(lambdaMax, rawLambda));
@@ -282,6 +313,21 @@ export function mapArcball(
 export function shoemakeArcballQuat(v0: Vec3, v1: Vec3): Quat {
   const cross = crossVec3(v0, v1);
   const dot = dotVec3(v0, v1);
+  // The antipodal degeneracy: for opposite sphere points the cross vanishes
+  // and the quat collapses to [0,0,0,-1] — the IDENTITY rotation — so a
+  // drag across the sphere produced no turn at all where the user asked
+  // for the largest one. A 180° turn about any axis perpendicular to v0
+  // is the correct limit; the axis choice is the rotation's one free
+  // parameter there, so a deterministic perpendicular is as right as any.
+  const crossMag = Math.hypot(cross[0], cross[1], cross[2]);
+  if (dot < -0.9999 && crossMag < 1e-6) {
+    const axis =
+      Math.abs(v0[0]) < 0.9
+        ? crossVec3(v0, [1, 0, 0])
+        : crossVec3(v0, [0, 1, 0]);
+    const m = Math.hypot(axis[0], axis[1], axis[2]) || 1.0;
+    return [axis[0] / m, axis[1] / m, axis[2] / m, 0];
+  }
   const norm = Math.hypot(cross[0], cross[1], cross[2], dot) || 1.0;
   return [cross[0] / norm, cross[1] / norm, cross[2] / norm, dot / norm];
 }
@@ -295,7 +341,15 @@ export function buildPickedRingBasis(
   axisWorld: Vec3,
   pickedPointWorld: Vec3
 ): { a: Vec3; b: Vec3 } {
-  const u = normalizeVec3(axisWorld);
+  // normalizeVec3 maps the zero vector to itself (mag||1), and a zero u
+  // zeroes b = u×a even when the picked point anchors a — every ring point
+  // becomes the pivot and the LM solver loses rotation entirely. No caller
+  // ships a zero axis today (gizmo axes are fixed unit vectors), but a math
+  // primitive must not return a collapsed basis for ANY input: substitute
+  // the deterministic Z axis, the same arbitrary-but-valid posture as the
+  // on-axis anchor fallback below.
+  const axisMag = Math.hypot(axisWorld[0], axisWorld[1], axisWorld[2]);
+  const u = axisMag > 1e-12 ? normalizeVec3(axisWorld) : ([0, 0, 1] as Vec3);
   const diff: Vec3 = [
     pickedPointWorld[0] - pivot[0],
     pickedPointWorld[1] - pivot[1],
@@ -308,7 +362,19 @@ export function buildPickedRingBasis(
     diff[1] - uDotDiff * u[1],
     diff[2] - uDotDiff * u[2],
   ];
-  const a = normalizeVec3(perp);
+  // A picked point ON the axis has no projection to anchor the basis: the
+  // normalized zero vector collapsed a and b to zero and every ring point
+  // to the pivot. Any perpendicular of u spans the same ring plane, so a
+  // deterministic one keeps the solver alive with an arbitrary-but-valid
+  // phase — exactly what an on-axis pick means geometrically.
+  const perpMag = Math.hypot(perp[0], perp[1], perp[2]);
+  const anchor: Vec3 =
+    perpMag > 1e-12
+      ? perp
+      : Math.abs(u[0]) < 0.9
+        ? crossVec3(u, [1, 0, 0])
+        : crossVec3(u, [0, 1, 0]);
+  const a = normalizeVec3(anchor);
   const b = normalizeVec3(crossVec3(u, a));
   return { a, b };
 }

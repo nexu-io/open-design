@@ -740,10 +740,22 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     ) {
       if (probe && (source.kind !== "spec" || specScriptRel !== undefined)) {
         const cached = request.noCache ? null : readCache(request.projectDir, "build", buildInputHash);
+        let cacheHit = false;
         if (cached) {
-          census = validateCensus(cached.data);
-          report("build", "cached", ms(tb));
-        } else {
+          // A corrupted or stale-shaped cache entry is a MISS, never a
+          // failure: the fresh path converts the same validation error
+          // into INVALID_CENSUS, and an unguarded throw here made a bad
+          // cache file abort the whole compile until someone guessed at
+          // --no-cache. Recovery is a rebuild, not an incantation.
+          try {
+            census = validateCensus(cached.data);
+            cacheHit = true;
+            report("build", "cached", ms(tb));
+          } catch {
+            census = undefined;
+          }
+        }
+        if (!cacheHit) {
           const job = {
             mode: "build" as const,
             projectDir: request.projectDir,
@@ -948,6 +960,19 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         } else {
           const written = names.filter((n) => fs.existsSync(path.join(request.projectDir, OUT_DIR, "proof", n)));
           const rel = written.map((n) => `${PROOF_DIR}/${n}`);
+          // A partial turntable is NOT a clean proof: the runner reported
+          // success, but frames missing from disk mean a renderer or
+          // filesystem failure ate part of the orbit — and silence here
+          // let downstream readers treat missing visual evidence as a
+          // clean pass. Loud, per the cap doctrine: name the count.
+          if (written.length < names.length) {
+            issues.push({
+              code: ISSUE_CODES.PROOF_FAILED,
+              severity: "error",
+              message: `proof wrote ${written.length} of ${names.length} expected frame(s) — the renderer reported success but the orbit is incomplete on disk`,
+              detail: { expected: names.length, written: written.length },
+            });
+          }
           // The object-index maps the runner renders beside each frame
           // (`<frame>.idx.png`) — the viewer's per-pixel x-ray silhouettes.
           // Companions, never proofImages: the player, the lint statistics
@@ -1076,6 +1101,11 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           | { lowering?: LoweringRecord | null; usdzUpAxisWarned?: string[] }
           | null;
         emitMasterParity(cachedData?.lowering ?? undefined, issues);
+        // The carried record reaches the manifest on a HIT too: the cache
+        // preserves it precisely so the persisted audit trail survives a
+        // recompile of an unchanged export — re-adjudicating the parity
+        // while dropping the provenance halved the point of carrying it.
+        carriedRecord = cachedData?.lowering?.carried ?? carriedRecord;
         /* Capability parity is a pure re-read of the source and shipped
            containers — no cached data involved — so a cached recompile
            re-adjudicates it. It used to live only in the miss branch, which
@@ -1222,7 +1252,28 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
                   fs.writeFileSync(packageFrom, arAuthored.usda);
                 }
                 try {
-                  packageUsdz(packageFrom, path.join(request.projectDir, usdzRel));
+                  const packed = packageUsdz(packageFrom, path.join(request.projectDir, usdzRel));
+                  // An archive that lacks files its own layers reference
+                  // "succeeds" here and fails in the consumer — say which
+                  // files never made it, at package time.
+                  if (packed.missing.length > 0) {
+                    issues.push({
+                      code: ISSUE_CODES.EXPORT_FORMAT_UNAVAILABLE,
+                      severity: "warning",
+                      message: `usdz packaged without ${packed.missing.length} referenced file(s) the layers name but the disk lacks: ${packed.missing.slice(0, 5).join(", ")}${packed.missing.length > 5 ? ` +${packed.missing.length - 5} more` : ""}`,
+                      detail: { format: "usdz", missing: packed.missing },
+                    });
+                  }
+                  // Binary layers ride the package but cannot be scanned for
+                  // THEIR references — a named caveat, never a silent gap.
+                  if (packed.unscanned.length > 0) {
+                    issues.push({
+                      code: ISSUE_CODES.EXPORT_FORMAT_UNAVAILABLE,
+                      severity: "info",
+                      message: `usdz carries ${packed.unscanned.length} binary layer(s) whose own references this packager cannot scan (${packed.unscanned.slice(0, 3).join(", ")}${packed.unscanned.length > 3 ? ` +${packed.unscanned.length - 3} more` : ""}) — transitive assets behind them may be absent`,
+                      detail: { format: "usdz", unscanned: packed.unscanned },
+                    });
+                  }
                   if (!rel.includes(usdzRel)) {
                     rel.push(usdzRel);
                     exportedAssets.push(usdzRel);
@@ -1283,10 +1334,26 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
               try {
                 fs.mkdirSync(path.join(request.projectDir, OUT_DIR), { recursive: true });
                 const usdzRel = `${OUT_DIR}/scene.usdz`;
-                packageUsdz(
+                const packed = packageUsdz(
                   path.join(request.projectDir, masterRel),
                   path.join(request.projectDir, usdzRel),
                 );
+                if (packed.missing.length > 0) {
+                  issues.push({
+                    code: ISSUE_CODES.EXPORT_FORMAT_UNAVAILABLE,
+                    severity: "warning",
+                    message: `usdz packaged without ${packed.missing.length} referenced file(s) the layers name but the disk lacks: ${packed.missing.slice(0, 5).join(", ")}${packed.missing.length > 5 ? ` +${packed.missing.length - 5} more` : ""}`,
+                    detail: { format: "usdz", missing: packed.missing },
+                  });
+                }
+                if (packed.unscanned.length > 0) {
+                  issues.push({
+                    code: ISSUE_CODES.EXPORT_FORMAT_UNAVAILABLE,
+                    severity: "info",
+                    message: `usdz carries ${packed.unscanned.length} binary layer(s) whose own references this packager cannot scan (${packed.unscanned.slice(0, 3).join(", ")}${packed.unscanned.length > 3 ? ` +${packed.unscanned.length - 3} more` : ""}) — transitive assets behind them may be absent`,
+                    detail: { format: "usdz", unscanned: packed.unscanned },
+                  });
+                }
                 rel.push(usdzRel);
                 exportedAssets.push(usdzRel);
               } catch (err: any) {
@@ -1353,6 +1420,20 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         report("export", "ran", ms(te));
       }
     } else {
+      // A REQUESTED export that produced nothing must say why — "skipped"
+      // in the stage list with no issue let a USDA project (excluded from
+      // needsBlender, so no BLENDER_NOT_FOUND either) return ok=true with
+      // zero deliverables and nothing naming the gap. Info, not error:
+      // the scene is fine; this machine is what is missing.
+      if (!probe) {
+        issues.push({
+          code: ISSUE_CODES.BLENDER_NOT_FOUND,
+          severity: "info",
+          message:
+            "export skipped — no Blender runtime on this machine, so the requested deliverables (GLB/USD/OBJ/FBX) were not produced",
+          hint: "install Blender to produce deliverables; parse and lint results above are complete without it",
+        });
+      }
       report("export", "skipped", ms(te));
     }
   }
@@ -1643,6 +1724,14 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       });
     }
 
+    /* Recomputed AFTER the read-model write attempt: a failed write pushed
+       DELIVERABLE_WRITE_FAILED into `issues`, and building the manifest
+       from the earlier list made the response and the manifest disagree
+       about that warning — the exact response-versus-disk split the
+       single-manifest discipline exists to prevent. (A failed MANIFEST
+       write below can only ride the response; an artifact cannot contain
+       the failure to write itself.) */
+    const manifestIssues = attributeIssues([...issues, ...lintIssues], census);
     const manifest = buildManifest({
       source,
       projectDir: request.projectDir,
@@ -1651,8 +1740,8 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       ...(proofRects ? { proofRects } : {}),
       ...(proofIdParts ? { proofIdParts } : {}),
       census,
-      issues: allIssues,
-      summary: summarize(allIssues),
+      issues: manifestIssues,
+      summary: summarize(manifestIssues),
       proofImages,
       exportedAssets,
       blenderUsed: probe !== null && needsBlender,
@@ -2079,7 +2168,11 @@ function previousManifestBakedTweaks(
  * compile. \d{3,} stays tolerant of a legacy 4-digit suffix.
  */
 export function isCompilerProofFrame(name: string): boolean {
-  return /^proof-[0-9a-f]{24}-\d{3,}\.png$/.test(name);
+  // The optional `.idx` tail covers the object-index maps that ride beside
+  // every beauty frame: they hash and orphan exactly the same way, and a
+  // pattern without the tail pruned the frames while their maps
+  // accumulated forever.
+  return /^proof-[0-9a-f]{24}-\d{3,}(?:\.idx)?\.png$/.test(name);
 }
 
 /**

@@ -129,3 +129,137 @@ describe("usdz packaging", () => {
     for (const entry of entries) expect(entry.stored, `${entry.name}`).toBe(true);
   });
 });
+
+describe("usdz reference containment (bug-shaker round)", () => {
+  function tmp(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "s3d-usdz-c-"));
+  }
+
+  it("reports an absolute reference instead of silently omitting it", () => {
+    // Red before the fix: the loop `continue`d past absolute refs with no
+    // diagnostic — the archive "succeeded" while depending on a file no
+    // consumer machine has.
+    const dir = tmp();
+    fs.writeFileSync(
+      path.join(dir, "scene.usda"),
+      `#usda 1.0\n\ndef Shader "S"\n{\n    asset inputs:file = @C:/elsewhere/tex.png@\n}\n`,
+    );
+    const { missing } = packageUsdz(path.join(dir, "scene.usda"), path.join(dir, "scene.usdz"));
+    expect(missing.some((m) => m.includes("C:/elsewhere/tex.png") && m.includes("absolute"))).toBe(
+      true,
+    );
+  });
+
+  it("refuses to mint '../' archive entries for refs escaping the package root", () => {
+    // A `../outside.usda` reference resolved and packaged used to become an
+    // entry literally named "../outside.usda" — a path-traversal write for
+    // naive extractors. It is reported as unpackageable instead.
+    const dir = tmp();
+    const root = path.join(dir, "pkg");
+    fs.mkdirSync(root);
+    fs.writeFileSync(path.join(dir, "outside.png"), Buffer.from("png-ish"));
+    fs.writeFileSync(
+      path.join(root, "scene.usda"),
+      `#usda 1.0\n\ndef Shader "S"\n{\n    asset inputs:file = @../outside.png@\n}\n`,
+    );
+    const { missing } = packageUsdz(path.join(root, "scene.usda"), path.join(root, "scene.usdz"));
+    expect(missing.some((m) => m.includes("../outside.png") && m.includes("escapes"))).toBe(true);
+    const entries = localEntries(fs.readFileSync(path.join(root, "scene.usdz")));
+    expect(entries.every((e) => !e.name.startsWith(".."))).toBe(true);
+  });
+
+  it("names binary layers it packaged but could not scan for transitive refs", () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, "part.usdc"), Buffer.from("PXR-USDC-binary-ish"));
+    fs.writeFileSync(
+      path.join(dir, "scene.usda"),
+      `#usda 1.0\n(\n    subLayers = [@./part.usdc@]\n)\n`,
+    );
+    const { missing, unscanned } = packageUsdz(
+      path.join(dir, "scene.usda"),
+      path.join(dir, "scene.usdz"),
+    );
+    expect(missing).toEqual([]);
+    expect(unscanned).toEqual(["part.usdc"]);
+  });
+});
+
+describe("usdz layer-encoding + link containment (bug-shaker round 4)", () => {
+  function tmp(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "s3d-usdz-d-"));
+  }
+
+  it("scans an ASCII layer under the .usd extension — the magic decides, not the suffix", () => {
+    // OpenUSD's .usd is either encoding. Red before the fix: a text .usd
+    // was packaged unscanned, so its own missing refs went unreported.
+    const dir = tmp();
+    fs.writeFileSync(
+      path.join(dir, "part.usd"),
+      `#usda 1.0\n\ndef Shader "S"\n{\n    asset inputs:file = @./gone.png@\n}\n`,
+    );
+    fs.writeFileSync(
+      path.join(dir, "scene.usda"),
+      `#usda 1.0\n(\n    subLayers = [@./part.usd@]\n)\n`,
+    );
+    const { missing, unscanned } = packageUsdz(
+      path.join(dir, "scene.usda"),
+      path.join(dir, "scene.usdz"),
+    );
+    expect(unscanned).toEqual([]);
+    expect(missing).toContain("./gone.png");
+  });
+
+  it("refuses a symlink inside the root that resolves outside it", (ctx) => {
+    // The lexical containment check cannot see links; readFileSync follows
+    // them and would embed external content under an innocent name.
+    const dir = tmp();
+    const root = path.join(dir, "pkg");
+    fs.mkdirSync(root);
+    fs.writeFileSync(path.join(dir, "secret.png"), Buffer.from("outside-bytes"));
+    try {
+      fs.symlinkSync(path.join(dir, "secret.png"), path.join(root, "tex.png"), "file");
+    } catch {
+      ctx.skip(); // symlink creation needs privileges this environment lacks
+      return;
+    }
+    fs.writeFileSync(
+      path.join(root, "scene.usda"),
+      `#usda 1.0\n\ndef Shader "S"\n{\n    asset inputs:file = @./tex.png@\n}\n`,
+    );
+    const { missing } = packageUsdz(path.join(root, "scene.usda"), path.join(root, "scene.usdz"));
+    expect(missing.some((m) => m.includes("./tex.png") && m.includes("via a link"))).toBe(true);
+    const bytes = fs.readFileSync(path.join(root, "scene.usdz"));
+    expect(bytes.includes(Buffer.from("outside-bytes"))).toBe(false);
+  });
+});
+
+describe("binary root layers (bug-shaker round 5)", () => {
+  it("names a binary master unscanned instead of text-scanning garbage", () => {
+    // The root used to skip the magic sniff entirely: a binary .usd master
+    // was read as UTF-8, its matches were noise, and unscanned stayed
+    // empty — an apparently complete package with unreported blind spots.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "s3d-usdz-e-"));
+    const master = path.join(dir, "scene.usd");
+    fs.writeFileSync(master, Buffer.from("PXR-USDC\x00binary payload"));
+    const { unscanned } = packageUsdz(master, path.join(dir, "scene.usdz"));
+    expect(unscanned).toEqual(["scene.usd"]);
+  });
+});
+
+describe("containment predicate exactness (bug-shaker round 6)", () => {
+  it("packages a file legitimately NAMED with a leading double dot", () => {
+    // `..hidden.png` matched startsWith("..") and was reported as escaping
+    // the root while sitting inside it. Escape means the first SEGMENT is
+    // exactly `..`.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "s3d-usdz-f-"));
+    fs.writeFileSync(path.join(dir, "..hidden.png"), Buffer.from("dotty"));
+    fs.writeFileSync(
+      path.join(dir, "scene.usda"),
+      `#usda 1.0\n\ndef Shader "S"\n{\n    asset inputs:file = @./..hidden.png@\n}\n`,
+    );
+    const { missing } = packageUsdz(path.join(dir, "scene.usda"), path.join(dir, "scene.usdz"));
+    expect(missing).toEqual([]);
+    const entries = localEntries(fs.readFileSync(path.join(dir, "scene.usdz")));
+    expect(entries.some((e) => e.name === "..hidden.png")).toBe(true);
+  });
+});

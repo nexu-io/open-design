@@ -327,3 +327,47 @@ describe("changeImpact", () => {
     expect(report.partsMoved.map((m) => m.part)).toEqual(["a", "b"]);
   });
 });
+
+describe("describeScene statistics scope to the described region (bug-shaker round)", () => {
+  it("does not quote density or asymmetry from meshes outside the region", () => {
+    // Red before the fix: `region` filtered the part list, but density and
+    // asymmetry read census.meshes unscoped — a focused digest named a mesh
+    // it claimed not to be describing.
+    const c = census([
+      part("prp_near_a", [0, 0, 0], [1, 1, 1], 100),
+      part("prp_near_b", [1.2, 0, 0], [1, 1, 1], 120),
+      part("prp_far_dense", [100, 100, 100], [1, 1, 1], 900_000),
+    ]);
+    for (const m of c.meshes) {
+      (m as { triDensity?: number }).triDensity = m.object === "prp_far_dense" ? 150_000 : 20;
+      (m as { symmetry?: { maxError: number } }).symmetry = {
+        maxError: m.object === "prp_far_dense" ? 0.25 : 0.0001,
+      };
+    }
+    const text = describeScene(c, [], { region: { min: [-1, -1, -1], max: [3, 3, 3] } });
+    expect(text).not.toContain("prp_far_dense");
+    // Positive assertions, not just absence: the density line still prints,
+    // built from the near meshes' own values (20-20, no spread)…
+    expect(text).toContain("density: 20-20");
+    expect(text).toContain("prp_near");
+    // …and the asymmetry line is GONE, because the region's own worst
+    // (0.0001) is under the threshold — only the excluded far mesh (0.25)
+    // could have produced one. Red before the fix.
+    expect(text).not.toContain("asymmetry:");
+  });
+
+  it("counts every group the token budget folded away, not just the first", () => {
+    // A failed header push used to increment `truncated` once and break —
+    // "1 more line" over a summary missing dozens of groups falsely implied
+    // near-completeness.
+    const many = census(
+      Array.from({ length: 40 }, (_, i) =>
+        part(`fam${String(i).padStart(2, "0")}_part`, [i * 2, 0, 0], [1, 1, 1]),
+      ),
+    );
+    const text = describeScene(many, [], { budgetTokens: 60 });
+    const note = /… (\d+) more line\(s\) folded away/.exec(text);
+    expect(note).not.toBeNull();
+    expect(Number(note![1])).toBeGreaterThan(5);
+  });
+});

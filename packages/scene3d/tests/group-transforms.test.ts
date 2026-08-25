@@ -187,3 +187,79 @@ describe("Multi-Selection Group Transforms & Polar TRS (group-transforms.ts)", (
     expect(bary[2]).toBeCloseTo(0.0, 4);
   });
 });
+
+describe("sheared decomposition returns a real rotation (bug-shaker round)", () => {
+  it("extracts a unit quaternion whose matrix is orthonormal even under shear", () => {
+    // Red before the fix: the quaternion was read off non-orthogonal
+    // columns, so it represented no rotation at all — reconstruction from
+    // it changed the authored transform even when the caller checked
+    // isSheared. Column-major matrix with an x-into-y shear of 0.4.
+    const sheared: number[] = [
+      1, 0, 0, 0,
+      0.4, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ];
+    const d = decomposePolarTRSWithContinuity(sheared as never);
+    expect(d.isSheared).toBe(true);
+    expect(d.shearResidual).toBeGreaterThan(0.1);
+    // The returned rotation is a REAL rotation: unit quaternion, and its
+    // matrix has orthonormal columns to floating point.
+    const q = d.rotation;
+    expect(Math.hypot(q[0], q[1], q[2], q[3])).toBeCloseTo(1, 9);
+    const R = rotationMatrixFromQuat(q);
+    const col = (i: number) => [R[i * 4], R[i * 4 + 1], R[i * 4 + 2]] as const;
+    for (let i = 0; i < 3; i++) {
+      const ci = col(i);
+      expect(Math.hypot(ci[0], ci[1], ci[2])).toBeCloseTo(1, 6);
+      for (let j = i + 1; j < 3; j++) {
+        const cj = col(j);
+        expect(ci[0] * cj[0] + ci[1] * cj[1] + ci[2] * cj[2]).toBeCloseTo(0, 6);
+      }
+    }
+  });
+
+  it("leaves a clean rotation matrix bit-stable through the orthonormalisation", () => {
+    // The escape must be the identity on orthonormal input: a plain 30°
+    // z-rotation with scale [2, 3, 4] decomposes exactly as before.
+    const c = Math.cos(Math.PI / 6);
+    const s = Math.sin(Math.PI / 6);
+    const M: number[] = [
+      2 * c, 2 * s, 0, 0,
+      -3 * s, 3 * c, 0, 0,
+      0, 0, 4, 0,
+      1, 2, 3, 1,
+    ];
+    const d = decomposePolarTRSWithContinuity(M as never);
+    expect(d.isSheared).toBe(false);
+    expect(d.scale[0]).toBeCloseTo(2, 9);
+    expect(d.scale[1]).toBeCloseTo(3, 9);
+    expect(d.scale[2]).toBeCloseTo(4, 9);
+    const R = rotationMatrixFromQuat(d.rotation);
+    expect(R[0]).toBeCloseTo(c, 9);
+    expect(R[1]).toBeCloseTo(s, 9);
+  });
+});
+
+describe("singular nonzero bases (bug-shaker round)", () => {
+  it("marks a collinear-column matrix degenerate instead of returning a fake rotation", () => {
+    // All three columns nonzero (so the length-based check passes) but
+    // collinear: Gram-Schmidt annihilates the projections and falls back to
+    // the raw directions, leaving the frame singular. Red before the fix:
+    // degenerate=false over a rotation no decomposition produced, which a
+    // caller could write back as an authored transform.
+    const collinear = new Float64Array([
+      1, 0, 0, 0,
+      2, 0, 0, 0,
+      3, 0, 0, 0,
+      0, 0, 0, 1,
+    ]);
+    const res = decomposePolarTRSWithContinuity(collinear);
+    expect(res.degenerate).toBe(true);
+  });
+
+  it("does not mark a clean orthonormal frame degenerate", () => {
+    const identity = new Float64Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    expect(decomposePolarTRSWithContinuity(identity).degenerate).toBe(false);
+  });
+});

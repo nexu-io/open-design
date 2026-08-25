@@ -221,6 +221,14 @@ describe("validateKernelText", () => {
     const errors = check("float s3d_fbm(vec2 p) { return 0.0; }\n" + KERNEL);
     expect(errors.some((e) => e.includes("redefines stdlib"))).toBe(true);
   });
+
+  it("rejects a bare prototype — a signature without a body is not a definition", () => {
+    // `vec4 kernel(vec2 uv);` satisfied the signature-only regex, passed
+    // "structural validation", and then died at GPU link with a driver
+    // message far less actionable than this one.
+    const errors = check("vec4 kernel(vec2 uv);");
+    expect(errors.some((e) => e.includes("with a body"))).toBe(true);
+  });
 });
 
 describe("assembly", () => {

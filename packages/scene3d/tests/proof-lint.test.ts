@@ -78,8 +78,68 @@ describe("lintProof", () => {
     ).toEqual([]);
   });
 
-  it("stays silent when the renderer could not measure the frames", () => {
-    expect(codes([frame({ meanLuminance: null, coverage: null })])).toEqual([]);
+  it("reports unmeasured frames instead of silently passing them", () => {
+    // Frames that exist but returned no pixel stats are UNCHECKED, and
+    // unchecked must never read as clean — the old `return` here was the
+    // black-render trap reinstated one layer up.
+    const issues: Issue[] = [];
+    lintProof([frame({ meanLuminance: null, coverage: null })], issues);
+    expect(issues.map((i) => i.code)).toEqual(["S3D-W-387"]);
+    expect(issues[0]!.severity).toBe("warning");
+    expect(issues[0]!.message).toContain("not visually verified");
+    expect(issues[0]!.detail).toMatchObject({ frames: 1, measured: 0, skipped: 1 });
+  });
+
+  it("does not claim EVERY frame empty when some frames were never measured", () => {
+    // One measured-empty frame plus one unmeasured frame proves only what it
+    // saw: the compile-failing total-failure error would overclaim, so the
+    // measured-empty frame degrades to the per-frame warning beside the
+    // unmeasured-coverage note.
+    const issues: Issue[] = [];
+    lintProof(
+      [
+        frame({ path: "a.png", meanLuminance: 0, coverage: 0 }),
+        frame({ path: "b.png", meanLuminance: null, coverage: null }),
+      ],
+      issues,
+    );
+    const codes = issues.map((i) => i.code).sort();
+    expect(codes).toEqual(["S3D-W-386", "S3D-W-387"]);
+  });
+
+  it("names partial measurement coverage while still judging the measured frames", () => {
+    const issues: Issue[] = [];
+    lintProof(
+      [
+        frame({ path: "a.png" }),
+        frame({ path: "b.png", meanLuminance: null, coverage: null }),
+      ],
+      issues,
+    );
+    expect(issues.map((i) => i.code)).toEqual(["S3D-W-387"]);
+    expect(issues[0]!.message).toContain("PARTIAL");
+    expect(issues[0]!.detail).toMatchObject({ frames: 2, measured: 1, skipped: 1 });
+  });
+
+  it("treats non-finite pixel statistics as unmeasured, never as clean", () => {
+    // NaN satisfies `!== null` and then fails every threshold comparison,
+    // so a corrupt readback used to bypass empty/sparse/static checks with
+    // no issue at all. Red before the fix.
+    const issues: Issue[] = [];
+    lintProof([frame({ meanLuminance: NaN, coverage: NaN })], issues);
+    expect(issues.map((i) => i.code)).toEqual(["S3D-W-387"]);
+  });
+
+  it("scopes the all-blown claim to measured frames when some carry no blownRatio", () => {
+    const issues: Issue[] = [];
+    lintProof(
+      [frame({ path: "a.png", blownRatio: 0.8 }), frame({ path: "b.png" })],
+      issues,
+    );
+    const blown = issues.find((i) => i.code === "S3D-W-385")!;
+    expect(blown.message).toContain("1 measured proof frame");
+    expect(blown.message).toContain("1 unmeasured");
+    expect(blown.message).not.toContain("every proof frame");
   });
 
   it("warns when every frame is blown out — the pale-mush failure", () => {
@@ -141,5 +201,65 @@ describe("lintProof", () => {
     const lenient: Issue[] = [];
     lintProof(dim, lenient, { emptyLuminance: 0.002, sparseCoverage: 0.01, blownRatio: 0.6 });
     expect(lenient.some((i) => i.code === "S3D-E-383")).toBe(false);
+  });
+});
+
+describe("exposure coverage + turntable identity (bug-shaker round 4)", () => {
+  it("notes partial exposure coverage as unchecked, at info severity", () => {
+    const issues: Issue[] = [];
+    lintProof(
+      [frame({ path: "a.png", blownRatio: 0.1 }), frame({ path: "b.png", blownRatio: NaN })],
+      issues,
+    );
+    const note = issues.find((i) => i.code === "S3D-W-387")!;
+    expect(note).toBeDefined();
+    expect(note.severity).toBe("info");
+    expect(note.message).toContain("overexposure was not measured for 1 of 2");
+  });
+
+  it("stays quiet when NO frame carries blownRatio — uniform absence is version skew, not corruption", () => {
+    const issues: Issue[] = [];
+    lintProof(
+      [frame({ path: "a.png", coverage: 0.3 }), frame({ path: "b.png", coverage: 0.4 })],
+      issues,
+    );
+    expect(issues.filter((i) => i.message.includes("overexposure"))).toEqual([]);
+  });
+
+  it("does not call a turntable static when only the blown ratio distinguishes the frames", () => {
+    const same = { meanLuminance: 0.3, coverage: 0.25 };
+    const issues: Issue[] = [];
+    lintProof(
+      [
+        frame({ path: "a.png", ...same, blownRatio: 0.1 }),
+        frame({ path: "b.png", ...same, blownRatio: 0.2 }),
+        frame({ path: "c.png", ...same, blownRatio: 0.3 }),
+      ],
+      issues,
+    );
+    expect(issues.filter((i) => i.code === "S3D-W-384")).toEqual([]);
+  });
+});
+
+describe("statistic validity + threshold immutability (bug-shaker round 5)", () => {
+  it("treats finite-but-impossible fractions as unmeasured", () => {
+    // coverage 1.3 or luminance -0.2 is corruption in a subtler coat than
+    // NaN — both fractions live in [0,1] by construction.
+    const issues: Issue[] = [];
+    lintProof(
+      [
+        frame({ path: "a.png", coverage: 1.3 }),
+        frame({ path: "b.png", meanLuminance: -0.2 }),
+      ],
+      issues,
+    );
+    const note = issues.find((i) => i.code === "S3D-W-387")!;
+    expect(note).toBeDefined();
+    expect(note.detail).toMatchObject({ measured: 0, skipped: 2 });
+  });
+
+  it("ships frozen default thresholds — a caller cannot retune every later invocation", async () => {
+    const { DEFAULT_PROOF_THRESHOLDS } = await import("../src/lint/proof.js");
+    expect(Object.isFrozen(DEFAULT_PROOF_THRESHOLDS)).toBe(true);
   });
 });

@@ -39,6 +39,15 @@ export interface HarmonicAngleMatch {
 }
 
 export function findClosestHarmonicAngle(theta: number): HarmonicAngleMatch {
+  // A non-finite angle has no nearest lattice point: without the guard,
+  // NaN propagated straight through round() into the returned angle, delta,
+  // AND label — a poisoned match that looked shaped like a real one. The
+  // identity posture (angle unchanged... but NaN) cannot work, so report
+  // zero with an infinite delta: no snap consumer treats an infinite-delta
+  // match as close enough to act on.
+  if (!Number.isFinite(theta)) {
+    return { angle: 0, deltaRad: Infinity, label: "indeterminate" };
+  }
   const deg = (theta * 180) / Math.PI;
 
   // Lattices: multiples of 15° and multiples of 36°
@@ -78,6 +87,13 @@ export function findClosestHarmonicScale(
   rawScale: number,
   octaveRange: [number, number] = [-3, 3]
 ): HarmonicScaleMatch {
+  // Non-finite input first: NaN fails every `diff < minDiff` comparison, so
+  // the loop's seed values survive and the caller received scale 1 labelled
+  // "1" with delta Infinity — a match-shaped object for an unmatchable
+  // input. Same posture as the angle guard: infinite delta, named label.
+  if (!Number.isFinite(rawScale)) {
+    return { scale: 1.0, delta: Infinity, label: "indeterminate" };
+  }
   if (rawScale <= 1e-6) {
     return { scale: 1.0, delta: Math.abs(rawScale - 1.0), label: "1:1" };
   }
@@ -169,28 +185,32 @@ export function parseTypedVCBExpression(
   const s = input.trim().toLowerCase();
   if (!s) return { valid: false, error: "Empty input" };
 
-  // Angle check
+  // Angle check. ANCHORED like the length branch below, never
+  // suffix-stripped: `parseFloat` after a replace accepted "12xdeg" and
+  // "12junk°" as 12 — a typo silently became a transform. The whole
+  // string must be number-then-unit or it is an error the user can fix.
+  const NUM = String.raw`[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?`;
+  const degMatch = s.match(new RegExp(`^(${NUM})\\s*(?:deg|°)$`));
+  if (degMatch) {
+    const val = parseFloat(degMatch[1]!);
+    return {
+      valid: true,
+      parsed: { type: "Angle", valueRad: (val * Math.PI) / 180, rawDeg: val },
+    };
+  }
   if (s.endsWith("deg") || s.endsWith("°")) {
-    const numStr = s.replace(/deg|°/g, "").trim();
-    const val = parseFloat(numStr);
-    if (Number.isFinite(val)) {
-      return {
-        valid: true,
-        parsed: { type: "Angle", valueRad: (val * Math.PI) / 180, rawDeg: val },
-      };
-    }
     return { valid: false, error: "Invalid angle value" };
   }
 
+  const radMatch = s.match(new RegExp(`^(${NUM})\\s*rad$`));
+  if (radMatch) {
+    const val = parseFloat(radMatch[1]!);
+    return {
+      valid: true,
+      parsed: { type: "Angle", valueRad: val, rawDeg: (val * 180) / Math.PI },
+    };
+  }
   if (s.endsWith("rad")) {
-    const numStr = s.replace(/rad/g, "").trim();
-    const val = parseFloat(numStr);
-    if (Number.isFinite(val)) {
-      return {
-        valid: true,
-        parsed: { type: "Angle", valueRad: val, rawDeg: (val * 180) / Math.PI },
-      };
-    }
     return { valid: false, error: "Invalid radian value" };
   }
 
@@ -216,7 +236,10 @@ export function parseTypedVCBExpression(
   }
 
   // Dimensionless Scale (phi, sqrt2, fractions, numbers)
-  if (s === "phi" || s === "Φ") {
+  // Lowercase phi, because `s` is already lowercased at entry — comparing
+  // against uppercase Φ could never match, so BOTH Greek spellings failed
+  // while the docs offered them. "Φ".toLowerCase() is "φ", covering both.
+  if (s === "phi" || s === "φ") {
     return { valid: true, parsed: { type: "DimensionlessScale", factor: PHI } };
   }
   if (s === "1/phi") {
@@ -243,10 +266,14 @@ export function parseTypedVCBExpression(
     return { valid: false, error: "Division by zero" };
   }
 
-  // Raw number as dimensionless scale or raw scene units
-  const rawNum = parseFloat(s);
-  if (Number.isFinite(rawNum)) {
-    return { valid: true, parsed: { type: "DimensionlessScale", factor: rawNum } };
+  // Raw number as dimensionless scale or raw scene units. Whole-string
+  // only: parseFloat("3.5meters") is 3.5, and a unit this parser does not
+  // know must be a loud error, never a silently unitless value.
+  if (new RegExp(`^${NUM}$`).test(s)) {
+    const rawNum = parseFloat(s);
+    if (Number.isFinite(rawNum)) {
+      return { valid: true, parsed: { type: "DimensionlessScale", factor: rawNum } };
+    }
   }
 
   return { valid: false, error: "Unrecognized expression" };

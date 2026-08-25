@@ -137,3 +137,73 @@ describe("Harmonic Inference & Broadphase Engine (harmonics.ts)", () => {
     expect(results[0].id).toBe("table_corner_1");
   });
 });
+
+describe("VCB expression strictness (bug-shaker round)", () => {
+  it("refuses trailing garbage in every branch — a typo is an error, never a value", () => {
+    // Red before the fix: parseFloat after suffix-stripping read "12xdeg"
+    // as 12° and "3.5meters" as a dimensionless 3.5.
+    for (const bad of ["12xdeg", "12junk°", "1.5xrad", "3.5meters", "12junk", "deg", "rad"]) {
+      expect(parseTypedVCBExpression(bad).valid, `${bad} must be refused`).toBe(false);
+    }
+  });
+
+  it("still accepts every legitimate spelling the loosened parser did", () => {
+    const cases: Array<[string, number]> = [
+      ["45deg", (45 * Math.PI) / 180],
+      ["45 deg", (45 * Math.PI) / 180],
+      ["-30°", (-30 * Math.PI) / 180],
+      [".5rad", 0.5],
+      ["1e1deg", (10 * Math.PI) / 180],
+    ];
+    for (const [input, rad] of cases) {
+      const r = parseTypedVCBExpression(input);
+      expect(r.valid, `${input} must parse`).toBe(true);
+      expect(r.parsed?.type, `${input} is an angle`).toBe("Angle");
+      if (r.parsed?.type === "Angle") expect(r.parsed.valueRad).toBeCloseTo(rad, 9);
+    }
+    const raw = parseTypedVCBExpression("2.5");
+    expect(raw.valid).toBe(true);
+    expect(raw.parsed?.type).toBe("DimensionlessScale");
+    if (raw.parsed?.type === "DimensionlessScale") {
+      expect(raw.parsed.factor).toBeCloseTo(2.5, 9);
+    }
+  });
+});
+
+describe("phi spellings (bug-shaker round)", () => {
+  it("accepts both Greek spellings — the input is lowercased before comparison", () => {
+    // Red before the fix: `s === "Φ"` compared uppercase Phi against an
+    // already-lowercased string, so both Φ and φ failed while the docs
+    // offered them.
+    for (const spelling of ["phi", "φ", "Φ", "PHI"]) {
+      const r = parseTypedVCBExpression(spelling);
+      expect(r.valid, `${spelling} must parse`).toBe(true);
+      if (r.parsed?.type === "DimensionlessScale") {
+        expect(r.parsed.factor).toBeCloseTo(PHI, 12);
+      }
+    }
+  });
+});
+
+describe("non-finite harmonic inputs (bug-shaker round)", () => {
+  it("returns an indeterminate angle match instead of propagating NaN", () => {
+    // Red before the fix: NaN rode round() into the returned angle, delta
+    // AND label — a poisoned object shaped exactly like a real match.
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      const r = findClosestHarmonicAngle(bad);
+      expect(Number.isFinite(r.angle), `angle for ${bad}`).toBe(true);
+      expect(r.deltaRad).toBe(Infinity);
+      expect(r.label).toBe("indeterminate");
+    }
+  });
+
+  it("returns an indeterminate scale match instead of a fake '1' label", () => {
+    // NaN failed every diff comparison, so the loop's seeds survived: the
+    // caller saw scale 1 labelled "1" — valid-looking — with delta Infinity.
+    for (const bad of [NaN, Infinity]) {
+      const r = findClosestHarmonicScale(bad);
+      expect(r.delta).toBe(Infinity);
+      expect(r.label).toBe("indeterminate");
+    }
+  });
+});

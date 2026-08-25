@@ -181,7 +181,20 @@ export function describeScene(
   };
 
   if (parts.length === 0) {
-    return options.region ? "empty region — no parts intersect it" : "empty scene — no meshes";
+    // The issues still lead, exactly as they do for a populated scene: an
+    // empty world usually HAS a reason (a parse error, a failed import),
+    // and swallowing it here made "why is my scene empty" unanswerable
+    // from the digest that exists to answer such questions.
+    const head = options.region ? "empty region — no parts intersect it" : "empty scene — no meshes";
+    const errs = issues.filter((i) => i.severity === "error").slice(0, 3);
+    if (errs.length === 0) return head;
+    return [
+      head,
+      ...errs.map((i) => `  ${i.code}${i.target ? ` [${i.target}]` : ""} ${i.message}`),
+      ...(issues.filter((i) => i.severity === "error").length > 3
+        ? [`  … +${issues.filter((i) => i.severity === "error").length - 3} more errors`]
+        : []),
+    ].join("\n");
   }
 
   /* ---- the whole shape first ---------------------------------------- */
@@ -239,7 +252,12 @@ export function describeScene(
   // across parts (a 100x spread is the classic generated-asset failure),
   // and the worst bilateral asymmetry names the lumpy half no screenshot
   // shows. Statistical metadata for a reader who cannot rotate the model.
-  const densities = census.meshes
+  // Scoped to the same part set as everything above: a region-focused
+  // digest that quoted density or asymmetry from meshes OUTSIDE the region
+  // described one thing while claiming to describe another.
+  const described = new Set(parts.map((p) => p.name));
+  const scopedMeshes = census.meshes.filter((m) => described.has(m.object));
+  const densities = scopedMeshes
     .map((m) => ({ name: m.object, d: m.triDensity }))
     .filter((r): r is { name: string; d: number } => typeof r.d === "number" && r.d > 0)
     .sort((a, b) => a.d - b.d);
@@ -251,7 +269,7 @@ export function describeScene(
       `density: ${Math.round(lo.d)}-${Math.round(hi.d)} tris/m² (${spread >= 10 ? `${Math.round(spread)}x spread — ` : ""}sparsest ${lo.name}, densest ${hi.name})`,
     );
   }
-  const asym = census.meshes
+  const asym = scopedMeshes
     .map((m) => ({ name: m.object, e: m.symmetry?.maxError }))
     .filter((r): r is { name: string; e: number } => typeof r.e === "number")
     .sort((a, b) => b.e - a.e)[0];
@@ -262,7 +280,8 @@ export function describeScene(
   /* ---- structure, coarsest first ------------------------------------- */
   const groups = group(parts);
   push(`groups: ${groups.length}`);
-  for (const g of groups) {
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi]!;
     const gs = span(g.min, g.max);
     const single = g.parts.length === 1;
     // A group of one is labelled with the PART's name, never the shared
@@ -273,7 +292,15 @@ export function describeScene(
       ? `  ${g.parts[0]!.name}: ${fmtVec(span(g.parts[0]!.min, g.parts[0]!.max))} m` +
         ` at ${fmtVec(g.parts[0]!.min)}`
       : `  ${g.key} ×${g.parts.length}: spans ${fmtVec(gs)} m, ${g.tris.toLocaleString("en-US")} tris`;
-    if (!push(head)) break;
+    if (!push(head)) {
+      // push() counted this group's own header; the groups never attempted
+      // are folded away too, and the closing note must say so — "1 more
+      // line" over a summary missing forty groups falsely implies it is
+      // nearly complete. One line each is their cheapest rendering, so the
+      // count is a floor, never an overclaim.
+      truncated += groups.length - gi - 1;
+      break;
+    }
 
     // Expand a group only when the reader asked for it, or when it is small
     // enough that naming its members costs less than describing them.
@@ -281,9 +308,13 @@ export function describeScene(
       ? g.parts.some((p) => p.name === options.focus) || g.key === options.focus
       : g.parts.length <= 4;
     if (expand && !single) {
-      for (const p of g.parts) {
+      for (let pi = 0; pi < g.parts.length; pi++) {
+        const p = g.parts[pi]!;
         const gap = p.groundGap === null ? "" : `, ground ${fmt(p.groundGap)}`;
-        if (!push(`    ${p.name}: ${fmtVec(span(p.min, p.max))} m at ${fmtVec(p.min)}${gap}`)) break;
+        if (!push(`    ${p.name}: ${fmtVec(span(p.min, p.max))} m at ${fmtVec(p.min)}${gap}`)) {
+          truncated += g.parts.length - pi - 1;
+          break;
+        }
       }
     }
   }

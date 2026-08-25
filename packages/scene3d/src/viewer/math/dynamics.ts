@@ -110,7 +110,12 @@ export function evaluateSnapStep(
 
   for (const c of candidates) {
     const res = c.resolve(rawXi, ctx);
-    if (!res.valid || res.distanceCss >= SNAP_R_OUT_CSS) continue;
+    // POSITIVE comparison, deliberately: `distanceCss >= OUT` reads as the
+    // same gate but lets NaN through (every NaN comparison is false), and
+    // a NaN distance then rides the blend into the manipulation state as
+    // NaN coordinates. The latched path above already uses the positive
+    // form; this is its mirror.
+    if (!res.valid || !(res.distanceCss < SNAP_R_OUT_CSS)) continue;
 
     if (!bestResolution) {
       bestConstraint = c;

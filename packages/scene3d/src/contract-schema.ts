@@ -39,11 +39,19 @@ export type FieldSpec = {
 } & (
   | { kind: "boolean" }
   | { kind: "string" }
+  /** A string that must COMPILE as a regular expression. `safePattern`
+   *  degrades an invalid one to the default at normalize time (total, never
+   *  crashing), so without this kind an authored `"["` validated clean and
+   *  the default rule silently won — the exact silently-disabled-rule
+   *  failure the top of this file documents. */
+  | { kind: "pattern" }
   | { kind: "enum"; values: readonly string[] }
   | { kind: "object" }
   | ({ kind: "number" } & Range)
-  | ({ kind: "numberArray" } & Range)
-  | { kind: "stringArray" }
+  | ({ kind: "numberArray"; length?: number } & Range)
+  /** With `values`, every entry must come from the list — an enum array.
+   *  Without it, any strings pass (author vocabulary like part prefixes). */
+  | { kind: "stringArray"; values?: readonly string[] }
 );
 
 type Range = {
@@ -83,6 +91,11 @@ export const CONTRACT_CONTAINERS = [
   "export",
 ] as const;
 
+/** The containers the export stage can actually produce — the ONE list the
+ *  schema validates against and normalize filters with, so "validated" and
+ *  "produced" can never name different sets. */
+export const EXPORT_FORMAT_VALUES = ["usda", "usdz", "glb", "obj", "fbx", "stl", "ply"] as const;
+
 export const ENGINE_TARGETS = [
   "unity",
   "unreal",
@@ -97,8 +110,8 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
   { path: "target", kind: "enum", values: ENGINE_TARGETS },
 
   /* naming */
-  { path: "conventions.naming.objectPattern", kind: "string" },
-  { path: "conventions.naming.collectionPattern", kind: "string" },
+  { path: "conventions.naming.objectPattern", kind: "pattern" },
+  { path: "conventions.naming.collectionPattern", kind: "pattern" },
   { path: "conventions.naming.forbidDefaultNames", kind: "boolean" },
   { path: "conventions.naming.partPrefixes", kind: "stringArray" },
 
@@ -109,8 +122,10 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
 
   /* pbr */
   { path: "conventions.pbr.metallicValues", kind: "numberArray" },
-  { path: "conventions.pbr.roughnessRange", kind: "numberArray" },
-  { path: "conventions.pbr.iorRange", kind: "numberArray" },
+  // TUPLES, not lists: normalize casts these straight to [lo, hi], so `[]`
+  // or `[0.5]` used to validate clean and hand consumers undefined bounds.
+  { path: "conventions.pbr.roughnessRange", kind: "numberArray", length: 2 },
+  { path: "conventions.pbr.iorRange", kind: "numberArray", length: 2 },
   { path: "conventions.pbr.realism.enabled", kind: "boolean" },
   { path: "conventions.pbr.realism.darkLuminanceMax", kind: "number", min: 0 },
   { path: "conventions.pbr.realism.metalMin", kind: "number", min: 0, max: 1 },
@@ -230,7 +245,15 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
     exclusiveMax: true,
     expected: "an array of triangle-keep ratios in (0, 1)",
   },
-  { path: "export.formats", kind: "stringArray" },
+  // Every entry must be a container this compiler can actually produce:
+  // `["blend"]` used to validate clean and then the export stage either
+  // attempted an unsupported format or quietly omitted the deliverable —
+  // a requested output lost with no error naming the request.
+  {
+    path: "export.formats",
+    kind: "stringArray",
+    values: EXPORT_FORMAT_VALUES,
+  },
 ];
 
 /** Walk a dotted path; returns `undefined` when any step is missing or is not
@@ -264,14 +287,20 @@ export function describeField(spec: FieldSpec): string {
       return "a boolean";
     case "string":
       return "a string";
+    case "pattern":
+      return "a string containing a valid regular expression";
     case "object":
       return "an object";
     case "stringArray":
-      return "an array of strings";
+      return spec.values
+        ? `an array drawn from ${spec.values.map((v) => `'${v}'`).join(", ")}`
+        : "an array of strings";
     case "enum":
       return `one of ${spec.values.map((v) => `'${v}'`).join(", ")}`;
     case "numberArray":
-      return `an array of numbers${rangeTail(spec)}`;
+      return spec.length !== undefined
+        ? `an array of exactly ${spec.length} numbers${rangeTail(spec)}`
+        : `an array of numbers${rangeTail(spec)}`;
     case "number":
       return numberTail(spec);
   }
@@ -311,6 +340,32 @@ export function validateFields(raw: unknown): string[] {
     const v = at(raw, spec.path);
     if (v === undefined) continue;
     if (!satisfies(v, spec)) problems.push(`${spec.path} must be ${describeField(spec)}`);
+  }
+  /* The top-level `sheets` DECLARATIONS (distinct from conventions.sheets,
+     which tunes how they are judged). Normalize reduces a malformed value
+     to an empty list — total, never crashing — so without validation here
+     an authored flipbook declaration could silently become "no sheets
+     declared" and every 6xx rule the author asked for went quiet. */
+  const sheets = at(raw, "sheets");
+  if (sheets !== undefined) {
+    if (!Array.isArray(sheets)) {
+      problems.push("sheets must be an array of sheet declarations ({ file, kind, ... })");
+    } else {
+      const KINDS = ["sprite", "flipbook", "particle", "beam", "sky"];
+      sheets.forEach((entry, i) => {
+        if (!isPlainObject(entry)) {
+          problems.push(`sheets[${i}] must be an object with a file and a kind`);
+          return;
+        }
+        const e = entry as { file?: unknown; kind?: unknown };
+        if (typeof e.file !== "string" || e.file.length === 0) {
+          problems.push(`sheets[${i}].file must be a project-relative image path`);
+        }
+        if (typeof e.kind !== "string" || !KINDS.includes(e.kind)) {
+          problems.push(`sheets[${i}].kind must be one of ${KINDS.map((k) => `'${k}'`).join(", ")}`);
+        }
+      });
+    }
   }
   problems.push(...unknownFieldProblems(raw));
   return problems;
@@ -426,15 +481,31 @@ function satisfies(v: unknown, spec: FieldSpec): boolean {
       return typeof v === "boolean";
     case "string":
       return typeof v === "string";
+    case "pattern": {
+      if (typeof v !== "string") return false;
+      try {
+        new RegExp(v);
+        return true;
+      } catch {
+        return false;
+      }
+    }
     case "object":
       return isPlainObject(v);
     case "enum":
       return typeof v === "string" && spec.values.includes(v);
     case "stringArray":
-      return Array.isArray(v) && v.every((e) => typeof e === "string");
+      return (
+        Array.isArray(v) &&
+        v.every(
+          (e) => typeof e === "string" && (spec.values === undefined || spec.values.includes(e)),
+        )
+      );
     case "numberArray":
       return (
-        Array.isArray(v) && v.every((e) => typeof e === "number" && Number.isFinite(e) && inRange(e, spec))
+        Array.isArray(v) &&
+        (spec.length === undefined || v.length === spec.length) &&
+        v.every((e) => typeof e === "number" && Number.isFinite(e) && inRange(e, spec))
       );
     case "number":
       return typeof v === "number" && Number.isFinite(v) && inRange(v, spec);

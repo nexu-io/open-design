@@ -245,6 +245,15 @@ export function validateShaderSpec(
           value.length <= 4 &&
           value.every((v) => typeof v === "number" && Number.isFinite(v))
         ) {
+          // The ints declaration is a TYPE contract, and a vector cannot
+          // honour it: this branch used to accept `ints: ["uTint"]` with a
+          // vec2 value and hand the kernel the wrong type entirely.
+          if (ints.has(uname)) {
+            errors.push(
+              `${at}.uniforms.${uname} is declared int but is a ${value.length}-component vector — ints declares scalar integers only`,
+            );
+            continue;
+          }
           uniforms.push({
             name: uname,
             type: value.length === 2 ? "vec2" : value.length === 3 ? "vec3" : "vec4",
@@ -338,8 +347,14 @@ export function validateKernelText(
   }
   for (const output of outputs) {
     const fn = kernelFunctionFor(output);
-    if (!new RegExp(`vec4\\s+${fn}\\s*\\(\\s*vec2\\s+\\w+\\s*\\)`).test(text)) {
-      errors.push(`${at}: kernel file must define 'vec4 ${fn}(vec2 uv)' for output '${output}'`);
+    // The signature must open a BODY: `vec4 kernel(vec2 uv);` is a bare
+    // prototype that satisfies a signature-only regex, passes "structural
+    // validation", and then dies at GPU link with a far less actionable
+    // driver message. Requiring the brace keeps the failure at this layer.
+    if (!new RegExp(`vec4\\s+${fn}\\s*\\(\\s*vec2\\s+\\w+\\s*\\)\\s*\\{`).test(text)) {
+      errors.push(
+        `${at}: kernel file must define 'vec4 ${fn}(vec2 uv) { ... }' (with a body) for output '${output}'`,
+      );
     }
   }
   for (const stdName of STDLIB_NAMES) {

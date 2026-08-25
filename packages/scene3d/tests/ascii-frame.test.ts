@@ -107,3 +107,21 @@ describe("ascii proof frames", () => {
     expect(rows.every((r) => r.length === 12)).toBe(true);
   });
 });
+
+describe("sampling-grid hardening (bug-shaker round)", () => {
+  it("survives a NaN columns option instead of rendering an empty frame", () => {
+    const img = encodePng({ width: 8, height: 8, data: new Uint8Array(8 * 8 * 4).fill(255) });
+    const frame = renderAsciiFrame(img, { columns: NaN });
+    expect(frame.rows.length).toBeGreaterThan(0);
+    expect(frame.rows[0]!.length).toBeGreaterThan(0);
+  });
+
+  it("never asks for more cells than the image has pixels", () => {
+    // A 4x4 image at 48 columns reused source pixels across cells, biasing
+    // every statistic against the one-pixel-one-cell contract.
+    const img = encodePng({ width: 4, height: 4, data: new Uint8Array(4 * 4 * 4).fill(255) });
+    const frame = renderAsciiFrame(img, { columns: 48 });
+    expect(frame.rows[0]!.length).toBeLessThanOrEqual(4);
+    expect(frame.rows.length).toBeLessThanOrEqual(4);
+  });
+});

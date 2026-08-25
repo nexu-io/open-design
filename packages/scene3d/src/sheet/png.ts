@@ -66,6 +66,13 @@ export function decodePng(buffer: Uint8Array): DecodedImage {
     }
 
     if (type === "IHDR") {
+      // The 13-byte body is asserted BEFORE the field reads: a short IHDR
+      // otherwise either reads the next chunk's bytes as garbage fields or
+      // throws DataView's RangeError, escaping the PngDecodeError contract
+      // the single SHEET_UNREADABLE path depends on.
+      if (length < 13) {
+        throw new PngDecodeError(`IHDR chunk is ${length} bytes — the spec requires 13`);
+      }
       width = view.getUint32(start);
       height = view.getUint32(start + 4);
       depth = buffer[start + 8]!;
@@ -81,7 +88,34 @@ export function decodePng(buffer: Uint8Array): DecodedImage {
       sawIend = true;
       break;
     }
-    offset = start + length + 4; // skip the CRC
+    offset = start + length + 4;
+  }
+  // Verify every consumed chunk's CRC (zlib ships crc32; the encoder below
+  // already writes with it). Skipping the check let a corrupted IDAT byte
+  // with intact zlib framing decode into confidently WRONG pixels — a
+  // fabricated measurement, which is worse for the sheet rules than the
+  // unreadable verdict this now produces.
+  {
+    let at = 8;
+    while (at + 8 <= buffer.length) {
+      const length = view.getUint32(at);
+      const start = at + 8;
+      if (start + length + 4 > buffer.length) break;
+      const stored = view.getUint32(start + length);
+      const actual = zlib.crc32(buffer.subarray(at + 4, start + length)) >>> 0;
+      if (stored !== actual) {
+        throw new PngDecodeError(
+          `PNG chunk CRC mismatch — the file is corrupted, and measuring it would fabricate pixel facts`,
+        );
+      }
+      if (
+        buffer[at + 4] === 0x49 && buffer[at + 5] === 0x45 &&
+        buffer[at + 6] === 0x4e && buffer[at + 7] === 0x44
+      ) {
+        break; // IEND verified; trailing bytes are outside the image
+      }
+      at = start + length + 4;
+    }
   }
 
   if (truncated || !sawIend) {
@@ -107,12 +141,41 @@ export function decodePng(buffer: Uint8Array): DecodedImage {
       `PNG declares ${width}x${height}, over the ${MAX_EDGE}px decoder limit — no runtime loads this`,
     );
   }
+  // The edge cap alone still admits 16384², whose RGBA expansion is ~1 GiB —
+  // enough for a few-hundred-byte bomb to exhaust memory before any rule
+  // runs. Area is capped separately at 64M pixels (256 MiB of RGBA): tall
+  // atlas strips at the full 16384 edge stay decodable, while nothing in the
+  // sheet class legitimately approaches a 16k×16k square.
+  const MAX_PIXELS = 64 * 1024 * 1024;
+  if (width * height > MAX_PIXELS) {
+    throw new PngDecodeError(
+      `PNG declares ${width}x${height} (${width * height} pixels), over the ${MAX_PIXELS}-pixel decoder limit`,
+    );
+  }
   if (interlace !== 0) throw new PngDecodeError("interlaced PNG is not supported");
   if (idat.length === 0) throw new PngDecodeError("PNG has no image data");
 
   const channels = CHANNELS[colorType];
   if (channels === undefined) throw new PngDecodeError(`unsupported colour type ${colorType}`);
-  if (![1, 2, 4, 8, 16].includes(depth)) throw new PngDecodeError(`unsupported bit depth ${depth}`);
+  // The SPEC's combination table, not two independent sets: greyscale (0)
+  // allows every depth, palette (3) only up to 8, and the multi-channel
+  // types (2, 4, 6) only 8 or 16. An illegal pair such as truecolour at
+  // depth 1 used to decode into fabricated pixels instead of unreadable.
+  const legalDepths: Record<number, number[]> = {
+    0: [1, 2, 4, 8, 16], 2: [8, 16], 3: [1, 2, 4, 8], 4: [8, 16], 6: [8, 16],
+  };
+  if (!legalDepths[colorType]!.includes(depth)) {
+    throw new PngDecodeError(`illegal depth ${depth} for colour type ${colorType}`);
+  }
+  if (colorType === 3 && !palette) {
+    throw new PngDecodeError("palette colour type with no PLTE chunk");
+  }
+  // PLTE is a sequence of RGB triples by definition; a ragged length means
+  // the file is malformed, and decoding it would fabricate a colour from
+  // whatever bytes happen to sit past the last whole triple.
+  if (palette && palette.length % 3 !== 0) {
+    throw new PngDecodeError(`PLTE length ${palette.length} is not a multiple of 3`);
+  }
 
   // A corrupt IDAT makes zlib throw its own `Z_DATA_ERROR` ("incorrect data
   // check"), and a malformed size can throw out of unfilter/toRgba. Wrap them
@@ -333,9 +396,18 @@ function toRgba(
       } else {
         const index = sample(row, base);
         const p = index * 3;
-        out[at] = palette?.[p] ?? 0;
-        out[at + 1] = palette?.[p + 1] ?? 0;
-        out[at + 2] = palette?.[p + 2] ?? 0;
+        // An index past the palette is a corrupt file, not a black pixel:
+        // `?? 0` here silently measured fake pixels from CRC-valid but
+        // structurally invalid images. (A tRNS shorter than the palette IS
+        // legal — the spec makes the remaining entries opaque.)
+        if (p + 2 >= palette!.length) {
+          throw new PngDecodeError(
+            `palette index ${index} out of range (palette has ${palette!.length / 3} entries)`,
+          );
+        }
+        out[at] = palette![p]!;
+        out[at + 1] = palette![p + 1]!;
+        out[at + 2] = palette![p + 2]!;
         out[at + 3] = transparency?.[index] ?? 255;
       }
     }

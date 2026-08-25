@@ -66,7 +66,14 @@ describe("importJavaModel", () => {
     expect(c[2]).toBeGreaterThan(c[0]); // blue-dominant, as authored
   });
 
-  it("skips a rotated element rather than importing it at the wrong orientation", () => {
+  it("imports a single-axis rotated element as a rotate part, exactly", () => {
+    // The skip this test used to pin predates the language's `rotate`: a
+    // Java element rotation IS single-axis with local extents kept, which
+    // is `rotate` verbatim. Expectations computed independently: the post's
+    // MC centre [1, 8, 1] pivots 45° about MC-y at origin [8, 8, 8] to
+    // [8 − 14·√½, 8, 8] ≈ [−1.8995, 8, 8]; the frame map (x, −z, y)/16
+    // lands it at [−0.11872, −0.5, 0.5]; MC-y maps to Blender-z with the
+    // angle preserved.
     const model = {
       elements: [
         { name: "post", from: [0, 0, 0], to: [2, 16, 2], rotation: { angle: 45, axis: "y", origin: [8, 8, 8] }, faces: {} },
@@ -74,9 +81,30 @@ describe("importJavaModel", () => {
       ],
     };
     const { spec, skipped } = importJavaModel(model);
-    expect(spec!.parts).toHaveLength(1); // only the un-rotated base
-    expect(skipped).toHaveLength(1);
-    expect(skipped[0]!.reason).toContain("rotated");
+    expect(skipped).toHaveLength(0);
+    expect(spec!.parts).toHaveLength(2);
+    const post = spec!.parts.find((p) => p.id.includes("post"))!;
+    expect(post.rotate).toEqual({ axis: "z", deg: 45 });
+    expect(post.size).toEqual([2 / 16, 2 / 16, 1]); // LOCAL extents, unrotated
+    const at = spec!.relations.find(
+      (r) => r.part === post.id && r.type === "at",
+    ) as { center: [number, number, number] };
+    expect(at.center[0]).toBeCloseTo((8 - 14 * Math.SQRT1_2) / 16, 5);
+    expect(at.center[1]).toBeCloseTo(-0.5, 9);
+    expect(at.center[2]).toBeCloseTo(0.5, 9);
+  });
+
+  it("still skips what rotate cannot express: rescale and multi-axis eulers", () => {
+    const { spec, skipped } = importJavaModel({
+      elements: [
+        { name: "stretched", from: [0, 0, 0], to: [4, 4, 4], rotation: { angle: 45, axis: "y", rescale: true }, faces: {} },
+        { name: "tumbled", from: [0, 0, 0], to: [4, 4, 4], rotation: [45, 45, 0], faces: {} },
+      ],
+    });
+    expect(spec).toBeNull(); // nothing importable
+    expect(skipped).toHaveLength(2);
+    expect(skipped[0]!.reason).toContain("rescale");
+    expect(skipped[1]!.reason).toContain("more than one axis");
   });
 
   it("skips a degenerate (zero-extent) element", () => {
@@ -89,7 +117,13 @@ describe("importJavaModel", () => {
   it("rejects a non-model with a clear reason, not a throw", () => {
     expect(importJavaModel({ foo: "bar" }).spec).toBeNull();
     expect(importJavaModel(null).spec).toBeNull();
-    expect(importJavaModel({ elements: [{ from: [0, 0, 0], to: [1, 1, 1], rotation: { angle: 22.5, axis: "y" }, faces: {} }] }).spec).toBeNull();
+    // A rotation with no origin defaults to the block centre [8, 8, 8] and
+    // imports (it used to be a skip — see the rotate round-trip pin above).
+    const rotated = importJavaModel({
+      elements: [{ from: [0, 0, 0], to: [1, 1, 1], rotation: { angle: 22.5, axis: "y" }, faces: {} }],
+    });
+    expect(rotated.spec).not.toBeNull();
+    expect(rotated.spec!.parts[0]!.rotate).toEqual({ axis: "z", deg: 22.5 });
   });
 
   it("terminates on duplicate names long enough to fill the id budget", () => {
@@ -171,5 +205,117 @@ describe("importJavaModel", () => {
       ],
     };
     expect(importJavaModel(model).warnings.filter((w) => w.includes("texture per face"))).toEqual([]);
+  });
+});
+
+describe("texture resolution hardening (bug-shaker round)", () => {
+  it("chases Java texture alias chains to the real reference", () => {
+    // `textures.all = "#stone"` is legal indirection; one flat lookup
+    // stopped at the alias and fell to the neutral placeholder while the
+    // real texture sat in the map.
+    const calls: string[] = [];
+    const { spec } = importJavaModel(
+      {
+        textures: { all: "#stone", stone: "block/stone_top" },
+        elements: [
+          { name: "slab", from: [0, 0, 0], to: [16, 8, 16], faces: { up: { texture: "#all" } } },
+        ],
+      },
+      {
+        resolveTexture: (ref) => {
+          calls.push(ref);
+          return undefined; // resolution fails, but the CHAIN must be followed
+        },
+      },
+    );
+    expect(spec).not.toBeNull();
+    // The resolver was offered the alias-resolved key, not only the alias.
+    expect(calls.some((c) => c.includes("stone"))).toBe(true);
+  });
+
+  it("recovers the real texture through the alias chain, full mapped path included", () => {
+    // The chain-following test above keeps its resolver failing on purpose;
+    // this one proves RECOVERY — a regression that requests the resolved
+    // alias but still assigns the placeholder passes that test and fails
+    // here. The resolver is keyed by the FULL mapped resource path
+    // ("block/stone_top"), which used to be offered only as a basename.
+    const red = solidPng(255, 0, 0);
+    const { spec, warnings } = importJavaModel(
+      {
+        textures: { all: "#stone", stone: "block/stone_top" },
+        elements: [
+          { name: "slab", from: [0, 0, 0], to: [16, 8, 16], faces: { up: { texture: "#all" } } },
+        ],
+      },
+      { resolveTexture: (ref) => (ref === "block/stone_top" ? red : undefined) },
+    );
+    expect(spec).not.toBeNull();
+    expect(warnings.filter((w) => w.includes("placeholder"))).toEqual([]);
+    const mat = spec!.materials[spec!.parts[0]!.material!]!;
+    expect(mat.baseColor[0]).toBeGreaterThan(0.5); // the red texture, not the grey placeholder
+    expect(mat.baseColor[1]).toBeLessThan(0.3);
+  });
+
+  it("keeps distinct resolved textures on distinct materials despite sanitised collisions", () => {
+    // `a-b` and `a_b` both sanitise to `a_b`; the second used to overwrite
+    // the first in the materials record and parts with different textures
+    // shared the wrong colour. (UNRESOLVED refs still deliberately collapse
+    // onto one placeholder — the compiler cannot tell those apart and says
+    // so once; this pins the resolved case, where it can.)
+    const red = solidPng(255, 0, 0);
+    const blue = solidPng(0, 0, 255);
+    const { spec } = importJavaModel(
+      {
+        textures: { "a-b": "block/a-b", a_b: "block/a_b" },
+        elements: [
+          { name: "one", from: [0, 0, 0], to: [4, 4, 4], faces: { up: { texture: "#a-b" } } },
+          { name: "two", from: [8, 0, 0], to: [12, 4, 4], faces: { up: { texture: "#a_b" } } },
+        ],
+      },
+      { resolveTexture: (ref) => (ref.includes("a-b") ? red : ref.includes("a_b") ? blue : undefined) },
+    );
+    expect(spec).not.toBeNull();
+    const mats = spec!.parts.map((p) => p.material!);
+    expect(new Set(mats).size).toBe(2);
+    const c0 = spec!.materials[mats[0]!]!.baseColor;
+    const c1 = spec!.materials[mats[1]!]!.baseColor;
+    expect(c0[0]).toBeGreaterThan(c0[2]); // one red-dominant…
+    expect(c1[2]).toBeGreaterThan(c1[0]); // …one blue-dominant
+  });
+});
+
+describe("non-finite rotation refusals (bug-shaker round)", () => {
+  it("skips an element whose rotation angle is NaN or Infinity, loudly", () => {
+    // Red before the fix: `typeof rot.angle === "number"` admitted NaN,
+    // which rode cos/sin into non-finite centres in the returned spec.
+    for (const angle of [NaN, Infinity]) {
+      const { spec, skipped } = importJavaModel({
+        textures: {},
+        elements: [
+          {
+            name: "bad",
+            from: [0, 0, 0],
+            to: [16, 16, 16],
+            rotation: { angle, axis: "y", origin: [8, 8, 8] },
+            faces: {},
+          },
+          { name: "good", from: [0, 0, 0], to: [16, 8, 16], faces: {} },
+        ],
+      });
+      expect(spec).not.toBeNull();
+      expect(spec!.parts).toHaveLength(1);
+      expect(skipped.some((s) => s.reason.includes("not a finite number"))).toBe(true);
+    }
+  });
+
+  it("skips an element whose rotation array carries a non-finite value", () => {
+    const { spec, skipped } = importJavaModel({
+      textures: {},
+      elements: [
+        { name: "bad", from: [0, 0, 0], to: [16, 16, 16], rotation: [0, NaN, 0], faces: {} },
+      ],
+    });
+    expect(spec === null || spec.parts.length === 0).toBe(true);
+    expect(skipped.some((s) => s.reason.includes("non-finite"))).toBe(true);
   });
 });

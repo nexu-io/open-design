@@ -32,7 +32,9 @@ export interface AsciiFrame {
   rows: string[];
   /** Mean luminance over non-transparent pixels, 0-1. */
   meanLuminance: number;
-  /** Fraction of pixels carrying any subject at all (alpha > 0). */
+  /** Fraction of pixels carrying visible subject (alpha > 0.02 — the same
+   *  floor the cell renderer uses, so faint compositing residue does not
+   *  count as coverage the eye cannot see). */
   coverage: number;
   /** Fraction of LIT pixels within a hair of white — the clipping measure the
    *  proof lint's blow-out rule judges. */
@@ -61,11 +63,26 @@ export interface AsciiOptions {
  */
 export function renderAsciiFrame(png: Uint8Array, options: AsciiOptions = {}): AsciiFrame {
   const image = decodePng(png);
-  const columns = Math.max(8, Math.min(200, options.columns ?? 48));
-  const cellAspect = options.cellAspect ?? 2;
-  const rowsCount = Math.max(
-    4,
-    Math.round((columns * image.height) / Math.max(1, image.width) / cellAspect),
+  // Finite first (NaN survives max/min and empties the render), then the
+  // range clamp, then the image's own width: a grid wider than the pixels
+  // would reuse source pixels across cells, biasing every statistic against
+  // the "each pixel contributes to exactly one cell" contract above.
+  const rawColumns = options.columns ?? 48;
+  const columns = Math.min(
+    Math.max(1, image.width),
+    Number.isFinite(rawColumns) ? Math.max(8, Math.min(200, Math.round(rawColumns))) : 48,
+  );
+  // Clamped like `columns`, and for a harder reason: cellAspect divides,
+  // so 0 (or NaN) made rowsCount Infinity and the render loop below a
+  // process hang rather than a bounded validation error.
+  const rawAspect = options.cellAspect ?? 2;
+  const cellAspect = Number.isFinite(rawAspect) ? Math.max(0.25, Math.min(8, rawAspect)) : 2;
+  const rowsCount = Math.min(
+    Math.max(1, image.height),
+    Math.max(
+      4,
+      Math.min(400, Math.round((columns * image.height) / Math.max(1, image.width) / cellAspect)),
+    ),
   );
 
   const rows: string[] = [];

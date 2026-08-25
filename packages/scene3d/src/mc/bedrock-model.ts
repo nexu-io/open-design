@@ -111,6 +111,18 @@ export function buildBedrockModel(census: Census, _contract: NormalizedContract)
     const row = rowColour.length;
     rowOfMaterial.set(key, row);
     const mat = matName ? materialByName.get(matName) : undefined;
+    // Detect-and-name, never a silent flatten: the atlas is composed of
+    // solid tiles, so a TEXTURED material ships as its base colour and the
+    // authored detail is gone from the Bedrock deliverable. The loss is a
+    // fact of this exporter's texture model; the entry makes it a stated
+    // one instead of something discovered in-game.
+    if (mat?.principled.hasTexture) {
+      skipped.push({
+        object: mat.name,
+        reason:
+          "textured material flattened to a solid colour tile — the Bedrock atlas is solid tiles; authored texture detail does not ship",
+      });
+    }
     rowColour.push(mat?.principled.baseColor ?? [0.8, 0.8, 0.8]);
     return row;
   };
@@ -123,6 +135,16 @@ export function buildBedrockModel(census: Census, _contract: NormalizedContract)
     if (!v || !v.isBox) {
       skipped.push({ object: mesh.object, reason: v ? "not a single cuboid" : "no voxel facts" });
       continue;
+    }
+    // A cube maps to ONE atlas row; extra material slots cannot ride along.
+    // The export still proceeds on the first slot, but the degradation is
+    // named — a silent [0] read painted multi-material cuboids wrong with
+    // nothing in the report to say so.
+    if ((mesh.materials?.length ?? 0) > 1) {
+      skipped.push({
+        object: mesh.object,
+        reason: `wears ${mesh.materials!.length} materials — a Bedrock cube carries one texture tile, exported with '${mesh.materials![0]}'`,
+      });
     }
     const row = rowFor(mesh.materials?.[0]);
     const uv: BedrockCube["uv"] = {};

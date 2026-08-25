@@ -182,8 +182,9 @@ export interface PartSpec {
    * composes with a bob freely.
    *
    * `rise` may be negative (a left-hand thread, a descent) but never zero —
-   * a zero rise is a `spin` written the long way — and is capped at 10m per
-   * turn, past which the snap-back reads as a teleport rather than a thread.
+   * a zero rise is a `spin` written the long way. Any finite nonzero rise
+   * is legal: how far one turn travels is scale taste, and taste is the
+   * author's — the cycle's snap-back is documented, not policed.
    */
   screw?: { axis?: Axis; seconds?: number; rise: number };
   /**
