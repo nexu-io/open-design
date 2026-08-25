@@ -100,7 +100,7 @@ test('[P2] captures the visual home harness', async ({ page }) => {
   await captureVisual(page, 'visual-home');
 });
 
-test('[P2] captures the Go campaign at narrow and short viewport boundaries', async ({ page }) => {
+test('[P2] captures the unpaid DeepSeek campaign at narrow and short viewport boundaries', async ({ page }) => {
   test.setTimeout(T.xlong);
 
   await page.clock.setFixedTime('2026-08-21T00:00:00+08:00');
@@ -110,9 +110,9 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   await gotoVisualHome(page);
   // Functional specs seed campaign dismissals globally so marketing surfaces
   // cannot interrupt unrelated flows. This visual contract deliberately opts
-  // back into the Go modal after establishing the page's same-origin storage.
+  // back into the DeepSeek modal after establishing same-origin storage.
   await page.evaluate(() => {
-    window.localStorage.removeItem('open-design:campaign-seen:go-plan-launch-2026');
+    window.localStorage.removeItem('open-design:campaign-seen:deepseek-v4-dual-unlimited-2026');
   });
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-community').evaluate((element: HTMLButtonElement) => {
@@ -124,15 +124,15 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   });
 
   const dialog = page.getByTestId('deepseek-v4-flash-campaign-dialog');
-  const close = page.getByRole('button', { name: 'Close dialog' });
-  const cta = page.getByRole('button', { name: 'View Go plan' });
+  const close = page.getByRole('button', { name: 'Close' });
+  const cta = page.getByRole('button', { name: 'Upgrade and use' });
   await expect(dialog).toBeVisible();
   await expect(close).toBeVisible();
   await expect(cta).toBeVisible();
   await expectInsideViewport(page, dialog);
   await expectInsideViewport(page, close);
   await expectInsideViewport(page, cta);
-  await captureVisual(page, 'visual-go-campaign-600');
+  await captureVisual(page, 'visual-deepseek-unpaid-campaign-600');
 
   await page.setViewportSize({ width: 760, height: 400 });
   await expect(close).toBeVisible();
@@ -141,7 +141,7 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   await expect.poll(async () => dialog.evaluate((element) => (
     element.scrollHeight > element.clientHeight
   ))).toBe(true);
-  await captureVisual(page, 'visual-go-campaign-short-height');
+  await captureVisual(page, 'visual-deepseek-unpaid-campaign-short-height');
   await cta.scrollIntoViewIfNeeded();
   await expect(cta).toBeVisible();
   await expectInsideViewport(page, cta);

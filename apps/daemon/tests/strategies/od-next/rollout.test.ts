@@ -29,13 +29,20 @@ function syntheticPolicy() {
 }
 
 describe('OD Next controlled rollout', () => {
-  it('defaults production rollout to all four owned artifact types while retaining explicit off', () => {
-    const policy = readOdNextRolloutPolicy({});
+  it('owns all four artifact types once a mode is asked for, and none until then', () => {
+    const policy = readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'active' });
     expect(policy).toMatchObject({
       requestedMode: 'active',
+      requestedModeSource: 'env',
       eligibleTaskTypes: ['prototype', 'ppt', 'marketing', 'hyperframes'],
       productionActiveApproved: true,
       assignmentPercent: 100,
+    });
+    // Shipping the strategy in a build is not the same as turning it on: an
+    // installation that configured nothing takes the ordinary route.
+    expect(readOdNextRolloutPolicy({})).toMatchObject({
+      requestedMode: 'off',
+      requestedModeSource: 'default',
     });
     expect(readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'off' }).requestedMode)
       .toBe('off');
@@ -58,6 +65,86 @@ describe('OD Next controlled rollout', () => {
         runtimeCapabilityVerified: true,
       })).toMatchObject({ requestedMode: 'active', effectiveMode: 'active', eligible: true });
     }
+  });
+
+  describe('opting one installation in', () => {
+    it('takes the saved mode when the environment names none', () => {
+      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'active' })).toMatchObject({
+        requestedMode: 'active',
+        requestedModeSource: 'app_config',
+      });
+      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'observe' }).requestedMode)
+        .toBe('observe');
+      // An empty variable is not a choice; it is how a shell exports nothing.
+      expect(readOdNextRolloutPolicy(
+        { OD_NEXT_STRATEGY_ROLLOUT: '  ' },
+        { odNextStrategyMode: 'active' },
+      )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'app_config' });
+    });
+
+    it('lets the environment pin a mode over the one the installation saved', () => {
+      // The env var is how one process gets pinned — an operator debugging a
+      // daemon, a packaged smoke run, a test. It must not be outvoted by a
+      // preference that the machine happens to have saved.
+      expect(readOdNextRolloutPolicy(
+        { OD_NEXT_STRATEGY_ROLLOUT: 'off' },
+        { odNextStrategyMode: 'active' },
+      )).toMatchObject({ requestedMode: 'off', requestedModeSource: 'env' });
+      expect(readOdNextRolloutPolicy(
+        { OD_NEXT_STRATEGY_ROLLOUT: 'active' },
+        { odNextStrategyMode: 'off' },
+      )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'env' });
+    });
+
+    it('stays off for a saved value that is not a mode', () => {
+      for (const saved of ['acive', '', 'true', 1, null, undefined, {}] as unknown[]) {
+        expect(readOdNextRolloutPolicy(
+          {},
+          { odNextStrategyMode: saved as never },
+        )).toMatchObject({ requestedMode: 'off', requestedModeSource: 'default' });
+      }
+    });
+
+    it('admits an eligible task once the installation opted in', () => {
+      const decision = evaluateOdNextRollout({
+        policy: readOdNextRolloutPolicy(
+          { OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY: '1' },
+          { odNextStrategyMode: 'active' },
+        ),
+        assignmentIdentity: 'project:conversation',
+        taskType: 'prototype',
+        agentId: 'codex',
+        agentVersion: 'codex-e2e 0.0.0',
+        sourceKind: 'bundled',
+      });
+      expect(decision).toMatchObject({
+        requestedMode: 'active',
+        effectiveMode: 'active',
+        eligible: true,
+      });
+    });
+
+    it('reports the deciding authority through the control status', () => {
+      const db = new Database(':memory:');
+      migrateOdNextRolloutStore(db);
+      expect(readOdNextRolloutControlStatus(db, {}))
+        .toMatchObject({ requestedMode: 'off', requestedModeSource: 'default', effectiveMode: 'off' });
+      expect(readOdNextRolloutControlStatus(db, {}, { odNextStrategyMode: 'active' }))
+        .toMatchObject({
+          requestedMode: 'active',
+          requestedModeSource: 'app_config',
+          effectiveMode: 'active',
+        });
+      // A latch still overrides an opted-in installation.
+      latchOdNextRolloutStop(db, { mode: 'observe', reasonCode: 'quality_regression', updatedAt: 1 });
+      expect(readOdNextRolloutControlStatus(db, {}, { odNextStrategyMode: 'active' }))
+        .toMatchObject({
+          requestedMode: 'active',
+          requestedModeSource: 'app_config',
+          effectiveMode: 'observe',
+        });
+      db.close();
+    });
   });
 
   it('keeps off and observe behavior-inert and never calls an active bucket eligible', () => {
@@ -244,6 +331,10 @@ describe('OD Next controlled rollout', () => {
       appVersion: '0.19.2',
       mode: 'observe',
       reasonCode: 'native_resume_failed',
+      // The latch only means anything on an installation that opted in, so the
+      // event has to report the mode that run was admitted under rather than
+      // the unconfigured default.
+      readAppConfig: () => ({ odNextStrategyMode: 'active' }),
     });
     await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     expect(capture).toHaveBeenCalledWith(expect.objectContaining({
@@ -258,6 +349,45 @@ describe('OD Next controlled rollout', () => {
         effective_mode: 'observe',
       },
     }));
+    db.close();
+  });
+
+  it('still latches when the app config cannot be read, and stays silent', async () => {
+    // The latch is the safety stop. It must land whether or not this daemon
+    // can read its own config — and the event must not claim the installation
+    // is `off` when what actually happened is that the disk did not answer.
+    const db = new Database(':memory:');
+    migrateOdNextRolloutStore(db);
+    const capture = vi.fn().mockResolvedValue(undefined);
+    latchOdNextRolloutStopOperationally({
+      db,
+      analytics: {
+        capture,
+        captureSafety: vi.fn(),
+        mergeAnonymousPerson: vi.fn(),
+        identifyGroup: vi.fn(),
+        shutdown: vi.fn(),
+      },
+      analyticsContext: {
+        deviceId: 'device',
+        sessionId: 'session',
+        clientType: 'web',
+        locale: 'en',
+        requestId: null,
+      },
+      appVersion: '0.19.2',
+      mode: 'off',
+      reasonCode: 'machine_contract_leak',
+      readAppConfig: () => {
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      },
+    });
+    expect(readOdNextRolloutStop(db)).toEqual({
+      mode: 'off',
+      reasonCode: 'machine_contract_leak',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(capture).not.toHaveBeenCalled();
     db.close();
   });
 

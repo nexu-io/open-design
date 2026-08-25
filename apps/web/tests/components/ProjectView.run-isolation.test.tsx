@@ -908,6 +908,7 @@ describe('ProjectView conversation run isolation', () => {
     cleanup();
     window.localStorage.clear();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -1075,6 +1076,35 @@ describe('ProjectView conversation run isolation', () => {
       );
     },
   );
+
+  it('preserves the configured system notification for a background completion', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+
+    renderProjectView({
+      ...config,
+      notifications: {
+        ...config.notifications!,
+        desktopEnabled: true,
+      },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    resolveConversationBMessages?.([]);
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+
+    conversationAMessages = [succeededAssistant];
+    fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
+
+    await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
+    expect(showCompletionNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'succeeded', body: 'done' }),
+    );
+  });
 
   // An OpenDesign Cloud run is billed to the CALLER's own wallet. The gate must
   // therefore ask about the caller's identity, not about this project's
@@ -1423,6 +1453,7 @@ describe('ProjectView conversation run isolation', () => {
       profile: 'prod',
       user: null,
       balanceUsd: '0',
+      codingPlanModels: [],
       updatedAt: null,
       fetchedAt: '2026-07-02T00:00:00.000Z',
       stale: false,
@@ -1459,6 +1490,7 @@ describe('ProjectView conversation run isolation', () => {
       profile: 'prod',
       user: { id: 'u-paid', plan: 'plus' },
       balanceUsd: '1.20',
+      codingPlanModels: [],
       updatedAt: null,
       fetchedAt: '2026-07-02T00:00:00.000Z',
       stale: false,
@@ -1822,6 +1854,48 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
     expect(showCompletionNotification).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      label: 'run failure',
+      terminalMessage: { ...succeededAssistant, runStatus: 'failed' as const },
+    },
+    {
+      label: 'delivery failure',
+      terminalMessage: {
+        ...succeededAssistant,
+        resultDeliveryState: 'delivery_failed' as const,
+      },
+    },
+  ])(
+    'keeps the foreground $label system notification silent while preserving its sound',
+    async ({ terminalMessage }) => {
+      vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+
+      renderProjectView({
+        ...config,
+        notifications: {
+          ...config.notifications!,
+          desktopEnabled: true,
+        },
+      });
+
+      await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+      await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+      fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+      await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+      resolveConversationBMessages?.([]);
+      await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+
+      conversationAMessages = [terminalMessage];
+      fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
+
+      await waitFor(() => expect(playSound).toHaveBeenCalledWith('failure-sound'));
+      expect(showCompletionNotification).not.toHaveBeenCalled();
+    },
+  );
 
   it('downgrades a reloaded terminal Design run whose file writes never landed', async () => {
     conversationAMessages = [

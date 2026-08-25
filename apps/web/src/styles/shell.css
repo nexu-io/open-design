@@ -1212,6 +1212,11 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Two controls that do opposite things: one leaves the panel open and sends
+   the version to a new window, the other closes the panel. They share chrome
+   but not a name — spelling them the same way is what let the open control's
+   ambiguous glyph go unnoticed in review (OPEND-2160). */
+.artifact-version-panel__open,
 .artifact-version-panel__close {
   width: 28px;
   height: 28px;
@@ -1480,6 +1485,7 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   align-items: center;
   gap: 6px;
 }
+.artifact-version-panel__open:disabled,
 .artifact-version-panel__close:disabled {
   cursor: not-allowed;
   opacity: 0.45;

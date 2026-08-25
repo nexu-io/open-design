@@ -630,6 +630,15 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       onAppConfigWritten?.(config);
       res.json({ config });
     } catch (err: any) {
+      if (err?.code === 'INVALID_APP_CONFIG_VALUE') {
+        // Nested envelope on purpose. `od`'s error reader only finds a code in
+        // this shape; from a flat body it falls back to `daemon-not-running`
+        // and exits 64, which tells a caller to go start a daemon that just
+        // answered. Rejected input should read as a plain failure.
+        return res.status(400).json({
+          error: { code: err.code, message: String(err.message) },
+        });
+      }
       const status = err?.code === 'WORKSPACE_ACCESS_DENIED'
           ? 403
           : 500;

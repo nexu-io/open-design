@@ -3063,7 +3063,7 @@ export const hu: Dict = {
   'fileViewer.versions.promptTitle': 'Prompt',
   'fileViewer.versions.copyPrompt': 'Prompt másolása',
   'fileViewer.versions.fullscreen': 'Teljes képernyős előnézet',
-  'fileViewer.versions.open': 'Előnézet megnyitása',
+  'fileViewer.versions.open': 'Előnézet megnyitása új ablakban',
   'fileViewer.versions.currentHelp': 'Ez már az aktuális verzió.',
   'fileViewer.versions.restoreHelp': 'A váltás ezt a HTML-t új aktuális verzióként állítja vissza.',
   'fileViewer.versions.restore': 'Váltás erre a verzióra',

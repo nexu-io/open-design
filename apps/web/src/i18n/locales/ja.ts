@@ -3063,7 +3063,7 @@ export const ja: Dict = {
   'fileViewer.versions.promptTitle': 'プロンプト',
   'fileViewer.versions.copyPrompt': 'プロンプトをコピー',
   'fileViewer.versions.fullscreen': '全画面プレビュー',
-  'fileViewer.versions.open': 'プレビューを開く',
+  'fileViewer.versions.open': 'プレビューを新しいウィンドウで開く',
   'fileViewer.versions.currentHelp': 'これはすでに現在のバージョンです。',
   'fileViewer.versions.restoreHelp': '切り替えると、このHTMLが新しい現在のバージョンとして復元されます。',
   'fileViewer.versions.restore': 'このバージョンに切り替える',

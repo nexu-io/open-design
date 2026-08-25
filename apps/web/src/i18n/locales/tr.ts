@@ -3063,7 +3063,7 @@ export const tr: Dict = {
   'fileViewer.versions.promptTitle': 'Prompt',
   'fileViewer.versions.copyPrompt': 'Promptu kopyala',
   'fileViewer.versions.fullscreen': 'Tam ekran önizleme',
-  'fileViewer.versions.open': 'Önizlemeyi aç',
+  'fileViewer.versions.open': 'Önizlemeyi yeni pencerede aç',
   'fileViewer.versions.currentHelp': 'Bu zaten geçerli sürüm.',
   'fileViewer.versions.restoreHelp': 'Geçiş, bu HTML’i yeni geçerli sürüm olarak geri yükler.',
   'fileViewer.versions.restore': 'Bu sürüme geç',

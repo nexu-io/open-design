@@ -3063,7 +3063,7 @@ export const ar: Dict = {
   'fileViewer.versions.promptTitle': 'الموجه',
   'fileViewer.versions.copyPrompt': 'نسخ الموجه',
   'fileViewer.versions.fullscreen': 'معاينة بملء الشاشة',
-  'fileViewer.versions.open': 'فتح المعاينة',
+  'fileViewer.versions.open': 'فتح المعاينة في نافذة جديدة',
   'fileViewer.versions.currentHelp': 'هذا هو الإصدار الحالي بالفعل.',
   'fileViewer.versions.restoreHelp': 'سيؤدي التبديل إلى استعادة ملف HTML هذا كإصدار حالي جديد.',
   'fileViewer.versions.restore': 'التبديل إلى هذا الإصدار',

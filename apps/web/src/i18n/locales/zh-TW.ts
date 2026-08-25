@@ -4453,7 +4453,7 @@ export const zhTW: Dict = {
   'fileViewer.versions.promptTitle': '提示詞',
   'fileViewer.versions.copyPrompt': '複製提示詞',
   'fileViewer.versions.fullscreen': '全螢幕預覽',
-  'fileViewer.versions.open': '開啟預覽',
+  'fileViewer.versions.open': "在新視窗開啟預覽",
   'fileViewer.versions.currentHelp': '這已經是目前版本。',
   'fileViewer.versions.restoreHelp': '切換會將此 HTML 還原為新的目前版本。',
   'fileViewer.versions.restore': '切換到此版本',

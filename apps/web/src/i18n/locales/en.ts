@@ -3077,7 +3077,7 @@ export const en: Dict = {
   'fileViewer.versions.promptTitle': 'Prompt',
   'fileViewer.versions.copyPrompt': 'Copy prompt',
   'fileViewer.versions.fullscreen': 'Fullscreen preview',
-  'fileViewer.versions.open': 'Open preview',
+  'fileViewer.versions.open': 'Open preview in a new window',
   'fileViewer.versions.currentHelp': 'This is already the current version.',
   'fileViewer.versions.restoreHelp': 'Switching restores this HTML as a new current version.',
   'fileViewer.versions.restore': 'Switch to this version',

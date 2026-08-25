@@ -3,6 +3,16 @@ export type OdNextRolloutMode = 'off' | 'observe' | 'active';
 export type OdNextRolloutTaskType = 'prototype' | 'ppt' | 'marketing' | 'hyperframes';
 
 /**
+ * Which authority decided the requested mode.
+ *
+ * `env` is `OD_NEXT_STRATEGY_ROLLOUT`, `app_config` is the installation's
+ * saved `odNextStrategyMode`, and `default` means neither was set. Reported so
+ * an operator who just configured the mode can confirm their configuration is
+ * the one in effect instead of inferring it from the resulting mode.
+ */
+export type OdNextRolloutModeSource = 'env' | 'app_config' | 'default';
+
+/**
  * Immutable evaluation captured once when a logical Run is claimed. The same
  * envelope drives status diagnostics and created/finished/reconcile telemetry;
  * callers must not recompute it from later environment or latch state.
@@ -47,6 +57,7 @@ export interface OdNextRolloutControlStatus {
   strategyId: 'od-next-strategy';
   scope: 'daemon_instance';
   requestedMode: OdNextRolloutMode;
+  requestedModeSource: OdNextRolloutModeSource;
   effectiveMode: OdNextRolloutMode;
   latch: OdNextRolloutLatchStatus | null;
   revision: number;

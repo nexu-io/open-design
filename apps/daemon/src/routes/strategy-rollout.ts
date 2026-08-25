@@ -9,6 +9,7 @@ import { newInsertId, readAnalyticsContext, type AnalyticsService } from '../ana
 import {
   readOdNextRolloutControlStatus,
   resetOdNextRolloutStop,
+  type OdNextRolloutAppConfig,
 } from '../strategies/od-next/rollout.js';
 
 export function registerStrategyRolloutRoutes(app: Express, deps: {
@@ -16,13 +17,23 @@ export function registerStrategyRolloutRoutes(app: Express, deps: {
   analytics: AnalyticsService;
   getAppVersion: () => string;
   requireLocalDaemonRequest: RequestHandler;
+  /**
+   * The installation's saved OD Next preference. Injected rather than read
+   * here so this route never resolves a daemon data path of its own, and so
+   * status reflects a preference the user changed since the daemon started.
+   */
+  readOdNextPreference: () => Promise<OdNextRolloutAppConfig>;
 }): void {
   app.get(
     '/api/strategies/od-next/rollout',
     deps.requireLocalDaemonRequest,
-    (_req, res) => {
+    async (_req, res) => {
       const body: OdNextRolloutControlResponse = {
-        status: readOdNextRolloutControlStatus(deps.db),
+        status: readOdNextRolloutControlStatus(
+          deps.db,
+          process.env,
+          await deps.readOdNextPreference(),
+        ),
       };
       res.json(body);
     },
@@ -48,12 +59,13 @@ export function registerStrategyRolloutRoutes(app: Express, deps: {
         return;
       }
 
-      const before = readOdNextRolloutControlStatus(deps.db);
+      const preference = await deps.readOdNextPreference();
+      const before = readOdNextRolloutControlStatus(deps.db, process.env, preference);
       const result = resetOdNextRolloutStop(deps.db, {
         expectedRevision: body.expectedRevision,
         reasonCode: 'operator_reset',
       });
-      const status = readOdNextRolloutControlStatus(deps.db);
+      const status = readOdNextRolloutControlStatus(deps.db, process.env, preference);
       if (!result.ok) {
         res.status(409).json({
           error: {

@@ -198,6 +198,88 @@ describe('OD Next automatic production through the real server', () => {
     expect(researchContract).toContain('Run the ordinary public fixture.');
   });
 
+  // ACCEPTANCE for the opt-in switch. Nothing configured takes the ordinary
+  // route; the SAME running daemon takes the OD Next route on the next run
+  // once `odNextStrategyMode` is saved through the public app-config API. No
+  // restart, no environment variable — that is what "configure it and it
+  // takes effect" has to mean for a packaged install.
+  it('admits OD Next on the next run once the installation configures it, and not before', async () => {
+    const fixture = await createPublicRolloutFixture('app-config-opt-in', 'design');
+    started = fixture.started;
+    binDir = fixture.binDir;
+    clearOdNextRolloutStop(database());
+    delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+
+    const beforeOptIn = await postRun(started.url, publicRunRequest(
+      fixture,
+      'Run before this installation opted in.',
+      'app-config-opt-in-before',
+    ));
+    expect(beforeOptIn.strategyTask).toBeUndefined();
+    expect(beforeOptIn.pluginId).toBe('example-web-prototype');
+    await waitForRunTerminal(started.url, beforeOptIn.runId as string);
+    const ordinaryInvocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(ordinaryInvocations).toHaveLength(1);
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('OD Next Strategy V2');
+    expect(ordinaryInvocations[0]?.stdin).not.toContain('open-design.strategy-state/v2');
+
+    const optIn = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: 'active' }),
+    });
+    expect(optIn.status).toBe(200);
+    expect((await optIn.json() as { config?: { odNextStrategyMode?: string } }).config?.odNextStrategyMode)
+      .toBe('active');
+
+    // A typo is refused rather than absorbed. Dropping it would switch this
+    // installation back off while the caller saw success — the one failure
+    // mode a control switch must not have.
+    const typo = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: 'acive' }),
+    });
+    expect(typo.status).toBe(400);
+    expect((await typo.json() as { error?: { code?: string } }).error?.code)
+      .toBe('INVALID_APP_CONFIG_VALUE');
+    const stillActive = await fetch(`${started.url}/api/app-config`);
+    expect((await stillActive.json() as { config?: { odNextStrategyMode?: string } })
+      .config?.odNextStrategyMode).toBe('active');
+
+    const afterOptIn = await postRun(started.url, publicRunRequest(
+      fixture,
+      'Run after this installation opted in.',
+      'app-config-opt-in-after',
+    ));
+    expect(afterOptIn.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+    expect(await readDurableRunState(afterOptIn.runId as string)).toMatchObject({
+      strategyRolloutDecision: { decisionClass: 'active', taskType: 'prototype' },
+    });
+
+    // The operator-facing surface names the authority that decided, so the
+    // person who just configured the mode can confirm theirs is the one in
+    // effect rather than inferring it from the resulting mode.
+    const status = await fetch(`${started.url}/api/strategies/od-next/rollout`);
+    expect(status.status).toBe(200);
+    expect((await status.json() as { status: unknown }).status).toMatchObject({
+      requestedMode: 'active',
+      requestedModeSource: 'app_config',
+      effectiveMode: 'active',
+    });
+
+    await fetch(
+      `${started.url}/api/runs/${encodeURIComponent(afterOptIn.runId as string)}/cancel`,
+      { method: 'POST' },
+    );
+    await waitForRunTerminal(started.url, afterOptIn.runId as string);
+    // Two full runs against a real server, plus config writes and a status
+    // read — the heaviest case in this file, and the only one that drives more
+    // than a single run. The suite default of 20s leaves it no headroom on a
+    // slow runner.
+  }, 60_000);
+
   it('keeps the automatic route when a named Skill cannot be resolved', async () => {
     const fixture = await createPublicRolloutFixture('prestart-skill-fallback', 'design');
     started = fixture.started;

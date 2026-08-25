@@ -253,6 +253,7 @@ describe('task observation rollout', () => {
   afterEach(() => {
     closeDatabase();
     fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -547,6 +548,10 @@ describe('task observation rollout', () => {
   });
 
   it('rebuilds safe Run quality from durable facts before exporting the Task payload', async () => {
+    vi.stubEnv(
+      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
     upsertMessage(db, 'conversation-1', {
       id: 'user-quality',
       role: 'user',

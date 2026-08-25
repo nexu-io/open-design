@@ -3063,7 +3063,7 @@ export const fr: Dict = {
   'fileViewer.versions.promptTitle': 'Prompt',
   'fileViewer.versions.copyPrompt': 'Copier le prompt',
   'fileViewer.versions.fullscreen': 'Aperçu plein écran',
-  'fileViewer.versions.open': 'Ouvrir l’aperçu',
+  'fileViewer.versions.open': 'Ouvrir l’aperçu dans une nouvelle fenêtre',
   'fileViewer.versions.currentHelp': 'C’est déjà la version actuelle.',
   'fileViewer.versions.restoreHelp': 'Le changement restaure ce HTML comme nouvelle version actuelle.',
   'fileViewer.versions.restore': 'Passer à cette version',
