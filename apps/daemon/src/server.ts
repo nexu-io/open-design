@@ -5404,7 +5404,20 @@ export async function startServer({
     // request and re-ran the one-off `vela team-projects --help` capability
     // probe — an extra CLI spawn (and, on the current CLI, a blocking analytics
     // POST) on every workspace projects load.
-    listTeamProjects: teamProjectsForRequest,
+    //
+    // Use the DISPLAY cache, not the uncached exact lookup. This is the read
+    // behind the Home team-project grid and the deep-link "is this shared to my
+    // team?" check, and `teamProjectsDisplayCache` was built for exactly this
+    // route — see its doc comment, which names it. Wired to the uncached lister
+    // instead, every call spawned `vela team-projects list`: measured at ~1.1s
+    // per request against a live workspace, cold and warm alike, on a path the
+    // UI hits on every launch and every deep link.
+    //
+    // The uncached lookup stays where its doc says it belongs: the pull gate
+    // and comment/presence relays, which must observe an unshare immediately.
+    // Display freshness does not rely on the 3s TTL alone — share, unshare and
+    // workspace-change all invalidate this cache explicitly.
+    listTeamProjects: teamProjectsForDisplay,
     // Expose the collab-cloud member directory so the web client can resolve
     // comment authors + owner names to a name + role.
     ...(teamMembersCache ? { listMembers: teamMembersForDisplay } : {}),
