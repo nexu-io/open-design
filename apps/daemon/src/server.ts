@@ -261,6 +261,7 @@ import {
   readVelaLoginStatus,
   resolveAmrProfile,
 } from './integrations/vela.js';
+import { isAbortedOperationError } from './integrations/aborted-error.js';
 import { projectResourceIdFor } from './integrations/vela-team-projects.js';
 import {
   getTeamProjectMaterialization,
@@ -5183,8 +5184,16 @@ export async function startServer({
           onTiming: emitSharedProjectPullTiming,
         }
       : {}),
-    onError: (error) =>
-      console.warn('[od] proactive shared-project pull failed (web polling remains the fallback):', String(error)),
+    // A cancelled `vela` child is this scheduler's own doing, not a fault: it
+    // aborts the in-flight pull when a higher published version supersedes it
+    // (`mergeIntentUpdate`) or when the intent is cleared (`clearIntent`).
+    // Reporting those as failures put a fault-shaped warning in the log on
+    // ordinary version churn. `proactive-content-pull.ts` stays dependency-free
+    // by design, so the distinction is drawn here, at its only error sink.
+    onError: (error) => {
+      if (isAbortedOperationError(error)) return;
+      console.warn('[od] proactive shared-project pull failed (web polling remains the fallback):', String(error));
+    },
     onCatchUp: (event) => {
       if (
         event.phase === 'retry-scheduled' ||

@@ -56,6 +56,7 @@ import {
   type PublicFilePublicationStore,
 } from '../collab/public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
+import { isAbortedOperationError } from '../integrations/aborted-error.js';
 import { readProjectManifest } from '../project-locations.js';
 import { redactSecrets } from '../redact.js';
 
@@ -1704,11 +1705,21 @@ export function registerCollabSyncRoutes(
             if (await shouldRetryStaleReceipt(error, authorizedAttempt)) {
               continue;
             }
-            console.warn('[od] authorized proactive team pull failed closed:', {
-              projectId,
-              version: expectedVersion,
-              ...errorLogFields(error),
-            });
+            // A cancelled child is not a fault: the scheduler aborts this pull
+            // on purpose when a higher version supersedes it, or when the
+            // intent is cleared. Logging that as "failed closed" put a
+            // fault-shaped warning in the log on ordinary version churn and
+            // sent an investigation chasing a phantom failure. The scheduler
+            // already handles the cancellation itself (a superseded intent
+            // bumps `revision` and re-loops; a cleared one is gone), so this
+            // only stops mislabelling it.
+            if (!isAbortedOperationError(error)) {
+              console.warn('[od] authorized proactive team pull failed closed:', {
+                projectId,
+                version: expectedVersion,
+                ...errorLogFields(error),
+              });
+            }
             return complete({ status: 'register_failed' });
           }
           // Old CLIs can materialize successfully while returning no version.
