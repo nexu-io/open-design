@@ -18,6 +18,7 @@ export { XRAY_MODES, XRAY_GHOST_MODES, type XrayModeEntry } from "./viewer/xray-
 export { parseUsda, UsdaParseError, walkPrims, primByPath, primPath } from "./parse/usda.js";
 export { discoverSources } from "./parse/sources.js";
 export { probeBlender, clearProbeCache, scriptsDir, runnerPath, resolveScriptsDir } from "./build/blender.js";
+export { assertBlenderIfRequired, assertPxrIfRequired } from "./testing.js";
 export { validateCensus } from "./build/census.js";
 export { runLint } from "./lint/rules.js";
 export * from "./solve/types.js";

@@ -121,6 +121,46 @@ describe("vitest.config.ts BLENDER_FILES stays in sync", () => {
     ).toEqual([]);
   });
 
+  it("keeps Blender-listed files pure: every top-level describe gated, the CI hatch armed", () => {
+    // Membership in BLENDER_FILES routes the WHOLE file into the serial
+    // Blender project, which CI never runs. An ungated describe in such a
+    // file is therefore pure-TS coverage silently dropped from CI — real
+    // case: kit-viewer.test.ts carried ~40 synthetic-container assertions
+    // into the Blender lane before the split. Gate every top-level
+    // describe or move it to a unit-project file.
+    //
+    // The gate alone is also not enough on an environment that PROMISED
+    // the runtime: every listed file must arm assertBlenderIfRequired so
+    // SCENE3D_REQUIRE_BLENDER turns a missing install into a failure
+    // instead of a green skip.
+    //
+    // pxr-gated suites (it.skipIf(!pxrAvailable)) are deliberately outside
+    // this guard's scope: the oracle subprocess is short-lived, needs no
+    // serialization, and belongs in the unit project with its own
+    // SCENE3D_REQUIRE_PXR hatch (see usd-oracle.test.ts).
+    const offenders: string[] = [];
+    const unarmed: string[] = [];
+    for (const rel of blenderFiles) {
+      const abs = path.join(__dirname, "..", rel);
+      if (!fs.existsSync(abs)) continue; // the dangling-entry test owns that failure
+      const source = fs.readFileSync(abs, "utf8");
+      for (const line of source.split(/\r?\n/)) {
+        if (/^describe/.test(line) && !/^describe\.skipIf\(/.test(line)) {
+          offenders.push(`${rel}: ${line.slice(0, 60)}`);
+        }
+      }
+      if (!source.includes("assertBlenderIfRequired(")) unarmed.push(rel);
+    }
+    expect(
+      offenders,
+      `these top-level describes in BLENDER_FILES members are not Blender-gated — pure-TS coverage CI will silently never run; gate them or move them to a unit-project file: ${offenders.join("; ")}`,
+    ).toEqual([]);
+    expect(
+      unarmed,
+      `these BLENDER_FILES members never call assertBlenderIfRequired, so SCENE3D_REQUIRE_BLENDER cannot turn a missing runtime into a failure there: ${unarmed.join(", ")}`,
+    ).toEqual([]);
+  });
+
   it("refuses nested test files — both project includes are flat, so they would silently never run", () => {
     // vitest.config.ts includes `tests/*.test.ts` (unit) and the flat
     // BLENDER_FILES list. A `*.test.ts` in any subdirectory (helpers/

@@ -4,7 +4,7 @@ import http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { probeBlender } from '@open-design/scene3d';
+import { assertBlenderIfRequired, probeBlender } from '@open-design/scene3d';
 import {
   artifactRef,
   parseProof,
@@ -499,6 +499,10 @@ describe('GET /api/projects/:id/scene3d/manifest', () => {
 });
 
 const hasBlender = (await probeBlender({})) !== null;
+// SCENE3D_REQUIRE_BLENDER turns a missing runtime into a failure instead of
+// a green skip on environments that promised real coverage - same hatch the
+// package's own Blender suites arm.
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)('scene3d compile over HTTP (real Blender)', () => {
   const LONG = 300_000;

@@ -940,16 +940,24 @@ here has a weight to argue about.
 Tests live in `packages/scene3d/tests/`, sibling to `src/`. Do not add
 `*.test.ts` under `src/`.
 
-The full package suite runs real Blender and takes a few minutes. Fast
-slices that do not need Blender:
+The suite splits into vitest projects (`vitest.config.ts`): `unit` and
+`unit-serial` are pure TypeScript, run in seconds, and are what CI runs
+(`test:unit`); `blender` holds the real-Blender integration files, one at
+a time. Fast local loop:
 
 ```bash
-pnpm --filter @open-design/scene3d test tests/asset-kind.test.ts
-pnpm --filter @open-design/scene3d test tests/kit-viewer.test.ts
-pnpm --filter @open-design/scene3d test tests/solver.test.ts
-pnpm --filter @open-design/scene3d test tests/spec.test.ts
-pnpm --filter @open-design/scene3d test tests/contract-schema.test.ts
+pnpm --filter @open-design/scene3d test:unit
 ```
+
+Everything Blender-bound rides `BLENDER_FILES` in `vitest.config.ts`, and
+`tests/vitest-blender-files.test.ts` keeps that list honest in both
+directions: a Blender-gated file missing from the list fails, and a listed
+file carrying an ungated describe fails too (that would be pure-TS
+coverage silently dropped from CI). On an environment that is SUPPOSED to
+carry the runtimes, set `SCENE3D_REQUIRE_BLENDER=1` (and
+`SCENE3D_REQUIRE_PXR=1`) so a missing install fails loudly instead of
+green-skipping — the escape hatches are exported from the package
+(`src/testing.ts`) so host-side suites arm them too.
 
 ### Fixture contract
 
@@ -969,7 +977,7 @@ both is how a gate silently stops gating.
 | `poisoned/spec-claims` | `S3D-E-701` |
 | `poisoned/spec-shader-bad` / `spec-shader-nan` | `S3D-E-801` / `E-804` |
 | `poisoned/*` | Naming, topology, PBR, UV, blind camera |
-| `real/` | Licensed Khronos assets: DamagedHelmet, Fox, CesiumMan, BrainStem |
+| `real/` | Licensed Khronos assets: DamagedHelmet, Fox, CesiumMan |
 | `print/thin_shell` | DfM walls |
 | `sheets/real/` | Beam, particle, sky cube |
 
@@ -991,6 +999,7 @@ Host-side tests:
 - `apps/daemon/tests/scene3d-routes.test.ts` — HTTP contract, 200-on-fail,
   path traversal, tweaks merge
 - `apps/daemon/tests/scene3d-issue-titles.test.ts` — code set ↔ title catalog
+- `apps/daemon/tests/scene3d-xray-modes.test.ts` — x-ray mode catalogue parity
 - `apps/web/tests/scene3d-*.test.ts` — presentation, selection, tree render,
   archive grouping
 - `packages/contracts/tests/scene3d-tree.test.ts` — stem clustering, paths

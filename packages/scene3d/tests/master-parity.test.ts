@@ -2,57 +2,20 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
-import { authorStageModel } from "../src/usd/stage-model.js";
 import { ISSUE_CODES } from "../src/errors.js";
 import { rmForSetup } from "./helpers/fs.js";
 import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
- * The release audit's three findings, pinned so they stay fixed:
- *  1. stage-model's declaration scans must never rewrite STRING content
- *     that merely resembles metadata,
+ * The release audit's Blender-bound findings, pinned so they stay fixed
+ * (the pure-TS string-safety repro lives in stage-model-safety.test.ts,
+ * in the unit project, so CI runs it):
  *  2. a usda-source project that requests usdz gets one (packaged from
  *     the source stage, source untouched),
  *  3. the export cache carries the parity record — a cached recompile
  *     re-adjudicates, and a record-less cache reports UNCHECKED rather
  *     than passing silently.
  */
-
-describe("stage-model string safety (audit repro)", () => {
-  it("never rewrites doc-string content resembling kind/purpose declarations", () => {
-    const src = `#usda 1.0
-(
-    defaultPrim = "root"
-)
-
-def Xform "root" (
-    doc = """example metadata:
-kind = "should_not_become_metadata"
-token purpose = "render"
-"""
-)
-{
-    def Mesh "prp_body"
-    {
-        int[] faceVertexCounts = [3]
-    }
-    def Xform "cam_rig"
-    {
-        def Camera "cam_hero"
-        {
-        }
-    }
-}
-`;
-    const result = authorStageModel({ usda: src, assetName: "probe" });
-    // The string content survives byte-for-byte…
-    expect(result.usda).toContain('kind = "should_not_become_metadata"');
-    expect(result.usda).toContain('token purpose = "render"');
-    // …while REAL metadata was still authored alongside it.
-    expect(result.usda).toMatch(/kind = "component"/);
-    expect(result.authored.guides).toContain("cam_rig");
-  });
-});
 
 const hasBlender = (await probeBlender({})) !== null;
 assertBlenderIfRequired(hasBlender);

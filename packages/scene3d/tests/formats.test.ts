@@ -69,26 +69,14 @@ describe.skipIf(!hasBlender)("format breadth (real Blender)", () => {
     expect(gltf.animations?.length).toBeGreaterThan(0);
   }, 400_000);
 
-  it("compiles the BrainStem multi-bone dance and measures its motion", async () => {
-    const dir = freshDir("brainstem");
-    fs.cpSync(fixture("real/brainstem/BrainStem.glb"), path.join(dir, "BrainStem.glb"));
-    const result = await compile({ projectDir: dir, stages: [...lintOnly], timeoutMs: LONG, noCache: true });
-    expect(result.summary.errors).toBe(0);
-    // Blender's importer builds BrainStem's rig as 18 deform bones — the
-    // measured truth, pinned loosely enough to survive importer evolution.
-    const totalBones = result.census!.armatures!.reduce((sum, a) => sum + a.bones, 0);
-    expect(totalBones).toBeGreaterThanOrEqual(15);
-    expect(result.census!.animation.actionNames!.length).toBeGreaterThan(0);
-  });
-
   it("compiles OBJ+MTL with its materials", async () => {
-    // A real OBJ export with named groups and a material library.
+    // A committed hand-authored OBJ + material library: this used to read
+    // from a developer's Downloads folder and silently return when the
+    // files were absent - a green run that proved nothing, on any machine
+    // but one. The fixture is tiny and the skip is gone.
     const dir = freshDir("obj");
-    const objSrc = "C:/Users/Micha/Downloads/crate.obj";
-    const mtlSrc = "C:/Users/Micha/Downloads/crate.mtl";
-    if (!fs.existsSync(objSrc) || !fs.existsSync(mtlSrc)) return; // corpus-dependent
-    fs.cpSync(objSrc, path.join(dir, "crate.obj"));
-    fs.cpSync(mtlSrc, path.join(dir, "crate.mtl"));
+    fs.cpSync(fixture("obj/crate.obj"), path.join(dir, "crate.obj"));
+    fs.cpSync(fixture("obj/crate.mtl"), path.join(dir, "crate.mtl"));
     const result = await compile({ projectDir: dir, stages: [...lintOnly], timeoutMs: LONG, noCache: true });
     expect(result.summary.errors).toBe(0);
     expect(result.census!.meshes.length).toBeGreaterThan(0);

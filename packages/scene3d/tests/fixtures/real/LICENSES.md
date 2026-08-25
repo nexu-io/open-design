@@ -12,7 +12,6 @@ generated primitives.
 | Damaged Helmet | `helmet/DamagedHelmet.glb` | CC-BY 4.0 | Model: theblueturtle_ (Sketchfab); glTF conversion: ctxwing; original PBR setup: Leonardo Carrion |
 | Fox | `fox/Fox.glb` | CC0 (model) + CC-BY 4.0 (rig/animation) | Model: PixelMannen; rig and animation: @tomkranis; glTF conversion: AsoboStudio |
 | CesiumMan | `cesium/CesiumMan.glb` | CC-BY 4.0 | Cesium (cesium.com) |
-| BrainStem | `brainstem/BrainStem.glb` | CC-BY 4.0 | Keith Hunter, Smith Micro Software / Poser; glTF conversion: Khronos |
 
 Do not modify the `.glb` files; they are pinned inputs. The `scene3d.json`
 beside each relaxes naming conventions only — third-party assets are not

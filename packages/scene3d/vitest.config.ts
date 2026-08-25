@@ -35,7 +35,7 @@ const BLENDER_FILES = [
   "tests/findings2-real.test.ts",
   "tests/findings3-real.test.ts",
   "tests/formats.test.ts",
-  "tests/kit-viewer.test.ts",
+  "tests/kit-viewer-real.test.ts",
   "tests/master-carry.test.ts",
   "tests/master-parity.test.ts",
   "tests/pipeline.test.ts",
@@ -46,6 +46,8 @@ const BLENDER_FILES = [
   "tests/voxel-pipeline.test.ts",
 ];
 
+const SERIAL_FILES = ["tests/usda-parser-alloc.test.ts"];
+
 export default defineConfig({
   test: {
     testTimeout: 120_000,
@@ -55,7 +57,22 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["tests/*.test.ts"],
-          exclude: [...BLENDER_FILES, "**/node_modules/**", "**/dist/**"],
+          exclude: [...BLENDER_FILES, ...SERIAL_FILES, "**/node_modules/**", "**/dist/**"],
+          testTimeout: 120_000,
+          hookTimeout: 120_000,
+        },
+      },
+      {
+        // Measurement-bearing unit tests that need a quiet process: the
+        // allocation oracle reads process.memoryUsage(), which the default
+        // worker-thread pool shares across concurrently-running files. One
+        // file today; the project exists so the next such oracle has a
+        // home instead of a flakiness apology.
+        test: {
+          name: "unit-serial",
+          include: SERIAL_FILES,
+          pool: "threads",
+          poolOptions: { threads: { singleThread: true } },
           testTimeout: 120_000,
           hookTimeout: 120_000,
         },

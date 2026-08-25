@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { gltfExtensionsUsed, lostShadingCapability } from "../src/read/gltf-capability.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { gltfExtensionsUsed, lostShadingCapability } from "../src/read/gltf-capability.js";
 
 /**
  * The parity fingerprint COUNTS meshes, materials, armatures and bound clips.
@@ -19,6 +19,9 @@ import { rmForSetup } from "./helpers/fs.js";
  */
 describe("glTF shading capability", () => {
   const dir = path.join(__dirname, ".work", "gltf-capability");
+  // Fixed-name scratch: a previous run's residue must not leak into this
+  // one, so setup clears it loudly (running against stale state is a lie).
+  rmForSetup(dir);
   const write = (name: string, doc: unknown): string => {
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, name);
