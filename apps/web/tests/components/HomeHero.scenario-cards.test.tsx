@@ -92,7 +92,9 @@ describe('HomeHero scenario cards', () => {
     ).toContain('Slide deck');
   });
 
-  it('uses the fixed ten-item Home creation hierarchy in product order', () => {
+  it('uses the fixed eleven-item Home creation hierarchy in product order', () => {
+    // `scene3d` (the compiled 3D asset mode) trails `webgl`, its GPU/3D
+    // sibling — adding a chip means updating this pin deliberately.
     const ordered = orderedCreateChips();
     const ids = ordered.map((chip) => chip.id);
     expect(ids).toEqual([
@@ -106,6 +108,7 @@ describe('HomeHero scenario cards', () => {
       'audio',
       'live-artifact',
       'webgl',
+      'scene3d',
     ]);
     expect(ids).not.toContain('wireframe');
     expect(ids).not.toContain('mobile');
