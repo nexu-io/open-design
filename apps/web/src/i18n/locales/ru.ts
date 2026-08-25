@@ -1008,7 +1008,7 @@ export const ru: Dict = {
   'homeHero.chip.imageNext': 'Откроет чат для генерации брендовых изображений с возможностью итераций.',
   'homeHero.chip.videoNext': 'Откроет чат для короткого видео, которое можно дорабатывать.',
   'homeHero.chip.audioNext': 'Откроет чат для озвучки, музыки или звуковых эффектов.',
-  'homeHero.chip.webClonePromptSeed': 'Website URL to clone: ',
+  'homeHero.chip.webClonePromptSeed': 'Ссылка на сайт для копирования: ',
   'homeWorkingDir.trigger': 'Выбрать рабочую папку',
   'homeWorkingDir.triggerShort': 'Рабочая папка',
   'homeWorkingDir.pick': 'Выбрать папку',

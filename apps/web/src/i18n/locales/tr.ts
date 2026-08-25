@@ -1008,7 +1008,7 @@ export const tr: Dict = {
   'homeHero.chip.imageNext': 'Open a chat that generates on-brand images you can iterate on.',
   'homeHero.chip.videoNext': 'Open a chat that produces a short video you can refine.',
   'homeHero.chip.audioNext': 'Open a chat that creates voiceover, music, or sound effects.',
-  'homeHero.chip.webClonePromptSeed': 'Website URL to clone: ',
+  'homeHero.chip.webClonePromptSeed': 'Klonlanacak web sitesi bağlantısı: ',
   'homeWorkingDir.trigger': 'Select working directory',
   'homeWorkingDir.triggerShort': 'Working directory',
   'homeWorkingDir.pick': 'Choose folder',
