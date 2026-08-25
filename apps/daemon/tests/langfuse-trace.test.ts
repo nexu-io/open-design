@@ -293,6 +293,11 @@ describe('readRunTelemetrySinkConfig', () => {
       protocol: 'http',
     });
     expect(describeRunTelemetrySink(readRunTelemetrySinkConfig({
+      // Same opt-out the relay case above passes. Without it the vela branch is
+      // enabled by default and `readVelaControlApiContext` falls through to the
+      // developer's real `~/.amr/config.json`, so this asserted 'vela' on any
+      // machine with an AMR login and only passed on a CI runner without one.
+      OPEN_DESIGN_VELA_TELEMETRY: 'off',
       LANGFUSE_PUBLIC_KEY: 'pk',
       LANGFUSE_SECRET_KEY: 'sk',
       LANGFUSE_BASE_URL: 'https://langfuse.example.test/private?key=secret',
