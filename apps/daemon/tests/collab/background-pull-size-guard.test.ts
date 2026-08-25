@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  backgroundPullMaxCumulativeEntriesFromEnv,
   backgroundPullMaxEntriesFromEnv,
   createBackgroundPullSizeGuard,
   DEFAULT_BACKGROUND_PULL_MAX_ENTRIES,
@@ -62,6 +63,72 @@ describe('createBackgroundPullSizeGuard', () => {
       entryCount: 7442,
       maxEntries: 2000,
     }));
+  });
+
+  // Measured against a live Team workspace: 12 shared projects of ~2.9 MB each
+  // (12 files apiece — an order of magnitude under the per-project threshold),
+  // and a member who did nothing but open the client pulled 23 MB across 8
+  // projects within 50s. The daemon's own sweep log showed why:
+  //
+  //   catch-up completed ... scanned=25 candidates=25 headChecks=4 suppressed=0
+  //
+  // Every project cleared the gate, because the gate is evaluated per
+  // project/version and each one is individually small. `headChecks=4` is a
+  // per-round batch size, not a ceiling — later rounds keep going. Nothing in
+  // the path expresses "this member has already been given enough for one
+  // session", so onboarding cost grows linearly with team size, unbounded.
+  //
+  // The per-project threshold stays exactly as it is (it solves the #6512
+  // shape: one enormous project). This adds the missing second dimension.
+  it('reads the cumulative budget from env, defaulting to disabled', () => {
+    // Default MUST be off: choosing a real ceiling is a capacity decision that
+    // needs production data on team sizes, and shipping a guessed default
+    // would silently change what every existing client downloads.
+    expect(backgroundPullMaxCumulativeEntriesFromEnv({})).toBe(0);
+    expect(backgroundPullMaxCumulativeEntriesFromEnv({
+      OD_COLLAB_BACKGROUND_PULL_MAX_CUMULATIVE_ENTRIES: '5000',
+    })).toBe(5000);
+    // Anything malformed disables rather than guesses, matching how
+    // `backgroundPullMaxEntriesFromEnv` refuses to be silently misconfigured.
+    for (const bad of ['-1', 'abc', '1.5', '']) {
+      expect(backgroundPullMaxCumulativeEntriesFromEnv({
+        OD_COLLAB_BACKGROUND_PULL_MAX_CUMULATIVE_ENTRIES: bad,
+      })).toBe(0);
+    }
+  });
+
+  it('defers once the cumulative budget for this session is exhausted', async () => {
+    const inspect = vi.fn(async () => countedInspect(12));
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      // Three small projects' worth. Each is far below `maxEntries`, so the
+      // per-project gate alone would clear all of them.
+      maxCumulativeEntries: 36,
+      inspect,
+    });
+
+    const project = (id: string) => ({ ...scope, projectId: id });
+
+    await expect(guard.assess(project('p-1'), 1)).resolves.toBe('pull');
+    await expect(guard.assess(project('p-2'), 1)).resolves.toBe('pull');
+    await expect(guard.assess(project('p-3'), 1)).resolves.toBe('pull');
+    // Budget spent: the fourth is left to the foreground lane, which never
+    // consults this guard, so opening it still materializes on demand.
+    await expect(guard.assess(project('p-4'), 1)).resolves.toBe('defer');
+  });
+
+  it('leaves the cumulative budget disabled by default', async () => {
+    // Absent an explicit budget the guard must behave exactly as before, so
+    // enabling this cannot silently change existing deployments.
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      inspect: async () => countedInspect(12),
+    });
+    for (let i = 0; i < 50; i += 1) {
+      await expect(
+        guard.assess({ ...scope, projectId: `p-${i}` }, 1),
+      ).resolves.toBe('pull');
+    }
   });
 
   it('pulls a version at or below the threshold', async () => {
