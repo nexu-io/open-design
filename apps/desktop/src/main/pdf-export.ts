@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 
-import { BrowserWindow, dialog } from "electron";
+import { BrowserWindow, dialog, type WebContents, type WebFrameMain } from "electron";
 import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
 
 export type PageSize = { height: number; width: number };
@@ -321,7 +321,74 @@ export const PRINTABLE_CONTENT_WAIT_TIMEOUT_MS = 15_000;
  *  normally, instead of every export paying the full outer timeout. */
 const IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS = 10_000;
 
+type EmbeddedFrameWaitResult = { stalled: boolean };
+
+/**
+ * Wait for each current child-frame navigation by Electron frame identity.
+ *
+ * DOM access cannot inspect an already-loaded cross-origin frame, while
+ * Resource Timing is scoped only to a URL. WebFrameMain gives us both the
+ * current document readiness and the process/routing pair emitted when that
+ * exact frame finishes navigation, so two frames sharing one URL cannot
+ * release each other.
+ */
+export async function waitForEmbeddedFrames(
+  webContents: WebContents,
+): Promise<EmbeddedFrameWaitResult> {
+  const mainFrame = webContents.mainFrame;
+  if (!mainFrame || !Array.isArray(mainFrame.framesInSubtree)) return { stalled: false };
+
+  const frames = mainFrame.framesInSubtree.filter((frame) => frame !== mainFrame);
+  const outcomes = await Promise.all(
+    frames.map((frame) => waitForEmbeddedFrame(webContents, frame)),
+  );
+  return { stalled: outcomes.some((outcome) => outcome === "timeout") };
+}
+
+function waitForEmbeddedFrame(
+  webContents: WebContents,
+  frame: WebFrameMain,
+): Promise<"settled" | "timeout"> {
+  return new Promise((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let done = false;
+    const finish = (outcome: "settled" | "timeout") => {
+      if (done) return;
+      done = true;
+      webContents.off("did-frame-finish-load", onFrameFinished);
+      if (timer !== undefined) clearTimeout(timer);
+      resolve(outcome);
+    };
+    const onFrameFinished = (
+      _event: Electron.Event,
+      isMainFrame: boolean,
+      frameProcessId: number,
+      frameRoutingId: number,
+    ) => {
+      if (
+        !isMainFrame &&
+        frameProcessId === frame.processId &&
+        frameRoutingId === frame.routingId
+      ) {
+        finish("settled");
+      }
+    };
+
+    // Subscribe before checking readiness so a frame completing between the
+    // snapshot and executeJavaScript cannot be missed.
+    webContents.on("did-frame-finish-load", onFrameFinished);
+    timer = setTimeout(() => finish("timeout"), IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS);
+    void frame.executeJavaScript("document.readyState").then(
+      (readyState) => {
+        if (readyState === "complete") finish("settled");
+      },
+      () => finish("settled"),
+    );
+  });
+}
+
 export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
+  const embeddedFramesSettled = waitForEmbeddedFrames(window.webContents);
   const pageSettled = window.webContents.executeJavaScript(
     `(function() {
       var RESOURCE_TIMEOUT_MS = ${IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS};
@@ -379,25 +446,6 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
         }));
       }
 
-      function waitForEmbeddedFrames() {
-        return Promise.all(Array.from(document.querySelectorAll('iframe')).map(function(frame) {
-          // Same-origin/srcdoc frames expose readiness directly. Cross-origin
-          // frames must settle through this specific element's load/error
-          // lifecycle; a URL-level resource entry is not proof that this frame
-          // finished, because another frame (or an older navigation) can share
-          // the same URL.
-          try {
-            if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
-              return Promise.resolve();
-            }
-          } catch {}
-          return withDeadline(new Promise(function(resolve) {
-            frame.addEventListener('load', resolve, { once: true });
-            frame.addEventListener('error', resolve, { once: true });
-          }));
-        }));
-      }
-
       function nextFrame() {
         return new Promise(function(resolve) { requestAnimationFrame(function() { resolve(true); }); });
       }
@@ -407,8 +455,7 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
           ? withDeadline(document.fonts.ready.catch(function(){}))
           : Promise.resolve(),
         waitForImages(),
-        waitForCssBackgroundImages(),
-        waitForEmbeddedFrames()
+        waitForCssBackgroundImages()
       ])
         .then(nextFrame)
         .then(nextFrame)
@@ -426,7 +473,7 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
   let raced: unknown;
   try {
     raced = await Promise.race([
-      pageSettled,
+      Promise.all([pageSettled, embeddedFramesSettled]),
       new Promise<symbol>((resolve) => {
         timer = setTimeout(() => resolve(OUTER_TIMEOUT), PRINTABLE_CONTENT_WAIT_TIMEOUT_MS);
       }),
@@ -442,9 +489,18 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
   // healthy, so the page-side deadline fires first and the outer timer never
   // runs. Keying only off the outer timer would skip cancellation in exactly
   // that case and leave the requests in flight.
+  const settledResults = Array.isArray(raced) ? raced : [];
+  const inPageResult = settledResults[0];
+  const embeddedFrameResult = settledResults[1];
   const inPageStalled =
-    typeof raced === "object" && raced !== null && (raced as { stalled?: unknown }).stalled === true;
-  const gaveUp = raced === OUTER_TIMEOUT || inPageStalled;
+    typeof inPageResult === "object" &&
+    inPageResult !== null &&
+    (inPageResult as { stalled?: unknown }).stalled === true;
+  const embeddedFrameStalled =
+    typeof embeddedFrameResult === "object" &&
+    embeddedFrameResult !== null &&
+    (embeddedFrameResult as { stalled?: unknown }).stalled === true;
+  const gaveUp = raced === OUTER_TIMEOUT || inPageStalled || embeddedFrameStalled;
 
   // Giving up on the wait is not enough on its own: the requests we stopped
   // waiting for are still in flight, and every later `executeJavaScript` in
