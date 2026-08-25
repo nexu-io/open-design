@@ -43,6 +43,11 @@ export const ISSUE_CODES = {
   /* build */
   BLENDER_NOT_FOUND: "S3D-E-201",
   BLENDER_FAILED: "S3D-E-202",
+  /* A Blender was found but its major version is below what the runner is
+     written against. Gated up front with the measured version, because the
+     alternative is a crash deep inside the runner that reads as "your scene
+     is broken" when the scene was never the problem. */
+  BLENDER_UNSUPPORTED: "S3D-E-207",
   STAGE_TIMEOUT: "S3D-E-203",
   INVALID_CENSUS: "S3D-E-204",
   EXPORT_FAILED: "S3D-E-205",
@@ -59,6 +64,20 @@ export const ISSUE_CODES = {
      right; dropping it silently made the scene snap back to its rest pose
      with nothing in the report to explain why. */
   TWEAKS_IGNORED: "S3D-W-208",
+
+  /* A derived deliverable (manifest, read model, digest, viewer) could not
+     be written — disk full, permissions. The compile itself finished; the
+     issues and census in the response are real. Throwing here used to
+     discard a completed compile as a bare 500. */
+  DELIVERABLE_WRITE_FAILED: "S3D-W-209",
+
+  /* The solver rested one part on another — their boxes are flush by
+     construction (the contact floor) — but the BUILT scene's measured
+     contact never happened. The box touched; the shape did not. Found by a
+     field build whose cage bars stood beside the ring they were meant to
+     carry, through a compile with zero errors: the plan and the build
+     disagreed and nothing said so. */
+  REST_NOT_TOUCHING: "S3D-W-337",
 
   /* lint: naming */
   NAME_DEFAULT: "S3D-E-301",

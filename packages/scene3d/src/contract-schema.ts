@@ -153,6 +153,7 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
 
   /* geometry */
   { path: "conventions.geometry.allowOpenMeshes", kind: "boolean" },
+  { path: "conventions.geometry.allowNgons", kind: "boolean" },
   { path: "conventions.geometry.allowLooseGeometry", kind: "boolean" },
   { path: "conventions.geometry.allowDoubleVertices", kind: "boolean" },
   { path: "conventions.geometry.allowInconsistentWinding", kind: "boolean" },
@@ -187,6 +188,14 @@ export const CONTRACT_FIELDS: readonly FieldSpec[] = [
   { path: "conventions.sheets.maxDimension", kind: "number", min: 1, integer: true },
   { path: "conventions.sheets.seamTolerance", kind: "number", min: 0, max: 255 },
   { path: "conventions.sheets.additiveBorderMax", kind: "number", min: 0, max: 255 },
+  { path: "conventions.sheets.fullAlphaMin", kind: "number", min: 0, max: 255 },
+  { path: "conventions.sheets.sparseCoverageMin", kind: "number", min: 0, max: 1 },
+  { path: "conventions.sheets.tintHueMax", kind: "number", min: 0, max: 1 },
+  { path: "conventions.sheets.cellBleedMax", kind: "number", min: 0, integer: true },
+  { path: "conventions.sheets.beamSeamMax", kind: "number", min: 0, max: 255 },
+  { path: "conventions.sheets.particleBorderTouchMax", kind: "number", min: 0, integer: true },
+  { path: "conventions.sheets.skyNonOpaqueMax", kind: "number", min: 0, max: 1 },
+  { path: "conventions.sheets.skyClipMax", kind: "number", min: 0, max: 1 },
 
   /* coherence — was normalized but never validated */
   { path: "conventions.coherence.outlierZ", kind: "number", min: 0, exclusiveMin: true },
@@ -294,7 +303,91 @@ export function validateFields(raw: unknown): string[] {
     if (v === undefined) continue;
     if (!satisfies(v, spec)) problems.push(`${spec.path} must be ${describeField(spec)}`);
   }
+  problems.push(...unknownFieldProblems(raw));
   return problems;
+}
+
+/* ------------------------------------------------------------------ */
+/* Unknown keys                                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A key this schema has not declared is a sentence the author believes they
+ * said. Until now it was IGNORED: `uv.texelDensityMaxRatio` (the wrong
+ * nesting) validated clean and the default silently won — the exact
+ * "silently disabled rule" failure the top of this file documents, committed
+ * one level up from the fields it was written to protect. Field runs hit it.
+ *
+ * Suggestions come in two tiers: an exact dots-removed match catches the
+ * wrong-nesting class outright; otherwise a short edit distance against the
+ * legal keys at the same level catches plain typos.
+ */
+export function unknownFieldProblems(raw: unknown): string[] {
+  if (!isPlainObject(raw)) return [];
+  const problems: string[] = [];
+  const containers = new Set<string>(CONTRACT_CONTAINERS);
+  /* Subtrees whose keys are the AUTHOR'S vocabulary (role names, part
+     names), not this schema's — an unknown key beneath one is a name,
+     never a typo. */
+  const opaque = new Set(CONTRACT_FIELDS.filter((f) => f.kind === "object").map((f) => f.path));
+  const legal = new Set<string>([
+    "schemaVersion",
+    "sheets",
+    ...containers,
+    ...CONTRACT_FIELDS.map((f) => f.path),
+  ]);
+  const dotless = (p: string) => p.replace(/\./g, "").toLowerCase();
+  const byDotless = new Map<string, string>([...legal].map((p) => [dotless(p), p]));
+
+  const walk = (node: Record<string, unknown>, prefix: string): void => {
+    for (const key of Object.keys(node)) {
+      const full = prefix ? `${prefix}.${key}` : key;
+      if (legal.has(full)) {
+        if (opaque.has(full)) continue;
+        const child = node[key];
+        if (containers.has(full) && isPlainObject(child)) walk(child, full);
+        continue;
+      }
+      const rewrapped = byDotless.get(dotless(full));
+      const siblings = [...legal]
+        .filter((p) => p.startsWith(prefix ? `${prefix}.` : "") && !p.slice(prefix ? prefix.length + 1 : 0).includes("."))
+        .map((p) => (prefix ? p.slice(prefix.length + 1) : p));
+      const near = siblings
+        .map((s) => ({ s, d: editDistance(key.toLowerCase(), s.toLowerCase()) }))
+        .filter((c) => c.d > 0 && c.d <= 2)
+        .sort((a, b) => a.d - b.d)[0];
+      const suggestion = rewrapped
+        ? ` — did you mean ${rewrapped}? (note the nesting)`
+        : near
+          ? ` — did you mean "${near.s}"?`
+          : "";
+      problems.push(
+        `${full} is not a contract field${suggestion}; an unknown key would otherwise be ignored and its default would silently win`,
+      );
+    }
+  };
+  walk(raw, "");
+  return problems;
+}
+
+/** Bounded Levenshtein — distances above 3 all read as "not a typo". */
+function editDistance(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 3) return 4;
+  const prev = new Array<number>(b.length + 1);
+  const cur = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j]! + 1,
+        cur[j - 1]! + 1,
+        prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = cur[j]!;
+  }
+  return prev[b.length]!;
 }
 
 function satisfies(v: unknown, spec: FieldSpec): boolean {

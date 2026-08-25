@@ -61,6 +61,22 @@ export interface SheetLintInput {
   /** Brightest channel a dark border may carry before it reads as a lit
    *  rectangle once summed additively. */
   additiveBorderMax?: number;
+  /** Lowest acceptable peak alpha before the hot core is judged missing. */
+  fullAlphaMin?: number;
+  /** Smallest drawn fraction before the sheet is judged sparse. */
+  sparseCoverageMin?: number;
+  /** Largest hue fraction a tintable sheet may carry. */
+  tintHueMax?: number;
+  /** Most pixels a flipbook cell's inner border may carry before it bleeds. */
+  cellBleedMax?: number;
+  /** Largest mean channel difference before a beam is judged not tileable. */
+  beamSeamMax?: number;
+  /** Most border-touching pixels a particle sheet may have. */
+  particleBorderTouchMax?: number;
+  /** Largest non-opaque fraction a sky face may have. */
+  skyNonOpaqueMax?: number;
+  /** Largest clipped fraction a sky face may have. */
+  skyClipMax?: number;
 }
 
 /**
@@ -83,6 +99,34 @@ export const SHEET_DEFAULTS = {
   maxDimension: 4096,
   seamTolerance: 6,
   additiveBorderMax: 24,
+  // The rest were module constants with no contract path at all — the least
+  // contract-governed rule family in the range. Each default below is the
+  // exact number that shipped as a hardcoded literal; only the ability to
+  // author it is new.
+  /** 250/255: a couple of dither/codec-noise levels short of true 255, so a
+   *  legitimately opaque core is not flagged for lossy compression. */
+  fullAlphaMin: 250,
+  /** 0.5% of the sheet: below this the texture is mostly empty space the
+   *  GPU still samples every frame. */
+  sparseCoverageMin: 0.005,
+  /** 0.1% of visible pixels: a couple of anti-aliased fringe pixels are
+   *  tolerated before tinted art is judged to fight the engine's multiply. */
+  tintHueMax: 0.001,
+  /** Zero tolerance: any pixel inside a cell's border is a real bleed risk
+   *  once the GPU filters across the cell boundary. */
+  cellBleedMax: 0,
+  /** 2: a couple of dither/codec-noise levels of first/last-column
+   *  difference are tolerated before a beam is judged not tileable. */
+  beamSeamMax: 2,
+  /** Zero tolerance: a particle sheet is meant to sit inset from the atlas
+   *  edge, so any border-touching pixel will clip once atlased. */
+  particleBorderTouchMax: 0,
+  /** Zero tolerance: a sky face is meant to be fully opaque, so any
+   *  non-opaque pixel shows the void behind it. */
+  skyNonOpaqueMax: 0,
+  /** 0.2% of the face: a small clipped fraction reads as legitimate
+   *  highlight/shadow rather than posterisation. */
+  skyClipMax: 0.002,
 } as const;
 
 type Edge = "top" | "bottom" | "left" | "right";
@@ -123,6 +167,14 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
   const maxDimension = input.maxDimension ?? SHEET_DEFAULTS.maxDimension;
   const seamTolerance = input.seamTolerance ?? SHEET_DEFAULTS.seamTolerance;
   const additiveBorderMax = input.additiveBorderMax ?? SHEET_DEFAULTS.additiveBorderMax;
+  const fullAlphaMin = input.fullAlphaMin ?? SHEET_DEFAULTS.fullAlphaMin;
+  const sparseCoverageMin = input.sparseCoverageMin ?? SHEET_DEFAULTS.sparseCoverageMin;
+  const tintHueMax = input.tintHueMax ?? SHEET_DEFAULTS.tintHueMax;
+  const cellBleedMax = input.cellBleedMax ?? SHEET_DEFAULTS.cellBleedMax;
+  const beamSeamMax = input.beamSeamMax ?? SHEET_DEFAULTS.beamSeamMax;
+  const particleBorderTouchMax = input.particleBorderTouchMax ?? SHEET_DEFAULTS.particleBorderTouchMax;
+  const skyNonOpaqueMax = input.skyNonOpaqueMax ?? SHEET_DEFAULTS.skyNonOpaqueMax;
+  const skyClipMax = input.skyClipMax ?? SHEET_DEFAULTS.skyClipMax;
 
   for (const file of input.missing ?? []) {
     issues.push({
@@ -190,21 +242,21 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
       // E-606 asserts alpha carries the silhouette. That is false for an
       // additive sheet, which is why declaring additive is a trade: this
       // check is gated off, and the dark-border check below stands in.
-      if (!additive && m.maxAlpha < 250) {
+      if (!additive && m.maxAlpha < fullAlphaMin) {
         issues.push({
           code: ISSUE_CODES.SHEET_NO_FULL_ALPHA,
           severity: "error",
           message: `never reaches full alpha (max ${m.maxAlpha}) — the hot core is missing`,
-          hint: "an effect that never hits opaque reads as washed out at every intensity",
+          hint: "an effect that never hits opaque reads as washed out at every intensity; governed by conventions.sheets.fullAlphaMin",
           ...at,
         });
       }
-      if (drawnRatio < 0.005) {
+      if (drawnRatio < sparseCoverageMin) {
         issues.push({
           code: ISSUE_CODES.SHEET_SPARSE,
           severity: "warning",
           message: `only ${(drawnRatio * 100).toFixed(2)}% of the sheet is drawn`,
-          hint: "most of this texture is empty space the GPU still samples",
+          hint: "most of this texture is empty space the GPU still samples; governed by conventions.sheets.sparseCoverageMin",
           ...at,
         });
       }
@@ -225,12 +277,12 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
 
     // Tintable art must be neutral: the engine multiplies a colour through
     // it, and baked hue fights whatever the engine asks for.
-    if (spec.tint && m.hueRatio > 0.001) {
+    if (spec.tint && m.hueRatio > tintHueMax) {
       issues.push({
         code: ISSUE_CODES.SHEET_TINTABLE_HAS_HUE,
         severity: "error",
         message: `${(m.hueRatio * 100).toFixed(1)}% of visible pixels carry hue, but this sheet is tinted by the engine`,
-        hint: "author it neutral grey; the engine supplies the colour",
+        hint: "author it neutral grey; the engine supplies the colour; governed by conventions.sheets.tintHueMax",
         ...at,
       });
     }
@@ -264,12 +316,12 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
             ...at,
           });
         }
-        if (cells.bleed > 0) {
+        if (cells.bleed > cellBleedMax) {
           issues.push({
             code: ISSUE_CODES.SHEET_CELL_BLEED,
             severity: "error",
             message: `${cells.bleed} pixels sit inside a cell's 2px border — frames will bleed into each other`,
-            hint: "inset each frame so filtering cannot sample its neighbour",
+            hint: "inset each frame so filtering cannot sample its neighbour; governed by conventions.sheets.cellBleedMax",
             ...at,
           });
         }
@@ -296,23 +348,23 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
       }
     }
 
-    if (spec.kind === "particle" && m.borderTouch > 0) {
+    if (spec.kind === "particle" && m.borderTouch > particleBorderTouchMax) {
       issues.push({
         code: ISSUE_CODES.SHEET_BORDER_TOUCH,
         severity: "error",
         message: `${m.borderTouch} pixels touch the outer border and will clip once atlased`,
-        hint: "inset the art away from the edge",
+        hint: "inset the art away from the edge; governed by conventions.sheets.particleBorderTouchMax",
         ...at,
       });
     }
 
     if (spec.kind === "beam") {
-      if (m.seamLeftRight > 2) {
+      if (m.seamLeftRight > beamSeamMax) {
         issues.push({
           code: ISSUE_CODES.SHEET_NOT_TILEABLE,
           severity: "error",
           message: `first and last columns differ by ${m.seamLeftRight.toFixed(1)} — the strip will not tile`,
-          hint: "make the two ends identical so the repeat is seamless",
+          hint: "make the two ends identical so the repeat is seamless; governed by conventions.sheets.beamSeamMax",
           ...at,
         });
       }
@@ -328,21 +380,21 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
     }
 
     if (spec.kind === "sky") {
-      if (m.nonOpaqueRatio > 0) {
+      if (m.nonOpaqueRatio > skyNonOpaqueMax) {
         issues.push({
           code: ISSUE_CODES.SHEET_SKY_NOT_OPAQUE,
           severity: "error",
           message: `${(m.nonOpaqueRatio * 100).toFixed(2)}% of the face is not fully opaque`,
-          hint: "a transparent skybox face shows the void behind it",
+          hint: "a transparent skybox face shows the void behind it; governed by conventions.sheets.skyNonOpaqueMax",
           ...at,
         });
       }
-      if (m.clippedRatio > 0.002) {
+      if (m.clippedRatio > skyClipMax) {
         issues.push({
           code: ISSUE_CODES.SHEET_SKY_CLIPPED,
           severity: "warning",
           message: `${(m.clippedRatio * 100).toFixed(1)}% of the face clips to pure black or white`,
-          hint: "clipped sky bands read as posterised in-engine",
+          hint: "clipped sky bands read as posterised in-engine; governed by conventions.sheets.skyClipMax",
           ...at,
         });
       }

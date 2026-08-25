@@ -311,6 +311,11 @@ jobs:
           pnpm --filter @open-design/contracts test
           pnpm --filter @open-design/host test
           pnpm --filter @open-design/platform test
+          # The unit project only: the blender project needs a real Blender
+          # 5.x install, which CI runners do not have. Environments that DO
+          # promise one run the full suite with SCENE3D_REQUIRE_BLENDER=1 so
+          # a missing Blender fails loudly instead of skipping silently.
+          pnpm --filter @open-design/scene3d test:unit
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
           if [ "${{ needs.scopes.outputs.tools_dev_tests_required }}" = "true" ]; then

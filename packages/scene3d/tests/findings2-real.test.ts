@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * End-to-end, REAL-Blender coverage of the FINDINGS2 mechanisms.
@@ -17,6 +18,7 @@ import { rmForSetup } from "./helpers/fs.js";
  * not work.
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 const HELMET = path.join(__dirname, "fixtures", "real", "helmet", "DamagedHelmet.glb");
 
 describe.skipIf(!hasBlender)("FINDINGS2 mechanisms (real Blender)", () => {
@@ -104,12 +106,19 @@ describe.skipIf(!hasBlender)("FINDINGS2 mechanisms (real Blender)", () => {
     const dir = path.join(__dirname, ".work", `f2-golem-${++seq}`);
     rmForSetup(dir);
     fs.cpSync(src, dir, { recursive: true });
-    const r = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true }); // every stage
+    const r = await compile({
+      projectDir: dir,
+      // The turntable is not the point here — one rendered frame proves
+      // "the turntable path rendered" for this all-stages integration.
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    }); // every stage
     expect(r.stages.map((s) => `${s.id}:${s.status}`)).toEqual([
       "parse:ran", "build:ran", "proof:ran", "export:ran", "lint:ran", "manifest:ran",
     ]);
     expect(r.ok).toBe(true);
-    expect(r.proofImages.length).toBeGreaterThan(0); // the turntable rendered
+    expect(r.proofImages.length).toBeGreaterThan(0); // the proof path rendered
     // The block model + its textures ship alongside the GLB/USD family.
     expect(r.exportedAssets).toContain("out/minecraft/model.json");
     expect(r.exportedAssets.some((a) => a.endsWith(".glb"))).toBe(true);
@@ -320,7 +329,12 @@ describe.skipIf(!hasBlender)("FINDINGS2 mechanisms (real Blender)", () => {
         "",
       ].join("\n"),
     });
-    const r = await compile({ projectDir: dir, stages: ["parse", "build", "lint", "export"], timeoutMs: LONG, noCache: true });
+    const r = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint", "export"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
     const spun = r.census!.meshes.find((m) => m.object === "prp_spun")!;
     // The census recovered the TRUE 1 m cube, not the ~1.31 m rotated AABB.
     expect(spun.voxel!.localSize![0]).toBeCloseTo(1, 2);
@@ -346,7 +360,7 @@ describe.skipIf(!hasBlender)("FINDINGS2 mechanisms (real Blender)", () => {
         "",
       ].join("\n");
     const coloured = mkProject({ "scene3d.json": JSON.stringify({ schemaVersion: 1, conventions: { naming: { forbidDefaultNames: false } } }), "build.py": bpyBody(true) });
-    const rc = await run(coloured);
+    const rc = await run(coloured, ["parse", "build", "lint"]);
     expect(rc.census!.meshes.find((m) => m.object === "prp_voxel")!.hasColorAttribute).toBe(true);
     expect(codes(rc, /W-345/)).toEqual([]);
 

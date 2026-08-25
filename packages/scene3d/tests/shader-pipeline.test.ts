@@ -5,6 +5,7 @@ import { compile, probeBlender } from "../src/index.js";
 import { ISSUE_CODES } from "../src/errors.js";
 import { decodePng, DecodedImage } from "../src/sheet/png.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * The shader pipeline on the REAL GPU: kernels compiled by the actual
@@ -16,6 +17,7 @@ import { rmForSetup } from "./helpers/fs.js";
  * lies).
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)("shader pipeline (real GPU)", () => {
   const fixture = (name: string) => path.join(__dirname, "fixtures", name);
@@ -30,7 +32,14 @@ describe.skipIf(!hasBlender)("shader pipeline (real GPU)", () => {
 
   it("bakes the rust kernel on the GPU and wires it through the whole pipeline", async () => {
     const dir = workDir("good/spec_shaded");
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // The proof assertion below needs a rendered frame to EXIST — one still
+    // carries that fact; the turntable adds nothing to it.
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(result.issues).toEqual([]);
     expect(result.ok).toBe(true);
 
@@ -316,7 +325,13 @@ describe.skipIf(!hasBlender)("shader pipeline (real GPU)", () => {
       }),
       "utf8",
     );
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    const result = await compile({
+      projectDir: dir,
+      // The mv atlas ships as an export deliverable; no render is consumed.
+      stages: ["parse", "build", "lint", "export"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(result.ok).toBe(true);
 
     const mvPath = path.join(dir, "out", "textures", "shd_slide_mv.png");
@@ -364,7 +379,16 @@ describe.skipIf(!hasBlender)("shader pipeline (real GPU)", () => {
       }),
       "utf8",
     );
-    const full = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    const full = await compile({
+      projectDir: dir,
+      // Manifest INCLUDED: the restricted pass below proves the manifest
+      // carry-forward, which can only carry from a manifest this compile
+      // wrote. Skipping proof keeps the speed; skipping manifest removed
+      // the very artifact under test.
+      stages: ["parse", "build", "lint", "export", "manifest"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(full.ok).toBe(true);
     expect(full.exportedAssets.some((a) => a.endsWith("scene.glb"))).toBe(true);
     expect(full.exportedAssets).toContain("out/textures/shd_slide_mv.png");

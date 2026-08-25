@@ -89,6 +89,14 @@ export interface KitEntry {
   scenePath?: string;
   issueCodes?: string[];
   ok?: boolean;
+  /**
+   * Derived asset kind (`animation`, `prop`, `texture`, …). The rail shows
+   * a small kind glyph per row when the kit MIXES kinds — a rail of twelve
+   * identical cubes is noise, a mixed kit earns the differentiation — and
+   * the ident hands it to the host so its toolbar chip can draw the same
+   * glyph the compile panel does.
+   */
+  kind?: string;
 }
 
 export interface KitPage {
@@ -323,6 +331,10 @@ export function renderKitHtml(page: KitPage): string {
   .chip[aria-pressed="true"] .n { color: color-mix(in srgb, var(--chip-on-ink) 65%, transparent); }
   .chip .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--bad); flex: none; }
   .chip .dot.ok { display: none; }
+  /* Per-row kind glyph (mixed-kind kits only): quiet, after the name. */
+  .chip .kindg { flex: none; display: inline-flex; color: var(--muted); opacity: 0.75; }
+  .chip .kindg svg { display: block; }
+  .chip[aria-pressed="true"] .kindg { color: color-mix(in srgb, var(--chip-on-ink) 70%, transparent); }
 
   /* Part tree under a scene row — the USD stage breakdown. Rows carry the
      prim name only; type, face count, and the full prim path live in the
@@ -1267,6 +1279,53 @@ let occupancy = null;
 let occupancyKey = '';
 let frame = null;
 let currentEntry = null;
+
+/**
+ * View-state persistence across page reloads.
+ *
+ * The host reloads this page whenever the compile rewrites kit.html or the
+ * file-change watcher refreshes the srcdoc — and a reload that forgets which
+ * scene was open and where the camera was makes every recompile feel like
+ * being thrown out of the room. window.name is the one storage this page can
+ * always reach: it survives a srcdoc swap in the SAME iframe element (the
+ * host's refresh path) and a plain reload of the standalone page, and it
+ * works in an opaque-origin sandbox where localStorage throws. The write is
+ * wrapped anyway — nothing about persistence may ever break the viewer.
+ *
+ * Restore is split: the entry choice happens at boot (the rail needs it),
+ * the camera after the model loads (select() sets the framing default the
+ * restore must beat), so the pending values live here and are consumed once.
+ */
+const VIEW_STATE_TAG = 's3dview:';
+let pendingViewCam = null;
+let pendingViewSel = null;
+function loadViewState() {
+  try {
+    if (typeof window.name === 'string' && window.name.indexOf(VIEW_STATE_TAG) === 0) {
+      const parsed = JSON.parse(window.name.slice(VIEW_STATE_TAG.length));
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch (_) { /* corrupt or foreign window.name: start fresh */ }
+  return null;
+}
+let viewStateTimer = 0;
+function saveViewState() {
+  /* Debounced off the render scheduler: an orbit drag invalidates every
+     frame, and serialising once after the gesture settles is plenty. */
+  clearTimeout(viewStateTimer);
+  viewStateTimer = setTimeout(() => {
+    try {
+      window.name = VIEW_STATE_TAG + JSON.stringify({
+        entry: currentEntry ? currentEntry.name : null,
+        cam: [state.azimuth, state.elevation, state.distance,
+              state.pan[0], state.pan[1], state.pan[2]],
+        sel: Array.from(state.selection),
+        rail: !document.getElementById('rail').classList.contains('hidden'),
+        xrayMode: state.xrayMode,
+      });
+    } catch (_) { /* persistence must never break the viewer */ }
+  }, 200);
+}
 /* The bytes the current model was built from, kept so a lost GPU context
    can be rebuilt without a refetch — and, more importantly, without
    discarding the edits the user has not saved yet. */
@@ -3547,7 +3606,13 @@ function applyReveal() {
 
   invalidate();
 }
-function invalidate() { if (frame === null) frame = requestAnimationFrame(draw); }
+function invalidate() {
+  /* Every state change that repaints is a state change worth remembering;
+     one hook here (debounced inside) covers orbit, zoom, pan, selection,
+     scene switches and the rail without a call at each site. */
+  saveViewState();
+  if (frame === null) frame = requestAnimationFrame(draw);
+}
 
 /**
  * Is there anything a save would write?
@@ -7064,6 +7129,29 @@ async function select(entry, button) {
     refreshEditButtons();
     state.distance = renderer.bounds.radius * 3.2;
     state.pan = [0, 0, 0];
+    /* One-shot restore of the pre-reload camera and selection, consumed on
+       the FIRST model load only: it must beat the framing default above,
+       and it must not follow the user to a different scene they open next.
+       Every number is validated and the distance re-clamped to this scene's
+       zoom range — the reload may be showing a recompiled, resized asset. */
+    if (pendingViewCam) {
+      const cam = pendingViewCam;
+      pendingViewCam = null;
+      if (Array.isArray(cam) && cam.length === 6 && cam.every(Number.isFinite)) {
+        state.azimuth = cam[0];
+        state.elevation = Math.max(-1.5, Math.min(1.5, cam[1]));
+        const range = zoomRange(renderer.bounds);
+        state.distance = Math.min(range.max, Math.max(range.min, cam[2]));
+        state.pan = [cam[3], cam[4], cam[5]];
+      }
+    }
+    if (pendingViewSel) {
+      const names = pendingViewSel.filter(
+        (n) => typeof n === 'string' && renderer.draws.some((d) => d.name === n),
+      );
+      pendingViewSel = null;
+      for (let k = 0; k < names.length; k++) selectPart(names[k], k === 0 ? 'replace' : 'add');
+    }
     updateIdent(entry,
       stats.parts + (stats.parts === 1 ? ' part · ' : ' parts · ') +
       stats.tris.toLocaleString() + (stats.tris === 1 ? ' tri' : ' tris'));
@@ -7153,6 +7241,9 @@ function updateIdent(entry, statsText) {
       known: entry.ok !== undefined,
       meta: statsText || '',
       detail: verdictText,
+      // The derived asset kind, so the host toolbar chip can draw the
+      // same kind glyph the compile panel does.
+      kind: entry.kind || null,
     }, '*');
   } catch (_) {}
 }
@@ -7165,6 +7256,27 @@ window.addEventListener('message', (e) => {
   }
 });
 
+/* Kind glyphs — the same drawn vocabulary the host panel's kind chip uses
+   (static here: the rail is a list, not a stage). Inline strings because
+   this page is self-contained; keep the paths in step with KindGlyphArt in
+   Scene3dPanel.tsx. */
+const KIND_SVG_OPEN = '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+const KIND_GLYPHS = {
+  animation: KIND_SVG_OPEN + '<circle cx="8" cy="8" r="6.2"/><path d="M6.7 5.7l4 2.3-4 2.3z" fill="currentColor" stroke="none"/></svg>',
+  prop: KIND_SVG_OPEN + '<path d="M8 1.9 13.5 5v6L8 14.1 2.5 11V5z"/><path d="M2.5 5 8 8.1 13.5 5M8 8.1v6"/></svg>',
+  kit: KIND_SVG_OPEN + '<rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/><rect x="5.5" y="2" width="5" height="5" rx="1"/></svg>',
+  texture: KIND_SVG_OPEN + '<rect x="2" y="2" width="12" height="12" rx="2"/><rect x="2.9" y="2.9" width="5.1" height="5.1" fill="currentColor" stroke="none" opacity="0.55"/><rect x="8" y="8" width="5.1" height="5.1" fill="currentColor" stroke="none" opacity="0.55"/></svg>',
+  skybox: KIND_SVG_OPEN + '<circle cx="8" cy="8" r="6.2"/><path d="M2 9.6c2-1.5 4-1.5 6 0s4 1.5 6 0"/><circle cx="10.4" cy="5.4" r="1.4" fill="currentColor" stroke="none"/></svg>',
+  sprite: KIND_SVG_OPEN + '<rect x="2" y="2" width="12" height="12" rx="2"/><path d="M8 2v12M2 8h12"/><rect x="3.6" y="3.6" width="3" height="3" rx="0.8" fill="currentColor" stroke="none"/></svg>',
+  flipbook: KIND_SVG_OPEN + '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M8 3v10"/></svg>',
+  vfx: KIND_SVG_OPEN + '<path d="M8 1.8v3.4M8 10.8v3.4M1.8 8h3.4M10.8 8h3.4"/><path d="M4 4l1.8 1.8M10.2 10.2 12 12M12 4l-1.8 1.8M5.8 10.2 4 12"/></svg>',
+  scene: KIND_SVG_OPEN + '<ellipse cx="8" cy="12.2" rx="5.9" ry="1.8"/><path d="M8 2.2 12.1 4.5v4L8 10.9 3.9 8.5v-4z"/><path d="M3.9 4.5 8 6.9l4.1-2.4M8 6.9v4"/></svg>',
+};
+/* Per-row kind glyphs earn their pixels only when the kit MIXES kinds — a
+   rail of twelve identical cubes is noise; prop-vs-animation-vs-texture is
+   information. */
+const mixedKinds = new Set(KIT.entries.map((e) => e.kind || 'scene')).size > 1;
+
 const host = document.getElementById('catalog');
 const groups = new Map();
 for (const entry of KIT.entries) {
@@ -7172,6 +7284,8 @@ for (const entry of KIT.entries) {
   groups.get(entry.category).push(entry);
 }
 let first = null;
+/* Every rail row, so the boot can reopen the entry a reload interrupted. */
+const railRows = [];
 for (const [category, entries] of groups) {
   const heading = document.createElement('div');
   heading.className = 'group';
@@ -7194,6 +7308,13 @@ for (const [category, entries] of groups) {
     label.className = 'label';
     label.textContent = entry.name;
     button.append(dot, label);
+    if (mixedKinds && entry.kind && KIND_GLYPHS[entry.kind]) {
+      const kglyph = document.createElement('span');
+      kglyph.className = 'kindg';
+      kglyph.innerHTML = KIND_GLYPHS[entry.kind];
+      kglyph.title = entry.kind;
+      button.appendChild(kglyph);
+    }
     if (typeof entry.parts === 'number') {
       const n = document.createElement('span');
       n.className = 'n';
@@ -7237,6 +7358,7 @@ for (const [category, entries] of groups) {
       });
     }
     if (!first) first = { entry: entry, button: button };
+    railRows.push({ entry: entry, button: button });
   }
   host.appendChild(chips);
 }
@@ -7516,7 +7638,24 @@ function syncRailFade() {
 }
 requestAnimationFrame(syncRailFade);
 window.addEventListener('resize', syncRailFade);
-if (first) select(first.entry, first.button);
+/* Reopen where the last load left off: the host reloads this page on every
+   recompile and file refresh, and without this each reload dumped the user
+   back at the first scene with a reframed camera. The saved entry must
+   still exist (a recompile can rename or drop scenes); anything missing
+   falls back to the first entry exactly as before. */
+const savedView = loadViewState();
+let bootRow = first;
+if (savedView) {
+  if (Array.isArray(savedView.cam)) pendingViewCam = savedView.cam;
+  if (Array.isArray(savedView.sel) && savedView.sel.length > 0) pendingViewSel = savedView.sel;
+  if (savedView.xrayMode === 1 || savedView.xrayMode === 2) state.xrayMode = savedView.xrayMode;
+  if (typeof savedView.rail === 'boolean') setRail(browsable && savedView.rail);
+  if (typeof savedView.entry === 'string') {
+    const match = railRows.find((r) => r.entry.name === savedView.entry);
+    if (match) bootRow = match;
+  }
+}
+if (bootRow) select(bootRow.entry, bootRow.button);
 else {
   // Nothing compiled: every control refers to an asset that does not
   // exist. An empty identity pill and a hint about clicking parts read as

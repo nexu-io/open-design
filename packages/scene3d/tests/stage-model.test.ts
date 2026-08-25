@@ -258,3 +258,22 @@ def Xform "Root" {
     expect(kinds(usda)).toMatchObject({ Root: "assembly", prp_a: "component", prp_b: "component" });
   });
 });
+
+describe("EOL preservation", () => {
+  it("keeps a CRLF-authored stage CRLF throughout, spliced lines included", () => {
+    const crlf = EXPORTED.replace(/\n/g, "\r\n");
+    const { usda } = authorStageModel({ usda: crlf, assetName: "crate" });
+    // Every line terminator is CRLF: no bare-LF line survives a splice.
+    expect(usda.includes("\r\n")).toBe(true);
+    expect(usda.replace(/\r\n/g, "").includes("\n")).toBe(false);
+    // No stray \r mid-line (the def-line split used to thread one in).
+    expect(/\r(?!\n)/.test(usda)).toBe(false);
+    // And the authored result still parses.
+    expect(() => parseUsda(usda, "out.usda")).not.toThrow();
+  });
+
+  it("keeps an LF stage LF", () => {
+    const { usda } = authorStageModel({ usda: EXPORTED, assetName: "crate" });
+    expect(usda.includes("\r")).toBe(false);
+  });
+});

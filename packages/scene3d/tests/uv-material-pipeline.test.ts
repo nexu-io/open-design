@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { ISSUE_CODES } from "../src/errors.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * The UV / texture-file / engine-hygiene rules against REAL Blender output.
@@ -17,6 +18,7 @@ import { rmForSetup } from "./helpers/fs.js";
  * rule must stay silent, because a gate that flags good work is noise.
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)("uv/material/hygiene rules (real Blender)", () => {
   const fixture = (name: string) => path.join(__dirname, "fixtures", name);
@@ -37,9 +39,12 @@ describe.skipIf(!hasBlender)("uv/material/hygiene rules (real Blender)", () => {
     // render, real exporters, and a manifest — with a textured material.
     // The GLB must embed the image (baseColorTexture + TEXCOORD_0 + a PNG
     // bufferView), because that is what the kit viewer's texture path and
-    // every downstream engine import consume.
+    // every downstream engine import consume. The proof assertion needs a
+    // rendered frame to EXIST — one still carries that fact; the turntable
+    // adds nothing to it.
     const result = await compile({
       projectDir: workDir("good/textured_prop"),
+      proof: { turntable: false },
       timeoutMs: LONG,
       noCache: true,
     });

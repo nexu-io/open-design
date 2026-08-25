@@ -15,10 +15,13 @@ import { CompileResult, Issue, Severity } from "./types.js";
 export type Grade = "pass" | "attention" | "fail";
 
 export type Dimension =
+  | "spec"
+  | "build"
   | "naming"
   | "geometry"
   | "materials"
   | "uv"
+  | "voxel"
   | "intent"
   | "claims"
   | "staging"
@@ -52,14 +55,19 @@ export interface Verdict {
   };
 }
 
-/** Map a stable code to the concern it belongs to (data, by numeric range). */
+/** Map a stable code to the concern it belongs to (data, by numeric range).
+ *  Total over the catalog on purpose: a range that falls through to "other"
+ *  makes a whole family vanish from the summary line — a voxel-heavy compile
+ *  used to grade as `attention — other`, which told the agent nothing. */
 export function dimensionOf(code: string): Dimension {
   const n = Number(/-(\d+)$/.exec(code)?.[1] ?? -1);
+  if (n >= 100 && n <= 119) return "spec"; // contract / scene.json / solver
+  if (n >= 200 && n <= 219) return "build"; // Blender runtime, import, tweaks
   if (n >= 300 && n <= 319) return "naming";
   if (n >= 320 && n <= 339) return "geometry";
   if (n >= 340 && n <= 359) return "materials";
   if (n >= 360 && n <= 379) return "geometry"; // units / transforms
-  if (n >= 380 && n <= 419) return "staging"; // proof + exported stage
+  if (n >= 380 && n <= 439) return "staging"; // proof + exported stage
   if (n >= 440 && n <= 459) return "uv";
   if (n >= 500 && n <= 519) return "conformance"; // glTF/USD oracles
   if (n >= 600 && n <= 619) return "materials"; // sheets
@@ -67,6 +75,7 @@ export function dimensionOf(code: string): Dimension {
   if (n >= 800 && n <= 819) return "materials"; // shaders
   if (n >= 900 && n <= 919) return "conformance"; // master parity
   if (n >= 950 && n <= 969) return "intent";
+  if (n >= 970 && n <= 979) return "voxel";
   return "other";
 }
 
@@ -114,7 +123,12 @@ export function assessVerdict(result: CompileResult): Verdict {
     const overruns = group
       .map((i) => i.detail?.overrun)
       .filter((v): v is number => typeof v === "number");
-    const worst = group[0]!;
+    /* The member whose overrun IS the group's magnitude tag. Taking group[0]
+       here let "fix first" print one part's +563% beside a different part's
+       sentence — the first thing a model acts on, attributed wrong. */
+    const overrunOf = (i: Issue) =>
+      typeof i.detail?.overrun === "number" ? (i.detail.overrun as number) : -Infinity;
+    const worst = group.reduce((best, i) => (overrunOf(i) > overrunOf(best) ? i : best), group[0]!);
     return {
       code,
       severity: worst.severity,

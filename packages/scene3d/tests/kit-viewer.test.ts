@@ -4,8 +4,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { KIT_RUNTIME_JS } from "../src/viewer/kit-runtime.js";
 import { renderKitHtml } from "../src/viewer/kit.js";
+import { writeViewer } from "../src/manifest.js";
 import { compile, probeBlender } from "../src/index.js";
 import { rmRetry } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * The kit runtime ships as an inlined string, so it never passes through
@@ -838,12 +840,13 @@ describe("renderKitHtml", () => {
 });
 
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)("kit runtime against a real export", () => {
   it("parses the GLB the pipeline actually produces", async () => {
     const work = fs.mkdtempSync(path.join(os.tmpdir(), "scene3d-kit-"));
     fs.cpSync(path.join(__dirname, "fixtures", "good", "prop_crate"), work, { recursive: true });
-    const result = await compile({ projectDir: work, timeoutMs: 240_000 });
+    const result = await compile({ projectDir: work, proof: { turntable: false }, timeoutMs: 240_000 });
     const glb = result.exportedAssets.find((a) => a.endsWith(".glb"))!;
     expect(glb).toBeTruthy();
 
@@ -882,4 +885,137 @@ describe.skipIf(!hasBlender)("kit runtime against a real export", () => {
     // teardown that throws turns a fully-passing test red.
     rmRetry(work);
   }, 300_000);
+});
+
+/*
+ * View-state persistence: the host reloads kit.html on every recompile and
+ * file refresh, and the page's answer is a window.name snapshot (the one
+ * storage an opaque-origin srcdoc can reach) restored at boot. These pin the
+ * mechanism at the two ends that can silently rot: the reader must survive
+ * junk, and the emitted page must actually carry the save/restore wiring.
+ */
+describe("kit view-state persistence", () => {
+  function pageHtml() {
+    return renderKitHtml({
+      title: "Kit",
+      entries: [{ name: "Crate", category: "Built", glb: "a.glb" }],
+    });
+  }
+
+  it("ships the save/restore wiring in the emitted page", () => {
+    const html = pageHtml();
+    // The tag is the contract between save and load; losing either side
+    // silently turns every reload back into a hard reset.
+    expect(html).toContain("s3dview:");
+    expect(html).toContain("function saveViewState");
+    expect(html).toContain("function loadViewState");
+    // Boot consumes the saved entry against the rail it just built.
+    expect(html).toContain("railRows");
+    expect(html).toContain("pendingViewCam");
+  });
+
+  it("loadViewState survives junk and foreign window.name values", () => {
+    const html = pageHtml();
+    const src = html.slice(html.indexOf("function loadViewState"));
+    const body = src.slice(0, src.indexOf("\n}\n") + 3);
+    // The tag const lives beside the function in the page; carry it in, but
+    // read its VALUE from the page so this test cannot drift from the ship.
+    const tag = html.match(/const VIEW_STATE_TAG = '([^']+)';/)?.[1];
+    expect(tag).toBe("s3dview:");
+    const load = (name: unknown) =>
+      new Function(
+        `const VIEW_STATE_TAG = '${tag}';\nconst window = { name: arguments[0] };\n${body}\nreturn loadViewState();`,
+      )(name);
+    expect(load("")).toBeNull();
+    expect(load("some other page's name")).toBeNull();
+    expect(load("s3dview:{not json")).toBeNull();
+    expect(load('s3dview:"a string, not an object"')).toBeNull();
+    const state = load('s3dview:{"entry":"fox","cam":[1,2,3,0,0,0],"rail":true}');
+    expect(state).toEqual({ entry: "fox", cam: [1, 2, 3, 0, 0, 0], rail: true });
+  });
+});
+
+/*
+ * The generated out/index.html frame player. Three behaviours earned by
+ * field complaints: an `animation` autoplays (its frames sample the clip —
+ * a static player under that label is the label lying), the picture answers
+ * the same drag-to-rotate gesture as the host panel, and the square stage
+ * caps to the viewport so the controls never fall below the fold.
+ */
+describe("turntable viewer page", () => {
+  function viewerHtml(assetKind?: string): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "s3d-viewer-"));
+    try {
+      writeViewer(
+        dir,
+        {
+          schemaVersion: 1,
+          generatedAt: "2026-01-01T00:00:00.000Z",
+          source: { kind: "spec", files: ["scene.json"] },
+          blender: { version: null, used: false },
+          partTree: [],
+          materials: [],
+          textures: [],
+          animation: { fps: 24, frameStart: 1, frameEnd: 48, keyframedObjects: [] },
+          camera: { present: false, name: null },
+          proofImages: [],
+          exportedAssets: [],
+          issues: { errors: 0, warnings: 0, infos: 0 },
+          issueCodes: [],
+          ...(assetKind ? { assetKind } : {}),
+        } as never,
+        ["out/proof/a.png", "out/proof/b.png"],
+      );
+      return fs.readFileSync(path.join(dir, "out", "index.html"), "utf8");
+    } finally {
+      rmRetry(dir);
+    }
+  }
+
+  it("carries the asset kind and gates autoplay on `animation`", () => {
+    const anim = viewerHtml("animation");
+    expect(anim).toContain('"assetKind":"animation"');
+    expect(anim).toContain("if (D.assetKind === 'animation') start();");
+    // The default (no kind recorded) falls back to scene, which never
+    // autoplays — a spinning prop is noise, not information.
+    expect(viewerHtml()).toContain('"assetKind":"scene"');
+  });
+
+  it("answers drag-to-rotate on the stage and keeps controls above the fold", () => {
+    const html = viewerHtml();
+    // The same gesture the host panel answers with.
+    expect(html).toContain("stage.addEventListener('pointerdown'");
+    expect(html).toContain("stage.addEventListener('pointermove'");
+    // The stage caps to the viewport height; a scrubber below the fold
+    // reads as a broken page (this shipped once).
+    expect(html).toMatch(/\.stage, \.bar \{ width: min\(100%, calc\(100vh/);
+    // Its script parses — the page is authored inside a TS template
+    // literal, where a stray backtick is a shipped syntax error.
+    for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
+      expect(() => new Function(m[1]!)).not.toThrow();
+    }
+  });
+});
+
+/*
+ * Per-entry kind glyphs: the rail differentiates a mixed kit (prop vs
+ * animation vs texture) with the same drawn vocabulary the host panel's
+ * kind chip uses, and the ident message hands the kind to the host.
+ */
+describe("kit kind glyphs", () => {
+  it("ships the glyph map, the mixed-kind gate, and the entries' kinds", () => {
+    const html = renderKitHtml({
+      title: "Kit",
+      entries: [
+        { name: "crate", category: "x", glb: "a.glb", kind: "prop" },
+        { name: "fox", category: "x", glb: "b.glb", kind: "animation" },
+      ],
+    });
+    expect(html).toContain("KIND_GLYPHS");
+    expect(html).toContain("mixedKinds");
+    expect(html).toContain('"kind":"prop"');
+    expect(html).toContain('"kind":"animation"');
+    // The ident hands the kind up so the host chip can draw the glyph.
+    expect(html).toContain("kind: entry.kind || null");
+  });
 });

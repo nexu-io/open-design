@@ -19,7 +19,7 @@ export function lintUv(ctx: LintContext, issues: Issue[]): void {
   if (!census || rules.require === "off") return;
 
   const textured = texturedObjects(census);
-  const densities: Array<{ object: string; min: number; max: number }> = [];
+  const densities: Array<{ object: string; min: number; max: number; mean: number }> = [];
   // An imported mesh owns its own unwrap (or deliberately has none — vertex-
   // coloured, or a shader that needs no UVs). That is handled by provenance
   // reclassification after the fact, not by skipping the measurement here.
@@ -112,16 +112,28 @@ export function lintUv(ctx: LintContext, issues: Issue[]): void {
     }
 
     if (uv.texelDensity) {
-      densities.push({ object: mesh.object, min: uv.texelDensity.min, max: uv.texelDensity.max });
+      densities.push({
+        object: mesh.object,
+        min: uv.texelDensity.min,
+        max: uv.texelDensity.max,
+        mean: uv.texelDensity.mean,
+      });
       if (
         rules.texelDensityTarget !== null &&
         (uv.texelDensity.max > rules.texelDensityTarget * rules.texelDensityMaxRatio ||
           uv.texelDensity.min < rules.texelDensityTarget / rules.texelDensityMaxRatio)
       ) {
+        /* The statistic is NAMED in the message. Three aggregates of one
+           measurement share the name "texel density" across the surfaces
+           (lint, kit page, judge), and a field run that saw 206 here and
+           382 on the kit chip for the same part could not tell which lever
+           moved which number. min/max stay the rule's subject — "does any
+           face miss the band" is a per-face question — the mean is quoted
+           so the reader can reconcile against every mean-quoting surface. */
         issues.push({
           code: ISSUE_CODES.TEXEL_DENSITY_TARGET,
           severity: "warning",
-          message: `mesh '${mesh.object}' texel density ${formatDensity(uv.texelDensity.min)}-${formatDensity(uv.texelDensity.max)} px/m misses the ${formatDensity(rules.texelDensityTarget)} px/m target (x${rules.texelDensityMaxRatio} band)`,
+          message: `mesh '${mesh.object}' texel density min ${formatDensity(uv.texelDensity.min)} / max ${formatDensity(uv.texelDensity.max)} px/m (mean ${formatDensity(uv.texelDensity.mean)}) misses the ${formatDensity(rules.texelDensityTarget)} px/m target (x${rules.texelDensityMaxRatio} band)`,
           hint: "rescale the UV islands or resize the texture toward the project's density target",
           target: mesh.object,
           detail: { density: uv.texelDensity, target: rules.texelDensityTarget },
@@ -144,18 +156,42 @@ export function lintUv(ctx: LintContext, issues: Issue[]): void {
   const authored = densities.filter((d) => !(ctx.imported?.has(d.object) ?? false));
   const excluded = densities.length - authored.length;
   if (authored.length > 1) {
-    const min = authored.reduce((a, b) => (a.min <= b.min ? a : b));
-    const max = authored.reduce((a, b) => (a.max >= b.max ? a : b));
-    if (min.min > 0 && max.max / min.min > rules.texelDensityMaxRatio) {
+    /* The spread is judged over each part's area-weighted MEAN, not over the
+       extremes of extremes. max.max/min.min compared one part's single worst
+       face against another's single best, so the headline ratio was a number
+       no edit could target — a part whose one chamfer face read 206 px/m
+       flagged the whole part while its visible surface sat at 382. The mean
+       is the statistic every other surface (kit chip, role floor) quotes,
+       and rescaling a part's UVs by meanRatio actually closes the finding.
+       Per-face outliers stay W-445's job. */
+    const min = authored.reduce((a, b) => (a.mean <= b.mean ? a : b));
+    const max = authored.reduce((a, b) => (a.mean >= b.mean ? a : b));
+    if (min.mean > 0 && max.mean / min.mean > rules.texelDensityMaxRatio) {
       const over = excluded > 0 ? ` (${excluded} imported mesh(es) excluded)` : "";
+      /* The WHOLE distribution rides the finding, not just its endpoints.
+         A two-endpoint summary forced serial discovery: fix the named max,
+         recompile, meet the next offender, repeat — a field run paid four
+         ~20s rounds to walk a list this rule had already measured. Sorted
+         densest-first so the reader can rescale every outlier in ONE edit. */
+      const byPart = [...authored]
+        .sort((a, b) => b.mean - a.mean)
+        .slice(0, 40)
+        .map((d) => ({
+          object: d.object,
+          mean: Math.round(d.mean),
+          min: Math.round(d.min),
+          max: Math.round(d.max),
+        }));
       issues.push({
         code: ISSUE_CODES.TEXEL_DENSITY_SPREAD,
         severity: "warning",
-        message: `texel density varies x${(max.max / min.min).toFixed(1)} across the scene's authored parts${over} ('${min.object}' ${formatDensity(min.min)} px/m vs '${max.object}' ${formatDensity(max.max)} px/m; limit x${rules.texelDensityMaxRatio})`,
+        message: `texel density varies x${(max.mean / min.mean).toFixed(1)} across the scene's authored parts${over} (mean px/m: '${min.object}' ${formatDensity(min.mean)} vs '${max.object}' ${formatDensity(max.mean)}; limit x${rules.texelDensityMaxRatio})`,
         hint: "even out UV scale or texture resolution so neighbouring parts read at one level of detail",
         detail: {
-          min: { object: min.object, density: min.min },
-          max: { object: max.object, density: max.max },
+          min: { object: min.object, density: min.mean },
+          max: { object: max.object, density: max.mean },
+          byPart,
+          ...(authored.length > 40 ? { byPartTruncated: authored.length - 40 } : {}),
           ...(excluded > 0 ? { importedExcluded: excluded } : {}),
         },
       });

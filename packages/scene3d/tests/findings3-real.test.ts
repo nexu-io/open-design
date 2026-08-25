@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * REAL-Blender coverage for the FINDINGS3 audit round.
@@ -14,6 +15,7 @@ import { rmForSetup } from "./helpers/fs.js";
  * SOMETHING true, not that it happened to stay quiet.
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)("FINDINGS3 (real Blender)", () => {
   let seq = 0;
@@ -148,7 +150,13 @@ plate("prp_plate_b")
     // this test nor the corpus calibration could see it. A posture that only
     // holds for the stages you happened to run is not a posture.
     const dir = dropAsset(path.join(REAL, "fox", "Fox.glb"));
-    const r = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // The turntable itself is not under test here — export + its rules are.
+    const r = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
     const blocking = r.issues.filter((i) => i.severity === "error");
     expect(blocking).toEqual([]);
     expect(r.ok).toBe(true);
@@ -160,7 +168,13 @@ plate("prp_plate_b")
     // renaming somebody else's rig. Khronos RiggedFigure and Sponza both
     // failed this way while linting clean.
     const dir = dropAsset(path.join(REAL, "cesium", "CesiumMan.glb"));
-    const r = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // Export must run (E-404 fires there); the turntable adds nothing.
+    const r = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(r.issues.filter((i) => i.severity === "error")).toEqual([]);
     // ...and the finding is still SAID, as a note that names its provenance.
     const named = r.issues.filter((i) => i.code === "S3D-E-404");

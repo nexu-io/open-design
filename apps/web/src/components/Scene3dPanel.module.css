@@ -40,19 +40,140 @@
 
 /* ---- toolbar ----------------------------------------------------- */
 
-/* The asset's category, stated once. A compiled deliverable is not always
-   a "scene", and a panel that says so everywhere is a panel that lies
-   about flipbooks and textures. */
-.kindBadge {
-  padding: 2px 7px;
+/* The asset's category as a drawn glyph — the word lives on as the
+   tooltip/aria-label. Each glyph strokes itself in on mount and carries a
+   small idle so the chip reads as alive rather than printed; every motion
+   here stands down under prefers-reduced-motion at the end of this
+   section. */
+.kindGlyph {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
   border: 1px solid var(--border-subtle, #e3e6ea);
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-secondary, #667081);
-  white-space: nowrap;
+  animation: glyphChipIn 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.kindGlyph svg {
+  display: block;
+}
+
+@keyframes glyphChipIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* The draw-in: every stroked path starts fully dashed-out and draws over
+   ~600ms. 44 covers the longest path in a 16px viewBox (the circle,
+   2πr ≈ 39). */
+.glyphStroke {
+  stroke-dasharray: 44;
+  stroke-dashoffset: 44;
+  animation: glyphDraw 620ms cubic-bezier(0.23, 1, 0.32, 1) 80ms forwards;
+}
+
+@keyframes glyphDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Idles — one small, slow motion per kind, quiet enough to live in a
+   toolbar. Each starts after the draw-in has finished. */
+.glyphBeat {
+  transform-origin: 8.4px 8px;
+  animation: glyphBeat 2.8s ease-in-out 900ms infinite;
+}
+
+@keyframes glyphBeat {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.92;
+  }
+  50% {
+    transform: scale(1.14);
+    opacity: 1;
+  }
+}
+
+.glyphSun {
+  animation: glyphSun 6s ease-in-out 900ms infinite;
+}
+
+@keyframes glyphSun {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.9px);
+  }
+}
+
+.glyphHop {
+  animation: glyphHop 6s steps(1, end) 900ms infinite;
+}
+
+@keyframes glyphHop {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(5.9px, 0);
+  }
+  50% {
+    transform: translate(5.9px, 5.9px);
+  }
+  75% {
+    transform: translate(0, 5.9px);
+  }
+}
+
+.glyphFlip {
+  transform-origin: 8px 3px;
+  opacity: 0.55;
+  animation: glyphFlip 4.2s ease-in-out 900ms infinite;
+}
+
+@keyframes glyphFlip {
+  0%,
+  70%,
+  100% {
+    opacity: 0.35;
+  }
+  82% {
+    opacity: 0.85;
+  }
+}
+
+.glyphTwinkle {
+  animation: glyphTwinkle 2.6s ease-in-out 900ms infinite;
+}
+
+.glyphTwinkleLate {
+  animation-delay: 2.2s;
+}
+
+@keyframes glyphTwinkle {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.glyphShimmer {
+  opacity: 0.55;
+  animation: glyphTwinkle 5s ease-in-out 900ms infinite;
 }
 
 .assetName {
@@ -62,10 +183,38 @@
   white-space: nowrap;
 }
 
-.verdictChip {
-  font-size: 12px;
+/* ---- verdict marks ------------------------------------------------ */
+
+/* The verdict as marks with counts; the sentence is the tooltip. The tick
+   draws itself in — the one moment of ceremony a clean compile earns. */
+.verdictMarks {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+
+.verdictMark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
   font-weight: 600;
-  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.verdictMark svg {
+  display: block;
+}
+
+.verdictTick {
+  stroke-dasharray: 12;
+  stroke-dashoffset: 12;
+  animation: glyphDraw 480ms cubic-bezier(0.23, 1, 0.32, 1) 260ms forwards;
+}
+
+.verdictCount {
+  line-height: 1;
 }
 
 .verdictPass {
@@ -74,6 +223,71 @@
 
 .verdictFail {
   color: var(--status-danger, #c0392b);
+}
+
+.verdictWarn {
+  color: var(--status-warning, #b7791f);
+}
+
+/* ---- toolbar meta ------------------------------------------------- */
+
+/* Magnitudes as glyph + number; exact counts, world size and the Blender
+   version live in the tooltip. */
+.metaRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  color: var(--text-secondary, #667081);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.metaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+
+.metaItem svg {
+  display: block;
+  opacity: 0.65;
+  flex: none;
+}
+
+.metaDims {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  gap: 0;
+}
+
+/* Axis-coloured dimensions, in the kit gizmo's exact palette — the same
+   hexes AXES declares in kit.ts, deliberately theme-static like the gizmo
+   itself, so readout and manipulator stay one colour language. */
+.dimX {
+  color: #e5484d;
+}
+
+.dimY {
+  color: #46a758;
+}
+
+.dimZ {
+  color: #3b82f6;
+}
+
+.dimSep {
+  opacity: 0.4;
+  margin: 0 3px;
+  font-size: 10px;
+}
+
+.dimUnit {
+  opacity: 0.55;
+  margin-left: 3px;
+  font-size: 11px;
 }
 
 /* ---- export menu ------------------------------------------------- */
@@ -172,7 +386,14 @@
   overflow: hidden;
   border: 1px solid var(--border-subtle, #e3e6ea);
   border-radius: 10px;
-  background: var(--surface-subtle, #f6f7f9);
+  /* A soft top-light over the panel surface, so the letterbox around a
+     square proof frame reads as a lit studio backdrop instead of a flat
+     grey slab. Both stops are theme tokens, so it holds in dark mode. */
+  background: radial-gradient(
+    120% 90% at 50% 0%,
+    color-mix(in srgb, var(--surface-raised, #fff) 55%, var(--surface-subtle, #f6f7f9)),
+    var(--surface-subtle, #f6f7f9) 78%
+  );
   /* The frames are a turntable, so the picture is a rotation surface:
      horizontal drags scrub the orbit. touch-action keeps a finger drag
      from scrolling the pane instead. */
@@ -210,49 +431,203 @@
   text-align: center;
 }
 
-/* One quiet affordance pill; it retires after the first successful drag
-   because a hint that keeps hinting is chrome. */
-.dragHint {
+/* The rotate affordance: a quiet glyph in the stage's corner, where a
+   watermark would sit, rather than a sentence over the subject. It retires
+   after the first successful drag because a hint that keeps hinting is
+   chrome; the wording lives on as its hover title. */
+.orbitHint {
   position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 4px 11px;
-  border: 1px solid var(--border-subtle, #e3e6ea);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-raised, #fff) 82%, transparent);
-  backdrop-filter: blur(4px);
+  right: 10px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
   color: var(--text-secondary, #667081);
-  font-size: 11.5px;
-  white-space: nowrap;
+  opacity: 0.55;
   pointer-events: none;
-  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.dragHintHidden {
+.orbitHintHidden {
   opacity: 0;
 }
 
+/* ---- on-picture selection ----------------------------------------- */
+
+/* The reticle layer sits over the frame and never eats the pointer — the
+   stage underneath owns rotate, hover and pick. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Focus brackets over the selected part, in the same teal the kit's
+   inspection ramp speaks — legible on the dark proof matte and on a pale
+   backdrop alike thanks to the double shadow (dark core + soft light).
+   Position/size transition so the brackets TRACK the part as the
+   turntable scrubs, instead of teleporting frame to frame. */
+.reticle {
+  --reticle: #3fbcc9;
+  position: absolute;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--reticle) 7%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--reticle) 55%, transparent),
+    0 0 16px color-mix(in srgb, var(--reticle) 30%, transparent);
+  transition:
+    left 170ms cubic-bezier(0.23, 1, 0.32, 1),
+    top 170ms cubic-bezier(0.23, 1, 0.32, 1),
+    width 170ms cubic-bezier(0.23, 1, 0.32, 1),
+    height 170ms cubic-bezier(0.23, 1, 0.32, 1);
+  animation:
+    reticleIn 260ms cubic-bezier(0.23, 1, 0.32, 1),
+    reticleBreathe 2.8s ease-in-out 300ms infinite;
+}
+
+@keyframes reticleIn {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes reticleBreathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.78;
+  }
+}
+
+.corner {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--reticle);
+}
+
+.cornerTl {
+  top: -3px;
+  left: -3px;
+  border-right: 0;
+  border-bottom: 0;
+  border-top-left-radius: 6px;
+}
+
+.cornerTr {
+  top: -3px;
+  right: -3px;
+  border-left: 0;
+  border-bottom: 0;
+  border-top-right-radius: 6px;
+}
+
+.cornerBl {
+  bottom: -3px;
+  left: -3px;
+  border-right: 0;
+  border-top: 0;
+  border-bottom-left-radius: 6px;
+}
+
+.cornerBr {
+  bottom: -3px;
+  right: -3px;
+  border-left: 0;
+  border-top: 0;
+  border-bottom-right-radius: 6px;
+}
+
+/* The part's name, pinned above the brackets in the mono the part list
+   speaks. Clamped inside the stage by sitting under the rect when the
+   rect hugs the top edge is not worth a measurement pass — top-anchored
+   with a small offset reads fine at every size tested. */
+.reticleTag {
+  position: absolute;
+  bottom: 100%;
+  left: -3px;
+  margin-bottom: 7px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: color-mix(in srgb, #0c1116 82%, var(--reticle));
+  color: #e9f6f8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+  animation: reticleIn 260ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.reticleTagBelow {
+  bottom: auto;
+  top: 100%;
+  margin-bottom: 0;
+  margin-top: 7px;
+}
+
+/* The x-ray energize canvas. Opacity IS the shader's uXray: this holds
+   the full-energize composite, and the crossfade runs the kit's exact
+   asymmetry — 200ms in, 140ms out, easeOutCubic (1-(1-p)^3, which is
+   cubic-bezier(0.33, 1, 0.68, 1)). */
+.xrayCanvas {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.xrayCanvasOn {
+  opacity: 1;
+  transition-duration: 200ms;
+}
+
+/* While the x-ray is energized the PART is the highlight: the brackets
+   and fill stand down and only the name tag rides along. */
+.reticleQuiet {
+  background: none;
+  box-shadow: none;
+  animation: reticleIn 260ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Hover pre-highlight: the "what am I about to click" answer, kept a
+   whisper next to the selection's full brackets. */
+.hoverBox {
+  position: absolute;
+  border-radius: 7px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #3fbcc9 45%, transparent);
+  background: color-mix(in srgb, #3fbcc9 5%, transparent);
+}
+
+/* The player row reads as a scrubber, not a form: a hairline track with a
+   played-portion fill, a small round thumb, and a ghost play control — the
+   grammar of a modern inline video player, in the app's own palette. */
 .scrub {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex: none;
+  padding: 0 2px;
 }
 
 .playButton {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   flex: none;
   padding: 0;
-  border: 1px solid var(--border-subtle, #e3e6ea);
-  border-radius: 7px;
+  border: 0;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-secondary, #667081);
   cursor: pointer;
-  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .playButton:hover {
@@ -260,17 +635,78 @@
   color: inherit;
 }
 
+/* Custom-drawn range: the native control is the one element on this panel
+   the design system cannot reach, and it is what made the player read as a
+   2000s form. Track and thumb are longhand-styled per engine; the played
+   fill rides the --progress variable the component sets inline. */
 .scrubInput {
   flex: 1;
   min-width: 0;
   margin: 0;
-  accent-color: var(--accent, #353535);
+  height: 16px;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.scrubInput:focus-visible {
+  outline: 2px solid var(--accent, #353535);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.scrubInput::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent, #353535) var(--progress, 0%),
+    var(--border-subtle, #e3e6ea) var(--progress, 0%)
+  );
+}
+
+.scrubInput::-webkit-slider-thumb {
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
+  border-radius: 999px;
+  background: var(--surface-raised, #fff);
+  border: 1.5px solid var(--accent, #353535);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.scrubInput:hover::-webkit-slider-thumb,
+.scrubInput:active::-webkit-slider-thumb {
+  transform: scale(1.18);
+}
+
+.scrubInput::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border-subtle, #e3e6ea);
+}
+
+.scrubInput::-moz-range-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--accent, #353535);
+}
+
+.scrubInput::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: var(--surface-raised, #fff);
+  border: 1.5px solid var(--accent, #353535);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
 }
 
 .counter {
   flex: none;
   color: var(--text-secondary, #667081);
-  font-size: 12px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   min-width: 4ch;
   text-align: right;
@@ -447,10 +883,19 @@
 .treeRowType {
   margin-left: auto;
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 9px;
   letter-spacing: 0.04em;
   text-transform: lowercase;
+  font-variant-numeric: tabular-nums;
   color: var(--text-secondary, #667081);
+}
+
+.treeRowType svg {
+  display: block;
+  opacity: 0.8;
 }
 
 .treeRowSelected .treeRowType {
@@ -531,11 +976,9 @@
 
 /* The claims ledger's payoff: shown ONLY when the scene declared claims and
    none failed. A failure shows nothing — the badge cannot be cheapened, and
-   the failure already surfaces as an E-701 in the issue list. */
+   the failure already surfaces as an E-701 in the issue list. Layout rides
+   .verdictMark; this only sets the colour. */
 .provenBadge {
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
   color: var(--status-success, #1f8a5f);
 }
 
@@ -578,6 +1021,53 @@
 
   .side {
     overflow: visible;
+  }
+
+}
+
+/* Narrow pane: parts and triangles stand down FIRST — both live
+   permanently in the parts rail right below — while the axis-coloured
+   world size keeps its place: it appears nowhere else on screen and is
+   the one number a modeller checks at a glance. Everything stays one
+   hover away on the row's tooltip. */
+@container (max-width: 620px) {
+  .metaItem {
+    display: none;
+  }
+
+  .metaDims {
+    display: inline-flex;
+  }
+
+  .assetName {
+    max-width: 30cqw;
+  }
+}
+
+/* Every decorative motion in this panel stands down together. Draw-in
+   strokes must land on their FINISHED state, not their dashed-out start. */
+@media (prefers-reduced-motion: reduce) {
+  .kindGlyph,
+  .glyphBeat,
+  .glyphSun,
+  .glyphHop,
+  .glyphFlip,
+  .glyphTwinkle,
+  .glyphShimmer,
+  .reticle,
+  .reticleTag {
+    animation: none;
+  }
+
+  .reticle {
+    transition: none;
+  }
+
+  .glyphStroke,
+  .verdictTick {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
   }
 }
 

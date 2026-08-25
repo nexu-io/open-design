@@ -41,6 +41,39 @@
       "shape": "cone",
       "material": "mtl_wood",
       "role": "ornament"
+    },
+    {
+      "id": "prp_planter",
+      "size": [0.3, 0.3, 0.28],
+      "shape": "cone",
+      "tip": 0.62,
+      "flip": true,
+      "material": "mtl_stone",
+      "role": "planter"
+    },
+    {
+      "id": "prp_ramp",
+      "size": [0.4, 0.3, 0.16],
+      "shape": "wedge",
+      "axis": "x",
+      "rotate": { "axis": "z", "deg": 15 },
+      "material": "mtl_wood",
+      "role": "ramp"
+    },
+    {
+      "id": "prp_socket",
+      "size": [0.3, 0.3, 0.3],
+      "shape": "tube",
+      "thickness": 0.05,
+      "material": "mtl_stone",
+      "role": "socket"
+    },
+    {
+      "id": "prp_lantern",
+      "size": [0.18, 0.18, 0.5],
+      "shape": "capsule",
+      "material": "mtl_lamp",
+      "role": "lantern"
     }
   ],
   "relations": [
@@ -56,12 +89,20 @@
     { "type": "sits_on", "part": "prp_ring", "on": "prp_plinth" },
     { "type": "align", "part": "prp_ring", "to": "prp_plinth", "axes": ["x", "y"] },
     { "type": "sits_on", "part": "prp_finial", "on": "prp_roof" },
-    { "type": "inset_from", "part": "prp_finial", "from": "prp_roof", "faces": ["x+", "y+"], "by": 0.2 }
+    { "type": "inset_from", "part": "prp_finial", "from": "prp_roof", "faces": ["x+", "y+"], "by": 0.2 },
+    { "type": "sits_on", "part": "prp_planter", "on": "prp_plinth" },
+    { "type": "inset_from", "part": "prp_planter", "from": "prp_plinth", "faces": ["x-", "y+"], "by": 0.45 },
+    { "type": "sits_on", "part": "prp_ramp", "on": "prp_plinth" },
+    { "type": "inset_from", "part": "prp_ramp", "from": "prp_plinth", "faces": ["x+", "y-"], "by": 0.45 },
+    { "type": "sits_on", "part": "prp_socket", "on": "prp_plinth" },
+    { "type": "inset_from", "part": "prp_socket", "from": "prp_plinth", "faces": ["x-", "y-"], "by": 0.3 },
+    { "type": "sits_on", "part": "prp_lantern", "on": "prp_plinth" },
+    { "type": "inset_from", "part": "prp_lantern", "from": "prp_plinth", "faces": ["x+", "y+"], "by": 0.56 }
   ],
   "light": "studio",
   "claims": {
-    "parts": 9,
-    "maxTriangles": 6000,
+    "parts": 13,
+    "maxTriangles": 7000,
     "grounded": true,
     "maxHeight": 1.81,
     "footprint": [2.41, 1.61],

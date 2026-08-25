@@ -42,12 +42,15 @@ export function lintTopology(ctx: LintContext, issues: Issue[]): void {
         detail: { nonManifoldEdges: mesh.nonManifoldEdges },
       });
     }
-    if (mesh.ngons > 0) {
+    // N-gons are the norm on hard-surface parts (a flat cap face, a boolean
+    // result) where triangulating buys nothing, so whether they're a defect
+    // is the CONTRACT's call, matching allowOpenMeshes just above.
+    if (mesh.ngons > 0 && !ctx.contract.geometry.allowNgons) {
       issues.push({
         code: ISSUE_CODES.NGONS,
         severity: "warning",
         message: `mesh '${mesh.object}' has ${mesh.ngons} ngon face(s)`,
-        hint: "prefer quads for rigging/animation robustness",
+        hint: "prefer quads for rigging/animation robustness, or set conventions.geometry.allowNgons for hard-surface assets",
         target: mesh.object,
         detail: { ngons: mesh.ngons },
       });

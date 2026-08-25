@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { ISSUE_CODES } from "../src/errors.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * Format breadth and damage tolerance, on real files.
@@ -16,6 +17,7 @@ import { rmForSetup } from "./helpers/fs.js";
  * deterministic repair posture is detect-and-name.
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)("format breadth (real Blender)", () => {
   const fixture = (name: string) => path.join(__dirname, "fixtures", name);

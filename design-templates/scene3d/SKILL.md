@@ -6,8 +6,8 @@ description: |
   Fabricate 3D props, scenes, kits, animations, GPU materials, sprite sheets,
   flipbooks, VFX sheets, skyboxes, and voxel/Minecraft models as code, then
   compile them through one call (`od scene3d compile`). Write a declarative
-  scene.json (parts + relations + claims), drop in a real GLB, fill a box
-  with a part script, or author a kernel. The compiler builds, photographs,
+  scene.json using the current parts/relations/claims subset, drop in a real
+  GLB, use the freeform part-script path, or author a kernel. The compiler builds, photographs,
   measures, and ships. Use when asked for a 3D model, prop, scene, asset kit,
   texture, shader, flipbook, skybox, voxel model, Minecraft model, or a
   GLB/USD export.
@@ -97,8 +97,9 @@ findings these stages already produce:
   --fast --agent-message
 ```
 
-You never choose file formats. You write geometry and materials. Which
-containers ship is the contract's delivery policy.
+Choose requested deliverables in the contract's `export.formats` policy. You
+write geometry and materials; the compiler owns how each requested container
+is produced, validated, and lowered.
 
 A compile that finds errors is still a successful run. The report tells
 you what the bench saw; read it, change the source, go again.
@@ -113,9 +114,9 @@ them.
 | **Prop / assembly** | Parts + relations + named materials + claims | Solves placement, keeps contacts from z-fighting, photographs a turntable, ships the model |
 | **Scene** | Several props in conversation — `repeat`, `scatter`, stacking | Path-addressed scatter that does not reshuffle when you add a part; derived camera that always contains the subject |
 | **Downloaded asset** | A scene dir of `.glb`/`.gltf`/`.obj`/`.fbx`, *or* a `file:` part inside a declared box | Imports, frames, measures, repackages. `material:` on a `file` part reskins it wholesale |
-| **Freeform shape** | `"script": "hull.py"` with `def build(ctx)` creating exactly one mesh | Fits that mesh into the declared box like any other part, so relations still work |
+| **Freeform shape** | `"script": "hull.py"` with `def build(ctx)` creating exactly one mesh | First-class procedural authoring path; fits that mesh into the declared box like any other part, so relations still work |
 | **GPU material** | A `.glsl` kernel `vec4 kernel(vec2 uv)` plus a `shaders` block | Bakes textures (even a height field → normal map), wires them, shows them in the proof and the GLB |
-| **Motion** | Per-part `spin` / `bob` | Owns the keyframes, loops them, derives an animation asset, keeps clips on imported rigs |
+| **Motion (current subset)** | Per-part `spin` / `bob` | Owns the keyframes, loops them, derives an animation asset, keeps clips on imported rigs; richer timelines and deformation systems are future language work |
 | **Sprite / flipbook / VFX / sky** | A sheet file, *or* a kernel with `"frames": 16` | Measures the atlas (grid, bleed, seams, motion). A frames kernel *is* a sheet, so materials do not bind it |
 | **Voxel / Minecraft** | Same language, on the pixel grid; or drop a Blockbench `.bbmodel` / Java `model.json` | Snaps `repeat`/`scatter` to the grid, warns about format facts, emits the JSON the game loads |
 
@@ -146,9 +147,9 @@ The compiler has two postures. Everything beyond them is the brief's
 taste alone.
 
 **Continuous (default).** Hard-surface, organic-enough primitives, real
-imported meshes, shaders, sheets. Contacts floor 1 mm from flush so
-faces never z-fight. Units are metres. Build from the language; claim
-what matters.
+imported meshes, shaders, sheets. In declarative spec scenes, contacts floor
+1 mm from flush so faces do not z-fight. Units are metres. Build from the
+language or raw mode; claim what matters.
 
 **Voxel.** Blocky art on a grid. Set `"target": "voxel"` for any engine
 (MagicaVoxel / Goxel / Qubicle → GLB/USD/OBJ), or `"target": "minecraft"`
@@ -190,16 +191,19 @@ scenes/<name>/
 └── out/             # the product, after a compile
 ```
 
-`scene.json` is the default. One authority per directory: `scene.json`
-and `build.py` together is two people claiming the same geometry.
+`scene.json` is the default structured source. In the current alpha, one
+authority per directory means `scene.json` and `build.py` together are two
+sources claiming the same geometry; this source-ownership rule does not make
+the freeform Python path second-class.
 
 Other legal entry points, when they *are* the job:
 
 - Bare mesh files → inspect and repackage (relax naming / open meshes so
   the report describes the download instead of scolding its author).
 - A Minecraft model file → import and refine.
-- `build.py` → booleans, curves, modifiers, topology the language cannot
-  say yet. Factory-reset first; you build the whole scene, including
+- `build.py` → raw procedural authoring: booleans, curves, modifiers,
+  topology, custom staging, or any construction that is clearest in Python.
+  Factory-reset first; you build the whole scene, including
   camera and light.
 
 ## The language
@@ -244,25 +248,55 @@ the brief. Ids are `[A-Za-z][A-Za-z0-9_]{2,63}`: `prp_deck`, `mtl_hull`,
 `shd_rust`. A name is design information.
 
 **Parts.** `size` is the AABB in metres. `shape` fills it exactly: `box`
-(default), `cylinder`, `sphere`, `cone`, `torus`. `axis` (default `"z"`)
-orients a cylinder/cone or a torus hole; `flip: true` points a cone
-down. For a torus, the entry along the axis is tube diameter and the
-two across it are the ring's outer diameter: `[0.9, 0.9, 0.06]` with
-`axis: "z"` is a 90 cm ring of 6 cm stock. Curved shapes pick their own
-segment count from a chord tolerance; you do not author a segment number.
+(default), `cylinder`, `sphere`, `cone`, `torus`, `wedge`, `tube`,
+`capsule`. `axis` (default `"z"`) orients a cylinder/cone/tube/capsule or
+a torus hole; `flip: true` points a cone down. For a torus, the entry
+along the axis is tube diameter and the two across it are the ring's
+outer diameter: `[0.9, 0.9, 0.06]` with `axis: "z"` is a 90 cm ring of
+6 cm stock. Curved shapes pick their own segment count from a chord
+tolerance; you do not author a segment number.
+
+Four more shapes for when a box, cylinder, sphere, cone, or torus is not
+the right primitive:
+
+- `cone` with `tip` (0 ≤ tip < 1, default 0): the top diameter as a
+  ratio of the base. `0.6` turns a cone into a bucket, a lamp shade, a
+  plant pot — a ratio rather than a metre value so the frustum keeps its
+  proportions when the box resizes. `tip: 1` is a cylinder; use `shape:
+  "cylinder"` instead.
+- `wedge`: a right triangular prism — a ramp, a doorstop, a roof
+  slope. `axis` is the up-slope direction (`"x"` or `"y"` only — a
+  ramp cannot climb the axis it is tall along); `flip` swaps which end
+  is high.
+- `tube`: a hollow cylinder — a pipe, a ring wall, a socket. Requires
+  `thickness` in metres, measured inward from the outer surface; the
+  one fact a hollow shape carries that its box cannot express.
+- `capsule`: a cylinder with hemispherical ends — a pill, a tank, a
+  limb blank. Long axis via `axis`; the along-axis extent must be at
+  least the diameter (a capsule shorter than it is wide is just a
+  sphere).
+
+**Turning a part.** `"rotate": { "axis": "z", "deg": 15 }` is a static
+rotation of the finished part about one world axis, at its solved
+position — a tilted sign, a canted buttress, a ramp turned to face the
+door. `size` stays the part's own box; the solver reasons in the ROTATED
+BOUND of that box, so every relation still places the space the part
+actually occupies. `deg` is strictly between -360 and 360 and never a
+whole turn (that rotates nothing, and is refused). Not combinable with
+`span`, whose whole job is to solve a size on a world axis.
 
 Fill the box another way:
 
 - `"file": "assets/helmet.glb"`: join, fit (uniform scale, centred,
   bottom-rest). Omit `material` to keep the asset's own surfaces; set
   `material` to reskin it.
-- `"script": "hull.py"`: `def build(ctx):` with `ctx["size"]` the
-  declared box and `ctx["material"](name)` to bind. Create **exactly one
-  mesh**. The compiler fits it into the box; placement stays the
-  relations' job.
+- `"script": "hull.py"`: `def build(ctx):` with `ctx.size` the declared
+  box and `ctx.material(name)` to bind (item access, `ctx["size"]`, also
+  works). Create **exactly one mesh**. The compiler fits it into the box;
+  placement stays the relations' job.
 
-**Relations.** Any order; the solver is a fixpoint. Every scene needs
-at least one `at`.
+**Relations.** Any order; the solver is a fixpoint. Every declarative spec
+scene needs at least one `at`.
 
 | Relation | Meaning |
 |---|---|
@@ -274,21 +308,60 @@ at least one `at`.
 | `span` (`from`, `to`, `axis`, `embed`) | stretch between two parts, biting into both |
 | `repeat` (`count`, `along`, `every`) | array at a centre-to-centre pitch; two repeats compose a grid |
 | `scatter` (`on`, `count`, `seed`, `minGap`, `sizeJitter`) | owns the part's whole placement; deterministic; a region too small fails loudly |
+| `around` (`center`, `radius`, `count`, `axis`, `startDeg`, `orient`) | ring `count` instances evenly about another part's centre; `orient: true` turns each one to face its own angle |
 
-`repeat` × `scatter` on the same part is refused. Contacts and repeat
-pitches floor 1 mm from flush.
+`around` owns the part's placement in the circle's PLANE and nothing
+else — the coordinate along the circle's normal still comes from the
+part's own relations, so `sits_on floor` + `around hub` is a ring
+standing on the floor. Do not hand-compute `at` positions for a ring;
+that arithmetic is what this relation deletes.
 
-**Camera and light.** Derived from the solved bounds. Steer with
-`"camera": { "azimuthDeg": 30, "elevationDeg": 20, "distance": 3 }` and
-`"light": "studio" | "sun"`. You cannot replace the derivation with raw
-coordinates.
+`repeat` × `scatter` on the same part is refused, and so is `around`
+beside `repeat`, `scatter`, another `around`, or a `span`. Contacts and repeat
+pitches floor 1 mm from flush. Loud ceilings, never a silent shortfall:
+`repeat` refuses past 200 instances, and a scene refuses past 500 parts
+after expansion. Below those, a big scatter still changes what the
+compiler can *measure*: past ~60 meshes the contact scan (grounding,
+touching-faces, the rested-pair check) reports itself skipped rather
+than guessing, so a claim that leans on contacts is unchecked, not
+failed, above that count.
+
+**Materials.** `baseColor` (linear RGB, required unless `shader` is set),
+`roughness` (default 0.5), `metallic` (0 or 1 — the pbr rule rejects
+in-betweens), `emission` + `emissionStrength` (watts, default 1) to
+glow, and `alpha` (0–1, default 1) — anything below 1 turns on alpha
+blending, for glass, a scrim, a ghosted x-ray part.
+
+**Camera and light.** In declarative spec scenes, staging is derived from the
+solved bounds. Steer with `"camera": { "azimuthDeg": 30, "elevationDeg": 20 }`
+and `"light": "studio" | "sun"`. Raw scenes may author their own camera and
+light directly.
+
+**Omit `distance`.** Left out, it AUTO-FITS: the compiler solves
+`d = r / (tan(fov/2) × 0.8)` against its own 50mm lens, so the subject
+fills about 80% of the frame height at every orbit angle — identically
+for a 26cm lantern and a 26m hangar. If you do write it, it is a
+**multiple of the scene's bounding radius, never metres**: `1` parks the
+camera on the bounding sphere itself (inside the subject), `3.47` is the
+auto-fit, and the useful range for a tighter or wider shot is roughly
+2.5–6. Reaching for it because a subject "looks too small in metres" is
+the one mistake this knob invites — the default already fits.
 
 **Claims** are your signature on the work, checked against the *built*
 artifact: `parts`, `maxTriangles`, `grounded`, `maxHeight`, `footprint`
 `[x,y]`, `watertight`, `materialsUsed`. Numerics are upper bounds except
 `parts` and `materialsUsed`, which are exact. `grounded` means nothing
-sinks through the floor. Floating is a legitimate composition.
-Claim what matters. A failed claim carries the measured truth.
+sinks through the floor. Floating is a legitimate composition — a
+lantern hangs, an orb hovers — and if a part is *meant* to float or bed
+while the rest of the scene stays grounded, declare it in
+`conventions.grounding.exempt` (an array of part ids) rather than
+dropping the scene-level claim; the same list also keeps a bobbing part
+honest across its whole cycle (a trough-anchored rest passes, a
+provably-clearing floater passes, a slow sinker fails with the measured
+numbers — exempt parts skip the check entirely). Claim what matters. A
+failed claim carries the measured truth, and the report now echoes a
+ledger (`claims: 7/7 held`) so you see the tally without hunting through
+individual issues.
 
 ### GPU kernels
 
@@ -314,24 +387,41 @@ vec4 kernel(vec2 uv) {
 }
 ```
 
-Uniforms are `uCamelCase`, used bare (the compiler prepends declarations).
-Floats need a decimal point. Helper functions are legal if defined before
-use. Leave out `#version`, `main()`, `uniform`, and samplers; the wrapper
-owns the scaffolding.
+The shader is declared with `kernel:` (a scene-relative `.glsl` path),
+never `file:` — `file:` is for real mesh assets on a part. Uniforms are
+`uCamelCase`, used bare — do not write your own `uniform` declaration,
+the compiler injects one from the `uniforms` block and a hand-written
+one either collides or silently does nothing. Floats need a decimal
+point. Helper functions are legal if defined before use. Leave out
+`#version`, `main()`, and samplers too; the wrapper owns the scaffolding.
 
 Core stdlib (integer-hash, identical on every GPU): `s3d_hash21(vec2)`,
 `s3d_hash22(vec2)`, `s3d_vnoise(vec2)`, `s3d_fbm(vec2)`, `s3d_voronoi(vec2)`.
-Octave count on fbm is fixed.
+`s3d_fbm` takes one argument — the coordinate, pre-scaled by you
+(`s3d_fbm(uv * uScale)`) — octave count, lacunarity and gain are fixed,
+not extra parameters.
 
 Outputs: `baseColor`, `emission` (sRGB), `roughness`, `metallic`
 (Non-Color), `height` (you author bump; the compiler derives a wrap-aware
-normal, `normalStrength` 0–10). Extra channels are extra functions
-(`vec4 kernel_roughness(vec2 uv)`).
+normal, `normalStrength` 0–10). The FIRST output is the plain
+`vec4 kernel(vec2 uv)` you already wrote. Every ADDITIONAL output in the
+`outputs` array needs its OWN entry point named `kernel_<output>` — a
+two-output shader (`["baseColor", "roughness"]`) means the file defines
+both `kernel` and `kernel_roughness`; a compile with an output declared
+but no matching function is a wasted round trip, not a partial bake.
 
 **Time is a kernel dimension.** `"frames": 16` (2/4/8/16/32/64) bakes a
 power-of-two atlas with `uS3dTime` ∈ [0, 1). Loop through the unit circle
 (`cos/sin(uS3dTime * 6.2832)`) so the last frame flows into the first. A
 frames shader is a sheet product, so materials cannot bind it.
+
+Iterating a kernel does not need a full compile: `--fast` still bakes
+shader textures to `out/textures/`, so you can judge the actual pixels
+cheap and save the photograph for when the composition is right. And
+every proof render — fast or full — also writes a lit-sphere preview
+per material to `out/materials/ball-<name>.png`, under the proof's own
+lighting: the cheap way to judge emission, alpha, and metallic
+composition before paying for a turntable.
 
 ### Motion
 
@@ -396,6 +486,19 @@ Iterate lighting cheap (`resolution: 256`, `turntableSteps: 1`), restore
 for the final pass. `proof.background` lives here, never in world-node
 graph code.
 
+Knobs that get mistyped in the field — the exact nesting, not the
+flattened key you might guess: `conventions.grounding.exempt` (part
+ids, see Claims above), `conventions.grounding.tolerance`, and
+`conventions.uv.texelDensity.maxRatio` / `conventions.uv.texelDensity.target`
+(nested under `texelDensity`, never `uv.texelDensityMaxRatio`).
+
+Deliverables ride `export.formats`. Omit it and you get the default set
+— `usda`, `usdz`, `glb`, `obj`, `fbx` — plus `stl` when `target` is
+`3d_print`. `stl`/`ply` stay opt-in everywhere else: they carry no
+materials, so shipping them by default would put two lossy files in
+every download menu. Name the block explicitly only to narrow it or add
+`ply`.
+
 Voxel / Minecraft:
 
 ```json
@@ -426,8 +529,31 @@ ask for `--agent-message` when you are the one reading the result.
 | `scene3d tweaks --set '<json>' --merge` | Write or compose edits. |
 | `scene3d tweaks --clear` | Bench reset, after you have folded the intent into source. |
 
-`--stages parse,build,lint` is the explicit form of `--fast`. Stages
-cache by content hash; an unchanged scene comes back almost immediately.
+`--fast` is `parse,build,lint,manifest` — it carries the manifest stage
+along for free (pure TypeScript, milliseconds) so `scene3d manifest
+--json` mid-iteration is never reading a stale census; `--stages
+parse,build,lint` is the explicit form MINUS manifest, when you truly
+don't need it refreshed. Stages cache by content hash; an unchanged
+scene comes back almost immediately.
+
+Operational facts worth knowing before they surprise you:
+
+- **409 means "already compiling," not "broken."** The daemon refuses a
+  second concurrent compile of the same scene rather than racing two
+  Blender processes over the same output files. Wait and retry; do not
+  fork the scene into a second directory to work around it.
+- **A dropped connection (CLI exit code 3) does not mean the compile
+  died.** The daemon may finish the run after your request disconnects.
+  Check `scene3d manifest --json`'s `generatedAt` before assuming
+  failure, and expect the next compile's stages to come back cached.
+- **Resolve the daemon port fresh every session** via `pnpm tools-dev
+  status --json`; never trust an inherited `OD_DAEMON_URL`, it changes
+  on every restart.
+- **On Windows, never write scene sources with PowerShell
+  `Set-Content`** — it stamps a UTF-8 BOM. The compiler tolerates a BOM
+  on `scene.json`/`scene3d.json` now, but other tools reading your files
+  may not, so prefer `.NET UTF8Encoding($false)` or the host's own file
+  tools when you have the choice.
 
 ## How to read the report
 
@@ -466,11 +592,34 @@ How to read it. This is the whole method:
    sparse, blown, static), and always before you call the piece done. A
    structurally perfect scene can still photograph black. For a ~1 m
    prop, a key AREA light around 50–80 W gives visible falloff; if the
-   frames blow out, quarter the energy.
+   frames blow out, quarter the energy. If you can read images, open the
+   proof PNGs directly; if you cannot, pass `--frames` (or `"frames":
+   true` on the API) to get the frames rendered as ASCII luminance ramps
+   right inside the report, sampled around the orbit — you are never
+   actually blind to the shot.
+6. **`out/ortho.svg`, every structural change, no exceptions.** A
+   dimensioned plan/front/side drawing — and it is SVG, so it is
+   readable as text even without vision. A 2-second look catches a
+   proportion or overlap mistake the turntable's angle hides; a field
+   build once shipped a defective cage because nothing told its author
+   to look here.
 
-`out/digest.md` is the prose twin: issues first, then what this compile
-changed. Contacts that broke are included, because that is how an edit
-can move nothing and still stop one part supporting another.
+A full compile's report ends with a `read:` block naming every one of
+these paths (`out/ortho.svg`, `out/digest.md`, `out/read-model.json`,
+`out/index.html`, `kit.html`) — follow it rather than guessing what
+exists. `out/digest.md` is the prose twin of the report: issues first,
+then what this compile changed. Contacts that broke are included,
+because that is how an edit can move nothing and still stop one part
+supporting another. `out/read-model.json` is the same census,
+machine-readable, for when you need to compare a number precisely
+rather than read a sentence.
+
+Remember what the harness actually validates: what was **built**, not
+what was **meant**. The solved-boxes table and the digest hand you the
+built dimensions; comparing them against the brief's intent is your
+job, and `claims` is how you write that intent down so the compiler
+checks it FOR you on every future compile instead of you eyeballing it
+each time.
 
 Fix the source. Compile again. Do not argue with the measurement.
 
@@ -494,13 +643,15 @@ viewer's Y-up). Treat it as design direction from your collaborator:
 Unreadable tweaks are reported instead of dropped. The piece will
 not snap back to rest pose without a reason.
 
-## Escape hatch: `build.py`
+## Raw authoring mode: `build.py`
 
-When the language cannot say it (booleans, curves, modifiers, custom
-topology), write Blender Python. The runner factory-resets; you start
-from empty and build everything, including a named camera and a named
-light. Name every object for what it is. Apply scale after resizing.
-Metallic 0 or 1.
+Use Blender Python when direct procedural control is the clearest expression
+of the brief: booleans, curves, modifiers, custom topology, authored
+animation, custom staging, or anything else the raw mode can express. The
+runner factory-resets; you start from empty and build everything, including a
+named camera and a named light. Name every object for what it is. Apply scale
+after resizing. For generated materials, use metallic 0 or 1 unless the
+brief or imported source calls for something else.
 
 Canonical helpers. Paste these at the top of a `build.py` so grid and aim
 fail in milliseconds instead of after a full photograph:

@@ -33,6 +33,7 @@ import {
 } from "./build/blender.js";
 import { validateCensus } from "./build/census.js";
 import { runLint } from "./lint/rules.js";
+import { isExempt } from "./lint/exempt.js";
 import { validateGltf } from "./lint/gltf-oracle.js";
 import { validateUsd } from "./lint/usd-oracle.js";
 import { collectSheets } from "./sheet/collect.js";
@@ -57,6 +58,10 @@ import { flipbookGrid, type CompiledShaderJob, type ShaderBinding } from "./shad
    declared pipeline vocabulary. */
 const STAGE_ORDER: StageId[] = ["parse", "build", "proof", "export", "lint", "manifest"];
 const DEFAULT_TIMEOUT_MS = 180_000;
+/** The runner is written against Blender 5.x APIs (README "Blender 5.x is
+ *  required"); older majors are refused up front rather than crashing deep
+ *  in the runner as a generic E-202. */
+const MIN_BLENDER_MAJOR = 5;
 
 /**
  * Deliverables live in a plain `out/` directory, not under `.scene3d/`.
@@ -70,6 +75,27 @@ const DEFAULT_TIMEOUT_MS = 180_000;
  */
 const OUT_DIR = "out";
 const PROOF_DIR = `${OUT_DIR}/proof`;
+/** Lit-sphere previews, one per distinct material, rendered by the proof. */
+const MATERIALS_DIR = `${OUT_DIR}/materials`;
+
+/**
+ * Flatten the raw `conventions` object the author wrote into leaf dot-paths
+ * (`"geometry.allowOpenMeshes"`, `"uv.texelDensity.target"`, …), for
+ * lint/provenance.ts's per-key cancellation. Only descends into plain nested
+ * objects; an array (`partPrefixes`, `roughnessRange`) is itself the leaf
+ * value, not a container to recurse into.
+ */
+function collectAuthoredKeys(conventions: unknown, prefix = "", out = new Set<string>()): Set<string> {
+  if (conventions === null || conventions === undefined) return out;
+  if (typeof conventions !== "object" || Array.isArray(conventions)) {
+    if (prefix) out.add(prefix);
+    return out;
+  }
+  for (const [key, value] of Object.entries(conventions as Record<string, unknown>)) {
+    collectAuthoredKeys(value, prefix ? `${prefix}.${key}` : key, out);
+  }
+  return out;
+}
 
 /**
  * Compile a scene project through the deterministic pipeline:
@@ -102,11 +128,12 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   const source = discoverSources(request.projectDir);
   let contract: Scene3dContract = request.contract ?? DEFAULT_CONTRACT;
   let contractIssues: string[] = [];
-  /* Convention blocks the AUTHOR wrote, as opposed to the ones DEFAULT_CONTRACT
-     and the target presets fill in. Only an explicit block is a statement of
-     intent, and only an explicit block cancels the imported-provenance
-     relaxation for its rules (lint/provenance.ts). */
-  let authoredBlocks = new Set<string>();
+  /* Contract leaf paths the AUTHOR wrote, as opposed to the ones DEFAULT_CONTRACT
+     and the target presets fill in. Only an explicit leaf is a statement of
+     intent, and only an explicit leaf cancels the imported-provenance
+     relaxation for the one rule it governs (lint/provenance.ts) — never for
+     unrelated sibling rules that happen to share its convention block. */
+  let authoredKeys = new Set<string>();
   if (request.contract) {
     // A programmatically-supplied contract (od CLI --contract, daemon route,
     // an embedded agent) skips the file-load path but must NOT skip validation:
@@ -123,13 +150,14 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       });
       contract = DEFAULT_CONTRACT;
     } else {
-      authoredBlocks = new Set(Object.keys(request.contract.conventions ?? {}));
+      authoredKeys = collectAuthoredKeys(request.contract.conventions);
     }
   } else {
     const contractFile = path.join(request.projectDir, "scene3d.json");
     if (fs.existsSync(contractFile)) {
       try {
-        const raw = JSON.parse(fs.readFileSync(contractFile, "utf8"));
+        // BOM-tolerant for the same reason as scene.json below.
+        const raw = JSON.parse(fs.readFileSync(contractFile, "utf8").replace(/^\uFEFF/, ""));
         contractIssues = validateContract(raw);
         if (contractIssues.length > 0) {
           issues.push({
@@ -140,7 +168,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           });
         } else {
           contract = raw as Scene3dContract;
-          authoredBlocks = new Set(Object.keys(contract.conventions ?? {}));
+          authoredKeys = collectAuthoredKeys(contract.conventions);
         }
       } catch (err) {
         issues.push({
@@ -271,7 +299,10 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     } else {
       let rawText: string | undefined;
       try {
-        rawText = fs.readFileSync(path.join(request.projectDir, "scene.json"), "utf8");
+        // A UTF-8 BOM is an editor's fingerprint, not authorial intent —
+        // Windows tooling (PowerShell 5.1 especially) writes one on every
+        // save, and refusing the file taxed authors twice per field run.
+        rawText = fs.readFileSync(path.join(request.projectDir, "scene.json"), "utf8").replace(/^\uFEFF/, "");
         const parsed = JSON.parse(rawText);
         const result = validateSceneSpec(parsed, { bake: { min: normalized.shade.bakeMin, max: normalized.shade.bakeMax } });
         if (result.spec) {
@@ -560,6 +591,21 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           "Blender runtime not found (set SCENE3D_BLENDER_BIN to a blender executable, or SCENE3D_PYTHON_BIN to a python with bpy installed)",
       });
     }
+    /* Gate the version BEFORE running anything. The runner is written
+       against Blender 5.x APIs; an older Blender used to run anyway and die
+       deep inside the runner as a generic E-202 with a stderr tail — a
+       failure indistinguishable from a broken scene. Name the real cause
+       with the measured version and run nothing. */
+    if (probe && probe.major !== undefined && probe.major < MIN_BLENDER_MAJOR) {
+      issues.push({
+        code: ISSUE_CODES.BLENDER_UNSUPPORTED,
+        severity: "error",
+        message: `found ${probe.version} at ${probe.bin} — scene3d requires Blender ${MIN_BLENDER_MAJOR}.x or newer`,
+        hint: "install Blender 5.x, or point SCENE3D_BLENDER_BIN at a 5.x executable",
+        detail: { version: probe.version, major: probe.major, required: MIN_BLENDER_MAJOR },
+      });
+      probe = null;
+    }
   }
 
   /* ---- build ------------------------------------------------------ */
@@ -715,29 +761,74 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
      coverage statistics, so "the render came out black" is a measured fact
      it can report rather than a failure only a human would ever notice. */
   const proofImages: string[] = [];
+  /* Lit-sphere material previews. Deliberately NOT folded into proofImages:
+     the frame player, the ascii sampling and the viewer all iterate that
+     list as a turntable, and a ball is not a frame of one. */
+  const materialBalls: string[] = [];
+  let materialBallsSkipped = 0;
   let proofFrames: ProofFrameStats[] | undefined;
   /** Per-frame off-camera facts from the proof turntable, when it ran. */
   let offByFrame: Array<{ frame: number; objects: string[] }> | undefined;
+  /** Per-frame per-part projected screen rects — the viewer's click-to-
+   *  highlight reads these off the manifest (see Scene3dManifest.proofRects). */
+  let proofRects: Array<Record<string, [number, number, number, number]>> | undefined;
+  /** Part names in id-map code order (code = index + 1); present when the
+   *  runner rendered `<frame>.idx.png` object-index maps beside the frames.
+   *  The viewer derives each map's path from its frame's path. */
+  let proofIdParts: string[] | undefined;
   const proofOpts: ProofOptions = { ...normalized.proof, ...(request.proof ?? {}) };
   if (wanted.has("proof")) {
     const tp = performance.now();
     if (probe && source.files.length > 0 && (source.kind !== "spec" || buildScriptRel !== undefined)) {
-      const steps = proofOpts.turntable ? proofOpts.turntableSteps ?? 8 : 1;
-      const proofHash = hashJson({ build: buildInputHash, proof: proofOpts });
+      // An animated scene's turntable doubles as its clip preview (the
+      // runner samples the timeline across the orbit), and 8 frames of a
+      // walk cycle read as a slideshow. 16 keeps playback legible without
+      // an explicit request; an authored turntableSteps still wins.
+      const sceneAnimates = (census?.animation?.keyframedObjects.length ?? 0) > 0;
+      const steps = proofOpts.turntable ? proofOpts.turntableSteps ?? (sceneAnimates ? 16 : 8) : 1;
+      /* `steps` is in the hash even though it is derived from the census:
+         a derived input is still an input. Without it, an animated scene's
+         16-frame request collides with its old 8-frame cache entry (the
+         entry's files all exist, so the hit sticks until --no-cache), and a
+         `--stages parse,proof` run — census undefined, so 8 frames — would
+         write a differently-sized frame set under the same hash. */
+      const proofHash = hashJson({ build: buildInputHash, proof: proofOpts, steps });
       const names = Array.from({ length: steps }, (_, i) => `proof-${proofHash}-${String(i).padStart(3, "0")}.png`);
       const abs = names.map((n) => path.join(request.projectDir, OUT_DIR, "proof", n));
       const cached = request.noCache ? null : readCache(request.projectDir, "proof", proofHash);
-      if (cached && cached.artifacts.every((a) => fs.existsSync(path.join(request.projectDir, a)))) {
+      /* Material balls are outputs, so they are not hash INPUTS — but they
+         are artifacts of this entry, so a hit has to prove they still exist.
+         Without this, deleting `out/materials/` left the cache reporting a
+         complete proof forever and the previews never came back. */
+      const cachedBalls = asStringList((cached?.data as { materialBalls?: unknown } | null)?.materialBalls);
+      if (
+        cached &&
+        [...cached.artifacts, ...cachedBalls].every((a) =>
+          fs.existsSync(path.join(request.projectDir, a)),
+        )
+      ) {
         proofImages.push(...cached.artifacts);
+        materialBalls.push(...cachedBalls);
+        materialBallsSkipped =
+          typeof (cached.data as { materialBallsSkipped?: unknown } | null)?.materialBallsSkipped === "number"
+            ? ((cached.data as { materialBallsSkipped: number }).materialBallsSkipped)
+            : 0;
         // The cache carries the frame statistics, not just the file list:
         // without them a cached rerun would drop S3D-E-383 and a scene that
         // rendered black would start reporting clean on its second compile.
         // The per-frame off-camera facts ride the same entry.
         const cachedData = cached.data as
-          | { frames?: unknown; offByFrame?: Array<{ frame: number; objects: string[] }> }
+          | {
+              frames?: unknown;
+              offByFrame?: Array<{ frame: number; objects: string[] }>;
+              screenRects?: Array<Record<string, [number, number, number, number]>>;
+              idParts?: string[];
+            }
           | null;
         proofFrames = asProofFrames(cachedData);
         offByFrame = Array.isArray(cachedData?.offByFrame) ? cachedData.offByFrame : undefined;
+        proofRects = Array.isArray(cachedData?.screenRects) ? cachedData.screenRects : undefined;
+        proofIdParts = Array.isArray(cachedData?.idParts) ? (cachedData.idParts as string[]) : undefined;
         report("proof", "cached", ms(tp));
       } else {
         const result = await runRunner(
@@ -760,6 +851,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
               respectSceneCamera: proofOpts.respectSceneCamera ?? false,
               ...(proofOpts.background ? { background: proofOpts.background } : {}),
               filepaths: abs,
+              materialBallDir: path.join(request.projectDir, OUT_DIR, "materials"),
             },
           },
           timeoutMs,
@@ -774,19 +866,59 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         } else {
           const written = names.filter((n) => fs.existsSync(path.join(request.projectDir, OUT_DIR, "proof", n)));
           const rel = written.map((n) => `${PROOF_DIR}/${n}`);
+          // The object-index maps the runner renders beside each frame
+          // (`<frame>.idx.png`) — the viewer's per-pixel x-ray silhouettes.
+          // Companions, never proofImages: the player, the lint statistics
+          // and the digest read beauty frames only.
+          const idxNames = names.map((n) => n.replace(/\.png$/i, ".idx.png"));
+          const idxWritten = idxNames.filter((n) =>
+            fs.existsSync(path.join(request.projectDir, OUT_DIR, "proof", n)),
+          );
           // Each compile hashes to a new frame set; without pruning, a scene
           // iterated a handful of times leaves tens of megabytes of orphaned
           // renders sitting in the user's project.
-          pruneStaleProofFrames(request.projectDir, names);
+          pruneStaleProofFrames(request.projectDir, [...names, ...idxNames]);
           proofImages.push(...rel);
+          /* The runner names the balls (only it knows the material names), so
+             it reports absolute paths and the project-relative form is derived
+             here — the same one place every other artifact path is made. */
+          const ballFiles = asStringList((result.data as { materialBalls?: unknown } | undefined)?.materialBalls)
+            .map((p) => path.basename(p))
+            .filter((n) => fs.existsSync(path.join(request.projectDir, OUT_DIR, "materials", n)));
+          pruneStaleMaterialBalls(request.projectDir, ballFiles);
+          materialBalls.push(...ballFiles.map((n) => `${MATERIALS_DIR}/${n}`));
+          const skippedRaw = (result.data as { materialBallsSkipped?: unknown } | undefined)?.materialBallsSkipped;
+          materialBallsSkipped = typeof skippedRaw === "number" ? skippedRaw : 0;
           proofFrames = asProofFrames((result.data as { frames?: unknown } | undefined)?.frames);
           offByFrame = (result.data as { offByFrame?: unknown } | undefined)?.offByFrame as
             | Array<{ frame: number; objects: string[] }>
             | undefined;
+          const rawRects = (result.data as { screenRects?: unknown } | undefined)?.screenRects;
+          proofRects = Array.isArray(rawRects)
+            ? (rawRects as Array<Record<string, [number, number, number, number]>>)
+            : undefined;
+          const rawIdParts = (result.data as { idParts?: unknown } | undefined)?.idParts;
+          // Usable only as a complete SET: a frame without its map would
+          // x-ray the wrong pixels, so the manifest advertises id maps only
+          // when every frame's map actually exists on disk.
+          proofIdParts =
+            Array.isArray(rawIdParts) && rawIdParts.length > 0 && idxWritten.length === names.length
+              ? (rawIdParts as string[])
+              : undefined;
           if (!request.noCache && rel.length === names.length) {
             writeCache(request.projectDir, "proof", proofHash, {
-              artifacts: rel,
-              data: { frames: proofFrames ?? null, offByFrame: offByFrame ?? [] },
+              artifacts: [...rel, ...idxWritten.map((n) => `${PROOF_DIR}/${n}`)],
+              data: {
+                frames: proofFrames ?? null,
+                offByFrame: offByFrame ?? [],
+                ...(proofRects ? { screenRects: proofRects } : {}),
+                ...(proofIdParts ? { idParts: proofIdParts } : {}),
+                /* Cached alongside the frame statistics for the same reason
+                   they are: a cached rerun that silently dropped the previews
+                   would read as the feature coming and going. */
+                materialBalls,
+                materialBallsSkipped,
+              },
             });
           }
         }
@@ -824,15 +956,46 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           : [...normalized.exportFormats];
       const exportHash = hashJson({ build: buildInputHash, formats, lod: normalized.lodRatios });
       const cached = request.noCache ? null : readCache(request.projectDir, "export", exportHash);
+      /* usdz deliverables that W-904 fired on when the export actually ran,
+         recorded into the cache so a cached recompile re-reports them. */
+      const usdzUpAxisWarned: string[] = [];
       if (cached && cached.artifacts.every((a) => fs.existsSync(path.join(request.projectDir, a)))) {
         exportedAssets.push(...cached.artifacts);
         // The parity verdict is part of the export's result, so the cache
         // carries the lowering record and a cached recompile re-adjudicates
         // it — the same discipline as the proof cache's frame statistics.
-        emitMasterParity(
-          (cached.data as { lowering?: LoweringRecord } | null)?.lowering,
-          issues,
-        );
+        const cachedData = cached.data as
+          | { lowering?: LoweringRecord | null; usdzUpAxisWarned?: string[] }
+          | null;
+        emitMasterParity(cachedData?.lowering ?? undefined, issues);
+        /* Capability parity is a pure re-read of the source and shipped
+           containers — no cached data involved — so a cached recompile
+           re-adjudicates it. It used to live only in the miss branch, which
+           made W-903 fire once and vanish on the next identical compile:
+           the exact stale-state-read-as-flakiness failure the cache
+           discipline above exists to prevent. */
+        emitMaterialCapabilityParity(request.projectDir, source, solved, cached.artifacts, issues);
+        /* Same for W-904: the packaging facts were recorded when the export
+           ran. Legacy cache entries predate the record — infer from the
+           lowering record instead (no AR stage + non-Y contract axis means
+           the package came from the non-Y master), except for usda sources,
+           whose packaging path never adjudicated the axis. */
+        const warnedUsdz =
+          cachedData?.usdzUpAxisWarned ??
+          (source.kind !== "usda" && normalized.upAxis !== "Y" && !cachedData?.lowering?.arMaster
+            ? cached.artifacts.filter((a) => a.toLowerCase().endsWith(".usdz"))
+            : []);
+        for (const usdzRel of warnedUsdz) {
+          if (!cached.artifacts.includes(usdzRel)) continue;
+          issues.push({
+            code: ISSUE_CODES.USDZ_UP_AXIS,
+            severity: "warning",
+            message: `${usdzRel} is packaged from a ${normalized.upAxis}-up stage — AR Quick Look and Scene Viewer read USDZ as Y-up, so it will arrive rotated onto its back`,
+            file: usdzRel,
+            hint: "the Y-up AR stage could not be authored for this compile; set conventions.units.upAxis to Y, or drop usdz from export.formats",
+            detail: { upAxis: normalized.upAxis, expected: "Y" },
+          });
+        }
         report("export", "cached", ms(te));
       } else {
         const result = await runRunner(
@@ -973,6 +1136,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
                   }
                 }
                 if (packageFrom === abs && normalized.upAxis !== "Y") {
+                  usdzUpAxisWarned.push(usdzRel);
                   issues.push({
                     code: ISSUE_CODES.USDZ_UP_AXIS,
                     severity: "warning",
@@ -1059,7 +1223,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
                   code: ISSUE_CODES.VOXEL_NOT_CUBOID,
                   severity: "warning",
                   message: "the Minecraft model is empty — no part could be expressed as a cuboid element/cube",
-                  hint: "author from box shapes; spheres, cylinders and rotated imports cannot be Minecraft cuboids",
+                  hint: "author from box shapes; round and sloped shapes (spheres, cylinders, tubes, capsules, wedges) and rotated imports cannot be Minecraft cuboids",
                 });
               }
             } catch (err: any) {
@@ -1074,7 +1238,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           if (!request.noCache && rel.length > 0) {
             writeCache(request.projectDir, "export", exportHash, {
               artifacts: rel,
-              data: { lowering: lowering ?? null },
+              data: { lowering: lowering ?? null, usdzUpAxisWarned },
             });
           }
         }
@@ -1191,17 +1355,48 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       // Only what the author actually wrote. A target preset fills in
       // conventions too, but a preset is a default, not a statement of intent,
       // and must not cancel the relaxation on their behalf.
-      authoredBlocks,
+      authoredKeys,
     });
     // A claim is adjudicated at the rest pose; a bobbing part leaves that
-    // pose every cycle. Unchecked-never-passed applies across TIME too.
+    // pose every cycle — but the CYCLE is adjudicable too, and "unchecked"
+    // for a motion whose envelope the solver just computed was a permanent
+    // warning an author could never answer. A field run's ember bobbed
+    // ±18mm at 470mm altitude, provably unable to reach the floor, and the
+    // coexistence warning blocked `--fail-on warning` forever. So: judge.
+    //  - a resting part's bob is TROUGH-anchored by the emitter (it only
+    //    rises from the solved pose; see _animate_bob) — grounded all cycle;
+    //  - a floating part's bob is centred: its worst dip is bottom minus
+    //    amplitude, measured against the same ground tolerance the claim
+    //    itself uses — silent when it provably clears, a REAL claim failure
+    //    when it provably sinks mid-cycle;
+    //  - exempt parts are outside the claim entirely, exactly as they are
+    //    in the rest-pose adjudication;
+    //  - only a part the solver did not place keeps the unchecked warning.
     if (spec?.claims?.grounded) {
+      const exempt = normalized.grounding.exempt;
+      const tolerance = normalized.grounding.tolerance;
       for (const part of spec.parts) {
         if (!part.bob) continue;
+        if (isExempt(part.id, exempt)) continue;
+        const placed = solved?.parts.find((p) => p.id === part.id);
+        if (placed) {
+          if (placed.restsOn) continue; // trough-anchored: never dips below rest
+          const worstBottom = placed.center[2] - placed.size[2] / 2 - part.bob.amplitude;
+          if (worstBottom >= -tolerance) continue; // clears the floor all cycle
+          lintIssues.push({
+            code: ISSUE_CODES.CLAIM_FAILED,
+            severity: "error",
+            message: `claim grounded failed: '${part.id}' bobs ±${part.bob.amplitude}m and sinks ${(-worstBottom).toFixed(4)}m below the ground plane at its trough`,
+            target: part.id,
+            hint: "raise the part, shrink the bob amplitude, or exempt it via conventions.grounding.exempt",
+            detail: { claim: "grounded", amplitude: part.bob.amplitude, worstBottom },
+          });
+          continue;
+        }
         lintIssues.push({
           code: ISSUE_CODES.CLAIM_UNCHECKED,
           severity: "warning",
-          message: `claim grounded is adjudicated at the rest pose only — '${part.id}' bobs ±${part.bob.amplitude}m and dips below it mid-cycle`,
+          message: `claim grounded is adjudicated at the rest pose only — '${part.id}' bobs ±${part.bob.amplitude}m and its cycle envelope could not be derived`,
           target: part.id,
           detail: { claim: "grounded", amplitude: part.bob.amplitude },
         });
@@ -1229,7 +1424,9 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   }
 
   /* ---- manifest --------------------------------------------------- */
-  let manifestPath = "";
+  /** The manifest AS PERSISTED — the result returns this same object so the
+   *  compile response and `out/manifest.json` can never disagree. */
+  let finalManifest: ReturnType<typeof buildManifest> | undefined;
   if (wanted.has("manifest")) {
     const tm = performance.now();
     // A restricted compile (`--stages parse,build,lint` — the fast loop the
@@ -1258,19 +1455,31 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     const prior = previousReadModel(request.projectDir);
     impact = changeImpact(prior?.census, census, prior?.issues ?? [], allIssues);
     digest = census ? describeScene(census, allIssues) : "no census — build stage did not run";
-    writeReadModel(request.projectDir, {
-      version: READ_MODEL_VERSION,
-      census,
-      issues: allIssues,
-      digest,
-      impact,
-    });
+    try {
+      writeReadModel(request.projectDir, {
+        version: READ_MODEL_VERSION,
+        census,
+        issues: allIssues,
+        digest,
+        impact,
+      });
+    } catch (err: any) {
+      /* Disk full / permissions. The compile finished; the response still
+         carries the digest and impact. Say what is missing on disk. */
+      issues.push({
+        code: ISSUE_CODES.DELIVERABLE_WRITE_FAILED,
+        severity: "warning",
+        message: `could not write the read model (digest.md, ortho.svg): ${String(err?.message ?? err)}`,
+      });
+    }
 
     const manifest = buildManifest({
       source,
       projectDir: request.projectDir,
       carried: carriedRecord,
       ...(proofFrames ? { proofFrames } : {}),
+      ...(proofRects ? { proofRects } : {}),
+      ...(proofIdParts ? { proofIdParts } : {}),
       census,
       issues: allIssues,
       summary: summarize(allIssues),
@@ -1282,11 +1491,23 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       sheets: [...normalized.sheets, ...derivedSheets],
       ...(spec?.claims ? { claimsDeclared: Object.keys(spec.claims).length } : {}),
     });
-    manifestPath = writeManifest(request.projectDir, manifest);
-    // The viewer is part of the deliverable, not a debug aid: it is the only
-    // thing in `out/` a file browser can actually open and play.
-    if (proofImages.length > 0) {
-      writeViewer(request.projectDir, manifest, proofImages, request.scenePath);
+    try {
+      finalManifest = writeManifest(request.projectDir, manifest);
+      // The viewer is part of the deliverable, not a debug aid: it is the only
+      // thing in `out/` a file browser can actually open and play.
+      if (proofImages.length > 0) {
+        writeViewer(request.projectDir, finalManifest, proofImages, request.scenePath);
+      }
+    } catch (err: any) {
+      /* The compile is done and its findings are real; a failed manifest
+         write must not turn a finished compile into a bare 500. The result
+         falls back to the in-memory manifest below. */
+      finalManifest = manifest;
+      issues.push({
+        code: ISSUE_CODES.DELIVERABLE_WRITE_FAILED,
+        severity: "warning",
+        message: `could not write out/manifest.json or the viewer: ${String(err?.message ?? err)}`,
+      });
     }
     report("manifest", "ran", ms(tm));
   }
@@ -1301,23 +1522,34 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     issues: allIssues,
     census,
     primTree,
-    manifest: buildManifest({
-      source,
-      projectDir: request.projectDir,
-      carried: carriedRecord,
-      ...(proofFrames ? { proofFrames } : {}),
-      census,
-      issues: allIssues,
-      summary,
-      proofImages,
-      exportedAssets,
-      blenderUsed: probe !== null && needsBlender,
-      blenderVersion: probe?.version ?? null,
-      bakedTweaks: bakedTweaksForManifest,
-      sheets: [...normalized.sheets, ...derivedSheets],
-      ...(spec?.claims ? { claimsDeclared: Object.keys(spec.claims).length } : {}),
-    }),
+    /* The persisted manifest when the manifest stage ran — response and
+       disk are then the SAME object (same generatedAt). Building a second
+       manifest here used to hand the HTTP response a fresh stamp while the
+       panel hydrated the stable one from disk. The fallback build only
+       runs for `--stages` requests that skipped the manifest stage. */
+    manifest:
+      finalManifest ??
+      buildManifest({
+        source,
+        projectDir: request.projectDir,
+        carried: carriedRecord,
+        ...(proofFrames ? { proofFrames } : {}),
+        ...(proofRects ? { proofRects } : {}),
+        ...(proofIdParts ? { proofIdParts } : {}),
+        census,
+        issues: allIssues,
+        summary,
+        proofImages,
+        exportedAssets,
+        blenderUsed: probe !== null && needsBlender,
+        blenderVersion: probe?.version ?? null,
+        bakedTweaks: bakedTweaksForManifest,
+        sheets: [...normalized.sheets, ...derivedSheets],
+        ...(spec?.claims ? { claimsDeclared: Object.keys(spec.claims).length } : {}),
+      }),
     proofImages,
+    materialBalls,
+    ...(materialBallsSkipped > 0 ? { materialBallsSkipped } : {}),
     exportedAssets,
     summary,
     digest,
@@ -1624,6 +1856,42 @@ function previousManifestBakedTweaks(
  */
 export function isCompilerProofFrame(name: string): boolean {
   return /^proof-[0-9a-f]{24}-\d{3,}\.png$/.test(name);
+}
+
+/**
+ * True ONLY for a material-ball preview this compiler itself wrote:
+ * `ball-<sanitised material name>.png`, where the stem is exactly the
+ * charset the runner's `safe_filename` can emit. Anything else in
+ * `out/materials/` is left alone — the directory is user-visible, and the
+ * proof-frame pruner learned that lesson the expensive way.
+ */
+export function isCompilerMaterialBall(name: string): boolean {
+  return /^ball-[A-Za-z0-9._-]+\.png$/.test(name);
+}
+
+function pruneStaleMaterialBalls(projectDir: string, keep: string[]): void {
+  const dir = path.join(projectDir, OUT_DIR, "materials");
+  const survivors = new Set(keep);
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (survivors.has(entry)) continue;
+    if (!isCompilerMaterialBall(entry)) continue;
+    try {
+      fs.rmSync(path.join(dir, entry), { force: true });
+    } catch {
+      /* a viewer may hold the handle; the next compile retries */
+    }
+  }
+}
+
+/** Narrow an untyped payload/cache field to a list of strings. */
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
 function pruneStaleProofFrames(projectDir: string, keep: string[]): void {

@@ -12,15 +12,15 @@ Other companions: `KILN.md` (design lineage), `RESEARCH.md` (market thesis).
 
 A deterministic world compiler: sources go in through one compile call,
 measured and adjudicated artifacts come out, and every failure leaves a
-stable code carrying the measurement that proves it plus the source line
-that caused it.
+stable code carrying the measurement that proves it plus the most specific
+available provenance for the source or imported asset that caused it.
 
 ## Layer map
 
 ```
 ┌─ Sources ──────────────────────────────────────────────────────────────┐
 │ scene.json (the language)  ·  bare .glb/.gltf/.obj/.fbx (mesh kind)    │
-│ build.py (bpy escape hatch)  ·  .usda layers  ·  .blend                │
+│ build.py (raw authoring mode) ·  .usda layers  ·  .blend               │
 ├─ Parse ────────────────────────────────────────────────────────────────┤
 │ schema validation with JSON paths (E-105) BEFORE any geometry exists   │
 │ shader kernels read + structurally checked (comment-stripped, E-801)   │
@@ -64,17 +64,28 @@ that caused it.
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-## The language (scene.json): the fidelity matrix
+## The current language (scene.json): the fidelity matrix
+
+This matrix describes the alpha language that exists today, not the full
+creative scope of scene3d. The intended direction is a broader declarative
+language for authored intent: composable procedural operations, richer
+relations, sequenced keyframes, skeletal and deformation systems, and other
+asset behavior can be added without changing the compiler's measured,
+validated output boundary. `scene.json` and `build.py` are equally legitimate
+authoring modes: JSON offers structured declarative intent, while Python is
+the raw mode for direct procedural control. The JSON subset can grow without
+making the raw mode a second-class path.
 
 | Concept | Vocabulary | Guarantees |
 |---|---|---|
-| Parts | `size` (AABB, metres) + `shape`: box/cylinder/sphere/cone/torus | every shape fills its box exactly; TRIFAN caps → zero ngons by construction |
+| Parts | `size` (AABB, metres) + `shape`: box/cylinder/sphere/cone/torus/wedge/tube/capsule (+ `tip` frustum ratio on a cone, `thickness` wall on a tube) | every shape fills its box exactly; TRIFAN caps and all-quad tube rings → zero ngons by construction |
 | Real assets as parts | `file:` .glb/.gltf/.obj/.fbx | joined, scaffolding-swept, fitted inside the box (bottom-rest); `material:` = wholesale override |
+| Static rotation | per-part `rotate{axis, deg}` | one world axis, applied at the solved centre; the solver reasons in the ROTATED BOUND of the local box, so every relation stays correct without knowing rotation exists; a whole turn (`deg % 360 == 0`) and `span`+`rotate` are refused |
 | Placement | `at`, `sits_on(embed)`, `above(clearance)`, `align`, `inset_from`, `span` | relation fixpoint, order-independent; 1mm contact floor → z-fighting structurally impossible; span extents floored + conflict-checked |
 | Multiplicity | `repeat(count, along, every)`; grids compose. `scatter(on, count, seed, minGap, sizeJitter)` | path-addressed RNG: adding parts cannot reshuffle a scatter; cross-scatter collision-free; repeat×scatter statically rejected |
 | Materials | named PBR: baseColor/roughness/`metallic(0\|1)`/emission/alpha, or `shader:` | undeclared reference = parse error; every generated material authored |
 | Shaders | `shaders` block: kernel file + typed uniforms + outputs + size (+frames) | see below |
-| Animation | per-part `spin{axis,seconds}`, `bob{amplitude,seconds}` | compiler-owned keyframes, looped (cycles modifiers), GLB carries clips, assetKind derives `animation` |
+| Animation (current subset) | per-part `spin{axis,seconds}`, `bob{amplitude,seconds}` | compiler-owned keyframes, looped (cycles modifiers), GLB carries clips, assetKind derives `animation`; sequenced and skeletal/deformation animation remain future language work |
 | Staging | derived camera (`camera{azimuthDeg,elevationDeg,distance}` steers) + `light: studio\|sun` | shot always contains the subject; never raw coordinates |
 | Claims | `parts, maxTriangles, grounded, maxHeight, footprint, watertight, materialsUsed` | adjudicated against the census (E-701); unadjudicable = W-701, never a silent pass; rest-pose caveat for bobbing parts reported |
 
@@ -92,15 +103,16 @@ per extra channel). The compiler owns:
 - uniform declarations (typed from JSON values; std430 running-offset
   push-constant budget vs Vulkan's 128-byte floor)
 - the stdlib: `s3d_hash21/22, s3d_vnoise, s3d_fbm, s3d_voronoi`, PCG2D
-  over `floatBitsToUint`; bit-deterministic on every backend, never
-  `fract(sin)`
+  over `floatBitsToUint`; avoids known driver-dependent constructions such as
+  `fract(sin)` and aims for stable output across supported backends
 - the wrapper + dispatch for two targets (Blender GPUShaderCreateInfo,
   WebGL2 300 es)
 - execution: real driver compile (E-802 carries the driver's log),
   offscreen draw into RGBA32F (8-bit targets clamp Inf and blind the
   oracle), NaN/Inf scan (E-804 with count + location), byte-exact PNG
   writing with the compiler's own sRGB transfer (no Blender colour
-  management in the loop); two fresh compiles bake byte-identical files
+  management in the loop); two fresh compiles under the supported toolchain
+  bake byte-identical files
 
 Outputs: `baseColor`, `emission` (sRGB), `roughness`, `metallic`
 (Non-Color), `height` (Non-Color plus a derived wrap-aware tangent-space
@@ -122,8 +134,10 @@ kernels, same stdlib, same diagnostics.
   (open meshes, fractional metallic, mirrored-shared UVs are real-world
   legitimate).
 - Rigs are census facts: `armatures` (bone counts), `animation.actionNames`
-  (real clips), both action APIs handled. Skins and animations survive
-  GLB re-export (dissected and pinned).
+  (real clips), both action APIs handled. Skins and imported animations
+  survive GLB re-export (dissected and pinned). Declarative rigging, skinning,
+  and authored deformation systems are future authoring capabilities, not
+  excluded domains.
 - Damage handling is deterministic detect-and-name, never mutation:
   truncated files fail with the importer's own reason (E-202, no traceback
   soup); missing .mtl companions and geometry-free imports surface as W-207
@@ -249,11 +263,123 @@ census, and the format is niche).
   gives Blender X→MC X (+θ), Z→MC Y (+θ), Y→MC Z (−θ), pinned by a round-trip on
   a real rotated cube; only Bedrock's per-axis sign convention stays unconfirmed
   until someone renders it in an engine. Multi-axis rotations (no single recovered axis)
-  are still skipped with a reason. Follow-ups (not yet built): rotated-element
-  scene.json→spec round-trip (needs static rotation in the language, which the
-  solver's AABB invariant does not yet carry), multi-axis Bedrock rotation,
+  are still skipped with a reason. The LANGUAGE half of the rotated-element
+  round trip now exists — a part's `rotate: {axis, deg}` is a static single-axis
+  rotation the solver carries as a rotated world box (the fidelity matrix's
+  "Static rotation" row) — so a scene.json→spec round trip of a
+  rotated element is authorable; wiring the .bbmodel importer to emit it is the
+  remaining step. Follow-ups (not yet built): rotated-element
+  scene.json→spec round-trip emission, multi-axis Bedrock rotation,
   per-face atlas UVs for Java, Bedrock bones/animation. Shared exporter helpers
   (frame map, texture synthesis, atlas tiles) live in `src/mc/common.ts`.
+
+## The USDA lexer skips bulk data (the chess-set OOM)
+
+The structure parser (`parse/usda.ts`) used to tokenize the ENTIRE stage —
+including geometry payloads. A real master is hundreds of MB of
+`point3f[] points = [(…), …]`, and one Token object per number and comma
+meant hundreds of millions of allocations: parsing ABeautifulGame's 358MB
+stage took 54s, churned >5.5GB, and OOM'd the daemon (twice — the export
+post-pass parses in `authorStageModel`, then lint parses again). The lexer
+now consumes a whole `[...]` payload in one charCode walk (`bulkArray`),
+minting only the array's structural shell plus what consumers actually
+read from arrays — `@asset@` refs, `<target>` paths, quoted strings. The
+same discipline runs through `stage-model.ts` (quote-free lines mask to
+themselves; depth walks use charCodeAt, never for..of or char arrays).
+After: 1.5s, ~zero retained beyond the source string, at a 2GB cap.
+Attribute values now record bulk arrays as an empty shell (`[]`) — the
+attribute's PRESENCE and its refs survive, the numbers never mattered to
+any rule. Pinned in `tests/usda-parser.test.ts` ("elides bulk array
+payloads…"). If a future rule needs numeric array content, extend the
+lexer with a targeted keep-list; do not revert to full tokenization.
+
+## Viewer continuity and the animated proof
+
+Behaviours that keep the compiled surfaces honest across the compile loop:
+
+- **The clicked part energizes with the kit's own x-ray.** The runner
+  renders an object-index map beside every proof frame
+  (`<frame>.idx.png`: flat emission per part, code = sorted-index + 1 in
+  8-step-per-channel RGB, Standard view transform, filter_size 0.01,
+  alpha-0 background; `_proof_id_pass` in runner.py — no restoration,
+  the proof process rebuilds from source and exits). The manifest
+  advertises `proofIdParts` only when every frame's map exists.
+  `apps/web/src/runtime/scene3d-xray.ts` is a constant-for-constant port
+  of kit-runtime's spectral pass (inspectionRamp stops, filmArc cosine,
+  rim mix 0.32 toward skin·0.45+film·0.85, edge tint (0.55,0.72,0.80)·
+  0.16, stage ink (0.03,0.035,0.05)) with 2D data sources: part-
+  normalized smoothed luminance drives the fill, silhouette proximity is
+  the grazing angle, Sobel gives the structure lines. The panel decodes
+  the map, composes the full-energize frame on a canvas, and crossfades
+  it with the kit's exact 200ms-in/140ms-out easeOutCubic — opacity IS
+  uXray. Occlusion is free: the map only marks pixels the part won in
+  the render. Reticle brackets stand down while energized (the part is
+  the highlight); missing maps fall back to the reticle. Keep the
+  constants in step across FRAG ↔ scene3d-xray.ts ↔ runner ID_STEPS ↔
+  XRAY_ID_STEPS (pinned in apps/web/tests/scene3d-xray.test.ts).
+- **The proof frames are pickable.** The runner already projected every
+  part through the render camera for the off-camera check; the same pass
+  now records each part's screen rect per frame
+  (`manifest.proofRects[frame][part] = [x0,y0,x1,y1]`, normalized, y
+  down) — ground truth from the exact transform that produced the pixels.
+  The host panel (`Scene3dPanel`) draws an animated focus reticle over
+  the selected parts, pre-highlights on hover, and resolves a click on
+  the picture back to a part (smallest containing rect wins; shift
+  toggles; empty space clears; the rail scrolls the picked row into
+  view). Web-side only the VIEWPORT transform lives in code —
+  `proofViewport` / `proofRectToStage` / `pickProofPart` in
+  `apps/web/src/runtime/scene3d-assets.ts`, pure and unit-tested, the
+  same split kit-runtime makes between worldToScreen and its canvas. A
+  manifest from before rects existed simply has no `proofRects`, and the
+  click stays a no-op rather than a guess.
+- **The compile toolbar speaks in marks.** The asset kind is a drawn,
+  gently animated glyph (word = tooltip/aria-label; the `scene` glyph is
+  the same cube-on-turntable sentence as the shared `scene3d` icon); the
+  verdict is a check / error / warning mark with counts, and the claims
+  badge is a drawn shield in the same grammar; parts, triangles and world
+  size are glyph+number with the full sentence (Blender version
+  included) as tooltip AND aria-label. The same drawn verdict mark rides
+  the HtmlViewer kit-toolbar ident chip (`viewer-scene3d-ident-mark` in
+  FileViewer) so colour is never the only verdict channel, and the
+  export chips show the shared spinner while archiving instead of an
+  ellipsis. Non-mesh part rows carry tiny camera/light/bone glyphs in
+  the tree-glyph style. World size renders axis-coloured in the kit
+  gizmo's exact palette (X #e5484d, Y #46a758, Z #3b82f6 — AXES in
+  kit.ts), theme-static like the gizmo, so readout and manipulator share
+  one colour language. `KitEntry.kind` carries the derived asset kind
+  into the kit page: the rail shows a per-row kind glyph ONLY when the
+  kit mixes kinds (KIND_GLYPHS in kit.ts, static mirrors of
+  KindGlyphArt — keep the paths in step), and the ident message hands
+  `kind` to the host, whose toolbar chip draws the same glyph
+  (`viewer-scene3d-ident-kind`, allowlist-validated in FileViewer). Narrow containers shed the dims first, then the
+  whole meta row (both live in the @container blocks at the end of
+  `Scene3dPanel.module.css`); every motion stands down under
+  prefers-reduced-motion.
+
+- **The proof turntable of an animated scene samples the clip.** Frame `i`
+  of the orbit also sets timeline frame `start + span·i/steps` (i/steps,
+  not i/(steps−1), so looped playback cycles without a doubled pose) —
+  without this, an asset the manifest labels `animation` proved as N
+  identical poses and the player scrubbed a statue. Single stills keep the
+  authored frame; the sampling lives in `_proof_frames` (runner.py) and
+  logs what it sampled. Animated scenes default to 16 turntable steps
+  (pipeline.ts, census-gated) so playback is legible; an authored
+  `proof.turntableSteps` still wins. Both frame players (the host's
+  `Scene3dPanel` and the generated `out/index.html`) autoplay when
+  `assetKind === "animation"` and answer drag-to-rotate over the picture;
+  the generated page's square stage caps to the viewport so its controls
+  never fall below the fold.
+- **kit.html remembers its view across reloads.** The host reloads the
+  page whenever a compile rewrites it or the file watcher refreshes the
+  srcdoc; the page snapshots {entry, camera, selection, rail, x-ray mode}
+  into `window.name` (tag `s3dview:` — the one storage an opaque-origin
+  srcdoc can reach, and it survives a srcdoc swap in the same iframe) on a
+  debounce hooked into `invalidate()`, and the boot restores it: entry
+  choice against the rebuilt rail, camera/selection consumed once after
+  the first model load (validated, distance re-clamped to the new bounds —
+  the reload may be showing a resized asset). Pins:
+  `tests/kit-viewer.test.ts` "kit view-state persistence" /
+  "turntable viewer page".
 
 ## The material layer (viewer tweaks channel)
 
@@ -567,3 +693,43 @@ art does not belong in the repository.
 - Fuzz: validator shape-fuzz, uniform-name injection fuzz, GPU
   hostile-uniform fuzz riding the E-804 oracle, RNG known-answer +
   insertion-stability.
+
+## Known gaps (alpha)
+
+The honest ledger of what is understood but not built. An item here is a
+scoped decision to defer, not an unknown; each names its cost and where the
+work would land. (The Minecraft-specific follow-ups stay in the Minecraft
+section above.)
+
+- **X-ray-aware picking.** `pickPart` (`src/viewer/kit-runtime.ts`) iterates
+  every draw with no reference to the x-ray state, so in x-ray mode the user
+  sees the interior and clicks the shell. Cost: a visibility/depth-order
+  filter in the candidate loop plus a runtime test beside
+  `tests/kit-picking.test.ts`.
+- **Arity-based assembly/component kinds.** `src/usd/stage-model.ts` calls a
+  stage with more than one geometry root an `assembly`, one root a
+  `component`. A two-part prop that is conceptually one component is still
+  called an assembly; nothing in the language lets the author say otherwise.
+- **Multi-axis rotation in the declarative language.** `rotate: {axis, deg}`
+  (the fidelity matrix's "Static rotation" row) covers ONE world axis. A part turned about
+  two axes at once — a diagonal brace, a compound-angle strut — still has no
+  word, and the rotated-bound arithmetic that makes one axis exact would have
+  to compose (still conservative, no longer exact for a box). `span` +
+  `rotate` is refused rather than reconciled, for the same reason.
+- **Curved-support contact is box contact.** `sits_on`/`scatter` against a
+  cylinder or sphere support use the support's AABB, not its surface: a
+  scatter over a cylindrical slab can land samples on the box corners where
+  no geometry exists. Self-consistent (the contact report measures the same
+  way) but visually wrong on curved supports.
+- **`contact_report` caps at 60 meshes** while the language admits 500
+  parts; above the cap the compile still succeeds but grounding/contact
+  facts are reported as skipped. The cap is reported, not silent — but the
+  language gives no warning at authoring time that a large scatter changes
+  what the compiler can see.
+- **Screen→NDC picking half is verified by inspection only.**
+  `tests/kit-picking.test.ts` pins the ray/mesh half; the DOM-layout half
+  (resize/DPR) has no automated coverage.
+- **Exporter kwarg drops are silent.** `usd_export_resilient` removes
+  unknown kwargs one at a time, so a different Blender point release can
+  export a narrower payload with no issue code. An `*_UNCHECKED`-family
+  code for a dropped kwarg would make the variance visible.

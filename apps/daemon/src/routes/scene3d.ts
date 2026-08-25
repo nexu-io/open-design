@@ -42,6 +42,17 @@ const inFlight = new Set<string>();
 const MAX_TIMEOUT_MS = 600_000;
 
 /**
+ * Error text as sent to the client: absolute host paths stripped. An fs
+ * error's message embeds the full path it failed on, and a 500 body that
+ * carries it hands every caller the daemon's directory layout. The full
+ * error still reaches the server log at each call site.
+ */
+function redactedMessage(err: unknown): string {
+  const msg = String((err as { message?: unknown })?.message || err);
+  return msg.replace(/[A-Za-z]:[\\/][^\s'"`)]+|\/(?:Users|home|tmp|var|opt)\/[^\s'"`)]+/g, '<path>');
+}
+
+/**
  * `POST /api/projects/:id/scene3d/compile` — compile a 3D scene project the
  * way a build tool compiles code: parse, build through headless Blender,
  * lint deterministically, render proof frames, export USD/GLB, and emit a
@@ -158,6 +169,9 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
         manifest: result.manifest as Scene3dManifest,
         proofImages: result.proofImages.map((p) => artifactRef(project.id, scenePath, p)),
         exportedAssets: result.exportedAssets.map((p) => artifactRef(project.id, scenePath, p)),
+        ...(result.materialBalls.length > 0
+          ? { materialBalls: result.materialBalls.map((p) => artifactRef(project.id, scenePath, p)) }
+          : {}),
         blender: { available: probe !== null, version: probe?.version ?? null },
         // The solver's own output: the parse loop's placement eyes.
         ...(result.solved ? { solved: result.solved } : {}),
@@ -165,12 +179,19 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
         // A model on this route may have no image input at all, so a
         // verdict about what a frame looks like is otherwise a verdict
         // about evidence the reader cannot reach.
-        agentMessage: renderAgentReport(result, { projectDir: sceneDir }),
+        agentMessage: renderAgentReport(result, {
+          projectDir: sceneDir,
+          // "Show me the frames anyway" — the text reader's open-the-PNG.
+          alwaysShowFrames: body.frames === true,
+          // The titles live in contracts; the compiler package cannot
+          // depend on it, so the catalog is injected at the seam.
+          issueTitle: (code: string) => scene3dIssueTitle(code) ?? undefined,
+        }),
       };
       res.json(response);
     } catch (err: any) {
       console.error('[scene3d]', err);
-      return sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+      return sendApiError(res, 500, 'INTERNAL_ERROR', redactedMessage(err));
     }
   });
 
@@ -265,7 +286,7 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       res.json({ ok: true, parts: Object.keys(tweaks).length });
     } catch (err: any) {
       console.error('[scene3d]', err);
-      return sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+      return sendApiError(res, 500, 'INTERNAL_ERROR', redactedMessage(err));
     }
   });
 
@@ -310,7 +331,7 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       res.json({ tweaks: sanitizeTweaks(parsed) ?? {} });
     } catch (err: any) {
       console.error('[scene3d]', err);
-      return sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+      return sendApiError(res, 500, 'INTERNAL_ERROR', redactedMessage(err));
     }
   });
 
@@ -357,7 +378,7 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       res.json(response);
     } catch (err: any) {
       console.error('[scene3d]', err);
-      return sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+      return sendApiError(res, 500, 'INTERNAL_ERROR', redactedMessage(err));
     }
   });
 }

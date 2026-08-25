@@ -1,6 +1,10 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { renderAgentReport } from "../src/report.js";
 import { buildManifest } from "../src/manifest.js";
+import { encodePng } from "../src/sheet/png.js";
 import { CompileResult, Census, Issue } from "../src/types.js";
 
 const source = { kind: "bpy" as const, files: ["build.py"] };
@@ -506,8 +510,267 @@ describe("renderAgentReport", () => {
     expect(text).toContain("… +1 more parts");
   });
 
+  it("names a static rotation on the row, so the world box is explicable", () => {
+    // The size column is the WORLD box — the rotated bound — so without the
+    // rotation named, a 15-degree sign board reads as a part nobody wrote.
+    const text = renderAgentReport(
+      result({
+        solved: {
+          parts: [
+            {
+              id: "prp_sign",
+              size: [0.483, 0.276, 0.02],
+              localSize: [0.4, 0.2, 0.02],
+              rotate: { axis: "z", deg: 30 },
+              center: [0, 0, 1],
+              shape: "box",
+              axis: "z",
+              flip: false,
+            },
+          ],
+          diagnostics: [],
+        },
+      }),
+    );
+    expect(text).toContain("· rot z 30°");
+  });
+
   it("omits the solved table when there is no solve (non-spec sources)", () => {
     const text = renderAgentReport(result());
     expect(text).not.toContain("solved boxes");
+  });
+
+  /* ---- asset kind, claims ledger, and loud success ------------------ */
+
+  it("names the derived asset kind on its own line, right after source", () => {
+    const text = renderAgentReport(
+      result({
+        manifest: buildManifest({
+          source,
+          issues: [],
+          summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [],
+          exportedAssets: [],
+          blenderUsed: true,
+          blenderVersion: "5.0.1",
+          // One mesh root, no camera, no keyframes -> derives to "prop".
+          census: censusWith(["prp_orb"]),
+        }),
+      }),
+    );
+    expect(text).toContain("asset: prop");
+    expect(text.indexOf("asset: prop")).toBeGreaterThan(text.indexOf("source:"));
+  });
+
+  it("prints the claims ledger, holding and failing", () => {
+    const held = renderAgentReport(
+      result({
+        manifest: buildManifest({
+          source,
+          issues: [],
+          summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [],
+          exportedAssets: [],
+          blenderUsed: true,
+          blenderVersion: "5.0.1",
+          claimsDeclared: 6,
+        }),
+      }),
+    );
+    expect(held).toContain("claims: 6/6 held");
+
+    const failedIssues: Issue[] = [
+      { code: "S3D-E-701", severity: "error", message: "claim failed", detail: { claim: "a" } },
+      { code: "S3D-E-701", severity: "error", message: "claim failed", detail: { claim: "b" } },
+    ];
+    const summary = {
+      errors: failedIssues.length,
+      warnings: 0,
+      infos: 0,
+    };
+    const failing = renderAgentReport(
+      result({
+        issues: failedIssues,
+        manifest: buildManifest({
+          source,
+          issues: failedIssues,
+          summary,
+          proofImages: [],
+          exportedAssets: [],
+          blenderUsed: true,
+          blenderVersion: "5.0.1",
+          claimsDeclared: 6,
+        }),
+      }),
+    );
+    expect(failing).toContain("claims: 4/6 held — 2 failed (S3D-E-701 below)");
+  });
+
+  it("stays silent about claims when the spec declared none", () => {
+    const text = renderAgentReport(result());
+    expect(text).not.toContain("claims:");
+  });
+
+  it("keeps summary and headroom on a clean pass instead of going silent", () => {
+    const text = renderAgentReport(
+      result({
+        manifest: buildManifest({
+          source,
+          issues: [],
+          summary: { errors: 0, warnings: 0, infos: 0 },
+          proofImages: [],
+          exportedAssets: [],
+          blenderUsed: true,
+          blenderVersion: "5.0.1",
+          census: censusWith(["a", "b"], [["a", "b"]]),
+        }),
+      }),
+    );
+    expect(text).toContain("summary: pass");
+    expect(text).toContain("headroom:");
+    expect(text).toContain("tris");
+  });
+
+  /* ---- carried-proof label ------------------------------------------- */
+
+  it("labels frames carried from a previous compile when the proof stage did not run this time", () => {
+    const text = renderAgentReport(
+      result({
+        proofImages: [".scene3d/proof/proof-abc-000.png"],
+        stages: [
+          { id: "parse", status: "ran", durationMs: 2 },
+          { id: "build", status: "cached", durationMs: 0 },
+        ],
+      }),
+    );
+    expect(text).toContain("carried from a previous compile");
+  });
+
+  it("also labels frames carried when the proof stage is present but skipped", () => {
+    const text = renderAgentReport(
+      result({
+        proofImages: [".scene3d/proof/proof-abc-000.png"],
+        stages: [
+          { id: "parse", status: "ran", durationMs: 2 },
+          { id: "proof", status: "skipped", durationMs: 0 },
+        ],
+      }),
+    );
+    expect(text).toContain("carried from a previous compile");
+  });
+
+  it("does not call frames carried when the proof stage actually ran or hit cache", () => {
+    const ran = renderAgentReport(
+      result({
+        proofImages: [".scene3d/proof/proof-abc-000.png"],
+        stages: [
+          { id: "parse", status: "ran", durationMs: 2 },
+          { id: "proof", status: "ran", durationMs: 5 },
+        ],
+      }),
+    );
+    expect(ran).not.toContain("carried from a previous compile");
+
+    const cached = renderAgentReport(
+      result({
+        proofImages: [".scene3d/proof/proof-abc-000.png"],
+        stages: [
+          { id: "parse", status: "ran", durationMs: 2 },
+          { id: "proof", status: "cached", durationMs: 0 },
+        ],
+      }),
+    );
+    expect(cached).not.toContain("carried from a previous compile");
+  });
+
+  /* ---- the digest pointer -------------------------------------------- */
+
+  it("points to the digest once the manifest stage has actually run", () => {
+    const text = renderAgentReport(
+      result({
+        stages: [
+          { id: "parse", status: "ran", durationMs: 2 },
+          { id: "manifest", status: "ran", durationMs: 1 },
+        ],
+      }),
+    );
+    expect(text).toContain("read:");
+    expect(text).toContain("out/ortho.svg — dimensioned plan/front/side");
+    expect(text).toContain("out/digest.md");
+    expect(text).toContain("out/read-model.json");
+  });
+
+  it("stays silent about the digest pointer when the manifest stage did not run", () => {
+    const text = renderAgentReport(result());
+    expect(text).not.toContain("read:");
+  });
+
+  /* ---- issueTitle injection ------------------------------------------- */
+
+  it("names an issue code with its title in the fix-first line when issueTitle is supplied", () => {
+    const issues: Issue[] = [
+      {
+        code: "S3D-E-324",
+        severity: "error",
+        message: "coplanar overlap between 'a' and 'b' (6 face pair(s))",
+        target: "a <-> b",
+      },
+    ];
+    const issueTitle = (code: string) => (code === "S3D-E-324" ? "Z-fighting overlap" : undefined);
+    const text = renderAgentReport(result({ issues }), { issueTitle });
+    expect(text).toContain("1. S3D-E-324 (Z-fighting overlap)");
+    // The per-severity sections carry the title too — the fix-first line is
+    // a curation of the same lines, not the only place the catalog shows.
+    expect(text).toContain("errors:\n  S3D-E-324 (Z-fighting overlap) [a <-> b]");
+  });
+
+  it("renders the bare code when issueTitle is absent or returns nothing", () => {
+    const issues: Issue[] = [
+      {
+        code: "S3D-E-324",
+        severity: "error",
+        message: "coplanar overlap between 'a' and 'b' (6 face pair(s))",
+        target: "a <-> b",
+      },
+    ];
+    const withoutOption = renderAgentReport(result({ issues }));
+    expect(withoutOption).toContain("errors:\n  S3D-E-324 [a <-> b]");
+    expect(withoutOption).toContain("1. S3D-E-324 ");
+    expect(withoutOption).not.toContain("S3D-E-324 (");
+
+    const unresolvedTitle = renderAgentReport(result({ issues }), { issueTitle: () => undefined });
+    expect(unresolvedTitle).not.toContain("S3D-E-324 (");
+  });
+
+  /* ---- ascii frame sampling: evenly around the orbit, not the first N -- */
+
+  it("samples ascii frames evenly around the orbit rather than the first N", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scene3d-report-frames-"));
+    const relPaths: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      const rel = `proof-${String(i).padStart(3, "0")}.png`;
+      const png = encodePng({
+        width: 4,
+        height: 4,
+        data: new Uint8Array(4 * 4 * 4).fill(255),
+      });
+      fs.writeFileSync(path.join(dir, rel), png);
+      relPaths.push(rel);
+    }
+    const text = renderAgentReport(
+      result({ proofImages: relPaths }),
+      { projectDir: dir, alwaysShowFrames: true },
+    );
+    // 8 frames, MAX_ASCII_FRAMES=4 shown -> indices 0,2,4,6, not 0,1,2,3.
+    expect(text).toContain("proof-000.png");
+    expect(text).toContain("proof-002.png");
+    expect(text).toContain("proof-004.png");
+    expect(text).toContain("proof-006.png");
+    expect(text).not.toContain("proof-001.png");
+    expect(text).not.toContain("proof-003.png");
+    expect(text).not.toContain("proof-005.png");
+    expect(text).not.toContain("proof-007.png");
+
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

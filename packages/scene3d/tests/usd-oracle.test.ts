@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { validateUsd } from "../src/lint/usd-oracle.js";
 import { ISSUE_CODES } from "../src/errors.js";
+import { assertPxrIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * The USD oracle runs OpenUSD's own runtime (pxr) in a subprocess. It is host-
@@ -42,6 +43,7 @@ const probeDir = tmp();
 fs.writeFileSync(path.join(probeDir, "probe.usda"), GOOD);
 const probe = await validateUsd(probeDir, "probe.usda");
 const pxrAvailable = !probe.some((i) => i.code === ISSUE_CODES.USD_UNCHECKED);
+assertPxrIfRequired(pxrAvailable);
 fs.rmSync(probeDir, { recursive: true, force: true });
 
 describe("validateUsd", () => {

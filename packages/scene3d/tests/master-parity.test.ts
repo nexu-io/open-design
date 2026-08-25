@@ -5,6 +5,7 @@ import { compile, probeBlender } from "../src/index.js";
 import { authorStageModel } from "../src/usd/stage-model.js";
 import { ISSUE_CODES } from "../src/errors.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * The release audit's three findings, pinned so they stay fixed:
@@ -54,6 +55,7 @@ token purpose = "render"
 });
 
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)("master parity + usdz across source kinds and caches", () => {
   const LONG = 300_000;
@@ -113,10 +115,21 @@ def Xform "root" (
     rmForSetup(dir);
     fs.cpSync(path.join(__dirname, "fixtures", "good", "prop_crate"), dir, { recursive: true });
     const stages = ["parse", "build", "export", "lint"] as const;
-    const first = await compile({ projectDir: dir, stages: [...stages], timeoutMs: LONG });
+    // Stage-status and issue-code assertions only — no render is consumed.
+    const first = await compile({
+      projectDir: dir,
+      stages: [...stages],
+      proof: { turntable: false },
+      timeoutMs: LONG,
+    });
     expect(first.issues.filter((i) => i.code === ISSUE_CODES.MASTER_UNCHECKED)).toEqual([]);
 
-    const second = await compile({ projectDir: dir, stages: [...stages], timeoutMs: LONG });
+    const second = await compile({
+      projectDir: dir,
+      stages: [...stages],
+      proof: { turntable: false },
+      timeoutMs: LONG,
+    });
     expect(second.stages.find((s) => s.id === "export")!.status).toBe("cached");
     // The cached run carries the parity record: no phantom UNCHECKED, and
     // the same clean verdict as the fresh run.
@@ -133,7 +146,12 @@ def Xform "root" (
       parsed.data = null;
       fs.writeFileSync(file, JSON.stringify(parsed), "utf8");
     }
-    const third = await compile({ projectDir: dir, stages: [...stages], timeoutMs: LONG });
+    const third = await compile({
+      projectDir: dir,
+      stages: [...stages],
+      proof: { turntable: false },
+      timeoutMs: LONG,
+    });
     expect(third.stages.find((s) => s.id === "export")!.status).toBe("cached");
     expect(third.issues.some((i) => i.code === ISSUE_CODES.MASTER_UNCHECKED)).toBe(true);
   }, 500_000);

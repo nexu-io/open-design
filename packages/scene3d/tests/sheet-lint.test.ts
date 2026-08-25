@@ -538,4 +538,92 @@ describe("sheet thresholds are contract data", () => {
       validateContract({ schemaVersion: 1, conventions: { sheets: { maxDimension: "big" } } }),
     ).toContain("conventions.sheets.maxDimension must be a positive integer");
   });
+
+  /*
+   * The rest of the sheet family was the least contract-governed rule set in
+   * the range: eight judgement numbers lived as bare literals inside
+   * lint/sheet.ts with no contract path at all. Each pin below proves one of
+   * them moved for real — an authored value flips the verdict — while every
+   * fixture elsewhere in this file keeps its byte-identical outcome under the
+   * (unchanged) defaults.
+   */
+
+  it("honours a raised particle border-touch tolerance", () => {
+    const dir = tempDir();
+    const img = blank(32, 32);
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) setPixel(img, x, y, [200, 200, 200, 255]);
+    write(dir, "fills.png", img);
+    const specs: SheetSpec[] = [{ file: "fills.png", kind: "particle" }];
+
+    const strict: Issue[] = runLint({
+      contract: normalizeContract({ schemaVersion: 1 }),
+      sheets: sheetInput(dir, specs),
+    });
+    expect(strict.map((i) => i.code)).toContain(ISSUE_CODES.SHEET_BORDER_TOUCH);
+
+    // The touching sprite is unchanged; only the tolerance moved, so a
+    // project that genuinely wants edge-touching particles can say so.
+    const permissive: Issue[] = runLint({
+      contract: normalizeContract({
+        schemaVersion: 1,
+        conventions: { sheets: { particleBorderTouchMax: 200 } },
+      }),
+      sheets: sheetInput(dir, specs),
+    });
+    expect(permissive.map((i) => i.code)).not.toContain(ISSUE_CODES.SHEET_BORDER_TOUCH);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("honours a raised sky clip tolerance for an HDR-authored face", () => {
+    const dir = tempDir();
+    // A sky face with a small pure-white highlight band — the kind of clipped
+    // specular an HDR-authored sky legitimately carries above the 0.2%
+    // default, but well under a project that has decided to tolerate it.
+    const face = skyFace(32, [90, 120, 180]);
+    for (let y = 0; y < 10; y++) {
+      for (let x = 0; x < 32; x++) setPixel(face, x, y, [255, 255, 255, 255]);
+    }
+    write(dir, "hdr_sky.png", face);
+    const specs: SheetSpec[] = [{ file: "hdr_sky.png", kind: "sky", face: "ft", set: "hdr" }];
+
+    const strict: Issue[] = runLint({
+      contract: normalizeContract({ schemaVersion: 1 }),
+      sheets: sheetInput(dir, specs),
+    });
+    expect(strict.map((i) => i.code)).toContain(ISSUE_CODES.SHEET_SKY_CLIPPED);
+
+    const permissive: Issue[] = runLint({
+      contract: normalizeContract({
+        schemaVersion: 1,
+        conventions: { sheets: { skyClipMax: 0.5 } },
+      }),
+      sheets: sheetInput(dir, specs),
+    });
+    expect(permissive.map((i) => i.code)).not.toContain(ISSUE_CODES.SHEET_SKY_CLIPPED);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("honours a lowered full-alpha floor for an intentionally translucent sheet", () => {
+    const dir = tempDir();
+    const faded = flipbook(32, 2, 2);
+    for (let i = 3; i < faded.data.length; i += 4) if (faded.data[i]! > 0) faded.data[i] = 180;
+    write(dir, "faded.png", faded);
+    const specs: SheetSpec[] = [{ file: "faded.png", kind: "sprite" }];
+
+    const strict: Issue[] = runLint({
+      contract: normalizeContract({ schemaVersion: 1 }),
+      sheets: sheetInput(dir, specs),
+    });
+    expect(strict.map((i) => i.code)).toContain(ISSUE_CODES.SHEET_NO_FULL_ALPHA);
+
+    const permissive: Issue[] = runLint({
+      contract: normalizeContract({
+        schemaVersion: 1,
+        conventions: { sheets: { fullAlphaMin: 150 } },
+      }),
+      sheets: sheetInput(dir, specs),
+    });
+    expect(permissive.map((i) => i.code)).not.toContain(ISSUE_CODES.SHEET_NO_FULL_ALPHA);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

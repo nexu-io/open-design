@@ -526,3 +526,85 @@ export function modelRowFromRefs(
   };
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Proof-frame viewport transform                                      */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The frame player's screen-space pipeline, written the way the kit
+ * runtime writes its own (worldToScreen): one definition each way, shared
+ * by the selection reticle and click-picking, so the two can never
+ * disagree about where a part is on the picture.
+ *
+ * Model → NDC happened at RENDER time: the runner projects every part's
+ * world points through Blender's own camera (`world_to_camera_view`) and
+ * ships the normalized rects in `manifest.proofRects` — ground truth from
+ * the same transform that produced the pixels, which no re-implemented
+ * camera can drift from. What remains web-side is the viewport transform:
+ * frame-normalized coordinates ⇄ CSS pixels inside the stage, where the
+ * square frame sits letterboxed by object-fit: contain.
+ */
+
+/** Part name → normalized [x0, y0, x1, y1], y down. One record per frame. */
+export type Scene3dProofRect = [number, number, number, number];
+
+/** Where the (square) proof frame actually renders inside the stage box. */
+export interface Scene3dProofViewport {
+  left: number;
+  top: number;
+  size: number;
+}
+
+/** object-fit: contain of a square image inside a stage of the given size. */
+export function proofViewport(stageWidth: number, stageHeight: number): Scene3dProofViewport {
+  const size = Math.max(0, Math.min(stageWidth, stageHeight));
+  return { left: (stageWidth - size) / 2, top: (stageHeight - size) / 2, size };
+}
+
+/** Frame-normalized rect → CSS pixels within the stage. */
+export function proofRectToStage(
+  rect: Scene3dProofRect,
+  viewport: Scene3dProofViewport,
+): { left: number; top: number; width: number; height: number } {
+  return {
+    left: viewport.left + rect[0] * viewport.size,
+    top: viewport.top + rect[1] * viewport.size,
+    width: (rect[2] - rect[0]) * viewport.size,
+    height: (rect[3] - rect[1]) * viewport.size,
+  };
+}
+
+/**
+ * The part under a stage-space point, or null.
+ *
+ * Inverse of proofRectToStage: the point is normalized into the frame,
+ * then tested against every part's rect. Where rects nest or overlap the
+ * SMALLEST containing rect wins — the specific part over the hull that
+ * surrounds it, which is what a pointer means. A hairline slack keeps
+ * one-pixel parts pickable at all.
+ */
+export function pickProofPart(
+  rects: Record<string, Scene3dProofRect> | undefined,
+  viewport: Scene3dProofViewport,
+  stageX: number,
+  stageY: number,
+): string | null {
+  if (!rects || viewport.size <= 0) return null;
+  const u = (stageX - viewport.left) / viewport.size;
+  const v = (stageY - viewport.top) / viewport.size;
+  if (u < 0 || u > 1 || v < 0 || v > 1) return null;
+  const slack = 2 / viewport.size; // ~2 CSS px, in frame units
+  let best: string | null = null;
+  let bestArea = Infinity;
+  for (const [name, rect] of Object.entries(rects)) {
+    if (u < rect[0] - slack || u > rect[2] + slack) continue;
+    if (v < rect[1] - slack || v > rect[3] + slack) continue;
+    const area = (rect[2] - rect[0]) * (rect[3] - rect[1]);
+    if (area < bestArea) {
+      bestArea = area;
+      best = name;
+    }
+  }
+  return best;
+}

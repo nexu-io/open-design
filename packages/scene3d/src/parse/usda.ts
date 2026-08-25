@@ -58,6 +58,8 @@ class Lexer {
   private pos = 0;
   private readonly src: string;
   private readonly file: string;
+  /** Tokens minted ahead of the cursor by the bulk-array fast path. */
+  private readonly pending: Token[] = [];
   line = 1;
 
   constructor(src: string, file: string) {
@@ -68,6 +70,10 @@ class Lexer {
   tokens(): Token[] {
     const out: Token[] = [];
     for (;;) {
+      if (this.pending.length > 0) {
+        out.push(this.pending.shift()!);
+        continue;
+      }
       this.skipWsAndComments();
       const t = this.next();
       out.push(t);
@@ -78,8 +84,15 @@ class Lexer {
 
   private skipWsAndComments(): void {
     for (;;) {
-      while (this.pos < this.src.length && /\s/.test(this.src[this.pos]!)) {
-        if (this.src[this.pos] === "\n") this.line++;
+      // charCodeAt, not a regex per character: this loop visits every byte
+      // of the stage, and a real (mesh-heavy) master is hundreds of MB.
+      while (this.pos < this.src.length) {
+        const c = this.src.charCodeAt(this.pos);
+        if (c === 10 /* \n */) {
+          this.line++;
+        } else if (c !== 32 /* space */ && c !== 9 /* \t */ && c !== 13 /* \r */ && c !== 12 /* \f */ && c !== 11 /* \v */) {
+          break;
+        }
         this.pos++;
       }
       if (this.src.startsWith("//", this.pos)) {
@@ -106,6 +119,17 @@ class Lexer {
     if (this.pos >= this.src.length) return { kind: "eof", value: "", line: this.line };
     const ch = this.src[this.pos]!;
     const line = this.line;
+
+    // Bulk-array fast path — the fix for the one thing that made this
+    // parser unusable on real masters. A mesh-heavy stage is hundreds of
+    // MB of `point3f[] points = [(…), (…), …]`, and tokenizing it minted a
+    // Token OBJECT per number and per comma: hundreds of millions of
+    // allocations, multi-GB heaps, and a daemon OOM on a chess set (this
+    // is a structure parser — none of those values are ever read). The
+    // whole `[...]` payload is skipped in one charCode walk instead; the
+    // things consumers DO read from arrays — `@asset@` refs, `<target>`
+    // paths, quoted strings — are still minted, in order.
+    if (ch === "[") return this.bulkArray(line);
 
     if (PUNCT.has(ch)) {
       this.pos++;
@@ -178,6 +202,96 @@ if (/[A-Za-z_]/.test(ch)) {
     }
 
     throw new UsdaParseError(`unexpected character '${ch}'`, line, this.file);
+  }
+
+  /**
+   * Consume a whole `[ ... ]` payload, minting only its structural shell
+   * plus the items consumers actually read — `@asset@` refs, `<target>`
+   * paths, quoted strings. Everything else (the numeric bulk) is skipped
+   * in a single charCode walk with no per-item allocation. Nested
+   * brackets are swallowed as data; strings and refs are scanned with the
+   * same escape rules as the main lexer, so a bracket inside a quoted
+   * value can never end the array early.
+   */
+  private bulkArray(line: number): Token {
+    const src = this.src;
+    this.pos++; // the '['
+    let depth = 1;
+    while (this.pos < src.length) {
+      const c = src.charCodeAt(this.pos);
+      if (c === 91 /* [ */) {
+        depth++;
+        this.pos++;
+        continue;
+      }
+      if (c === 93 /* ] */) {
+        depth--;
+        this.pos++;
+        if (depth === 0) {
+          this.pending.push({ kind: "punct", value: "]", line: this.line });
+          return { kind: "punct", value: "[", line };
+        }
+        continue;
+      }
+      if (c === 10 /* \n */) {
+        this.line++;
+        this.pos++;
+        continue;
+      }
+      if (c === 34 /* " */) {
+        const tokenLine = this.line;
+        if (src.startsWith('"""', this.pos)) {
+          const end = src.indexOf('"""', this.pos + 3);
+          if (end === -1) throw new UsdaParseError("unterminated string", tokenLine, this.file);
+          const value = src.slice(this.pos + 3, end);
+          for (let k = 0; k < value.length; k++) if (value.charCodeAt(k) === 10) this.line++;
+          this.pos = end + 3;
+          this.pending.push({ kind: "string", value, line: tokenLine });
+          continue;
+        }
+        let out = "";
+        this.pos++;
+        let closed = false;
+        while (this.pos < src.length) {
+          const s = src.charCodeAt(this.pos);
+          if (s === 92 /* \ */ && this.pos + 1 < src.length) {
+            out += src[this.pos + 1];
+            this.pos += 2;
+            continue;
+          }
+          if (s === 34 /* " */) {
+            this.pos++;
+            closed = true;
+            break;
+          }
+          if (s === 10 /* \n */) this.line++;
+          out += src[this.pos];
+          this.pos++;
+        }
+        if (!closed) throw new UsdaParseError("unterminated string", tokenLine, this.file);
+        this.pending.push({ kind: "string", value: out, line: tokenLine });
+        continue;
+      }
+      if (c === 64 /* @ */) {
+        const tokenLine = this.line;
+        const end = src.indexOf("@", this.pos + 1);
+        if (end === -1) throw new UsdaParseError("unterminated reference path", tokenLine, this.file);
+        const value = src.slice(this.pos, end + 1);
+        for (let k = 0; k < value.length; k++) if (value.charCodeAt(k) === 10) this.line++;
+        this.pos = end + 1;
+        this.pending.push({ kind: "path", value, line: tokenLine });
+        continue;
+      }
+      if (c === 60 /* < */) {
+        const end = src.indexOf(">", this.pos + 1);
+        if (end === -1) throw new UsdaParseError("unterminated target path", this.line, this.file);
+        this.pending.push({ kind: "path", value: src.slice(this.pos, end + 1), line: this.line });
+        this.pos = end + 1;
+        continue;
+      }
+      this.pos++;
+    }
+    throw new UsdaParseError("unterminated array", line, this.file);
   }
 }
 

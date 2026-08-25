@@ -1127,6 +1127,27 @@
 }
 .viewer-scene3d-ident-name.is-ok { color: var(--status-success, #1f8a5f); }
 .viewer-scene3d-ident-name.is-bad { color: var(--status-danger, #c0392b); }
+/* The drawn verdict mark (same grammar as the compile panel's toolbar).
+   The chip aligns children on baseline for the text pair; the mark is a
+   box and centres itself instead. */
+.viewer-scene3d-ident-mark {
+  flex: none;
+  display: block;
+  align-self: center;
+}
+/* The asset-kind glyph (same art as the compile panel's kind chip),
+   handed up by the page in the ident message. */
+.viewer-scene3d-ident-kind {
+  flex: none;
+  display: block;
+  align-self: center;
+  color: var(--text-muted);
+}
+.viewer-scene3d-ident-kind svg {
+  display: block;
+}
+.viewer-scene3d-ident-mark.is-ok { color: var(--status-success, #1f8a5f); }
+.viewer-scene3d-ident-mark.is-bad { color: var(--status-danger, #c0392b); }
 .viewer-scene3d-ident-meta {
   font-size: 12px;
   color: var(--text-muted);

@@ -18,7 +18,7 @@ it again; read this, then act.
 
 | Piece | Path |
 |---|---|
-| Compiler (parse→build→lint→proof→export→manifest) | `packages/scene3d/` |
+| Compiler (parse→build→proof→export→lint→manifest) | `packages/scene3d/` |
 | Declarative scene language (`scene.json`: shapes/relations/repeat/materials/claims) | `packages/scene3d/src/solve/` (`types.ts` language, `validate.ts` schema, `solver.ts` fixpoint+repeat, `emit-bpy.ts` backend) + `src/lint/claims.ts` |
 | Wire contract + `buildScene3dAssetUrl` | `packages/contracts/src/api/scene3d.ts` |
 | Daemon routes (`POST …/scene3d/compile`, `GET …/scene3d/manifest`) | `apps/daemon/src/routes/scene3d.ts` |

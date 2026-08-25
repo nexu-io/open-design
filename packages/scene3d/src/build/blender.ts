@@ -22,6 +22,10 @@ export interface BlenderProbe {
   mode: "blender" | "python";
   bin: string;
   version: string;
+  /** Leading major version parsed from the version line, when one is
+   *  recognisable. Undefined means the line carried no parseable number —
+   *  the probe still counts, the version gate simply cannot judge it. */
+  major?: number;
 }
 
 let probeCache: BlenderProbe | null | undefined;
@@ -58,22 +62,32 @@ export function runnerPath(): string {
   return path.join(scriptsDir(), "blender", "runner.py");
 }
 
-/** Resolve and probe the Blender runtime once per process. */
+/**
+ * Resolve and probe the Blender runtime; a SUCCESS is cached for the process.
+ *
+ * A failure is deliberately NOT cached. The daemon holds this module for its
+ * whole lifetime, so a negative cached at startup — Blender installed five
+ * minutes after the daemon came up — used to poison every subsequent compile
+ * with `S3D-E-201` until a daemon restart nobody had a reason to suspect.
+ * Re-probing on failure costs one fast spawn attempt per compile, paid only
+ * while Blender is genuinely absent.
+ */
 export async function probeBlender(options: {
   blenderBin?: string;
   pythonBin?: string;
 }): Promise<BlenderProbe | null> {
-  if (probeCache !== undefined) return probeCache;
+  if (probeCache !== undefined && probeCache !== null) return probeCache;
 
   const blenderBin = options.blenderBin ?? process.env.SCENE3D_BLENDER_BIN;
-  if (blenderBin) {
-    probeCache = await probe(bin(blenderBin), ["--version"], "blender") ?? null;
-    return probeCache;
-  }
-
-  const pythonBin = options.pythonBin ?? process.env.SCENE3D_PYTHON_BIN ?? "python";
-  probeCache = await probe(pythonBin, ["-c", "import bpy; print(bpy.app.version_string)"], "python");
-  return probeCache;
+  const found = blenderBin
+    ? await probe(bin(blenderBin), ["--version"], "blender")
+    : await probe(
+        options.pythonBin ?? process.env.SCENE3D_PYTHON_BIN ?? "python",
+        ["-c", "import bpy; print(bpy.app.version_string)"],
+        "python",
+      );
+  if (found) probeCache = found;
+  return found;
 }
 
 export function clearProbeCache(): void {
@@ -85,12 +99,21 @@ async function probe(bin: string, args: string[], mode: "blender" | "python"): P
     const out = await runCapture(bin, args, 30_000);
     const first = out.stdout.trim().split(/\r?\n/)[0] ?? "";
     if (out.code === 0 && first.length > 0 && first.length < 200) {
-      return { mode, bin, version: first };
+      const major = parseMajorVersion(first);
+      return { mode, bin, version: first, ...(major !== undefined ? { major } : {}) };
     }
     return null;
   } catch {
     return null;
   }
+}
+
+/** `Blender 5.0.1` and bpy's bare `5.0.1` both lead with the major. */
+export function parseMajorVersion(versionLine: string): number | undefined {
+  const match = /(\d+)\.\d+/.exec(versionLine);
+  if (!match) return undefined;
+  const major = Number(match[1]);
+  return Number.isFinite(major) ? major : undefined;
 }
 
 function bin(value: string): string {
@@ -163,6 +186,12 @@ export interface RunnerJob {
     respectSceneCamera: boolean;
     background?: string;
     filepaths: string[];
+    /**
+     * Absolute directory the runner writes per-material lit-sphere previews
+     * into. The runner owns the filenames because only it knows the material
+     * names; omitting the field turns the previews off.
+     */
+    materialBallDir?: string;
   };
   /** Viewport edits keyed by part name, replayed after the build —
    *  transform deltas plus the absolute material channel. */

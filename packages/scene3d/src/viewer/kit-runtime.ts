@@ -1090,10 +1090,14 @@ function cameraFor(renderer, state) {
 /**
  * Resolve a click to a part name.
  *
- * Ray/AABB against each part's world bounds rather than a GPU picking pass:
- * the assets this renders are built from boxes, so box bounds ARE the
- * geometry, and a CPU test costs nothing while avoiding a second render
- * target and a framebuffer readback stall on every click.
+ * Broad-phase ray/AABB sort, then an exact ray/triangle test against the
+ * candidate meshes (rayMeshDistance, Möller–Trumbore) — CPU-side, so no
+ * second render target and no framebuffer readback stall on every click.
+ * The AABB alone used to BE the answer, which mis-picked any rotated or
+ * non-box part whose world bounds overlap a neighbour's; the failure and
+ * the fix are pinned in tests/kit-picking.test.ts. (No backticks here:
+ * this file is one String.raw template, and a backtick in a comment ends
+ * it mid-file.)
  */
 function pickPart(renderer, state, canvas, clientX, clientY) {
   if (!renderer.draws.length) return null;
@@ -1128,14 +1132,39 @@ function pickPart(renderer, state, canvas, clientX, clientY) {
      confirmed surface hit is closer than the next box can possibly be. */
   candidates.sort((a, b) => a.near - b.near);
 
-  let best = null;
-  let bestT = Infinity;
-  for (const candidate of candidates) {
-    if (candidate.near > bestT) break;
-    const t = rayMeshDistance(cam.eye, dir, candidate.draw);
-    if (t !== null && t < bestT) { bestT = t; best = candidate.draw; }
+  /* Solid mode: nearest surface wins, and the sort lets the exact test stop
+     as soon as a confirmed hit is closer than the next box can start. */
+  if ((state.xrayMix || 0) <= 0.5) {
+    let best = null;
+    let bestT = Infinity;
+    for (const candidate of candidates) {
+      if (candidate.near > bestT) break;
+      const t = rayMeshDistance(cam.eye, dir, candidate.draw);
+      if (t !== null && t < bestT) { bestT = t; best = candidate.draw; }
+    }
+    return best;
   }
-  return best;
+
+  /* X-ray shows the interior through the shell, so the click must be able to
+     reach what the eye can see — nearest-surface picking made the shell
+     swallow every click. Depth cycling instead: the first click picks the
+     front surface; clicking again picks the next part behind the one already
+     selected, wrapping back to the front. Every candidate is tested (no
+     early break) because the stack under the cursor IS the answer here. */
+  const hits = [];
+  for (const candidate of candidates) {
+    const t = rayMeshDistance(cam.eye, dir, candidate.draw);
+    if (t !== null) hits.push({ draw: candidate.draw, t: t });
+  }
+  if (!hits.length) return null;
+  hits.sort((a, b) => a.t - b.t);
+  const order = [];
+  for (const hit of hits) {
+    if (!order.some((d) => d.name === hit.draw.name)) order.push(hit.draw);
+  }
+  const selectedAt = order.findIndex((d) => state.selection && state.selection.has(d.name));
+  if (selectedAt === -1) return order[0];
+  return order[(selectedAt + 1) % order.length];
 }
 
 /**

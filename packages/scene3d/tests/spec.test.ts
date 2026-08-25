@@ -2,9 +2,16 @@ import { describe, expect, it } from "vitest";
 import { Rng } from "../src/solve/rng.js";
 import { validateSceneSpec, specDeclarationLines } from "../src/solve/validate.js";
 import { findCoplanarFaces, solveScene } from "../src/solve/solver.js";
-import { emitBlenderScript } from "../src/solve/emit-bpy.js";
+import { emitBlenderScript, frameScene } from "../src/solve/emit-bpy.js";
 import { lintClaims } from "../src/lint/claims.js";
-import { MIN_CONTACT, SceneSpec } from "../src/solve/types.js";
+import { nearestKey } from "../src/solve/did-you-mean.js";
+import {
+  AUTOFIT_DISTANCE,
+  CAMERA_FILL,
+  CAMERA_HALF_FOV,
+  MIN_CONTACT,
+  SceneSpec,
+} from "../src/solve/types.js";
 import { ISSUE_CODES } from "../src/errors.js";
 import type { Census, Issue } from "../src/types.js";
 
@@ -123,6 +130,132 @@ describe("validateSceneSpec", () => {
     expect(errors.some((e) => e.includes("must be circular"))).toBe(true);
   });
 
+  /* ---- the second wave of shapes: frustum, wedge, tube, capsule ------ */
+  //
+  // Each new word is a shape parameter or a shape constraint, and the whole
+  // point of both is that they FAIL EARLY: a tip on a box, a ramp that
+  // climbs the sky, a wall thicker than its own pipe, and a capsule shorter
+  // than it is wide are all statements the author believes they made.
+
+  it("accepts every new shape at its happy path", () => {
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_pot", size: [0.3, 0.3, 0.3], shape: "cone", tip: 0.6 },
+        { id: "prp_ramp", size: [0.6, 0.4, 0.2], shape: "wedge", axis: "x" },
+        { id: "prp_pipe", size: [0.4, 0.4, 1], shape: "tube", thickness: 0.05 },
+        { id: "prp_pill", size: [0.2, 0.2, 0.8], shape: "capsule" },
+      ],
+      relations: [
+        { type: "at", part: "prp_pot", center: [0, 0, 0.15] },
+        { type: "at", part: "prp_ramp", center: [1, 0, 0.1] },
+        { type: "at", part: "prp_pipe", center: [2, 0, 0.5] },
+        { type: "at", part: "prp_pill", center: [3, 0, 0.4] },
+      ],
+    });
+    expect(errors).toEqual([]);
+    expect(spec!.parts[0]!.tip).toBe(0.6);
+    expect(spec!.parts[2]!.thickness).toBe(0.05);
+    // A capsule exactly as long as it is wide IS a sphere and is allowed:
+    // the shift collapses to zero rather than to a degenerate shape.
+    const equal = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_pill", size: [0.4, 0.4, 0.4], shape: "capsule" }],
+      relations: [{ type: "at", part: "prp_pill", center: [0, 0, 0.2] }],
+    });
+    expect(equal.errors).toEqual([]);
+  });
+
+  it("rejects a cone tip outside 0 up to 1, and a tip on anything but a cone", () => {
+    const high = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_pot", size: [1, 1, 1], shape: "cone", tip: 1 }],
+      relations: [{ type: "at", part: "prp_pot", center: [0, 0, 0.5] }],
+    });
+    expect(
+      high.errors.some((e) => e.includes("parts[0].tip must be a number from 0 up to but not including 1")),
+    ).toBe(true);
+    const negative = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_pot", size: [1, 1, 1], shape: "cone", tip: -0.2 }],
+      relations: [{ type: "at", part: "prp_pot", center: [0, 0, 0.5] }],
+    });
+    expect(negative.errors.some((e) => e.includes("parts[0].tip"))).toBe(true);
+    const onBox = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_crate", size: [1, 1, 1], tip: 0.5 }],
+      relations: [{ type: "at", part: "prp_crate", center: [0, 0, 0.5] }],
+    });
+    expect(onBox.errors.some((e) => e.includes("tip is a cone field"))).toBe(true);
+    expect(onBox.errors.some((e) => e.includes("'box'"))).toBe(true);
+  });
+
+  it("refuses a wedge that slopes along z — a ramp climbs a horizontal axis", () => {
+    const named = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_ramp", size: [1, 1, 0.3], shape: "wedge", axis: "z" }],
+      relations: [{ type: "at", part: "prp_ramp", center: [0, 0, 0.15] }],
+    });
+    expect(named.errors.some((e) => e.includes("must be x or y"))).toBe(true);
+    // The default axis IS z, so an omitted axis is the same mistake.
+    const omitted = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_ramp", size: [1, 1, 0.3], shape: "wedge" }],
+      relations: [{ type: "at", part: "prp_ramp", center: [0, 0, 0.15] }],
+    });
+    expect(omitted.errors.some((e) => e.includes("slopes UP"))).toBe(true);
+  });
+
+  it("requires a tube's thickness, refuses it elsewhere, and makes it fit", () => {
+    const missing = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_pipe", size: [0.4, 0.4, 1], shape: "tube" }],
+      relations: [{ type: "at", part: "prp_pipe", center: [0, 0, 0.5] }],
+    });
+    expect(missing.errors.some((e) => e.includes("thickness is required on a tube"))).toBe(true);
+
+    const elsewhere = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_ball", size: [1, 1, 1], shape: "sphere", thickness: 0.1 }],
+      relations: [{ type: "at", part: "prp_ball", center: [0, 0, 0.5] }],
+    });
+    expect(elsewhere.errors.some((e) => e.includes("thickness is a tube field"))).toBe(true);
+
+    // Half the diameter is exactly where the hole disappears.
+    const tooThick = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_pipe", size: [0.4, 0.4, 1], shape: "tube", thickness: 0.2 }],
+      relations: [{ type: "at", part: "prp_pipe", center: [0, 0, 0.5] }],
+    });
+    expect(
+      tooThick.errors.some((e) => e.includes("does not fit its outer diameter")),
+    ).toBe(true);
+
+    const oval = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_pipe", size: [0.4, 0.3, 1], shape: "tube", thickness: 0.05 }],
+      relations: [{ type: "at", part: "prp_pipe", center: [0, 0, 0.5] }],
+    });
+    expect(oval.errors.some((e) => e.includes("a tube must be circular"))).toBe(true);
+  });
+
+  it("refuses a capsule shorter than its own diameter, and a non-circular one", () => {
+    const stubby = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_pill", size: [0.4, 0.4, 0.2], shape: "capsule" }],
+      relations: [{ type: "at", part: "prp_pill", center: [0, 0, 0.1] }],
+    });
+    expect(stubby.errors.some((e) => e.includes("shorter than it is wide"))).toBe(true);
+    expect(stubby.errors.some((e) => e.includes('use shape "sphere"'))).toBe(true);
+
+    const oval = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_pill", size: [0.4, 0.3, 1], shape: "capsule" }],
+      relations: [{ type: "at", part: "prp_pill", center: [0, 0, 0.5] }],
+    });
+    expect(oval.errors.some((e) => e.includes("a capsule must be circular"))).toBe(true);
+  });
+
   it("rejects duplicate part ids", () => {
     const { errors } = validateSceneSpec({
       schemaVersion: 1,
@@ -185,6 +318,169 @@ describe("validateSceneSpec", () => {
     expect(errors.some((e) => e.includes("claims.doorWidth has no oracle"))).toBe(true);
     // The refusal teaches: it lists what DOES adjudicate.
     expect(errors.some((e) => e.includes("parts, maxTriangles"))).toBe(true);
+  });
+
+  it("refuses an unknown material key instead of swallowing it", () => {
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_x: { baseColor: [0.5, 0.5, 0.5], offset: 0.2 } },
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_x" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(spec).toBeUndefined();
+    expect(errors.some((e) => e.includes("materials.mtl_x.offset is not a material field"))).toBe(true);
+    expect(errors.some((e) => e.includes("known fields"))).toBe(true);
+  });
+
+  it("refuses an unknown key on a relation, scoped to that relation's own field set", () => {
+    // `offset` typed where `embed` was meant on a sits_on used to compile
+    // clean and place the part flush against its default embed, silently.
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_base", size: [1, 1, 0.2] },
+        { id: "prp_lid", size: [1, 1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_base", center: [0, 0, 0.1] },
+        { type: "sits_on", part: "prp_lid", on: "prp_base", offset: 0.01 },
+      ],
+    });
+    expect(spec).toBeUndefined();
+    expect(errors.some((e) => e.includes("relations[1].offset is not a field of relation 'sits_on'"))).toBe(
+      true,
+    );
+    expect(errors.some((e) => e.includes("known fields: type, part, on, embed"))).toBe(true);
+  });
+
+  it("refuses a key that IS legal on a different relation type", () => {
+    // `to` belongs to align, not sits_on — the message must name the
+    // AUTHORED type's vocabulary, not some other relation's.
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_base", size: [1, 1, 0.2] },
+        { id: "prp_lid", size: [1, 1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_base", center: [0, 0, 0.1] },
+        { type: "sits_on", part: "prp_lid", on: "prp_base", to: "prp_base" },
+      ],
+    });
+    expect(errors.some((e) => e.includes("relations[1].to is not a field of relation 'sits_on'"))).toBe(
+      true,
+    );
+  });
+
+  it("refuses an unknown top-level scene.json key", () => {
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1] }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+      claim: { parts: 1 },
+    });
+    expect(spec).toBeUndefined();
+    expect(errors.some((e) => e.includes("claim is not a scene.json field"))).toBe(true);
+    expect(errors.some((e) => e.includes("known fields"))).toBe(true);
+  });
+
+  /* ---- field-precise diagnostics ------------------------------------ */
+
+  it("reports spin.axis and spin.seconds as separate failures", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], spin: { axis: "w", seconds: 0.01 } }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors.some((e) => e === "parts[0].spin.axis must be x, y or z")).toBe(true);
+    expect(errors.some((e) => e === "parts[0].spin.seconds must be a number greater than 0.1")).toBe(true);
+  });
+
+  it("reports only the bad spin field, not both, when one is fine", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], spin: { axis: "z", seconds: 0.01 } }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors.some((e) => e.includes("spin.axis"))).toBe(false);
+    expect(errors.some((e) => e.includes("spin.seconds"))).toBe(true);
+  });
+
+  it("reports bob.amplitude and bob.seconds as separate failures", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], bob: { amplitude: -1, seconds: 0.01 } }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors.some((e) => e === "parts[0].bob.amplitude must be a positive number")).toBe(true);
+    expect(errors.some((e) => e === "parts[0].bob.seconds must be a number greater than 0.1")).toBe(true);
+  });
+
+  it("reports every bad component of a vec3, not just the first", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_bad", size: [-1, NaN, 1] }],
+      relations: [{ type: "at", part: "prp_bad", center: [0, 0, 0.5] }],
+    });
+    expect(errors.some((e) => e.includes("parts[0].size[0]"))).toBe(true);
+    expect(errors.some((e) => e.includes("parts[0].size[1]"))).toBe(true);
+    expect(errors.some((e) => e.includes("parts[0].size[2]"))).toBe(false);
+  });
+
+  it("states the id/material name bound in plain words alongside the regex", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "x", size: [1, 1, 1] }],
+      relations: [],
+    });
+    expect(
+      errors.some(
+        (e) =>
+          e.includes("parts[0].id") &&
+          e.includes("3-64 characters, starting with a letter, then letters, digits or underscores"),
+      ),
+    ).toBe(true);
+  });
+
+  it("suggests the nearest legal metallic value", () => {
+    const low = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_x: { baseColor: [1, 1, 1], metallic: 0.1 } },
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_x" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(low.errors.some((e) => e.includes("metallic must be 0 or 1") && e.includes("(use 0)"))).toBe(
+      true,
+    );
+
+    const high = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_x: { baseColor: [1, 1, 1], metallic: 0.9 } },
+      parts: [{ id: "prp_a", size: [1, 1, 1], material: "mtl_x" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(high.errors.some((e) => e.includes("metallic must be 0 or 1") && e.includes("(use 1)"))).toBe(
+      true,
+    );
+  });
+
+  it("explains the sizeJitter ceiling instead of stating it bare", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_slab", size: [1, 1, 0.1] },
+        { id: "prp_rock", size: [0.1, 0.1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_slab", center: [0, 0, 0.05] },
+        { type: "scatter", part: "prp_rock", on: "prp_slab", count: 1, sizeJitter: 0.95 },
+      ],
+    });
+    expect(
+      errors.some(
+        (e) => e.includes("sizeJitter must be a number in [0, 0.9)") && e.includes("10%"),
+      ),
+    ).toBe(true);
   });
 
   it("still accepts every key the language actually reads", () => {
@@ -399,6 +695,88 @@ describe("shape emission", () => {
     expect(script.match(/end_fill_type="TRIFAN"/g)).toHaveLength(2);
   });
 
+  it("emits the frustum, wedge, tube and capsule with their own construction", () => {
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_pot", size: [0.3, 0.3, 0.3], shape: "cone", tip: 0.6 },
+        { id: "prp_ramp", size: [0.6, 0.4, 0.2], shape: "wedge", axis: "x" },
+        { id: "prp_pipe", size: [0.4, 0.4, 1], shape: "tube", thickness: 0.05 },
+        { id: "prp_pill", size: [0.2, 0.2, 0.8], shape: "capsule" },
+      ],
+      relations: [
+        { type: "at", part: "prp_pot", center: [0, 0, 0.15] },
+        { type: "at", part: "prp_ramp", center: [1, 0, 0.1] },
+        { type: "at", part: "prp_pipe", center: [2, 0, 0.5] },
+        { type: "at", part: "prp_pill", center: [3, 0, 0.4] },
+      ],
+    };
+    const { spec: valid, errors } = validateSceneSpec(spec);
+    expect(errors).toEqual([]);
+    const script = emitBlenderScript(solveScene(valid!));
+
+    // Shape parameters ride as keywords, only where they were authored.
+    expect(script).toContain(
+      '_part("prp_pot", "cone", (0.3, 0.3, 0.3), (0, 0, 0.15), "z", False, tip=0.6)',
+    );
+    expect(script).toContain(
+      '_part("prp_pipe", "tube", (0.4, 0.4, 1), (2, 0, 0.5), "z", False, thickness=0.05)',
+    );
+    // A shape with no parameters emits exactly the call it always did — a
+    // cached build of an untouched spec must not be invalidated by words it
+    // never used.
+    expect(script).toContain('_part("prp_pill", "capsule", (0.2, 0.2, 0.8), (3, 0, 0.4), "z", False)');
+
+    // The frustum is the cone's second radius, not a second primitive.
+    expect(script).toContain("radius2=0.5 * tip");
+
+    // Explicit-vertex shapes: six verts for the prism, four rings for the
+    // pipe, and every face a quad or a triangle so no ngon can exist.
+    expect(script).toContain("def _wedge_verts(axis, flip):");
+    expect(script).toContain("p(-0.5, 0.5, -0.5), p(0.5, -0.5, 0.5), p(0.5, 0.5, 0.5),");
+    expect(script).toContain("faces = [(0, 3, 2, 1), (1, 2, 5, 4), (0, 4, 5, 3), (0, 1, 4), (3, 5, 2)]");
+    expect(script).toContain("def _tube_verts(outer, inner, length, segments):");
+    expect(script).toContain("_inner = _outer - thickness");
+    expect(script).toContain("mesh.from_pydata(list(verts), [], list(faces))");
+
+    // The capsule is a sphere pulled apart at the equator, with an ODD ring
+    // count so no ring is left sitting on the seam.
+    expect(script).toContain("_shift = _len / 2.0 - _r");
+    expect(script).toContain("if _rings % 2 == 0:");
+    expect(script).toContain("_v.co.z += _shift");
+
+    // Real-radius shapes skip the scale step; the wedge skips the rotations.
+    expect(script).toContain('if shape not in ("torus", "tube", "capsule"):');
+    expect(script).toContain('if shape != "wedge":');
+    expect(script).toContain('if shape in ("sphere", "torus", "capsule"):');
+  });
+
+  it("stays byte-stable across compiles of a spec using the new shapes", () => {
+    const build = (): SceneSpec => ({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_pot", size: [0.3, 0.3, 0.3], shape: "cone", tip: 0.6 },
+        { id: "prp_ramp", size: [0.6, 0.4, 0.2], shape: "wedge", axis: "y", flip: true },
+        // Axis "x": the long extent moves to x and the CIRCULAR pair to y/z.
+        { id: "prp_pipe", size: [1, 0.4, 0.4], shape: "tube", thickness: 0.05, axis: "x" },
+        { id: "prp_pill", size: [0.2, 0.2, 0.8], shape: "capsule" },
+      ],
+      relations: [
+        { type: "at", part: "prp_pot", center: [0, 0, 0.15] },
+        { type: "at", part: "prp_ramp", center: [1, 0, 0.1] },
+        { type: "at", part: "prp_pipe", center: [2, 0, 0.5] },
+        { type: "at", part: "prp_pill", center: [3, 0, 0.4] },
+      ],
+    });
+    const a = emitBlenderScript(solveScene(validateSceneSpec(build()).spec!));
+    const b = emitBlenderScript(solveScene(validateSceneSpec(build()).spec!));
+    expect(a).toBe(b);
+    // Axis and flip reach the emitted call, so the wedge's own coordinate
+    // construction has the two facts it needs.
+    expect(a).toContain('_part("prp_ramp", "wedge", (0.6, 0.4, 0.2), (1, 0, 0.1), "y", True)');
+    expect(a).toContain('_part("prp_pipe", "tube", (1, 0.4, 0.4), (2, 0, 0.5), "x", False, thickness=0.05)');
+  });
+
   it("emits authored material specs, emission and alpha included", () => {
     const spec: SceneSpec = {
       schemaVersion: 1,
@@ -445,6 +823,264 @@ describe("shape emission", () => {
     const a = emitBlenderScript(solveScene(colonnade()));
     const b = emitBlenderScript(solveScene(colonnade()));
     expect(a).toBe(b);
+  });
+});
+
+describe("static rotation", () => {
+  /* ---- validation: a rotation that rotates nothing is refused -------- */
+
+  it("refuses a rotation axis that is not an axis", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], rotate: { axis: "w", deg: 30 } }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors).toContain("parts[0].rotate.axis must be x, y or z");
+  });
+
+  it("refuses a whole turn — the no-op the author believes did something", () => {
+    for (const deg of [0, 360, -360, 720]) {
+      const { errors } = validateSceneSpec({
+        schemaVersion: 1,
+        parts: [{ id: "prp_a", size: [1, 1, 1], rotate: { axis: "z", deg } }],
+        relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+      });
+      expect(errors.join("\n"), `deg ${deg}`).toContain(
+        `parts[0].rotate.deg is ${deg}, a whole number of turns`,
+      );
+    }
+  });
+
+  it("refuses more than a full turn and names the angle it actually reaches", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], rotate: { axis: "z", deg: 430 } }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors.join("\n")).toContain(
+      "parts[0].rotate.deg must be greater than -360 and less than 360 — 430 is more than a full turn; write the angle it actually reaches (70)",
+    );
+  });
+
+  it("accepts a right angle — reorienting a wedge is a real thing to want", () => {
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_a", size: [1, 0.2, 0.2], shape: "wedge", axis: "x", rotate: { axis: "z", deg: 90 } },
+      ],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.1] }],
+    });
+    expect(errors).toEqual([]);
+    expect(spec!.parts[0]!.rotate).toEqual({ axis: "z", deg: 90 });
+  });
+
+  it("refuses an unknown key inside rotate", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], rotate: { axis: "z", deg: 30, pivot: [0, 0, 0] } }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors).toContain(
+      "parts[0].rotate.pivot is not a rotate field — known fields: axis, deg",
+    );
+  });
+
+  it("refuses span and rotate on the same part — two authorities over one extent", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_l", size: [0.2, 0.2, 1] },
+        { id: "prp_r", size: [0.2, 0.2, 1] },
+        { id: "prp_beam", size: [0.1, 0.1, 0.1], rotate: { axis: "y", deg: 20 } },
+      ],
+      relations: [
+        { type: "at", part: "prp_l", center: [-1, 0, 0.5] },
+        { type: "at", part: "prp_r", center: [1, 0, 0.5] },
+        { type: "span", part: "prp_beam", from: "prp_l", to: "prp_r", axis: "x" },
+      ],
+    });
+    expect(errors.join("\n")).toContain(
+      "relations: part 'prp_beam' is both spanned and rotated — a span solves the part's size on a world axis, which a rotation would un-solve",
+    );
+  });
+
+  it("lists rotate in the vocabulary an unknown part key is measured against", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], rotated: 30 }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    });
+    expect(errors.join("\n")).toContain("rotate");
+  });
+
+  /* ---- the world box: the solver reasons in the rotated bound -------- */
+
+  it("solves a quarter-turned part as its swapped world box", () => {
+    const scene = solveScene({
+      schemaVersion: 1,
+      parts: [{ id: "prp_bar", size: [1, 0.2, 0.2], rotate: { axis: "z", deg: 90 } }],
+      relations: [{ type: "at", part: "prp_bar", center: [0, 0, 0.1] }],
+    });
+    const bar = scene.parts[0]!;
+    expect(bar.size[0]).toBeCloseTo(0.2, 9);
+    expect(bar.size[1]).toBeCloseTo(1, 9);
+    // The extent ALONG the rotation axis is untouched.
+    expect(bar.size[2]).toBe(0.2);
+    // The local box — what the shape still fills exactly — rides alongside.
+    expect(bar.localSize).toEqual([1, 0.2, 0.2]);
+    expect(bar.rotate).toEqual({ axis: "z", deg: 90 });
+  });
+
+  it("solves a 45-degree unit cube as a root-two bound", () => {
+    const scene = solveScene({
+      schemaVersion: 1,
+      parts: [{ id: "prp_cube", size: [1, 1, 1], rotate: { axis: "z", deg: 45 } }],
+      relations: [{ type: "at", part: "prp_cube", center: [0, 0, 0.5] }],
+    });
+    const cube = scene.parts[0]!;
+    expect(cube.size[0]).toBeCloseTo(Math.SQRT2, 9);
+    expect(cube.size[1]).toBeCloseTo(Math.SQRT2, 9);
+    expect(cube.size[2]).toBe(1);
+  });
+
+  it("leaves an unrotated part's solved shape byte-identical (no stray fields)", () => {
+    const scene = solveScene({
+      schemaVersion: 1,
+      parts: [{ id: "prp_cube", size: [1, 1, 1] }],
+      relations: [{ type: "at", part: "prp_cube", center: [0, 0, 0.5] }],
+    });
+    expect(scene.parts[0]!.size).toEqual([1, 1, 1]);
+    expect("localSize" in scene.parts[0]!).toBe(false);
+    expect("rotate" in scene.parts[0]!).toBe(false);
+  });
+
+  /* ---- relations see the world box and nothing else ------------------ */
+
+  it("rests a part on the ROTATED bound's top face", () => {
+    // A 1m bar tipped a quarter turn about y stands 1m tall: its world box
+    // is [0.2, 0.2, 1], so anything sitting on it starts a metre up — not
+    // at the 0.2m the authored size would suggest.
+    const scene = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_bar", size: [1, 0.2, 0.2], rotate: { axis: "y", deg: 90 } },
+        { id: "prp_cap", size: [0.1, 0.1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_bar", center: [0, 0, 0.5] },
+        { type: "sits_on", part: "prp_cap", on: "prp_bar" },
+      ],
+    });
+    const bar = scene.parts.find((p) => p.id === "prp_bar")!;
+    const cap = scene.parts.find((p) => p.id === "prp_cap")!;
+    expect(bar.size[2]).toBeCloseTo(1, 9);
+    // top of the world box (1.0) minus the 1mm embed plus half the cap.
+    expect(cap.center[2]).toBeCloseTo(1 - MIN_CONTACT + 0.05, 9);
+  });
+
+  it("insets from the ROTATED bound, so a canted part still clears the edge", () => {
+    const scene = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_slab", size: [4, 4, 0.1] },
+        { id: "prp_sign", size: [1, 0.2, 0.2], rotate: { axis: "z", deg: 90 } },
+      ],
+      relations: [
+        { type: "at", part: "prp_slab", center: [0, 0, 0.05] },
+        { type: "sits_on", part: "prp_sign", on: "prp_slab" },
+        { type: "inset_from", part: "prp_sign", from: "prp_slab", faces: ["y-"], by: 0.5 },
+      ],
+    });
+    const sign = scene.parts.find((p) => p.id === "prp_sign")!;
+    // World y extent is 1 (the local x extent, turned), so the centre sits
+    // half a metre further in than the authored 0.2 would have put it.
+    expect(sign.center[1]).toBeCloseTo(-2 + 0.5 + 0.5, 9);
+  });
+
+  it("repeat clones inherit the rotation and both boxes", () => {
+    const scene = solveScene({
+      schemaVersion: 1,
+      parts: [{ id: "prp_fin", size: [1, 0.2, 0.2], rotate: { axis: "z", deg: 90 } }],
+      relations: [
+        { type: "at", part: "prp_fin", center: [0, 0, 0.1] },
+        { type: "repeat", part: "prp_fin", count: 3, along: "x", every: 0.5 },
+      ],
+    });
+    const clones = scene.parts.filter((p) => p.from === "prp_fin");
+    expect(clones).toHaveLength(2);
+    for (const clone of clones) {
+      expect(clone.rotate).toEqual({ axis: "z", deg: 90 });
+      expect(clone.localSize).toEqual([1, 0.2, 0.2]);
+      expect(clone.size[1]).toBeCloseTo(1, 9);
+    }
+    // And the pitch was judged against the WORLD extent on x (0.2), not the
+    // authored 1 — so a 0.5 pitch is legal here and nothing was floored.
+    expect(scene.diagnostics).toEqual([]);
+  });
+
+  /* ---- emission ------------------------------------------------------ */
+
+  it("builds the primitive at the LOCAL box and rotates it at the solved centre", () => {
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [{ id: "prp_bar", size: [1, 0.2, 0.2], rotate: { axis: "z", deg: 90 } }],
+      relations: [{ type: "at", part: "prp_bar", center: [0, 0, 0.1] }],
+    };
+    const script = emitBlenderScript(solveScene(spec));
+    // The local box feeds the primitive; the inflated world bound must not.
+    expect(script).toContain(
+      '_static_rotate(_part("prp_bar", "box", (1, 0.2, 0.2), (0, 0, 0.1), "z", False), 2, 1.570796, (0, 0, 0.1))',
+    );
+    // The rotation is BAKED, so the exported transform stays identity and
+    // the transform-hygiene rules stay quiet by construction.
+    expect(script).toContain(
+      "bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)",
+    );
+  });
+
+  it("rotates the real-radius shapes identically — they skip the scale step, not this one", () => {
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_pipe", size: [0.4, 0.4, 1], shape: "tube", thickness: 0.05, rotate: { axis: "x", deg: 30 } },
+        { id: "prp_pill", size: [0.2, 0.2, 0.8], shape: "capsule", rotate: { axis: "y", deg: 30 } },
+      ],
+      relations: [
+        { type: "at", part: "prp_pipe", center: [0, 0, 1] },
+        { type: "at", part: "prp_pill", center: [2, 0, 1] },
+      ],
+    };
+    const script = emitBlenderScript(solveScene(spec));
+    expect(script).toContain('_static_rotate(_part("prp_pipe", "tube", (0.4, 0.4, 1)');
+    expect(script).toContain(", 0, 0.523599, (0, 0, 1))");
+    expect(script).toContain('_static_rotate(_part("prp_pill", "capsule", (0.2, 0.2, 0.8)');
+    expect(script).toContain(", 1, 0.523599, (2, 0, 1))");
+  });
+
+  it("emits nothing new for an unrotated spec, and stays byte-stable", () => {
+    const plain = emitBlenderScript(solveScene(colonnade()));
+    expect(plain).not.toContain("_static_rotate(_part");
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [{ id: "prp_bar", size: [1, 0.2, 0.2], rotate: { axis: "z", deg: 37.5 } }],
+      relations: [{ type: "at", part: "prp_bar", center: [0, 0, 0.1] }],
+    };
+    expect(emitBlenderScript(solveScene(spec))).toBe(emitBlenderScript(solveScene(spec)));
+  });
+
+  it("frames the shot from the rotated bound, so a canted part cannot leave frame", () => {
+    // frameScene reads the same world boxes the solver placed, which is the
+    // whole reason `size` had to stay the world box: a diagonal slab needs a
+    // wider shot than its authored extents ask for.
+    const slabScene = (rotate?: { axis: "x" | "y" | "z"; deg: number }) =>
+      solveScene({
+        schemaVersion: 1,
+        parts: [{ id: "prp_slab", size: [2, 0.4, 0.1], ...(rotate ? { rotate } : {}) }],
+        relations: [{ type: "at", part: "prp_slab", center: [0, 0, 0.05] }],
+      });
+    const turned = frameScene(slabScene({ axis: "z", deg: 45 }));
+    const flat = frameScene(slabScene());
+    expect(turned.radius).toBeGreaterThan(flat.radius);
   });
 });
 
@@ -755,5 +1391,496 @@ describe("lintClaims", () => {
     delete (legacy as { tris?: number }).tris;
     const issues = run({ maxTriangles: 100 }, censusOf({ meshes: [legacy] }));
     expect(issues[0]!.code).toBe(ISSUE_CODES.CLAIM_UNCHECKED);
+  });
+});
+
+type AroundRelation = Extract<SceneSpec["relations"][number], { type: "around" }>;
+
+describe("around (radial repeat)", () => {
+  /**
+   * A hub on the floor and one bar to ring it. The bar's Z comes from its own
+   * `sits_on`, exactly as a repeat clone's does — `around` owns the circle's
+   * plane and nothing else.
+   */
+  const ring = (
+    around: Partial<AroundRelation> = {},
+    bar: Partial<SceneSpec["parts"][number]> = {},
+  ): SceneSpec => ({
+    schemaVersion: 1,
+    parts: [
+      { id: "prp_floor", size: [4, 4, 0.1] },
+      { id: "prp_hub", size: [0.3, 0.3, 0.3], shape: "cylinder" },
+      { id: "prp_bar", size: [0.2, 0.2, 0.6], ...bar },
+    ],
+    relations: [
+      { type: "at", part: "prp_floor", center: [0, 0, 0.05] },
+      { type: "sits_on", part: "prp_hub", on: "prp_floor" },
+      { type: "align", part: "prp_hub", to: "prp_floor", axes: ["x", "y"] },
+      { type: "sits_on", part: "prp_bar", on: "prp_floor" },
+      {
+        type: "around",
+        part: "prp_bar",
+        center: "prp_hub",
+        radius: 1,
+        count: 4,
+        ...around,
+      } as AroundRelation,
+    ],
+  });
+
+  it("lands four bars on the four compass points at the authored radius", () => {
+    const solved = solveScene(ring());
+    expect(solved.diagnostics).toEqual([]);
+    const bars = solved.parts.filter((p) => p.id.startsWith("prp_bar"));
+    expect(bars.map((p) => p.id)).toEqual(["prp_bar", "prp_bar_2", "prp_bar_3", "prp_bar_4"]);
+    // The hub is centred on the floor at the origin, so the compass points
+    // are exact rather than approximate.
+    // `+ 0` folds the -0 a cosine of 270 degrees legitimately produces; the
+    // emitter's own fixed-precision writer does the same, so it never reaches
+    // a script either.
+    const points = bars
+      .map((p) => [Number(p.center[0].toFixed(6)) + 0, Number(p.center[1].toFixed(6)) + 0])
+      .sort((a, b) => a[0]! - b[0]! || a[1]! - b[1]!);
+    expect(points).toEqual([
+      [-1, 0],
+      [0, -1],
+      [0, 1],
+      [1, 0],
+    ]);
+    for (const bar of bars) {
+      expect(Math.hypot(bar.center[0], bar.center[1])).toBeCloseTo(1, 9);
+    }
+  });
+
+  it("takes the along-axis coordinate from the base's own relations", () => {
+    const solved = solveScene(ring());
+    const bars = solved.parts.filter((p) => p.id.startsWith("prp_bar"));
+    // The floor's top is at 0.1 and sits_on sinks the bar by the contact
+    // floor; every instance inherits that resting height, clones included.
+    const restingZ = 0.1 - MIN_CONTACT + 0.3;
+    for (const bar of bars) {
+      expect(bar.center[2]).toBeCloseTo(restingZ, 9);
+      expect(bar.restsOn).toBe("prp_floor");
+    }
+  });
+
+  it("records the base part for provenance on every minted instance", () => {
+    const solved = solveScene(ring());
+    const clones = solved.parts.filter((p) => p.id.startsWith("prp_bar_"));
+    expect(clones).toHaveLength(3);
+    for (const clone of clones) expect(clone.from).toBe("prp_bar");
+    // The base is the line the author wrote, so it carries no pointer.
+    expect(solved.parts.find((p) => p.id === "prp_bar")!.from).toBeUndefined();
+  });
+
+  it("honours startDeg and rings about a named axis", () => {
+    // A vertical wheel: normal x, so the circle spans (y, z) in cyclic order
+    // and the ring owns the part's HEIGHT. Nothing else may, which is why
+    // this spec has no sits_on on the ringed part — around owns the plane,
+    // and a second authority over an axis in it is a SOLVE-CONFLICT.
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_hub", size: [0.3, 0.3, 0.3] },
+        { id: "prp_spoke", size: [0.1, 0.1, 0.2] },
+      ],
+      relations: [
+        { type: "at", part: "prp_hub", center: [0, 0, 1] },
+        { type: "align", part: "prp_spoke", to: "prp_hub", axes: ["x"] },
+        {
+          type: "around",
+          part: "prp_spoke",
+          center: "prp_hub",
+          axis: "x",
+          radius: 0.5,
+          count: 2,
+          startDeg: 90,
+        },
+      ],
+    });
+    expect(solved.diagnostics).toEqual([]);
+    const spokes = solved.parts.filter((p) => p.id.startsWith("prp_spoke"));
+    // 90 degrees is +z off the hub (the sine axis), 270 is -z, and neither
+    // moves off the hub in y (the cosine axis).
+    const zs = spokes.map((p) => p.center[2]).sort((a, b) => a - b);
+    expect(zs[0]).toBeCloseTo(0.5, 9);
+    expect(zs[1]).toBeCloseTo(1.5, 9);
+    for (const spoke of spokes) expect(spoke.center[1]).toBeCloseTo(0, 9);
+  });
+
+  it("swells each instance's world box by its own orient angle", () => {
+    const solved = solveScene(ring({ count: 4, orient: true }, { size: [0.8, 0.2, 0.6] }));
+    expect(solved.diagnostics).toEqual([]);
+    const byId = new Map(solved.parts.map((p) => [p.id, p]));
+    // startDeg defaults to 0, so the base is un-turned and carries no rotate;
+    // the clones turn a quarter, a half and three quarters about the circle.
+    expect(byId.get("prp_bar")!.rotate).toBeUndefined();
+    expect(byId.get("prp_bar_2")!.rotate).toEqual({ axis: "z", deg: 90 });
+    expect(byId.get("prp_bar_3")!.rotate).toEqual({ axis: "z", deg: 180 });
+    expect(byId.get("prp_bar_4")!.rotate).toEqual({ axis: "z", deg: 270 });
+    // A quarter turn swaps the world box's x and y — rotatedBoxSize, the same
+    // predicate every rotated part is measured with.
+    expect(byId.get("prp_bar_2")!.size[0]).toBeCloseTo(0.2, 9);
+    expect(byId.get("prp_bar_2")!.size[1]).toBeCloseTo(0.8, 9);
+    // The LOCAL box, which the emitter builds at, is untouched by the turn.
+    expect(byId.get("prp_bar_2")!.localSize).toEqual([0.8, 0.2, 0.6]);
+    expect(byId.get("prp_bar_3")!.size[0]).toBeCloseTo(0.8, 9);
+  });
+
+  it("turns the BASE too when startDeg is not zero, and sums an authored rotate", () => {
+    const solved = solveScene(
+      ring(
+        { count: 4, startDeg: 30, orient: true },
+        { size: [0.8, 0.2, 0.6], rotate: { axis: "z", deg: 15 } },
+      ),
+    );
+    expect(solved.diagnostics).toEqual([]);
+    const byId = new Map(solved.parts.map((p) => [p.id, p]));
+    // 15 authored + 30 start = 45 on the base; each clone adds a quarter turn,
+    // and the composed angles stay inside the (-360, 360) window every other
+    // consumer reads `rotate.deg` in, rather than running on past a full turn.
+    expect(byId.get("prp_bar")!.rotate).toEqual({ axis: "z", deg: 45 });
+    expect(byId.get("prp_bar_2")!.rotate).toEqual({ axis: "z", deg: 135 });
+    expect(byId.get("prp_bar_4")!.rotate).toEqual({ axis: "z", deg: 315 });
+    for (const bar of solved.parts.filter((p) => p.id.startsWith("prp_bar"))) {
+      expect(Math.abs(bar.rotate!.deg)).toBeLessThan(360);
+    }
+    // The base's world box was measured WITH its composed turn — which is the
+    // box its sits_on read to seat it.
+    const bound = 0.8 * Math.cos(Math.PI / 4) + 0.2 * Math.sin(Math.PI / 4);
+    expect(byId.get("prp_bar")!.size[0]).toBeCloseTo(bound, 9);
+  });
+
+  it("emits a ring as ordinary placed parts — no new emitter vocabulary", () => {
+    const script = emitBlenderScript(solveScene(ring({ count: 4, orient: true })));
+    expect(script).toContain('_part("prp_bar", "box"');
+    // Oriented clones wear the same _static_rotate wrapper an authored
+    // rotate has always used.
+    expect(script).toContain('_static_rotate(_part("prp_bar_2", "box"');
+    expect(script).toContain('_static_rotate(_part("prp_bar_3", "box"');
+  });
+
+  it("is byte-stable across compiles of an around-expanded spec", () => {
+    const a = emitBlenderScript(solveScene(ring({ count: 6, startDeg: 22.5, orient: true })));
+    const b = emitBlenderScript(solveScene(ring({ count: 6, startDeg: 22.5, orient: true })));
+    expect(a).toBe(b);
+  });
+
+  it("cannot z-fight: a ring of bars keeps every face off its neighbours", () => {
+    expect(findCoplanarFaces(solveScene(ring({ count: 8, radius: 1.5 })))).toEqual([]);
+  });
+
+  it("names the unplaced centre through the blocker-chain machinery", () => {
+    const spec: SceneSpec = {
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_hub", size: [0.3, 0.3, 0.3] },
+        { id: "prp_bar", size: [0.2, 0.2, 0.6] },
+      ],
+      // Nothing places the hub, so the ring can never resolve.
+      relations: [{ type: "around", part: "prp_bar", center: "prp_hub", radius: 1, count: 3 }],
+    };
+    const solved = solveScene(spec);
+    const unresolved = solved.diagnostics.filter((d) => d.code === "SOLVE-UNRESOLVED");
+    expect(unresolved.length).toBeGreaterThan(0);
+    expect(unresolved[0]!.message).toContain("around");
+    expect(unresolved[0]!.message).toContain("prp_hub");
+    expect(unresolved[0]!.message).toContain("never placed");
+  });
+
+  it("refuses a ring past the repeat ceiling", () => {
+    const solved = solveScene(ring({ count: 201, radius: 50 }));
+    const limit = solved.diagnostics.filter((d) => d.code === "SOLVE-LIMIT");
+    expect(limit).toHaveLength(1);
+    expect(limit[0]!.message).toContain("201");
+    expect(limit[0]!.message).toContain("the ceiling is 200");
+  });
+
+  it("refuses a minted id that collides with an authored part", () => {
+    const spec = ring();
+    spec.parts.push({ id: "prp_bar_2", size: [0.1, 0.1, 0.1] });
+    spec.relations.push({ type: "at", part: "prp_bar_2", center: [3, 3, 0.05] });
+    const solved = solveScene(spec);
+    const conflict = solved.diagnostics.find((d) => d.code === "SOLVE-CONFLICT")!;
+    expect(conflict.message).toContain("prp_bar_2");
+    expect(conflict.message).toContain("already exists");
+  });
+
+  /* ---- validation ---------------------------------------------------- */
+
+  const errorsFor = (relations: unknown[], parts?: unknown[]): string[] =>
+    validateSceneSpec({
+      schemaVersion: 1,
+      parts: parts ?? [
+        { id: "prp_hub", size: [0.3, 0.3, 0.3] },
+        { id: "prp_bar", size: [0.2, 0.2, 0.6] },
+      ],
+      relations: [{ type: "at", part: "prp_hub", center: [0, 0, 0.15] }, ...relations],
+    }).errors;
+
+  it("accepts a well-formed around and round-trips its fields", () => {
+    const { spec, errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_hub", size: [0.3, 0.3, 0.3] },
+        { id: "prp_bar", size: [0.2, 0.2, 0.6] },
+      ],
+      relations: [
+        { type: "at", part: "prp_hub", center: [0, 0, 0.15] },
+        { type: "at", part: "prp_bar", center: [0, 0, 0.3] },
+        {
+          type: "around",
+          part: "prp_bar",
+          center: "prp_hub",
+          axis: "y",
+          radius: 1.25,
+          count: 8,
+          startDeg: -45,
+          orient: true,
+        },
+      ],
+    });
+    expect(errors).toEqual([]);
+    expect(spec!.relations[2]).toEqual({
+      type: "around",
+      part: "prp_bar",
+      center: "prp_hub",
+      axis: "y",
+      radius: 1.25,
+      count: 8,
+      startDeg: -45,
+      orient: true,
+    });
+  });
+
+  it("refuses a non-positive radius, a count below two, and a runaway startDeg", () => {
+    const errors = errorsFor([
+      { type: "around", part: "prp_bar", center: "prp_hub", radius: 0, count: 1, startDeg: 720 },
+    ]);
+    expect(errors.some((e) => e.includes(".radius must be a positive number"))).toBe(true);
+    expect(errors.some((e) => e.includes(".count must be an integer >= 2"))).toBe(true);
+    expect(errors.some((e) => e.includes(".startDeg must be greater than -360"))).toBe(true);
+  });
+
+  it("refuses an unknown key on around, scoped to around's own field set", () => {
+    const errors = errorsFor([
+      { type: "around", part: "prp_bar", center: "prp_hub", radius: 1, count: 3, every: 0.5 },
+    ]);
+    expect(errors.some((e) => e.includes("every is not a field of relation 'around'"))).toBe(true);
+  });
+
+  it("refuses around beside repeat, scatter, another around, or a span", () => {
+    const base = { type: "around", part: "prp_bar", center: "prp_hub", radius: 1, count: 3 };
+    expect(
+      errorsFor([base, { type: "repeat", part: "prp_bar", count: 2, along: "x", every: 1 }]).some(
+        (e) => e.includes("targeted by both around and repeat"),
+      ),
+    ).toBe(true);
+    expect(
+      errorsFor([base, { type: "scatter", part: "prp_bar", on: "prp_hub", count: 2 }]).some((e) =>
+        e.includes("targeted by both around and scatter"),
+      ),
+    ).toBe(true);
+    expect(
+      errorsFor([base, { ...base, radius: 2 }]).some((e) =>
+        e.includes("is targeted by 2 around relations"),
+      ),
+    ).toBe(true);
+    expect(
+      errorsFor([
+        base,
+        { type: "span", part: "prp_bar", from: "prp_hub", to: "prp_hub", axis: "x" },
+      ]).some((e) => e.includes("is both spanned and placed around a centre")),
+    ).toBe(true);
+  });
+
+  it("refuses orient composed onto a part that already rotates about another axis", () => {
+    const errors = errorsFor(
+      [{ type: "around", part: "prp_bar", center: "prp_hub", radius: 1, count: 4, orient: true }],
+      [
+        { id: "prp_hub", size: [0.3, 0.3, 0.3] },
+        { id: "prp_bar", size: [0.2, 0.2, 0.6], rotate: { axis: "x", deg: 20 } },
+      ],
+    );
+    expect(errors).toContain(
+      "relations: orient composes a rotation about z onto the clones, and 'prp_bar' already rotates about x — one axis per part for now",
+    );
+  });
+
+  it("accepts orient composed onto a rotation about the SAME axis", () => {
+    const errors = errorsFor(
+      [{ type: "around", part: "prp_bar", center: "prp_hub", radius: 1, count: 4, orient: true }],
+      [
+        { id: "prp_hub", size: [0.3, 0.3, 0.3] },
+        { id: "prp_bar", size: [0.2, 0.2, 0.6], rotate: { axis: "z", deg: 20 } },
+      ],
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it("lists around in the vocabulary an unknown relation type is measured against", () => {
+    const errors = errorsFor([{ type: "round", part: "prp_bar" }]);
+    expect(errors.some((e) => e.includes("expected at, sits_on"))).toBe(true);
+    expect(errors.some((e) => e.includes('did you mean "around"?'))).toBe(true);
+  });
+});
+
+describe("camera auto-framing", () => {
+  const subject = (metres: number): SceneSpec => ({
+    schemaVersion: 1,
+    parts: [{ id: "prp_subject", size: [metres, metres, metres] }],
+    relations: [{ type: "at", part: "prp_subject", center: [0, 0, metres / 2] }],
+  });
+
+  it("derives the default distance from the lens, not from a literal", () => {
+    // d = r / (tan(fov/2) * fill) — recomputed here from the published lens
+    // rather than restated as the number it happens to come out as.
+    expect(AUTOFIT_DISTANCE).toBeCloseTo(1 / (Math.tan(CAMERA_HALF_FOV) * CAMERA_FILL), 12);
+    expect(AUTOFIT_DISTANCE).toBeCloseTo(3.472222, 5);
+  });
+
+  it("fits a 26cm subject and a 26m subject to the same fraction of frame", () => {
+    const lantern = frameScene(solveScene(subject(0.26)));
+    const hangar = frameScene(solveScene(subject(26)));
+    expect(lantern.fill).toBeCloseTo(CAMERA_FILL, 9);
+    expect(hangar.fill).toBeCloseTo(CAMERA_FILL, 9);
+    // Which is inside the band the framing promises, at both scales.
+    for (const shot of [lantern, hangar]) {
+      expect(shot.fill).toBeGreaterThan(0.75);
+      expect(shot.fill).toBeLessThan(0.85);
+    }
+    // The METRES move with the subject, which is the thing the field report
+    // was reaching for when it asked for 0.6 on a 26cm lantern.
+    const away = (shot: ReturnType<typeof frameScene>) =>
+      Math.hypot(
+        shot.location[0] - shot.center[0],
+        shot.location[1] - shot.center[1],
+        shot.location[2] - shot.center[2],
+      );
+    expect(away(lantern)).toBeCloseTo(AUTOFIT_DISTANCE * lantern.radius, 9);
+    expect(away(lantern)).toBeLessThan(1);
+    expect(away(hangar)).toBeGreaterThan(50);
+  });
+
+  it("leaves an AUTHORED distance meaning exactly what it always meant", () => {
+    const { radius } = frameScene(solveScene(subject(1)));
+    const shot = frameScene(solveScene(subject(1)), { distance: 5 });
+    expect(
+      Math.hypot(
+        shot.location[0] - shot.center[0],
+        shot.location[1] - shot.center[1],
+        shot.location[2] - shot.center[2],
+      ),
+    ).toBeCloseTo(5 * radius, 9);
+    expect(shot.fill).toBeCloseTo(1 / (5 * Math.tan(CAMERA_HALF_FOV)), 12);
+  });
+
+  it("emits the lens the derivation reads instead of inheriting a default", () => {
+    const script = emitBlenderScript(solveScene(subject(1)));
+    expect(script).toContain("cam.data.lens = 50");
+    expect(script).toContain("cam.data.sensor_width = 36");
+  });
+
+  it("names the unit, the floor's meaning, and the fitting value when distance is refused", () => {
+    const { errors } = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [0.26, 0.26, 0.26] }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.13] }],
+      // 0.6 metres, which is what an author reaches for when they read this
+      // knob as a distance instead of a multiple.
+      camera: { distance: 0.6 },
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("MULTIPLE OF THE SCENE'S BOUNDING RADIUS, not metres");
+    expect(errors[0]).toContain("1 puts the camera on the bounding sphere itself");
+    expect(errors[0]).toContain(AUTOFIT_DISTANCE.toFixed(2));
+  });
+});
+
+describe("did-you-mean on unknown keys", () => {
+  it("names the nearest part field, in full", () => {
+    const message = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], materal: "mtl_x" }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    }).errors.find((e) => e.includes("materal"))!;
+    expect(message).toBe(
+      'parts[0].materal is not a part field — did you mean "material"? known fields: id, size, shape, file, script, axis, flip, tip, thickness, material, role, spin, bob, rotate',
+    );
+  });
+
+  it("suggests a truncated top-level key", () => {
+    const message = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1] }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+      cam: { distance: 3 },
+    }).errors.find((e) => e.includes("cam is not"))!;
+    expect(message).toContain('did you mean "camera"?');
+    expect(message).toContain("known fields: schemaVersion");
+  });
+
+  it("suggests across the claim, material, camera and relation gates too", () => {
+    const errors = validateSceneSpec({
+      schemaVersion: 1,
+      materials: { mtl_a: { baseColor: [1, 1, 1], metalic: 1 } },
+      parts: [
+        { id: "prp_a", size: [1, 1, 1], material: "mtl_a" },
+        { id: "prp_b", size: [1, 1, 1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_a", center: [0, 0, 0.5] },
+        { type: "sits_on", part: "prp_b", on: "prp_a", embeded: 0.01 },
+      ],
+      camera: { distence: 3 },
+      claims: { maxHight: 2 },
+    }).errors;
+    expect(
+      errors.some((e) =>
+        e.includes('materials.mtl_a.metalic is not a material field — did you mean "metallic"?'),
+      ),
+    ).toBe(true);
+    expect(
+      errors.some((e) => e.includes('claims.maxHight has no oracle — did you mean "maxHeight"?')),
+    ).toBe(true);
+    expect(
+      errors.some((e) =>
+        e.includes('camera.distence is not a camera field — did you mean "distance"?'),
+      ),
+    ).toBe(true);
+    expect(
+      errors.some((e) =>
+        e.includes(
+          `relations[1].embeded is not a field of relation 'sits_on' — did you mean "embed"?`,
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("says nothing when nothing is close, rather than guessing", () => {
+    const message = validateSceneSpec({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [1, 1, 1], quaternionBasis: 3 }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
+    }).errors.find((e) => e.includes("quaternionBasis"))!;
+    expect(message).not.toContain("did you mean");
+    expect(message).toContain("known fields:");
+  });
+
+  it("does not guess at a short key, where two edits are noise", () => {
+    expect(nearestKey("zz", ["id", "at", "by"])).toBeUndefined();
+    // One edit on a short key is still a real match.
+    expect(nearestKey("ax", ["at", "by"])).toBe("at");
+  });
+
+  it("prefers a case slip, then a prefix, then an edit — deterministically", () => {
+    expect(nearestKey("BaseColor", ["baseColor", "baseColour"])).toBe("baseColor");
+    expect(nearestKey("texelDensity", ["texelDensityMaxRatio", "roughness"])).toBe(
+      "texelDensityMaxRatio",
+    );
+    expect(nearestKey("offste", ["offset", "onset"])).toBe("offset");
+    // Same answer every call: the suggestion is a fact about the strings, not
+    // about iteration order.
+    expect(nearestKey("offste", ["onset", "offset"])).toBe("offset");
   });
 });

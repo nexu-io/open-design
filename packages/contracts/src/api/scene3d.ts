@@ -135,6 +135,22 @@ export interface Scene3dManifest {
   animation: { fps: number; frameStart: number; frameEnd: number; keyframedObjects: string[] };
   camera: { present: boolean; name: string | null };
   proofImages: string[];
+  /**
+   * Where each part landed in each proof frame: one record per frame,
+   * part name → normalized `[x0, y0, x1, y1]` (y down). Projected through
+   * the render camera at render time; this is what lets the panel draw a
+   * selection reticle on the prerendered picture and resolve a click on
+   * the picture back to a part name.
+   */
+  proofRects?: Array<Record<string, [number, number, number, number]>>;
+  /**
+   * Part names in id-map code order (code = index + 1). Present when the
+   * proof rendered an object-index map beside every frame — the same path
+   * with `.idx.png` in place of `.png` — whose pixels encode the part code
+   * in 8-step-per-channel RGB (background alpha 0). The panel's x-ray
+   * energize decodes them to find exactly which pixels a part occupies.
+   */
+  proofIdParts?: string[];
   exportedAssets: string[];
   issues: Scene3dIssueSummary;
   issueCodes: string[];
@@ -174,6 +190,13 @@ export interface Scene3dCompileRequest {
   proof?: Scene3dProofOptions;
   /** Bypass the per-stage content-hash cache. */
   noCache?: boolean;
+  /**
+   * Render the proof frames as text in the agent report even when no proof
+   * rule fired. By default the ASCII ramps appear only when a finding is
+   * ABOUT what the frames look like; this is the caller saying "show me
+   * anyway" — the text-only reader's equivalent of opening the PNGs.
+   */
+  frames?: boolean;
 }
 
 /**
@@ -198,6 +221,14 @@ export interface Scene3dCompileResponse {
   manifest: Scene3dManifest;
   proofImages: Scene3dArtifactRef[];
   exportedAssets: Scene3dArtifactRef[];
+  /**
+   * Per-material lit-sphere previews (`out/materials/ball-<name>.png`),
+   * rendered during proof under the proof's own lighting/exposure — the
+   * cheap gear between a raw baked texture and a full turntable for judging
+   * how emission, alpha, and metallic compose. Never mixed into
+   * `proofImages`: these are not frames of the scene.
+   */
+  materialBalls?: Scene3dArtifactRef[];
   blender: { available: boolean; version: string | null };
   /**
    * The solver's output for spec-authored scenes: every part's solved box,

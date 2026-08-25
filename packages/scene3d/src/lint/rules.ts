@@ -48,12 +48,14 @@ export interface LintInput {
    */
   sourceKind?: string;
   /**
-   * Convention blocks the author wrote EXPLICITLY in scene3d.json (`geometry`,
-   * `uv`, …) — not blocks a target preset filled in. Writing in a block is a
-   * statement that you meant its rules, and cancels the imported-provenance
-   * relaxation for that block alone.
+   * Contract leaf paths the author wrote EXPLICITLY in scene3d.json
+   * (`"geometry.allowOpenMeshes"`, `"uv.maxOverlapFraction"`, …) — not leaves
+   * a target preset filled in. Writing a leaf is a statement that you meant
+   * ITS rule, and cancels the imported-provenance relaxation for that rule
+   * alone (lint/provenance.ts) — never for unrelated sibling rules in the
+   * same block.
    */
-  authoredBlocks?: ReadonlySet<string>;
+  authoredKeys?: ReadonlySet<string>;
 }
 
 /**
@@ -104,7 +106,7 @@ export function runLint(input: LintInput): Issue[] {
   lintUv(ctx, issues);
   lintUnits(ctx, issues);
   lintIntegrity(ctx, issues);
-  lintWorld(input.contract, input.census, issues);
+  lintWorld(input.contract, input.census, issues, input.solved);
   // The turntable's own framing facts: which mesh fell out of which orbit
   // frame. Runs after the census-level check so the two never double-report
   // — this one carries the frame index the census cannot know.
@@ -150,7 +152,7 @@ export function runLint(input: LintInput): Issue[] {
       materialUsers.set(material, users);
     }
   }
-  applyImportedPosture(issues, imported, input.authoredBlocks ?? new Set(), materialUsers);
+  applyImportedPosture(issues, imported, input.authoredKeys ?? new Set(), materialUsers);
 
   const seen = new Set<string>();
   const deduped: Issue[] = [];

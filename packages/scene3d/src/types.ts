@@ -142,6 +142,30 @@ export interface Scene3dContract {
       seamTolerance?: number;
       /** Brightest channel a dark border may carry on an additive sheet. */
       additiveBorderMax?: number;
+      /** Lowest acceptable peak alpha (0-255) for an alpha-blended sheet —
+       *  below this the silhouette's hot core is judged missing. */
+      fullAlphaMin?: number;
+      /** Smallest fraction of the sheet that must be drawn before the sheet
+       *  is judged sparse (mostly-empty texture the GPU still samples). */
+      sparseCoverageMin?: number;
+      /** Largest fraction of visible pixels a tintable sheet may carry hue
+       *  on before the engine's tint multiply is judged fought. */
+      tintHueMax?: number;
+      /** Most pixels a flipbook cell's inner border may carry before a
+       *  frame is judged to bleed into its neighbour. */
+      cellBleedMax?: number;
+      /** Largest mean channel difference between a beam's first and last
+       *  column before the strip is judged not tileable. */
+      beamSeamMax?: number;
+      /** Most visible pixels a particle sheet may have touching the outer
+       *  border before it is judged to clip once atlased. */
+      particleBorderTouchMax?: number;
+      /** Largest fraction of a sky face that may be non-opaque before the
+       *  face is judged to show the void behind it. */
+      skyNonOpaqueMax?: number;
+      /** Largest fraction of a sky face that may clip to pure black/white
+       *  before the face is judged posterised. */
+      skyClipMax?: number;
     };
     /**
      * Scene-coherence tuning. `outlierZ` is the robust z-score (median + MAD,
@@ -259,6 +283,12 @@ export interface Scene3dContract {
        * watertight default.
        */
       allowOpenMeshes?: boolean;
+      /**
+       * Permit n-gon faces. Hard-surface assets legitimately ship n-gons
+       * (a flat cap face, a boolean result) where triangulating them buys
+       * nothing; authored scenes keep the quads-preferred default.
+       */
+      allowNgons?: boolean;
       allowLooseGeometry?: boolean;
       allowDoubleVertices?: boolean;
       allowInconsistentWinding?: boolean;
@@ -369,6 +399,24 @@ export interface CompileResult {
   manifest: Scene3dManifest;
   /** Project-relative paths of rendered proof images. */
   proofImages: string[];
+  /**
+   * Project-relative paths of the per-material lit-sphere previews rendered
+   * by the proof stage (`out/materials/ball-<material>.png`), sorted by
+   * material name.
+   *
+   * Separate from `proofImages` on purpose: those are turntable frames, and
+   * every consumer of that list — the frame player, the ascii sampler, the
+   * viewer — reads it as one orbit of one subject. A ball is a different
+   * question ("how does THIS material compose under the shot's lighting")
+   * answered at a fraction of a turntable's cost.
+   */
+  materialBalls: string[];
+  /**
+   * How many bound materials got no ball — over the per-compile cap, or a
+   * render that raised. Absent when nothing was skipped, so the number never
+   * has to be read as "zero or unmeasured".
+   */
+  materialBallsSkipped?: number;
   /** Project-relative paths of exported assets. */
   exportedAssets: string[];
   summary: IssueSummary;
@@ -1035,6 +1083,23 @@ export interface Scene3dManifest {
     coverage: number | null;
     blownRatio?: number | null;
   }>;
+  /**
+   * Where each part landed in each proof frame: one record per frame,
+   * part name → normalized `[x0, y0, x1, y1]` (y down, clamped to the
+   * frame). Measured by projecting the part's world points through the
+   * render camera at render time — the frames are prerendered pixels, and
+   * this is what lets a viewer highlight or pick a part ON the picture.
+   * A part with no entry in a frame is entirely behind the camera there.
+   */
+  proofRects?: Array<Record<string, [number, number, number, number]>>;
+  /**
+   * Part names in id-map code order. Present when the proof rendered an
+   * object-index map beside every frame (`<frame>.idx.png`): pixels encode
+   * `code = index + 1` in 8-step-per-channel RGB, background alpha 0. The
+   * viewer's x-ray energize decodes these to know exactly which visible
+   * pixels a part occupies in each prerendered frame.
+   */
+  proofIdParts?: string[];
   issues: IssueSummary;
   issueCodes: string[];
   /** The subset of issueCodes that fired at error or warning severity —

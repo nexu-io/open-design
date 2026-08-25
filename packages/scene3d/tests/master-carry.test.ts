@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * What survives the USD master round trip, measured on the SHIPPED bytes.
@@ -21,6 +22,7 @@ import { rmForSetup } from "./helpers/fs.js";
  */
 
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 const LONG = 400_000;
 
 /** The JSON chunk of a .glb, which is where the material and animation
@@ -55,7 +57,13 @@ describe.skipIf(!hasBlender)("what the master round trip must not lose", () => {
   it("ships every animation clip the source declared, not just the bound one", async () => {
     const dir = workDir("carry-fox");
     fs.cpSync(fixture("real/fox/Fox.glb"), path.join(dir, "Fox.glb"));
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // The assertions read the SHIPPED GLB, not a render — skip the turntable.
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
 
     // Blender's glTF importer binds ONE action and files the rest as NLA
     // strips. The parity fingerprint compared bound actions on both sides, so
@@ -83,7 +91,12 @@ describe.skipIf(!hasBlender)("what the master round trip must not lose", () => {
   it("keeps a material single-sided through the round trip", async () => {
     const dir = workDir("carry-sided");
     fs.cpSync(fixture("real/fox/Fox.glb"), path.join(dir, "Fox.glb"));
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(result.summary.errors).toBe(0);
 
     // glTF's default for doubleSided is false, so "absent" is single-sided and
@@ -126,11 +139,17 @@ describe.skipIf(!hasBlender)("what the master round trip must not lose", () => {
       }),
       "utf8",
     );
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // The GLB is the product under test here — no render is consumed.
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(result.summary.errors).toBe(0);
 
     const glb = glbJson(path.join(dir, "out", "scene.glb"));
-    const glow = (glb.materials ?? []).find((m) => String(m.name).includes("glow"))!;
+    const glow = (glb.materials ?? []).find((m) => String(m.name).includes("glow"))!;;
     expect(glow, "the shader material must reach the GLB").toBeTruthy();
     expect("emissiveTexture" in glow, "the baked emission map must be bound").toBe(true);
     // The authored strength, not a flattened 1. UsdPreviewSurface has no
@@ -143,7 +162,13 @@ describe.skipIf(!hasBlender)("what the master round trip must not lose", () => {
     const dir = workDir("carry-occlusion");
     fs.cpSync(fixture("real/helmet/DamagedHelmet.glb"), path.join(dir, "DamagedHelmet.glb"));
     fs.cpSync(fixture("real/helmet/scene3d.json"), path.join(dir, "scene3d.json"));
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // Exported-bytes assertions only — no render is read.
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "export", "lint"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(result.summary.errors).toBe(0);
 
     // The importer routes occlusion into a `glTF Material Output` group node,
@@ -156,4 +181,37 @@ describe.skipIf(!hasBlender)("what the master round trip must not lose", () => {
       0,
     );
   }, LONG);
+});
+
+describe.skipIf(!hasBlender)("capability parity rides the export cache", () => {
+  const fixture = (name: string) => path.join(__dirname, "fixtures", name);
+  const workDir = (name: string) => {
+    const dir = path.join(__dirname, ".work", name);
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  };
+
+  it("re-reports W-903 on a cached recompile instead of letting it vanish", async () => {
+    const dir = workDir("carry-sheen");
+    fs.cpSync(fixture("real/sheen-card/sheen-card.gltf"), path.join(dir, "sheen-card.gltf"));
+    const w903 = (issues: Array<{ code: string; detail?: Record<string, unknown> }>) =>
+      issues.filter((i) => i.code === "S3D-W-903");
+
+    // NOT noCache: the work dir is fresh (no stale entries to bypass), and
+    // noCache also skips cache WRITES — the second compile below can only
+    // hit a cache this one wrote.
+    const first = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: LONG });
+    // Coverage before verdict: the fixture must actually trip the rule, or
+    // the cache assertion below proves nothing.
+    expect(w903(first.issues).length, "sheen fixture must lose capability through the master").toBeGreaterThan(0);
+    expect(w903(first.issues)[0]!.detail?.lost).toContain("KHR_materials_sheen");
+
+    const second = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: LONG });
+    expect(second.stages.find((s) => s.id === "export")!.status).toBe("cached");
+    // The regression this pins: capability parity lived only in the cache-miss
+    // branch, so an identical recompile silently read as "fixed".
+    expect(w903(second.issues).length).toBe(w903(first.issues).length);
+    expect(w903(second.issues)[0]!.detail?.lost).toContain("KHR_materials_sheen");
+  });
 });

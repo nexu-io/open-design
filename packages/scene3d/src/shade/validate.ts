@@ -9,6 +9,10 @@ import {
   pushConstantBytes,
 } from "./types.js";
 import { STDLIB_NAMES } from "./stdlib.js";
+// Pure string arithmetic with no imports of its own, so the shader validator
+// can share the language's suggestion helper without a cycle back through
+// solve/validate.ts (which calls into this file).
+import { didYouMean } from "../solve/did-you-mean.js";
 
 /**
  * Validate one shader declaration and its kernel text — everything that
@@ -50,6 +54,21 @@ export function validateShaderSpec(
   }
   const doc = raw as Record<string, unknown>;
   const before = errors.length;
+
+  // Unknown shader keys are refused, never swallowed — the same doctrine as
+  // scene.json's part/material/relation keys: a typo here (`"format"`
+  // instead of `"outputs"`) compiled clean and baked nothing the author
+  // asked for.
+  const KNOWN_SHADER_KEYS = new Set([
+    "kernel", "size", "outputs", "frames", "motionVectors", "normalStrength", "ints", "uniforms",
+  ]);
+  for (const key of Object.keys(doc)) {
+    if (!KNOWN_SHADER_KEYS.has(key)) {
+      errors.push(
+        `${at}.${key} is not a shader field — ${didYouMean(key, KNOWN_SHADER_KEYS)}known fields: ${[...KNOWN_SHADER_KEYS].join(", ")}`,
+      );
+    }
+  }
 
   if (typeof doc.kernel !== "string" || !/\.glsl$/i.test(doc.kernel)) {
     errors.push(`${at}.kernel must be a scene-relative .glsl file path`);

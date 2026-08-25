@@ -6,13 +6,16 @@ from Kiln, a deterministic compiler for 3D assets that predates it, and
 what remains worth taking.
 
 Kiln lives in a private research repository and will stay there. This file
-is written to stand alone: everything load-bearing from it is recorded here,
-because what mattered was never the code, it was the bets and the scars.
+is written to stand alone: the design bets and failure stories are recorded
+here so their lessons survive independently of the code. Unless a capability
+is marked as adopted in the current package documentation, treat these
+sections as lineage and candidate design material, not live behavior.
 
 One doctrine comes before the details. The boundary around what scene3d may
-automate is drawn at **determinism**, never at domain. Anything computable
+automate is drawn at **determinism**, not artistic domain. Anything computable
 from declared inputs (contact offsets today; expressions, skin weights,
-skeletons, spring chains tomorrow) belongs in the compiler eventually.
+skeletons, spring chains tomorrow) is a candidate for compiler support when
+it improves author control, validation, or delivery.
 Kiln is the existence proof: rigging and facial expression were "artist
 domains" until they were algebra.
 
@@ -31,9 +34,10 @@ derived stability bound, an NDMF-style module system, an object registry,
 and a QA suite whose report volunteers what is missing and records skipped
 checks as skips. Same recipe, same bytes, on any machine.
 
-Its founding judgment is scene3d's: a model writing imperative geometry
-code fails in ways nobody can detect, while a model declaring *what* to
-build in schema-checked structure fails loudly and specifically.
+Its founding judgment is scene3d's: imperative geometry code without
+measurement and provenance fails in ways nobody can detect, while structured
+declarative intent can fail loudly and specifically. Both authoring modes
+belong behind the same compiler boundary.
 
 ## Adopted (live in scene3d today)
 
@@ -41,7 +45,8 @@ build in schema-checked structure fails loudly and specifically.
   `scene.json`: parts + relations + materials, schema-checked with JSON
   paths (`S3D-E-105`) before any geometry exists. The generating agent
   decides *what* to build in structured, reviewable terms; the solver and
-  Blender do the geometry. `build.py` stays only as the escape hatch.
+  Blender do the geometry. `build.py` is the first-class freeform authoring
+  path when the current JSON subset cannot yet express the intent.
 - **The build produces an asset *and* a claim, and the validator is the
   authority.** `claims` in `scene.json`, adjudicated against the census by
   `src/lint/claims.ts` (`S3D-E-701`), with skips reported as skips (`S3D-W-701`).
@@ -71,11 +76,12 @@ it reaches further than blendshapes: skin weights ride the same operator
 (`S @ W`, partition of unity exact with no renormalisation pass); UVs ride
 it encoded as points on a circle, so the wrap seam never exists during
 propagation; and the export-time vertex split is a row-gather, so the
-composed operator keeps both properties through export. When scene3d ever
-wants characters, faces, or rigged creatures, this is the proven road in;
-not a human-authoring pipeline.
+composed operator keeps both properties through export. When scene3d wants
+characters, faces, or rigged creatures, this is a proven road in. It is not
+limited to manual mesh editing and can support both machine-authored and
+human-directed workflows.
 
-**Structure comes from patch graphs, not remeshing.** Auto-retopology aligns
+**Structure comes from patch graphs, not remeshing.** Generic auto-retopology aligns
 to curvature, not anatomy; it emits a different vertex count every run, so a
 reusable shape library is impossible, and it destroys UVs and vertex groups.
 Kiln's answer generalises past faces: quad-patch layouts resolved by
@@ -152,7 +158,8 @@ advisory, not a gate.
 4. **Multiple render-context outputs on one USD material** (portable
    `UsdPreviewSurface` fallback beside a richer context) when materials grow
    beyond Principled parameters.
-5. **Rig and lowering discipline**, when animation arrives: deform bones in
+5. **Rig and lowering discipline**, when skeletal, deformation, facial, or
+  sequenced animation arrives: deform bones in
    quaternion mode; bone roll is not cosmetic (identical head/tail with
    different roll exports as different rest rotations); emit a name→index
    manifest and generate binds from it; generate to the strictest rest pose
@@ -178,10 +185,12 @@ work; the load-bearing decisions, so later phases honour them:
 - **Every rule is a format/consistency fact, never a style.** All voxel lint
   is target-gated, advisory, and phrased as "the game will reject/shimmer".
   The linter warns; the exporter hard-refuses.
-- **Scope traps avoided:** no texture painting / timeline / gizmo editor
-  (Blockbench-parity creep contradicts "AI makes, they refine"); no baked-in
-  MC version knowledge in code paths; no resource-pack assembly in core,
-  because the moment scene3d knows namespaces it is a build system.
+- **Scope traps avoided:** no attempt to become a full Blockbench clone for
+  the Minecraft target; no baked-in MC version knowledge in code paths; no
+  resource-pack assembly in core, because the moment scene3d knows namespaces
+  it is a build system. A timeline or richer animation system belongs in the
+  broader compiler when it serves author intent; it is simply outside this
+  target's current scope.
 - **Domain facts corrected in-consult:** Java rotations are the fixed set
   {−45,−22.5,0,22.5,45}° on one axis (not free 22.5° steps); Bedrock cubes
   take free angles; cuboid-only is the contract for both dialects.

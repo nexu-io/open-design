@@ -20,7 +20,8 @@ import bmesh
 
 
 def build(ctx):
-    size = ctx["size"]
+    # Attribute style is the documented contract; ctx["size"] also works.
+    size = ctx.size
     me = bmesh.new()
 
     # Chamfered base slab: a cube scaled to the box footprint, top face

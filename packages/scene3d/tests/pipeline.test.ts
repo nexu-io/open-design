@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { compile, probeBlender, clearProbeCache } from "../src/index.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * Integration suite against the real Blender runtime (pip `bpy` on this
@@ -10,6 +11,7 @@ import { rmForSetup } from "./helpers/fs.js";
  * Blender runtime is discoverable, so CI stays green anywhere.
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 
 describe.skipIf(!hasBlender)("scene3d pipeline (real Blender)", () => {
@@ -118,6 +120,48 @@ expect(result.manifest.partTree.map((p) => p.name).sort()).toEqual(
     expect(new Set(sizes).size).toBeGreaterThan(1);
   }, LONG);
 
+  it("renders one lit-sphere preview per bound material, and keeps them cached", async () => {
+    // The field complaint this answers: emission strength, alpha, metallic
+    // and a baked texture only compose into a photograph at the far end of a
+    // full turntable, so judging a material cost a ~90s round per guess. The
+    // balls are rendered under the proof's own world, film and colour
+    // management, which is what makes them a PREDICTION rather than a second
+    // renderer's opinion.
+    const dir = workDir("good/prop_crate");
+    // NOT noCache: the work dir is fresh, and noCache also skips cache
+    // WRITES — the cached-recompile assertion below needs this compile's
+    // cache entries to exist.
+    const first = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    // prop_crate binds exactly two materials, and the names are sanitised
+    // (alphanumerics/._- survive) and sorted by material name.
+    expect(first.materialBalls).toEqual([
+      "out/materials/ball-mtl_crate_metal.png",
+      "out/materials/ball-mtl_crate_wood.png",
+    ]);
+    // Nothing was skipped, so the field is absent rather than 0 — "none" and
+    // "unmeasured" must not share a representation.
+    expect(first.materialBallsSkipped).toBeUndefined();
+    for (const ball of first.materialBalls) {
+      expect(fs.statSync(path.join(dir, ball)).size).toBeGreaterThan(0);
+    }
+    // Balls are not turntable frames: the frame player, the ascii sampler and
+    // the viewer all read proofImages as one orbit of one subject.
+    expect(first.proofImages.some((p) => p.includes("/materials/"))).toBe(false);
+
+    // A cached proof carries its previews the same way it carries its frame
+    // statistics — otherwise the feature would appear to come and go.
+    const second = await compile({ projectDir: dir });
+    expect(second.stages.find((s) => s.id === "proof")!.status).toBe("cached");
+    expect(second.materialBalls).toEqual(first.materialBalls);
+
+    // ...and a deleted materials dir re-renders, because the cache-hit test
+    // checks the ball files exist, not just the frames.
+    fs.rmSync(path.join(dir, "out", "materials"), { recursive: true, force: true });
+    const third = await compile({ projectDir: dir });
+    expect(third.stages.find((s) => s.id === "proof")!.status).toBe("ran");
+    expect(third.materialBalls).toEqual(first.materialBalls);
+  }, LONG);
+
   it("caches stages on the second compile", async () => {
     const dir = workDir("good/prop_crate");
     await compile({ projectDir: dir });
@@ -132,7 +176,13 @@ expect(result.manifest.partTree.map((p) => p.name).sort()).toEqual(
 
   it("flags default names in the naming-violations fixture", async () => {
     const dir = workDir("poisoned/naming-violations");
-    const result = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    // Naming and camera-presence are lint facts; no render or export is
+    // consumed here.
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      timeoutMs: 240_000,
+    });
 expect(result.ok).toBe(false);
     const codes = new Set(result.issues.map((i) => i.code));
     expect(codes.has("S3D-E-301")).toBe(true); // Cube.001
@@ -143,7 +193,12 @@ expect(result.ok).toBe(false);
 
   it("detects z-fighting, non-manifold and NaN in the topology fixture", async () => {
     const dir = workDir("poisoned/topology");
-    const result = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    // Census + lint assertions only — the proof render is not read.
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      timeoutMs: 240_000,
+    });
     expect(result.ok).toBe(false);
     const codes = new Set(result.issues.map((i) => i.code));
     expect(codes.has("S3D-E-324")).toBe(true); // z-fighting
@@ -155,7 +210,13 @@ expect(result.ok).toBe(false);
 
   it("catches a camera aimed away from the subject that every structural rule passes", async () => {
     const dir = workDir("poisoned/blind-camera");
-    const result = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    // The assertion is on the E-383 code, not on any pixel — one frame
+    // carries the same luminance/coverage facts as eight.
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: 240_000,
+    });
     const codes = result.issues.map((i) => i.code);
     // Structure is impeccable: named parts, a real material, a camera, a light.
     expect(codes).not.toContain("S3D-E-301");
@@ -171,9 +232,9 @@ expect(result.ok).toBe(false);
     // The stats live in the proof cache entry; if they did not, a second
     // compile would report the black scene as clean.
     const dir = workDir("poisoned/blind-camera");
-    const first = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const first = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     expect(first.issues.map((i) => i.code)).toContain("S3D-E-383");
-    const second = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const second = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     expect(second.stages.find((s) => s.id === "proof")!.status).toBe("cached");
     expect(second.issues.map((i) => i.code)).toContain("S3D-E-383");
     expect(second.ok).toBe(false);
@@ -204,7 +265,7 @@ expect(result.ok).toBe(false);
     // The delta must land in the census AND change the content hash — a
     // cached census from before the tweak would silently undo the edit.
     const dir = workDir("good/prop_crate");
-    const before = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const before = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     const lidBefore = before.census!.objects.find((o) => o.name === "prp_crate_lid")!;
 
     // Deltas are in VIEWER space (glTF, Y-up). Blender is Z-up, so a +Y
@@ -214,7 +275,7 @@ expect(result.ok).toBe(false);
       path.join(dir, "tweaks.json"),
       JSON.stringify({ prp_crate_lid: { translate: [0, 0.25, 0] } }),
     );
-    const after = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const after = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     expect(after.stages.find((s) => s.id === "build")!.status).toBe("ran");
     const lidAfter = after.census!.objects.find((o) => o.name === "prp_crate_lid")!;
     expect(lidAfter.location[2] - lidBefore.location[2]).toBeCloseTo(0.25, 5);
@@ -225,7 +286,7 @@ expect(result.ok).toBe(false);
       path.join(dir, "tweaks.json"),
       JSON.stringify({ prp_crate_lid: { translate: [0, 0, 0.25] } }),
     );
-    const depth = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const depth = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     const lidDepth = depth.census!.objects.find((o) => o.name === "prp_crate_lid")!;
     expect(lidDepth.location[1] - lidBefore.location[1]).toBeCloseTo(-0.25, 5);
     expect(lidDepth.location[2] - lidBefore.location[2]).toBeCloseTo(0, 5);
@@ -249,7 +310,7 @@ expect(result.ok).toBe(false);
     //                    Unreal's material-instance semantics;
     //   sole-user override -> mutates in place, no copy litter.
     const dir = workDir("good/prop_crate");
-    const before = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const before = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     const woodBefore = before.census!.materials.find((m) => m.name === "mtl_crate_wood")!;
     expect(woodBefore.usedByObjectCount).toBe(1);
 
@@ -258,7 +319,7 @@ expect(result.ok).toBe(false);
       path.join(dir, "tweaks.json"),
       JSON.stringify({ prp_crate_lid: { material: { assign: "mtl_crate_wood" } } }),
     );
-    const assigned = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const assigned = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     expect(assigned.stages.find((s) => s.id === "build")!.status).toBe("ran");
     const lidAssigned = assigned.census!.meshes.find((m) => m.object === "prp_crate_lid")!;
     expect(lidAssigned.materials).toEqual(["mtl_crate_wood"]);
@@ -286,7 +347,7 @@ expect(result.ok).toBe(false);
         },
       }),
     );
-    const overridden = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const overridden = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     const instName = "mtl_crate_wood__prp_crate_lid";
     const inst = overridden.census!.materials.find((m) => m.name === instName);
     expect(inst).toBeTruthy();
@@ -312,7 +373,7 @@ expect(result.ok).toBe(false);
       path.join(dir, "tweaks.json"),
       JSON.stringify({ prp_crate_body: { material: { roughness: 0.9 } } }),
     );
-    const inPlace = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const inPlace = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     const woodInPlace = inPlace.census!.materials.find((m) => m.name === "mtl_crate_wood")!;
     expect(woodInPlace.principled.roughness).toBeCloseTo(0.9, 3);
     expect(
@@ -334,7 +395,7 @@ expect(result.ok).toBe(false);
       path.join(dir, "tweaks.json"),
       JSON.stringify({ prp_box: { material: { baseColor: [0.9, 0.2, 0.15] } } }),
     );
-    const result = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    const result = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: 240_000 });
     const glbRel = result.manifest.exportedAssets.find((a) => a.endsWith(".glb"))!;
     const buf = fs.readFileSync(path.join(dir, glbRel));
     const jsonLen = buf.readUInt32LE(12);
@@ -355,7 +416,12 @@ expect(result.ok).toBe(false);
 
   it("flags pbr violations and missing camera in the pbr fixture", async () => {
     const dir = workDir("poisoned/pbr");
-    const result = await compile({ projectDir: dir, timeoutMs: 240_000 });
+    // Issue-code assertions only; nothing downstream of lint is read.
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      timeoutMs: 240_000,
+    });
     expect(result.ok).toBe(false);
     const codes = new Set(result.issues.map((i) => i.code));
     expect(codes.has("S3D-E-341")).toBe(true); // metallic 0.5

@@ -626,7 +626,7 @@ const SCENE3D_STRING_FLAGS = new Set([
 ]);
 const SCENE3D_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'agent-message', 'no-turntable', 'no-cache',
-  'merge', 'clear', 'fast',
+  'merge', 'clear', 'fast', 'frames',
 ]);
 const SCENE3D_ACTIONS = ['compile', 'manifest', 'tweaks'];
 const SCENE3D_FAIL_ON_VALUES = ['error', 'warning', 'none'];
@@ -776,6 +776,7 @@ Options:
   --turntable-steps <n>    Turntable frame count (1-64)
   --no-turntable           Render one still instead of a turntable
   --no-cache               Bypass the per-stage content-hash cache
+  --frames                 Show the proof frames as text in the report even when clean
   --fail-on <sev>          error | warning | none — exit 1 threshold (default error)
   --agent-message          Also print the <scene3d-report> block for agent splicing
 
@@ -973,16 +974,24 @@ async function runScene3d(args) {
 
   // Stage/proof options are validated by the daemon too; parsing them here
   // means a typo fails before a Blender process is ever spawned.
-  const body = { scenePath, noCache: flags['no-cache'] === true };
-  // `--fast` is the structure-loop alias: parse + build + lint, no proofs,
-  // no export. The iteration gear for grid/naming/relation work — a full
-  // compile pays ~7s of proof for findings these stages already produce.
+  const body = {
+    scenePath,
+    noCache: flags['no-cache'] === true,
+    ...(flags.frames === true ? { frames: true } : {}),
+  };
+  // `--fast` is the structure-loop alias: parse + build + lint + manifest,
+  // no proofs, no export. The iteration gear for grid/naming/relation work —
+  // a full compile pays ~7s of proof for findings these stages already
+  // produce. The manifest stage is pure TypeScript and costs milliseconds;
+  // dropping it made `od scene3d manifest --json` mid-iteration read a
+  // manifest the fast loop had never refreshed, so the machine-readable
+  // census silently went stale while the prose report was current.
   if (flags.fast === true) {
     if (flags.stages) {
       console.error('pass either --fast or --stages, not both');
       process.exit(2);
     }
-    body.stages = ['parse', 'build', 'lint'];
+    body.stages = ['parse', 'build', 'lint', 'manifest'];
   } else if (flags.stages) {
     const stages = String(flags.stages).split(',').map((s) => s.trim()).filter(Boolean);
     const unknown = stages.filter((s) => !SCENE3D_STAGE_IDS.includes(s));
@@ -1028,6 +1037,16 @@ async function runScene3d(args) {
     });
   } catch (err) {
     surfaceFetchError(err, base);
+    // The daemon does not abort a compile because this client vanished: a
+    // dropped connection routinely means the work FINISHED server-side and
+    // only the reply was lost. Without this note, the next compile's
+    // "build cached" reads as the compiler skipping work that seemingly
+    // never ran — a field run lost minutes to exactly that doubt.
+    console.error(
+      'note: the compile may still be running (or already finished) on the daemon — ' +
+        'verify with `od scene3d manifest --json` (generatedAt shows whether it landed); ' +
+        'a follow-up compile reports cached stages for any work that completed.',
+    );
     process.exit(3);
   }
   if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
@@ -1049,6 +1068,9 @@ async function runScene3d(args) {
       issues: result.issues,
       proofImages: result.proofImages.map((a) => a.path),
       exportedAssets: result.exportedAssets.map((a) => a.path),
+      ...(result.materialBalls
+        ? { materialBalls: result.materialBalls.map((a: { path: string }) => a.path) }
+        : {}),
       manifest: result.manifest,
     };
     process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);

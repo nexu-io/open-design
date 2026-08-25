@@ -212,6 +212,7 @@ export interface NormalizedContract {
   };
   geometry: {
     allowOpenMeshes: boolean;
+    allowNgons: boolean;
     allowLooseGeometry: boolean;
     allowDoubleVertices: boolean;
     allowInconsistentWinding: boolean;
@@ -221,7 +222,19 @@ export interface NormalizedContract {
   sheets: NonNullable<Scene3dContract["sheets"]>;
   /** Thresholds for the 2D sheet rules — contract data like every other lint
    *  family's, rather than module constants with a dead override field. */
-  sheetRules: { maxDimension: number; seamTolerance: number; additiveBorderMax: number };
+  sheetRules: {
+    maxDimension: number;
+    seamTolerance: number;
+    additiveBorderMax: number;
+    fullAlphaMin: number;
+    sparseCoverageMin: number;
+    tintHueMax: number;
+    cellBleedMax: number;
+    beamSeamMax: number;
+    particleBorderTouchMax: number;
+    skyNonOpaqueMax: number;
+    skyClipMax: number;
+  };
   /** Chord tolerance and clamps for emitted primitives. */
   tessellation: Tessellation;
   /** Deliverable containers the export stage emits. */
@@ -405,6 +418,7 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
     },
     geometry: {
       allowOpenMeshes: boolOr(geo.allowOpenMeshes, false),
+      allowNgons: boolOr(geo.allowNgons, false),
       allowLooseGeometry: boolOr(geo.allowLooseGeometry, false),
       allowDoubleVertices: boolOr(geo.allowDoubleVertices, false),
       allowInconsistentWinding: boolOr(geo.allowInconsistentWinding, false),
@@ -431,6 +445,20 @@ export function normalizeContract(contract?: Scene3dContract): NormalizedContrac
         c.conventions?.sheets?.additiveBorderMax,
         SHEET_DEFAULTS.additiveBorderMax,
       ),
+      fullAlphaMin: numOr(c.conventions?.sheets?.fullAlphaMin, SHEET_DEFAULTS.fullAlphaMin),
+      sparseCoverageMin: numOr(
+        c.conventions?.sheets?.sparseCoverageMin,
+        SHEET_DEFAULTS.sparseCoverageMin,
+      ),
+      tintHueMax: numOr(c.conventions?.sheets?.tintHueMax, SHEET_DEFAULTS.tintHueMax),
+      cellBleedMax: numOr(c.conventions?.sheets?.cellBleedMax, SHEET_DEFAULTS.cellBleedMax),
+      beamSeamMax: numOr(c.conventions?.sheets?.beamSeamMax, SHEET_DEFAULTS.beamSeamMax),
+      particleBorderTouchMax: numOr(
+        c.conventions?.sheets?.particleBorderTouchMax,
+        SHEET_DEFAULTS.particleBorderTouchMax,
+      ),
+      skyNonOpaqueMax: numOr(c.conventions?.sheets?.skyNonOpaqueMax, SHEET_DEFAULTS.skyNonOpaqueMax),
+      skyClipMax: numOr(c.conventions?.sheets?.skyClipMax, SHEET_DEFAULTS.skyClipMax),
     },
     // USD is the interchange stage, GLB the web-viewer mesh; both ship by
     // default so neither the author nor the agent ever has to think about

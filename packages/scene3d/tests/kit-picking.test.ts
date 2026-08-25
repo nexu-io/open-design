@@ -164,3 +164,56 @@ describe("viewport picking", () => {
     expect(rayMeshDistance([0, 0, 3], forward, flipped)).toBeCloseTo(3, 6);
   });
 });
+
+/**
+ * X-ray depth cycling: in x-ray mode the user SEES the interior through the
+ * shell, so the click must be able to reach it. First click picks the front
+ * surface; clicking again picks the next part behind the selected one,
+ * wrapping. In solid mode the nearest surface always wins.
+ */
+describe("x-ray picking", () => {
+  const factory = new Function(
+    `${KIT_RUNTIME_JS}\nreturn { pickPart: pickPart };`,
+  );
+  const { pickPart } = factory() as {
+    pickPart: (renderer: unknown, state: unknown, canvas: unknown, x: number, y: number) => { name?: string } | null;
+  };
+
+  const canvas = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) };
+  const shell: Draw = {
+    pickPositions: quad(0.5), pickIndices: null, model: IDENTITY,
+    min: [-0.5, -0.5, 0.5], max: [0.5, 0.5, 0.5], name: "shell",
+  };
+  const core: Draw = {
+    pickPositions: quad(-0.5), pickIndices: null, model: IDENTITY,
+    min: [-0.5, -0.5, -0.5], max: [0.5, 0.5, -0.5], name: "core",
+  };
+  // Eye lands at [0,0,5] looking down -z; a click at the canvas centre rays
+  // straight through both quads.
+  const stateFor = (xrayMix: number, selection: string[]) => ({
+    pan: [0, 0, 0], distance: 5, azimuth: 0, elevation: 0,
+    xrayMix, selection: new Set(selection),
+  });
+  const renderer = { draws: [shell, core], bounds: { center: [0, 0, 0], radius: 1 } };
+
+  it("solid mode picks the nearest surface regardless of selection", () => {
+    expect(pickPart(renderer, stateFor(0, []), canvas, 50, 50)?.name).toBe("shell");
+    expect(pickPart(renderer, stateFor(0, ["shell"]), canvas, 50, 50)?.name).toBe("shell");
+  });
+
+  it("x-ray first click still picks the front surface", () => {
+    expect(pickPart(renderer, stateFor(1, []), canvas, 50, 50)?.name).toBe("shell");
+  });
+
+  it("x-ray click on an already-selected front part cycles to the one behind it", () => {
+    expect(pickPart(renderer, stateFor(1, ["shell"]), canvas, 50, 50)?.name).toBe("core");
+  });
+
+  it("x-ray cycling wraps from the back part to the front", () => {
+    expect(pickPart(renderer, stateFor(1, ["core"]), canvas, 50, 50)?.name).toBe("shell");
+  });
+
+  it("x-ray click beside the stack picks nothing", () => {
+    expect(pickPart(renderer, stateFor(1, []), canvas, 99, 99)).toBeNull();
+  });
+});

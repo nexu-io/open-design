@@ -166,3 +166,61 @@ describe("budgets", () => {
     expect(codes(budgeted, census([{ name: "prp_a", min: 0, tris: 1_000 }]))).toEqual([]);
   });
 });
+
+/**
+ * S3D-W-337: a restsOn pair the solver flushed to its 1mm floor must show a
+ * measured contact. The field failure this pins: cage bars beside the ring
+ * they were meant to carry, zero errors, the missing contact measured in the
+ * census and read by nobody.
+ */
+describe("rested pairs must actually touch (W-337)", () => {
+  const contract = normalizeContract({ schemaVersion: 1 });
+  const withContacts = (
+    contacts: Array<{ a: string; b: string; separation: number }>,
+    skipped: string[] = [],
+  ): Census => ({
+    ...census([
+      { name: "prp_ring", min: 0.5 },
+      { name: "prp_bar", min: 0 },
+    ]),
+    contacts: contacts.map((c) => ({
+      a: c.a,
+      b: c.b,
+      gap: [0, 0, c.separation] as [number, number, number],
+      separation: c.separation,
+      intersects: c.separation <= 0,
+    })),
+    contactsSkipped: skipped,
+  });
+  const solved = { parts: [{ id: "prp_ring", restsOn: "prp_bar" }] };
+  const run = (c: Census, s?: typeof solved) => {
+    const issues: Issue[] = [];
+    lintWorld(contract, c, issues, s);
+    return issues.filter((i) => i.code === "S3D-W-337");
+  };
+
+  it("stays silent when the rested pair is in measured contact", () => {
+    expect(run(withContacts([{ a: "prp_bar", b: "prp_ring", separation: 0.001 }]), solved)).toEqual([]);
+  });
+
+  it("warns when no contact was measured between the pair at all", () => {
+    const found = run(withContacts([]), solved);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.message).toContain("never comes near it");
+    expect(found[0]!.target).toBe("prp_ring <-> prp_bar");
+  });
+
+  it("warns with the measured gap when the pair is near but apart", () => {
+    const found = run(withContacts([{ a: "prp_ring", b: "prp_bar", separation: 0.04 }]), solved);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.detail?.separation).toBe(0.04);
+  });
+
+  it("stays silent when the contact scan was skipped — unmeasured is not untouching", () => {
+    expect(run(withContacts([], ["scene has 91 meshes, above the 60-mesh contact limit"]), solved)).toEqual([]);
+  });
+
+  it("stays silent without a solved scene (nothing declared restsOn)", () => {
+    expect(run(withContacts([]))).toEqual([]);
+  });
+});

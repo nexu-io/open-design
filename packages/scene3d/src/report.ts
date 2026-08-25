@@ -42,6 +42,10 @@ export interface ReportOptions {
   projectDir?: string;
   /** Show the frames even when nothing is wrong with them. */
   alwaysShowFrames?: boolean;
+  /** Human title for an issue code (the contracts catalog). Injected rather
+   *  than imported: this package cannot depend on `@open-design/contracts`,
+   *  and duplicating the catalog here would let the two drift. */
+  issueTitle?: (code: string) => string | undefined;
 }
 
 export function renderAgentReport(result: CompileResult, options: ReportOptions = {}): string {
@@ -50,6 +54,10 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
 
   lines.push(`<scene3d-report ok="${result.ok}" errors="${errors}" warnings="${warnings}">`);
   lines.push(`source: ${result.source.kind} (${result.source.files.join(", ") || "none"})`);
+  // What the compile DERIVED this to be. The kind gates chrome, labels and
+  // export downstream; an author who meant to build a prop and produced a
+  // `scene` learns it here rather than from the gallery card.
+  if (result.manifest.assetKind) lines.push(`asset: ${result.manifest.assetKind}`);
   // WHAT compiled this, on the line above the findings. A stale daemon
   // enforcing a rule the checkout no longer has is indistinguishable from
   // current behaviour without it, and an agent that cannot tell those
@@ -82,7 +90,11 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
       const size = part.size.map((v: number) => fmtM(v)).join(" × ");
       const origin = part.from ? ` (from ${part.from})` : "";
       const rests = part.restsOn ? ` · rests on ${part.restsOn}` : "";
-      lines.push(`  ${part.id}${origin}: (${centre}) · ${size}${rests}`);
+      // The size printed above is the WORLD box (the rotated bound), so a
+      // rotated part's row otherwise reads as a part the author never
+      // authored. Naming the rotation is what makes the number explicable.
+      const rot = part.rotate ? ` · rot ${part.rotate.axis} ${part.rotate.deg}°` : "";
+      lines.push(`  ${part.id}${origin}: (${centre}) · ${size}${rot}${rests}`);
     }
     const total = result.solved.parts.length;
     if (total > CAP) {
@@ -108,10 +120,42 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     lines.push(`scale: ${parts.join(" · ")}`);
   }
   if (result.proofImages.length > 0) {
-    lines.push(`proof: ${result.proofImages.length} frame(s) — ${result.proofImages[0]}`);
+    /* `cached` frames are still THIS scene's render (the hash matched); only
+       a skipped/absent proof stage means the files predate the edit. Saying
+       so matters: a `--stages` iteration loop used to present last week's
+       render as if it photographed today's geometry. */
+    const proofStage = result.stages.find((s) => s.id === "proof");
+    const carried = !proofStage || proofStage.status === "skipped";
+    lines.push(
+      `proof: ${result.proofImages.length} frame(s) — ${result.proofImages[0]}` +
+        (carried ? " (carried from a previous compile — proof did not run this time)" : "") +
+        " · real PNGs: open them directly if you can read images",
+    );
   }
   if (result.exportedAssets.length > 0) {
     lines.push(`assets: ${result.exportedAssets.join(", ")}`);
+  }
+  /* Per-material lit-sphere previews: the cheap gear between "raw kernel
+     PNG" and "full proof" for judging how strength × texture × alpha
+     compose under the proof's own lighting. A field build paid four ~90s
+     turntable rounds to tune one emissive material because nothing cheaper
+     could show the composition. */
+  if ((result.materialBalls?.length ?? 0) > 0) {
+    const skipped = result.materialBallsSkipped ? ` (${result.materialBallsSkipped} skipped)` : "";
+    lines.push(
+      `material balls: ${result.materialBalls!.length} lit-sphere preview(s) in out/materials/${skipped} — judge emission/alpha here before paying for a turntable`,
+    );
+  }
+  /* The claims ledger, in both directions. Failures already surface as
+     S3D-E-701 lines; the SUCCESS was silent, so an author who declared
+     claims could not tell "adjudicated and held" from "ignored". */
+  const ledger = result.manifest.claims;
+  if (ledger) {
+    lines.push(
+      ledger.failed === 0
+        ? `claims: ${ledger.declared}/${ledger.declared} held`
+        : `claims: ${ledger.declared - ledger.failed}/${ledger.declared} held — ${ledger.failed} failed (S3D-E-701 below)`,
+    );
   }
   // What the frames MEASURED, always — not only when a rule complains.
   // These numbers already existed and reached the linter alone, so the only
@@ -165,15 +209,35 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     );
   }
 
+  /* Where the rest of the compile's answers live. Every one of these is
+     written on every full compile and none of them used to be named here,
+     so reaching the census digest cost a file read the agent had no prompt
+     to make. */
+  if (result.stages.some((s) => s.id === "manifest" && s.status !== "skipped")) {
+    lines.push("");
+    lines.push("read:");
+    /* ortho.svg leads, with an instruction, not just a path. A field build
+       shipped a cage whose bars stood beside their ring: the plan view
+       showed it unmissably, and the author never opened the file because
+       nothing named it. The turntable is a photograph; these are the
+       drawings. */
+    lines.push(
+      "  out/ortho.svg — dimensioned plan/front/side drawings (SVG = text-readable); a 2-second look catches proportion and overlap mistakes the turntable obscures",
+    );
+    lines.push("  out/digest.md — the census in prose, with the per-part dimensions table");
+    lines.push("  out/read-model.json — the full census, machine-readable");
+    lines.push("  out/index.html (frame player) · kit.html at the project root (live viewer)");
+  }
+
   // Synthesis header: the ranked "fix first" summary an agent reads before the
   // full list. Pure curation over the same issues — most-actionable first,
   // ranked by measured overrun then reach — so the model spends its next turn
   // on what matters, not the first code it happens to see.
-  appendVerdict(lines, assessVerdict(result));
+  appendVerdict(lines, assessVerdict(result), options);
 
-  appendSection(lines, "errors", result.issues, "error");
-  appendSection(lines, "warnings", result.issues, "warning");
-  if (infos > 0) appendSection(lines, "info", result.issues, "info");
+  appendSection(lines, "errors", result.issues, "error", options);
+  appendSection(lines, "warnings", result.issues, "warning", options);
+  if (infos > 0) appendSection(lines, "info", result.issues, "info", options);
 
   if (result.ok) {
     lines.push("");
@@ -232,10 +296,15 @@ function appendFrames(lines: string[], result: CompileResult, options: ReportOpt
   if (!wanted) return;
 
   // Bounded: a turntable is eight frames and a report is a context window.
-  const shown = result.proofImages.slice(0, MAX_ASCII_FRAMES);
+  // Sampled EVENLY around the orbit rather than slice(0, n): the first four
+  // frames of an eight-frame turntable are the front half, so the back of
+  // the model was structurally invisible in text.
+  const all = result.proofImages;
+  const count = Math.min(MAX_ASCII_FRAMES, all.length);
+  const shown = Array.from({ length: count }, (_, i) => all[Math.floor((i * all.length) / count)]!);
   lines.push("");
   lines.push(
-    `frames (${shown.length} of ${result.proofImages.length}, ${ASCII_COLUMNS} cols, ' ' dark -> '@' lit):`,
+    `frames (${shown.length} of ${all.length}, sampled around the orbit, ${ASCII_COLUMNS} cols, ' ' dark -> '@' lit):`,
   );
   for (const rel of shown) {
     try {
@@ -274,8 +343,11 @@ function appendDelta(lines: string[], result: CompileResult): void {
  * the ranking is measured. It sits ABOVE the full per-severity list, which is
  * left exactly as it was.
  */
-function appendVerdict(lines: string[], verdict: Verdict): void {
-  if (verdict.actions.length === 0 && verdict.grade === "pass") return;
+function appendVerdict(lines: string[], verdict: Verdict, options: ReportOptions): void {
+  /* The success path is as loud as the failure path — deliberately. The
+     early return this replaces dropped `summary:` AND `headroom:` on a clean
+     compile, so the one compile where the author most wants "what did I
+     build" was the one that said the least. */
   lines.push("");
   const dims = verdict.dimensions.map((d) => d.dimension).join(", ");
   lines.push(`summary: ${verdict.grade}${dims ? ` — ${dims}` : ""}`);
@@ -284,13 +356,15 @@ function appendVerdict(lines: string[], verdict: Verdict): void {
   if (top.length > 0) {
     lines.push("fix first:");
     top.forEach((a, i) => {
+      const title = options.issueTitle?.(a.code);
+      const named = title ? `${a.code} (${title})` : a.code;
       const target = a.target ? ` [${a.target}]` : "";
       const where = a.origin ? ` (${a.origin})` : "";
       const more = a.count > 1 ? ` ×${a.count}` : "";
       // A compact magnitude tag, not prose — so it reads as metadata before the
       // message rather than colliding with the sentence ("[+563%] 'x' owns…").
       const mag = a.overrun !== undefined ? ` [+${Number((a.overrun * 100).toFixed(0))}%]` : "";
-      lines.push(`  ${i + 1}. ${a.code}${target}${where}${more}${mag} ${a.message}`);
+      lines.push(`  ${i + 1}. ${named}${target}${where}${more}${mag} ${a.message}`);
     });
   }
 
@@ -308,12 +382,15 @@ function appendSection(
   title: string,
   issues: Issue[],
   severity: Severity,
+  options: ReportOptions,
 ): void {
   const matching = issues.filter((i) => i.severity === severity);
   if (matching.length === 0) return;
   lines.push("");
   lines.push(`${title}:`);
   for (const issue of matching) {
+    const codeTitle = options.issueTitle?.(issue.code);
+    const named = codeTitle ? `${issue.code} (${codeTitle})` : issue.code;
     const target = issue.target ? ` [${issue.target}]` : "";
     // attributeIssues resolves each target to the source line that
     // authored it (detail.origin, pre-formatted "scene.json:47"); the
@@ -326,7 +403,7 @@ function appendSection(
         : issue.file
           ? ` (${issue.file})`
           : "";
-    lines.push(`  ${issue.code}${target}${where} ${issue.message}`);
+    lines.push(`  ${named}${target}${where} ${issue.message}`);
     const data = compactDetail(issue.detail);
     if (data) lines.push(`    data: ${data}`);
     if (issue.hint) lines.push(`    fix: ${issue.hint}`);
@@ -351,7 +428,12 @@ function compactDetail(detail: Record<string, unknown> | undefined): string | nu
     .sort();
   if (keys.length === 0) return null;
   const line = keys.map((key) => `${key}=${fmtDetailValue(detail[key])}`).join(" ");
-  return line.length > 400 ? `${line.slice(0, 397)}…` : line;
+  // A silent ellipsis reads as "the list ends here". For W-323/W-336 skip
+  // lists and E-802 driver logs — exactly the payloads that overflow — the
+  // reader must know it is looking at a prefix.
+  return line.length > 400
+    ? `${line.slice(0, 320)}… (truncated, ${line.length - 320} more chars in the manifest's issue detail)`
+    : line;
 }
 
 function fmtDetailValue(value: unknown): string {

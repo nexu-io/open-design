@@ -12,6 +12,8 @@ import {
   SolvedPart,
   SolvedScene,
   Vec3,
+  normalizeTurn,
+  rotatedBoxSize,
 } from "./types.js";
 import { Rng } from "./rng.js";
 
@@ -51,9 +53,41 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
   const size = new Map<string, Vec3>();
   /** part -> what a `sits_on` placed it on. See SolvedPart.restsOn. */
   const restsOn = new Map<string, string>();
+
+  // `around { orient: true }` makes the BASE part instance 0, turned to its
+  // own start angle — so the rotation is part of the part's identity before
+  // anything measures it. Composed here, ahead of the size table below,
+  // because a rotated part's world box is what `sits_on` reads to find its
+  // resting height: composing it later would seat the ring at the height of
+  // an un-turned bar and then turn it, which is a different scene.
+  // Present for every oriented base, holding `undefined` when the composed
+  // angle came out a whole turn: that is a part with NO rotation, not a part
+  // that falls back to the authored one it just cancelled.
+  const orientedBase = new Map<string, { axis: Axis; deg: number } | undefined>();
+  for (const relation of spec.relations) {
+    if (relation.type !== "around" || relation.orient !== true) continue;
+    const part = parts.get(relation.part);
+    if (!part) continue;
+    const axis = relation.axis ?? "z";
+    const deg = normalizeTurn((part.rotate?.deg ?? 0) + (relation.startDeg ?? 0));
+    // A composition that lands on a whole turn rotates nothing; carrying it
+    // anyway would emit a rotate call for the identity and break the
+    // byte-identity an un-oriented spec has always had.
+    orientedBase.set(relation.part, deg === 0 ? undefined : { axis, deg });
+  }
+  /** The rotation a part is actually BUILT with — authored, or composed. */
+  const rotationOf = (part: PartSpec): PartSpec["rotate"] =>
+    orientedBase.has(part.id) ? orientedBase.get(part.id) : part.rotate;
+
   for (const part of spec.parts) {
     center.set(part.id, [null, null, null]);
-    size.set(part.id, [...part.size] as Vec3);
+    // The solver reasons in the WORLD box from the very first line. A
+    // rotated part's authored `size` is its LOCAL box — what its shape fills
+    // — and every relation below is about the space the part occupies, so
+    // the rotated bound is the only box any of them may see. Splitting it
+    // here rather than at each relation is what keeps `rotate` invisible to
+    // sits_on, inset_from, repeat, scatter and the intersection report.
+    size.set(part.id, rotatedBoxSize(part.size, rotationOf(part)));
   }
 
   const unknown = (id: string, relation: string): void => {
@@ -231,6 +265,24 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
         return true;
       }
 
+      case "around": {
+        if (!parts.has(relation.part)) return unknown(relation.part, "around"), true;
+        if (!parts.has(relation.center)) return unknown(relation.center, "around"), true;
+        // The circle waits for its hub exactly as `sits_on` waits for its
+        // support — one dependency, expressed the one way this solver has.
+        if (!solvedAxes(relation.center)) return false;
+        const hub = center.get(relation.center)!;
+        const [u, v] = planeAxes(relation.axis ?? "z");
+        // The base IS instance 0. It takes the start angle, and the clones
+        // minted after the fixpoint take the rest — the same shape as
+        // repeat, where the base keeps its place and the clones step off it.
+        const first = ringPosition(hub as Vec3, u, v, relation.radius, relation.startDeg ?? 0);
+        setAxis(relation.part, AXES[u]!, snap(first[u]!), "around");
+        setAxis(relation.part, AXES[v]!, snap(first[v]!), "around");
+        aroundPlans.push({ relation, hub: [hub[0]!, hub[1]!, hub[2]!] });
+        return true;
+      }
+
       case "scatter": {
         if (!parts.has(relation.part)) return unknown(relation.part, "scatter"), true;
         if (!parts.has(relation.on)) return unknown(relation.on, "scatter"), true;
@@ -320,6 +372,11 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
   /** Everything scatters have placed per support, so later scatters on the
    *  same support treat earlier ones as obstacles. */
   const scatterOccupancy = new Map<string, Array<{ center: Vec3; size: Vec3 }>>();
+  /** Rings whose base landed, with the hub centre they were measured from. */
+  const aroundPlans: Array<{
+    relation: Extract<Relation, { type: "around" }>;
+    hub: Vec3;
+  }> = [];
 
   // Repeats expand a SOLVED part into instances, so they run after the
   // fixpoint rather than inside it — an instance's position is derived
@@ -377,12 +434,68 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
     }
   }
 
+  // The parts a relation reads from before it can place its own part — the
+  // same set `apply()` above checks `solvedAxes()` on. Repeat never appears
+  // here: it is excluded from `pending` from the start.
+  const relationRefs = (relation: Relation): string[] => {
+    switch (relation.type) {
+      case "sits_on": return [relation.on];
+      case "above": return [relation.over];
+      case "align": return [relation.to];
+      case "inset_from": return [relation.from];
+      case "span": return [relation.from, relation.to];
+      case "scatter": return [relation.on];
+      case "around": return [relation.center];
+      default: return [];
+    }
+  };
+
+  // For every part a still-pending relation would place, what unresolved
+  // reference(s) it is blocked on — real state read off `center`/`solvedAxes`,
+  // not a guess. Used to walk the actual blocking chain below.
+  const blockedOn = new Map<string, string[]>();
+  for (const index of pending) {
+    const relation = spec.relations[index]!;
+    blockedOn.set(relation.part, relationRefs(relation).filter((ref) => !solvedAxes(ref)));
+  }
+
+  // Name the specific reference a relation is waiting on, walking the chain
+  // until it bottoms out at a part nothing pending places (never/partially
+  // placed) or loops back on itself (a cycle). Bounded by the part count:
+  // a chain that runs longer than that has necessarily repeated a part.
+  const explainBlocker = (relation: Relation): string => {
+    const refs = relationRefs(relation).filter((ref) => !solvedAxes(ref));
+    if (refs.length === 0) {
+      return "its reference is unplaced or the graph has a cycle";
+    }
+    const chain = [relation.part];
+    const seen = new Set(chain);
+    let current = refs[0]!;
+    for (let hop = 0; hop <= spec.parts.length; hop++) {
+      if (seen.has(current)) {
+        return `cycle: ${[...chain, current].join(" → ")}`;
+      }
+      chain.push(current);
+      seen.add(current);
+      const next = blockedOn.get(current);
+      if (!next || next.length === 0) {
+        const c = center.get(current);
+        const partial = c !== undefined && c.some((v) => v !== null);
+        return partial
+          ? `${chain.join(" → ")} — '${current}' is only partially placed`
+          : `${chain.join(" → ")} — '${current}' was never placed`;
+      }
+      current = next[0]!;
+    }
+    return `${chain.join(" → ")} — its reference is unplaced or the graph has a cycle`;
+  };
+
   for (const index of pending) {
     const relation = spec.relations[index]!;
     diagnostics.push({
       code: "SOLVE-UNRESOLVED",
-      message: `relation '${relation.type}' on '${"part" in relation ? relation.part : "?"}' never resolved — its reference is unplaced or the graph has a cycle`,
-      part: "part" in relation ? relation.part : undefined,
+      message: `relation '${relation.type}' on '${relation.part}' never resolved — ${explainBlocker(relation)}`,
+      part: relation.part,
     });
   }
 
@@ -404,17 +517,33 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
       shape: part.shape ?? "box",
       axis: part.axis ?? "z",
       flip: part.flip === true,
+      // Shape parameters ride through untouched, exactly like role/spin/bob:
+      // they say what fills the box, never where the box goes, so the
+      // placement fixpoint above neither reads nor needs them.
+      ...(part.tip !== undefined ? { tip: part.tip } : {}),
+      ...(part.thickness !== undefined ? { thickness: part.thickness } : {}),
       ...(part.file !== undefined ? { file: part.file } : {}),
       ...(part.script !== undefined ? { script: part.script } : {}),
       ...(part.material !== undefined ? { material: part.material } : {}),
       ...(part.spin !== undefined ? { spin: part.spin } : {}),
       ...(part.bob !== undefined ? { bob: part.bob } : {}),
+      // Both halves of a rotated box travel: `size` above is the world box
+      // every consumer means, `localSize` is the box the emitter builds the
+      // primitive at. Absent when nothing is rotated, so an unrotated scene
+      // solves to exactly the object it always did.
+      // `rotationOf`, not `part.rotate`: an `around { orient }` base is built
+      // turned to its start angle, and the box the solver reserved above was
+      // already measured with that rotation in it.
+      ...(rotationOf(part) !== undefined
+        ? { localSize: [...part.size] as Vec3, rotate: rotationOf(part)! }
+        : {}),
       ...(part.role !== undefined ? { role: part.role } : {}),
       ...(restsOn.has(part.id) ? { restsOn: restsOn.get(part.id)! } : {}),
     });
   }
 
   expandRepeats(solved, repeats, new Set(parts.keys()), diagnostics, snap);
+  expandArounds(solved, aroundPlans, new Set(parts.keys()), diagnostics, snap);
 
   // Scatter instances 2..N. The base already solved through the fixpoint;
   // clones inherit everything but centre and (jittered) size, and record
@@ -448,11 +577,20 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
         });
         return;
       }
+      // sizeJitter scales the WORLD box uniformly; the local box has to
+      // follow it by the same factor or the emitter would build every
+      // scattered rotated instance at the un-jittered size while the solver
+      // reserved the jittered one. Uniform scale commutes with rotation, so
+      // one ratio is the whole correction.
+      const scale = base.size[0] !== 0 ? placement.size[0]! / base.size[0]! : 1;
       solved.push({
         ...base,
         id,
         center: placement.center,
         size: placement.size,
+        ...(base.localSize
+          ? { localSize: base.localSize.map((v) => v * scale) as Vec3 }
+          : {}),
         from: plan.relation.part,
       });
     });
@@ -660,6 +798,10 @@ function expandRepeats(
           id,
           center,
           size: [...instance.size] as Vec3,
+          // Clones inherit the rotation: their world boxes are copies, so a
+          // repeat of a canted part is a row of identically canted parts.
+          // Copied, not aliased, for the same reason `size` is.
+          ...(instance.localSize ? { localSize: [...instance.localSize] as Vec3 } : {}),
           from: repeat.part,
         };
         solved.push(clone);
@@ -671,6 +813,151 @@ function expandRepeats(
 
 function faceAxis(face: Face): Axis {
   return face[0] as Axis;
+}
+
+/**
+ * The two axis indices spanning the plane perpendicular to a normal axis, in
+ * cyclic order — so the first carries the cosine and the second the sine, and
+ * a positive angle turns the same way (x toward y) on every axis.
+ *
+ * The cyclic order is the whole content of this function: pick the pair by
+ * "the two that aren't the normal" and z gives (x, y) while y gives (x, z),
+ * which is a mirrored circle — a ring that winds backwards on one axis and
+ * forwards on the others, with nothing to tell you.
+ */
+function planeAxes(normal: Axis): [number, number] {
+  const k = AXES.indexOf(normal);
+  return [(k + 1) % 3, (k + 2) % 3];
+}
+
+/** A point on the ring: the hub's centre, displaced in the circle's plane. */
+function ringPosition(hub: Vec3, u: number, v: number, radius: number, deg: number): Vec3 {
+  const theta = (deg * Math.PI) / 180;
+  const out = [...hub] as Vec3;
+  out[u] = hub[u]! + radius * Math.cos(theta);
+  out[v] = hub[v]! + radius * Math.sin(theta);
+  return out;
+}
+
+/**
+ * Expand `around` relations into the rest of their ring.
+ *
+ * The base part is already instance 0 — the fixpoint placed it at `startDeg`
+ * — so this mints instances 2..N at the remaining angles, and everything the
+ * language guarantees for `repeat` clones is guaranteed here by being the
+ * same code shape: ids number sequentially from the base, `from` records the
+ * authored part so provenance points at the line that exists, an id that
+ * collides with an authored part is refused, the part ceiling is enforced
+ * before anything is minted, and two clones landing on the same point (which
+ * a grid snap can cause on a small radius) is refused rather than shipped.
+ *
+ * Only the coordinates in the circle's PLANE come from the ring. The
+ * coordinate along the normal is copied from the base, which is what makes
+ * `sits_on floor` + `around hub` a ring standing on the floor: the base
+ * solved its own resting height through its own relations, and every clone
+ * inherits it exactly as a repeat clone inherits everything but its pitch.
+ */
+function expandArounds(
+  solved: SolvedPart[],
+  plans: Array<{ relation: Extract<Relation, { type: "around" }>; hub: Vec3 }>,
+  declaredIds: Set<string>,
+  diagnostics: SolveDiagnostic[],
+  /** Grid quantizer for solver-invented positions (identity off-grid). */
+  snap: (v: number) => number,
+): void {
+  const byId = new Map(solved.map((part) => [part.id, part]));
+
+  for (const { relation, hub } of plans) {
+    const base = byId.get(relation.part);
+    // The base never solved; its own SOLVE-UNRESOLVED already explains why.
+    if (!base) continue;
+    if (relation.count > MAX_REPEAT_COUNT) {
+      diagnostics.push({
+        code: "SOLVE-LIMIT",
+        message: `around on '${relation.part}' asks for ${relation.count} instances — the ceiling is ${MAX_REPEAT_COUNT}`,
+        part: relation.part,
+      });
+      continue;
+    }
+    const minted = relation.count - 1;
+    if (solved.length + minted > MAX_PARTS) {
+      diagnostics.push({
+        code: "SOLVE-LIMIT",
+        message: `around on '${relation.part}' would grow the scene to ${solved.length + minted} parts — the ceiling is ${MAX_PARTS}`,
+        part: relation.part,
+      });
+      continue;
+    }
+
+    const [u, v] = planeAxes(relation.axis ?? "z");
+    const start = relation.startDeg ?? 0;
+    const step = 360 / relation.count;
+    const local = base.localSize ?? base.size;
+    let counter = 1;
+
+    for (let index = 1; index < relation.count; index++) {
+      counter += 1;
+      const id = `${relation.part}_${counter}`;
+      if (declaredIds.has(id) || byId.has(id)) {
+        diagnostics.push({
+          code: "SOLVE-CONFLICT",
+          message: `around on '${relation.part}' would mint '${id}', which already exists — rename the authored part or the base`,
+          part: id,
+        });
+        continue;
+      }
+      const point = ringPosition(hub, u, v, relation.radius, start + index * step);
+      const center = [...base.center] as Vec3;
+      center[u] = snap(point[u]!);
+      center[v] = snap(point[v]!);
+      const coincident = solved.find(
+        (p) =>
+          (p.id === relation.part || p.from === relation.part) &&
+          Math.abs(p.center[0] - center[0]) < 1e-9 &&
+          Math.abs(p.center[1] - center[1]) < 1e-9 &&
+          Math.abs(p.center[2] - center[2]) < 1e-9,
+      );
+      if (coincident) {
+        diagnostics.push({
+          code: "SOLVE-CONFLICT",
+          message: `around on '${relation.part}' would place an instance exactly on '${coincident.id}' — the radius is too small for ${relation.count} distinct positions; widen the ring or lower the count`,
+          part: relation.part,
+        });
+        continue;
+      }
+      // Orientation is the ONE thing a ring clone does not simply inherit:
+      // its angle is its own. The world box follows the same predicate every
+      // rotated part uses, so a turned bar reserves the space it occupies.
+      const rotate =
+        relation.orient === true
+          ? (() => {
+              const deg = normalizeTurn((base.rotate?.deg ?? 0) + index * step);
+              return deg === 0
+                ? undefined
+                : { axis: relation.axis ?? "z", deg };
+            })()
+          : base.rotate;
+      const clone: SolvedPart = {
+        ...base,
+        id,
+        center,
+        size: rotate ? rotatedBoxSize(local, rotate) : ([...local] as Vec3),
+        from: relation.part,
+      };
+      // Both halves of the rotated box travel together or neither does — a
+      // clone that kept the base's localSize with no rotation would be built
+      // at the wrong box.
+      if (rotate) {
+        clone.localSize = [...local] as Vec3;
+        clone.rotate = rotate;
+      } else {
+        delete clone.localSize;
+        delete clone.rotate;
+      }
+      solved.push(clone);
+      byId.set(id, clone);
+    }
+  }
 }
 
 /**
@@ -714,7 +1001,21 @@ function sampleScatter(
   }
   const rng = new Rng(relation.seed ?? 0).at(`scatter/${relation.part}/${relation.on}`);
   const jitter = relation.sizeJitter ?? 0;
-  const minGap = Math.max(relation.minGap ?? MIN_CONTACT, MIN_CONTACT);
+  // Same floor and the same diagnostic channel as every other contact
+  // offset the solver owns (see `contact()` above): a requested minGap
+  // below the 1mm z-fight floor used to be raised silently, which meant
+  // `minGap: 0` looked honoured in the spec but was never the number
+  // that actually separated the instances.
+  const requestedMinGap = relation.minGap ?? MIN_CONTACT;
+  let minGap = requestedMinGap;
+  if (minGap < MIN_CONTACT) {
+    diagnostics.push({
+      code: "SOLVE-EPSILON-FLOOR",
+      message: `minGap ${requestedMinGap} on '${relation.part}' is below the ${MIN_CONTACT}m contact floor and was raised; coincident instances would z-fight`,
+      part: relation.part,
+    });
+    minGap = MIN_CONTACT;
+  }
   const ATTEMPTS = 200;
 
   const placed: Array<{ center: Vec3; size: Vec3 }> = [];

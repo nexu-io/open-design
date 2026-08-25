@@ -1,83 +1,68 @@
 import { describe, expect, it } from "vitest";
+import {
+  mulMat4,
+  perspectiveMatrix,
+  rotateVec3WithQuat,
+  type Mat4,
+  type Quat,
+  type Vec3,
+} from "../src/viewer/math/projection.js";
+import {
+  rotationMatrixFromQuat,
+  translationMatrix,
+} from "../src/viewer/math/group-transforms.js";
+
+/**
+ * Fixture-only helper: builds a unit quaternion for a rotation of `angle`
+ * radians about `axis`. This is test INPUT construction (mirroring how
+ * projection.test.ts hardcodes camera rotations as literal quaternions),
+ * not a re-implementation of anything under test — every assertion below
+ * runs the axis-angle result through the real exported functions
+ * (`rotateVec3WithQuat`, `rotationMatrixFromQuat`, `mulMat4`,
+ * `perspectiveMatrix`).
+ */
+function axisAngleQuatFixture(axis: Vec3, angle: number): Quat {
+  const len = Math.hypot(axis[0], axis[1], axis[2]) || 1;
+  const h = angle / 2;
+  const s = Math.sin(h) / len;
+  return [axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(h)];
+}
 
 describe("Canonical Mathematical Conventions & Fingerprints", () => {
-  it("verifies column-major matrix multiplication and layout", () => {
+  it("verifies column-major matrix layout via translationMatrix()", () => {
     // Column-major 4x4: basis vectors in cols 0, 1, 2, translation in col 3 (indices 12, 13, 14)
-    const T = new Float64Array([
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
-      10, 20, 30, 1
-    ]);
+    const T: Mat4 = translationMatrix([10, 20, 30]);
     expect(T[12]).toBe(10);
     expect(T[13]).toBe(20);
     expect(T[14]).toBe(30);
   });
 
-  it("verifies quaternion [x, y, z, w] multiplication and world left-composition", () => {
-    function qMul(a: number[], b: number[]): number[] {
-      return [
-        a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
-        a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
-        a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
-        a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
-      ];
-    }
-    function qNorm(q: number[]): number[] {
-      const n = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
-      return [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
-    }
-    function qAxisAngle(axis: number[], angle: number): number[] {
-      const len = Math.hypot(axis[0], axis[1], axis[2]) || 1;
-      const h = angle / 2;
-      const s = Math.sin(h) / len;
-      return [axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(h)];
-    }
-    function rotateVec3(q: number[], v: number[]): number[] {
-      const [x, y, z, w] = q;
-      const qv = [
-        w * v[0] + y * v[2] - z * v[1],
-        w * v[1] + z * v[0] - x * v[2],
-        w * v[2] + x * v[1] - y * v[0],
-        -x * v[0] - y * v[1] - z * v[2],
-      ];
-      return [
-        qv[0] * w - qv[3] * x - qv[1] * z + qv[2] * y,
-        qv[1] * w - qv[3] * y - qv[2] * x + qv[0] * z,
-        qv[2] * w - qv[3] * z - qv[0] * y + qv[1] * x,
-      ];
-    }
+  it("verifies quaternion world left-composition vs local right-composition via rotationMatrixFromQuat/mulMat4", () => {
+    const q0 = axisAngleQuatFixture([1, 0, 0], Math.PI / 4);
+    const uLocal: Vec3 = [0, 1, 0];
+    const uWorld = rotateVec3WithQuat(q0, uLocal);
 
-    const q0 = qAxisAngle([1, 0, 0], Math.PI / 4);
-    const uLocal = [0, 1, 0];
-    const uWorld = rotateVec3(q0, uLocal);
+    // World-space delta applied on the LEFT: R(qDeltaWorld) * R(q0)
+    const qDeltaWorld = axisAngleQuatFixture(uWorld, Math.PI / 2);
+    const rNextLeft = mulMat4(rotationMatrixFromQuat(qDeltaWorld), rotationMatrixFromQuat(q0));
 
-    const qDeltaWorld = qAxisAngle(uWorld, Math.PI / 2);
-    const qNextLeft = qNorm(qMul(qDeltaWorld, q0));
+    // Local-space delta applied on the RIGHT: R(q0) * R(qDeltaLocal)
+    const qDeltaLocal = axisAngleQuatFixture(uLocal, Math.PI / 2);
+    const rNextRight = mulMat4(rotationMatrixFromQuat(q0), rotationMatrixFromQuat(qDeltaLocal));
 
-    const qDeltaLocal = qAxisAngle(uLocal, Math.PI / 2);
-    const qNextRight = qNorm(qMul(q0, qDeltaLocal));
-
-    for (let i = 0; i < 4; i++) {
-      expect(qNextLeft[i]).toBeCloseTo(qNextRight[i], 6);
+    // Both compositions describe the same physical rotation (a world-axis
+    // delta and its equivalent local-axis delta produce the same matrix),
+    // which is the load-bearing convention the old local qMul reimplementation
+    // asserted — now checked against the matrices the real pipeline builds.
+    for (let i = 0; i < 16; i++) {
+      expect(rNextLeft[i]).toBeCloseTo(rNextRight[i], 6);
     }
   });
 
-  it("verifies perspective matrix NDC depth mapping z = -n -> -1 and z = -f -> +1", () => {
-    function perspective(fovy: number, aspect: number, near: number, far: number): Float64Array {
-      const f = 1 / Math.tan(fovy / 2);
-      const o = new Float64Array(16);
-      o[0] = f / aspect;
-      o[5] = f;
-      o[10] = (far + near) / (near - far);
-      o[11] = -1;
-      o[14] = (2 * far * near) / (near - far);
-      return o;
-    }
-
+  it("verifies perspectiveMatrix() NDC depth mapping z = -n -> -1 and z = -f -> +1", () => {
     const near = 0.1;
     const far = 100.0;
-    const P = perspective(Math.PI / 4, 1.5, near, far);
+    const P = perspectiveMatrix(Math.PI / 4, 1.5, near, far);
 
     // Point on near plane: (0, 0, -near)
     const pNear = [0, 0, -near, 1];

@@ -31,8 +31,10 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-E-205': 'Export failed',
   'S3D-W-205': 'Export format unavailable',
   'S3D-E-206': 'Proof render failed',
+  'S3D-E-207': 'Blender version unsupported',
   'S3D-W-207': 'Imported file degraded',
   'S3D-W-208': 'Viewer edits ignored',
+  'S3D-W-209': 'Deliverable write failed',
 
   /* lint: naming */
   'S3D-E-301': 'Default object name',
@@ -62,6 +64,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-335': 'Triangle budget approximated',
   'S3D-W-334': 'Wall too thin to print',
   'S3D-W-336': 'Contact scan skipped',
+  'S3D-W-337': 'Rested pair never touches',
 
   /* lint: world placement + budgets */
   'S3D-W-325': 'Part floats above support',

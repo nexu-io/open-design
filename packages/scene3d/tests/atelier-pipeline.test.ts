@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * The capstone: one scene exercising the whole system at once, on real
@@ -22,6 +23,7 @@ import { rmForSetup } from "./helpers/fs.js";
  * it under one light rig.
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 const MARBLE = `vec4 kernel(vec2 uv) {
   float warp = s3d_fbm(uv * 3.0);
@@ -137,7 +139,14 @@ describe.skipIf(!hasBlender)("material atelier (real assets, GPU shaders, animat
       "utf8",
     );
 
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // The proof assertion below needs a rendered frame to EXIST — one still
+    // carries that fact; the turntable adds nothing to it.
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(result.issues.filter((i) => i.severity === "error")).toEqual([]);
     expect(result.ok).toBe(true);
 
@@ -181,7 +190,7 @@ describe.skipIf(!hasBlender)("material atelier (real assets, GPU shaders, animat
     expect(census.animation.frameEnd).toBeGreaterThan(census.animation.frameStart);
     expect(result.manifest.assetKind).toBe("animation");
 
-    // Deliverables: turntable frames + a GLB carrying everything.
+    // Deliverables: a proof frame + a GLB carrying everything.
     expect(result.proofImages.length).toBeGreaterThan(0);
     expect(result.exportedAssets.some((a) => a.endsWith(".glb"))).toBe(true);
   }, 500_000);

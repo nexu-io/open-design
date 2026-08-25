@@ -27,8 +27,46 @@ export function lintWorld(
   contract: NormalizedContract,
   census: Census | undefined,
   issues: Issue[],
+  solved?: { parts: ReadonlyArray<{ id: string; restsOn?: string }> },
 ): void {
   if (!census) return;
+
+  /* ---- rested pairs must actually touch ----------------------------- */
+  // The solver floors every sits_on at exactly the contact offset, so a
+  // restsOn pair whose MEASURED boxes never come within tolerance is a
+  // certainty, not a heuristic: something between plan and build — a fitted
+  // import that does not fill its box, a script part, a viewer tweak, a
+  // curved rim — moved reality off the solve. A field build shipped cage
+  // bars standing beside the ring they were meant to carry, through a
+  // zero-error compile; the census had measured the missing contact and no
+  // rule read it. Gated on an UNSKIPPED contact scan: with the scan capped,
+  // an empty list means "not measured", never "nothing touches" (W-336
+  // already says so).
+  if (solved && (census.contactsSkipped ?? []).length === 0 && census.contacts) {
+    const meshNames = new Set(census.meshes.map((m) => m.object));
+    const pairKey = (a: string, b: string) => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
+    const separationOf = new Map(census.contacts.map((c) => [pairKey(c.a, c.b), c.separation]));
+    // Slack above the solver's own 1mm floor, governed by the same grounding
+    // tolerance the rest of the placement rules judge with.
+    const touch = 0.001 + contract.grounding.tolerance;
+    for (const part of solved.parts) {
+      if (!part.restsOn) continue;
+      if (!meshNames.has(part.id) || !meshNames.has(part.restsOn)) continue;
+      const separation = separationOf.get(pairKey(part.id, part.restsOn));
+      if (separation !== undefined && separation <= touch) continue;
+      issues.push({
+        code: ISSUE_CODES.REST_NOT_TOUCHING,
+        severity: "warning",
+        message:
+          separation === undefined
+            ? `the solver rested '${part.id}' on '${part.restsOn}', but the built geometry never comes near it — no contact was measured between them`
+            : `the solver rested '${part.id}' on '${part.restsOn}', but the built geometry sits ${fmt(separation)}m apart`,
+        hint: "the plan and the build disagree — check a viewer tweak that moved one of them, a file/script part that does not fill its declared box, or a support whose curved surface falls short of its box",
+        target: `${part.id} <-> ${part.restsOn}`,
+        detail: { restsOn: part.restsOn, ...(separation !== undefined ? { separation } : {}) },
+      });
+    }
+  }
 
   /* ---- grounding --------------------------------------------------- */
 

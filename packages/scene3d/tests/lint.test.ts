@@ -110,6 +110,37 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(codes.has(ISSUE_CODES.NAN_TRANSFORM)).toBe(true);
   });
 
+  it("gates NGONS on conventions.geometry.allowNgons, defaulting to warn", () => {
+    // Hard-surface assets legitimately ship n-gons (a flat cap face, a
+    // boolean result); the default keeps the current strict behavior, and
+    // an author who declares allowNgons opts a specific project out.
+    const withNgons = census({
+      meshes: [
+        {
+          object: "prp_cube",
+          verts: 8,
+          faces: 6,
+          ngons: 2,
+          nonManifoldEdges: 0,
+          zeroAreaFaces: 0,
+          nan: false,
+          uvLayers: ["UVMap"],
+        },
+      ],
+    });
+    const strict = runLint({ contract: contract(), census: withNgons });
+    expect(strict.some((i) => i.code === ISSUE_CODES.NGONS)).toBe(true);
+
+    const gated = runLint({
+      contract: normalizeContract({
+        schemaVersion: 1,
+        conventions: { geometry: { allowNgons: true } },
+      }),
+      census: withNgons,
+    });
+    expect(gated.some((i) => i.code === ISSUE_CODES.NGONS)).toBe(false);
+  });
+
   it("relaxes the inspection-posture gates for a file:-imported mesh, not the real defects", () => {
     // The SAME open/doubled/wound mesh — but marked as a `file:` import via the
     // solved scene — is no longer BLOCKING on non-manifold/doubles/winding
@@ -267,12 +298,13 @@ describe("lint: pbr/topology/integrity over census", () => {
       expect(issue.detail?.provenance).toBe("imported");
     }
 
-    // ...unless the project stated an opinion about hierarchy.
-    const strict = runLint({ ...args, sourceKind: "mesh", authoredBlocks: new Set(["hierarchy"]) });
+    // ...unless the project stated an opinion about hierarchy — the specific
+    // leaf DEPTH_LIMIT reads, `hierarchy.maxDepth`.
+    const strict = runLint({ ...args, sourceKind: "mesh", authoredKeys: new Set(["hierarchy.maxDepth"]) });
     expect(strict.filter((i) => i.code === ISSUE_CODES.DEPTH_LIMIT).every((i) => i.severity === "error")).toBe(true);
   });
 
-  it("lets an explicit convention block cancel the relaxation it governs", () => {
+  it("lets an explicit KEY cancel the relaxation it governs, and only that rule", () => {
     const meshRow = {
       object: "prp_helm",
       verts: 200,
@@ -288,12 +320,160 @@ describe("lint: pbr/topology/integrity over census", () => {
       census: census({ meshes: [meshRow] }),
       solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
     };
-    // Writing in `geometry` says you meant its rules — for this asset too.
-    const strict = runLint({ ...args, authoredBlocks: new Set(["geometry"]) });
+    // Writing the SPECIFIC leaf NON_MANIFOLD reads says you meant that rule —
+    // for this asset too.
+    const strict = runLint({ ...args, authoredKeys: new Set(["geometry.allowOpenMeshes"]) });
     expect(strict.find((i) => i.code === ISSUE_CODES.NON_MANIFOLD)!.severity).toBe("error");
-    // ...and ONLY its rules: an unrelated block leaves geometry relaxed.
-    const unrelated = runLint({ ...args, authoredBlocks: new Set(["print"]) });
+    // ...and ONLY that rule: an unrelated leaf (even in the SAME block) leaves
+    // NON_MANIFOLD relaxed.
+    const unrelated = runLint({ ...args, authoredKeys: new Set(["geometry.allowNgons"]) });
     expect(unrelated.find((i) => i.code === ISSUE_CODES.NON_MANIFOLD)!.severity).toBe("info");
+  });
+
+  it("REGRESSION: a permissive geometry key must not re-strictify sibling geometry rules on imported geometry", () => {
+    // The exact bug this key-granular posture replaces: `geometry.allowOpenMeshes:
+    // true` is a RELAXING statement ("open meshes are fine"), but under the old
+    // block-granular cancellation it cancelled the relaxation for every OTHER
+    // geometry rule too — Z_FIGHTING, both scale rules, winding, double-verts,
+    // zero-area — none of which the author said anything about. A relaxing edit
+    // must never make the report louder.
+    const meshRow = {
+      object: "prp_helm",
+      verts: 200,
+      faces: 300,
+      ngons: 0,
+      nonManifoldEdges: 0,
+      zeroAreaFaces: 1,
+      doubleVertices: 3,
+      inconsistentWindingEdges: 2,
+      nan: false,
+      uvLayers: [],
+    };
+    const objects = [
+      { name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, -1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      { name: "prp_helm2", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+    ];
+    const args = {
+      contract: contract(),
+      census: census({
+        objects: objects as never,
+        meshes: [meshRow, { ...meshRow, object: "prp_helm2", doubleVertices: 0, inconsistentWindingEdges: 0 }],
+        zFightingPairs: [{ a: "prp_helm", b: "prp_helm2", faceCount: 2, area: 0.01 }],
+      }),
+      solved: {
+        parts: [
+          { id: "prp_helm", file: "helm.glb" },
+          { id: "prp_helm2", file: "helm2.glb" },
+        ],
+      } as never,
+      // Author wrote ONLY the permissive `allowOpenMeshes` key.
+      authoredKeys: new Set(["geometry.allowOpenMeshes"]),
+    };
+    const issues = runLint(args);
+    for (const code of [
+      ISSUE_CODES.Z_FIGHTING,
+      ISSUE_CODES.NEGATIVE_SCALE,
+      ISSUE_CODES.INCONSISTENT_WINDING,
+      ISSUE_CODES.DOUBLE_VERTICES,
+      ISSUE_CODES.ZERO_AREA_FACES,
+    ]) {
+      const issue = issues.find((i) => i.code === code);
+      expect(issue, `${code} must still be reported`).toBeDefined();
+      expect(issue!.severity, `${code} must stay relaxed — the author only wrote allowOpenMeshes`).toBe("info");
+    }
+  });
+
+  it("cancels exactly the UV rule whose specific key was authored, leaving sibling UV relaxations intact", () => {
+    const meshRow = {
+      object: "prp_helm",
+      verts: 200,
+      faces: 300,
+      ngons: 0,
+      nonManifoldEdges: 0,
+      zeroAreaFaces: 0,
+      nan: false,
+      uvLayers: ["UVMap"],
+      materials: ["mtl_helm"] as string[],
+      uv: {
+        sampled: true,
+        overlapFraction: 0.9, // way over the default 0.05 -> UV_OVERLAP
+        flippedFaces: 5, // -> UV_FLIPPED
+        outOfBoundsFraction: 0,
+      },
+    };
+    const args = {
+      contract: contract(),
+      census: census({
+        meshes: [meshRow as never],
+        // A bound, textured material is what makes `needsUv` true (uv.ts
+        // `textured.has(mesh.object)`) so the quality verdicts (overlap,
+        // flipped) actually evaluate instead of being skipped under `require`.
+        materials: [
+          {
+            name: "mtl_helm",
+            usedByObjectCount: 1,
+            textureNames: ["helm_diffuse.png"],
+            principled: {
+              present: true,
+              metallic: 0,
+              roughness: 0.5,
+              ior: 1.45,
+              baseColor: [0.8, 0.8, 0.8],
+              hasTexture: true,
+              untouchedDefault: false,
+            },
+          },
+        ] as never,
+      }),
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
+    };
+    // Author wrote ONLY uv.maxOverlapFraction.
+    const issues = runLint({ ...args, authoredKeys: new Set(["uv.maxOverlapFraction"]) });
+    expect(issues.find((i) => i.code === ISSUE_CODES.UV_OVERLAP)!.severity).toBe("warning");
+    // UV_FLIPPED is governed by a DIFFERENT key (uv.allowFlipped) and stays relaxed.
+    const flipped = issues.find((i) => i.code === ISSUE_CODES.UV_FLIPPED)!;
+    expect(flipped.severity).toBe("info");
+    expect(flipped.detail?.provenance).toBe("imported");
+  });
+
+  it("relaxes keyless rows (no governing contract field) regardless of ANY authored sibling", () => {
+    // Z_FIGHTING and ZERO_AREA_FACES read no contract field at all
+    // (lint/topology.ts fires them unconditionally), so they carry no `key`
+    // in IMPORTED_RELAXATIONS and must relax no matter what else the author
+    // wrote — even a sweeping authoredKeys set naming every other geometry
+    // and uv leaf.
+    const objects = [
+      { name: "prp_a", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      { name: "prp_b", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+    ];
+    const meshRow = { object: "prp_a", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 2, nan: false, uvLayers: [] };
+    const issues = runLint({
+      contract: contract(),
+      census: census({
+        objects: objects as never,
+        meshes: [meshRow, { ...meshRow, object: "prp_b", zeroAreaFaces: 0 }],
+        zFightingPairs: [{ a: "prp_a", b: "prp_b", faceCount: 2, area: 0.01 }],
+      }),
+      solved: {
+        parts: [
+          { id: "prp_a", file: "a.glb" },
+          { id: "prp_b", file: "b.glb" },
+        ],
+      } as never,
+      authoredKeys: new Set([
+        "geometry.allowOpenMeshes",
+        "geometry.allowNgons",
+        "geometry.allowLooseGeometry",
+        "geometry.allowDoubleVertices",
+        "geometry.allowInconsistentWinding",
+        "geometry.allowNegativeScale",
+        "geometry.requireAppliedScale",
+        "uv.require",
+        "uv.maxOverlapFraction",
+      ]),
+    });
+    expect(issues.find((i) => i.code === ISSUE_CODES.Z_FIGHTING)!.severity).toBe("info");
+    expect(issues.find((i) => i.code === ISSUE_CODES.ZERO_AREA_FACES)!.severity).toBe("info");
   });
 
   it("reports z-fighting pairs and empty meshes", () => {
@@ -823,5 +1003,44 @@ describe("lint: pbr/topology/integrity over census", () => {
       }),
     });
     expect(mirrored.some((i) => i.code === ISSUE_CODES.NEGATIVE_SCALE)).toBe(true);
+  });
+
+  it("relaxes negative scale on imported geometry, not on authored geometry", () => {
+    // Mirrored limbs via negative scale are commonplace in real FBX/GLB
+    // exports (a rigger mirrors an arm by flipping its transform), so the
+    // inspection posture should note it, not hard-fail the compile.
+    const mirroredCensus = census({
+      objects: [
+        {
+          name: "prp_arm_l",
+          type: "MESH",
+          parent: null,
+          location: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [1, 1, -1],
+          dimensions: [1, 1, 1],
+          visible: true,
+          hasMeshData: true,
+        },
+      ],
+    });
+
+    // Authored: still a hard error, unchanged.
+    const authored = runLint({ contract: contract(), census: mirroredCensus });
+    const authoredIssue = authored.find((i) => i.code === ISSUE_CODES.NEGATIVE_SCALE);
+    expect(authoredIssue?.severity).toBe("error");
+    expect(authoredIssue?.detail?.provenance).toBeUndefined();
+
+    // The same object, marked as a `file:`-imported part.
+    const imported = runLint({
+      contract: contract(),
+      census: mirroredCensus,
+      solved: { parts: [{ id: "prp_arm_l", file: "arm.fbx" }] } as never,
+    });
+    const importedIssue = imported.find((i) => i.code === ISSUE_CODES.NEGATIVE_SCALE);
+    expect(importedIssue, "NEGATIVE_SCALE must still be reported").toBeDefined();
+    expect(importedIssue!.severity).toBe("info");
+    expect(importedIssue!.detail?.provenance).toBe("imported");
+    expect(imported.some((i) => i.severity === "error" && i.code === ISSUE_CODES.NEGATIVE_SCALE)).toBe(false);
   });
 });

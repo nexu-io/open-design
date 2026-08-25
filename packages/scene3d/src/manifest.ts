@@ -53,6 +53,10 @@ export function buildManifest(input: {
   projectDir?: string;
   /** Per-frame proof measurements, for readers who cannot open a PNG. */
   proofFrames?: Scene3dManifest["proofFrames"];
+  /** Per-frame per-part projected screen rects (see Scene3dManifest.proofRects). */
+  proofRects?: Scene3dManifest["proofRects"];
+  /** Part names in id-map code order (see Scene3dManifest.proofIdParts). */
+  proofIdParts?: Scene3dManifest["proofIdParts"];
   /** What the lowering had to restore because the master could not hold it. */
   carried?: Scene3dManifest["carried"];
   census?: Census;
@@ -238,6 +242,12 @@ export function buildManifest(input: {
     ...(input.proofFrames && input.proofFrames.length > 0
       ? { proofFrames: input.proofFrames }
       : {}),
+    ...(input.proofRects && input.proofRects.length > 0
+      ? { proofRects: input.proofRects }
+      : {}),
+    ...(input.proofIdParts && input.proofIdParts.length > 0
+      ? { proofIdParts: input.proofIdParts }
+      : {}),
     exportedAssets: input.exportedAssets,
     // Present whenever the lowering RECORDED one, empty lists included. An
     // all-empty carry says "the master held everything"; an absent field says
@@ -339,13 +349,18 @@ function objectDepth(byName: Map<string, CensusObject>, name: string): number {
   return depth;
 }
 
-/** Persist the manifest; returns the project-relative path. */
-export function writeManifest(projectDir: string, manifest: Scene3dManifest): string {
+/** Persist the manifest; returns the manifest AS PERSISTED — generatedAt
+ *  stabilised — so a caller can hand out the same object the disk holds.
+ *  Returning the pre-stabilised input made the compile response and
+ *  `out/manifest.json` disagree about `generatedAt` on an unchanged
+ *  recompile, and the two surfaces hydrate from different sides. */
+export function writeManifest(projectDir: string, manifest: Scene3dManifest): Scene3dManifest {
   const dir = path.join(projectDir, "out");
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "manifest.json");
-  fs.writeFileSync(file, JSON.stringify(stableGeneratedAt(file, manifest), null, 2));
-  return "out/manifest.json";
+  const persisted = stableGeneratedAt(file, manifest);
+  fs.writeFileSync(file, JSON.stringify(persisted, null, 2));
+  return persisted;
 }
 
 /**
@@ -408,6 +423,9 @@ export function writeViewer(
     issueCodes: manifest.issueCodes,
     exportedAssets: manifest.exportedAssets.map((a) => a.replace(/^out\//, "")),
     camera: manifest.camera,
+    // The player autoplays an `animation` (its frames sample the clip);
+    // every other kind waits to be scrubbed.
+    assetKind: manifest.assetKind ?? "scene",
   })
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e");
@@ -461,6 +479,7 @@ export function writeViewer(
             ...(manifest.claims ? { claims: manifest.claims } : {}),
             ok: manifest.issues.errors === 0,
             issueCodes: manifest.issueCodes,
+            kind: assetKind,
           },
         ],
       }),
@@ -792,6 +811,7 @@ export function writeProjectKit(
       scenePath,
       ok: manifest.issues.errors === 0,
       issueCodes: manifest.issueCodes,
+      kind: manifest.assetKind ?? "scene",
     });
   }
   if (entries.length === 0) return null;
@@ -1047,26 +1067,54 @@ function findCompiledScenes(projectRoot: string, depth = 4): string[] {
 }
 
 function renderViewerHtml(payload: string): string {
+  // Kept in step with the host's native frame player (Scene3dPanel): same
+  // hairline scrubber with a played-portion fill, same ghost play control,
+  // same corner orbit glyph instead of a text hint, same drag-to-rotate
+  // gesture over the picture. This page is the standalone fallback for the
+  // same frames, and two visual dialects for one artifact read as neglect.
   return `<!doctype html>
 <meta charset="utf-8" />
 <title>Scene 3D — turntable</title>
 <style>
-  :root { color-scheme: light dark; --ink: #14181d; --muted: #667081; --line: #e3e6ea; --panel: #f6f7f9; }
+  :root { color-scheme: light dark; --ink: #14181d; --muted: #667081; --line: #e3e6ea; --panel: #f6f7f9; --raised: #fff; --accent: #353535; }
   @media (prefers-color-scheme: dark) {
-    :root { --ink: #e6edf3; --muted: #8b949e; --line: #262d36; --panel: #161b22; }
+    :root { --ink: #e6edf3; --muted: #8b949e; --line: #262d36; --panel: #161b22; --raised: #0d1117; --accent: #adbac7; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; color: var(--ink); font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; }
   .wrap { display: grid; grid-template-columns: minmax(0,1fr) 260px; gap: 16px; padding: 16px; }
   @media (max-width: 780px) { .wrap { grid-template-columns: minmax(0,1fr); } }
+  /* The stage is square (the frames are), but the VIEWPORT is not: capped
+     to the window height so the scrubber never falls below the fold — a
+     player whose controls need a scroll to reach reads as a broken page. */
+  .stage, .bar { width: min(100%, calc(100vh - 90px)); margin-inline: auto; }
   .stage { position: relative; aspect-ratio: 1/1; border: 1px solid var(--line); border-radius: 10px;
-           background: var(--panel); display: grid; place-items: center; overflow: hidden; }
-  .stage img { width: 100%; height: 100%; object-fit: contain; }
+           background: radial-gradient(120% 90% at 50% 0%,
+             color-mix(in srgb, var(--raised) 55%, var(--panel)), var(--panel) 78%);
+           display: grid; place-items: center; overflow: hidden;
+           user-select: none; touch-action: pan-y; cursor: grab; }
+  .stage.drag { cursor: grabbing; }
+  .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+  .hint { position: absolute; right: 10px; bottom: 8px; color: var(--muted); opacity: .55;
+          pointer-events: none; transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+  .hint.off { opacity: 0; }
   .bar { display: flex; align-items: center; gap: 10px; padding-top: 10px; }
-  .bar input { flex: 1; }
-  button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line);
-           border-radius: 8px; padding: 5px 12px; cursor: pointer; }
-  output { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 5ch; text-align: right; }
+  .play { display: inline-grid; place-items: center; width: 26px; height: 26px; flex: none; padding: 0;
+          border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer;
+          transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1), color 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+  .play:hover { background: var(--panel); color: inherit; }
+  input[type=range] { flex: 1; min-width: 0; margin: 0; height: 16px; appearance: none;
+    -webkit-appearance: none; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 999px;
+    background: linear-gradient(to right, var(--accent) var(--p, 0%), var(--line) var(--p, 0%)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+    width: 11px; height: 11px; margin-top: -4px; border-radius: 999px; background: var(--raised);
+    border: 1.5px solid var(--accent); box-shadow: 0 1px 3px rgb(0 0 0 / 18%); }
+  input[type=range]::-moz-range-track { height: 3px; border-radius: 999px; background: var(--line); }
+  input[type=range]::-moz-range-progress { height: 3px; border-radius: 999px; background: var(--accent); }
+  input[type=range]::-moz-range-thumb { width: 11px; height: 11px; border-radius: 999px;
+    background: var(--raised); border: 1.5px solid var(--accent); }
+  output { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 5ch; text-align: right; font-size: 11.5px; }
   h2 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
   ul { list-style: none; margin: 0 0 14px; padding: 0; max-height: 190px; overflow: auto; }
   li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
@@ -1075,9 +1123,12 @@ function renderViewerHtml(payload: string): string {
 </style>
 <div class="wrap">
   <main>
-    <div class="stage"><img id="f" alt="Turntable frame" /></div>
+    <div class="stage" id="stage">
+      <img id="f" alt="Turntable frame" draggable="false" />
+      <span class="hint" id="hint" title="Drag to rotate" aria-hidden="true"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.1"/><path d="M14.6 8a6.6 6.6 0 1 1-2.1-4.85"/><path d="M12.1 1.4l.4 1.75 1.75-.4"/></svg></span>
+    </div>
     <div class="bar">
-      <button id="play" type="button">Replay</button>
+      <button id="play" class="play" type="button" aria-label="Play"></button>
       <input id="s" type="range" min="0" value="0" aria-label="Turntable frame" />
       <output id="c"></output>
     </div>
@@ -1090,7 +1141,10 @@ function renderViewerHtml(payload: string): string {
 <script>
 const D = ${payload};
 const img = document.getElementById('f'), s = document.getElementById('s'),
-      c = document.getElementById('c'), play = document.getElementById('play');
+      c = document.getElementById('c'), play = document.getElementById('play'),
+      stage = document.getElementById('stage'), hint = document.getElementById('hint');
+const PLAY_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M4.6 2.9l8.2 5.1-8.2 5.1z"/></svg>';
+const STOP_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><rect x="3.6" y="2.8" width="3.1" height="10.4" rx="1.1"/><rect x="9.3" y="2.8" width="3.1" height="10.4" rx="1.1"/></svg>';
 s.max = String(Math.max(0, D.frames.length - 1));
 for (const src of D.frames) new Image().src = src;
 let timer = null;
@@ -1098,15 +1152,52 @@ function show(i) {
   if (!D.frames.length) return;
   const n = ((i % D.frames.length) + D.frames.length) % D.frames.length;
   s.value = String(n); img.src = D.frames[n]; c.textContent = (n + 1) + '/' + D.frames.length;
+  const pct = D.frames.length > 1 ? (n / (D.frames.length - 1)) * 100 : 0;
+  s.style.setProperty('--p', pct + '%');
 }
-function stop() { if (timer !== null) { clearInterval(timer); timer = null; play.textContent = 'Replay'; } }
-play.addEventListener('click', () => {
-  if (timer !== null) return stop();
-  play.textContent = 'Stop';
+function setPlayIcon() {
+  play.innerHTML = timer !== null ? STOP_ICON : PLAY_ICON;
+  play.setAttribute('aria-label', timer !== null ? 'Stop' : 'Play');
+}
+function stop() { if (timer !== null) { clearInterval(timer); timer = null; setPlayIcon(); } }
+function start() {
+  if (timer !== null || D.frames.length < 2) return;
   timer = setInterval(() => show(Number(s.value) + 1), 110);
-});
+  setPlayIcon();
+  hint.classList.add('off');
+}
+play.addEventListener('click', () => { if (timer !== null) stop(); else start(); });
 s.addEventListener('input', () => { stop(); show(Number(s.value)); });
+/* Drag over the picture scrubs the orbit — the same gesture the host's
+   native player answers with. The slider stays as the precise control. */
+let drag = null;
+stage.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || D.frames.length < 2) return;
+  const per = Math.max(10, (stage.clientWidth * 0.65) / D.frames.length);
+  drag = { id: e.pointerId, x: e.clientX, at: Number(s.value), per: per };
+  stage.setPointerCapture(e.pointerId);
+  stage.classList.add('drag');
+  stop();
+});
+stage.addEventListener('pointermove', (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const steps = Math.round((e.clientX - drag.x) / drag.per);
+  if (steps !== 0) hint.classList.add('off');
+  show(drag.at + steps);
+});
+const endDrag = (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  drag = null;
+  stage.classList.remove('drag');
+};
+stage.addEventListener('pointerup', endDrag);
+stage.addEventListener('pointercancel', endDrag);
 show(0);
+setPlayIcon();
+/* A single still cannot rotate: no grab affordance, no orbit hint. */
+if (D.frames.length < 2) { hint.classList.add('off'); stage.style.cursor = 'default'; }
+/* An animation's frames sample the clip, so the honest default is motion. */
+if (D.assetKind === 'animation') start();
 const parts = document.getElementById('parts');
 for (const p of D.partTree) {
   const li = document.createElement('li');

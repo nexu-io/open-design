@@ -214,6 +214,82 @@ describe("solveScene", () => {
     expect(solved.diagnostics[0]!.code).toBe("SOLVE-UNRESOLVED");
   });
 
+  it("names the reference a pending relation is blocked on", () => {
+    // prp_box has no placement relation at all, so prp_lid's sits_on can
+    // never resolve — the diagnostic should name prp_box specifically,
+    // not just say "unplaced or a cycle" and leave the author guessing
+    // which of the two it is.
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_box", size: [1, 1, 1] },
+        { id: "prp_lid", size: [1, 1, 0.1] },
+      ],
+      relations: [{ type: "sits_on", part: "prp_lid", on: "prp_box" }],
+    });
+    const diag = solved.diagnostics.find(
+      (d) => d.code === "SOLVE-UNRESOLVED" && d.part === "prp_lid",
+    );
+    expect(diag).toBeDefined();
+    expect(diag!.message).toContain("prp_box");
+    expect(diag!.message).toContain("was never placed");
+  });
+
+  it("detects and names a two-part cycle in the reference graph", () => {
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_a", size: [1, 1, 1] },
+        { id: "prp_b", size: [1, 1, 1] },
+      ],
+      relations: [
+        { type: "sits_on", part: "prp_a", on: "prp_b" },
+        { type: "sits_on", part: "prp_b", on: "prp_a" },
+      ],
+    });
+    const diag = solved.diagnostics.find((d) => d.code === "SOLVE-UNRESOLVED");
+    expect(diag).toBeDefined();
+    expect(diag!.message).toContain("cycle:");
+    expect(diag!.message).toContain("prp_a");
+    expect(diag!.message).toContain("prp_b");
+  });
+
+  it("floors a scatter minGap below the contact minimum, reporting it (not silently)", () => {
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_slab", size: [2, 2, 0.1] },
+        { id: "prp_rock", size: [0.1, 0.1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_slab", center: [0, 0, 0.05] },
+        { type: "scatter", part: "prp_rock", on: "prp_slab", count: 3, seed: 1, minGap: 0 },
+      ],
+    });
+    const floor = solved.diagnostics.find(
+      (d) => d.code === "SOLVE-EPSILON-FLOOR" && d.message.includes("minGap"),
+    );
+    expect(floor).toBeDefined();
+    expect(floor!.part).toBe("prp_rock");
+  });
+
+  it("does not report a minGap floor when the request already clears the contact minimum", () => {
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_slab", size: [2, 2, 0.1] },
+        { id: "prp_rock", size: [0.1, 0.1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_slab", center: [0, 0, 0.05] },
+        { type: "scatter", part: "prp_rock", on: "prp_slab", count: 3, seed: 1, minGap: 0.05 },
+      ],
+    });
+    expect(
+      solved.diagnostics.some((d) => d.code === "SOLVE-EPSILON-FLOOR" && d.message.includes("minGap")),
+    ).toBe(false);
+  });
+
   it("reports a reference to a part that does not exist", () => {
     const solved = solveScene({
       schemaVersion: 1,
@@ -294,6 +370,48 @@ describe("the solver's own output is checked, not assumed", () => {
     // Still buildable — this is a warning about geometry, not an unsolvable
     // graph, and the author may be told rather than blocked.
     expect(solved.parts).toHaveLength(3);
+  });
+
+  it("judges a rotated part's repeat against the WORLD extent, both ways", () => {
+    // The whole point of solving in the rotated bound: a 1m bar turned a
+    // quarter about z is 0.2m wide on x, so a 0.5 pitch clears it — and a
+    // 0.5 pitch on the SAME bar unrotated does not. One number, two
+    // verdicts, decided by the box the part actually occupies.
+    const bar = (rotate: unknown): SceneSpec =>
+      ({
+        schemaVersion: 1,
+        parts: [{ id: "prp_bar", size: [1, 0.2, 0.2], ...(rotate ? { rotate } : {}) }],
+        relations: [
+          { type: "at", part: "prp_bar", center: [0, 0, 0.1] },
+          { type: "repeat", part: "prp_bar", count: 3, along: "x", every: 0.5 },
+        ],
+      }) as SceneSpec;
+    expect(solveScene(bar({ axis: "z", deg: 90 })).diagnostics).toEqual([]);
+    expect(
+      solveScene(bar(undefined)).diagnostics.filter((d) => d.code === "SOLVE-INTERSECTION"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps the no-coplanar-faces guarantee over rotated boxes", () => {
+    // The solver's promise is a property of the boxes it places, and a
+    // rotated part hands it a DIFFERENT box. The floors still own every
+    // contact, so the property has to survive unchanged.
+    const solved = solveScene({
+      schemaVersion: 1,
+      parts: [
+        { id: "prp_slab", size: [2, 2, 0.1] },
+        { id: "prp_sign", size: [1, 0.2, 0.4], rotate: { axis: "z", deg: 30 } },
+        { id: "prp_cap", size: [0.1, 0.1, 0.1] },
+      ],
+      relations: [
+        { type: "at", part: "prp_slab", center: [0, 0, 0.05] },
+        { type: "sits_on", part: "prp_sign", on: "prp_slab" },
+        { type: "align", part: "prp_sign", to: "prp_slab", axes: ["x", "y"] },
+        { type: "sits_on", part: "prp_cap", on: "prp_sign" },
+      ],
+    } as SceneSpec);
+    expect(solved.diagnostics).toEqual([]);
+    expect(findCoplanarFaces(solved)).toEqual([]);
   });
 
   it("stays silent when the pitch clears the part", () => {

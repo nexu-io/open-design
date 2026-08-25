@@ -158,8 +158,8 @@ arithmetic.
 Ids follow `[A-Za-z][A-Za-z0-9_]{2,63}` (`prp_`, `mtl_`, `shd_`). Shapes:
 `box` (default), `cylinder`, `sphere`, `cone`, `torus`, or fill the box
 with `"file": "assets/helmet.glb"` / `"script": "hull.py"`. A script
-defines `def build(ctx)` (`ctx["size"]`, `ctx["material"](name)`),
-creates exactly one mesh, and does not place itself.
+defines `def build(ctx)` (`ctx.size`, `ctx.material(name)`; item access
+also works), creates exactly one mesh, and does not place itself.
 
 Relations (any order; need one `at`): `sits_on`, `above`, `align`,
 `inset_from`, `span`, `repeat`, `scatter`. `scatter` owns placement;

@@ -166,3 +166,90 @@ describe("contract schema", () => {
     });
   });
 });
+
+/**
+ * Unknown keys are refused with a suggestion, never silently ignored. The
+ * failure this pins: `conventions.uv.texelDensityMaxRatio` (the wrong
+ * nesting) used to validate clean while the default silently won.
+ */
+describe("unknown contract keys", () => {
+  it("catches a wrong-nesting spelling with an exact rewrap suggestion", () => {
+    const problems = validateFields({
+      schemaVersion: 1,
+      conventions: { uv: { texelDensityMaxRatio: 4 } },
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("conventions.uv.texelDensityMaxRatio is not a contract field");
+    expect(problems[0]).toContain("did you mean conventions.uv.texelDensity.maxRatio?");
+  });
+
+  it("catches a plain typo with a nearest-sibling suggestion", () => {
+    const problems = validateFields({
+      schemaVersion: 1,
+      conventions: { geometry: { allowOpenMeshs: true } },
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('did you mean "allowOpenMeshes"?');
+  });
+
+  it("says nothing helpful is near when nothing is", () => {
+    const problems = validateFields({
+      schemaVersion: 1,
+      conventions: { geometry: { frobnicate: true } },
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("conventions.geometry.frobnicate is not a contract field");
+    expect(problems[0]).not.toContain("did you mean");
+  });
+
+  it("leaves author-vocabulary subtrees alone (role and part budget maps)", () => {
+    const problems = validateFields({
+      schemaVersion: 1,
+      conventions: {
+        budgets: {
+          roles: { hero: { maxTriangles: 5000 } },
+          parts: { prp_anything_at_all: { maxTriangles: 100 } },
+        },
+      },
+    });
+    expect(problems).toEqual([]);
+  });
+
+  it("accepts every legal spelling untouched", () => {
+    expect(
+      validateFields({
+        schemaVersion: 1,
+        target: "web",
+        conventions: { uv: { texelDensity: { maxRatio: 4 } } },
+        proof: { turntable: false },
+        export: { formats: ["glb"] },
+      }),
+    ).toEqual([]);
+  });
+});
+
+  it("keeps deprecated-but-declared spellings legal (legacy contracts still compile)", () => {
+    // The unknown-key gate is a behavior change: keys that were silently
+    // ignored now reject. Every LEGACY spelling the normalizer still reads
+    // must therefore stay declared, or an old project breaks on upgrade.
+    // The minecraft pxPerBlock/grid shorthand is the documented case.
+    expect(
+      validateFields({
+        schemaVersion: 1,
+        conventions: { minecraft: { pxPerBlock: 16, grid: { size: 0.0625 } } },
+      }),
+    ).toEqual([]);
+  });
+
+  it("catches a typo of the budget-map container names themselves", () => {
+    // The maps' CHILDREN are author vocabulary (role/part names) and are
+    // rightly opaque — but the container names are schema vocabulary, and a
+    // misspelling of one silently dropped the whole budget block.
+    const problems = validateFields({
+      schemaVersion: 1,
+      conventions: { budgets: { rolse: { hero: { maxTriangles: 5000 } } } },
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("conventions.budgets.rolse is not a contract field");
+    expect(problems[0]).toContain('did you mean "roles"?');
+  });

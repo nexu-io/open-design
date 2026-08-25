@@ -21,14 +21,14 @@ Companion documents in this package:
 | `README.md` (this file) | Maintainer architecture, host seam, how to change the system |
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Compiler internals: language fidelity, USD master, shaders, voxel, materials, verdict totality |
 | [`KILN.md`](./KILN.md) | Design lineage: what was adopted from Kiln, what remains worth taking |
-| [`RESEARCH.md`](./RESEARCH.md) | Market thesis: why this is a compiler, not a generator |
+| [`RESEARCH.md`](./RESEARCH.md) | Historical strategy note: why this is a compiler, not a reconstruction generator |
 
 ## Contents
 
 1. [What it is](#what-it-is)
 2. [The host seam](#the-host-seam)
 3. [Ownership](#ownership)
-4. [Settled architecture](#settled-architecture)
+4. [Current architectural baseline](#current-architectural-baseline)
 5. [Pipeline](#pipeline)
 6. [Sources](#sources)
 7. [The language](#the-language)
@@ -42,7 +42,7 @@ Companion documents in this package:
 15. [Testing](#testing)
 16. [How to change the system](#how-to-change-the-system)
 17. [Load-bearing invariants](#load-bearing-invariants)
-18. [What this is not](#what-this-is-not)
+18. [Product boundary](#product-boundary)
 19. [Commands](#commands)
 
 ---
@@ -51,19 +51,31 @@ Companion documents in this package:
 
 scene3d treats a 3D scene the way a compiler treats a code project.
 
+This is an alpha, and the declarative language is intentionally incomplete.
+The current JSON vocabulary is a useful structured subset, not the boundary
+of what scene3d may eventually express. The freeform Python path is a
+first-class authoring mode today; over time, more of that expressive power
+can become declarative while keeping the same measurement, diagnostics, and
+export boundary. "Not implemented yet" is not the same as "forbidden by the
+architecture."
+
 - **Sources are text or real files.** A declarative `scene.json`, a Blender
   Python `build.py`, USDA layers, a `.blend`, a dropped-in `.glb`, or a
   Minecraft `model.json`. One entry point per scene directory.
-- **Compilation is deterministic.** The same sources, contract, and runner
-  produce the same census and issue codes, plus a byte-identical
-  `<scene3d-report>` once the cache is warm.
+- **Compilation is deterministic.** Under the supported toolchain, the same
+  sources and contract produce the same measured census and issue codes, plus
+  a byte-identical `<scene3d-report>` once the cache is warm. Artifact bytes
+  are promised where the relevant exporter and runtime can make that promise;
+  semantic equivalence is the expectation across different toolchains.
 - **Judgement is measured.** Headless Blender records a census of
   world-space facts, and pure TypeScript lint rules compare those facts to
   `scene3d.json`. Every failure is a stable code carrying the measurement
   that proves it and the source line that caused it.
-- **USD is the master format.** The stage is authored first. GLB, OBJ, FBX,
-  and the rest are lowered from a re-import of that stage. A capability the
-  writer failed to author cannot silently reach a deliverable.
+- **USD is the current master for 3D scene and geometry deliveries.** The
+  stage is authored first. GLB, OBJ, FBX, and the rest are lowered from a
+  re-import of that stage. Other asset products may retain a more natural
+  authoritative source while using the same measurement and validation
+  boundary.
 
 Inside Open Design, HyperFrames already runs this play: the agent authors
 sources, a deterministic compiler produces the asset and its diagnostics,
@@ -83,7 +95,7 @@ counts a single-surface capability as a regression.
 
 ```
 ┌─ Authoring ──────────────────────────────────────────────────────────┐
-│  generating agent writes scene.json / build.py / real assets         │
+│  generating agent writes scene.json / freeform build.py / real assets │
 │  design-templates/scene3d/SKILL.md is that agent's manual            │
 ├─ Compiler  @open-design/scene3d ─────────────────────────────────────┤
 │  compile(projectDir) → CompileResult                                 │
@@ -182,17 +194,20 @@ the full set of 19 locales.
 
 ---
 
-## Settled architecture
+## Current architectural baseline
 
-Each of these is a settled decision that has already been paid for at least
-once. Overturning one is a redesign, and a redesign deserves its own
-discussion before anyone starts editing.
+These are the current decisions that protect the compiler boundary. Some are
+long-lived invariants; others describe the present alpha implementation and
+may be extended as the language grows. Change the latter deliberately, but do
+not mistake today's supported syntax for a permanent ceiling.
 
 1. **One compile call.** No sibling "check z-fighting" / "validate naming"
    tools or endpoints. The compile response's `agentMessage` is the
    `<scene3d-report>` block for agent self-correction.
-2. **`scene.json` is the primary authoring surface.** `build.py`, USDA, and
-   `.blend` are escape hatches. `scene.json` + `build.py` together is
+2. **`scene.json` and `build.py` are peer authoring modes.** JSON emphasizes
+  structured declarative intent; Python is the raw mode for direct
+  procedural control. USDA and `.blend` are additional source modes.
+  `scene.json` + `build.py` together is
    `S3D-E-102`, never a silent winner.
 3. **Validate before geometry exists.** Spec failures are `S3D-E-105` with
    JSON paths, never a Blender traceback.
@@ -228,8 +243,8 @@ discussion before anyone starts editing.
 
 ### Three strata
 
-The compiler has exactly three kinds of conditional. Confusing them is how
-modes grow.
+The compiler distinguishes three important kinds of conditional. Confusing
+them is how modes grow.
 
 | Stratum | Gate | Example |
 |---|---|---|
@@ -303,13 +318,16 @@ measured against where objects used to be.
 
 ## Sources
 
-`discoverSources()` in `src/parse/sources.ts` picks exactly one kind.
+`discoverSources()` in `src/parse/sources.ts` picks one primary source kind in
+the current alpha. Some primary sources may use intentional companions; for
+example, a raw Python build may have USDA layers alongside it. Companions do
+not become competing authoring sources unless the discovery rules say so.
 Precedence is fixed:
 
 | Kind | Trigger | Notes |
 |---|---|---|
 | `spec` | `scene.json` | Primary. Solver emits the bpy script. |
-| `bpy` | `build.py` | Escape hatch. USDA siblings may ride along. |
+| `bpy` | `build.py` | Raw authoring mode. USDA siblings may ride along. |
 | `usda` | `.usda` / `.usdc` / `.usdz` | Direct stage. Prefers `scene.usda`. |
 | `blend` | `.blend` | Native Blender file. |
 | `mc_model` | `.bbmodel`, or a `.json` with an `elements` array that is not `scene.json` / `scene3d.json` | Converted in memory to a spec; copy written to `.scene3d/imported.scene.json`. |
@@ -355,9 +373,11 @@ output.
   (Blender GPUShaderCreateInfo and WebGL2 300 es), and the bake. Time is a
   kernel dimension: `frames: 2..64` bakes a POT atlas that registers as a
   sheet.
-- **Animation** is per-part `spin` / `bob`. The compiler owns the
-  keyframes (24 fps, cycles modifiers). Any motion derives `assetKind:
-  animation`.
+- **Animation currently includes** per-part `spin` / `bob`. The compiler owns
+  those keyframes (24 fps, cycles modifiers), and any motion derives
+  `assetKind: animation`. Sequenced keyframes, skeletal/deformation systems,
+  and richer animation intent are future language areas, not architectural
+  exclusions.
 - **Claims** (`parts`, `maxTriangles`, `grounded`, `maxHeight`,
   `footprint`, `watertight`, `materialsUsed`) are adjudicated against the
   census. `grounded` means nothing sinks through the floor. Floating is a
@@ -929,7 +949,7 @@ both is how a gate silently stops gating.
 | `good/spec_shaded` | GPU bake, byte-deterministic across compiles |
 | `good/spec_flame` | Flipbook shader as a sheet product |
 | `good/spec_script_part` | `script:` part fitted into its box |
-| `good/prop_crate`, `good/textured_prop` | bpy escape hatch |
+| `good/prop_crate`, `good/textured_prop` | raw Python authoring path |
 | `minecraft/golem` | Voxel path, Java lowering, import round-trip |
 | `poisoned/spec-claims` | `S3D-E-701` |
 | `poisoned/spec-shader-bad` / `spec-shader-nan` | `S3D-E-801` / `E-804` |
@@ -1081,22 +1101,46 @@ important the first time it broke.
 
 ---
 
-## What this is not
+## Product boundary
 
-scene3d is the 3D technical-artist compiler. It is not a generator.
+scene3d is a technical-art compiler: it turns authored code, declarative
+intent, and source assets into generated, measured, validated, exportable
+things. The goal is not only to make geometry, but to make geometry that can
+be trusted in the scene, in the target engine, and in the final delivery
+format.
 
-Do not add, as differentiators: text/image-to-3D, generic auto-remesh or
-auto-rig, 4K texture generation, an MCP wrapper around the pipeline, a
-generic DCC bridge, per-check tools beside `compile`, a page-side download
-UI, a second URL encoder, an authored `assetKind` field, or a mode flag
-that is really a value the author already writes.
+scene3d is not primarily a reconstruction model or a text/image-to-3D
+product. It may integrate those systems when useful, but reconstruction is
+not the durable differentiator. The durable layer is the compiler's ability
+to preserve intent, expose measurable truth, and report what survives each
+stage of production.
 
-Integrate commoditised stages when a project needs them. Do not compete on
-them. The durable layer is: generators know what an object should look
-like; scene3d knows what the object has to do.
+The product should not compete on generic commodity features such as
+text/image-to-3D reconstruction, generic remeshing, one-click auto-rigging,
+or high-resolution texture generation. Those may be replaceable inputs or
+stages when a project needs them. They are not forbidden capabilities, and
+they do not define the boundary of what the compiler may eventually express.
 
-Lineage and the "worth taking next" list live in `KILN.md` and
-`RESEARCH.md`. They are not a promise to build those items.
+In particular, deterministic, author-directed systems for procedural
+construction, relations, sequenced keyframes, skeletal animation, skinning,
+facial shapes, creatures, avatars, and other domain-specific behavior are
+within the long-term scope when the language and export contracts can
+represent them honestly.
+
+The current JSON language is only one evolving way to express that intent.
+The freeform Python path is a first-class authoring mode today. Over time,
+more of its useful expressive power may move into declarative forms without
+changing the compiler's core responsibility: turn intent into a working
+asset, then measure and explain the result.
+
+The host and pipeline still have concrete invariants: one compile entry
+point, shared URL construction, derived asset kinds, host-owned downloads,
+and no silent validation gaps. Those are implementation contracts, not
+limits on the creative domain.
+
+`KILN.md` records design lineage and possible future directions.
+`RESEARCH.md` records a dated strategy snapshot. Neither document is a
+permanent feature promise or a substitute for current maintainer judgment.
 
 ---
 

@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { ISSUE_CODES } from "../src/errors.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * The declarative pipeline against REAL Blender.
@@ -16,6 +17,7 @@ import { rmForSetup } from "./helpers/fs.js";
  * issues. A language whose own showcase trips its own linter is broken.
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
   const fixture = (name: string) => path.join(__dirname, "fixtures", name);
@@ -30,14 +32,22 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
 
   it("compiles the pavilion through all six stages with zero issues", async () => {
     const dir = workDir("good/spec_pavilion");
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // The deliverable assertions below need proof frames to EXIST and a GLB
+    // to ship — not a turntable. One still frame carries the same fact.
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(result.issues).toEqual([]);
     expect(result.ok).toBe(true);
     expect(result.source.kind).toBe("spec");
 
     // The build really expanded the repeats: 1 plinth + 4 columns + roof +
-    // lamp + ring + finial = 9 mesh parts, exactly as claimed.
-    expect(result.census!.meshes).toHaveLength(9);
+    // lamp + ring + finial + planter + ramp + socket + lantern = 13 mesh
+    // parts, exactly as claimed.
+    expect(result.census!.meshes).toHaveLength(13);
     const names = result.census!.meshes.map((m) => m.object).sort();
     expect(names).toContain("prp_column_4");
 
@@ -55,7 +65,11 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     // higher bound would be a statement about tessellation policy, which is
     // the next assertion's job, not this one's.
     const BOX_VERTS = 8;
-    for (const curved of ["prp_lamp", "prp_ring", "prp_column", "prp_finial"]) {
+    for (const curved of [
+      "prp_lamp", "prp_ring", "prp_column", "prp_finial",
+      // The second wave: a frustum, a hollow pipe and a stretched sphere.
+      "prp_planter", "prp_socket", "prp_lantern",
+    ]) {
       expect(byName.get(curved)!.verts, `${curved} should be curved geometry`).toBeGreaterThan(
         BOX_VERTS * 2,
       );
@@ -65,6 +79,9 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     // tolerance, segment counts derived per part — rather than a count
     // somebody chose. A fixed-segment emitter fails this.
     expect(byName.get("prp_ring")!.verts).toBeGreaterThan(byName.get("prp_lamp")!.verts);
+    // The wedge is the one shape with a FIXED vertex count: a right
+    // triangular prism is six corners at any size or tolerance.
+    expect(byName.get("prp_ramp")!.verts).toBe(6);
     for (const mesh of result.census!.meshes) {
       expect(mesh.nonManifoldEdges, `${mesh.object} is not watertight`).toBe(0);
       expect(mesh.ngons, `${mesh.object} has ngons`).toBe(0);
@@ -198,7 +215,7 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
       timeoutMs: LONG,
     });
     expect(second.stages.find((s) => s.id === "build")!.status).toBe("cached");
-    expect(second.census!.meshes).toHaveLength(9);
+    expect(second.census!.meshes).toHaveLength(13);
   });
 
   it("fails every false claim with the measured truth, and only those", async () => {
@@ -254,8 +271,14 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
   it("gates print DfM on a 3d_print target: measures thickness and flags a sub-nozzle wall", async () => {
     // The 3d_print contract turns on the wall-thickness ray-cast and its
     // judgment. A 0.6mm shell is under the 0.8mm FDM floor; a 20mm block is not.
+    // Census + lint assertions only — no render or export is consumed.
     const dir = workDir("print/thin_shell");
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
     const byName = new Map(result.census!.meshes.map((m) => [m.object, m]));
 
     // The ray-cast ran (only because target is 3d_print) and measured the wall
@@ -273,4 +296,79 @@ describe.skipIf(!hasBlender)("declarative spec pipeline (real Blender)", () => {
     // Advisory only — a warning, never a compile-blocking error.
     expect(result.issues.filter((i) => i.severity === "error")).toEqual([]);
   });
+});
+
+describe.skipIf(!hasBlender)("script parts vs a hostile selection", () => {
+  it("fits a script part even when the script sabotages the selection", async () => {
+    // transform_apply acts on the SELECTION, and build(ctx) is arbitrary bpy:
+    // a script that deselects its mesh and activates a bystander used to
+    // leave the part unfitted (unapplied transforms) while the harness
+    // transformed the wrong object. The emitter now claims the selection
+    // explicitly; this is the adversarial pin.
+    const dir = path.join(__dirname, ".work", "spec-script-hostile");
+    rmForSetup(dir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "scene.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        materials: { mtl_slab: { baseColor: [0.5, 0.5, 0.5], roughness: 0.7, metallic: 0 } },
+        parts: [
+          { id: "prp_base", size: [1, 1, 0.12], material: "mtl_slab" },
+          { id: "prp_blob", size: [0.4, 0.4, 0.3], script: "blob.py", material: "mtl_slab" },
+        ],
+        relations: [
+          { type: "at", part: "prp_base", center: [0, 0, 0.06] },
+          { type: "sits_on", part: "prp_blob", on: "prp_base" },
+        ],
+      }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(dir, "blob.py"),
+      [
+        "import bpy, bmesh",
+        "",
+        "def build(ctx):",
+        "    # Both context spellings hold: the documented attribute form and",
+        "    # the item form early scripts used.",
+        '    assert ctx.size == ctx["size"] and ctx.size[0] > 0',
+        '    mesh = bpy.data.meshes.new("blob")',
+        "    bm = bmesh.new()",
+        "    bmesh.ops.create_cube(bm, size=2.0)",
+        "    bm.to_mesh(mesh)",
+        "    bm.free()",
+        '    obj = bpy.data.objects.new("blob", mesh)',
+        "    bpy.context.collection.objects.link(obj)",
+        "    # Authored transform the harness must bake:",
+        "    obj.scale = (0.5, 0.25, 0.125)",
+        "    # Adversarial: hand the harness the WRONG selection.",
+        '    bpy.ops.object.select_all(action="DESELECT")',
+        '    other = bpy.data.objects.get("prp_base")',
+        "    if other is not None:",
+        "        other.select_set(True)",
+        "        bpy.context.view_layer.objects.active = other",
+      ].join("\n"),
+      "utf8",
+    );
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "lint"],
+      timeoutMs: 300_000,
+      noCache: true,
+    });
+    expect(result.ok).toBe(true);
+    // No unapplied-transform residue on either object.
+    expect(result.issues.map((i) => i.code)).not.toContain("S3D-W-330");
+    const blob = result.census!.objects.find((o) => o.name === "prp_blob")!;
+    // 2m cube scaled (0.5, 0.25, 0.125) = 1.0 x 0.5 x 0.25, uniformly fitted
+    // into the 0.4 x 0.4 x 0.3 box: s = 0.4, so 0.4 x 0.2 x 0.1.
+    expect(blob.dimensions[0]).toBeCloseTo(0.4, 3);
+    expect(blob.dimensions[1]).toBeCloseTo(0.2, 3);
+    expect(blob.dimensions[2]).toBeCloseTo(0.1, 3);
+    // The bystander the script selected was not transformed.
+    const base = result.census!.objects.find((o) => o.name === "prp_base")!;
+    expect(base.dimensions[0]).toBeCloseTo(1, 3);
+    expect(base.dimensions[2]).toBeCloseTo(0.12, 3);
+  }, 400_000);
 });

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { orderDrifts, fingerprintLosses, isCompilerProofFrame, boundsShift } from "../src/pipeline.js";
+import {
+  orderDrifts,
+  fingerprintLosses,
+  isCompilerProofFrame,
+  isCompilerMaterialBall,
+  boundsShift,
+} from "../src/pipeline.js";
 
 /**
  * W-902 (MASTER_ORDER_DRIFT): the set of joints/morphs survives lowering but
@@ -93,6 +99,29 @@ describe("isCompilerProofFrame", () => {
     expect(isCompilerProofFrame("proof-deadbeef-999.png")).toBe(false); // 8 hex, not 24
     expect(isCompilerProofFrame("my-render-001.png")).toBe(false);
     expect(isCompilerProofFrame("proof-0123456789abcdef01234567.png")).toBe(false); // no frame
+  });
+});
+
+/**
+ * The material-ball prune inherits the proof-frame lesson: `out/materials/`
+ * is user-visible, so the pruner deletes only names the runner's own
+ * `safe_filename` could have produced (alphanumerics, dot, underscore, dash)
+ * and leaves everything else where the user put it.
+ */
+describe("isCompilerMaterialBall", () => {
+  it("matches the compiler's own ball names, sanitised material and all", () => {
+    expect(isCompilerMaterialBall("ball-mat_lava.png")).toBe(true);
+    expect(isCompilerMaterialBall("ball-Gold.001.png")).toBe(true);
+    // Deterministic collision suffix from two names that sanitise alike.
+    expect(isCompilerMaterialBall("ball-mat_rust-2.png")).toBe(true);
+  });
+
+  it("spares anything the runner could not have written", () => {
+    expect(isCompilerMaterialBall("ball-.png")).toBe(false); // empty stem
+    expect(isCompilerMaterialBall("ball-my mat.png")).toBe(false); // space never survives
+    expect(isCompilerMaterialBall("reference-ball.png")).toBe(false);
+    expect(isCompilerMaterialBall("ball-lava.jpg")).toBe(false);
+    expect(isCompilerMaterialBall("ball-lava.png.bak")).toBe(false);
   });
 });
 

@@ -14,6 +14,7 @@ import {
   workspaceContextHasTeamIdentity,
   isScene3dTweaksRequestMessage,
   scene3dIssueTitle,
+  type Scene3dAssetKind,
   type CollabCloudMemberDirectoryEntry,
   type CollabMemberRole,
   type AgentInfo,
@@ -218,9 +219,10 @@ import type {
 } from '../types';
 import { Icon } from './Icon';
 import { RemixIcon } from './RemixIcon';
-import { Scene3dPanel } from './Scene3dPanel';
+import { KindGlyphArt, Scene3dPanel } from './Scene3dPanel';
 import { scene3dScenePathForFile } from '../hooks/useScene3dCompile';
 import {
+  assetKindLabelKey,
   modelRowsFromArtifactManifest,
   scenePathFromArtifactManifest,
 } from '../runtime/scene3d-assets';
@@ -8329,6 +8331,9 @@ function HtmlViewer({
     meta: string;
     /** Verdict phrase / issue codes — the colour says it, hover spells it. */
     detail: string;
+    /** Derived asset kind, when the page reports one — drawn as the same
+     *  glyph the compile panel's kind chip uses. */
+    kind: Scene3dAssetKind | null;
   } | null>(null);
   useEffect(() => {
     setScene3dIdent(null);
@@ -8419,13 +8424,23 @@ function HtmlViewer({
         return;
       }
       const data = event.data as
-        | { type?: string; name?: unknown; ok?: unknown; known?: unknown; meta?: unknown; detail?: unknown }
+        | { type?: string; name?: unknown; ok?: unknown; known?: unknown; meta?: unknown; detail?: unknown; kind?: unknown }
         | null;
       if (!data || data.type !== 'od:scene3d-ident' || typeof data.name !== 'string') return;
+      /* Allowlisted, not cast: the page is an iframe and anything can post
+         a lookalike; an unknown kind renders nothing rather than a broken
+         glyph lookup. */
+      const KNOWN_KINDS: readonly Scene3dAssetKind[] = [
+        'scene', 'prop', 'kit', 'animation', 'sprite', 'flipbook', 'vfx', 'skybox', 'texture',
+      ];
       setScene3dIdent({
         name: data.name,
         ok: data.ok !== false,
         known: data.known === true,
+        kind:
+          typeof data.kind === 'string' && (KNOWN_KINDS as readonly string[]).includes(data.kind)
+            ? (data.kind as Scene3dAssetKind)
+            : null,
         meta: typeof data.meta === 'string' ? data.meta : '',
         // The page sends bare S3D-* codes (it has no title catalog);
         // the host is where a code becomes a sentence, so expand each
@@ -15059,7 +15074,52 @@ function HtmlViewer({
               only; the verdict is the colour; parts/tris/codes ride the
               hover title. */}
           {isScene3dArtifact && scene3dIdent ? (
-            <span className="viewer-scene3d-ident" title={scene3dIdent.detail}>
+            /* Same drawn verdict mark as the compile panel's toolbar, so the
+               two scene3d surfaces speak one visual language — colour alone
+               carried the verdict here, which is invisible to a screen
+               reader and colour-blind users alike. */
+            <span
+              className="viewer-scene3d-ident"
+              title={scene3dIdent.detail}
+              role="img"
+              aria-label={[
+                scene3dIdent.kind ? t(assetKindLabelKey(scene3dIdent.kind)) : null,
+                scene3dIdent.name,
+                scene3dIdent.detail,
+              ]
+                .filter(Boolean)
+                .join(' — ')}
+            >
+              {scene3dIdent.kind ? (
+                <span
+                  className="viewer-scene3d-ident-kind"
+                  title={t(assetKindLabelKey(scene3dIdent.kind))}
+                  aria-hidden="true"
+                >
+                  <KindGlyphArt kind={scene3dIdent.kind} />
+                </span>
+              ) : null}
+              {scene3dIdent.known ? (
+                <svg
+                  className={`viewer-scene3d-ident-mark${scene3dIdent.ok ? ' is-ok' : ' is-bad'}`}
+                  viewBox="0 0 16 16"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="8" cy="8" r="6.4" />
+                  {scene3dIdent.ok ? (
+                    <path d="M5.2 8.3l1.9 1.9 3.7-4" />
+                  ) : (
+                    <path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" />
+                  )}
+                </svg>
+              ) : null}
               <span
                 className={`viewer-scene3d-ident-name${
                   scene3dIdent.known ? (scene3dIdent.ok ? ' is-ok' : ' is-bad') : ''
@@ -15968,7 +16028,11 @@ function HtmlViewer({
                                     });
                                   }}
                                 >
-                                  {scene3dArchiveBusy === busyKey ? '…' : item.ext.toUpperCase()}
+                                  {scene3dArchiveBusy === busyKey ? (
+                                    <Icon name="spinner" size={12} />
+                                  ) : (
+                                    item.ext.toUpperCase()
+                                  )}
                                 </button>
                               );
                             })}
@@ -16008,7 +16072,11 @@ function HtmlViewer({
                                   });
                                 }}
                               >
-                                {scene3dArchiveBusy === row.label ? '…' : 'ZIP'}
+                                {scene3dArchiveBusy === row.label ? (
+                                  <Icon name="spinner" size={12} />
+                                ) : (
+                                  'ZIP'
+                                )}
                               </button>
                             ) : null}
                           </span>

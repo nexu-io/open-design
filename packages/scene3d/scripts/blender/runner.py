@@ -1721,12 +1721,37 @@ def mat_texture_names(m):
 
 
 def mat_texture_px(m):
-    """Largest texture edge (px) bound in the material, or 0 when untextured."""
+    """Largest texture edge (px) REACHABLE from the Principled BSDF, or 0.
+
+    Reachable, not merely present: a disconnected TEX_IMAGE samples nothing
+    (the same argument `hasTexture` already makes), yet this used to size
+    the texel-density formula off exactly such a node — a 512 albedo with a
+    stray 4K node in the tree reported 8x the density any shader reads.
+    Falls back to any bound image only when the material has no Principled
+    to walk from (a bare emission graph still textures its mesh).
+    """
+    if not m or not m.node_tree:
+        return 0
+    root = next((n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
     best = 0
-    if m and m.node_tree:
-        for n in m.node_tree.nodes:
-            if n.type == "TEX_IMAGE" and n.image:
+    if root is not None:
+        seen = set()
+        stack = [root]
+        while stack:
+            n = stack.pop()
+            if id(n) in seen:
+                continue
+            seen.add(id(n))
+            if n.type == "TEX_IMAGE" and n.image is not None:
                 best = max(best, n.image.size[0], n.image.size[1])
+            for inp in n.inputs:
+                for link in inp.links:
+                    if link.from_node is not None:
+                        stack.append(link.from_node)
+        return best
+    for n in m.node_tree.nodes:
+        if n.type == "TEX_IMAGE" and n.image:
+            best = max(best, n.image.size[0], n.image.size[1])
     return best
 
 
@@ -1861,7 +1886,9 @@ def uv_facts(o, bm, uv_layer, slot_tex_px):
         uv_area = abs(signed)
         tex_px = slot_tex_px[f.material_index] if 0 <= f.material_index < len(slot_tex_px) else 0
         if tex_px > 0 and world_area > 1e-12 and uv_area > 1e-12:
-            densities.append(math.sqrt(uv_area / world_area) * tex_px)
+            # Carried with the face's world area so the mean below can be
+            # area-weighted, like stretch.mean already is.
+            densities.append((math.sqrt(uv_area / world_area) * tex_px, world_area))
         # Per sub-triangle stretch: map (u,v) -> 3D, take the affine Jacobian's
         # singular values. The overall 1/(2A) scale cancels in the ratio, so
         # the anisotropy is robust to UV and world scale alike.
@@ -1918,10 +1945,20 @@ def uv_facts(o, bm, uv_layer, slot_tex_px):
         overlap = (sum(1 for c in over if c) / float(covered)) if covered else 0.0
     density = None
     if densities:
+        # Mean is AREA-weighted, matching stretch.mean: an unweighted
+        # per-face mean let a hundred tiny bevel faces outvote the one big
+        # visible slab, so the reported number was not the density a viewer
+        # perceives. min/max stay per-face extremes — "does any face miss
+        # the band" is genuinely a per-face question.
+        density_area = sum(w for _, w in densities)
         density = {
-            "min": R6(min(densities)),
-            "max": R6(max(densities)),
-            "mean": R6(sum(densities) / len(densities)),
+            "min": R6(min(v for v, _ in densities)),
+            "max": R6(max(v for v, _ in densities)),
+            "mean": R6(
+                (sum(v * w for v, w in densities) / density_area)
+                if density_area > 1e-12
+                else sum(v for v, _ in densities) / len(densities)
+            ),
         }
     stretch = None
     if stretch_vals:
@@ -3318,6 +3355,88 @@ def proof(job):
             restore_scale()
 
 
+def _srgb_encode(u):
+    """Forward sRGB transfer, so an emission colour chosen here lands as an
+    exact predictable byte once the Standard view transform encodes it."""
+    return u / 12.92 if u <= 0.04045 else ((u + 0.055) / 1.055) ** 2.4
+
+
+# The id-map channel quantisation: 8 well-separated steps per channel, so a
+# web-side nearest-step decode survives dithering, mild filtering and any
+# codec rounding with ±18 of headroom. 8^3 - 1 = 511 addressable parts;
+# index 0 is reserved for "background / nothing".
+ID_STEPS = [round(k * 255 / 7) for k in range(8)]
+
+
+def _proof_id_pass(scene, subjects, aim_for_step, steps, filepaths):
+    """Render one object-index map per proof frame.
+
+    The proof frames are prerendered pixels, and a rect can only say where a
+    part's bounding box landed — not which pixels ARE the part. The id map
+    answers that exactly: every subject is re-shaded with a flat emission
+    colour encoding its index, the same camera renders the same frames, and
+    the viewer can then apply a per-pixel, occlusion-correct effect (the
+    x-ray energize) to precisely the pixels the part occupies.
+
+    No restoration: this runs after every beauty render in a process that
+    rebuilds the scene from source on each invocation and exits right after
+    the emit — the mutations die with the process.
+    """
+    import bpy
+
+    ordered = sorted(subjects, key=lambda o: o.name)
+    capacity = len(ID_STEPS) ** 3 - 1
+    if len(ordered) > capacity:
+        log("id maps cover the first %d of %d parts (encoding capacity)"
+            % (capacity, len(ordered)))
+        ordered = ordered[:capacity]
+    for index, obj in enumerate(ordered):
+        code = index + 1
+        r = ID_STEPS[(code // 64) % 8]
+        g = ID_STEPS[(code // 8) % 8]
+        b = ID_STEPS[code % 8]
+        mat = bpy.data.materials.new("S3D_IDX_%d" % code)
+        mat.use_nodes = True
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+        nodes.clear()
+        emit_node = nodes.new("ShaderNodeEmission")
+        emit_node.inputs["Color"].default_value = (
+            _srgb_encode(r / 255.0), _srgb_encode(g / 255.0), _srgb_encode(b / 255.0), 1.0,
+        )
+        emit_node.inputs["Strength"].default_value = 1.0
+        out_node = nodes.new("ShaderNodeOutputMaterial")
+        links.new(emit_node.outputs["Emission"], out_node.inputs["Surface"])
+        if not obj.material_slots:
+            obj.data.materials.append(mat)
+        for slot in obj.material_slots:
+            slot.link = "OBJECT"
+            slot.material = mat
+
+    # Flat colours must arrive as flat bytes: no AA spread, no dither, no
+    # filmic look, alpha-0 background so "nothing" decodes as nothing.
+    scene.render.filter_size = 0.01
+    scene.render.dither_intensity = 0.0
+    scene.render.film_transparent = True
+    scene.render.image_settings.color_mode = "RGBA"
+    try:
+        scene.view_settings.view_transform = "Standard"
+        scene.view_settings.look = "None"
+    except Exception:
+        pass
+    scene.view_settings.exposure = 0.0
+    scene.view_settings.gamma = 1.0
+
+    written = []
+    for i in range(steps):
+        aim_for_step(i)
+        target = filepaths[i][:-4] + ".idx.png" if filepaths[i].lower().endswith(".png") else filepaths[i] + ".idx.png"
+        scene.render.filepath = target
+        bpy.ops.render.render(write_still=True)
+        written.append(target)
+    return written, [o.name for o in ordered]
+
+
 def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntable_on):
     import bpy
     import mathutils
@@ -3351,6 +3470,31 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
     cam_data.clip_end = max(dist * 1e3, diag * 10.0)
 
     frames = []
+    # An animated scene plays its clip across the turntable: frame i of the
+    # orbit also samples timeline position i/steps, so the proof frames show
+    # the MOTION the census reported instead of one frozen instant. Without
+    # this, an asset the manifest labels `animation` proved as N identical
+    # poses — the player scrubbed a static object, which read as a broken
+    # export rather than a camera choice. i/steps (not i/(steps-1)) keeps
+    # the last frame one step short of the first, so looped playback cycles
+    # without a doubled pose. Single stills keep the current frame: one
+    # image cannot show motion, and the authored pose is the honest one.
+    anim_start, anim_end = scene.frame_start, scene.frame_end
+    animate_proof = (
+        turntable_on
+        and steps > 1
+        and anim_end > anim_start
+        and any(
+            o.animation_data is not None
+            and o.animation_data.action is not None
+            and action_has_curves(o.animation_data.action)
+            for o in scene.objects
+        )
+    )
+    saved_frame = scene.frame_current
+    if animate_proof:
+        log("proof samples animation frames %d-%d across %d turntable steps"
+            % (anim_start, anim_end, steps))
     # Meshes the census will judge for framing, minus the rig itself. The
     # per-frame check below is the honest version of the off-camera fact:
     # the census measures against ONE camera pose, but a turntable renders
@@ -3363,34 +3507,343 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
         if o.type == "MESH" and o.name != "S3D_AutoCam"
     ]
     off_by_frame = []
-    for i in range(steps):
+    screen_rects = []
+
+    def aim_for_step(i):
+        """One definition of "frame i" — timeline sample plus camera pose —
+        shared by the beauty loop and the id-map pass, so the index map is
+        pixel-registered with the frame it describes."""
+        if animate_proof:
+            span = anim_end - anim_start
+            scene.frame_set(anim_start + int(round(span * i / float(steps))))
+            bpy.context.view_layer.update()
         if turntable_on:
             aim_camera(auto_cam, center, orbit_offset(2.0 * math.pi * i / steps, elevation, dist))
         elif is_auto:
             aim_camera(auto_cam, center, orbit_offset(0.0, elevation, dist))
+
+    for i in range(steps):
+        aim_for_step(i)
         scene.render.filepath = filepaths[i]
         bpy.ops.render.render(write_still=True)
         frames.append(frame_stats(filepaths[i]))
         log("rendered %s" % filepaths[i])
-        if turntable_on or is_auto:
-            gone = []
-            for o in subjects:
-                world = face_connected_world_points(o)
-                pts = [world_to_camera_view(scene, auto_cam, p) for p in world]
-                if world and all(
-                    not (0.0 <= p.x <= 1.0 and 0.0 <= p.y <= 1.0 and p.z > 0.0) for p in pts
-                ):
-                    gone.append(o.name)
-            if gone:
-                off_by_frame.append({"frame": i, "objects": sorted(gone)})
+        # One projection pass serves two consumers: the off-camera fact
+        # (below, auto-framed shots only) and the per-part SCREEN RECTS the
+        # viewer's click-to-highlight reads. The frames are prerendered
+        # pixels, so the only way a click on the picture can name a part is
+        # if the render records where each part landed — normalized
+        # [x0,y0,x1,y1], y down, clamped to the frame, one dict per frame.
+        # Captured for every camera mode: an authored-camera still deserves
+        # the same pick-and-reticle the turntable gets.
+        rects = {}
+        gone = []
+        for o in subjects:
+            world = face_connected_world_points(o)
+            pts = [world_to_camera_view(scene, auto_cam, p) for p in world]
+            if world and all(
+                not (0.0 <= p.x <= 1.0 and 0.0 <= p.y <= 1.0 and p.z > 0.0) for p in pts
+            ):
+                gone.append(o.name)
+            visible = [p for p in pts if p.z > 0.0]
+            if visible:
+                xs = [p.x for p in visible]
+                ys = [p.y for p in visible]
+                # Camera space is y-up; images are y-down.
+                x0 = max(0.0, min(xs)); x1 = min(1.0, max(xs))
+                y0 = max(0.0, 1.0 - max(ys)); y1 = min(1.0, 1.0 - min(ys))
+                if x1 > x0 and y1 > y0:
+                    rects[o.name] = [round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4)]
+        screen_rects.append(rects)
+        if (turntable_on or is_auto) and gone:
+            off_by_frame.append({"frame": i, "objects": sorted(gone)})
+    # Id maps after every beauty frame: the pass re-shades objects with
+    # OBJECT-level slot overrides and brand-new materials, so the real
+    # material datablocks (which the material-ball stage below reads) are
+    # never touched. An enhancement, not a deliverable — a failure here is
+    # reported and the proof still ships.
+    id_maps = []
+    id_parts = []
+    try:
+        id_maps, id_parts = _proof_id_pass(scene, subjects, aim_for_step, steps, filepaths)
+    except Exception:
+        log("id-map pass skipped: %s" % traceback.format_exc(limit=4))
+    if animate_proof:
+        scene.frame_set(saved_frame)
+        bpy.context.view_layer.update()
+
+    # Material balls last: the turntable is the product, and a preview that
+    # could cost the shot is not worth having. Everything below is contained
+    # — its own scene, its own try/except — so a ball that will not render
+    # reports itself and the proof still ships its frames.
+    balls = {"paths": [], "skipped": []}
+    ball_dir = opts.get("materialBallDir")
+    if ball_dir:
+        try:
+            balls = render_material_balls(scene, scene.render.engine, ball_dir)
+        except Exception:
+            log("material balls skipped entirely: %s" % traceback.format_exc(limit=4))
+            balls = {"paths": [], "skipped": [
+                {"material": "*", "reason": "material ball stage raised"},
+            ]}
+
     emit({
         "ok": True,
         "data": {
             "images": filepaths[:steps],
             "frames": frames,
             "offByFrame": off_by_frame,
+            "screenRects": screen_rects,
+            "idMaps": id_maps,
+            "idParts": id_parts,
+            "materialBalls": balls["paths"],
+            # The caller owns the cap, so the caller is told what it cost.
+            "materialBallsSkipped": len(balls["skipped"]),
+            "materialBallNotes": balls["skipped"],
         },
     })
+
+
+# ------------------------------------------------------------------
+# Material balls
+#
+# A proof frame answers "does the ASSET look right". It cannot answer "does
+# this MATERIAL look right": emission strength, alpha, metallic and a baked
+# texture only compose into a photograph at the far end of a full turntable,
+# which is a ~90s round per guess. A field report spent four of them moving
+# one ember from "dark orb" to "glowing relic" while the baked PNG had been
+# correct since round one.
+#
+# So: one small sphere per distinct bound material, rendered right after the
+# frames, in a scene of its OWN that borrows this scene's world, engine, film
+# and colour management. The lighting mirrors ensure_staging's key (a sun
+# from the camera's quarter, elevated) for the same reason: the ball has to
+# PREDICT the photograph, not be a second renderer's opinion of the material.
+#
+# Nothing here touches the proof scene. The alternative — hiding every object
+# and swapping materials in place — mutates the graph that just produced the
+# frames, and the restore path is exactly where that goes wrong.
+# ------------------------------------------------------------------
+
+MATERIAL_BALL_LIMIT = 24
+MATERIAL_BALL_RES = 128
+# Long material names make long paths; the dedupe below keeps the truncation
+# from ever silently merging two balls into one file.
+MATERIAL_BALL_STEM_MAX = 64
+
+
+def safe_filename(name):
+    """The filename sanitiser this file already uses for baked images.
+
+    Alphanumerics, dot, underscore and dash survive; everything else becomes
+    an underscore. Deterministic, and collision-prone by design — callers
+    that need uniqueness resolve it themselves.
+    """
+    return "".join(c if (c.isalnum() or c in "._-") else "_" for c in name)
+
+
+def _material_ball_uvs(mesh):
+    """Spherical UVs, seam-corrected, for a sphere that came without any.
+
+    A material ball with no UV layer shows a baked texture as one flat sample
+    — which is the exact question the ball exists to answer, so the fallback
+    is worth its twenty lines.
+    """
+    uv = mesh.uv_layers.new(name="UVMap")
+    for poly in mesh.polygons:
+        loops = []
+        for li in poly.loop_indices:
+            co = mesh.vertices[mesh.loops[li].vertex_index].co
+            radius = max(co.length, 1e-9)
+            u = 0.5 + math.atan2(co.y, co.x) / (2.0 * math.pi)
+            v = 0.5 + math.asin(max(-1.0, min(1.0, co.z / radius))) / math.pi
+            loops.append((li, u, v))
+        # A face straddling the u=0/1 seam otherwise runs the WHOLE texture
+        # backwards across one column of quads.
+        span = max(u for _, u, _ in loops) - min(u for _, u, _ in loops)
+        for li, u, v in loops:
+            if span > 0.5 and u < 0.5:
+                u += 1.0
+            uv.data[li].uv = (u, v)
+
+
+def _material_ball_mesh():
+    import bmesh
+    import bpy
+    mesh = bpy.data.meshes.new("S3D_MaterialBallMesh")
+    bm = bmesh.new()
+    try:
+        kwargs = {"u_segments": 32, "v_segments": 16, "radius": 0.5}
+        try:
+            bmesh.ops.create_uvsphere(bm, calc_uvs=True, **kwargs)
+        except TypeError:
+            # Older bmesh ops name the size `diameter` and have no calc_uvs.
+            try:
+                bmesh.ops.create_uvsphere(bm, **kwargs)
+            except TypeError:
+                bmesh.ops.create_uvsphere(bm, u_segments=32, v_segments=16, diameter=1.0)
+        bm.to_mesh(mesh)
+    finally:
+        bm.free()
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+    if not mesh.uv_layers:
+        _material_ball_uvs(mesh)
+    return mesh
+
+
+def _material_ball_scene(src_scene, engine):
+    """A one-sphere studio that borrows the proof's photographic conventions.
+
+    Returns (scene, sphere_object, cleanup) — cleanup removes everything this
+    made and nothing it borrowed (the world belongs to the proof scene).
+    """
+    import bpy
+    ball = bpy.data.scenes.new("S3D_MaterialBall")
+    ball.world = src_scene.world
+    try:
+        ball.render.engine = engine
+    except Exception:
+        ball.render.engine = "BLENDER_EEVEE"
+    ball.render.image_settings.file_format = "PNG"
+    ball.render.resolution_x = MATERIAL_BALL_RES
+    ball.render.resolution_y = MATERIAL_BALL_RES
+    ball.render.resolution_percentage = 100
+    ball.render.film_transparent = src_scene.render.film_transparent
+    # Same view transform, look and exposure, or the ball is photographed
+    # under different rules than the thing it is predicting.
+    for attr in ("view_transform", "look", "exposure", "gamma"):
+        try:
+            setattr(ball.view_settings, attr, getattr(src_scene.view_settings, attr))
+        except Exception:
+            pass
+    try:
+        ball.display_settings.display_device = src_scene.display_settings.display_device
+    except Exception:
+        pass
+
+    mesh = _material_ball_mesh()
+    sphere = bpy.data.objects.new("S3D_MaterialBall", mesh)
+    ball.collection.objects.link(sphere)
+    sphere.data.materials.append(None)
+
+    cam_data = bpy.data.cameras.new("S3D_MaterialBallCamData")
+    cam_data.angle = math.radians(45)
+    cam = bpy.data.objects.new("S3D_MaterialBallCam", cam_data)
+    ball.collection.objects.link(cam)
+    ball.camera = cam
+    azimuth = math.pi / 4.0
+    # The sphere subtends 80% of the frame's half-angle: room for the rim
+    # highlight that reads metallic, no crop at the silhouette.
+    dist = 0.5 / math.sin(cam_data.angle / 2.0 * 0.8)
+    offset = orbit_offset(azimuth, math.radians(15.0), dist)
+    cam.location = offset
+    cam.rotation_euler = offset.to_track_quat("Z", "Y").to_euler()
+
+    light_data = bpy.data.lights.new("S3D_MaterialBallKeyData", type="SUN")
+    light_data.energy = 3.0
+    key = bpy.data.objects.new("S3D_MaterialBallKey", light_data)
+    ball.collection.objects.link(key)
+    key.rotation_euler = orbit_offset(
+        azimuth - 0.4, math.pi / 3.0, 1.0
+    ).to_track_quat("Z", "Y").to_euler()
+
+    # Background bpy does not refresh matrix_world for transforms assigned
+    # outside operators — the same reason census() and the proof both carry
+    # an explicit update. Without it the render reads the camera's origin
+    # pose and every ball comes back black.
+    ball.view_layers[0].update()
+
+    def cleanup():
+        for obj, data, remover in (
+            (sphere, mesh, bpy.data.meshes),
+            (cam, cam_data, bpy.data.cameras),
+            (key, light_data, bpy.data.lights),
+        ):
+            try:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            except Exception:
+                pass
+            try:
+                remover.remove(data)
+            except Exception:
+                pass
+        try:
+            ball.world = None
+            bpy.data.scenes.remove(ball)
+        except Exception:
+            pass
+
+    return ball, sphere, cleanup
+
+
+def render_material_balls(scene, engine, out_dir):
+    """Render one lit sphere per distinct material bound to a mesh.
+
+    Returns {"paths": [absolute png paths], "skipped": [{material, reason}]}.
+    Every material that does NOT produce a file appears in `skipped` with a
+    reason — over the cap, or the exception that stopped it. A bounded search
+    that reports nothing about its bound is a search that lies.
+    """
+    import bpy
+    bound = {}
+    for obj in scene.objects:
+        if obj.type != "MESH":
+            continue
+        for slot in obj.material_slots:
+            if slot.material is not None:
+                bound[slot.material.name] = slot.material
+    names = sorted(bound)
+    skipped = []
+    if len(names) > MATERIAL_BALL_LIMIT:
+        for name in names[MATERIAL_BALL_LIMIT:]:
+            skipped.append({
+                "material": name,
+                "reason": "over the %d-ball cap" % MATERIAL_BALL_LIMIT,
+            })
+        names = names[:MATERIAL_BALL_LIMIT]
+    if not names:
+        return {"paths": [], "skipped": skipped}
+
+    try:
+        os.makedirs(out_dir)
+    except OSError:
+        if not os.path.isdir(out_dir):
+            raise
+
+    ball_scene, sphere, cleanup = _material_ball_scene(scene, engine)
+    paths = []
+    try:
+        # Alphabetical, so the ordinal a collision picks up is a property of
+        # the material set and not of iteration order.
+        used = {}
+        for name in names:
+            stem = safe_filename(name)[:MATERIAL_BALL_STEM_MAX] or "material"
+            seen = used.get(stem, 0)
+            used[stem] = seen + 1
+            if seen:
+                stem = "%s-%d" % (stem, seen + 1)
+            target = os.path.join(out_dir, "ball-%s.png" % stem)
+            try:
+                sphere.data.materials[0] = bound[name]
+                ball_scene.render.filepath = target
+                bpy.ops.render.render(write_still=True, scene=ball_scene.name)
+                if not os.path.exists(target):
+                    raise RuntimeError("renderer wrote no file")
+                # Called for its MATTE, not its statistics: the ball is
+                # rendered on the same transparent film as the proof, and
+                # every consumer that drops alpha would otherwise show a
+                # black square. The stats are the proof's question, not this
+                # one's.
+                frame_stats(target)
+                paths.append(target)
+                log("material ball %s -> %s" % (name, target))
+            except Exception as exc:
+                skipped.append({"material": name, "reason": str(exc)[:200]})
+                log("material ball skipped for %s: %s" % (name, exc))
+    finally:
+        cleanup()
+    return {"paths": paths, "skipped": skipped}
 
 
 # ------------------------------------------------------------------
@@ -3815,7 +4268,7 @@ def _save_image_copy(image, scratch):
     datablock, save the copy, drop it: the build scene is untouched and the
     pixels survive the scene reset."""
     import bpy
-    safe = "".join(c if (c.isalnum() or c in "._-") else "_" for c in image.name)
+    safe = safe_filename(image.name)
     target = os.path.join(scratch, "%s.png" % safe)
     tmp = image.copy()
     try:

@@ -84,6 +84,13 @@ describe("validateShaderSpec", () => {
     expect(badName.some((e) => e.includes("shd_"))).toBe(true);
   });
 
+  it("refuses an unknown shader key instead of swallowing it", () => {
+    const { result, errors } = run(spec({ format: "png" }));
+    expect(result).toBeUndefined();
+    expect(errors.some((e) => e.includes("shaders.shd_test.format is not a shader field"))).toBe(true);
+    expect(errors.some((e) => e.includes("known fields"))).toBe(true);
+  });
+
   it("enforces the push-constant budget with the byte count", () => {
     const uniforms: Record<string, number[]> = {};
     for (let i = 0; i < 10; i++) uniforms[`uVec${String.fromCharCode(65 + i)}`] = [1, 2, 3, 4];

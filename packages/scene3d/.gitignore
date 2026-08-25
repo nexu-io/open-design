@@ -8,3 +8,10 @@ tests/.work/
 # harness itself is committed; what it renders is not.
 scripts/harness/.out/
 scripts/harness/.shots/
+
+# Stage caches written by compiling a fixture in place (a local convenience
+# run, not the test flow — tests copy fixtures into .work/ first). The
+# entries are inert anyway: cache keys include absolute paths, so a hash
+# minted here can never match on another machine. They are noise a reviewer
+# reads as "the real-Blender tests get a free pass".
+tests/fixtures/**/.scene3d/cache/

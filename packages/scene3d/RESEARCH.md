@@ -1,23 +1,25 @@
-# Market research → scene3d decisions (condensed)
+# Market research snapshot — positioning hypotheses (condensed)
 
-Market thesis, not the maintainer map. Start at `README.md` for how the
-system is shaped and how to change it; this file is the condensed
-decision-shaping version of why scene3d is a compiler rather than a
-generator.
+Historical strategy note, not the maintainer map. Start at `README.md` for
+how the system is shaped and how to change it; this file records the
+positioning hypotheses that influenced scene3d's compiler framing.
 
 Source: user-provided research, 2026-08-18 ("What AI 3D Tools Still Get
-Wrong"). Hold these theses while extending the compiler. The full text
+Wrong"). This is a dated strategy snapshot, not a permanent feature ban or
+the sole source of product direction. Use it to challenge assumptions, then
+defer to the current architecture and maintainer decisions. The full text
 lives with the user.
 
-## The strategic thesis (verbatim spirit)
+## Working thesis, as interpreted for this project
 
 Generation is commoditizing (Meshy/Tripo now ship remesh, quad, rig,
 animate, print-repair, MCP as line items). The durable layer is not "best
-text-to-chair" — it is: **generators know what an object should look like;
-scene3d knows what the object has to DO.** Fit a hand, contact the floor,
+text-to-chair" — it is: **generation systems may propose appearance or
+structure; scene3d turns authored intent into a working, inspectable,
+exportable result.** Fit a hand, contact the floor,
 deform, hit a budget, hold exact proportions, belong to its scene, follow
 studio conventions. Be the 3D technical-artist agent, not another
-generator. Users' core complaint: "appearance I like, structure I cannot
+reconstruction product. Users' core complaint: "appearance I like, structure I cannot
 trust" — they don't know an asset is unusable until the pipeline damages
 it downstream.
 
@@ -43,6 +45,11 @@ it downstream.
 
 ## Findings → not built yet (ranked; pull from here)
 
+> Snapshot note: items 3–5 of this list have since shipped (scene-consistency
+> QA as the intent budgets `S3D-W-951`–`956`, engine target profiles, and the
+> print gate `S3D-W-333`/`334`). They stay listed here because this file is a
+> historical strategy record, not a live backlog.
+
 1. **Production-readiness score** — one derived roll-up from facts the
    census already measures (geometry/UV/materials/budget/staging as
    pass/warn/fail categories + a number). Cheap; high leverage; purely
@@ -64,9 +71,11 @@ it downstream.
 7. **Staged texture pipeline** — geometry edits must not destroy baked
    textures: keep bake as a late, re-runnable stage.
 
-## Anti-goals (explicitly commoditized; do not build as differentiators)
+## Anti-goals (commoditized differentiators, not forbidden capabilities)
 
-Text/image→3D itself, generic auto-remesh/quad/low-poly, canned
-auto-rigging, 4K texture generation, MCP wrapper features, generic DCC
-bridges. Integrate them as replaceable stages when needed; never compete
-on them.
+Text/image→3D reconstruction itself, generic auto-remesh/quad/low-poly,
+one-click auto-rigging, 4K texture generation, MCP wrapper features, generic
+DCC bridges. Integrate these as replaceable stages when useful; do not make
+them the product's differentiator. Deterministic, author-directed rigging,
+skinning, deformation, or animation systems remain valid future compiler
+capabilities.

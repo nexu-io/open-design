@@ -115,6 +115,12 @@ interface ScanState {
  * review, reproduced live).
  */
 function maskStrings(line: string, state: ScanState): string {
+  // Fast path for the lines that dominate a real master: geometry data.
+  // A mesh-heavy stage is a few thousand lines, several MB each, and not
+  // one of them contains a quote — masking those char-by-char is what
+  // turned this authoring pass into gigabytes of string churn. No open
+  // string, no quote on the line → the line IS its own mask.
+  if (!state.inString && line.indexOf('"') === -1) return line;
   let out = "";
   let i = 0;
   while (i < line.length) {
@@ -155,47 +161,6 @@ function maskStrings(line: string, state: ScanState): string {
   return out;
 }
 
-/** Yield only the structural (non-string) characters of one line. */
-function structuralChars(line: string, state: ScanState): string[] {
-  const out: string[] = [];
-  let i = 0;
-  while (i < line.length) {
-    if (state.inString) {
-      if (state.triple) {
-        if (line.startsWith('"""', i)) {
-          state.inString = false;
-          state.triple = false;
-          i += 3;
-          continue;
-        }
-        i++;
-        continue;
-      }
-      if (line[i] === "\\") {
-        i += 2;
-        continue;
-      }
-      if (line[i] === '"') state.inString = false;
-      i++;
-      continue;
-    }
-    if (line.startsWith('"""', i)) {
-      state.inString = true;
-      state.triple = true;
-      i += 3;
-      continue;
-    }
-    if (line[i] === '"') {
-      state.inString = true;
-      i++;
-      continue;
-    }
-    out.push(line[i]!);
-    i++;
-  }
-  return out;
-}
-
 function primSpan(
   lines: string[],
   defLine: number,
@@ -204,13 +169,20 @@ function primSpan(
   let metaOpen: number | null = null;
   const state: ScanState = { inString: false, triple: false };
   for (let i = defLine; i < lines.length; i++) {
-    for (const ch of structuralChars(lines[i] ?? "", state)) {
-      if (ch === "(") {
+    // charCodeAt over the masked line, not an array of one-char strings:
+    // this walk can cross multi-MB data lines, and materializing a string
+    // per character was one of the allocation storms that OOM'd the
+    // daemon on a real master. The mask keeps in-string characters inert
+    // (they become spaces) at zero cost for quote-free lines.
+    const masked = maskStrings(lines[i] ?? "", state);
+    for (let j = 0; j < masked.length; j++) {
+      const c = masked.charCodeAt(j);
+      if (c === 40 /* ( */) {
         if (depth === 0 && metaOpen === null) metaOpen = i;
         depth++;
-      } else if (ch === ")") {
+      } else if (c === 41 /* ) */) {
         depth--;
-      } else if (ch === "{" && depth === 0) {
+      } else if (c === 123 /* { */ && depth === 0) {
         return { metaOpen, bodyOpen: i };
       }
     }
@@ -312,10 +284,13 @@ function setPurpose(lines: string[], prim: UsdaPrim, purpose: string, out: Splic
     const line = lines[i] ?? "";
     // One masked pass serves both jobs: depth from its structural chars,
     // and the declaration match on text that string content cannot fake.
+    // charCodeAt, not for..of — iterating a string yields a fresh one-char
+    // string per character, and this walk crosses the data lines.
     const masked = maskStrings(line, state);
-    for (const ch of masked) {
-      if (ch === "{") depth++;
-      else if (ch === "}") depth--;
+    for (let j = 0; j < masked.length; j++) {
+      const c = masked.charCodeAt(j);
+      if (c === 123 /* { */) depth++;
+      else if (c === 125 /* } */) depth--;
     }
     if (i > bodyOpen && depth <= 0) break;
     if (i > bodyOpen && depth === 1 && /^\s*(uniform\s+)?token\s+purpose\s*=/.test(masked)) {
@@ -401,7 +376,14 @@ export function authorStageModel(input: StageModelInput): StageModelResult {
    */
   const rootKind: "component" | "assembly" = geometry.length > 1 ? "assembly" : "component";
 
-  const lines = input.usda.split("\n");
+  /* Split on either EOL and rejoin with the stage's own. Splitting on bare
+     "\n" left every retained line carrying its "\r" while every SPLICED line
+     went out bare — a mixed-EOL stage — and the def-line split above even
+     threaded a stray "\r" into the middle of the rewritten line. Blender's
+     writer emits LF, so this only ever bit hand-authored (Windows-authored)
+     .usda sources — which "USD is the master" makes a first-class path. */
+  const eol = input.usda.includes("\r\n") ? "\r\n" : "\n";
+  const lines = input.usda.split(/\r\n|\n/);
   const splices: Splice[] = [];
   const authored: StageModelAuthoring = {
     rootName: root.name,
@@ -440,5 +422,5 @@ export function authorStageModel(input: StageModelInput): StageModelResult {
     lines.splice(splice.at, splice.replace ? 1 : 0, ...splice.text);
   }
 
-  return { usda: lines.join("\n"), authored };
+  return { usda: lines.join(eol), authored };
 }

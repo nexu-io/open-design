@@ -22,8 +22,50 @@ describe("usda parser", () => {
     expect(root.typeName).toBe("Xform");
     const seat = root.children[0]!;
     expect(seat.typeName).toBe("Mesh");
-    expect(seat.attributes.get("faceVertexCounts")).toBe("[4,4,4]");
+    /* Bulk `[...]` payloads are elided at the lexer (a real master is
+       hundreds of MB of vertex data, and tokenizing it OOM'd the daemon —
+       this is a structure parser, and no rule reads the numbers). The
+       attribute's PRESENCE survives, as do refs/paths/strings inside
+       arrays; the numeric bulk is recorded as an empty shell. */
+    expect(seat.attributes.has("faceVertexCounts")).toBe(true);
+    expect(seat.attributes.get("faceVertexCounts")).toBe("[]");
     expect(seat.attributes.get("material:binding")).toBe("</Root/Materials/mtl_wood>");
+  });
+
+  it("elides bulk array payloads but keeps refs, paths and strings inside arrays", () => {
+    /* The regression this pins: a real master is hundreds of MB of
+       bracketed vertex data, and tokenizing it minted a Token object per
+       number — a multi-GB heap and a daemon OOM on a chess set. The lexer
+       now skips `[...]` payloads in one walk; what consumers actually
+       read from arrays (sublayer/reference @paths@, <targets>, strings)
+       must still come through. */
+    const tuples = new Array(50_000).fill("(0.123456, 1.234567, 2.345678)").join(", ");
+    const src = `#usda 1.0
+(
+    defaultPrim = "Root"
+    subLayers = [@./base.usda@, @./decor.usda@]
+)
+
+def Xform "Root"
+{
+    def Mesh "m"
+    {
+        point3f[] points = [${tuples}]
+        int[] faceVertexIndices = [0, 1, 2, 0, 2, 3]
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        rel material:binding = </Root/M/mtl_x>
+    }
+}
+`;
+    const tree = parseUsda(src, "big.usda");
+    expect(tree.stage.subLayers).toEqual(["./base.usda", "./decor.usda"]);
+    const mesh = tree.prims.find((p) => p.name === "m")!;
+    // The bulk is gone — a value that used to be megabytes is a shell…
+    expect(mesh.attributes.get("points")!.length).toBeLessThan(8);
+    expect(mesh.attributes.get("faceVertexIndices")!.length).toBeLessThan(8);
+    // …while strings inside arrays survive for whoever reads them.
+    expect(mesh.attributes.get("xformOpOrder")).toContain("xformOp:transform");
+    expect(mesh.attributes.get("material:binding")).toBe("</Root/M/mtl_x>");
   });
 
   it("tracks line numbers for issue reporting", () => {

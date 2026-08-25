@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * The voxel/Minecraft layer against REAL Blender.
@@ -15,6 +16,7 @@ import { rmForSetup } from "./helpers/fs.js";
  * trips its own linter is broken.
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)("voxel pipeline (real Blender)", () => {
   const fixture = (name: string) => path.join(__dirname, "fixtures", name);

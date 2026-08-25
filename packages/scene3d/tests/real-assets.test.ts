@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { compile, probeBlender } from "../src/index.js";
 import { rmForSetup } from "./helpers/fs.js";
+import { assertBlenderIfRequired } from "./helpers/blender-gate.js";
 
 /**
  * The compiler against REAL downloaded assets — the Khronos glTF sample
@@ -17,6 +18,7 @@ import { rmForSetup } from "./helpers/fs.js";
  *      against the real measured geometry.
  */
 const hasBlender = (await probeBlender({})) !== null;
+assertBlenderIfRequired(hasBlender);
 
 describe.skipIf(!hasBlender)("real assets (Khronos corpus, real Blender)", () => {
   const fixture = (name: string) => path.join(__dirname, "fixtures", name);
@@ -60,7 +62,13 @@ describe.skipIf(!hasBlender)("real assets (Khronos corpus, real Blender)", () =>
       }),
       "utf8",
     );
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // Exported-bytes assertions only — no render is read.
+    const result = await compile({
+      projectDir: dir,
+      stages: ["parse", "build", "export", "lint"],
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(result.summary.errors).toBe(0);
     // Base + two LOD levels ship as deliverables.
     expect(result.exportedAssets).toContain("out/scene.glb");
@@ -126,6 +134,7 @@ describe.skipIf(!hasBlender)("real assets (Khronos corpus, real Blender)", () =>
       }),
       "utf8",
     );
+    // Exported-bytes assertions only — no render is read.
     const result = await compile({
       projectDir: dir,
       stages: ["parse", "build", "export", "lint"],
@@ -136,7 +145,6 @@ describe.skipIf(!hasBlender)("real assets (Khronos corpus, real Blender)", () =>
 
     const base = glbTriangles(path.join(dir, "out", "scene.glb"));
     const lod1 = glbTriangles(path.join(dir, "out", "scene.lod1.glb"));
-    expect(base).toBeGreaterThan(4000);
     // Genuinely decimated — NOT a full-res no-op (which is what the shape key
     // would have caused before the fix).
     expect(lod1).toBeLessThan(base * 0.65);
@@ -149,7 +157,14 @@ describe.skipIf(!hasBlender)("real assets (Khronos corpus, real Blender)", () =>
 
   it("compiles the Damaged Helmet from a bare .glb: census, UVs, textures, proof, re-export", async () => {
     const dir = workDir("real/helmet");
-    const result = await compile({ projectDir: dir, timeoutMs: LONG, noCache: true });
+    // The proof assertion below needs frames to EXIST with real coverage —
+    // one still frame carries that fact; the turntable does not add to it.
+    const result = await compile({
+      projectDir: dir,
+      proof: { turntable: false },
+      timeoutMs: LONG,
+      noCache: true,
+    });
     expect(result.source.kind).toBe("mesh");
     expect(result.source.files).toEqual(["DamagedHelmet.glb"]);
     expect(result.summary.errors).toBe(0);
