@@ -181,7 +181,11 @@ describe.skipIf(!hasBlender)("material atelier (real assets, GPU shaders, animat
     expect(fox.materials).toEqual(["mtl_gold"]);
     const helmet = census.meshes.find((m) => m.object === "prp_helmet")!;
     expect(helmet.tris).toBeGreaterThan(10_000);
-    expect(helmet.materials!.some((m) => m !== "mtl_gold")).toBe(true);
+    // Exact, not .some(): the claim is that the helmet was NOT overridden,
+    // and DamagedHelmet ships exactly one material. The old form passed as
+    // long as ANY material differed from mtl_gold, which a partial-override
+    // regression would satisfy.
+    expect(helmet.materials).toEqual(["Material_MR"]);
 
     // The origin CONTRACT for real assets: rotation pivots at the object
     // origin, so a file part's origin must be its solved box centre — not

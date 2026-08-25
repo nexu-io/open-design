@@ -273,8 +273,10 @@ describe.skipIf(!hasBlender)("real assets (Khronos corpus, real Blender)", () =>
     expect(spatial.size[2]).toBeLessThanOrEqual(0.4 + 1e-6);
     expect(Math.max(...spatial.size)).toBeCloseTo(0.4, 3);
     expect(spatial.worldMin[2]).toBeCloseTo(0.5 - 0.001, 6);
-    // Its real materials survived the import.
-    expect(helmet.materials!.length).toBeGreaterThan(0);
+    // Its real material survived the import — the exact one, because
+    // "at least one" is also true after a merge/drop regression leaves a
+    // stray behind.
+    expect(helmet.materials).toEqual(["Material_MR"]);
     // Provenance points at the scene.json the author wrote.
     expect(result.census!.provenance!.prp_helmet!.file).toBe("scene.json");
   }, 400_000);

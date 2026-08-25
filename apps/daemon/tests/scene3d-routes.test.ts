@@ -579,18 +579,21 @@ describe.skipIf(!hasBlender)('scene3d compile over HTTP (real Blender)', () => {
     const api = await startServer({ projectsRoot: root });
 
     const body = { stages: ['parse', 'build', 'lint'], noCache: true };
-    const [first, second] = await Promise.all([
+    // Two concurrent posts, no stagger: the in-flight lock is acquired
+    // synchronously when a request enters the handler, so exactly one of
+    // the pair wins regardless of arrival order, and the seconds-long
+    // Blender compile makes a both-200 interleaving impossible. A fixed
+    // sleep here used to ORDER the pair instead, which trusted the
+    // scheduler on a loaded box; the contract only promises that the loser
+    // is told to retry rather than racing the same `.scene3d` directory,
+    // so that is what is asserted, order-agnostically.
+    const [a, b] = await Promise.all([
       api.req('/api/projects/proj1/scene3d/compile', { method: 'POST', body }),
-      // Sent while the first is still inside Blender; the loser must be told
-      // to retry rather than racing on the same `.scene3d` directory.
-      (async () => {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        return api.req('/api/projects/proj1/scene3d/compile', { method: 'POST', body });
-      })(),
+      api.req('/api/projects/proj1/scene3d/compile', { method: 'POST', body }),
     ]);
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(409);
-    expect(second.body.error.code).toBe('CONFLICT');
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const loser = a.status === 409 ? a : b;
+    expect(loser.body.error.code).toBe('CONFLICT');
   }, LONG);
 });
 

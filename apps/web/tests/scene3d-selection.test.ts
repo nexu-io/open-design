@@ -78,7 +78,9 @@ describe('scene3d viewer selection', () => {
       expect(state.scenePath).toBe('scenes/crate');
       expect(state.selected).toEqual(['prp_crate_lid']);
       expect(state.parts).toHaveLength(3);
-      expect(seen.length).toBeGreaterThan(0);
+      // Exactly one dispatch, exactly one notification: > 0 would also
+      // pass a duplicate-listener double-invoke, the classic pub/sub bug.
+      expect(seen.length).toBe(1);
       unsubscribe();
     });
 
