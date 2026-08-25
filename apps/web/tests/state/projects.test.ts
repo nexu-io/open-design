@@ -16,6 +16,7 @@ import {
   importClaudeDesignZip,
   importFolderProject,
   invalidateWorkspaceProjectLists,
+  listTemplates,
   installGeneratedPluginFolder,
   installPluginSource,
   listPlugins,
@@ -2479,5 +2480,84 @@ describe('read-only project tabs cache', () => {
     expect(loaded.active).toBe('local.html');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBeUndefined();
+  });
+});
+
+describe('listTemplates request coalescing', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
+  }
+
+  it('collapses concurrent template-list reads into a single request', async () => {
+    // Same launch-burst shape as the design-system catalog: App's one-shot
+    // bootstrap and the home-route effect both want the list on the same pass,
+    // and both must keep their own read — one settles the entry view, the other
+    // exists to pick up a template saved inside a project. On the wire they are
+    // one request, and on a cold Home load they land together.
+    const gate = deferred<Response>();
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(() => {
+      reads += 1;
+      return gate.promise;
+    }));
+
+    const inFlight = [listTemplates(), listTemplates(), listTemplates()];
+    await vi.waitFor(() => expect(reads).toBeGreaterThan(0));
+    expect(reads).toBe(1);
+
+    gate.resolve(new Response(
+      JSON.stringify({ templates: [{ id: 'tpl-1', name: 'Landing page' }] }),
+      { status: 200 },
+    ));
+    for (const read of inFlight) {
+      await expect(read).resolves.toEqual([
+        expect.objectContaining({ id: 'tpl-1' }),
+      ]);
+    }
+  });
+
+  it('re-reads the template list for a call issued after the previous settled', async () => {
+    // Single-flight only, never a shared settled answer: returning Home re-reads
+    // precisely so a template saved inside a project shows up, and the save
+    // handler awaits its own refresh. A cached list would hand both of them the
+    // list they were fired to replace.
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      reads += 1;
+      return new Response(
+        JSON.stringify({ templates: reads > 1 ? [{ id: 'tpl-new', name: 'Saved' }] : [] }),
+        { status: 200 },
+      );
+    }));
+
+    await expect(listTemplates()).resolves.toEqual([]);
+    await expect(listTemplates()).resolves.toEqual([
+      expect.objectContaining({ id: 'tpl-new' }),
+    ]);
+    expect(reads).toBe(2);
+  });
+
+  it('lets the next caller retry instead of joining a failed read', async () => {
+    // Failures are never cached: a transient 500 must not leave the entry view
+    // with an empty template list until something else happens to refetch.
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      reads += 1;
+      return reads === 1
+        ? new Response('nope', { status: 500 })
+        : new Response(JSON.stringify({ templates: [{ id: 'tpl-2', name: 'Deck' }] }), { status: 200 });
+    }));
+
+    await expect(listTemplates()).resolves.toEqual([]);
+    await expect(listTemplates()).resolves.toEqual([
+      expect.objectContaining({ id: 'tpl-2' }),
+    ]);
+    expect(reads).toBe(2);
   });
 });
