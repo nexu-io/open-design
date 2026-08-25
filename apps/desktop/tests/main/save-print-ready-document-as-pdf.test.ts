@@ -200,6 +200,15 @@ describe('savePrintReadyDocumentAsPdf', () => {
         url: 'about:blank',
       }),
     };
+    Object.assign(mainFrame, {
+      frames: [provisionalFrame],
+      executeJavaScript: vi.fn().mockResolvedValue({
+        hasSrc: true,
+        rawSrc: 'https://example.test/delayed-adapter.html',
+        resolvedSrc: 'https://example.test/delayed-adapter.html',
+      }),
+    });
+    Object.assign(provisionalFrame, { parent: mainFrame });
     mainFrame.framesInSubtree = [mainFrame, provisionalFrame];
     const webContents = Object.assign(events, {
       mainFrame,
@@ -252,6 +261,8 @@ describe('savePrintReadyDocumentAsPdf', () => {
         url: 'https://example.test/delayed-adapter.html',
       }),
     };
+    Object.assign(committedFrame, { parent: mainFrame });
+    mainFrame.frames = [committedFrame];
     mainFrame.framesInSubtree = [mainFrame, committedFrame];
     events.emit(
       'did-frame-finish-load',
@@ -558,6 +569,50 @@ describe('waitForPrintableContent', () => {
       expect(sandboxedFrame.executeJavaScript).toHaveBeenCalledWith(
         '({ readyState: document.readyState, url: location.href })',
       );
+      expect(stop).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('accepts a completed intentionally blank iframe without consuming the deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const events = new EventEmitter();
+      const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+      const blankFrame: Record<string, unknown> = {
+        frameTreeNodeId: 301,
+        url: 'about:blank',
+        processId: 12,
+        routingId: 301,
+        executeJavaScript: vi.fn().mockResolvedValue({
+          readyState: 'complete',
+          url: 'about:blank',
+        }),
+      };
+      Object.assign(mainFrame, {
+        frames: [blankFrame],
+        executeJavaScript: vi.fn().mockResolvedValue({
+          hasSrc: false,
+          rawSrc: null,
+          resolvedSrc: '',
+        }),
+      });
+      blankFrame.parent = mainFrame;
+      mainFrame.framesInSubtree = [mainFrame, blankFrame];
+      const stop = vi.fn();
+      const webContents = Object.assign(events, {
+        mainFrame,
+        executeJavaScript: vi.fn().mockResolvedValue({ stalled: false }),
+        stop,
+      });
+
+      await waitForPrintableContent(
+        { webContents } as unknown as Parameters<typeof waitForPrintableContent>[0],
+      );
+
+      expect(mainFrame.executeJavaScript).toHaveBeenCalledTimes(2);
       expect(stop).not.toHaveBeenCalled();
       expect(vi.getTimerCount()).toBe(0);
     } finally {

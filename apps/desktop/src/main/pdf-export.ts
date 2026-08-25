@@ -435,14 +435,22 @@ export async function waitForEmbeddedFrames(
           (value) => {
             if (done || !pending.has(entry.key)) return;
             const state = normalizeEmbeddedFrameDocumentState(value);
-            if (
-              state.readyState === "complete" &&
-              !isInitialBlankFrameDocument(state.url)
-            ) {
+            if (state.readyState !== "complete") {
+              probeReplacementFrame(entry, candidate);
+              return;
+            }
+            if (!isInitialBlankFrameDocument(state.url)) {
               settle(entry.key);
               return;
             }
-            probeReplacementFrame(entry, candidate);
+            void blankFrameTargetState(candidate).then((targetState) => {
+              if (done || !pending.has(entry.key)) return;
+              if (targetState === "intentional-blank") {
+                settle(entry.key);
+                return;
+              }
+              probeReplacementFrame(entry, candidate);
+            });
           },
           () => probeReplacementFrame(entry, candidate),
         );
@@ -526,6 +534,58 @@ function normalizeEmbeddedFrameDocumentState(
 
 function isInitialBlankFrameDocument(url: string): boolean {
   return url === "" || url === "about:blank" || url.startsWith("about:blank#");
+}
+
+type BlankFrameTargetState = "intentional-blank" | "pending-nonblank" | "unknown";
+
+/**
+ * Distinguish the initial about:blank document of an assigned navigation from
+ * an iframe whose intended document is actually blank.
+ *
+ * A sandboxed child cannot read `window.frameElement`, but its parent owns the
+ * element and can read the authored target. Electron's `parent.frames` order
+ * follows the document's child browsing-context order; require its count to
+ * match the parent's iframe/frame elements before using the index so an
+ * unusual embedding shape fails closed instead of releasing the wrong frame.
+ */
+async function blankFrameTargetState(frame: WebFrameMain): Promise<BlankFrameTargetState> {
+  try {
+    const parent = frame.parent;
+    if (!parent) return "unknown";
+    const siblings = parent.frames;
+    const index = siblings.findIndex((candidate) =>
+      candidate.frameTreeNodeId === frame.frameTreeNodeId
+    );
+    if (index < 0) return "unknown";
+    const value = await parent.executeJavaScript(
+      `(function(){
+        var elements = Array.from(document.querySelectorAll('iframe,frame'));
+        if (elements.length !== ${siblings.length}) return null;
+        var element = elements[${index}];
+        if (!element) return null;
+        return {
+          hasSrc: element.hasAttribute('src'),
+          rawSrc: element.getAttribute('src'),
+          resolvedSrc: typeof element.src === 'string' ? element.src : ''
+        };
+      })()`,
+    );
+    if (typeof value !== "object" || value === null) return "unknown";
+    const target = value as { hasSrc?: unknown; rawSrc?: unknown; resolvedSrc?: unknown };
+    if (target.hasSrc !== true) return "intentional-blank";
+    const rawSrc = typeof target.rawSrc === "string" ? target.rawSrc : "";
+    const resolvedSrc = typeof target.resolvedSrc === "string" ? target.resolvedSrc : rawSrc;
+    if (
+      rawSrc === "" ||
+      isInitialBlankFrameDocument(resolvedSrc) ||
+      resolvedSrc.startsWith("javascript:")
+    ) {
+      return "intentional-blank";
+    }
+    return "pending-nonblank";
+  } catch {
+    return "unknown";
+  }
 }
 
 export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
