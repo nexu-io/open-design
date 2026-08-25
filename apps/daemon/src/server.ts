@@ -14383,6 +14383,7 @@ export async function startServer({
         stdioMcpRemovedInVersion: def.acpStdioMcpRemovedInVersion ?? null,
         executionProfile,
         completePromptOnTurnEnd: def.acpTurnEndCompletesPrompt === true,
+        sessionIdIsDurable: def.acpSessionIdIsDurable === true,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         // Resume the prior upstream session (drives `session/load`) when the
         // resume-identity guard says it is safe; otherwise a fresh session/new.

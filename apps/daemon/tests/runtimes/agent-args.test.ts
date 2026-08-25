@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kimi, kiro, letta, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
@@ -363,6 +363,22 @@ test('devin args use acp subcommand for json-rpc streaming', () => {
     'acp',
   ]);
   assert.equal(devin.streamFormat, 'acp-json-rpc');
+});
+
+test('letta uses the standalone ACP adapter without probing models', () => {
+  assert.equal(letta.name, 'Letta Code');
+  assert.equal(letta.bin, 'letta-acp');
+  assert.deepEqual(letta.versionArgs, ['--version']);
+  assert.deepEqual(letta.buildArgs('', [], [], {}), []);
+  assert.equal(letta.streamFormat, 'acp-json-rpc');
+  assert.equal(letta.fetchModels, undefined);
+  assert.equal(letta.listModels, undefined);
+  assert.equal(letta.fallbackModels?.[0]?.id, 'default');
+  assert.equal(letta.supportsImagePaths, true);
+  assert.equal(letta.mcpDiscovery, 'mature-acp');
+  assert.equal(letta.externalMcpInjection, 'acp-merge');
+  assert.equal(letta.acpSessionIdIsDurable, true);
+  assert.equal(letta.resumesSessionViaAcpLoad, true);
 });
 
 test('pi args use rpc mode without --no-session and append model/thinking options', () => {

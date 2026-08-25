@@ -31,6 +31,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/agent-adapters.md',
     docsUrl: 'https://hermes-agent.nousresearch.com/docs/',
   },
+  letta: {
+    installUrl: 'https://github.com/letta-ai/letta-acp#quick-start',
+    docsUrl: 'https://github.com/letta-ai/letta-acp#configuration',
+  },
   'trae-cli': {
     installUrl: 'https://www.volcengine.com/docs/86677/2227861?lang=zh',
     docsUrl: 'https://www.volcengine.com/docs/86677/2227861?lang=zh',

@@ -2121,7 +2121,13 @@ interface AgentSpawnHandle {
 }
 
 function attachAgentStreamHandlers(
-  def: { streamFormat?: string; eventParser?: string; id: string; promptViaStdin?: boolean },
+  def: {
+    streamFormat?: string;
+    eventParser?: string;
+    id: string;
+    promptViaStdin?: boolean;
+    acpSessionIdIsDurable?: boolean;
+  },
   child: ReturnType<typeof spawn>,
   prompt: string,
   cwd: string,
@@ -2175,6 +2181,7 @@ function attachAgentStreamHandlers(
       // so ACP runtimes can use their upstream configured default.
       model: resolveModelForAgent(def as never, model ?? null, modelEnv, liveModelScope),
       mcpServers: [],
+      sessionIdIsDurable: def.acpSessionIdIsDurable === true,
       send,
     });
   } else if (def.streamFormat === 'dsh-profile-jsonl') {

@@ -123,6 +123,9 @@ export interface AttachAcpSessionOptions {
   // `session/new`. The agent verifies the session and, if it is gone, returns a
   // structured `resume_failed` error the caller maps to its reseed path.
   resumeSessionId?: string | null;
+  // ACP adapters such as Letta use the protocol `sessionId` as the durable
+  // conversation handle rather than returning a separate adapter-specific id.
+  sessionIdIsDurable?: boolean;
   // Subsegment timing markers for spawn->first-token attribution (#3408 §4).
   // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
   // (the CLI is up and speaking the protocol); `onSessionInit` fires once when
@@ -176,6 +179,7 @@ export function attachAcpSession({
   modelUnavailableErrorCode,
   completePromptOnTurnEnd = false,
   resumeSessionId,
+  sessionIdIsDurable = false,
   onCliReady,
   onSessionInit,
   onPromptComplete,
@@ -1070,7 +1074,11 @@ export function attachAcpSession({
       sessionId = typeof result.sessionId === 'string' ? result.sessionId : null;
       // The durable handle for resuming this session on the next turn.
       durableSessionId =
-        typeof result.openCodeSessionId === 'string' ? result.openCodeSessionId : null;
+        typeof result.openCodeSessionId === 'string'
+          ? result.openCodeSessionId
+          : sessionIdIsDurable
+            ? sessionId
+            : null;
       // session/new acknowledged with a session id = handshake done (#3408 §4).
       if (sessionId) onSessionInit?.();
       const modelConfig = findModelConfigOption(result.configOptions);
