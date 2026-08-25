@@ -222,6 +222,8 @@ interface Props {
   /** Explicitly scoped balance in USD for `context`. Team callers must pass
    *  only a backend-proven v2 workspace wallet, never account credits. */
   balanceUsd?: string | null;
+  /** Demo-only override for surfaces that must show an explicit zero balance. */
+  forceShowCreditsBalance?: boolean;
   /** Open the app settings dialog (optionally on a specific section). */
   onOpenSettings?: (section?: EntrySettingsSection) => void;
   /** Open the members / invite slot (B's InviteDialog). */
@@ -528,6 +530,7 @@ interface EntryTopRightClusterProps {
   context: WorkspaceCollabContext | null;
   billing?: WorkspaceBillingSummary | null;
   balanceUsd?: string | null;
+  forceShowCreditsBalance?: boolean;
   /** Extra content rendered LEFT of the credits pill (e.g. the DeepSeek
    *  campaign badge on Home). */
   leadingSlot?: ReactNode;
@@ -555,6 +558,7 @@ export function EntryTopRightCluster({
   context,
   billing,
   balanceUsd,
+  forceShowCreditsBalance = false,
   leadingSlot,
   updaterSlot,
   onOpenSettings,
@@ -596,7 +600,7 @@ export function EntryTopRightCluster({
   const balanceLabel = formatVelaBalanceUsd(balanceUsd);
   // A subscriber's $0.00 is a healthy state (their popular models are
   // unlimited), so the pill stays out of the way instead of alarming them.
-  const showCreditsBalance = shouldShowCreditsBalance({
+  const showCreditsBalance = forceShowCreditsBalance || shouldShowCreditsBalance({
     tier: labelTier,
     balanceUsd,
   });
@@ -1206,6 +1210,7 @@ export function EntryNavRail({
   context,
   billing,
   balanceUsd,
+  forceShowCreditsBalance,
   onOpenSettings,
   onSignedOut,
   updaterSlot,
@@ -1889,6 +1894,7 @@ export function EntryNavRail({
         context={context}
         billing={billing}
         balanceUsd={balanceUsd}
+        forceShowCreditsBalance={forceShowCreditsBalance}
         leadingSlot={topRightSlot}
         updaterSlot={updaterSlot}
         onOpenSettings={onOpenSettings}

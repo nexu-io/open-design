@@ -83,6 +83,7 @@ export type TrackingAmrEntrySource =
   | 'generation_preview_switch_retry_card'
   | 'settings_amr_upgrade'
   | 'inline_amr_upgrade'
+  | 'go_plan_sunset_modal'
   | 'deepseek_unpaid_modal'
   | 'deepseek_workbench_badge'
   | 'deepseek_model_switcher_upgrade'
@@ -94,9 +95,14 @@ export type TrackingAmrEntrySource =
 // `deepseek_v4_flash` is the finished 8/6-8/13 free week; `deepseek_v4_pro`
 // is the 8/13-8/27 two-model window that follows it. Both stay declared so
 // the finished campaign's rows keep a valid id in the warehouse.
-export type TrackingCampaignId = 'deepseek_v4_flash' | 'deepseek_v4_pro';
+export type TrackingCampaignId =
+  | 'deepseek_v4_flash'
+  | 'deepseek_v4_pro'
+  | 'go_plan_sunset_202608';
 export type TrackingCampaignUserState = 'paid' | 'unpaid';
+export type TrackingCampaignDeliveryMode = 'demo' | 'targeted';
 export type TrackingCampaignConversionSource =
+  | 'go_plan_sunset_modal'
   | 'deepseek_unpaid_modal'
   | 'deepseek_workbench_badge'
   | 'deepseek_model_switcher_upgrade'

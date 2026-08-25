@@ -55,6 +55,7 @@ function renderRail(props: {
   context?: WorkspaceCollabContext;
   billing?: WorkspaceBillingSummary | null;
   balanceUsd?: string | null;
+  forceShowCreditsBalance?: boolean;
 }) {
   return render(
     <I18nProvider initial="zh-CN">
@@ -66,6 +67,7 @@ function renderRail(props: {
         context={props.context ?? context()}
         billing={props.billing === undefined ? billing() : props.billing}
         balanceUsd={props.balanceUsd}
+        forceShowCreditsBalance={props.forceShowCreditsBalance}
       />
     </I18nProvider>,
   );
@@ -98,6 +100,16 @@ describe('top-right credits pill', () => {
   it('hides a zero balance written as 0.00', () => {
     renderRail({ balanceUsd: '0.00' });
     expect(creditsPill()).toBeNull();
+  });
+
+  it('keeps a subscribed zero visible when a focused demo explicitly requests it', () => {
+    renderRail({
+      context: context({ planId: 'go' } as Partial<WorkspaceCollabContext>),
+      billing: billing({ membershipTier: 'go' }),
+      balanceUsd: '0',
+      forceShowCreditsBalance: true,
+    });
+    expect(creditsPill()?.textContent).toContain('$0.00');
   });
 
   it('keeps the balance when a subscriber still has money', () => {
