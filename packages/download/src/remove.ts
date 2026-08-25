@@ -18,6 +18,7 @@ import { removePathBestEffort } from "@open-design/platform";
 
 import { MANAGED_DOWNLOAD_ERROR_CODES, ManagedDownloadError } from "./errors.js";
 import { pathExists } from "./fs-io.js";
+import { acquireLock, releaseLock } from "./lock.js";
 import { readManifest } from "./manifest.js";
 import { activeTargets, targetActiveKey } from "./registry.js";
 import { ensureManagedBase } from "./store.js";
@@ -67,14 +68,18 @@ export async function removeManagedDownload(options: RemoveManagedDownloadOption
     throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.TARGET_LOCKED, `download target is active: ${target.bucket}/${target.fileName}`);
   }
   await ensureManagedBase(target.basePath);
-  await Promise.all([
-    removePathBestEffort(target.finalPath),
-    removePathBestEffort(target.partialPath, { recursive: false }),
-    removePathBestEffort(target.manifestPath, { recursive: false }),
-    removePathBestEffort(target.lockPath, { recursive: false }),
-  ]);
-  const bucketPath = join(target.basePath, target.bucket);
-  const entries = await readdir(bucketPath).catch(() => null);
-  if (entries != null && entries.length === 0) await rm(bucketPath, { force: true, recursive: true }).catch(() => undefined);
-  return { removed: true };
+  const lock = await acquireLock(target);
+  try {
+    await Promise.all([
+      removePathBestEffort(target.finalPath),
+      removePathBestEffort(target.partialPath, { recursive: false }),
+      removePathBestEffort(target.manifestPath, { recursive: false }),
+    ]);
+    const bucketPath = join(target.basePath, target.bucket);
+    const entries = await readdir(bucketPath).catch(() => null);
+    if (entries != null && entries.length === 0) await rm(bucketPath, { force: true, recursive: true }).catch(() => undefined);
+    return { removed: true };
+  } finally {
+    await releaseLock(lock);
+  }
 }

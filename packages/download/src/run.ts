@@ -2,7 +2,7 @@
  * @module run
  *
  * Single managed-download execution. Detects reusable state (a verified complete
- * file or a resumable partial), resets suspicious/corrupt bases, then acquires the
+ * file or a resumable partial), clears suspicious/corrupt target state, then acquires the
  * lock, prunes, transfers, verifies the checksum, and atomically promotes the
  * partial to its final path — emitting the final result. This is the orchestration
  * kernel behind the public `managedDownload`. Depends on the store, manifest, lock,
@@ -17,7 +17,7 @@ import { hashFile, pathExists, statFileSize, writeJson } from "./fs-io.js";
 import { acquireLock, type AcquiredLock, releaseLock } from "./lock.js";
 import { createManifest, manifestMatchesTarget, readManifest } from "./manifest.js";
 import { pruneManagedDownloads } from "./prune.js";
-import { ensureManagedBase, resetOwnedBase } from "./store.js";
+import { ensureManagedBase } from "./store.js";
 import type { NormalizedTarget } from "./target.js";
 import { downloadWithRetries } from "./transfer.js";
 import type { DownloadManifest } from "./manifest.js";
@@ -25,26 +25,35 @@ import type { ManagedDownloadProgress, ManagedDownloadResult } from "./types.js"
 
 /**
  * @internal Snapshot of reusable state resolved before a transfer: an existing
- * complete result, a resumable partial manifest, or a signal that the base was
- * reset because its state was suspicious.
+ * complete result or a resumable partial manifest.
  */
 type ReusableState = {
   manifest: DownloadManifest | null;
-  reset?: boolean;
   result?: ManagedDownloadResult;
 };
 
 /**
- * @internal Reset the owned base and report that a suspicious state was cleared.
+ * @internal Clear one target's result and scratch state while retaining its lock.
+ */
+async function clearTargetState(target: NormalizedTarget): Promise<void> {
+  await Promise.all([
+    rm(target.finalPath, { force: true, recursive: true }),
+    rm(target.partialPath, { force: true, recursive: true }),
+    rm(target.manifestPath, { force: true, recursive: true }),
+  ]);
+}
+
+/**
+ * @internal Clear suspicious target state before starting a fresh download.
  */
 async function suspiciousReset(target: NormalizedTarget): Promise<ReusableState> {
-  await resetOwnedBase(target.basePath);
-  return { manifest: null, reset: true };
+  await clearTargetState(target);
+  return { manifest: null };
 }
 
 /**
  * @internal Resolve whether an existing complete file can be reused, a partial
- * can be resumed, or the base must be reset.
+ * can be resumed, or target state must be cleared.
  * @returns The resolved reusable state.
  */
 async function loadReusableState(target: NormalizedTarget): Promise<ReusableState> {
@@ -106,25 +115,12 @@ export async function runManagedDownload(
   try {
     let state = await loadReusableState(target);
     if (state.result != null) return state.result;
-    if (state.reset === true) {
-      // A reset removes the lock as part of the managed base cleanup, so
-      // reacquire it before writing the fresh target state.
-      await releaseLock(lock);
-      lock = null;
-      await ensureManagedBase(target.basePath);
-      lock = await acquireLock(target);
-      state = await loadReusableState(target);
-      if (state.result != null) return state.result;
-      if (state.reset === true) {
-        throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.STORE_CORRUPT, "download state kept resetting after base cleanup");
-      }
-    }
     const download = await downloadWithRetries(target, state.manifest, options);
     const actual = await hashFile(target.partialPath, target.checksum.algorithm).catch((error: unknown) => {
       throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.STORE_CORRUPT, `downloaded partial could not be hashed: ${errorMessage(error)}`);
     });
     if (actual !== target.checksum.value) {
-      await resetOwnedBase(target.basePath).catch(() => undefined);
+      await clearTargetState(target).catch(() => undefined);
       throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.CHECKSUM_MISMATCH, "downloaded file checksum did not match requested payload", {
         actual,
         expected: target.checksum.value,
@@ -135,7 +131,7 @@ export async function runManagedDownload(
     if (await pathExists(target.finalPath)) {
       const existing = await hashFile(target.finalPath, target.checksum.algorithm).catch(() => null);
       if (existing !== target.checksum.value) {
-        await resetOwnedBase(target.basePath).catch(() => undefined);
+        await clearTargetState(target).catch(() => undefined);
         throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.STORE_CORRUPT, "existing complete file did not match requested payload");
       }
       await rm(target.partialPath, { force: true }).catch(() => undefined);
