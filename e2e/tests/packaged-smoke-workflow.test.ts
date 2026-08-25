@@ -39,6 +39,7 @@ const playwrightConfigPath = join(e2eRoot, "playwright.config.ts");
 const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.atom.yml");
 const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.atom.yml");
 const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.atom.yml");
+const convergenceWorkflowPath = join(workspaceRoot, ".github", "workflows", "convergence.atom.yml");
 const contributorMaintainerCheckWorkflowPath = join(
   workspaceRoot,
   ".github",
@@ -68,6 +69,8 @@ const bakePreviewsReleaseWorkflowPath = join(
 );
 const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
+const convergenceScriptPath = join(workspaceRoot, ".github", "scripts", "convergence.py");
+const r2PythonLibPath = join(workspaceRoot, ".github", "scripts", "lib", "r2.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const dailyBetaRecoveryScriptPath = join(
   workspaceRoot,
@@ -88,7 +91,7 @@ const releaseStableNotesScriptPath = join(workspaceRoot, ".github", "scripts", "
 const releaseStableScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-stable.ts");
 const releaseBetaScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-beta.ts");
 const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package.json");
-const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
+const scopesScriptPath = join(workspaceRoot, ".github", "scripts", "scopes.py");
 const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
 const notifyReleaseFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-release-feishu.yml");
@@ -194,7 +197,7 @@ function extractValidateGateJqPrograms(workflow: string): { failures: string; re
   const needsCheck = sectionBetween(
     validate,
     "      - name: Check workspace validation jobs",
-    "      - name: Block merge while a merge-blocking label is present",
+    "      - name: Checkout convergence control plane",
   );
   const programs = [...needsCheck.matchAll(/jq -r '([\s\S]*?)'/g)].map((match) => match[1] ?? "");
   expect(programs).toHaveLength(2);
@@ -253,39 +256,33 @@ async function readPackagedVersion(): Promise<string> {
 }
 
 async function runScopesPrint(eventName: string, eventPayload: unknown, changedFiles: string[] = []): Promise<Record<string, unknown>> {
-  const tempDir = await mkdtemp(join(tmpdir(), "od-scopes-"));
-  const eventPath = join(tempDir, "event.json");
-  const ghPath = join(tempDir, "gh");
-  const ghCmdPath = join(tempDir, "gh.cmd");
-  await writeFile(eventPath, JSON.stringify(eventPayload));
-  const script = `#!/usr/bin/env node
-const changedFiles = ${JSON.stringify(changedFiles)};
-if (process.argv.includes("--jq")) {
-  process.stdout.write(changedFiles.join("\\n"));
-  if (changedFiles.length > 0) process.stdout.write("\\n");
-} else {
-  process.stdout.write(JSON.stringify({ files: changedFiles.map((filename) => ({ filename })) }));
-}
-`;
-  await writeFile(ghPath, script);
-  await chmod(ghPath, 0o755);
-  await writeFile(ghCmdPath, `@echo off\r\n"${process.execPath}" "${ghPath}" %*\r\n`);
-
-  try {
-    const { stdout } = await execFileAsync(process.execPath, ["--experimental-strip-types", scopesScriptPath, "print"], {
-      cwd: workspaceRoot,
-      env: workflowFixtureEnv({
-        GITHUB_EVENT_NAME: eventName,
-        GITHUB_EVENT_PATH: eventPath,
-        GITHUB_REPOSITORY: "nexu-io/open-design",
-        GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
-        OPEN_DESIGN_GH_NODE_SCRIPT: ghPath,
-      }, tempDir),
-    });
-    return JSON.parse(stdout) as Record<string, unknown>;
-  } finally {
-    await rm(tempDir, { recursive: true, force: true });
-  }
+  const inputMode = (eventPayload as { inputs?: { ci_mode?: string } }).inputs?.ci_mode;
+  const context =
+    eventName === "workflow_dispatch" && inputMode !== "hot"
+      ? "full"
+      : eventName === "merge_group" && changedFiles.length === 0
+        ? "full"
+        : eventName === "merge_group"
+          ? "merge-queue"
+          : "pr";
+  const { stdout } = await execFileAsync("python3", [scopesScriptPath, "plan", "--context", context, "--files", ...changedFiles], {
+    cwd: workspaceRoot,
+  });
+  const value = JSON.parse(stdout) as {
+    scopes: Record<string, unknown>;
+    enabled: Record<string, boolean>;
+  };
+  return {
+    ...value.scopes,
+    run_e2e_vitest: value.enabled.e2e_vitest,
+    run_playwright_critical: value.enabled.playwright_critical,
+    run_playwright_visual: value.enabled.playwright_visual,
+    run_preflight: value.enabled.preflight,
+    run_ui_p0: value.enabled.ui_p0,
+    run_web_workspace_tests: value.enabled.web_workspace_tests,
+    run_windows_tools_pack_payload_tests: value.enabled.windows_tools_pack_payload_tests,
+    run_workspace_unit_tests: value.enabled.workspace_unit_tests,
+  };
 }
 
 async function runRunners(mode?: string): Promise<Record<string, string>> {
@@ -407,18 +404,17 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toContain("Smoke PR windows packaged runtime");
     expect(workflow).not.toContain("Smoke PR linux headless packaged runtime");
     expect(workflow).not.toContain("OD_PACKAGED_E2E_");
-    expect(workflow).not.toContain("actions/cache/save");
   });
 
-  it("[P2] runs Windows launcher payload archive validation when tools-pack is touched", async () => {
+  it("[P2] runs the independent Windows launcher payload test set", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const job = sectionBetween(workflow, "  windows_tools_pack_payload_tests:", "  web_workspace_tests:");
     const validate = sectionBetween(workflow, "  validate:", "          if [ -n \"$failures\" ]; then");
 
     expect(job).toContain("fromJSON(needs.runners.outputs.runs_on).windows_tools");
     expect(job).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).windows_tools)");
-    expect(job).toContain("needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true'");
-    expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts");
+    expect(job).toContain("fromJSON(needs.plan.outputs.run).windows_tools_pack_payload_tests");
+    expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher/windows/payload.test.ts");
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
 
@@ -540,13 +536,40 @@ describe("packaged smoke workflow", () => {
       readFile(commentWorkflowPath, "utf8"),
     ]);
 
-    // Producer: the merge_group gate emits a handoff/comment artifact for the labeled PR when
-    // it blocks, and uploads it on the failure path (the gate exits 1 exactly when it produces).
-    expect(ciWorkflow).toContain("<!-- merge-queue-needs-validation -->");
-    expect(ciWorkflow).toContain("emit_ejection_notice");
-    expect(ciWorkflow).toContain(
+    const mergePolicy = sectionBetween(ciWorkflow, "  merge_policy:", "  validate:");
+    const validate = sectionBetween(ciWorkflow, "  validate:", "  runtime_summary:");
+
+    // Producer: merge policy is a merge-group-only sibling of every workload. It emits a
+    // handoff/comment artifact for a labeled PR and uploads it on the failure path.
+    expect(mergePolicy).toContain("needs: [plan, runners]");
+    expect(mergePolicy).toContain("if: ${{ github.event_name == 'merge_group' }}");
+    expect(mergePolicy).toContain("fromJSON(needs.runners.outputs.runs_on).control");
+    expect(mergePolicy).toContain("<!-- merge-queue-needs-validation -->");
+    expect(mergePolicy).toContain("emit_ejection_notice");
+    expect(mergePolicy).toContain(
       "if: ${{ failure() && steps.merge_blocking_label_gate.outputs.comment_created == 'true' }}",
     );
+
+    // Policy converges only at the required workspace gate. It never becomes a prerequisite
+    // that could suppress workload coverage for a labeled merge group.
+    expect(validate).toContain("      - merge_policy");
+    expect(validate).toContain("if: ${{ always() }}");
+    expect(validate).not.toContain("Block merge while a merge-blocking label is present");
+    const workloadSections = [
+      ["  static_gate:", "  preflight:"],
+      ["  preflight:", "  workspace_unit_tests:"],
+      ["  workspace_unit_tests:", "  daemon_unit_tests:"],
+      ["  daemon_unit_tests:", "  windows_tools_pack_payload_tests:"],
+      ["  windows_tools_pack_payload_tests:", "  web_workspace_tests:"],
+      ["  web_workspace_tests:", "  e2e_vitest:"],
+      ["  e2e_vitest:", "  playwright_critical:"],
+      ["  playwright_critical:", "  ui_p0:"],
+      ["  ui_p0:", "  playwright_visual:"],
+      ["  playwright_visual:", "  merge_policy:"],
+    ] as const;
+    for (const [start, end] of workloadSections) {
+      expect(sectionBetween(ciWorkflow, start, end)).toContain("needs: [plan, runners]");
+    }
 
     // Consumer: a merge_group run's head_sha is the queue's synthetic merge commit, so the atom
     // binds merge_group artifacts to their producing run by run_id and skips the base-freshness
@@ -554,6 +577,269 @@ describe("packaged smoke workflow", () => {
     expect(commentWorkflow).toContain('"$RUN_EVENT" = "merge_group"');
     expect(commentWorkflow).toContain('"$artifact_run_id" != "$RUN_ID"');
     expect(commentWorkflow).toContain('[ "$RUN_EVENT" != "merge_group" ] && [ "$current_base" != "$base_sha" ]');
+  });
+
+  it("[P2] surfaces a merge-queue CI failure ejection as a PR comment handoff", async () => {
+    const ciWorkflow = await readFile(ciWorkflowPath, "utf8");
+    const mergePolicy = sectionBetween(ciWorkflow, "  merge_policy:", "  validate:");
+    const validate = sectionBetween(ciWorkflow, "  validate:", "  runtime_summary:");
+
+    // The label gate tells the generic notice whether it already announced this ejection, so a
+    // label-only ejection gets exactly one comment.
+    expect(mergePolicy).toContain(
+      "ejection_notice: ${{ steps.merge_blocking_label_gate.outputs.comment_created }}",
+    );
+    expect(validate).toContain("LABEL_NOTICE_EMITTED: ${{ needs.merge_policy.outputs.ejection_notice }}");
+
+    // Producer: merge-group only, only after the gate has already failed, unable to change the
+    // gate result, and uploaded on the failure path exactly like the label notice.
+    expect(validate).toContain("<!-- merge-queue-ci-failure -->");
+    expect(validate).toContain("if: ${{ failure() && github.event_name == 'merge_group' }}");
+    expect(validate).toContain("continue-on-error: true");
+    expect(validate).toContain(
+      "if: ${{ failure() && steps.merge_queue_failure_notice.outputs.comment_created == 'true' }}",
+    );
+    // It sits after hash publication so the success path is untouched and the gate's own jq
+    // programs stay isolated (see extractValidateGateJqPrograms).
+    expect(validate.indexOf("Save successful hash map")).toBeLessThan(
+      validate.indexOf("Produce merge-queue failure notice handoff"),
+    );
+
+    // Behavior: run the real step script against a stubbed `gh`, then read the handoff it
+    // produced through the same helper comment.atom.yml uses to consume it.
+    const script = extractWorkflowRunScript(ciWorkflow, "Produce merge-queue failure notice handoff");
+    const prHead = "4821c4ee".padEnd(40, "0");
+    const prBase = "1a7a23d4".padEnd(40, "0");
+    const groupHead = "e3051e63".padEnd(40, "0");
+    const runId = "32105196624";
+    const planRun = JSON.stringify({ static_gate: true, daemon_unit_tests: true, e2e_vitest: false });
+    const esc = String.fromCharCode(27);
+    const failedShardLog = [
+      `2026-08-18T06:05:15.3329113Z ${esc}[31m⎯⎯⎯ Failed Tests 1 ⎯⎯⎯${esc}[39m`,
+      `2026-08-18T06:05:15.3330283Z ${esc}[41m${esc}[1m FAIL ${esc}[22m${esc}[49m tests/project-archive.test.ts > buildProjectArchive > exposes a consumable stream with the same archive contents`,
+      `2026-08-18T06:05:15.3333182Z ${esc}[31mAssertionError: expected [ Array(6) ] to deeply equal [ 'DESIGN-HANDOFF.md', …(4) ]${esc}[39m`,
+      "2026-08-18T06:05:15.3398469Z ##[error]AssertionError: expected [ Array(6) ] to deeply equal [ 'DESIGN-HANDOFF.md', …(4) ]",
+      "2026-08-18T06:05:15.4000000Z ##[error]Process completed with exit code 1.",
+      "",
+    ].join("\n");
+
+    async function runNotice(args: {
+      needs: Record<string, unknown>;
+      labelNoticeEmitted?: string;
+      labels?: string[];
+      mergePolicyConclusion?: string;
+      // gh >= 2.97 refuses to print a body with terminal escape sequences unless
+      // `--allow-escape-sequences` is passed; older gh rejects that flag as unknown.
+      ghSupportsEscapeFlag?: boolean;
+    }): Promise<{
+      stdout: string;
+      output: Record<string, string>;
+      listed: Array<Record<string, unknown>>;
+      body: string;
+    }> {
+      const dir = await mkdtemp(join(tmpdir(), "od-merge-queue-notice-"));
+      const ghPath = join(dir, "gh");
+      const outputPath = join(dir, "github-output");
+      const runnerTemp = join(dir, "runner-temp");
+      await mkdir(runnerTemp);
+      await writeFile(outputPath, "");
+      const mergePolicyConclusion = args.mergePolicyConclusion ?? "success";
+      const fixtures = {
+        pull: {
+          head: { sha: prHead },
+          base: { sha: prBase },
+          labels: (args.labels ?? []).map((name) => ({ name })),
+        },
+        jobs: {
+          jobs: [
+            {
+              id: 101,
+              name: "Daemon tests (1/4)",
+              conclusion: "failure",
+              html_url: `https://github.com/nexu-io/open-design/actions/runs/${runId}/job/101`,
+              steps: [
+                { name: "Checkout", conclusion: "success" },
+                { name: "Run daemon test shard", conclusion: "failure" },
+              ],
+            },
+            { id: 102, name: "Daemon tests (2/4)", conclusion: "success", html_url: "", steps: [] },
+            {
+              id: 103,
+              name: "Merge policy",
+              conclusion: mergePolicyConclusion,
+              html_url: `https://github.com/nexu-io/open-design/actions/runs/${runId}/job/103`,
+              steps: [{ name: "Block merge while a merge-blocking label is present", conclusion: mergePolicyConclusion }],
+            },
+            // Replaying a completed run reports the gate itself as failed; it must never be listed.
+            { id: 104, name: "Validate workspace", conclusion: "failure", html_url: "", steps: [] },
+          ],
+        },
+        compare: {
+          commits: [
+            { commit: { message: "fix(daemon): keep daemon as sole writer of run events (#6559)\n\nbody" } },
+            { commit: { message: "fix(daemon): list dot-prefixed user content in managed projects (#6214)" } },
+          ],
+        },
+        logs: failedShardLog,
+      };
+      const supportsEscapeFlag = args.ghSupportsEscapeFlag ?? true;
+      await writeFile(
+        ghPath,
+        `#!/usr/bin/env node
+const fixtures = JSON.parse(process.env.FAKE_GH_FIXTURES);
+const supportsEscapeFlag = ${supportsEscapeFlag ? "true" : "false"};
+const argv = process.argv.slice(2);
+const args = argv.join(" ");
+const hasEscapeFlag = argv.includes("--allow-escape-sequences");
+if (args === "--version") process.stdout.write(supportsEscapeFlag ? "gh version 2.98.0 (fake)\\n" : "gh version 2.87.3 (fake)\\n");
+// Real help text is long: a probe that lets grep exit early would SIGPIPE gh and, under
+// pipefail, read as "flag unsupported". Pad well past the pipe buffer so that stays red.
+else if (args === "api --help") process.stdout.write((supportsEscapeFlag ? "      --allow-escape-sequences   Allow printing terminal escape sequences\\n" : "      --cache duration           Cache the response\\n") + "      --padding\\n".repeat(8192));
+else if (hasEscapeFlag && !supportsEscapeFlag) { process.stderr.write("unknown flag: --allow-escape-sequences\\n"); process.exit(1); }
+else if (/\\/pulls\\/6214$/.test(args)) process.stdout.write(JSON.stringify(fixtures.pull));
+else if (/\\/actions\\/runs\\/${runId}\\/jobs/.test(args)) process.stdout.write(JSON.stringify(fixtures.jobs));
+else if (/\\/actions\\/jobs\\/\\d+\\/logs$/.test(args)) {
+  // Real gh >= 2.97 behavior for a body full of ANSI codes: nothing on stdout, exit 1.
+  if (supportsEscapeFlag && !hasEscapeFlag) { process.stderr.write("the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway\\n"); process.exit(1); }
+  process.stdout.write(fixtures.logs);
+}
+else if (/\\/compare\\//.test(args)) process.stdout.write(JSON.stringify(fixtures.compare));
+else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit(1); }
+`,
+      );
+      await chmod(ghPath, 0o755);
+      try {
+        const { stdout } = await execFileAsync("bash", ["-c", script], {
+          cwd: workspaceRoot,
+          env: workflowFixtureEnv(
+            {
+              GH_TOKEN: "fake",
+              REPO: "nexu-io/open-design",
+              RUN_ID: runId,
+              NEEDS_JSON: JSON.stringify(args.needs),
+              MERGE_GROUP_REF: `gh-readonly-queue/main/pr-6214-${prBase}`,
+              BASE_SHA: prBase,
+              HEAD_SHA: groupHead,
+              LABEL_NOTICE_EMITTED: args.labelNoticeEmitted ?? "",
+              SELF_JOB_NAME: "Validate workspace",
+              GITHUB_OUTPUT: outputPath,
+              GITHUB_SERVER_URL: "https://github.com",
+              RUNNER_TEMP: runnerTemp,
+              FAKE_GH_FIXTURES: JSON.stringify(fixtures),
+            },
+            dir,
+          ),
+        });
+        const output = parseGithubOutput(await readFile(outputPath, "utf8"));
+        let listed: Array<Record<string, unknown>> = [];
+        let body = "";
+        if (output.comment_path) {
+          const { stdout: listStdout } = await execFileAsync(
+            "python3",
+            [handoffScriptPath, "list", "comment", output.comment_path],
+            { cwd: workspaceRoot },
+          );
+          listed = listStdout
+            .trim()
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as Record<string, unknown>);
+          body = await readFile(
+            join(output.comment_path, "handoff", "comment", "merge-queue-ci-failure-pr-6214", "body.md"),
+            "utf8",
+          );
+        }
+        return { stdout, output, listed, body };
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+
+    // A failed workload: one notice for the PR heading the group, naming the job, the step,
+    // the failing assertion, the run, and the PR batched ahead of it.
+    const workloadFailure = await runNotice({
+      needs: {
+        plan: { result: "success", outputs: { run: planRun } },
+        merge_policy: { result: "success", outputs: { ejection_notice: "" } },
+        static_gate: { result: "success" },
+        daemon_unit_tests: { result: "failure" },
+        e2e_vitest: { result: "skipped" },
+      },
+    });
+    expect(workloadFailure.output.comment_created).toBe("true");
+    expect(workloadFailure.output.comment_name).toBe("handoff-comment-merge-queue-ci-failure-pr-6214");
+    expect(workloadFailure.listed).toHaveLength(1);
+    expect(workloadFailure.listed[0]).toMatchObject({
+      kind: "comment",
+      id: "merge-queue-ci-failure-pr-6214",
+      pr_number: 6214,
+      head_sha: prHead,
+      base_sha: prBase,
+      run_id: 32105196624,
+      marker: "<!-- merge-queue-ci-failure -->",
+    });
+    expect(workloadFailure.body).toContain("<!-- merge-queue-ci-failure -->");
+    expect(workloadFailure.body).toContain(
+      `[run ${runId}](https://github.com/nexu-io/open-design/actions/runs/${runId})`,
+    );
+    expect(workloadFailure.body).toContain(
+      `- **Daemon tests (1/4)** — failure at \`Run daemon test shard\` ([job log](https://github.com/nexu-io/open-design/actions/runs/${runId}/job/101))`,
+    );
+    expect(workloadFailure.body).not.toContain("Daemon tests (2/4)");
+    expect(workloadFailure.body).not.toContain("Validate workspace");
+    expect(workloadFailure.body).toContain(
+      "FAIL  tests/project-archive.test.ts > buildProjectArchive > exposes a consumable stream with the same archive contents",
+    );
+    expect(workloadFailure.body).toContain("AssertionError: expected [ Array(6) ]");
+    expect(workloadFailure.body).not.toContain("Process completed with exit code");
+    expect(workloadFailure.body).not.toContain(esc);
+    expect(workloadFailure.body).toContain("queued ahead of it (#6559)");
+    expect(workloadFailure.body).toContain("add the PR back to the merge queue");
+
+    // A label-only ejection is already announced by the gate's notice: no second comment.
+    const labelOnly = await runNotice({
+      needs: {
+        plan: { result: "success", outputs: { run: planRun } },
+        merge_policy: { result: "failure", outputs: { ejection_notice: "true" } },
+        static_gate: { result: "success" },
+        daemon_unit_tests: { result: "success" },
+      },
+      labelNoticeEmitted: "true",
+      labels: ["needs-validation"],
+      mergePolicyConclusion: "failure",
+    });
+    expect(labelOnly.output.comment_created).toBeUndefined();
+    expect(labelOnly.stdout).toContain("its own notice covers this ejection");
+
+    // A workload that failed alongside a blocking label is still reported, without repeating
+    // the policy job — and the live label alone is enough to recognize the label ejection.
+    const labelPlusWorkload = await runNotice({
+      needs: {
+        plan: { result: "success", outputs: { run: planRun } },
+        merge_policy: { result: "failure", outputs: { ejection_notice: "" } },
+        static_gate: { result: "success" },
+        daemon_unit_tests: { result: "failure" },
+      },
+      labels: ["needs-maintainer-check"],
+      mergePolicyConclusion: "failure",
+    });
+    expect(labelPlusWorkload.output.comment_created).toBe("true");
+    expect(labelPlusWorkload.body).toContain("**Daemon tests (1/4)**");
+    expect(labelPlusWorkload.body).not.toContain("Merge policy");
+
+    // A runner whose gh predates the escape-sequence policy must still get the excerpt: the
+    // probe finds no flag and the plain fetch is used.
+    const olderGh = await runNotice({
+      needs: {
+        plan: { result: "success", outputs: { run: planRun } },
+        merge_policy: { result: "success", outputs: { ejection_notice: "" } },
+        daemon_unit_tests: { result: "failure" },
+      },
+      ghSupportsEscapeFlag: false,
+    });
+    expect(olderGh.output.comment_created).toBe("true");
+    expect(olderGh.body).toContain("FAIL  tests/project-archive.test.ts");
+    expect(olderGh.stdout).toContain("gh version 2.87.3 (fake)");
   });
 
   it("[P1] routes configured contributors into an independent maintainer merge block", async () => {
@@ -1075,15 +1361,14 @@ process.stdin.on("end", () => {
 
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
+    const plan = sectionBetween(workflow, "  plan:", "  static_gate:");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
     expect(workflow).toContain("ci_mode:");
-    expect(scopes).toContain("ci_mode: ${{ steps.detect.outputs.ci_mode }}");
-    expect(scopes).toContain("ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}");
-    expect(scopes).toContain("run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}");
-    expect(workflow).toContain("needs.scopes.outputs.run_ui_p0 == 'true'");
-    expect(validate).toContain('when($out.run_ui_p0 == "true"; ["ui_p0"])');
+    expect(plan).toContain("run: ${{ steps.convergence.outputs.run }}");
+    expect(plan).toContain("scopes: ${{ steps.scopes.outputs.scopes }}");
+    expect(workflow).toContain("fromJSON(needs.plan.outputs.run).ui_p0");
+    expect(validate).toContain("[$run | to_entries[] | select(.value) | .key]");
 
     await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["apps/web/src/app/page.tsx"])).resolves.toMatchObject({
       ci_mode: "hot",
@@ -1126,12 +1411,12 @@ process.stdin.on("end", () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const workspaceUnit = sectionBetween(workflow, "  workspace_unit_tests:", "  daemon_unit_tests:");
 
-    expect(workspaceUnit).toContain(`if [ "\${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+    expect(workspaceUnit).toContain(`if [ "\${{ fromJSON(needs.plan.outputs.scopes).tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/desktop build
             pnpm --filter @open-design/desktop test
             pnpm --filter @open-design/packaged test
             pnpm --filter @open-design/tools-pack test
-            if [ "\${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
+            if [ "\${{ fromJSON(needs.plan.outputs.run).e2e_vitest }}" != "true" ]; then
               pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
             fi
           fi`);
@@ -1142,12 +1427,12 @@ process.stdin.on("end", () => {
     const daemonTests = sectionBetween(workflow, "  daemon_unit_tests:", "  windows_tools_pack_payload_tests:");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
-    expect(daemonTests).toContain("if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}");
+    expect(daemonTests).toContain("if: ${{ fromJSON(needs.plan.outputs.run).daemon_unit_tests }}");
     expect(daemonTests).toContain("fail-fast: false");
     expect(daemonTests).toContain("shard: [1, 2, 3, 4]");
     expect(daemonTests).toContain("pnpm --filter @open-design/daemon test --shard=${{ matrix.shard }}/4");
     expect(validate).toContain("- daemon_unit_tests");
-    expect(validate).toContain('when($out.daemon_tests_required == "true"; ["daemon_unit_tests"])');
+    expect(validate).toContain("[$run | to_entries[] | select(.value) | .key]");
   });
 
   it("[P2] skips the critical fallback for pure packaged-leaf changes and stays fail-closed elsewhere", async () => {
@@ -1183,10 +1468,28 @@ process.stdin.on("end", () => {
       run_playwright_visual: false,
       run_ui_p0: false,
       run_web_workspace_tests: false,
-      run_windows_tools_pack_payload_tests: true,
+      run_windows_tools_pack_payload_tests: false,
       tools_dev_tests_required: true,
       tools_pack_tests_required: true,
+      windows_tools_pack_payload_tests_required: false,
       workspace_validation_required: true,
+    });
+
+    await expect(runScopesPrint("merge_group", mergeGroup, ["tools/pack/src/mac/app.ts"])).resolves.toMatchObject({
+      run_windows_tools_pack_payload_tests: false,
+      tools_pack_tests_required: true,
+      windows_tools_pack_payload_tests_required: false,
+    });
+
+    await expect(runScopesPrint("merge_group", mergeGroup, ["tools/pack/src/win/custom-installer.ts"])).resolves.toMatchObject({
+      run_windows_tools_pack_payload_tests: true,
+      tools_pack_tests_required: true,
+      windows_tools_pack_payload_tests_required: true,
+    });
+
+    await expect(runScopesPrint("merge_group", mergeGroup, ["packages/launcher-proto/src/index.ts"])).resolves.toMatchObject({
+      run_windows_tools_pack_payload_tests: true,
+      windows_tools_pack_payload_tests_required: true,
     });
 
     await expect(runScopesPrint("merge_group", mergeGroup, ["apps/desktop/package.json"])).resolves.toMatchObject({
@@ -1262,30 +1565,82 @@ process.stdin.on("end", () => {
     expect(validate).not.toContain("run_docker_build");
     expect(validate).toContain("Check workspace validation jobs");
 
-    const baseOutputs = {
-      run_preflight: "false",
-      run_workspace_unit_tests: "false",
-      run_windows_tools_pack_payload_tests: "false",
-      run_web_workspace_tests: "false",
-      run_e2e_vitest: "false",
-      run_playwright_critical: "false",
-      run_ui_p0: "false",
-      run_playwright_visual: "false",
+    const baseRun = {
+      static_gate: false,
+      preflight: false,
+      workspace_unit_tests: false,
+      daemon_unit_tests: false,
+      windows_tools_pack_payload_tests: false,
+      web_workspace_tests: false,
+      e2e_vitest: false,
+      playwright_critical: false,
+      ui_p0: false,
+      playwright_visual: false,
     };
     // Core gate only cares about app jobs — unknown packaging keys are ignored.
     await expect(
       validateGatePasses(workflow, {
-        scopes: { result: "success", outputs: baseOutputs },
-        static_gate: { result: "success" },
+        plan: { result: "success", outputs: { run: JSON.stringify(baseRun) } },
+        merge_policy: { result: "skipped" },
       }),
     ).resolves.toBe(true);
 
+    await expect(
+      validateGatePasses(workflow, {
+        plan: { result: "success", outputs: { run: JSON.stringify(baseRun) } },
+        merge_policy: { result: "success" },
+      }),
+    ).resolves.toBe(true);
+
+    await expect(
+      validateGatePasses(workflow, {
+        plan: { result: "success", outputs: { run: JSON.stringify(baseRun) } },
+        merge_policy: { result: "failure" },
+      }),
+    ).resolves.toBe(false);
+
     const needsWithFailedWeb = {
-      scopes: { result: "success", outputs: { ...baseOutputs, run_web_workspace_tests: "true" } },
-      static_gate: { result: "success" },
+      plan: { result: "success", outputs: { run: JSON.stringify({ ...baseRun, web_workspace_tests: true }) } },
       web_workspace_tests: { result: "failure" },
     };
     await expect(validateGatePasses(workflow, needsWithFailedWeb)).resolves.toBe(false);
+  });
+
+  it("[P1] hands off convergence results only after the workspace gate succeeds", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const plan = sectionBetween(workflow, "  plan:", "  static_gate:");
+    const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
+
+    expect(plan).toContain("Upload pending convergence plan");
+    expect(plan).toContain(
+      "convergence_plan_artifact: ci-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}",
+    );
+    expect(plan).not.toContain("actions/cache/save");
+    expect(validate).toContain("Download pending convergence plan");
+    expect(validate).toContain("name: ${{ needs.plan.outputs.convergence_plan_artifact }}");
+    expect(validate).not.toContain("name: ci-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}");
+    expect(validate).toContain("Upload convergence handoff");
+    expect(validate.indexOf("Upload convergence handoff")).toBeGreaterThan(
+      validate.indexOf("Check workspace validation jobs"),
+    );
+    expect(validate).not.toContain("Block merge while a merge-blocking label is present");
+
+    const run = {
+      static_gate: false,
+      preflight: false,
+      workspace_unit_tests: false,
+      daemon_unit_tests: false,
+      windows_tools_pack_payload_tests: false,
+      web_workspace_tests: false,
+      e2e_vitest: true,
+      playwright_critical: false,
+      ui_p0: false,
+      playwright_visual: false,
+    };
+    await expect(validateGatePasses(workflow, {
+      plan: { result: "success", outputs: { run: JSON.stringify(run) } },
+      e2e_vitest: { result: "failure" },
+    })).resolves.toBe(false);
   });
 
   it("[P1] includes launcher protocol in the Nix daemon workspace build", async () => {
@@ -1300,8 +1655,8 @@ process.stdin.on("end", () => {
 
   it("[P2] routes trusted Linux CI through the Nexu runner fleet", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const runners = sectionBetween(workflow, "  runners:", "  scopes:");
-    const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
+    const runners = sectionBetween(workflow, "  runners:", "  plan:");
+    const plan = sectionBetween(workflow, "  plan:", "  static_gate:");
     const staticGate = sectionBetween(workflow, "  static_gate:", "  preflight:");
     const workspaceUnitTests = sectionBetween(workflow, "  workspace_unit_tests:", "  daemon_unit_tests:");
     const daemonUnitTests = sectionBetween(workflow, "  daemon_unit_tests:", "  windows_tools_pack_payload_tests:");
@@ -1309,16 +1664,16 @@ process.stdin.on("end", () => {
     const e2eVitest = sectionBetween(workflow, "  e2e_vitest:", "  playwright_critical:");
     const preflight = sectionBetween(workflow, "  preflight:", "  workspace_unit_tests:");
     const uiP0 = sectionBetween(workflow, "  ui_p0:", "  playwright_visual:");
-    const visual = sectionBetween(workflow, "  playwright_visual:", "  validate:");
+    const visual = sectionBetween(workflow, "  playwright_visual:", "  merge_policy:");
 
     expect(runners).toContain("|| 'nexu-runners-small'");
     expect(runners).toContain("&& 'ubuntu-24.04'");
     expect(runners).toContain("runs_on: ${{ steps.runners.outputs.runs_on }}");
     expect(runners).toContain("decision: ${{ steps.runners.outputs.decision }}");
     expect(runners).toContain("python3 .github/scripts/runners.py");
-    expect(scopes).toContain("needs: [runners]");
-    expect(scopes).toContain("fromJSON(needs.runners.outputs.runs_on).control");
-    expect(staticGate).toContain("needs: [runners]");
+    expect(plan).toContain("needs: [runners]");
+    expect(plan).toContain("fromJSON(needs.runners.outputs.runs_on).control");
+    expect(staticGate).toContain("needs: [plan, runners]");
     expect(staticGate).toContain("fromJSON(needs.runners.outputs.runs_on).control");
     expect(workspaceUnitTests).toContain("fromJSON(needs.runners.outputs.runs_on).workspace_unit");
     expect(workspaceUnitTests).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit)");
@@ -1345,7 +1700,7 @@ process.stdin.on("end", () => {
     expect(uiP0).toContain(
       "toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0)",
     );
-    expect(uiP0).toContain("include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}");
+    expect(uiP0).toContain("include: ${{ fromJSON(needs.plan.outputs.ui_p0_matrix) }}");
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
       "project-workspace",
@@ -1453,7 +1808,7 @@ process.stdin.on("end", () => {
 
   it("[P1] routes external fork PRs through GitHub-hosted runner profiles", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const runners = sectionBetween(workflow, "  runners:", "  scopes:");
+    const runners = sectionBetween(workflow, "  runners:", "  plan:");
 
     expect(runners).toContain("github.event_name == 'pull_request'");
     expect(runners).toContain("github.event.pull_request.head.repo.full_name != github.repository");
@@ -1628,7 +1983,7 @@ process.stdin.on("end", () => {
 
     const performanceProfiles = await runRunners("performance");
     const performanceRunsOn = runnerRunsOn(performanceProfiles);
-    expect(runnerDecision(performanceProfiles)).toEqual({ schema_version: 1, mode: "performance" });
+    expect(runnerDecision(performanceProfiles)).toEqual({ schema_version: 1, mode: "default" });
     expect(performanceRunsOn.control).toEqual(["nexu-runners-small"]);
     expect(performanceRunsOn.general_medium).toEqual(["nexu-runners-medium"]);
     expect(performanceRunsOn.workspace_unit).toEqual(["nexu-runners-medium"]);
@@ -1666,9 +2021,7 @@ process.stdin.on("end", () => {
     expect(economicRunsOn.visual_hot).toEqual(["ubuntu-24.04"]);
 
     for (const invalidMode of ["Economic", " economic "]) {
-      const fallbackProfiles = await runRunners(invalidMode);
-      expect(runnerDecision(fallbackProfiles)).toEqual({ schema_version: 1, mode: "default" });
-      expect(runnerRunsOn(fallbackProfiles).control).toEqual(["nexu-runners-small"]);
+      await expect(runRunners(invalidMode)).rejects.toThrow("unknown runner mode");
     }
   });
 
@@ -1681,11 +2034,12 @@ process.stdin.on("end", () => {
   });
 
   it("[P2] routes CI follow-ons through generic handoff workflows", async () => {
-    const [ciWorkflow, commentWorkflow, autofixWorkflow, reportWorkflow, handoffScript] = await Promise.all([
+    const [ciWorkflow, commentWorkflow, autofixWorkflow, reportWorkflow, convergenceWorkflow, handoffScript] = await Promise.all([
       readFile(ciWorkflowPath, "utf8"),
       readFile(commentWorkflowPath, "utf8"),
       readFile(autofixWorkflowPath, "utf8"),
       readFile(reportWorkflowPath, "utf8"),
+      readFile(convergenceWorkflowPath, "utf8"),
       readFile(handoffScriptPath, "utf8"),
     ]);
 
@@ -1693,8 +2047,10 @@ process.stdin.on("end", () => {
     // Packaging hash autofix left core ci with nix — no ci-produced autofix handoffs for now.
     expect(ciWorkflow).toContain("handoff.py dir comment");
     expect(ciWorkflow).toContain("handoff.py dir report");
+    expect(ciWorkflow).toContain("convergence.py handoff");
     expect(ciWorkflow).toContain("handoff-comment-");
     expect(ciWorkflow).toContain("handoff-report-");
+    expect(ciWorkflow).toContain("handoff-convergence-");
     expect(ciWorkflow).not.toContain("handoff.py dir autofix");
     expect(ciWorkflow).not.toContain("handoff-autofix-");
     expect(ciWorkflow).not.toContain("nix-hash-autofix");
@@ -1716,6 +2072,19 @@ process.stdin.on("end", () => {
     expect(reportWorkflow).not.toContain("handoff-comment-");
     expect(handoffScript).toContain("def self_check()");
     expect(handoffScript).toContain('"report"');
+    expect(handoffScript).toContain('"convergence"');
+    expect(convergenceWorkflow).toContain("handoff.py resolve-run-artifact convergence ci-results");
+    expect(convergenceWorkflow).toContain("Checkout trusted convergence code");
+    expect(convergenceWorkflow).toContain("convergence.py admit");
+    expect(convergenceWorkflow).toContain("python3 .github/scripts/convergence.py publish");
+    expect(convergenceWorkflow).toContain("convergence.py stage-products");
+    expect(convergenceWorkflow).toContain("convergence.py storage-status");
+    expect(convergenceWorkflow).toContain("CLOUDFLARE_R2_WORKLOAD_RESULTS_AK");
+    expect(convergenceWorkflow).not.toContain("gh api");
+    expect(convergenceWorkflow).not.toContain("jq");
+    expect(convergenceWorkflow).not.toContain("ci-v1");
+    expect(ciWorkflow).not.toContain("convergence-provenance.json");
+    expect(convergenceWorkflow).not.toContain("actions/checkout@v6.0.2\n        with:\n          ref: ${{ github.event.workflow_run.head_sha }}");
 
     for (const workflow of [commentWorkflow, autofixWorkflow]) {
       expect(workflow).toContain("python3 .github/scripts/handoff.py self-check");
@@ -1734,6 +2103,22 @@ process.stdin.on("end", () => {
       expect(workflow).not.toContain("--field body=\"$(cat");
       expect(workflow).not.toContain("--field \"body=$(cat");
     }
+  });
+
+  it("[P1] keeps workload policy above the narrow Python R2 transport", async () => {
+    const [workflow, convergence, r2] = await Promise.all([
+      readFile(convergenceWorkflowPath, "utf8"),
+      readFile(convergenceScriptPath, "utf8"),
+      readFile(r2PythonLibPath, "utf8"),
+    ]);
+    expect(convergence).toContain("from lib.r2 import R2Client");
+    expect(convergence).toContain("def publish_command");
+    expect(r2).toContain("class R2Client");
+    expect(r2).toContain('headers["if-none-match"] = "*"');
+    expect(r2).not.toContain("workload result");
+    expect(r2).not.toContain("handoff");
+    expect(workflow).not.toContain("r2.ts");
+    expect(workflow).not.toContain("publish-workload-results");
   });
 
   it("[P2] keeps pull-request plugin preview baking secretless and read-only", async () => {

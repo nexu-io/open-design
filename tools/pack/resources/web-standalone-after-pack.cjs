@@ -835,13 +835,22 @@ function resolveHyperframesRuntimePackageNames(platformName) {
   if (arch !== "arm64" && arch !== "x64") {
     throw new Error(`[tools-pack hyperframes] unsupported ${platformName} architecture: ${arch}`);
   }
-  const platform = platformName === "darwin" ? "darwin" : "win32";
-  return [
-    "sharp",
-    "@img/colour",
-    `@img/sharp-${platform}-${arch}`,
-    `@img/sharp-libvips-${platform}-${arch}`,
-  ];
+  if (platformName === "win32") {
+    return [
+      "sharp",
+      "@img/colour",
+      `@img/sharp-win32-${arch}`,
+    ];
+  }
+  if (platformName === "darwin") {
+    return [
+      "sharp",
+      "@img/colour",
+      `@img/sharp-darwin-${arch}`,
+      `@img/sharp-libvips-darwin-${arch}`,
+    ];
+  }
+  throw new Error(`[tools-pack hyperframes] unsupported platform: ${platformName}`);
 }
 
 function packagePath(nodeModulesRoot, packageName) {
@@ -948,7 +957,9 @@ async function auditNoBrokenSymlinks(root, label) {
 }
 
 async function runWebStandaloneAfterPack(context) {
-  if (context?.electronPlatformName != null && context.electronPlatformName !== "darwin" && context.electronPlatformName !== "win32") return;
+  if (context?.electronPlatformName !== "darwin" && context?.electronPlatformName !== "win32") {
+    throw new Error(`[tools-pack web-standalone] unsupported platform: ${context?.electronPlatformName ?? "unknown"}`);
+  }
 
   const config = await readHookConfig();
   const appPath = resolveAppPath(context);

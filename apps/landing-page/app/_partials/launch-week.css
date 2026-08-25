@@ -1204,8 +1204,8 @@ html:has(main.lw) {
   width: auto;
   vertical-align: -0.2em;
   margin-right: 0.5em;
-  /* Discord blurple and the Feishu bird both fight the acid fill at full
-     strength; a hair of desaturation settles them without going grey. */
+  /* Discord blurple fights the acid fill at full strength; a hair of
+     desaturation settles it without going grey. */
   filter: saturate(0.92);
 }
 

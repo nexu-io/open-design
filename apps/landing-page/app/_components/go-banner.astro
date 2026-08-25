@@ -1,0 +1,235 @@
+---
+import { getGoBannerCopy } from '../go-banner-i18n';
+import { localeFromPath, localizedHref, type LandingLocaleCode } from '../i18n';
+
+interface Props {
+  locale?: LandingLocaleCode;
+  apiOrigin?: string;
+}
+
+const locale = Astro.props.locale ?? localeFromPath(Astro.url.pathname);
+const copy = getGoBannerCopy(locale);
+const pricingHref = localizedHref('/pricing/', locale);
+const env = import.meta.env as Record<string, string | undefined>;
+const apiOrigin =
+  Astro.props.apiOrigin ??
+  env.PUBLIC_CLOUD_API_BASE ??
+  env.PUBLIC_AMR_API_BASE ??
+  'https://amr-api.open-design.ai';
+---
+
+<aside
+  class="go-banner"
+  data-go-banner
+  data-window-start="2026-08-20T17:00:00+08:00"
+  data-window-end="2026-09-03T20:00:00+08:00"
+  data-api-origin={apiOrigin}
+  aria-label={copy.ariaLabel}
+  hidden
+>
+  <div class="go-banner__inner">
+    <span class="go-banner__badge">{copy.badge}</span>
+    <a class="go-banner__link" href={pricingHref} data-go-banner-cta>
+      <span class="go-banner__headline">{copy.headline}</span>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+    </a>
+  </div>
+  <button class="go-banner__close" type="button" data-go-banner-close aria-label={copy.closeLabel}>
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+  </button>
+</aside>
+
+<style>
+  .go-banner {
+    position: sticky;
+    z-index: 72;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 7px 70px;
+    color: #20241d;
+    background: #d8ffb5;
+    border: 0;
+  }
+  .go-banner[hidden] { display: none !important; }
+  .go-banner__inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-width: 0;
+  }
+  .go-banner__link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 4px 0;
+    color: #292d27;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-decoration: none;
+  }
+  .go-banner__badge {
+    flex: 0 0 auto;
+    padding: 5px 9px;
+    border-radius: 999px;
+    color: #173111;
+    background: #78ea57;
+    font-size: 8px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: .045em;
+    white-space: nowrap;
+  }
+  .go-banner__headline {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .go-banner__link svg {
+    flex: none;
+    transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .go-banner__link:hover svg { transform: translateX(3px); }
+  .go-banner__link:focus-visible {
+    outline: 2px solid #11120f;
+    outline-offset: 3px;
+  }
+  .go-banner__close {
+    position: absolute;
+    top: 50%;
+    right: 3.2vw;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border: 1px solid transparent;
+    color: #11120f;
+    background: transparent;
+    cursor: pointer;
+    transform: translateY(-50%);
+  }
+  .go-banner__close:hover { color: #11120f; }
+  .go-banner__close:focus-visible { outline: 3px solid rgb(17 18 15 / 28%); outline-offset: 1px; }
+  :global(html.go-banner-active),
+  :global(html.go-banner-pending) { --home-campaign-banner-height: 0px !important; }
+  :global(html.go-banner-active .home-campaign-banner),
+  :global(html.go-banner-pending .home-campaign-banner) { display: none !important; }
+  :global(html.go-banner-active .site-chrome),
+  :global(html.go-banner-pending .site-chrome) { top: 48px; }
+  @media (max-width: 760px) {
+    .go-banner {
+      justify-content: flex-start;
+      min-height: 48px;
+      padding: 8px 48px 8px 14px;
+    }
+    .go-banner__inner {
+      justify-content: flex-start;
+      gap: 8px;
+    }
+    .go-banner__link { justify-content: flex-start; font-size: 10px; overflow: hidden; }
+    .go-banner__close { right: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .go-banner__link svg { transition: none; }
+  }
+</style>
+
+<script is:inline>
+  (() => {
+    const banner = document.querySelector('[data-go-banner]');
+    if (!banner) return;
+
+    const start = Date.parse(banner.getAttribute('data-window-start') || '');
+    const end = Date.parse(banner.getAttribute('data-window-end') || '');
+    const now = Date.now();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || now < start || now >= end) return;
+
+    const dismissKey = 'open-design:go-banner-dismissed:2026-08-20';
+    try {
+      if (window.localStorage.getItem(dismissKey) === '1') return;
+    } catch (error) {}
+    const announceOwnershipChange = () => {
+      window.dispatchEvent(new Event('go-banner:state-change'));
+    };
+    document.documentElement.classList.add('go-banner-pending');
+    announceOwnershipChange();
+
+    const track = (name, extra) => {
+      try {
+        window.__odTrack?.(name, Object.assign({
+          page_name: 'landing_home',
+          area: 'go_banner',
+          audience: 'unpaid',
+          campaign_id: 'go_plan_launch',
+        }, extra || {}));
+      } catch (error) {}
+    };
+
+    const hide = () => {
+      banner.setAttribute('hidden', '');
+      document.documentElement.classList.remove('go-banner-active', 'go-banner-pending');
+      announceOwnershipChange();
+    };
+    const show = () => {
+      banner.removeAttribute('hidden');
+      document.documentElement.classList.add('go-banner-active');
+      announceOwnershipChange();
+      track('surface_view');
+    };
+
+    banner.querySelector('[data-go-banner-cta]')?.addEventListener('click', () => {
+      track('ui_click', { element: 'cta' });
+    });
+    banner.querySelector('[data-go-banner-close]')?.addEventListener('click', () => {
+      track('ui_click', { element: 'close' });
+      try { window.localStorage.setItem(dismissKey, '1'); } catch (error) {}
+      hide();
+    });
+
+    const apiOrigin = (banner.getAttribute('data-api-origin') || '').replace(/\/$/, '');
+    if (!apiOrigin) {
+      document.documentElement.classList.remove('go-banner-pending');
+      announceOwnershipChange();
+      return;
+    }
+    fetch(apiOrigin + '/api/auth/get-session', {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('session_unavailable');
+        return response.json();
+      })
+      .then((session) => {
+        if (!session?.user) {
+          show();
+          return null;
+        }
+        return fetch(apiOrigin + '/api/v1/billing/summary', {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        })
+          .then((response) => {
+            if (!response.ok) throw new Error('billing_summary_unavailable');
+            return response.json();
+          })
+          .then((summary) => {
+            const tier = String(summary?.membershipTier || '').trim().toLowerCase();
+            if (!tier || tier === 'free' || tier === 'none') show();
+          });
+      })
+      .catch(() => {
+        // A failed entitlement probe cannot safely classify a signed-in visitor.
+      })
+      .finally(() => document.documentElement.classList.remove('go-banner-pending'))
+      .then(announceOwnershipChange);
+  })();
+</script>

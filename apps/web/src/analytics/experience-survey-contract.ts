@@ -17,6 +17,15 @@
 
 export const EXPERIENCE_SURVEY_ID = '01a00fd1-ed7e-0000-d38e-63bce21fb816';
 
+/**
+ * What armed the card. PostHog's survey analytics ignores extra properties, so
+ * this rides along purely for our own segmentation. It exists because the
+ * trigger moved from a successful export to a delivered artifact: without it,
+ * responses from the two regimes are indistinguishable in the events table and
+ * any before/after read of the score is guesswork.
+ */
+export const EXPERIENCE_SURVEY_TRIGGER = 'post_generation';
+
 export const EXPERIENCE_SURVEY_QUESTION_IDS = {
   recommendation: '146fefc0-9c11-4003-9869-1fd81be1650f',
   improvement: 'e487f41a-8111-4a87-8795-1358c9a11b55',
@@ -47,3 +56,13 @@ export const EXPERIENCE_SURVEY_IMPROVEMENT_CHOICES = [
   "Doesn't look good",
   'Breaks other things',
 ] as const;
+
+/**
+ * The escape hatch at the end of the choices. PostHog models this as the
+ * question's open choice: when a respondent picks it, the response recorded is
+ * the text they typed, not the word "Other". This constant is only what we
+ * report when they pick it and type nothing — "none of these fit" is itself an
+ * answer worth keeping, and dropping it would silently turn those people into
+ * non-responders.
+ */
+export const EXPERIENCE_SURVEY_IMPROVEMENT_OTHER = 'Other';

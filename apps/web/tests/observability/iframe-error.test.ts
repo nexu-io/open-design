@@ -161,6 +161,24 @@ describe('preview iframe observability', () => {
     },
   );
 
+  it('classifies a retained unverified frame recovered on reactivation', () => {
+    reportPreviewTransportRecovery({
+      surface: 'artifact_preview',
+      renderMode: 'srcdoc',
+      signal: 'reactivation_unverified',
+      activationAcknowledged: false,
+    });
+
+    expect(reportSafetyEvent).toHaveBeenCalledWith(
+      'client_preview_white_screen',
+      expect.objectContaining({
+        transport_signal: 'reactivation_unverified',
+        transport_stage: 'retained_frame_unverified_on_reactivation',
+        recovery_attempted: true,
+      }),
+    );
+  });
+
   it('deduplicates repeated failures from one preview', () => {
     const seen = new Set<string>();
     const message = {

@@ -65,8 +65,25 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, forceInline: true })).toBe(false);
   });
 
+  it('URL-loads sandbox-shim artifacts only when the daemon guard is present', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, needsSandboxShim: true })).toBe(false);
+    expect(shouldUrlLoadHtmlPreview({
+      ...base,
+      needsSandboxShim: true,
+      urlSandboxGuard: true,
+    })).toBe(true);
+  });
+
   it('falls back to srcDoc when the HTML source needs a focus guard', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, needsFocusGuard: true })).toBe(false);
+  });
+
+  it('URL-loads focus-guard artifacts only when the daemon guard is present', () => {
+    expect(shouldUrlLoadHtmlPreview({
+      ...base,
+      needsFocusGuard: true,
+      urlFocusGuard: true,
+    })).toBe(true);
   });
 
   it('falls back to srcDoc when the HTML source needs a redirect guard (issue #710)', () => {
@@ -74,6 +91,14 @@ describe('shouldUrlLoadHtmlPreview', () => {
     // the iframe forever and freezes the workspace. The srcDoc path carries
     // buildSrcdoc's redirect-loop guard.
     expect(shouldUrlLoadHtmlPreview({ ...base, needsRedirectGuard: true })).toBe(false);
+  });
+
+  it('URL-loads redirecting artifacts only when the daemon guard is present', () => {
+    expect(shouldUrlLoadHtmlPreview({
+      ...base,
+      needsRedirectGuard: true,
+      urlRedirectGuard: true,
+    })).toBe(true);
   });
 
   it('falls back to srcDoc when the source references project files by site-root path', () => {

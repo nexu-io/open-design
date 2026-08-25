@@ -7,6 +7,8 @@ import type {
   OpenDesignHostFailure,
   OpenDesignHostGlobalScope,
   OpenDesignHostPdfPrintOptions,
+  OpenDesignHostPreviewNavigationFailure,
+  OpenDesignHostPreviewNavigationFailureListener,
   OpenDesignHostPickWorkingDirResult,
   OpenDesignHostProjectImportInit,
   OpenDesignHostProjectImportResult,
@@ -165,6 +167,33 @@ export function setHostPetVisible(visible: boolean, scope: OpenDesignHostGlobalS
     return { ok: true };
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+/** Read the latest Electron-observed preview subframe navigation failure. */
+export function getLatestHostPreviewNavigationFailure(
+  scope: OpenDesignHostGlobalScope = globalThis,
+): OpenDesignHostPreviewNavigationFailure | null {
+  const host = getOpenDesignHost(scope);
+  if (typeof host?.preview?.getLatestNavigationFailure !== "function") return null;
+  try {
+    return host.preview.getLatestNavigationFailure();
+  } catch {
+    return null;
+  }
+}
+
+/** Subscribe to Electron-observed preview subframe navigation failures. */
+export function subscribeHostPreviewNavigationFailure(
+  listener: OpenDesignHostPreviewNavigationFailureListener,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): () => void {
+  const host = getOpenDesignHost(scope);
+  if (typeof host?.preview?.subscribeNavigationFailure !== "function") return () => undefined;
+  try {
+    return host.preview.subscribeNavigationFailure(listener);
+  } catch {
+    return () => undefined;
   }
 }
 

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-next-strategy",
+  "title": "OD Next Strategy V2",
+  "version": "2.0.0",
+  "publishedAt": "2026-08-14T10:44:00Z",
+  "description": "Bundled, inactive OD Next planning and Build strategy content.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "tags": [
+    "scenario",
+    "first-party",
+    "strategy",
+    "hidden"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "od-next-strategy-v2",
+    "mode": "scenario",
+    "hidden": true,
+    "strategy": {
+      "schema": "open-design.bundled-strategy/v2",
+      "id": "od-next-strategy",
+      "promptRecipe": "od-next-plan-build-v2",
+      "assets": {
+        "core": {
+          "path": "./assets/core-system-prompt.md",
+          "version": "2.0.0"
+        },
+        "orchestration": {
+          "path": "./assets/general-orchestration.md",
+          "version": "2.0.0"
+        },
+        "taskProfiles": [
+          {
+            "taskType": "prototype",
+            "path": "./assets/task-profiles/prototype.md",
+            "version": "2.1.0",
+            "rollout": "active",
+            "projectKinds": ["prototype"],
+            "resources": [
+              { "path": "./assets/task-profiles/prototype/device-frames/iphone.html", "version": "1.0.0" },
+              { "path": "./assets/task-profiles/prototype/device-frames/android.html", "version": "1.0.0" },
+              { "path": "./assets/task-profiles/prototype/device-frames/neutral.html", "version": "1.0.0" }
+            ]
+          },
+          {
+            "taskType": "ppt",
+            "path": "./assets/task-profiles/ppt.md",
+            "version": "2.0.0",
+            "rollout": "active",
+            "projectKinds": ["deck"]
+          },
+          {
+            "taskType": "marketing",
+            "path": "./assets/task-profiles/marketing.md",
+            "version": "2.0.0",
+            "rollout": "active",
+            "projectKinds": ["image"]
+          },
+          {
+            "taskType": "hyperframes",
+            "path": "./assets/task-profiles/hyperframes.md",
+            "version": "2.0.0",
+            "rollout": "active",
+            "projectKinds": ["video"]
+          }
+        ],
+        "taskProfileMapping": {
+          "path": "./references/task-profile-mapping.md",
+          "version": "2.0.0"
+        }
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/core-system-prompt.md",
+        "./assets/general-orchestration.md",
+        "./assets/task-profiles/prototype.md",
+        "./assets/task-profiles/ppt.md",
+        "./assets/task-profiles/marketing.md",
+        "./assets/task-profiles/hyperframes.md",
+        "./references/task-profile-mapping.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": ["discovery-question-form"]
+        },
+        {
+          "id": "plan",
+          "atoms": ["direction-picker", "todo-write"]
+        },
+        {
+          "id": "generate",
+          "atoms": ["file-write", "live-artifact"]
+        }
+      ]
+    },
+    "capabilities": ["prompt:inject", "pipeline:*", "fs:write"]
+  }
+}

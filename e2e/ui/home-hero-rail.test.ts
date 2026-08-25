@@ -1323,7 +1323,7 @@ test('[P2] home hero exposes the composer footer pickers and the full template s
   }
 });
 
-test('[P0] empty home composer submits the active placeholder suggestion with template routing', async ({ page }) => {
+test('[P0] empty home composer submits the active prototype suggestion without explicit plugin authority', async ({ page }) => {
   await routeProjectCreates(page);
   await routeRunsAccepted(page);
   await gotoEntryHome(page);
@@ -1341,7 +1341,7 @@ test('[P0] empty home composer submits the active placeholder suggestion with te
   };
 
   expect(body.pendingPrompt?.trim()).toBeTruthy();
-  expect(body.pluginId).toBe('example-web-prototype');
+  expect(body.pluginId).toBeUndefined();
   expect(body.metadata?.kind).toBe('prototype');
   await expect(page).toHaveURL(/\/projects\//);
 });

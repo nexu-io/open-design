@@ -1,0 +1,21 @@
+{
+  "schema": "open-design.od-next-runtime-fixture-manifest/v1",
+  "fixtureVersion": "od-next-runtime-contract/v1",
+  "runtimePath": "native-opencode",
+  "agentId": "opencode",
+  "runtimeAdapterVersion": "od-opencode-json-events/v1",
+  "provenance": {
+    "kind": "contract_only",
+    "reason": "x1_runtime_fixture_missing"
+  },
+  "containsSensitiveContent": false,
+  "cases": [
+    { "id": "main_run", "expectedMinimumEvidence": "L0" },
+    { "id": "tool", "expectedMinimumEvidence": "L1" },
+    { "id": "child_success", "expectedMinimumEvidence": "L2" },
+    { "id": "child_failure_parent_recovers", "expectedMinimumEvidence": "L2" },
+    { "id": "cancel", "expectedMinimumEvidence": "L0" },
+    { "id": "timeout", "expectedMinimumEvidence": "L0" },
+    { "id": "resume", "expectedMinimumEvidence": "L0" }
+  ]
+}

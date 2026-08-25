@@ -1083,7 +1083,7 @@ test('[P1] rail destinations navigate and Home keeps its composer execution pill
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer routes free-form prompts through the default prototype scenario', async ({ page }) => {
+test('[P0] @critical home composer delegates the default prototype scenario to daemon authority', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
@@ -1103,13 +1103,15 @@ test('[P0] @critical home composer routes free-form prompts through the default 
     conversationMode?: string;
     pluginId?: string | null;
     pluginInputs?: Record<string, unknown>;
+    automaticStrategyTaskProfile?: string;
     metadata?: { kind?: string };
   };
-  expect(body.name).toBe('Web Prototype');
+  expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
   expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('design');
-  expect(body.pluginId).toBe('example-web-prototype');
-  expect(body.pluginInputs).toMatchObject({ artifactKind: 'web prototype' });
+  expect(body.pluginId).toBeUndefined();
+  expect(body.pluginInputs).toBeUndefined();
+  expect(body.automaticStrategyTaskProfile).toBe('prototype');
   expect(body.metadata?.kind).toBe('prototype');
 });
 

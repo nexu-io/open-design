@@ -1,6 +1,7 @@
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  PREVIEW_OBSERVABILITY_HOST_STATE_MESSAGE_TYPE,
   PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
   buildPreviewObservabilityBridge,
   type PreviewObservabilityMessage,
@@ -16,6 +17,7 @@ interface BridgeHarness {
   advanceBy: (durationMs: number) => void;
   close: () => void;
   events: PreviewObservabilityMessage[];
+  setHostActive: (active: boolean) => void;
   setViewport: (width: number, height: number) => void;
   setVisibility: (value: DocumentVisibilityState) => void;
   window: JSDOM['window'];
@@ -27,7 +29,7 @@ function bridgeScriptBody(): string {
     .replace(/<\/script>$/, '');
 }
 
-function createBridgeHarness(body = ''): BridgeHarness {
+function createBridgeHarness(body = '', hostActive = true): BridgeHarness {
   const dom = new JSDOM(`<!doctype html><html><body>${body}</body></html>`, {
     pretendToBeVisual: true,
     runScripts: 'outside-only',
@@ -77,6 +79,16 @@ function createBridgeHarness(body = ''): BridgeHarness {
 
   win.eval(bridgeScriptBody());
 
+  const setHostActive = (active: boolean) => {
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: {
+        type: PREVIEW_OBSERVABILITY_HOST_STATE_MESSAGE_TYPE,
+        active,
+      },
+    }));
+  };
+  if (hostActive) setHostActive(true);
+
   return {
     advanceBy(durationMs) {
       const target = now + durationMs;
@@ -92,6 +104,7 @@ function createBridgeHarness(body = ''): BridgeHarness {
     },
     close: () => dom.window.close(),
     events,
+    setHostActive,
     setViewport(width, height) {
       viewportWidth = width;
       viewportHeight = height;
@@ -112,6 +125,23 @@ afterEach(() => {
 });
 
 describe('preview observability white-screen bridge', () => {
+  it('starts the white-screen window only after a retained preview becomes active', () => {
+    const harness = createBridgeHarness('', false);
+    harnesses.push(harness);
+
+    harness.advanceBy(20_000);
+    expect(harness.events).toEqual([]);
+
+    harness.setHostActive(true);
+    harness.advanceBy(6_500);
+    expect(harness.events).toEqual([
+      expect.objectContaining({
+        event: 'white_screen',
+        blank_observation_count: 2,
+      }),
+    ]);
+  });
+
   it('does not report while the host tab is hidden, then samples after it becomes visible', () => {
     const harness = createBridgeHarness();
     harnesses.push(harness);

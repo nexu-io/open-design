@@ -135,6 +135,19 @@ export function spawnEnvForAgent(
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
+    // Name the rollout root the codex CLI is about to write into. Child
+    // evidence is read back from `<CODEX_HOME>/sessions/.../rollout-*.jsonl`,
+    // and `collectCodexChildEvidence` deliberately refuses a homedir fallback
+    // so it can never attribute one install's sessions to another. That leaves
+    // the caller owing it an explicit root — which nothing supplied, so the
+    // collector's `CODEX_HOME` guard was false on every default install and a
+    // complex Run's native Children went unobserved. The plan still locked
+    // complex, then failed certification for evidence the daemon simply never
+    // looked for.
+    if (!env.CODEX_HOME?.trim()) {
+      const home = os.homedir();
+      if (home) env.CODEX_HOME = path.join(home, '.codex');
+    }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'opencode' || agentId === 'byok-opencode') {

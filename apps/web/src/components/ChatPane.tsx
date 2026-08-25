@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { hasOdCard } from '@open-design/contracts';
+import { hasOdCard, OD_NEXT_STRATEGY_ID } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
@@ -39,6 +39,10 @@ import {
   type DesignToolboxActionId,
 } from '../runtime/design-toolbox';
 import { isRetryableAssistantTerminalFailure } from '../runtime/design-delivery';
+import {
+  isInternalStrategySnapshot,
+  shouldShowSessionModeChip,
+} from '../runtime/strategy-turn-chrome';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { useLiquidGlass } from '../hooks/useLiquidGlass';
@@ -65,9 +69,9 @@ import {
   isDesignSystemWorkspacePrompt,
 } from '../design-system-auto-prompt';
 import {
+  continuableUnfinishedTodos,
   isTodoWriteToolName,
   latestTodoWriteInputForPinnedCard,
-  unfinishedTodosFromEvents,
 } from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { agentDisplayName } from '../utils/agentLabels';
@@ -820,6 +824,66 @@ interface QueuedSendUpdate {
 // Gap left above the anchored user message when it is pinned to the top.
 const ANCHOR_TOP_PADDING = 12;
 
+/**
+ * Fold an OD Next logical task into ONE conversation turn.
+ *
+ * A Full Plan turn runs as several physical Runs (request -> production). The
+ * user asked once, and the daemon-issued continuation carries no prompt of its
+ * own, so rendering each Run as its own message shows an answer nobody asked
+ * for — with its own author line and its own "finished" affordances mid-turn.
+ *
+ * The daemon stays the single writer of one message per Run; only the view is
+ * folded. Every continuation's content, events and produced files are appended
+ * to the turn's first message in Run order, so nothing is dropped and nothing
+ * is duplicated.
+ */
+export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
+  if (!messages.some((message) => (message.strategyTaskRunIndex ?? 0) > 0)) {
+    return messages;
+  }
+  const folded: ChatMessage[] = [];
+  const turnHeadIndexByTask = new Map<string, number>();
+  for (const message of messages) {
+    const taskId = message.strategyTaskExecutionId;
+    const runIndex = message.strategyTaskRunIndex ?? 0;
+    if (message.role !== 'assistant' || !taskId) {
+      folded.push(message);
+      continue;
+    }
+    if (runIndex === 0 || !turnHeadIndexByTask.has(taskId)) {
+      turnHeadIndexByTask.set(taskId, folded.length);
+      folded.push(message);
+      continue;
+    }
+    const headIndex = turnHeadIndexByTask.get(taskId)!;
+    const head = folded[headIndex]!;
+    const headContent = head.content ?? '';
+    const tailContent = message.content ?? '';
+    folded[headIndex] = {
+      ...head,
+      content: tailContent
+        ? `${headContent}${headContent && !headContent.endsWith('\n') ? '\n\n' : ''}${tailContent}`
+        : headContent,
+      events: [...(head.events ?? []), ...(message.events ?? [])],
+      producedFiles: [...(head.producedFiles ?? []), ...(message.producedFiles ?? [])],
+      // The turn's status is the latest Run's: the earlier Runs finishing is an
+      // internal step, not the turn ending.
+      runId: message.runId ?? head.runId,
+      runStatus: message.runStatus ?? head.runStatus,
+      // Likewise the task verdict: only the final Run of the chain carries it,
+      // and the folded turn is what the pinned todo card reads.
+      ...(message.strategyTaskDelivered
+        ? { strategyTaskDelivered: message.strategyTaskDelivered }
+        : {}),
+      ...(message.endedAt ? { endedAt: message.endedAt } : {}),
+      ...(message.resultDeliveryState
+        ? { resultDeliveryState: message.resultDeliveryState }
+        : {}),
+    };
+  }
+  return folded;
+}
+
 function shouldHideEmptyBrandAssistantMessage(message: ChatMessage, metadata?: ProjectMetadata): boolean {
   if (metadata?.importedFrom !== 'brand-extraction' && metadata?.kind !== 'brand') return false;
   if (message.role !== 'assistant') return false;
@@ -1012,7 +1076,9 @@ export function ChatPane({
   const { t, locale } = useI18n();
   const analytics = useAnalytics();
   const displayMessages = useMemo(
-    () => messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
+    () => foldStrategyTaskTurns(
+      messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
+    ),
     [messages, projectMetadata],
   );
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
@@ -3536,7 +3602,10 @@ function ChatRows({
       const pluginSnapshot = message.appliedPluginSnapshot ?? activePluginSnapshot ?? null;
       const contextItems: AppliedContextItem[] = [];
 
-      if (pluginSnapshot) {
+      // A strategy package is daemon-applied plumbing, never a plugin the
+      // user chose, so it stays out of the applied-context line in both the
+      // snapshot and the raw-id form.
+      if (pluginSnapshot && !isInternalStrategySnapshot(pluginSnapshot)) {
         contextItems.push({
           kind: 'plugin',
           title: pluginSnapshot.pluginTitle ?? pluginSnapshot.pluginId,
@@ -3545,6 +3614,7 @@ function ChatRows({
       }
       for (const pluginId of message.runContext?.pluginIds ?? []) {
         if (pluginSnapshot?.pluginId === pluginId) continue;
+        if (pluginId === OD_NEXT_STRATEGY_ID) continue;
         contextItems.push({ kind: 'plugin', title: pluginId, pluginId });
       }
       for (const skillId of message.runContext?.skillIds ?? []) {
@@ -3620,6 +3690,7 @@ function ChatRows({
           onRequestDesignSystemDetails={onRequestDesignSystemDetails}
           t={t}
           appliedContextItems={appliedContextByMessageId.get(m.id) ?? []}
+          showSessionModeChip={shouldShowSessionModeChip(m.sessionMode)}
           highlighted={highlightedUserMessageId === m.id}
         />
       );
@@ -4046,7 +4117,7 @@ function PinnedTodoSlot({
       ? `${owner.id}:${ownerTodoEvent.id}`
       : null;
   if (snapshotKey != null && snapshotKey === dismissedSnapshotKey) return null;
-  const unfinishedTodos = owner ? unfinishedTodosFromEvents(owner.events) : [];
+  const unfinishedTodos = continuableUnfinishedTodos(owner);
 
   return (
     <div
@@ -4666,6 +4737,7 @@ function UserMessageImpl({
   onRequestDesignSystemDetails,
   t,
   appliedContextItems,
+  showSessionModeChip,
   highlighted,
 }: {
   message: ChatMessage;
@@ -4676,6 +4748,7 @@ function UserMessageImpl({
   onRequestDesignSystemDetails?: (system: DesignSystemSummary) => void;
   t: TranslateFn;
   appliedContextItems: AppliedContextItem[];
+  showSessionModeChip: boolean;
   highlighted?: boolean;
 }) {
   const { workspaceContext } = useProjectCollabContext();
@@ -4684,7 +4757,7 @@ function UserMessageImpl({
   const workspaceItems = message.runContext?.workspaceItems ?? [];
   const visibleWorkspaceItems = workspaceItems.filter((item) => item.kind !== 'design-system');
   const hasRunContext = Boolean(
-    message.sessionMode ||
+    showSessionModeChip ||
       visibleWorkspaceItems.length > 0 ||
       appliedContextItems.length > 0,
   );
@@ -4719,7 +4792,7 @@ function UserMessageImpl({
       <span className="sr-only">{t('chat.you')}</span>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">
-          {message.sessionMode ? (
+          {showSessionModeChip && message.sessionMode ? (
             <MessageSessionModeChip mode={message.sessionMode} t={t} />
           ) : null}
           {visibleWorkspaceItems.map((item) => (

@@ -398,20 +398,15 @@
   left: 0;
 }
 
-/* Floating account row (top-right cluster): the rocket rides right after the
-   avatar chip, hugging the viewport's right edge, so the side-flyout base
-   rule would push the panel off-screen (and `bottom: 0` would grow it past
-   the top). Open DOWNWARD instead, right-aligned to the host. */
-.entry-nav-rail__account--floating .entry-updater-menu .updater-popup {
+/* Standalone updater slot (top-right cluster): the rocket rides right after
+   the account capsule, hugging the viewport's right edge, so the side-flyout
+   base rule would push the panel off-screen (and `bottom: 0` would grow it
+   past the top). Open DOWNWARD instead, right-aligned to the host. */
+.entry-top-right-cluster > .entry-nav-rail__account-updater .entry-updater-menu .updater-popup {
   top: calc(100% + 10px);
   bottom: auto;
   right: 0;
   left: auto;
-}
-
-[dir='rtl'] .entry-nav-rail__account--floating .entry-updater-menu .updater-popup {
-  right: auto;
-  left: 0;
 }
 
 .updater-popup__body {

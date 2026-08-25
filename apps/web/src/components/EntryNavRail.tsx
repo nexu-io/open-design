@@ -71,9 +71,14 @@ import {
   workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
 } from '../collab/useWorkspaceContext';
-import { canUpgradeFromPlanTier, hasTeamPlan, resolvePlanLabelTier } from '../collab/team-plan';
-import { AMR_CONSOLE_UPGRADE_INTENT, amrPlansUrlForProfile } from '../runtime/amr-guidance';
+import { canUpgradeFromPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
+import { shouldShowCreditsBalance } from './entry-rail-account-state';
+import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
+import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
+import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
+import { resolveSubscriptionAudience } from '../campaigns/go-plan';
+import { useGoPlanCampaignVisibility } from '../campaigns/use-go-plan-campaign';
 import type { EntryHomeView } from '../router';
 import type {
   AccountMenuClickProps,
@@ -92,6 +97,7 @@ import {
   stableAnalyticsErrorCode,
   workspaceAnalyticsDimensions,
 } from '../analytics/workspace';
+import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const GITHUB_HELP_URL = `${REPO_URL}/issues/new`;
@@ -228,12 +234,9 @@ interface Props {
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
    *
-   * It rides the floating account module's row IMMEDIATELY AFTER the avatar
-   * chip (`.entry-nav-rail__account-updater`), per product: 升级提醒按钮跟在
-   * 头像后边，不再单独占一行。 Earlier homes — the rail footer (#5517) and a
-   * strip above the identity row — both detached the reminder from the
-   * avatar. The footer stays as the fallback home for the signed-out shell,
-   * which has no account row at all.
+   * It is an independent control immediately after the floating credits/avatar
+   * capsule (`.entry-nav-rail__account-updater`). The footer stays as the
+   * fallback home for the signed-out shell, which has no account capsule.
    */
   updaterSlot?: ReactNode;
   /** Optional notice shown above the footer controls. */
@@ -324,13 +327,8 @@ export function teamConsoleUrl(
     | 'dashboard'
     | 'settings'
     | 'billing'
-    | 'upgrade'
     | 'create-team'
-    | 'plans'
     | 'invite',
-  // Only consulted for `section: 'upgrade'` — see the comment below on why the
-  // deep-link param depends on it.
-  options?: { hasActivePlan?: boolean },
 ): string {
   // B's console routes: members live at /team, everything account/billing
   // shaped reports on the dashboard. The settings URL the context carries
@@ -343,25 +341,11 @@ export function teamConsoleUrl(
   // the product's information architecture — balance, manual top-up and the
   // auto-recharge policy were rehomed onto the dashboard (vela #1055).
   //
-  // `upgrade` and `plans` both land on the dashboard AND ask it to open an
-  // upgrade dialog. B resolves `billing=plan` against the workspace's own
-  // subscription state, so one intent covers all three states: a personal
-  // owner gets the personal plan modal (the same one the console's 「升级订阅」
-  // hero button opens), a never-subscribed team gets first-checkout, and a
-  // subscribed team gets change-plan.
-  //
-  // `upgrade` additionally still passes `billing=checkout` for a team the
-  // caller knows has never subscribed (`options.hasActivePlan`, from
-  // `hasTeamPlan(context, billing)` in `collab/team-plan.ts`). That is now a
-  // hint rather than a requirement: B honors it when first-checkout is really
-  // available and otherwise falls back to the dialog that does match, so a
-  // stale `hasActivePlan` can no longer strand the user on a bare Overview
-  // page the way it did in recvpSQKna0LwR.
+  // Plan comparison is deliberately absent here: every generic upgrade entry
+  // uses `workspaceUpgradeUrl` and public Pricing instead of a Cloud modal.
   const path =
     section === 'members' ? 'team'
     : section === 'billing' ? 'dashboard'
-    : section === 'plans' ? 'dashboard'
-    : section === 'upgrade' ? 'dashboard'
     : section === 'create-team' || section === 'invite' ? 'dashboard'
     : section;
   try {
@@ -373,13 +357,6 @@ export function teamConsoleUrl(
       segments.push(path);
     }
     url.pathname = `/${segments.join('/')}`;
-    if (section === 'upgrade') {
-      url.searchParams.set(
-        'billing',
-        options?.hasActivePlan ? AMR_CONSOLE_UPGRADE_INTENT : 'checkout',
-      );
-    }
-    if (section === 'plans') url.searchParams.set('billing', AMR_CONSOLE_UPGRADE_INTENT);
     // Vela owns the final invite action because only its dashboard has the
     // authoritative subscription + seat state needed to choose between
     // upgrading to Team, buying seats, and sending an invite. `invite=auto`
@@ -401,34 +378,9 @@ export function teamConsoleUrl(
 }
 
 /**
- * Where an 「升级」/「升级套餐」 affordance sends THIS workspace — the one
- * decision point shared by every upgrade entry (EntryNavRail's credits chip
- * and invite dialog, AmrBalanceDialog's balance-gate CTA, RecentProjectsStrip's
- * invite dialog, SettingsDialog's AMR-card upgrade buttons), so the three
- * subscription states cannot drift apart per entry point.
- *
- * The axis is the WORKSPACE TYPE, never "does a console URL exist": B returns
- * `workspaceSettingsUrl` for a personal workspace too (it has a settings page
- * like any other), so URL-presence stopped implying "team" — that premise
- * routed a $0-balance personal account onto the team dashboard's
- * `billing=checkout` deep link, which opens the Upgrade-to-Team dialog in an
- * error state ("Team plan unavailable" / 3-seat minimum). recvpYEiH019cD,
- * verified live with a real personal-workspace session.
- *
- *   - personal (or type unknown) → `dashboard?billing=plan`, B's personal plan
- *     modal — the same dialog the console's own 「升级订阅」 hero button opens.
- *   - team, never subscribed → `dashboard?billing=checkout` (first-checkout
- *     dialog); team, already subscribed → `dashboard?billing=plan`
- *     (change-plan dialog). See `teamConsoleUrl` for why the team branch still
- *     sends the more specific hint even though B can now resolve either.
- *   - a resolved workspace without `canManageBilling` → null. Billing is
- *     owner-only, so admin/member surfaces hide the action rather than linking
- *     to an operation B will reject.
- *
- * Dialog callers pass `fallbackProfile` and receive the profile-keyed personal
- * plans deep link when no workspace context exists after loading. An existing
- * workspace without billing permission still returns null; callers hide the
- * affordance.
+ * Shared destination for every generic 「升级」/「升级套餐」 affordance. Pricing
+ * owns comparison; selecting a concrete card there is what hands checkout to
+ * Cloud. A resolved workspace without billing permission still returns null.
  */
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
@@ -441,22 +393,14 @@ export function workspaceUpgradeUrl(
 ): string | null;
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
-  billing: WorkspaceBillingSummary | null | undefined,
+  _billing: WorkspaceBillingSummary | null | undefined,
   options?: { fallbackProfile: string | null | undefined },
 ): string | null {
-  // Team billing is owner-only. Keep the permission check in the shared
-  // resolver so every upgrade surface (including dialogs that pass a profile
-  // fallback) fails closed for admins/members instead of accidentally linking
-  // them to an action B will reject. A missing context still uses the fallback
-  // because there is no workspace identity to authorize yet.
+  // Billing is owner-only. Missing context can use the caller's fallback
+  // profile because there is no workspace identity to authorize yet.
   if (context && context.permissions?.canManageBilling !== true) return null;
-  const settingsUrl = context?.workspaceSettingsUrl?.trim() || null;
-  if (settingsUrl) {
-    return context?.workspaceType === 'team'
-      ? teamConsoleUrl(settingsUrl, 'upgrade', { hasActivePlan: hasTeamPlan(context, billing) })
-      : teamConsoleUrl(settingsUrl, 'plans');
-  }
-  return options ? amrPlansUrlForProfile(options.fallbackProfile) : null;
+  if (!context && !options) return null;
+  return amrPlansUrlForProfile(options?.fallbackProfile);
 }
 
 export type WorkspaceInviteTarget =
@@ -650,6 +594,12 @@ export function EntryTopRightCluster({
       ? t('entry.billingTierTeam')
       : t('entry.billingTierFree');
   const balanceLabel = formatVelaBalanceUsd(balanceUsd);
+  // A subscriber's $0.00 is a healthy state (their popular models are
+  // unlimited), so the pill stays out of the way instead of alarming them.
+  const showCreditsBalance = shouldShowCreditsBalance({
+    tier: labelTier,
+    balanceUsd,
+  });
   // #5517: wordmark badge inside the menu's billing card. It names the plan
   // FAMILY, so a TEAM workspace draws the one `team` wordmark at every tier —
   // free through max — while the personal ladder keeps its per-tier glyph
@@ -749,10 +699,8 @@ export function EntryTopRightCluster({
     setAccountOpen(false);
   });
 
-  // One decision shared with the rail's invite dialog: personal → the
-  // console's personal plan modal, team → checkout vs change-plan by
-  // subscription state. See `workspaceUpgradeUrl` for why the axis is the
-  // workspace TYPE.
+  // One public comparison destination shared with the rail's invite dialog.
+  // Pricing owns plan choice; only a selected card hands off to checkout.
   const upgradeUrl = workspaceUpgradeUrl(context, billing);
   const billingUpgradeUrl =
     context?.billingRecovery?.recoveryUrl?.trim() || upgradeUrl;
@@ -763,9 +711,9 @@ export function EntryTopRightCluster({
   const billingConsoleUrl = workspaceSettingsUrl
     ? teamConsoleUrl(workspaceSettingsUrl, 'billing')
     : null;
-  // Product decision: plan selection / payment lives in Vela Web. The local
-  // client opens that billing surface, then refreshes billing + context when
-  // focus returns so direct web upgrades sync plan, credits, seats and gates.
+  // Product decision: plan comparison lives on public Pricing and payment
+  // lives in Cloud. The client refreshes billing + context when focus returns
+  // so a completed web upgrade syncs plan, credits, seats and gates.
   //
   // The gate needs all three answers: a destination exists, the caller may act
   // on billing, AND the tier actually has somewhere to go. Without the tier
@@ -831,8 +779,9 @@ export function EntryTopRightCluster({
               The capsule owns the pill material; the segments inside are
               chrome-free click targets. */}
           {context ? (
-            <div className="entry-top-right-account-pill">
-          {(billing || balanceLabel) ? (
+            <>
+              <div className="entry-top-right-account-pill">
+          {(billing || balanceLabel) && showCreditsBalance ? (
             <button
               type="button"
               className="entry-top-right-credits"
@@ -881,19 +830,6 @@ export function EntryTopRightCluster({
                   ) : null}
                 </span>
               </button>
-              {/* Update-ready rocket, riding the same row immediately AFTER the
-                  avatar chip. It is mounted unconditionally so the row's shape
-                  is stable, and it holds no element children until the updater
-                  actually has something to show; `:empty { display: none }` is
-                  what keeps an idle slot from reserving width (plus the row's
-                  6px gap) next to the avatar.
-
-                  The rocket must never be a DESCENDANT of the trigger above:
-                  a button inside the account button would be invalid markup and
-                  would make every rocket click toggle the account menu too. */}
-              <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
-                {updaterSlot}
-              </div>
               {accountOpen ? (
                 <>
                   {/* No backdrop here (unlike the team menu): hover-open relies
@@ -1016,52 +952,10 @@ export function EntryTopRightCluster({
                     >
                       <Icon name="sparkles" size={15} /> {t('entry.accountFeatureRequest')}
                     </a>
-                    {/* #5517: the Discord/X/mail badges move off the rail footer
-                        into a compact social row inside the account menu. GitHub
-                        left the row for its own top-right cluster chip. */}
-                    <div className="entry-nav-rail__menu-social">
-                      <a
-                        className="entry-nav-rail__menu-social-btn"
-                        role="menuitem"
-                        href={DISCORD_URL}
-                        {...externalLinkProps}
-                        aria-label={t('entry.discordAria')}
-                        title={t('entry.discordAria')}
-                        onClick={() => {
-                          trackAccountAction('discord');
-                          setAccountOpen(false);
-                        }}
-                      >
-                        <Icon name="discord" size={15} />
-                      </a>
-                      <a
-                        className="entry-nav-rail__menu-social-btn"
-                        role="menuitem"
-                        href={X_URL}
-                        {...externalLinkProps}
-                        aria-label="@OpenDesignHQ"
-                        title="@OpenDesignHQ"
-                        onClick={() => {
-                          trackAccountAction('twitter');
-                          setAccountOpen(false);
-                        }}
-                      >
-                        <span className="entry-nav-rail__menu-x" aria-hidden>X</span>
-                      </a>
-                      <a
-                        className="entry-nav-rail__menu-social-btn"
-                        role="menuitem"
-                        href={CONTACT_EMAIL_URL}
-                        aria-label={t('entry.mailAria')}
-                        title={t('entry.mailAria')}
-                        onClick={() => {
-                          trackAccountAction('email');
-                          setAccountOpen(false);
-                        }}
-                      >
-                        <Icon name="mail" size={15} />
-                      </a>
-                    </div>
+                    {/* The Discord/X/mail social row used to sit here (#5517).
+                        It now lives in the nav rail's footer — see
+                        `RailSocialRow` — so the account menu stays a pure list
+                        of account actions. */}
                     <div className="entry-nav-rail__menu-divider" />
                     <button
                       type="button"
@@ -1105,8 +999,16 @@ export function EntryTopRightCluster({
                   }}
                 />
               ) : null}
-            </div>
-            </div>
+              </div>
+              </div>
+              {/* Update-ready rocket: an independent control immediately after
+                  the credits/avatar capsule. The slot stays mounted so
+                  `:empty { display: none }` can remove it from cluster layout
+                  until an installer has downloaded. */}
+              <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
+                {updaterSlot}
+              </div>
+            </>
           ) : null}
         </div>,
         document.body,
@@ -1139,6 +1041,10 @@ export function WorkspaceTopRightAccountCluster({
   updaterSlot,
   workspaceContextOverride,
   workspaceContextLoading,
+  amrLoggedIn = null,
+  amrAccountPlan = null,
+  metricsConsent = false,
+  installationId,
 }: {
   onOpenSettings?: (section?: EntrySettingsSection) => void;
   onSignedOut?: () => void | Promise<void>;
@@ -1146,33 +1052,138 @@ export function WorkspaceTopRightAccountCluster({
   updaterSlot?: ReactNode;
   workspaceContextOverride?: WorkspaceCollabContext | null;
   workspaceContextLoading?: boolean;
+  amrLoggedIn?: boolean | null;
+  amrAccountPlan?: string | null;
+  metricsConsent?: boolean;
+  installationId?: string | null;
 }) {
   const ambient = useWorkspaceContext();
   const hasExplicitWorkspaceContext = workspaceContextOverride !== undefined;
   const context = hasExplicitWorkspaceContext
     ? workspaceContextOverride
     : ambient.context;
+  const contextLoading = hasExplicitWorkspaceContext
+    ? workspaceContextLoading === true
+    : ambient.loading;
   const billingResponse = useWorkspaceBillingResponse({
     context,
-    loading: hasExplicitWorkspaceContext
-      ? workspaceContextLoading === true
-      : ambient.loading,
+    loading: contextLoading,
   });
   // Plan and money are both workspace-scoped questions, so both go through a
   // context-partitioned projection — `response.summary` on its own is an
   // ACCOUNT read (`workspaceId: null` by contract). Same rule as EntryShell.
   const billing = workspaceBillingSummaryForContext(billingResponse, context);
   const balanceUsd = workspaceBillingBalanceUsd(billingResponse, context);
+  const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
+  const goPlanCampaignVisibility = useGoPlanCampaignVisibility();
+  const campaignPlan = resolvePlanLabelTier({
+    billing,
+    context,
+    accountPlan:
+      contextLoading || context?.workspaceType === 'team'
+        ? null
+        : amrAccountPlan,
+  });
+  const deepSeekCampaignAudience = resolveDeepSeekV4FlashCampaignAudience({
+    plan: campaignPlan,
+    loggedIn: amrLoggedIn,
+    now: deepSeekCampaignVisibility.now,
+  });
+  const subscriptionAudience = resolveSubscriptionAudience({
+    plan: campaignPlan,
+    loggedIn: amrLoggedIn,
+  });
+  const campaignKind =
+    subscriptionAudience === 'unpaid'
+      ? goPlanCampaignVisibility.visible
+        ? 'go'
+        : null
+      : deepSeekCampaignAudience === 'paid'
+        ? 'deepseek'
+        : null;
   return (
     <EntryTopRightCluster
       page="project"
       context={context}
       billing={billing}
       balanceUsd={balanceUsd}
+      leadingSlot={campaignKind ? (
+        <WorkbenchCampaignBadge
+          kind={campaignKind}
+          page="project"
+          metricsConsent={metricsConsent}
+          installationId={installationId}
+        />
+      ) : null}
       updaterSlot={updaterSlot}
       onOpenSettings={onOpenSettings}
       onSignedOut={onSignedOut}
     />
+  );
+}
+
+/**
+ * Community/contact links pinned to the bottom of the nav rail.
+ *
+ * The row's first slot is the Discord invite for every locale (the Chinese
+ * Feishu group entry was retired so there is one community to point at). X
+ * and mail are locale-independent. Analytics keeps reporting these
+ * under `area: 'account_menu'` so the existing funnel stays comparable across
+ * the move out of that menu.
+ */
+function RailSocialRow({
+  page,
+  dimensions,
+}: {
+  page: TrackingWorkspacePage;
+  dimensions: ReturnType<typeof workspaceAnalyticsDimensions>;
+}) {
+  const { t } = useI18n();
+  const analytics = useAnalytics();
+  const communityLabel = t('entry.discordAria');
+
+  function track(element: AccountMenuClickProps['element']) {
+    trackAccountMenuClick(analytics.track, {
+      page_name: page,
+      area: 'account_menu',
+      element,
+      ...dimensions,
+    });
+  }
+
+  return (
+    <div className="entry-nav-rail__social" data-testid="entry-nav-rail-social">
+      <a
+        className="entry-nav-rail__social-btn"
+        href={DISCORD_URL}
+        {...externalLinkProps}
+        aria-label={communityLabel}
+        title={communityLabel}
+        data-testid="entry-nav-rail-discord"
+        onClick={() => track('discord')}
+      >
+        <Icon name="discord" size={15} />
+      </a>
+      <a
+        className="entry-nav-rail__social-btn"
+        href={X_URL}
+        {...externalLinkProps}
+        aria-label="@OpenDesignHQ"
+        title="@OpenDesignHQ"
+        onClick={() => track('twitter')}
+      >
+        <span className="entry-nav-rail__menu-x" aria-hidden>X</span>
+      </a>
+      <a
+        className="entry-nav-rail__social-btn"
+        href={CONTACT_EMAIL_URL}
+        aria-label={t('entry.mailAria')}
+        title={t('entry.mailAria')}
+        onClick={() => track('email')}
+      >
+        <Icon name="mail" size={15} />
+      </a>
+    </div>
   );
 }
 
@@ -1247,10 +1258,8 @@ export function EntryNavRail({
   const [workspaceSwitchingId, setWorkspaceSwitchingId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const inviteTarget = resolveWorkspaceInviteTarget(context);
-  // The invite dialog's seat-gate upgrade entry: personal → the console's
-  // personal plan modal, team → checkout vs change-plan by subscription state.
-  // See `workspaceUpgradeUrl` for why the axis is the workspace TYPE. (The
-  // credits chip's twin decision lives in `EntryTopRightCluster`.)
+  // The invite dialog's seat-gate upgrade entry uses the same public Pricing
+  // destination as the credits chip's twin decision in EntryTopRightCluster.
   const upgradeUrl = workspaceUpgradeUrl(context, billing);
   const identityWorkspaceItems = workspaceDirectoryForIdentity(workspaceItems, context);
   const currentWorkspaceItem = context
@@ -1818,19 +1827,18 @@ export function EntryNavRail({
           </>
         )}
       </div>
-      {/* Skip the footer entirely when it has nothing to show — an empty
-          shell here read as a dead white strip under the account row.
-          `footerUpdaterSlot` is only ever set in the signed-out shell: with a
-          cloud identity the updater host rides the account row instead (see
-          `updaterSlot`), so the footer must not render a second host. */}
-      {footerNotice || footerUpdaterSlot ? (
-        <div className="entry-nav-rail__footer">
-          {footerNotice}
-          {footerUpdaterSlot ? (
-            <div className="entry-rail-actions">{footerUpdaterSlot}</div>
-          ) : null}
-        </div>
-      ) : null}
+      {/* The footer always has the social row to show now, so it no longer
+          collapses to nothing. `footerUpdaterSlot` is only ever set in the
+          signed-out shell: with a cloud identity the updater host rides the
+          account row instead (see `updaterSlot`), so the footer must not
+          render a second host. */}
+      <div className="entry-nav-rail__footer">
+        {footerNotice}
+        {footerUpdaterSlot ? (
+          <div className="entry-rail-actions">{footerUpdaterSlot}</div>
+        ) : null}
+        <RailSocialRow page={analyticsPage} dimensions={workspaceDimensions} />
+      </div>
       </div>
 
       {/* Signed-out message-center panel + unread polling (the rail's bell

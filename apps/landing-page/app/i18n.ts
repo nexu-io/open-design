@@ -255,6 +255,7 @@ export interface HeaderProductMenuCopy {
   // navigation translations. Fixed-length tuples keep missing translations
   // visible at typecheck time (same convention as HomePageCopy).
   solution: string;
+  feature: string;
   useCases: string;
   useCaseItems: [string, string, string, string, string, string];
   roles: string;
@@ -315,6 +316,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Tutorials',
     tutorialsBlurb: 'Video walkthroughs, demos, and community reviews.',
     solution: 'Solution',
+    feature: 'Feature',
     useCases: 'Use cases',
     useCaseItems: ['Prototype', 'Dashboard', 'Slides', 'Image', 'Video', 'Design System'],
     roles: 'Roles',
@@ -356,6 +358,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: '教程',
     tutorialsBlurb: '视频上手、演示与社区评测。',
     solution: '解决方案',
+    feature: '功能',
     useCases: '使用场景',
     useCaseItems: ['原型', '数据看板', '幻灯片', '图片', '视频', '设计系统'],
     roles: '角色',
@@ -397,6 +400,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: '教學',
     tutorialsBlurb: '影片上手、演示與社群評測。',
     solution: '解決方案',
+    feature: '功能',
     useCases: '使用場景',
     useCaseItems: ['原型', '儀表板', '投影片', '圖片', '影片', '設計系統'],
     roles: '角色',
@@ -438,6 +442,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'チュートリアル',
     tutorialsBlurb: '動画ガイド、デモ、コミュニティレビュー。',
     solution: 'ソリューション',
+    feature: '機能',
     useCases: 'ユースケース',
     useCaseItems: ['プロトタイプ', 'ダッシュボード', 'スライド', '画像', '動画', 'デザインシステム'],
     roles: 'ロール',
@@ -479,6 +484,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: '튜토리얼',
     tutorialsBlurb: '영상 가이드, 데모, 커뮤니티 리뷰.',
     solution: '솔루션',
+    feature: '기능',
     useCases: '활용 사례',
     useCaseItems: ['프로토타입', '대시보드', '슬라이드', '이미지', '영상', '디자인 시스템'],
     roles: '역할',
@@ -520,6 +526,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Tutorials',
     tutorialsBlurb: 'Videoanleitungen, Demos und Community-Reviews.',
     solution: 'Lösungen',
+    feature: 'Funktionen',
     useCases: 'Anwendungsfälle',
     useCaseItems: ['Prototyp', 'Dashboard', 'Slides', 'Bild', 'Video', 'Designsystem'],
     roles: 'Rollen',
@@ -561,6 +568,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Tutoriels',
     tutorialsBlurb: 'Guides vidéo, démos et avis de la communauté.',
     solution: 'Solutions',
+    feature: 'Fonctionnalités',
     useCases: 'Cas d’usage',
     useCaseItems: ['Prototype', 'Tableau de bord', 'Diapositives', 'Image', 'Vidéo', 'Système de design'],
     roles: 'Rôles',
@@ -602,6 +610,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Руководства',
     tutorialsBlurb: 'Видеоразборы, демо и обзоры сообщества.',
     solution: 'Решения',
+    feature: 'Функции',
     useCases: 'Сценарии',
     useCaseItems: ['Прототип', 'Дашборд', 'Слайды', 'Изображение', 'Видео', 'Дизайн-система'],
     roles: 'Роли',
@@ -643,6 +652,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Tutoriales',
     tutorialsBlurb: 'Guías en video, demos y reseñas de la comunidad.',
     solution: 'Soluciones',
+    feature: 'Funciones',
     useCases: 'Casos de uso',
     useCaseItems: ['Prototipo', 'Panel', 'Diapositivas', 'Imagen', 'Vídeo', 'Sistema de diseño'],
     roles: 'Roles',
@@ -684,6 +694,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Tutoriais',
     tutorialsBlurb: 'Guias em vídeo, demos e avaliações da comunidade.',
     solution: 'Soluções',
+    feature: 'Recursos',
     useCases: 'Casos de uso',
     useCaseItems: ['Protótipo', 'Painel', 'Slides', 'Imagem', 'Vídeo', 'Sistema de design'],
     roles: 'Funções',
@@ -725,6 +736,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Tutorial',
     tutorialsBlurb: 'Guide video, demo e recensioni della community.',
     solution: 'Soluzioni',
+    feature: 'Funzionalità',
     useCases: 'Casi d’uso',
     useCaseItems: ['Prototipo', 'Dashboard', 'Slide', 'Immagine', 'Video', 'Design system'],
     roles: 'Ruoli',
@@ -766,6 +778,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Hướng dẫn',
     tutorialsBlurb: 'Video hướng dẫn, demo và đánh giá cộng đồng.',
     solution: 'Giải pháp',
+    feature: 'Tính năng',
     useCases: 'Trường hợp dùng',
     useCaseItems: ['Nguyên mẫu', 'Dashboard', 'Slide', 'Hình ảnh', 'Video', 'Hệ thống thiết kế'],
     roles: 'Vai trò',
@@ -807,6 +820,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Poradniki',
     tutorialsBlurb: 'Wideo, dema i recenzje społeczności.',
     solution: 'Rozwiązania',
+    feature: 'Funkcje',
     useCases: 'Zastosowania',
     useCaseItems: ['Prototyp', 'Dashboard', 'Slajdy', 'Grafika', 'Wideo', 'System projektowy'],
     roles: 'Role',
@@ -848,6 +862,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Tutorial',
     tutorialsBlurb: 'Panduan video, demo, dan ulasan komunitas.',
     solution: 'Solusi',
+    feature: 'Fitur',
     useCases: 'Kasus Penggunaan',
     useCaseItems: ['Prototipe', 'Dashboard', 'Slide', 'Gambar', 'Video', 'Sistem Desain'],
     roles: 'Peran',
@@ -889,6 +904,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Tutorials',
     tutorialsBlurb: 'Videogidsen, demo’s en communityreviews.',
     solution: 'Oplossingen',
+    feature: 'Functies',
     useCases: 'Use cases',
     useCaseItems: ['Prototype', 'Dashboard', 'Slides', 'Afbeelding', 'Video', 'Designsysteem'],
     roles: 'Rollen',
@@ -930,6 +946,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'الدروس',
     tutorialsBlurb: 'شروحات فيديو وعروض وتجارب من المجتمع.',
     solution: 'الحلول',
+    feature: 'الميزات',
     useCases: 'حالات الاستخدام',
     useCaseItems: ['نموذج أولي', 'لوحة بيانات', 'شرائح', 'صورة', 'فيديو', 'نظام التصميم'],
     roles: 'الأدوار',
@@ -971,6 +988,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Eğitimler',
     tutorialsBlurb: 'Video anlatımlar, demolar ve topluluk incelemeleri.',
     solution: 'Çözümler',
+    feature: 'Özellikler',
     useCases: 'Kullanım alanları',
     useCaseItems: ['Prototip', 'Pano', 'Slaytlar', 'Görsel', 'Video', 'Tasarım Sistemi'],
     roles: 'Roller',
@@ -1012,6 +1030,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsName: 'Навчальні матеріали',
     tutorialsBlurb: 'Відеоінструкції, демо та огляди спільноти.',
     solution: 'Рішення',
+    feature: 'Функції',
     useCases: 'Сценарії',
     useCaseItems: ['Прототип', 'Панель', 'Слайди', 'Зображення', 'Відео', 'Дизайн-система'],
     roles: 'Ролі',
@@ -7093,6 +7112,12 @@ export function pageNameFromPath(pathname = '/'): string {
   return segments.join('_').toLowerCase().replace(/[^a-z0-9_]+/g, '_');
 }
 
+// These pages intentionally ship only at their canonical English URL. Internal
+// links must not acquire a locale prefix that points at an ungenerated route.
+const LOCALE_CANONICAL_ONLY_PATHS = new Set([
+  '/tutorials/open-design-ai-ppt-tutorial/',
+]);
+
 export function localizedHref(
   href: string,
   locale: LandingLocaleCode,
@@ -7113,7 +7138,11 @@ export function localizedHref(
   if (pathAndQuery === '') return hashSuffix || href;
   const [path, query = ''] = pathAndQuery.split('?');
   const querySuffix = query ? `?${query}` : '';
-  const localized = localePath(locale, path || '/');
+  const pathname = path || '/';
+  if (LOCALE_CANONICAL_ONLY_PATHS.has(pathname)) {
+    return `${pathname}${querySuffix}${hashSuffix}`;
+  }
+  const localized = localePath(locale, pathname);
   return `${localized}${querySuffix}${hashSuffix}`;
 }
 

@@ -262,13 +262,13 @@
   color: var(--text-faint, #bdbdbd);
 }
 
-/* Keep the inset fill on focus. Switching it to --bg made the field the same
-   white as the card behind it, so the input dissolved into the panel and only
-   a floating green outline was left. The ring carries the focus cue instead. */
+/* Keep the inset fill on focus — switching it to --bg made the field the same
+   white as the card behind it and the input dissolved into the panel. The
+   border alone carries the focus cue: neutral, because green here competed
+   with the brand fill on the selected chip right above it. */
 .textarea:focus {
   outline: none;
-  border-color: var(--brand-weak, #d0ffb5);
-  box-shadow: 0 0 0 3px var(--brand-soft, #ebffde);
+  border-color: var(--text-strong, #202020);
 }
 
 .foot {
@@ -312,6 +312,10 @@
 /* Sizing only — colour, hover and focus come from the shared Button primitive
    so this stays in step with every other primary action in the app. */
 .submit {
+  /* Same push as .skip. Submit replaces Skip in the footer, so without this it
+     collapsed back against the counter and the primary action jumped from the
+     right edge to the left the moment the field opened. */
+  margin-left: auto;
   font-size: var(--font-size-12, 12px);
   padding: 6px 14px;
   border-radius: 999px;

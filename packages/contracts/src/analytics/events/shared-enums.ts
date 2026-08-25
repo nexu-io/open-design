@@ -170,12 +170,17 @@ export type TrackingByokProviderId =
 // v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
 // `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer
 // fold into the `other` catch-all bucket.
+// Every agent the daemon can detect needs its own id here. An agent that falls
+// through to `other` is invisible to any breakdown or alert that asks *which*
+// CLI failed — which is the only question worth asking when an install someone
+// followed our own instructions for cannot be used.
 export type TrackingCliProviderId =
   | 'claude_code'
   | 'codex_cli'
   | 'devin_for_terminal'
   | 'gemini_cli'
   | 'opencode'
+  | 'byok_opencode'
   | 'hermes'
   | 'kimi_cli'
   | 'cursor_agent'
@@ -184,6 +189,19 @@ export type TrackingCliProviderId =
   | 'github_copilot_cli'
   | 'pi'
   | 'kilo'
+  | 'kiro'
+  | 'vibe'
+  | 'amp'
+  | 'aider'
+  | 'trae_cli'
+  | 'grok_build'
+  | 'antigravity'
+  | 'codebuddy'
+  | 'reasonix'
+  | 'mimo'
+  | 'atomcode'
+  | 'deepseek'
+  | 'deepseek_harness'
   | 'amr'
   | 'other';
 
@@ -226,6 +244,13 @@ export type TrackingRunTerminalTrigger =
   | TrackingRunCancelOrigin
   | 'first_output_deadline'
   | 'inactivity_watchdog'
+  // The ACP bridge's own per-stage watchdog gave up waiting for the agent's
+  // next JSON-RPC line. Distinct from `inactivity_watchdog` (the outer
+  // chat-run clock) because the two have different budgets and different
+  // blind spots, and because the ACP path ends the child itself — the run
+  // then carries the CHILD's exit code (typically AGENT_EXIT_130), which
+  // reads like a user interrupt unless this trigger says otherwise.
+  | 'acp_stage_timeout'
   | 'daemon_restart';
 export type TrackingExportResult = 'success' | 'failed' | 'cancelled';
 // Stable codes for artifact_publish_result.error_code. Deliberately a CLOSED
@@ -448,6 +473,7 @@ export type TrackingLangfuseDropReason =
   | 'content_consent_off'
   | 'missing_sink_config'
   | 'payload_too_large'
+  | 'task_hierarchy_rollout'
   | 'relay_429'
   | 'relay_413'
   | 'relay_5xx'

@@ -35,6 +35,8 @@ export type {
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureSuccess,
   OpenDesignHostCaptureResult,
+  OpenDesignHostPreviewNavigationFailure,
+  OpenDesignHostPreviewNavigationFailureListener,
   OpenDesignHostAppearanceTheme,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostUpdaterAction,
@@ -99,7 +101,9 @@ export {
   downloadHostUpdater,
   installHostUpdater,
   quitHostAfterUpdaterInstallerOpen,
+  getLatestHostPreviewNavigationFailure,
   subscribeHostUpdater,
   subscribeHostUpdaterOpenDialog,
+  subscribeHostPreviewNavigationFailure,
   setHostUpdaterMenuLabels,
 } from "./actions.js";

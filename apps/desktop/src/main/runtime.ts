@@ -6,7 +6,8 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell, webFrameMain } from "electron";
+import type { WebFrameMain } from "electron";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -22,6 +23,7 @@ import {
 import type {
   OpenDesignHostActionResult,
   OpenDesignHostCaptureResult,
+  OpenDesignHostPreviewNavigationFailure,
   OpenDesignHostProjectImportInit,
   OpenDesignHostUpdaterActionOptions,
   OpenDesignHostUpdaterMenuLabels,
@@ -45,6 +47,35 @@ import {
 } from "./update-preflight.js";
 
 const execFileAsync = promisify(execFile);
+const PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL = "od:preview-navigation-failed";
+const ABORTED_NAVIGATION_ERROR_CODE = -3;
+let previewNavigationFailureEventSequence = 0;
+
+function isPreviewTransportNavigationUrl(url: string): boolean {
+  return url === "about:srcdoc" || url.startsWith("blob:od://app/");
+}
+
+export function previewNavigationFailureFromDidFailLoad(input: {
+  errorCode: number;
+  eventId: number;
+  frameName?: string;
+  isMainFrame: boolean;
+  occurredAtMs: number;
+  validatedUrl: string;
+}): OpenDesignHostPreviewNavigationFailure | null {
+  if (
+    input.isMainFrame
+    || input.errorCode !== ABORTED_NAVIGATION_ERROR_CODE
+    || !isPreviewTransportNavigationUrl(input.validatedUrl)
+  ) return null;
+  return {
+    errorCode: input.errorCode,
+    eventId: input.eventId,
+    ...(input.frameName ? { frameName: input.frameName } : {}),
+    occurredAtMs: input.occurredAtMs,
+    validatedUrl: input.validatedUrl,
+  };
+}
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -2257,6 +2288,34 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+  const previewFrameNameByRoutingId = new Map<string, string>();
+  const previewFrameRoutingKey = (processId: number, routingId: number) =>
+    `${processId}:${routingId}`;
+  const rememberPreviewFrameName = (frame: WebFrameMain | null | undefined) => {
+    if (!frame?.name.startsWith("od-artifact-preview-srcdoc-")) return;
+    const key = previewFrameRoutingKey(frame.processId, frame.routingId);
+    previewFrameNameByRoutingId.set(key, frame.name);
+    // Routing IDs are unique for a frame lifetime, but this process can run
+    // for days. Keep the late-failure lookup bounded without retaining frame
+    // objects after Chromium destroys them.
+    if (previewFrameNameByRoutingId.size > 512) {
+      const oldestKey = previewFrameNameByRoutingId.keys().next().value;
+      if (oldestKey) previewFrameNameByRoutingId.delete(oldestKey);
+    }
+  };
+  window.webContents.on("frame-created", (_event, details) => {
+    const frame = details.frame;
+    if (!frame) return;
+    rememberPreviewFrameName(frame);
+    frame.on("dom-ready", () => rememberPreviewFrameName(frame));
+  });
+  window.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame || !isPreviewTransportNavigationUrl(details.url)) return;
+    // `did-fail-load` can arrive after Chromium has destroyed the frame, at
+    // which point webFrameMain.fromId() and frame-created/dom-ready are too
+    // late to recover its name. Snapshot the identity when navigation starts.
+    rememberPreviewFrameName(details.frame);
+  });
   window.on("page-title-updated", (event) => {
     event.preventDefault();
     window.setTitle(windowTitle);
@@ -2279,15 +2338,42 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       url: window.webContents.getURL(),
     });
   });
-  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+  window.webContents.on("did-fail-load", (
+    _event,
+    errorCode,
+    errorDescription,
+    validatedURL,
+    isMainFrame,
+    frameProcessId,
+    frameRoutingId,
+  ) => {
+    const failedFrame = isMainFrame
+      ? undefined
+      : webFrameMain.fromId(frameProcessId, frameRoutingId);
+    const cachedFrameName = isMainFrame
+      ? undefined
+      : previewFrameNameByRoutingId.get(previewFrameRoutingKey(frameProcessId, frameRoutingId));
+    const frameName = failedFrame?.name || cachedFrameName;
     console.error("[open-design desktop] main window did-fail-load", {
       errorCode,
       errorDescription,
+      frameName,
+      frameProcessId,
+      frameRoutingId,
       isMainFrame,
       pendingUrl,
       validatedURL,
       url: window.webContents.getURL(),
     });
+    const failure = previewNavigationFailureFromDidFailLoad({
+      errorCode,
+      eventId: ++previewNavigationFailureEventSequence,
+      ...(frameName ? { frameName } : {}),
+      isMainFrame,
+      occurredAtMs: Date.now(),
+      validatedUrl: validatedURL,
+    });
+    if (failure) window.webContents.send(PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL, failure);
   });
   window.on("unresponsive", () => {
     console.error("[open-design desktop] main window unresponsive", {

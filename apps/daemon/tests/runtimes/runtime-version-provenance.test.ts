@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   detectAgents,
+  ensureDetectedRuntimeVersions,
   getDetectedRuntimeVersions,
 } from '../../src/runtimes/detection.js';
 
@@ -34,8 +35,30 @@ describe('runtime version provenance', () => {
 
     expect(agents.find((agent) => agent.id === 'claude')?.version).toBe('claude 9.8.7');
     expect(getDetectedRuntimeVersions('claude')).toEqual({
+      invocable: true,
       agentCliVersion: 'claude 9.8.7',
     });
+  });
+
+  it('re-probes when the configured executable changes instead of reusing another binary scope', async () => {
+    const first = executable('claude-first', 'claude 1.0.0');
+    const second = executable('claude-second', 'claude 2.0.0');
+
+    await expect(ensureDetectedRuntimeVersions('claude', { CLAUDE_BIN: first }))
+      .resolves.toEqual({ invocable: true, agentCliVersion: 'claude 1.0.0' });
+    await expect(ensureDetectedRuntimeVersions('claude', { CLAUDE_BIN: second }))
+      .resolves.toEqual({ invocable: true, agentCliVersion: 'claude 2.0.0' });
+  });
+
+  it('retains invocability when version output is unavailable', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-runtime-version-null-'));
+    roots.push(root);
+    const spawned = join(root, 'claude-spawned');
+    writeFileSync(spawned, '#!/bin/sh\nexit 2\n', 'utf8');
+    chmodSync(spawned, 0o755);
+
+    await expect(ensureDetectedRuntimeVersions('claude', { CLAUDE_BIN: spawned }))
+      .resolves.toEqual({ invocable: true });
   });
 
   it.runIf(process.platform !== 'win32')(
@@ -52,6 +75,7 @@ describe('runtime version provenance', () => {
       });
 
       expect(getDetectedRuntimeVersions('amr')).toEqual({
+        invocable: true,
         agentCliVersion: 'vela 0.0.26',
         runtimeCompanionName: 'opencode',
         runtimeCompanionVersion: 'opencode 1.2.3',

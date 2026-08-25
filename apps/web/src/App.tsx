@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { flushSync } from 'react-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { Button } from '@open-design/components';
+import { reportAgentDetectDiagnostics } from './analytics/agent-detect';
 import { useAnalytics } from './analytics/provider';
 import {
   trackExperienceSurveyDismissed,
@@ -25,12 +26,14 @@ import {
 import type {
   AmrModelsResponse,
   ChatSessionMode,
+  CreateProjectExampleReference,
   LocalCatalogScope,
   RunContextSelection,
   TeamProject,
   WorkspaceCollabContext,
   WorkspaceInvalidationSsePayload,
   ProjectWorkspaceScope,
+  ProjectScenarioTaskProfile,
   WorkspaceProjectSummary,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
@@ -250,6 +253,9 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   pluginType?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
+  automaticStrategyTaskProfile?: ProjectScenarioTaskProfile;
+  /** Official example card the user picked under the automatic route. */
+  exampleReference?: CreateProjectExampleReference;
   initialRunContext?: RunContextSelection | null;
   conversationMode?: ChatSessionMode;
   autoSendFirstMessage?: boolean;
@@ -1258,6 +1264,8 @@ function AppInner() {
   const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(
     null,
   );
+
+
   const [daemonMediaProviders, setDaemonMediaProviders] = useState<
     AppConfig['mediaProviders'] | null
   >(null);
@@ -2052,6 +2060,7 @@ function AppInner() {
       })
         .then((list) => {
           if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
+          reportAgentDetectDiagnostics(analytics.track, list);
           setAgents(
             mergeAmrModelsIntoAgents(
               orderAgentsByRegistry(list),
@@ -2855,6 +2864,7 @@ function AppInner() {
           },
         });
         const ordered = orderAgentsByRegistry(next);
+        reportAgentDetectDiagnostics(analytics.track, ordered);
         if (isCurrentAgentStreamRequest(agentRequestId)) {
           setAgents(mergeAmrModelsIntoAgents(ordered, amrModelsRef.current));
           setAgentsLoading(false);
@@ -3024,6 +3034,12 @@ function AppInner() {
             ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
             : {}),
           ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
+          ...(input.automaticStrategyTaskProfile
+            ? { automaticStrategyTaskProfile: input.automaticStrategyTaskProfile }
+            : {}),
+          ...(input.exampleReference
+            ? { exampleReference: input.exampleReference }
+            : {}),
           workspaceContext: createWorkspaceContext,
         });
       } catch (err) {
@@ -5103,13 +5119,21 @@ function AppInner() {
           : undefined,
     });
     if (pendingCreation && activeProject) {
+      // Same `div.app` element as the ProjectView branch below, deliberately.
+      // React reconciles one element across the pending -> real hand-off, so
+      // the `.app` entrance animation plays once for the whole transition
+      // instead of restarting when ProjectView takes over (the pending surface
+      // lives ~150ms, shorter than the 180ms animation, so a second mount read
+      // as the project frame flashing twice).
       appMain = (
-        <ProjectCreationPendingView
-          project={activeProject}
-          prompt={pendingCreation.prompt}
-          agentId={config.agentId}
-          onBack={handleBack}
-        />
+        <div className="app">
+          <ProjectCreationPendingView
+            project={activeProject}
+            prompt={pendingCreation.prompt}
+            agentId={config.agentId}
+            onBack={handleBack}
+          />
+        </div>
       );
     } else if (
       routeSurfaceState === 'loading-projects'
@@ -5176,6 +5200,7 @@ function AppInner() {
       );
     } else if (activeProject) {
       appMain = (
+        <div className="app">
         <ProjectView
           key={projectViewAuthorizationLifetimeKey(
             activeProject.id,
@@ -5252,6 +5277,7 @@ function AppInner() {
           onDuplicateProject={handleDuplicateProject}
           onRunActivityChange={handleProjectRunActivityChange}
         />
+        </div>
       );
     }
   } else {
@@ -5411,6 +5437,14 @@ function AppInner() {
                 ? projectRouteWorkspaceContext.loading
                 : undefined
             }
+            amrLoggedIn={amrLoginStatus?.loggedIn ?? null}
+            amrAccountPlan={
+              amrLoginStatus?.account?.plan?.trim()
+              || amrLoginStatus?.user?.plan?.trim()
+              || null
+            }
+            metricsConsent={config.telemetry?.metrics === true}
+            installationId={config.installationId}
           />
         ) : null}
         {route.kind === 'project'

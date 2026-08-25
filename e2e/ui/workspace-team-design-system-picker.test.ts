@@ -489,13 +489,16 @@ async function expectProjectSharedLogo(
       return 0;
     }
 
+    // A late workspace restoration can replace this panel after tabReady was
+    // observed. Bound the locator probe so the outer poll can select the tab
+    // again instead of waiting on the removed image until the full timeout.
     const image = await logo.evaluate((element: HTMLImageElement) => ({
       complete: element.complete,
       width: element.naturalWidth,
       height: element.naturalHeight,
       workspaceId: new URL(element.src).searchParams.get('workspaceId'),
       workspaceMemberId: new URL(element.src).searchParams.get('workspaceMemberId'),
-    })).catch(() => null);
+    }), { timeout: T.short }).catch(() => null);
     const matches = image?.complete === true
       && image.width === 320
       && image.height === 160

@@ -67,6 +67,7 @@ import {
   type VisualStyleContext,
 } from "../runtime/visual-style-catalog";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
+import { stripInternalControlMarkers } from "../artifacts/internal-markers";
 import { BRAND_BROWSER_TAB_ID } from "../runtime/brand-browser-bridge";
 import {
   getPluginFolderCandidates,
@@ -82,8 +83,8 @@ import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import { dedupeToolUsesById } from "../runtime/tool-events";
 import {
+  continuableUnfinishedTodos,
   isTodoWriteToolName,
-  unfinishedTodosFromEvents,
   type TodoItem,
 } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
@@ -548,6 +549,15 @@ function AssistantMessageImpl({
   nextStepVariant = 'default',
 }: Props) {
   const t = useT();
+  // A blocked strategy task is a sticky terminal verdict: the daemon rejects
+  // every further continuation with 409 STRATEGY_TASK_STATE_MISMATCH, so the
+  // turn's question forms must stop accepting submissions and explain why.
+  // Prefer the gate's persisted agent-visible text; fall back to the generic
+  // localized notice.
+  const strategyBlockedNotice =
+    message.strategyTaskBlocked === true
+      ? message.strategyTaskBlockedText?.trim() || t("questions.strategyBlockedNotice")
+      : null;
   // Thinking text renders markdown too — its file links must route in-app
   // exactly like prose links (ProseBlock builds the same handler itself).
   const thinkingLinkClick = useMemo(
@@ -749,7 +759,12 @@ function AssistantMessageImpl({
           }),
     [message.content, nextStepVariant, projectMetadata, streaming],
   );
-  const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
+  // A settled `completed` strategy verdict outranks a stale TodoWrite snapshot:
+  // the deliverable was verified on disk, so the footer must not report the
+  // turn as stopped with unfinished work (and must not withhold next steps).
+  const unfinishedTodos = streaming
+    ? []
+    : continuableUnfinishedTodos({ events, strategyTaskDelivered: message.strategyTaskDelivered });
   const hasTodoSnapshot = events.some(
     (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),
   );
@@ -921,7 +936,10 @@ function AssistantMessageImpl({
                 nextUserContent={nextUserContent}
                 suppressDirectionForms={suppressDirectionForms}
                 onSubmitQuestionForm={onSubmitQuestionForm}
-                questionFormSubmitDisabled={questionFormSubmitDisabled}
+                questionFormSubmitDisabled={
+                  questionFormSubmitDisabled || strategyBlockedNotice !== null
+                }
+                strategyBlockedNotice={strategyBlockedNotice}
                 visualStyleContext={visualStyleContextForProjectKind(projectKind)}
                 projectId={projectId}
                 conversationId={conversationId}
@@ -2535,6 +2553,7 @@ function ProseBlock({
   suppressDirectionForms,
   onSubmitQuestionForm,
   questionFormSubmitDisabled,
+  strategyBlockedNotice = null,
   visualStyleContext,
   projectId,
   conversationId,
@@ -2559,15 +2578,22 @@ function ProseBlock({
   projectResolvedDir?: string | null;
   onSubmitQuestionForm?: QuestionFormSubmitHandler;
   questionFormSubmitDisabled: boolean;
+  /** Localized blocked-task notice; non-null terminates form interaction. */
+  strategyBlockedNotice?: string | null;
   visualStyleContext?: VisualStyleContext;
   onRequestOpenFile?: (name: string) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
   const t = useT();
   const cleaned = useMemo(() => {
-    const stripped = stripArtifact(text);
-    return hideRecoveredHtmlFallback ? stripRecoveredHtmlFallbackForDisplay(stripped, text) : stripped;
-  }, [hideRecoveredHtmlFallback, text]);
+    // Internal control markers come off first: they are daemon plumbing that
+    // never belongs in prose, and a leaked one would otherwise reach Markdown.
+    const withoutMarkers = stripInternalControlMarkers(text, { streaming });
+    const stripped = stripArtifact(withoutMarkers);
+    return hideRecoveredHtmlFallback
+      ? stripRecoveredHtmlFallbackForDisplay(stripped, withoutMarkers)
+      : stripped;
+  }, [hideRecoveredHtmlFallback, streaming, text]);
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
   // doesn't flash raw JSON; an inline loading frame takes its place. A not-yet-closed
@@ -2678,6 +2704,7 @@ function ProseBlock({
             interactive={isLastAssistant}
             onSubmit={onSubmitQuestionForm}
             submitDisabled={questionFormSubmitDisabled}
+            strategyBlockedNotice={strategyBlockedNotice}
             visualStyleContext={visualStyleContext}
           />
         );
@@ -2710,6 +2737,7 @@ function FormBlock({
   interactive,
   onSubmit,
   submitDisabled,
+  strategyBlockedNotice = null,
   visualStyleContext,
 }: {
   form: QuestionForm;
@@ -2720,6 +2748,8 @@ function FormBlock({
   interactive: boolean;
   onSubmit?: QuestionFormSubmitHandler;
   submitDisabled: boolean;
+  /** Localized blocked-task notice rendered under the disabled form. */
+  strategyBlockedNotice?: string | null;
   visualStyleContext?: VisualStyleContext;
 }) {
   const t = useT();
@@ -3103,6 +3133,15 @@ function FormBlock({
         visualStyleContext={visualStyleContext}
         autoContinueAfterTimeout
       />
+      {strategyBlockedNotice ? (
+        <div
+          className="qf-blocked-notice"
+          role="status"
+          data-testid="question-form-blocked-notice"
+        >
+          {strategyBlockedNotice}
+        </div>
+      ) : null}
       {uploadError ? (
         <div className="qf-upload-error" role="alert">
           {uploadError}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { DECK_STRUCTURED_SLIDE_SELECTOR } from '@open-design/contracts/runtime/deck-stage-fallback';
 import { buildSrcdoc } from '../../src/runtime/srcdoc';
@@ -37,9 +37,64 @@ describe('buildSrcdoc', () => {
       { baseHref: '/api/projects/project-1/preview/scope-1/' },
     );
 
+    const dom = new JSDOM(doc, {
+      url: 'http://open-design.local/',
+      runScripts: 'dangerously',
+    });
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      source: dom.window.parent,
+      data: {
+        type: 'od:preview-base-update',
+        href: '/api/projects/project-1/preview/scope-2/',
+      },
+    }));
+
     expect(doc).toContain(authored);
     expect(doc).not.toContain('/api/projects/project-1/preview/scope-1/');
-    expect(new JSDOM(doc).window.document.querySelectorAll('base')).toHaveLength(1);
+    expect(dom.window.document.querySelectorAll('base')).toHaveLength(1);
+    expect(dom.window.document.querySelector('base')?.getAttribute('href'))
+      .toBe('https://cdn.example/assets/');
+    dom.window.close();
+  });
+
+  it('updates an injected preview base in place without navigating the document', () => {
+    const doc = buildSrcdoc(
+      '<!doctype html><html><head></head><body><main>Preview</main></body></html>',
+      { baseHref: 'od://app/api/projects/project-1/preview/scope-1/' },
+    );
+    const dom = new JSDOM(doc, {
+      url: 'http://open-design.local/',
+      runScripts: 'dangerously',
+    });
+    const before = dom.window.document.documentElement;
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      source: dom.window.parent,
+      data: {
+        type: 'od:preview-base-update',
+        requestId: 'renew-1',
+        href: 'od://app/api/projects/project-1/preview/scope-2/',
+      },
+    }));
+
+    expect(dom.window.document.documentElement).toBe(before);
+    expect(dom.window.document.querySelector('base')?.getAttribute('href'))
+      .toBe('od://app/api/projects/project-1/preview/scope-2/');
+    dom.window.close();
+  });
+
+  it('keeps relative assets resolvable when Electron transports srcDoc through a Blob URL', () => {
+    const doc = buildSrcdoc(
+      '<!doctype html><html><head></head><body><img src="./asset.png"></body></html>',
+      { baseHref: 'od://app/api/projects/project-1/preview/scope-1/pages/' },
+    );
+    const dom = new JSDOM(doc, { url: 'blob:od://app/preview-document' });
+
+    expect(dom.window.document.baseURI)
+      .toBe('od://app/api/projects/project-1/preview/scope-1/pages/');
+    expect(new URL('./asset.png', dom.window.document.baseURI).href)
+      .toBe('od://app/api/projects/project-1/preview/scope-1/pages/asset.png');
+    dom.window.close();
   });
 
   it('echoes the witnessed content-size generation with separate scroll and client widths', () => {
@@ -106,6 +161,46 @@ describe('buildSrcdoc', () => {
       srcdoc.indexOf('<script>throw new Error("boot")</script>'),
     );
     expect(buildSrcdoc(html)).not.toContain('data-od-preview-observability');
+  });
+
+  it('defers trusted font stylesheets without changing authored layout CSS', async () => {
+    const parserWindow = new JSDOM('').window;
+    vi.stubGlobal('DOMParser', parserWindow.DOMParser);
+    const fontHref = 'https://fonts.googleapis.com/css2?family=Inter&display=swap';
+    const html = `<!doctype html><html><head>
+      <link href="${fontHref}" rel="stylesheet">
+      <link href="/layout.css" rel="stylesheet">
+    </head><body><main>Preview</main></body></html>`;
+    try {
+      const srcdoc = buildSrcdoc(html, { deferFontStylesheets: true });
+      const document = new JSDOM(srcdoc).window.document;
+      const fontLink = document.querySelector<HTMLLinkElement>('link[href^="https://fonts.googleapis.com/"]');
+      const layoutLink = document.querySelector<HTMLLinkElement>('link[href="/layout.css"]');
+
+      expect(fontLink?.media).toBe('print');
+      expect(fontLink?.hasAttribute('data-od-deferred-font-stylesheet')).toBe(true);
+      expect(layoutLink?.media).toBe('');
+      expect(layoutLink?.hasAttribute('data-od-deferred-font-stylesheet')).toBe(false);
+      expect(srcdoc.indexOf('data-od-font-stylesheet-loader')).toBeLessThan(
+        srcdoc.indexOf('fonts.googleapis.com'),
+      );
+
+      const runtime = new JSDOM(srcdoc, { runScripts: 'dangerously' });
+      await new Promise<void>((resolve) => runtime.window.queueMicrotask(resolve));
+      const runtimeFontLink = runtime.window.document.querySelector<HTMLLinkElement>(
+        'link[href^="https://fonts.googleapis.com/"]',
+      );
+      runtimeFontLink?.dispatchEvent(new runtime.window.Event('load'));
+      expect(runtimeFontLink?.media).toBe('all');
+      expect(runtimeFontLink?.hasAttribute('data-od-deferred-font-stylesheet')).toBe(false);
+      runtime.window.close();
+
+      const unchanged = new JSDOM(buildSrcdoc(html)).window.document;
+      expect(unchanged.querySelector<HTMLLinkElement>('link[href^="https://fonts.googleapis.com/"]')?.media).toBe('');
+    } finally {
+      vi.unstubAllGlobals();
+      parserWindow.close();
+    }
   });
 
   it('echoes the host challenge token from the srcDoc transport readiness probe', () => {
@@ -373,6 +468,8 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('schedulePostPreviewScroll');
     expect(srcdoc).toContain("type: 'od:preview-scroll'");
     expect(srcdoc).toContain("type: 'od:preview-scroll-request'");
+    expect(srcdoc).toContain("data.type === 'od:preview-scroll-capture'");
+    expect(srcdoc).toContain('postPreviewScroll(data.requestId)');
     expect(srcdoc).toContain("data.type === 'od:preview-scroll-by'");
     expect(srcdoc).toContain('previewScrollBy(data.left, data.top)');
     expect(srcdoc).toContain('data-od-selection-bridge-style');

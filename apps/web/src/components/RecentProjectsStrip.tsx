@@ -404,10 +404,8 @@ export function RecentProjectsStrip({
     (workspaceContextHasTeamIdentity(workspaceContext) &&
       workspaceContext?.permissions.canShareProjects === true);
   const canAccessInviteFlow = canAccessWorkspaceInviteFlow(workspaceContext);
-  // The invite dialog's seat-gate upgrade CTA: personal workspace → B's
-  // personal plan modal, team → checkout vs change-plan by subscription state.
-  // One shared decision point — see `workspaceUpgradeUrl` in EntryNavRail.tsx
-  // (recvpYEiH019cD).
+  // The invite dialog's seat-gate upgrade CTA shares the public Pricing
+  // destination owned by `workspaceUpgradeUrl` in EntryNavRail.tsx.
   const inviteUpgradeUrl = workspaceUpgradeUrl(workspaceContext, workspaceBilling);
   const inviteTarget = resolveWorkspaceInviteTarget(workspaceContext);
   const canManageCollection =
@@ -2476,8 +2474,9 @@ async function loadDeckCover(
   return run;
 }
 
-function deckPreviewSrcDoc(html: string): string {
+export function deckPreviewSrcDoc(html: string): string {
   const withoutScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, '');
+  const withCoverSlide = markFirstDeckPage(withoutScripts);
   const style = `<style id="od-recent-deck-real-preview">
     html,
     body {
@@ -2490,6 +2489,16 @@ function deckPreviewSrcDoc(html: string): string {
       display: block !important;
       scroll-snap-type: none !important;
     }
+    :where(body *):has(> [data-od-cover-slide]) {
+      position: absolute !important;
+      inset: 0 !important;
+      width: ${DECK_PREVIEW_WIDTH}px !important;
+      height: ${DECK_PREVIEW_HEIGHT}px !important;
+      margin: 0 !important;
+      overflow: hidden !important;
+      transform: none !important;
+      transform-origin: 0 0 !important;
+    }
     .slide,
     section[data-slide],
     section[data-screen-label] {
@@ -2500,9 +2509,24 @@ function deckPreviewSrcDoc(html: string): string {
       flex: none !important;
       scroll-snap-align: none !important;
     }
-    .slide:not(:first-of-type),
-    section[data-slide]:not(:first-of-type),
-    section[data-screen-label]:not(:first-of-type),
+    [data-od-cover-slide] {
+      opacity: 1 !important;
+      visibility: visible !important;
+      transform: none !important;
+    }
+    [data-od-cover-slide] > *,
+    [data-od-cover-slide] [data-anim],
+    [data-od-cover-slide] .reveal {
+      animation: none !important;
+      transition: none !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      transform: none !important;
+      clip-path: none !important;
+    }
+    .slide:not([data-od-cover-slide]),
+    section[data-slide]:not([data-od-cover-slide]),
+    section[data-screen-label]:not([data-od-cover-slide]),
     .deck-counter,
     .deck-controls,
     .deck-hint,
@@ -2521,6 +2545,7 @@ function deckPreviewSrcDoc(html: string): string {
     #deck-next,
     #deck-cur,
     #deck-total,
+    #hint,
     [data-deck-controls],
     [data-page-controls],
     [data-pagination],
@@ -2536,7 +2561,45 @@ function deckPreviewSrcDoc(html: string): string {
       pointer-events: none !important;
     }
   </style>`;
-  return injectBefore(withoutScripts, '</head>', style);
+  return injectBefore(withCoverSlide, '</head>', style);
+}
+
+function markFirstDeckPage(html: string): string {
+  const tags = [...html.matchAll(/<[a-z][\w:-]*\b[^>]*>/giu)];
+  const classSlide = tags.find((match) => {
+    const className = match[0].match(/\bclass\s*=\s*(["'])(.*?)\1/iu)?.[2];
+    return className?.split(/\s+/u).includes('slide') === true;
+  });
+  const page = classSlide
+    ?? tags.find((match) => /\sdata-slide(?:\s|=|>)/iu.test(match[0]))
+    ?? tags.find((match) => /\sdata-screen-label(?:\s|=|>)/iu.test(match[0]));
+  if (!page || page.index === undefined) return html;
+  const tag = page[0];
+  const classAttribute = tag.match(/\bclass\s*=\s*(["'])(.*?)\1/iu);
+  const activeClasses = ['active', 'is-active'];
+  let activated = tag;
+  if (classAttribute) {
+    const quote = classAttribute[1];
+    const classes = classAttribute[2]?.split(/\s+/u).filter(Boolean) ?? [];
+    for (const activeClass of activeClasses) {
+      if (!classes.includes(activeClass)) classes.push(activeClass);
+    }
+    activated = activated.replace(
+      classAttribute[0],
+      `class=${quote}${classes.join(' ')}${quote}`,
+    );
+  } else {
+    activated = activated.replace(/\s*\/?\s*>$/u, (ending) => (
+      ` class="${activeClasses.join(' ')}"${ending}`
+    ));
+  }
+  activated = activated
+    .replace(/\saria-hidden\s*=\s*(["'])true\1/iu, ' aria-hidden="false"')
+    .replace(/\shidden(?:\s*=\s*(["'])?hidden\1?)?(?=\s|\/?\s*>)/iu, '');
+  const marked = activated.endsWith('/>')
+    ? `${activated.slice(0, -2)} data-od-cover-slide />`
+    : `${activated.slice(0, -1)} data-od-cover-slide>`;
+  return `${html.slice(0, page.index)}${marked}${html.slice(page.index + tag.length)}`;
 }
 
 function injectBefore(source: string, marker: string, addition: string): string {

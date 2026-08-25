@@ -17,7 +17,7 @@ const script = `
   // strippable locale segment, or switching language on an alias page like
   // /zh-CN/blog/ would rebuild a nested, non-existent /<locale>/zh-CN/blog/.
   // Mirrors LEGACY_LOCALE_PREFIXES in app/i18n.ts.
-  const legacyAliases = new Set(['zh-cn', 'es-es', 'fa', 'hu', 'th']);
+  const legacyAliases = new Set(['zh-cn', 'zh-tw', 'es-es', 'fa', 'hu', 'th']);
   const isLocaleSegment = (segment) => {
     const value = (segment || '').toLowerCase();
     return value !== '' && (codes.has(value) || legacyAliases.has(value));
@@ -34,7 +34,7 @@ const script = `
       raw === 'zh-hant' ||
       raw.startsWith('zh-hant-')
     ) {
-      return 'zh-tw';
+      return codes.has('zh-tw') ? 'zh-tw' : 'zh';
     }
     if (raw === 'pt' || raw.startsWith('pt-br')) return 'pt-br';
     if (codes.has(raw)) return raw;
@@ -59,11 +59,18 @@ const script = `
   const isCanonicalOnly = () =>
     document.documentElement.getAttribute('data-locale-canonical') === 'true';
 
+  const searchWithoutLocaleHandoff = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.delete('od_locale');
+    const search = searchParams.toString();
+    return search ? \`?\${search}\` : '';
+  };
+
   const targetFor = (locale) => {
     const basePath = basePathFromCurrent();
     const nextPath =
       isCanonicalOnly() || locale === DEFAULT_LOCALE ? basePath : \`/\${locale}\${basePath}\`;
-    return \`\${nextPath}\${window.location.search}\${window.location.hash}\`;
+    return \`\${nextPath}\${searchWithoutLocaleHandoff()}\${window.location.hash}\`;
   };
 
   const persistLocale = (locale) => {
@@ -158,7 +165,21 @@ const script = `
     // design-system detail pages): keep the visitor on the URL they clicked.
     // hreflang + manual language switching stay intact.
     if (document.documentElement.getAttribute('data-locale-autoredirect') === 'off') return;
-    if (currentFromPath() !== DEFAULT_LOCALE) return;
+    const current = currentFromPath();
+    const searchParams = new URLSearchParams(window.location.search);
+    const requested = normalizeLocale(searchParams.get('od_locale'));
+    // A product that links here already knows the user's selected language.
+    // Honor that explicit handoff before this site's saved/browser fallback,
+    // then consume it so a later manual language choice remains authoritative.
+    if (requested) {
+      if (requested !== current) selectLocale(requested, false);
+      else {
+        const target = \`\${window.location.pathname}\${searchWithoutLocaleHandoff()}\${window.location.hash}\`;
+        window.history.replaceState(window.history.state, '', target);
+      }
+      return;
+    }
+    if (current !== DEFAULT_LOCALE) return;
     let saved = null;
     try {
       saved = normalizeLocale(window.localStorage.getItem(STORAGE_KEY) ?? '');

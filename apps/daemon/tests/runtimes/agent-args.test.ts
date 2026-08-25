@@ -4,7 +4,12 @@ import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
+import {
+  getRememberedLiveModels,
+  rememberLiveModels,
+} from '../../src/runtimes/models.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
 // ---- Cursor Agent --trust capability (issue #4461) -------------------------
@@ -72,12 +77,16 @@ test('cursor-agent declares the --trust capability probe (issue #4461 root cause
   assert.equal(cursorAgent.capabilityFlags?.['--trust'], 'trust');
 });
 
-test('opencode args keep the documented run/json argv and ignore unsupported reasoning options', () => {
+test('opencode args pass model-supported variants without changing the default argv', () => {
   agentCapabilities.delete('opencode');
   const prompt = 'design a dashboard';
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
   assert.equal(opencode.reasoningOptions, undefined);
+  assert.deepEqual(opencode.listModels?.args, ['models', '--verbose']);
+  assert.equal(opencode.fallbackModels.find(
+    (model) => model.id === 'openai/gpt-5.6-sol',
+  )?.reasoningOptions, undefined);
   assert.deepEqual(opencode.helpArgs, ['run', '--help']);
   assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
   assert.equal(baseArgs.includes('-'), false);
@@ -101,20 +110,117 @@ test('opencode args keep the documented run/json argv and ignore unsupported rea
     '-m',
     'anthropic/claude-sonnet-4-5',
   ]);
-  const withReasoning = opencode.buildArgs(
-    prompt,
-    [],
-    [],
-    {
-      model: 'anthropic/claude-sonnet-4-5',
-      reasoning: 'high',
-    },
-  );
-  assert.equal(withReasoning.some((arg) => arg.includes('reason')), false);
-  assert.equal(withReasoning.includes('--thinking'), false);
-  assert.deepEqual(withReasoning, withModel);
+  assert.deepEqual(opencode.buildArgs(prompt, [], [], {
+    model: 'anthropic/claude-sonnet-4-5',
+    reasoning: 'high',
+  }), withModel);
+  assert.deepEqual(opencode.buildArgs(prompt, [], [], {
+    model: 'openai/gpt-5.6-sol',
+    reasoning: 'default',
+  }), [
+    'run',
+    '--format',
+    'json',
+    '-m',
+    'openai/gpt-5.6-sol',
+  ]);
   assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
   assert.equal(withModel.includes('--model'), false);
+});
+
+test('opencode parses live verbose variant metadata and only forwards variants advertised for that model', () => {
+  const previous = getRememberedLiveModels('opencode');
+  const parsed = parseOpenCodeModels([
+    'openai/gpt-5.6-sol',
+    '{ "variants": { "high": {} } }',
+    'openai/gpt-5.6-terra',
+    '{ "variants": { "high": {} } }',
+    'openai/gpt-5.6-luna',
+    '{ "variants": { "max": {} } }',
+    'custom/reasoner',
+    '{',
+    '  "id": "reasoner",',
+    '  "variants": {',
+    '    "low": { "reasoningEffort": "low" },',
+    '    "ultra": { "reasoningEffort": "ultra" }',
+    '  }',
+    '}',
+    'custom/plain',
+    '{',
+    '  "id": "plain",',
+    '  "variants": {}',
+    '}',
+  ].join('\n'));
+  assert.deepEqual(parsed?.find((model) => model.id === 'custom/reasoner')?.reasoningOptions, [
+    { id: 'default', label: 'Default' },
+    { id: 'low', label: 'low' },
+    { id: 'ultra', label: 'ultra' },
+  ]);
+  assert.equal(parsed?.find((model) => model.id === 'custom/plain')?.reasoningOptions, undefined);
+
+  rememberLiveModels('opencode', parsed ?? []);
+  try {
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-sol',
+      reasoning: 'high',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'openai/gpt-5.6-sol',
+      '--variant',
+      'high',
+    ]);
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-terra',
+      reasoning: 'high',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'openai/gpt-5.6-terra',
+      '--variant',
+      'high',
+    ]);
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-luna',
+      reasoning: 'max',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'openai/gpt-5.6-luna',
+      '--variant',
+      'max',
+    ]);
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'custom/reasoner',
+      reasoning: 'ultra',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'custom/reasoner',
+      '--variant',
+      'ultra',
+    ]);
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'custom/plain',
+      reasoning: 'ultra',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '-m',
+      'custom/plain',
+    ]);
+  } finally {
+    rememberLiveModels('opencode', previous);
+  }
 });
 
 test('opencode passes --dangerously-skip-permissions when the help probe finds it', () => {
@@ -130,6 +236,22 @@ test('opencode passes --dangerously-skip-permissions when the help probe finds i
   } finally {
     agentCapabilities.delete('opencode');
   }
+});
+
+test('opencode pins its workspace to the project cwd', () => {
+  // OpenCode resolves its project by walking up to the nearest enclosing git
+  // root, not by using its process cwd. A managed project directory is not a
+  // repository, so a development install (daemon data dir under the checkout)
+  // made OpenCode adopt the whole Open Design repository as the workspace: it
+  // wrote the deliverable at the repository root, the project stayed empty, and
+  // the Run reported `no_artifact`.
+  const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+  assert.deepEqual(args, ['run', '--format', 'json', '--dir', '/projects/p1']);
+});
+
+test('opencode omits --dir for a run with no project directory', () => {
+  const args = opencode.buildArgs('design a dashboard', [], [], {}, {});
+  assert.equal(args.includes('--dir'), false);
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
@@ -950,6 +1072,48 @@ test('claude flags promptViaStdin and never embeds the prompt in argv', () => {
   // `-p` (print mode) must still be present; without it claude drops into
   // an interactive REPL that the daemon has no TTY for.
   assert.ok(args.includes('-p'), 'claude argv must include -p');
+});
+
+test('claude enables native Child behavior frames only for an observed OD Next Run', () => {
+  assert.equal(
+    claude.buildArgs('', [], [], {}, {}).includes('--forward-subagent-text'),
+    false,
+  );
+  assert.equal(
+    claude.capabilityFlags?.['--forward-subagent-text'],
+    'forwardSubagentText',
+  );
+  agentCapabilities.set('claude', { forwardSubagentText: true });
+  try {
+    assert.equal(claude.buildArgs('', [], [], {}, {
+      observeNativeChildBehavior: true,
+    }).includes('--forward-subagent-text'), true);
+  } finally {
+    agentCapabilities.delete('claude');
+  }
+  assert.throws(
+    () => claude.buildArgs('', [], [], {}, { observeNativeChildBehavior: true }),
+    /advertised --forward-subagent-text support/,
+  );
+});
+
+test('claude registers daemon-issued Build Package handles and rejects an unadvertised CLI', () => {
+  const bindings = [{ nativeAgentHandle: 'od-build-1-0123456789abcdef', buildPackageId: 'package-a' }];
+  agentCapabilities.set('claude', { customAgents: true });
+  try {
+    const args = claude.buildArgs('', [], [], {}, { nativeBuildPackageBindings: bindings });
+    const flag = args.indexOf('--agents');
+    assert.ok(flag >= 0);
+    const definitions = JSON.parse(args[flag + 1]!);
+    assert.deepEqual(Object.keys(definitions), ['od-build-1-0123456789abcdef']);
+    assert.equal(JSON.stringify(definitions).includes('package-a'), false);
+  } finally {
+    agentCapabilities.delete('claude');
+  }
+  assert.throws(
+    () => claude.buildArgs('', [], [], {}, { nativeBuildPackageBindings: bindings }),
+    /advertised --agents support/,
+  );
 });
 
 // ---- Claude Code --add-dir capability (issue #430) -------------------------

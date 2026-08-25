@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import { ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import { ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import {
   collectWorkspaceTarballs,
   createWinPackagedAppCacheKey,

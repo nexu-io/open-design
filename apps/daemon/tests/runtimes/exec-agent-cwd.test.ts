@@ -40,3 +40,20 @@ describe('execAgentFile cwd isolation', () => {
     }
   });
 });
+
+describe('execAgentFile probe termination', () => {
+  it('settles a probe whose binary swallows SIGTERM', async () => {
+    // `timeout` alone only *signals*: execFile settles on 'close', which needs
+    // the child to actually exit. A CLI that traps SIGTERM therefore left the
+    // probe pending forever. The run-start `--help` capability scan awaits one,
+    // so a Run created against such a binary never left `queued` — no spawn, no
+    // inactivity watchdog, no terminal status, just a Run parked until the
+    // caller's own timeout fired.
+    const TRAP = "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);";
+    const startedAt = Date.now();
+    await expect(
+      execAgentFile(process.execPath, ['-e', TRAP], { timeout: 750 }),
+    ).rejects.toThrow();
+    expect(Date.now() - startedAt).toBeLessThan(10_000);
+  });
+});

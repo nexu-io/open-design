@@ -910,12 +910,21 @@ function classifyRunFailureBase(
   if (isTimeoutText(text) || errorCode === 'TIMEOUT') {
     const retryable = retryableHint ?? true;
     const inactivityTimeout = /inactivity|stalled|hung|no new output|without emitting any new output/i.test(text);
+    // `attachAcpSession`'s stage watchdog fails the turn with
+    // `ACP <stage> timed out after <n>ms` and then kills the child, so the run
+    // surfaces the child's exit code instead of a stall code. Without this
+    // trigger the terminal reads as a bare AGENT_EXIT_130 — indistinguishable
+    // from a user interrupt, which is how the 2026-07-28 AMR stall got
+    // attributed to the wrong watchdog and the wrong 15-minute window.
+    const acpStageTimeout = /\bACP\b[^\n]*timed out after \d+\s*ms/i.test(text);
     const terminalTrigger: TrackingRunTerminalTrigger | undefined =
       /without emitting a first output/i.test(text)
         ? 'first_output_deadline'
         : inactivityTimeout
           ? 'inactivity_watchdog'
-          : undefined;
+          : acpStageTimeout
+            ? 'acp_stage_timeout'
+            : undefined;
     return {
       ...classification(
         'timeout',

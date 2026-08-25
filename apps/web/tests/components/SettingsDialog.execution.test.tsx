@@ -5578,6 +5578,7 @@ describe('SettingsDialog about interactions', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('drops a pending autosave when explicit onboarding reset unmounts Settings', () => {
@@ -5626,6 +5627,8 @@ describe('SettingsDialog about interactions', () => {
   });
 
   it('renders app version and runtime details when version info is available', () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       {
@@ -5650,6 +5653,12 @@ describe('SettingsDialog about interactions', () => {
     expect(screen.getByText('darwin')).toBeTruthy();
     expect(screen.getByText('Architecture')).toBeTruthy();
     expect(screen.getByText('arm64')).toBeTruthy();
+    // OD Next routing is product-owned and invisible to end users. About must
+    // not expose the daemon's internal rollout latch/reset control.
+    expect(screen.queryByTestId('od-next-rollout-control')).toBeNull();
+    expect(fetchMock.mock.calls.some(([input]) => (
+      String(input).includes('/api/strategies/od-next/rollout')
+    ))).toBe(false);
   });
 
   it('renders the unavailable fallback when app version info is missing', () => {

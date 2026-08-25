@@ -25,6 +25,7 @@ const DELAYED_HEADING = 'Delayed Daemon Smoke';
 const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
 const SLOW_RELOAD_HEADING = 'Slow Reload Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
+const OD_NEXT_CANARY_FILE = 'od-next-active-canary.html';
 const MEDIA_ONLY_FILE = 'media-only.png';
 const SERVER_DERIVED_WORKSPACE_HEADERS = {
   'x-od-workspace-id': 'e2e-server-derived-workspace',
@@ -116,12 +117,161 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 
+test('[P0] local OD Next active canary follows one public task across physical runs', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next local active canary');
+
+  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Create an OD Next active canary artifact');
+  const createResponse = await createResponsePromise;
+  const created = await createResponse.json() as {
+    runId: string;
+    taskExecutionId?: string;
+    strategyTask?: { taskExecutionId: string; inputStage: string; terminal: boolean };
+  };
+  expect(created.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+  expect(created.taskExecutionId).toBe(created.strategyTask?.taskExecutionId);
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
+  await expect(page.getByText(
+    'Created od-next-active-canary.html through the continued native session.',
+  ).last()).toBeVisible();
+
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${created.runId}`);
+    const status = await response.json() as {
+      strategyTask?: {
+        activeRunId: string;
+        inputStage: string;
+        outcome: string;
+        terminal: boolean;
+      };
+    };
+    return status.strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    inputStage: 'production',
+    outcome: 'completed',
+    terminal: true,
+    activeRunId: expect.not.stringMatching(new RegExp(`^${created.runId}$`)),
+  });
+
+  const list = await page.request.get(`/api/runs?projectId=${encodeURIComponent(projectId)}`);
+  const body = await list.json() as {
+    runs: Array<{ strategyTask?: { taskExecutionId: string } }>;
+  };
+  expect(body.runs.filter((run) => (
+    run.strategyTask?.taskExecutionId === created.taskExecutionId
+  ))).toHaveLength(2);
+});
+
+test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next local clarification canary');
+
+  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Create an OD Next clarification canary artifact');
+  const created = await (await createResponsePromise).json() as {
+    runId: string;
+    taskExecutionId: string;
+  };
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${created.runId}`);
+    return (await response.json() as { strategyTask?: { outcome: string } }).strategyTask?.outcome;
+  }, { timeout: 20_000 }).toBe('clarification_required');
+
+  const form = page.locator('.question-form').first();
+  await expect(form).toBeVisible();
+  await form.getByText('Desktop web', { exact: true }).click();
+  const clarificationResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await form.getByRole('button', { name: 'Send answers' }).click();
+  const clarificationResponse = await clarificationResponsePromise;
+  const clarificationText = await clarificationResponse.text();
+  expect(clarificationResponse.ok(), clarificationText).toBeTruthy();
+  const clarification = JSON.parse(clarificationText) as {
+    taskExecutionId: string;
+    strategyTask?: { inputStage: string };
+  };
+  expect(clarification.taskExecutionId).toBe(created.taskExecutionId);
+  expect(clarification.strategyTask?.inputStage).toBe('clarification');
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
+  await expect(page.getByText(
+    'Created od-next-active-canary.html through the continued native session.',
+  ).last()).toBeVisible();
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${created.runId}`);
+    return (await response.json() as {
+      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
+    }).strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    taskExecutionId: created.taskExecutionId,
+    outcome: 'completed',
+    terminal: true,
+  });
+});
+
+test('[P0] local OD Next public canaries project blocked and canceled terminal mappings', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next local blocked canary');
+  const blockedResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Create an OD Next blocked canary');
+  const blocked = await (await blockedResponsePromise).json() as {
+    runId: string;
+    taskExecutionId: string;
+  };
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${blocked.runId}`);
+    return (await response.json() as {
+      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
+    }).strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    taskExecutionId: blocked.taskExecutionId,
+    outcome: 'blocked',
+    terminal: true,
+  });
+
+  await prepareLocalOdNextCanary(page, 'OD Next local canceled canary');
+  const canceledResponsePromise = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Hold the daemon run open until canceled');
+  const canceled = await (await canceledResponsePromise).json() as {
+    runId: string;
+    taskExecutionId: string;
+  };
+  const cancelResponse = await page.request.post(`/api/runs/${canceled.runId}/cancel`);
+  expect(cancelResponse.ok(), await cancelResponse.text()).toBeTruthy();
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${canceled.runId}`);
+    return (await response.json() as {
+      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
+    }).strategyTask;
+  }, { timeout: 20_000 }).toMatchObject({
+    taskExecutionId: canceled.taskExecutionId,
+    outcome: 'canceled',
+    terminal: true,
+  });
+});
+
 test('[P0] bound project reads derive Workspace authority without browser query scope', async ({ page }) => {
   const projectId = `server-derived-raw-${Date.now()}`;
   const { conversationId } = await createProjectViaApi(
     page,
     projectId,
     'Server-derived raw authority',
+    undefined,
     SERVER_DERIVED_WORKSPACE_HEADERS,
   );
 
@@ -790,7 +940,12 @@ test('[P0] real daemon run supports fake non-Codex runtime protocols', async ({ 
   }
 });
 
-async function createProject(page: Page, name: string, agentId: FakeAgentId = 'codex') {
+async function createProject(
+  page: Page,
+  name: string,
+  agentId: FakeAgentId = 'codex',
+  conversationMode?: 'design' | 'chat' | 'plan',
+) {
   const projectId = `real-daemon-${name}-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
   await configureFakeAgent(page, agentId);
   await installBrowserAgentConfig(page, agentId);
@@ -800,7 +955,12 @@ async function createProject(page: Page, name: string, agentId: FakeAgentId = 'c
   // redundant setup it removed — `installBrowserAgentConfig` above already
   // seeded it — and the goto is guarded against the aborted-navigation races a
   // domcontentloaded wait can lose to.
-  const { conversationId } = await createProjectViaApi(page, projectId, name);
+  const { conversationId } = await createProjectViaApi(
+    page,
+    projectId,
+    name,
+    conversationMode,
+  );
   try {
     await page.goto(`/projects/${projectId}/conversations/${conversationId}`, {
       waitUntil: 'domcontentloaded',
@@ -812,6 +972,38 @@ async function createProject(page: Page, name: string, agentId: FakeAgentId = 'c
   await waitForLoadingToClear(page);
   await expectBrowserAgentConfig(page, agentId);
   await dismissPrivacyDialog(page);
+}
+
+async function prepareLocalOdNextCanary(page: Page, name: string): Promise<void> {
+  // Exercise the shipped Design-mode New Project flow, rather than hand-
+  // constructing the create payload. EntryShell leaves the silently selected
+  // default out of explicit plugin authority; the daemon derives and stamps
+  // its exact snapshot, so rollout can replace only that automatic pin.
+  await configureFakeAgent(page, 'opencode');
+  await installBrowserAgentConfig(page, 'opencode');
+  await gotoEntryHome(page);
+  await setBrowserAgentConfig(page, 'opencode');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await setBrowserAgentConfig(page, 'opencode');
+  await configureFakeAgent(page, 'opencode');
+  await expectBrowserAgentConfig(page, 'opencode');
+  await dismissPrivacyDialog(page);
+  await openNewProjectModalFromProjects(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await page.getByTestId('new-project-name').fill(name);
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+  await configureFakeAgent(page, 'opencode');
+  const response = await page.request.get('/api/agents');
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const body = await response.json() as {
+    agents?: Array<{ id: string; available: boolean; version?: string }>;
+  };
+  expect(body.agents?.find((agent) => agent.id === 'opencode')).toMatchObject({
+    available: true,
+    version: 'opencode-e2e 0.0.0',
+  });
 }
 
 async function createByokOpenCodeProject(page: Page, name: string) {
@@ -835,6 +1027,7 @@ async function createProjectViaApi(
   page: Page,
   projectId: string,
   name: string,
+  conversationMode?: 'design' | 'chat' | 'plan',
   headers?: Readonly<Record<string, string>>,
 ) {
   const response = await page.request.post('/api/projects', {
@@ -846,6 +1039,7 @@ async function createProjectViaApi(
       designSystemId: null,
       pendingPrompt: null,
       metadata: { kind: 'prototype' },
+      ...(conversationMode ? { conversationMode } : {}),
     },
   });
   expect(response.ok()).toBeTruthy();

@@ -77,7 +77,7 @@ const FONT_HOSTS = new Set([
 // must be an https URL whose HOST is exactly an approved font CDN — a substring
 // match would accept `https://evil.example/fonts.googleapis.com.css` and inject
 // arbitrary CSS into the app document.
-function isApprovedFontHref(href: string): boolean {
+export function isApprovedFontStylesheetHref(href: string): boolean {
   // Font-CDN links are always absolute https URLs; a relative href cannot be an
   // approved CDN and is correctly treated as an untrusted external stylesheet.
   let url: URL;
@@ -127,7 +127,7 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
     if (!/\bstylesheet\b/.test(rel)) continue;
     const href = link.getAttribute('href') || '';
     if (!href) continue;
-    if (isApprovedFontHref(href)) {
+    if (isApprovedFontStylesheetHref(href)) {
       if (!fontLinks.includes(href)) fontLinks.push(href);
     } else {
       return unrenderable('external-stylesheet');
@@ -468,7 +468,7 @@ function extractStylesheetImports(css: string): StylesheetImportExtraction {
     const match = CSS_IMPORT_HREF_RE.exec(statement);
     const href = match?.slice(1).find((value): value is string => typeof value === 'string')?.trim() ?? '';
     const condition = match ? statement.slice(match[0].length, -1).trim() : '';
-    if (!href || condition || !isApprovedFontHref(href)) unsafe = true;
+    if (!href || condition || !isApprovedFontStylesheetHref(href)) unsafe = true;
     else if (!fontLinks.includes(href)) fontLinks.push(href);
 
     chunks.push(css.slice(chunkStart, i));

@@ -10,6 +10,7 @@ import {
   clearHostBrowserData,
   checkHostUpdater,
   detectOpenDesignHostClientType,
+  getLatestHostPreviewNavigationFailure,
   getHostUpdaterStatus,
   getOpenDesignHost,
   installHostUpdater,
@@ -25,6 +26,7 @@ import {
   setHostPetVisible,
   subscribeHostUpdaterOpenDialog,
   subscribeHostUpdater,
+  subscribeHostPreviewNavigationFailure,
 } from "../src/index.js";
 import { createMockOpenDesignHost, installMockOpenDesignHost } from "../src/testing.js";
 
@@ -308,6 +310,31 @@ describe("open-design host contract", () => {
     expect(subscribe).toHaveBeenCalledWith(listener);
     expect(subscribeOpenDialog).toHaveBeenCalledWith(openDialogListener);
     expect(setMenuLabels).toHaveBeenCalledOnce();
+  });
+
+  it("routes optional preview navigation failure subscriptions", () => {
+    const failure = {
+      errorCode: -3,
+      eventId: 1,
+      frameName: "od-artifact-preview-srcdoc-preview-host-1",
+      occurredAtMs: 1234,
+      validatedUrl: "about:srcdoc",
+    };
+    const unsubscribe = vi.fn();
+    const subscribeNavigationFailure = vi.fn(() => unsubscribe);
+    const getLatestNavigationFailure = vi.fn(() => failure);
+    const scope: Record<string, unknown> = {};
+    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+      preview: { getLatestNavigationFailure, subscribeNavigationFailure },
+    });
+    const listener = vi.fn();
+
+    expect(getLatestHostPreviewNavigationFailure(scope)).toBe(failure);
+    expect(getLatestNavigationFailure).toHaveBeenCalledOnce();
+    expect(subscribeHostPreviewNavigationFailure(listener, scope)).toBe(unsubscribe);
+    expect(subscribeNavigationFailure).toHaveBeenCalledWith(listener);
+    expect(getLatestHostPreviewNavigationFailure({})).toBeNull();
+    expect(subscribeHostPreviewNavigationFailure(listener, {})).toEqual(expect.any(Function));
   });
 
   it("wraps updater action throws into structured failures", async () => {

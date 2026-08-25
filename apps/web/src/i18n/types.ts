@@ -2816,9 +2816,14 @@ export interface Dict {
   'inlineSwitcher.missingApiKey': string;
   'inlineSwitcher.openFullSettings': string;
   'inlineSwitcher.customSuffix': string;
+  'inlineSwitcher.unlimitedBadge': string;
 
   // Project view / chat pane / composer
   'project.backToProjects': string;
+  'project.restoreAutomaticScenario': string;
+  'project.restoreAutomaticScenarioConfirm': string;
+  'project.restoreAutomaticScenarioBusy': string;
+  'project.restoreAutomaticScenarioFailed': string;
   'project.brandReadyTitle': string;
   'project.brandReadyTitleGeneric': string;
   'project.brandReadyCta': string;
@@ -2906,6 +2911,7 @@ export interface Dict {
   'chat.runError.title.sessionExpired': string;
   'chat.runError.title.gitBashMissing': string;
   'chat.runError.title.cpuUnsupported': string;
+  'chat.runError.title.strategyTaskHalted': string;
   'chat.runError.title.generic': string;
   'chat.runError.title.artifactMissing': string;
   'chat.runError.signInMessage.amr': string;
@@ -2928,6 +2934,7 @@ export interface Dict {
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
   'chat.runError.cpuUnsupportedMessage': string;
+  'chat.runError.strategyTaskStateMismatchMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;
@@ -4112,6 +4119,7 @@ export interface Dict {
   'fileViewer.exportPptxBusy': string;
   'fileViewer.exportPptxHint': string;
   'fileViewer.exportPptxNa': string;
+  'fileViewer.exportDaemonUnreachable': string;
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
   'fileViewer.exportMd': string;
@@ -4453,6 +4461,7 @@ export interface Dict {
   'questions.tabLabel': string;
   'questions.banner': string;
   'questions.bannerAnswered': string;
+  'questions.strategyBlockedNotice': string;
   'questions.continue': string;
   'questions.generating': string;
   'questions.skipAll': string;
@@ -5445,6 +5454,9 @@ export interface Dict {
   'experienceSurvey.improvement.slow': string;
   'experienceSurvey.improvement.looks': string;
   'experienceSurvey.improvement.regression': string;
+  'experienceSurvey.improvement.other': string;
+  'experienceSurvey.otherPlaceholder': string;
+  'experienceSurvey.submit': string;
   'experienceSurvey.skip': string;
   'experienceSurvey.thanksTitle': string;
   'experienceSurvey.thanksBody': string;

@@ -2567,7 +2567,14 @@ async function testAgentConnectionInternal(
         [],
         {
           model: input.model ?? null,
-          reasoning: input.reasoning ?? null,
+          // The remembered OpenCode variant catalog belongs to the detected
+          // binary. A one-off OPENCODE_BIN connection test may point at a
+          // different version, so keep the base model but do not forward a
+          // variant that was never probed on that executable.
+          reasoning:
+            input.agentId === 'opencode' && executableResolution.configuredOverridePath
+              ? null
+              : input.reasoning ?? null,
           serviceTier: input.serviceTier ?? null,
         },
         {

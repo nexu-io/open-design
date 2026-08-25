@@ -135,7 +135,7 @@ test('[P0] @critical onboarding Local CLI card lets the user pick an agent model
   await selectOnboardingOption(localPanel, 'Model', 'GLM 5');
 
   await expect(expectOnboardingTrigger(localPanel, 'Model')).toContainText('GLM 5');
-  await expect(page.getByRole('button', { name: /^Continue$/i })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: /^Continue$/i })).not.toHaveAttribute(
     'aria-disabled',
     'true',
   );
@@ -634,7 +634,7 @@ test('[P0] @critical onboarding BYOK path can fetch models, test the provider, a
   });
 });
 
-test('[P0] onboarding BYOK path cannot continue before a successful connection test', async ({ page }) => {
+test('[P0] onboarding BYOK Continue tests the configuration and retries after failure', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: true,
@@ -679,24 +679,23 @@ test('[P0] onboarding BYOK path cannot continue before a successful connection t
 
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
   await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByRole('heading', { name: /Bring your own key|自己的模型 Key/i })).toBeVisible();
 
   await fillInlineField(page, 'API key', 'bad-api-key');
   await fillInlineField(page, 'Base URL', 'https://api.anthropic.com');
   await page.getByRole('button', { name: /Fetch models/i }).click();
   await expect(page.getByText(/Fetched 1 model/)).toBeVisible();
   await selectOnboardingOption(byokPanel, 'Model', 'Claude Sonnet 4.5');
-  await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
+  await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
 
-  await page.getByRole('button', { name: /^Test$/i }).click();
+  await continueButton.click();
   await expect(page.getByText(/Invalid API key|Connection failed|failed/i)).toBeVisible();
-  await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('heading', { name: /Bring your own key|自己的模型 Key/i })).toBeVisible();
+  await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
 
   connectionOk = true;
   await fillInlineField(page, 'API key', 'good-api-key');
-  await page.getByRole('button', { name: /^Test$/i }).click();
-  await expectConnectionSuccess(page);
-  await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
+  await continueButton.click();
+  await expectOnboardingFinished(page);
 });
 
 test('[P0] onboarding BYOK path supports Anthropic model selection and API key visibility before completing', async ({ page }) => {
@@ -803,7 +802,8 @@ test('[P0] onboarding BYOK successful test is invalidated when connection settin
 
   await fillInlineField(page, 'API key', 'changed-api-key');
 
-  await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
+  await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByText(/Connected\. Replied/i)).toHaveCount(0);
   await expect(page.getByRole('heading', { name: /Bring your own key|自己的模型 Key/i })).toBeVisible();
   await expect(page.getByText(/Optional details for better defaults/i)).toHaveCount(0);
 });
@@ -859,7 +859,8 @@ test('[P0] onboarding BYOK successful test is invalidated when Base URL or model
   await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
 
   await fillInlineField(page, 'Base URL', 'https://api.changed.example');
-  await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
+  await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByText(/Connected\. Replied/i)).toHaveCount(0);
 
   await fillInlineField(page, 'Base URL', 'https://api.anthropic.com');
   await page.getByRole('button', { name: /^Test$/i }).click();
@@ -867,7 +868,8 @@ test('[P0] onboarding BYOK successful test is invalidated when Base URL or model
   await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
 
   await selectOnboardingOption(byokPanel, 'Model', 'Claude Opus 4.8');
-  await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
+  await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByText(/Connected\. Replied/i)).toHaveCount(0);
   await expect(page.getByRole('heading', { name: /Bring your own key|自己的模型 Key/i })).toBeVisible();
   await expect(page.getByText(/Optional details for better defaults/i)).toHaveCount(0);
 });

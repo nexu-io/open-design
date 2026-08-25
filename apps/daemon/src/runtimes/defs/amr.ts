@@ -104,6 +104,8 @@ function isVelaChatModelId(modelId: string): boolean {
   // Remove this filter when AMR grows first-class image/video execution.
   const id = modelId.toLowerCase();
   if (id.startsWith('gpt-image-')) return false;
+  if (id.startsWith('nano-banana-')) return false;
+  if (id.startsWith('seedream-')) return false;
   if (id.startsWith('seedance-')) return false;
   if (id.startsWith('doubao-seedance-')) return false;
   if (id.startsWith('veo-')) return false;

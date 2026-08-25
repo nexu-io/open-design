@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_AMR_RECHARGE_URL,
+  OPEN_DESIGN_PRICING_URL,
   amrConsoleUrlForWorkspace,
   amrPlansUrlForWorkspace,
   amrProfileBadgeLabel,
@@ -90,25 +91,21 @@ describe('amr-guidance origin literals', () => {
       'utf8',
     );
     const origins = [...source.matchAll(/https?:\/\/[^'"`\s)]+/g)].map((match) => match[0]);
-    // Exactly three: the public prod console, the local dev server, and the one
-    // grandfathered internal entry that predates this rule. A fourth means
+    // Exactly four: public prod console + Pricing, the local dev server, and
+    // the one grandfathered internal entry that predates this rule. A fifth means
     // someone hardcoded an environment hostname instead of injecting it.
-    expect(origins).toHaveLength(3);
+    expect(origins).toHaveLength(4);
   });
 });
 
 describe('workspace-scoped AMR URLs', () => {
-  // `billing=plan` is the console's own state-aware upgrade intent: its
-  // dashboard resolves it against the workspace's real subscription state
-  // (personal → the personal plan modal, team → checkout or change-plan), so
-  // this client does not have to guess which dialog to ask for.
-  it('pins console and plans links to the exact workspace', () => {
+  it('pins console links to the workspace and sends plan discovery to Pricing', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(amrConsoleUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
       `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a`,
     );
     expect(amrPlansUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a&billing=plan`,
+      OPEN_DESIGN_PRICING_URL,
     );
   });
 
@@ -232,6 +229,23 @@ describe('resolveRunFailureUi', () => {
   });
 
   // Antigravity's per-model quota flow (terminal switch-model) must still win
+  // A clarification answer submitted after the daemon's OD Next protocol gate
+  // already settled the task (blocked, or otherwise past this round) 409s with
+  // STRATEGY_TASK_STATE_MISMATCH. That is a task-lifecycle verdict, not an
+  // engine failure, so it must render dedicated halted-task copy for every
+  // agent instead of the generic "task failed" card.
+  it('maps a strategy-task state mismatch to dedicated halted-task copy', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      expect(resolveRunFailureUi('STRATEGY_TASK_STATE_MISMATCH', null, agent)).toMatchObject({
+        primaryAction: 'retry',
+        titleKey: 'chat.runError.title.strategyTaskHalted',
+        messageKey: 'chat.runError.strategyTaskStateMismatchMessage',
+        secondaryRetry: false,
+        showSwitchCard: false,
+      });
+    }
+  });
+
   // over the generic hard-quota detail override — its bespoke handling is
   // resolved before the detail layer.
   it('keeps the antigravity terminal switch-model flow even with a hard_quota detail', () => {

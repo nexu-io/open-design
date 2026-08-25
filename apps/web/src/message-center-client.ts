@@ -99,11 +99,6 @@ export async function markAccountMessageRead(messageId: string): Promise<void> {
   if (!response.ok) throw new Error(`Mark message read failed: ${response.status}`);
 }
 
-export async function markAllAccountMessagesRead(): Promise<void> {
-  const response = await fetch(`${ACCOUNT_PROXY}/read-all`, { method: 'POST' });
-  if (!response.ok) throw new Error(`Mark all messages read failed: ${response.status}`);
-}
-
 function apiLocale(locale: string): string {
   const mapping: Record<string, string> = { en: 'en-US', 'es-ES': 'es', 'pt-BR': 'pt' };
   return mapping[locale] ?? locale;

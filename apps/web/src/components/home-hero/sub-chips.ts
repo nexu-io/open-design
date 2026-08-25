@@ -9,8 +9,9 @@
 // visible even when the installed plugin catalog has no matching example.
 // Deck continues to use the dynamic Community facet taxonomy.
 
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord, ProjectMetadata } from '@open-design/contracts';
 import type { IconName } from '../Icon';
+import type { HomeHeroChip } from './chips';
 import {
   buildSubcategoryCatalog,
   extractSubcategories,
@@ -23,15 +24,24 @@ import {
 // we surface the rail for prototype + deck.
 export type SubChipParentId = 'prototype' | 'deck';
 
+/**
+ * What a second-level scene adds to the metadata its parent task type stamps.
+ *
+ * `kind` is deliberately not expressible: a scene refines WHAT to build, never
+ * WHICH product kind is being built, so it cannot turn itself into a task type
+ * by stamping a different kind than its parent.
+ */
+export type HomeHeroSubChipMetadata = Omit<Partial<ProjectMetadata>, 'kind'>;
+
 export interface HomeHeroSubChip {
   // Facet subcategory slug, e.g. 'business-dashboards'.
   slug: string;
   label: string;
   icon: IconName;
-  // Mobile and Wireframe used to be top-level Home chips. Keep their catalog
-  // action ids so selecting the nested scene preserves the platform/fidelity
-  // metadata those actions stamp on the project.
-  actionChipId?: 'mobile' | 'wireframe';
+  // Refinement merged over the parent task type's own metadata when this scene
+  // is selected (see `prototypeSceneProjectMetadata`). Most scenes narrow only
+  // the example rail and stamp nothing.
+  projectMetadata?: HomeHeroSubChipMetadata;
 }
 
 const PARENT_IDS: readonly SubChipParentId[] = ['prototype', 'deck'];
@@ -68,8 +78,23 @@ const DEFAULT_SUBCATEGORY_ICON: IconName = 'blocks';
 const PROTOTYPE_SUB_CHIPS: readonly HomeHeroSubChip[] = [
   { slug: 'landing-marketing', label: 'Landing / marketing', icon: 'globe' },
   { slug: 'business-dashboards', label: 'Dashboards', icon: 'grid' },
-  { slug: 'mobile', label: 'Mobile app', icon: 'smartphone', actionChipId: 'mobile' },
-  { slug: 'wireframe', label: 'Wireframe', icon: 'layout', actionChipId: 'wireframe' },
+  {
+    slug: 'mobile',
+    label: 'Mobile app',
+    icon: 'smartphone',
+    // Frames the screens for handheld viewports; the Prototype task profile
+    // already carries mobile guidance down to touch reach and breakpoints.
+    projectMetadata: { platform: 'auto', platformTargets: ['mobile-ios', 'mobile-android'] },
+  },
+  {
+    slug: 'wireframe',
+    label: 'Wireframe',
+    icon: 'layout',
+    // Keeps the agent in structural/greybox territory instead of jumping to
+    // high-fidelity styling; the Prototype task profile downgrades its content
+    // and interaction-state requirements for exactly this fidelity.
+    projectMetadata: { fidelity: 'wireframe' },
+  },
   { slug: 'app-prototypes', label: 'Apps', icon: 'blocks' },
   { slug: 'developer-tools', label: 'Developer tools', icon: 'terminal' },
   { slug: 'brand-design', label: 'Brand / design', icon: 'palette' },
@@ -81,15 +106,61 @@ export function prototypeSubChipForSlug(slug: string | null): HomeHeroSubChip | 
   return PROTOTYPE_SUB_CHIPS.find((item) => item.slug === slug) ?? null;
 }
 
-export function prototypeSubChipForActionChipId(
-  chipId: string | null,
-): HomeHeroSubChip | null {
-  if (!chipId) return null;
-  return PROTOTYPE_SUB_CHIPS.find((item) => item.actionChipId === chipId) ?? null;
-}
-
 export function isSubChipParent(chipId: string | null): chipId is SubChipParentId {
   return chipId === 'prototype' || chipId === 'deck';
+}
+
+/**
+ * Retired first-level chip ids and the Prototype scene each one became.
+ *
+ * `mobile` and `wireframe` were top-level Home task types until the creation
+ * hierarchy moved them under Prototype; they are scenes now and carry no chip
+ * id of their own. The two strings survive here for one reason only: they are
+ * already sitting in users' persisted composer drafts and in queued
+ * cross-surface intents. Nothing new belongs in this table — a scene that never
+ * shipped as a chip has no legacy id to fold.
+ */
+const LEGACY_TASK_TYPE_CHIP_SCENE_SLUGS: Readonly<Record<string, string>> = {
+  mobile: 'mobile',
+  wireframe: 'wireframe',
+};
+
+/**
+ * The Prototype scene a retired top-level chip id became, or `null` for every
+ * live chip id.
+ *
+ * Applied wherever a chip id arrives from outside the live catalog — a
+ * persisted draft, a queued intent, the placeholder-carousel table — so those
+ * ids are folded onto `prototype` + scene BEFORE anything tries to look them up
+ * in `HOME_HERO_CHIPS`, where they no longer exist.
+ */
+export function legacyPrototypeSceneForChipId(chipId: string | null): HomeHeroSubChip | null {
+  if (!chipId) return null;
+  const slug = LEGACY_TASK_TYPE_CHIP_SCENE_SLUGS[chipId];
+  return slug ? prototypeSubChipForSlug(slug) : null;
+}
+
+/**
+ * The project metadata a task type stamps once a second-level scene refines it.
+ *
+ * A scene refines WHAT to build, never WHETHER the parent's product route
+ * applies, so the parent owns `kind` (and everything else it already stamps)
+ * and the scene may only layer its own fields on top. With no scene — or a
+ * scene that stamps nothing — this is exactly what the bare parent stamps.
+ */
+export function prototypeSceneProjectMetadata(
+  parent: HomeHeroChip,
+  scene: HomeHeroSubChip | null,
+): ProjectMetadata | null {
+  const action = parent.action;
+  const bindsProject =
+    action.kind === 'apply-scenario' || action.kind === 'apply-figma-migration';
+  const parentMetadata = bindsProject ? action.projectMetadata ?? null : null;
+  const refinement = scene?.projectMetadata;
+  if (!refinement) return parentMetadata;
+  if (parentMetadata) return { ...parentMetadata, ...refinement };
+  if (!bindsProject) return null;
+  return { kind: action.projectKind, ...refinement };
 }
 
 // Sub-types for a first-level chip, drawn from the Community facet catalog so

@@ -124,7 +124,7 @@ describe('DeepSeek V4 Flash campaign', () => {
     );
   });
 
-  it('shows a shared live countdown in both paid and unpaid campaign modals', () => {
+  it('keeps the DeepSeek live countdown on the paid campaign modal', () => {
     const start = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
     const end = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive);
     const t = (key: string, vars?: Record<string, string | number>) => {
@@ -151,12 +151,13 @@ describe('DeepSeek V4 Flash campaign', () => {
     expect(campaignDialogSource).toContain('styles.boundary');
   });
 
-  it('keeps the unpaid action on the upgrade flow without showing the paid secondary action', () => {
-    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.unpaid.cta')");
-    expect(campaignDialogSource).toContain("'deepseek_unpaid_modal'");
-    expect(campaignDialogSource).toContain('attributedAmrUrl(plansUrl, attribution, deviceId)');
-    expect(campaignDialogSource).toContain('metricsConsent,');
-    expect(campaignDialogSource).toMatch(/\{paid \? \([\s\S]*campaign\.deepseekV4Flash\.later[\s\S]*\) : null\}/);
+  it('reuses the modal shell for Go without showing the paid secondary action', () => {
+    expect(campaignDialogSource).toContain('styles.goWelcomePrimary');
+    expect(campaignDialogSource).toContain('goPlanPricingUrl');
+    expect(campaignDialogSource).not.toContain("'go_plan_modal'");
+    expect(campaignDialogSource.indexOf('styles.goWelcomePrimary')).toBeLessThan(
+      campaignDialogSource.indexOf('styles.laterAction'),
+    );
   });
 
   it('keeps campaign visibility free of every URL review backdoor (product decision)', () => {

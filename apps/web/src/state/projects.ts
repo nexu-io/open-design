@@ -7,6 +7,7 @@
 // result changes behavior must preserve failure as a typed error instead.
 
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
+import { isDaemonProxyConnectionFailure } from '../runtime/daemon-proxy-failure';
 import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
 import { API_ERROR_CODES, type ApiErrorCode } from '@open-design/contracts';
@@ -17,6 +18,7 @@ import type {
   CollabProjectBootstrapResponse,
   CreateConversationRequest,
   CreateDesignSystemProjectFromProjectResponse,
+  CreateProjectExampleReference,
   DuplicateProjectResponse,
   CreatePluginShareProjectResponse,
   CreateTerminalRequest,
@@ -28,6 +30,8 @@ import type {
   PluginInstallOutcome,
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
+  ProjectScenarioTaskProfile,
+  RestoreProjectAutomaticScenarioResponse,
   ProjectVisibility,
   ProjectWorkspaceScopeResponse,
   TerminalSession,
@@ -163,6 +167,35 @@ export function resolvedWorkspaceContextForWrite(
     throw new Error('Workspace context is unavailable. Try again when workspace sync finishes.');
   }
   return state.context;
+}
+
+export async function restoreProjectAutomaticScenario(
+  projectId: string,
+  expectedCurrentSnapshotId: string | null,
+  workspaceContext: WorkspaceCollabContext | null,
+): Promise<RestoreProjectAutomaticScenarioResponse> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/scenario/restore-automatic`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
+      body: JSON.stringify({ expectedCurrentSnapshotId }),
+    },
+  );
+  const body = await response.json().catch(() => null) as
+    | RestoreProjectAutomaticScenarioResponse
+    | { error?: { message?: string } }
+    | null;
+  if (!response.ok || !body || !('project' in body)) {
+    throw new Error(body && 'error' in body
+      ? body.error?.message ?? `HTTP ${response.status}`
+      : `HTTP ${response.status}`);
+  }
+  evictCoalescedGet(`/api/projects/${encodeURIComponent(projectId)}`);
+  return body;
 }
 
 /**
@@ -652,22 +685,6 @@ function defaultRetrySleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Next's same-origin API proxy turns a missing local daemon into a plain-text
- * 502 instead of rejecting `fetch`. Recognize only its connection-level errno
- * shape; an upstream/product 502 (normally JSON) remains a business response.
- */
-async function isLocalDaemonProxyFailure(resp: Response): Promise<boolean> {
-  if (resp.status !== 502) return false;
-  const contentType = resp.headers.get('content-type')?.toLowerCase() ?? '';
-  if (!contentType.startsWith('text/plain')) return false;
-  try {
-    const body = await resp.clone().text();
-    return /\b(?:ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT)\b/u.test(body);
-  } catch {
-    return false;
-  }
-}
 
 /** Parse a create/write error body into a UI message + the retryable flag. */
 async function readWorkspaceWriteError(
@@ -753,6 +770,13 @@ export async function createProject(
     pluginSource?: string;
     appliedPluginSnapshotId?: string;
     pluginInputs?: Record<string, unknown>;
+    automaticStrategyTaskProfile?: ProjectScenarioTaskProfile;
+    /**
+     * Identity of the official example card the user picked under an automatic
+     * OD Next route. A claim, not content: the daemon re-resolves it through
+     * the local catalogue. Never accompanies `pluginId`/`appliedPluginSnapshotId`.
+     */
+    exampleReference?: CreateProjectExampleReference;
     workspaceContext?: WorkspaceCollabContext | null;
   },
   retryOptions: CreateProjectRetryOptions = {},
@@ -796,7 +820,7 @@ export async function createProject(
         markProjectCreatedByViewer(created.project.id, input.workspaceContext ?? null);
         return created;
       }
-      if (await isLocalDaemonProxyFailure(resp)) {
+      if (await isDaemonProxyConnectionFailure(resp)) {
         throw new ProjectCreateError(
           'Could not reach the local OpenDesign service',
           null,

@@ -133,6 +133,18 @@ export type OpenDesignHostCaptureOptions = { clip?: OpenDesignHostCaptureClip };
 export type OpenDesignHostCaptureSuccess = { dataUrl: string; h: number; ok: true; w: number };
 export type OpenDesignHostCaptureResult = OpenDesignHostCaptureSuccess | OpenDesignHostFailure;
 
+export type OpenDesignHostPreviewNavigationFailure = {
+  errorCode: number;
+  eventId: number;
+  frameName?: string;
+  occurredAtMs: number;
+  validatedUrl: string;
+};
+
+export type OpenDesignHostPreviewNavigationFailureListener = (
+  failure: OpenDesignHostPreviewNavigationFailure,
+) => void;
+
 export type OpenDesignHostBrowserClearDataOptions = {
   cookies?: boolean;
   storage?: boolean;
@@ -378,6 +390,13 @@ export type OpenDesignHostBridge = {
   };
   pet: {
     setVisible(visible: boolean): void;
+  };
+  // Optional so web builds and older desktop hosts keep the same contract.
+  // Electron is the only layer that can observe a compositor-affecting
+  // subframe navigation failure after the iframe DOM remains healthy.
+  preview?: {
+    getLatestNavigationFailure(): OpenDesignHostPreviewNavigationFailure | null;
+    subscribeNavigationFailure(listener: OpenDesignHostPreviewNavigationFailureListener): () => void;
   };
   project: {
     pickAndImport(init?: OpenDesignHostProjectImportInit): Promise<OpenDesignHostProjectImportResult>;

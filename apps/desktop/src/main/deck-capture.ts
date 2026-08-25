@@ -161,6 +161,74 @@ const REAL_SLIDES_JS =
  * paints it (capturePage needs a live frame) without any visible flash or
  * focus theft, then destroyed.
  */
+/**
+ * How long to wait for the artifact document itself before proceeding with
+ * whatever has rendered.
+ */
+export const ARTIFACT_DOCUMENT_LOAD_TIMEOUT_MS = 15_000;
+
+/**
+ * Load the artifact into the offscreen window without letting a single stalled
+ * subresource block the whole export.
+ *
+ * `loadURL()` resolves on `did-finish-load`, which Chromium only fires once
+ * EVERY subresource has settled. An image or font URL that answers neither way
+ * — the packaged `od://` failure mode — therefore leaves `loadURL()` pending
+ * forever, and the export hung here long before reaching the (separately
+ * bounded) `waitForPrintableContent` step. Production bore this out: 122 of
+ * 142 `DESKTOP_RENDERER_UNAVAILABLE` failures sat at the daemon's 600s IPC
+ * ceiling.
+ *
+ * `dom-ready` is the signal we actually need: the document is parsed and
+ * scriptable, which is all the capture pipeline requires — waiting for
+ * subresources is `waitForPrintableContent`'s job, and it bounds itself. The
+ * listener is attached before `loadURL` so a fast `data:` URL cannot fire it
+ * before we are listening.
+ *
+ * A real load failure still fails: `did-fail-load` reaching us before
+ * dom-ready rethrows, so `renderDeckSlides` reports RENDER_FAILED exactly as
+ * it did when this was a bare `await window.loadURL(...)`.
+ */
+type ArtifactLoadOutcome =
+  | { readonly kind: "loaded" }
+  | { readonly kind: "dom-ready" }
+  | { readonly kind: "timeout" }
+  | { readonly kind: "failed"; readonly error: unknown };
+
+export async function loadArtifactDocument(window: BrowserWindow, url: string): Promise<void> {
+  const domReady = new Promise<ArtifactLoadOutcome>((resolve) => {
+    window.webContents.once("dom-ready", () => resolve({ kind: "dom-ready" }));
+  });
+  // Settle the load into a tagged outcome rather than catching it away. A
+  // `did-fail-load` that beats dom-ready is a genuine main-document failure and
+  // must still propagate — swallowing it would let the pipeline go on to
+  // capture Chromium's error page and report a successful-but-wrong export,
+  // which is worse than the hang this function exists to prevent. Attaching
+  // handlers here (rather than leaving the promise bare) also means a rejection
+  // arriving AFTER dom-ready has already won stays handled instead of surfacing
+  // as an unhandled rejection.
+  const finished = window.loadURL(url).then<ArtifactLoadOutcome, ArtifactLoadOutcome>(
+    () => ({ kind: "loaded" }),
+    (error: unknown) => ({ error, kind: "failed" }),
+  );
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let outcome: ArtifactLoadOutcome;
+  try {
+    outcome = await Promise.race([
+      finished,
+      domReady,
+      new Promise<ArtifactLoadOutcome>((resolve) => {
+        timer = setTimeout(() => resolve({ kind: "timeout" }), ARTIFACT_DOCUMENT_LOAD_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+
+  if (outcome.kind === "failed") throw outcome.error;
+}
+
 export async function renderDeckSlides(
   input: DesktopRenderSlidesInput,
 ): Promise<DesktopRenderSlidesResult> {
@@ -206,7 +274,7 @@ export async function renderDeckSlides(
 
   try {
     const doc = injectBaseHref(input.html, input.baseHref);
-    await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(doc)}`);
+    await loadArtifactDocument(window, `data:text/html;charset=utf-8,${encodeURIComponent(doc)}`);
     tLoad = Date.now();
     await waitForPrintableContent(window);
     tAssets = Date.now();

@@ -467,6 +467,14 @@ const countryOptions = buildCountryOptions(locale);
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      // Pricing's legacy compatibility funnel counted submit intent, including
+      // attempts rejected by client validation. Keep this synchronous and
+      // payload-free so analytics can never delay or leak lead fields.
+      if (leadSource === 'pricing_team') {
+        form.dispatchEvent(new CustomEvent('pricing:enterprise-submit', {
+          bubbles: true,
+        }));
+      }
       if (errorEl) errorEl.hidden = true;
 
       let firstInvalid = null;

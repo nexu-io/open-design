@@ -1,6 +1,6 @@
 {
   "name": "@open-design/contracts",
-  "version": "0.19.2",
+  "version": "0.20.3",
   "private": true,
   "type": "module",
   "description": "Shared pure TypeScript contracts for the OpenDesign web/daemon boundary.",
@@ -53,6 +53,10 @@
     "./runtime/preview-observability": {
       "types": "./dist/runtime/preview-observability.d.ts",
       "default": "./dist/runtime/preview-observability.mjs"
+    },
+    "./runtime/preview-guards": {
+      "types": "./dist/runtime/preview-guards.d.ts",
+      "default": "./dist/runtime/preview-guards.mjs"
     },
     "./design-systems/components-manifest": {
       "types": "./dist/design-systems/components-manifest.d.ts",

@@ -139,6 +139,16 @@ export const API_ERROR_CODES = [
   // registered owner unshares the project, so clients must not render it as
   // a "try again later" error.
   'TEAM_PROJECT_OWNER_CONFLICT',
+  // A design-system enrichment ("AI Optimize") run was requested while the
+  // same conversation already has a non-terminal run. The enrichment turn is
+  // a hidden seeded prompt that refines the registered design system in
+  // place, so a second concurrent pass bills twice and races on the same
+  // files (2026-07-28: one double-triggered affordance billed two runs). The
+  // daemon rejects the newcomer with HTTP 409 and names the run that already
+  // owns the conversation in `details` (`DesignSystemEnrichmentInProgressDetails`)
+  // so a client can attach to it instead of starting another. Not retryable
+  // while that run is active; ordinary chat turns are never gated by this.
+  'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
   'INTERNAL_ERROR',
 ] as const;
 
