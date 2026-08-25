@@ -103,6 +103,7 @@ import {
   workspaceIdentityCacheKey,
   workspaceResourceUrl,
   workspaceAccountScopedCacheKey,
+  currentWorkspaceAccountGeneration,
 } from '../collab/workspace-identity';
 import { PublicFilePublishError } from '../collab/public-file-publish';
 
@@ -596,6 +597,7 @@ export interface FetchDesignSystemsOptions {
 
 async function materializeTeamDesignSystems(
   workspaceContext: WorkspaceCollabContext | null | undefined,
+  accountGeneration: number,
   options?: FetchDesignSystemsOptions,
 ): Promise<ReadonlySet<string>> {
   if (!workspaceContext || !workspaceContextHasTeamIdentity(workspaceContext)) {
@@ -614,9 +616,14 @@ async function materializeTeamDesignSystems(
   // workspace" lookup. One account can have multiple clients open in different
   // Workspaces; a backend-global active Workspace would let either client
   // retarget the other's catalog request.
-  const identity = workspaceIdentityCacheKey(workspaceContext);
   try {
-    const cacheKey = `design-system-team-materialization:${identity}`;
+    // Account-scoped for the same reason the catalog key is, and with the SAME
+    // captured generation: this witness decorates the catalog rows, so a `/team`
+    // request still in flight across a sign-out/sign-in must not be joined by a
+    // post-boundary reader — that would stamp the new account's rows with the
+    // previous account's Team-share flags.
+    const cacheKey = `design-system-team-materialization:`
+      + `${workspaceAccountScopedCacheKey(workspaceContext, accountGeneration)}`;
     const readTeamIndex = async () => {
       const response = await fetch('/api/workspace/design-systems/team', {
         cache: 'no-store',
@@ -698,6 +705,7 @@ function noteDesignSystemCatalogMutation(): void {
 
 async function readDesignSystemCatalog(
   workspaceContext: WorkspaceCollabContext | null | undefined,
+  accountGeneration: number,
   options?: FetchDesignSystemsOptions,
 ): Promise<DesignSystemSummary[]> {
   // Keyed by the exact identity the request will carry, PLUS the account
@@ -711,7 +719,7 @@ async function readDesignSystemCatalog(
   // settled-result reuse, not a post-boundary reader joining a request issued
   // before the boundary.
   const cacheKey = `design-system-catalog:${designSystemCatalogMutationGeneration}`
-    + `:${workspaceAccountScopedCacheKey(workspaceContext)}`;
+    + `:${workspaceAccountScopedCacheKey(workspaceContext, accountGeneration)}`;
   // Same rule as the Team index above: a forced call is an authoritative read
   // for one mutation and must never join a snapshot issued before it.
   //
@@ -742,9 +750,23 @@ export async function fetchDesignSystemsResult(
   workspaceContext?: WorkspaceCollabContext | null,
   options?: FetchDesignSystemsOptions,
 ): Promise<DesignSystemsResult> {
+  // Capture the account boundary ONCE. The Team witness and the catalog are two
+  // awaited reads; letting each resolve the generation at its own call time lets
+  // them straddle a sign-out/sign-in, which would decorate post-boundary rows
+  // with pre-boundary Team-share flags. Keyed as of one boundary, a stale pair
+  // is simply discarded by the caller's own generation check.
+  const accountGeneration = currentWorkspaceAccountGeneration();
   try {
-    const teamSharedIds = await materializeTeamDesignSystems(workspaceContext, options);
-    const designSystems = await readDesignSystemCatalog(workspaceContext, options);
+    const teamSharedIds = await materializeTeamDesignSystems(
+      workspaceContext,
+      accountGeneration,
+      options,
+    );
+    const designSystems = await readDesignSystemCatalog(
+      workspaceContext,
+      accountGeneration,
+      options,
+    );
     return {
       ok: true,
       // Mapped per caller: readers sharing one catalog read still resolve the

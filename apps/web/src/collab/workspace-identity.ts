@@ -94,11 +94,17 @@ export function resetWorkspaceAccountGeneration(): void {
 /**
  * Cache partition for a Workspace-scoped read: the context fields that go on
  * the wire, plus the account boundary they were captured under.
+ *
+ * A caller that makes several dependent reads should capture the generation ONCE
+ * and pass it to each, so the whole operation is keyed as of one boundary. Left
+ * to default, two reads a few hundred ms apart can straddle a boundary and mix a
+ * pre-boundary answer into a post-boundary one.
  */
 export function workspaceAccountScopedCacheKey(
   context: WorkspaceCollabContext | null | undefined,
+  generation: number = currentWorkspaceAccountGeneration(),
 ): string {
-  return `${currentWorkspaceAccountGeneration()}:${workspaceIdentityCacheKey(context)}`;
+  return `${generation}:${workspaceIdentityCacheKey(context)}`;
 }
 
 /**

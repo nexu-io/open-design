@@ -691,6 +691,49 @@ describe('design-system Workspace scope', () => {
     await Promise.all([beforeBoundary, afterBoundary]);
   });
 
+  it('never lets a pre-boundary Team witness decorate a post-boundary catalog', async () => {
+    // The catalog key carries the account generation, but the Team-index read it
+    // awaits first did not. A `/team` request still in flight across a
+    // sign-out/sign-in would be joined by the post-boundary caller, so the fresh
+    // catalog got decorated with the previous account's Team-share flags — the
+    // account-boundary guarantee held for the rows and not for the flags.
+    const context = teamWorkspaceContext();
+    const firstTeamRead = deferred<Response>();
+    let teamReads = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        teamReads += 1;
+        if (teamReads === 1) return firstTeamRead.promise;
+        return Promise.resolve(new Response(JSON.stringify({ ids: ['user:b'] }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        designSystems: [
+          { id: 'user:a', title: 'A', source: 'user', status: 'published' },
+          { id: 'user:b', title: 'B', source: 'user', status: 'published' },
+        ],
+      }), { status: 200 }));
+    }));
+
+    const beforeBoundary = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(teamReads).toBe(1));
+
+    advanceWorkspaceAccountGeneration('team-witness-boundary');
+
+    const afterBoundary = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(teamReads).toBe(2));
+
+    firstTeamRead.resolve(new Response(JSON.stringify({ ids: ['user:a'] }), { status: 200 }));
+
+    await expect(afterBoundary).resolves.toMatchObject({
+      ok: true,
+      designSystems: [
+        expect.not.objectContaining({ teamShared: true }),
+        expect.objectContaining({ id: 'user:b', teamShared: true }),
+      ],
+    });
+    await beforeBoundary;
+  });
+
   it('never lets a headerless catalog read answer a Workspace-scoped one', async () => {
     // A read issued before `/api/workspace/context` settles carries no identity
     // headers, and `/api/design-systems` is fail-closed on a missing scope — it
