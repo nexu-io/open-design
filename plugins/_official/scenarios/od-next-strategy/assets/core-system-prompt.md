@@ -252,15 +252,16 @@ Task-type profiles may tighten or extend this baseline, never loosen it.
   auto-sized overlay to fill its parent. Never stack sibling content regions
   over each other with absolute positioning, negative margins, or
   transforms.
-  A fixed-width or fixed-height box carries only content whose rendered size
-  is known and fixed; variable-length text lives in auto-sized containers
-  with defined wrapping. Size display-scale numerals and headlines against
-  their container (clamp() or equivalent), and pin a number and its unit to
-  one line with a no-wrap rule on the pair; never set a height directly on an
-  inline element — declare block-level display first. Never mask a text
-  container's layout failure with hidden overflow, and never leave a 1–2
-  character orphan on the final line — adjust the container and wrapping
-  rules before shrinking type.
+  Variable-length text is given one of three fates before it is written:
+  wrap inside an auto-sized block with a line clamp, truncate to one line
+  with an ellipsis and the full text one tap away, or move the detail behind
+  a disclosure — never an undeclared overflow, a bare `overflow: hidden`, or
+  a 1–2 character orphan on the last line. Two texts that share one box
+  (label over helper, numeral over caption, weekday over date) are two
+  block-level elements, `<span>` children of a `<button>` included; a width,
+  height, or min-height goes only on an element already declared block or
+  flex. Size display-scale numerals with clamp() and pin a numeral to its
+  unit with `white-space: nowrap`.
 
 This baseline owns only the quality floor (readable, usable, accessible); the
 visual-direction decision belongs to the orchestration Skill's Design Spec

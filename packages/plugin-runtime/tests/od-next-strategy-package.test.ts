@@ -83,20 +83,30 @@ describe('bundled OD Next Strategy V2 package', () => {
     for (const assetPath of assetPaths) {
       const content = readFileSync(`${pluginRoot}/${assetPath.slice(2)}`, 'utf8');
       expect(content.length, assetPath).toBeGreaterThan(100);
+      // Resources (shells, stylesheets) are quoted as facts, never as
+      // instructions, so the pre-Build vocabulary rule applies to prose only.
+      if (!assetPath.endsWith('.md')) continue;
       for (const forbidden of forbiddenContent) {
         expect(content, `${assetPath} must not match ${forbidden}`).not.toMatch(forbidden);
       }
     }
   });
 
-  it('ships the three handheld shells as prototype resources with the shell contract intact', () => {
+  it('ships the three handheld shells and the layout primitives as prototype resources', () => {
     const prototype = declaration.assets.taskProfiles.find((profile) => profile.taskType === 'prototype');
     expect(prototype?.resources?.map((resource) => resource.path)).toEqual([
       './assets/task-profiles/prototype/device-frames/iphone.html',
       './assets/task-profiles/prototype/device-frames/android.html',
       './assets/task-profiles/prototype/device-frames/neutral.html',
+      './assets/task-profiles/prototype/layout.css',
     ]);
-    for (const resource of prototype?.resources ?? []) {
+    const primitives = readFileSync(`${pluginRoot}/assets/task-profiles/prototype/layout.css`, 'utf8');
+    expect(primitives).toContain('/* OD-LAYOUT-PRIMITIVES v1');
+    expect(primitives).toContain('/* /OD-LAYOUT-PRIMITIVES v1 */');
+    expect(primitives).toMatch(/^@layer od-layout \{/m);
+    // Structure only: no palette, type, radius, or shadow opinions.
+    expect(primitives).not.toMatch(/(^|[^-])color\s*:|font-family|font-size|border-radius|box-shadow|background\s*:/);
+    for (const resource of (prototype?.resources ?? []).filter((r) => r.path.includes('/device-frames/'))) {
       const shell = readFileSync(`${pluginRoot}/${resource.path.slice(2)}`, 'utf8');
       expect(shell).toContain('data-phone-shell');
       expect(shell).toContain('class="phone-content"');
@@ -110,6 +120,9 @@ describe('bundled OD Next Strategy V2 package', () => {
     for (const shell of ['.od-frames/iphone.html', '.od-frames/android.html', '.od-frames/neutral.html']) {
       expect(ruleCard).toContain(shell);
     }
+    expect(ruleCard).toContain('### Variable-length text and stacked information');
+    expect(ruleCard).toContain('.od-frames/layout.css');
+    expect(ruleCard).toContain('OD-LAYOUT-PRIMITIVES v1');
   });
 
   it('maps unknown project kinds to generic or blocked instead of guessing', () => {

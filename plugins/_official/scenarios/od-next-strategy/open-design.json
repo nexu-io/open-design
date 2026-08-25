@@ -37,7 +37,7 @@
       "assets": {
         "core": {
           "path": "./assets/core-system-prompt.md",
-          "version": "2.0.0"
+          "version": "2.1.0"
         },
         "orchestration": {
           "path": "./assets/general-orchestration.md",
@@ -47,13 +47,14 @@
           {
             "taskType": "prototype",
             "path": "./assets/task-profiles/prototype.md",
-            "version": "2.1.0",
+            "version": "2.2.0",
             "rollout": "active",
             "projectKinds": ["prototype"],
             "resources": [
               { "path": "./assets/task-profiles/prototype/device-frames/iphone.html", "version": "1.0.0" },
               { "path": "./assets/task-profiles/prototype/device-frames/android.html", "version": "1.0.0" },
-              { "path": "./assets/task-profiles/prototype/device-frames/neutral.html", "version": "1.0.0" }
+              { "path": "./assets/task-profiles/prototype/device-frames/neutral.html", "version": "1.0.0" },
+              { "path": "./assets/task-profiles/prototype/layout.css", "version": "1.0.0" }
             ]
           },
           {

@@ -41,6 +41,73 @@ export const OD_NEXT_DEVICE_PLATFORMS: ReadonlyArray<OdNextDevicePlatformV1> = [
 /** Attribute every shipped shell carries on its outermost handset element. */
 export const OD_NEXT_DEVICE_SHELL_MARKER = 'data-phone-shell' as const;
 
+/**
+ * Structure-only layout primitives the prototype profile ships beside the
+ * shells. Staged under the same root and quoted as the `layout-primitives`
+ * fact, so the Build composes stacked text, truncation, rails, and screen
+ * chrome from classes that already behave instead of re-deriving them.
+ */
+export const OD_NEXT_LAYOUT_PRIMITIVES_FILE = 'layout.css' as const;
+export const OD_NEXT_LAYOUT_PRIMITIVES_MARKER = 'OD-LAYOUT-PRIMITIVES v1' as const;
+
+/** Every file name the daemon may stage under {@link OD_NEXT_DEVICE_FRAME_ROOT}. */
+export const OD_NEXT_MANAGED_RESOURCE_FILES: ReadonlyArray<string> = [
+  ...Object.values(OD_NEXT_DEVICE_FRAME_FILES),
+  OD_NEXT_LAYOUT_PRIMITIVES_FILE,
+];
+
+/** Basename of a task resource when it is one the daemon stages, else null. */
+export function odNextManagedResourceName(resourcePath: string): string | null {
+  const basename = resourcePath.split('/').pop() ?? '';
+  return OD_NEXT_MANAGED_RESOURCE_FILES.includes(basename) ? basename : null;
+}
+
+/** The layout primitives stylesheet out of the task profile's resources, if shipped. */
+export function selectOdNextLayoutPrimitivesCss(
+  taskResources: ReadonlyArray<{ path: string; text: string }> | null | undefined,
+): string | null {
+  for (const resource of taskResources ?? []) {
+    if ((resource.path.split('/').pop() ?? '') === OD_NEXT_LAYOUT_PRIMITIVES_FILE && resource.text.trim()) {
+      return resource.text;
+    }
+  }
+  return null;
+}
+
+export type OdNextLayoutPrimitivesPresenceV1 = 'verbatim' | 'modified' | 'linked' | 'absent';
+
+function normalizeCss(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * How a delivered document carries the layout primitives: the block copied
+ * byte-for-byte (whitespace aside), copied but altered, linked from the staged
+ * file, or not at all. An observation, not a gate — it tells the rollout
+ * whether a model tier reproduces a ~50-line block faithfully enough for
+ * inlining, or whether the rule card should point at `<link>` instead.
+ */
+export function detectOdNextLayoutPrimitives(
+  html: string | null | undefined,
+  primitivesCss: string | null | undefined,
+): OdNextLayoutPrimitivesPresenceV1 {
+  if (typeof html !== 'string' || html.length === 0) return 'absent';
+  const open = `/* ${OD_NEXT_LAYOUT_PRIMITIVES_MARKER}`;
+  const close = `/* /${OD_NEXT_LAYOUT_PRIMITIVES_MARKER} */`;
+  const start = html.indexOf(open);
+  const end = start >= 0 ? html.indexOf(close, start) : -1;
+  if (start >= 0 && end > start) {
+    if (typeof primitivesCss !== 'string') return 'modified';
+    const shipped = primitivesCss.slice(primitivesCss.indexOf(open), primitivesCss.indexOf(close) + close.length);
+    const delivered = html.slice(start, end + close.length);
+    return normalizeCss(delivered) === normalizeCss(shipped) ? 'verbatim' : 'modified';
+  }
+  if (new RegExp(`<link[^>]+href=["'][^"']*${OD_NEXT_DEVICE_FRAME_ROOT}/${OD_NEXT_LAYOUT_PRIMITIVES_FILE}["']`).test(html)) {
+    return 'linked';
+  }
+  return 'absent';
+}
+
 // Platform vocabulary across English and Chinese briefs. Explicit platforms
 // are deliberately narrow: "苹果" alone also names a company and "pixel" alone
 // is a unit, so both need an app/handset companion word before they count.

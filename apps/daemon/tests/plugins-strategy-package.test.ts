@@ -72,6 +72,7 @@ describe('bundled OD Next strategy package identity', () => {
       './assets/task-profiles/prototype/device-frames/android.html',
       './assets/task-profiles/prototype/device-frames/iphone.html',
       './assets/task-profiles/prototype/device-frames/neutral.html',
+      './assets/task-profiles/prototype/layout.css',
       './open-design.json',
       './references/task-profile-mapping.md',
     ]);
@@ -86,7 +87,7 @@ describe('bundled OD Next strategy package identity', () => {
     ]);
     expect(prototype.selectedTaskProfile).toEqual(expect.objectContaining({
       taskType: 'prototype',
-      version: '2.1.0',
+      version: '2.2.0',
       path: './assets/task-profiles/prototype.md',
     }));
     expect(hyperframes.packageHash).not.toBe(prototype.packageHash);
@@ -103,8 +104,15 @@ describe('bundled OD Next strategy package identity', () => {
       './assets/task-profiles/prototype/device-frames/iphone.html',
       './assets/task-profiles/prototype/device-frames/android.html',
       './assets/task-profiles/prototype/device-frames/neutral.html',
+      './assets/task-profiles/prototype/layout.css',
     ]);
     for (const resource of assets.taskResources) {
+      if (resource.path.endsWith('layout.css')) {
+        expect(resource.text).toContain('OD-LAYOUT-PRIMITIVES v1');
+        expect(resource.text).toContain('@layer od-layout');
+        expect(resource.text).not.toMatch(/color\s*:|font-family|border-radius|box-shadow/);
+        continue;
+      }
       expect(resource.text).toContain('data-phone-shell');
       expect(resource.text).toContain('APP CONTENT START');
       expect(resource.text).toContain('class="phone-content"');

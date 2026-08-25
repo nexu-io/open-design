@@ -13,6 +13,7 @@ import {
   loadOdNextTaskResourcesForSnapshot,
   materializeOdNextDeviceFrames,
   observeOdNextDeviceShell,
+  observeOdNextLayoutPrimitives,
 } from '../../../src/strategies/od-next/device-frames.js';
 
 const BUNDLED_PLUGINS_DIR = path.resolve(import.meta.dirname, '../../../../../plugins/_official');
@@ -38,6 +39,7 @@ const SHELLS = [
   { path: './assets/task-profiles/prototype/device-frames/neutral.html', text: '<div data-phone-shell data-platform="neutral"><main class="phone-content">neutral</main></div>' },
   { path: './assets/task-profiles/prototype/notes.md', text: 'not a shell' },
 ];
+const PRIMITIVES = { path: './assets/task-profiles/prototype/layout.css', text: '/* OD-LAYOUT-PRIMITIVES v1 */\n@layer od-layout { .od-stack { display: flex; } }\n/* /OD-LAYOUT-PRIMITIVES v1 */\n' };
 
 describe('materializeOdNextDeviceFrames', () => {
   it('stages the shells under .od-frames, records ownership, and leaves unrelated files alone', async () => {
@@ -183,6 +185,24 @@ describe('materializeOdNextDeviceFrames', () => {
       .toEqual([OD_NEXT_DEVICE_FRAME_MANIFEST, 'leftover.html']);
   });
 
+  it('stages the layout primitives beside the shells under the same ownership record', async () => {
+    const cwd = await projectDir();
+    const result = await materializeOdNextDeviceFrames({ cwd, resources: [...SHELLS, PRIMITIVES] });
+    expect(result.staged).toEqual([
+      '.od-frames/android.html',
+      '.od-frames/iphone.html',
+      '.od-frames/layout.css',
+      '.od-frames/neutral.html',
+    ]);
+    expect(await readFile(path.join(cwd, '.od-frames', 'layout.css'), 'utf8')).toBe(PRIMITIVES.text);
+    const manifest = JSON.parse(await readFile(path.join(cwd, '.od-frames', OD_NEXT_DEVICE_FRAME_MANIFEST), 'utf8'));
+    expect(Object.keys(manifest.files).sort()).toEqual(['android.html', 'iphone.html', 'layout.css', 'neutral.html']);
+    // A package that stops shipping the stylesheet retires our copy like a shell.
+    const again = await materializeOdNextDeviceFrames({ cwd, resources: SHELLS });
+    expect(again.staged).toEqual(['.od-frames/android.html', '.od-frames/iphone.html', '.od-frames/neutral.html']);
+    await expect(lstat(path.join(cwd, '.od-frames', 'layout.css'))).rejects.toThrow();
+  });
+
   it('is a no-op without shells and refuses a symlinked staging root', async () => {
     const cwd = await projectDir();
     expect(await materializeOdNextDeviceFrames({ cwd, resources: [SHELLS[3]!] })).toEqual({ staged: [], skipped: [] });
@@ -219,6 +239,7 @@ describe('loadOdNextTaskResourcesForSnapshot', () => {
       'iphone.html',
       'android.html',
       'neutral.html',
+      'layout.css',
     ]);
 
     expect(await loadOdNextTaskResourcesForSnapshot({
@@ -253,6 +274,26 @@ describe('observeOdNextDeviceShell', () => {
     expect(await observeOdNextDeviceShell({ projectRoot, entryFile: 'bare.html', resolution })).toEqual(
       expect.objectContaining({ shellPresent: false }),
     );
+  });
+
+  it('reports how the delivered entry carries the layout primitives', async () => {
+    const projectRoot = await projectDir();
+    const css = PRIMITIVES.text;
+    await writeFile(path.join(projectRoot, 'verbatim.html'), `<style>\n${css.replace(/\n/g, '\n  ')}\n</style>`);
+    await writeFile(path.join(projectRoot, 'modified.html'), '<style>/* OD-LAYOUT-PRIMITIVES v1 */ .od-stack{display:block} /* /OD-LAYOUT-PRIMITIVES v1 */</style>');
+    await writeFile(path.join(projectRoot, 'linked.html'), '<link rel="stylesheet" href=".od-frames/layout.css">');
+    await writeFile(path.join(projectRoot, 'none.html'), '<div class="od-stack"></div>');
+    for (const [entryFile, presence] of [
+      ['verbatim.html', 'verbatim'],
+      ['modified.html', 'modified'],
+      ['linked.html', 'linked'],
+      ['none.html', 'absent'],
+    ] as const) {
+      expect(await observeOdNextLayoutPrimitives({ projectRoot, entryFile, primitivesCss: css }))
+        .toEqual({ entryFile, presence });
+    }
+    expect(await observeOdNextLayoutPrimitives({ projectRoot, entryFile: null, primitivesCss: css })).toBeNull();
+    expect(await observeOdNextLayoutPrimitives({ projectRoot, entryFile: '../x.html', primitivesCss: css })).toBeNull();
   });
 
   it('observes nothing without a resolution, without an entry, or for a path outside the project', async () => {
