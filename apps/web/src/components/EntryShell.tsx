@@ -1763,6 +1763,7 @@ export function EntryShell({
                 designTemplates={designTemplates}
                 connectors={connectors}
                 connectorsLoading={connectorsLoading}
+                isActive={view === 'tasks'}
               />
             </div>
             <div data-testid="entry-view-plugins" data-active={view === 'plugins' ? 'true' : 'false'} {...inactiveViewProps(view === 'plugins')}>
