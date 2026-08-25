@@ -4,7 +4,14 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { validateRunDeliverable } from '../src/run-deliverable-validation.js';
+import {
+  diffRunArtifacts,
+  snapshotProjectArtifacts,
+} from '../src/run-artifact-fs.js';
+import {
+  validateRunDeliverable,
+  validateStrategyRunDeliverable,
+} from '../src/run-deliverable-validation.js';
 
 const temporaryRoots: string[] = [];
 
@@ -116,6 +123,47 @@ describe('run deliverable validation', () => {
         runStatus: 'succeeded',
         artifactCount: 1,
         touchedPaths: ['preview/colors.html', 'DESIGN.md'],
+        projectMetadata: {
+          kind: 'other',
+          entryFile: 'DESIGN.md',
+        },
+      }),
+    ).resolves.toMatchObject({
+      valid: true,
+      validation: 'valid',
+      entryFile: 'DESIGN.md',
+      artifactKind: 'text',
+    });
+  });
+
+  it('validates strategy completion from the real filesystem outcome when DESIGN.md is the entry', async () => {
+    const fixture = await projectFixture({});
+    const projectRoot = path.join(fixture.projectsRoot, fixture.projectId);
+    const before = snapshotProjectArtifacts(projectRoot);
+    await fs.writeFile(
+      path.join(projectRoot, 'DESIGN.md'),
+      '# Generated design system',
+      'utf8',
+    );
+    await fs.mkdir(path.join(projectRoot, 'preview'), { recursive: true });
+    await fs.writeFile(
+      path.join(projectRoot, 'preview', 'colors.html'),
+      '<!doctype html><title>Colors</title>',
+      'utf8',
+    );
+    const diff = diffRunArtifacts(before, snapshotProjectArtifacts(projectRoot));
+
+    expect(diff.touchedPaths.map((file) => path.basename(file))).toEqual(['colors.html']);
+    expect(diff.deliverableTouchedPaths.map((file) => path.basename(file))).toEqual([
+      'DESIGN.md',
+      'colors.html',
+    ]);
+    await expect(
+      validateStrategyRunDeliverable({
+        ...fixture,
+        artifactCount: diff.touched,
+        artifactOutcome: { diff },
+        artifactPaths: ['preview/colors.html'],
         projectMetadata: {
           kind: 'other',
           entryFile: 'DESIGN.md',

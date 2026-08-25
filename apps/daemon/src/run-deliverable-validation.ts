@@ -39,6 +39,54 @@ interface ValidateRunDeliverableInput {
   touchedPaths?: string[];
 }
 
+interface ValidateStrategyRunDeliverableInput {
+  projectsRoot: string;
+  projectId: string | null;
+  projectMetadata?: Partial<ProjectMetadata> | Record<string, unknown> | null;
+  artifactCount: number;
+  artifactOutcome?: unknown;
+  artifactPaths?: string[];
+}
+
+function strategyRunTouchedPaths(input: ValidateStrategyRunDeliverableInput): string[] | undefined {
+  const diff = (
+    input.artifactOutcome as
+      | { diff?: { deliverableTouchedPaths?: unknown; touchedPaths?: unknown } }
+      | undefined
+  )?.diff;
+  const outcomePaths = Array.isArray(diff?.deliverableTouchedPaths)
+    ? diff.deliverableTouchedPaths
+    : diff?.touchedPaths;
+  if (Array.isArray(outcomePaths)) {
+    return outcomePaths.filter(
+      (value): value is string => typeof value === 'string' && value.length > 0,
+    );
+  }
+  return input.artifactPaths;
+}
+
+/**
+ * Strategy completion validates the filesystem outcome, not only the
+ * renderable artifact list exposed on the run. DESIGN.md deliberately does
+ * not contribute to artifact_count/artifactPaths, but it is a canonical
+ * design-system deliverable and therefore remains in deliverableTouchedPaths.
+ */
+export async function validateStrategyRunDeliverable(
+  input: ValidateStrategyRunDeliverableInput,
+): Promise<RunDeliverableValidationResult> {
+  const touchedPaths = strategyRunTouchedPaths(input);
+  return validateRunDeliverable({
+    projectsRoot: input.projectsRoot,
+    projectId: input.projectId,
+    ...(input.projectMetadata !== undefined
+      ? { projectMetadata: input.projectMetadata }
+      : {}),
+    runStatus: 'succeeded',
+    artifactCount: input.artifactCount,
+    ...(touchedPaths ? { touchedPaths } : {}),
+  });
+}
+
 const PROJECT_KIND_FILE_KINDS: Partial<
   Record<ProjectMetadata['kind'], ReadonlySet<ProjectFileKind>>
 > = {

@@ -531,7 +531,7 @@ import {
 } from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
-import { validateRunDeliverable } from './run-deliverable-validation.js';
+import { validateStrategyRunDeliverable } from './run-deliverable-validation.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
   decidePostToolResumeRecovery,
@@ -15178,13 +15178,13 @@ export async function startServer({
             || mayInferDirectEditCompletion
           )
         ) {
-          const deliverable = await validateRunDeliverable({
+          const deliverable = await validateStrategyRunDeliverable({
             projectsRoot: PROJECTS_DIR,
             projectId: run.projectId ?? null,
             projectMetadata: projectRecord?.metadata,
-            runStatus: 'succeeded',
             artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
-            ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
+            artifactOutcome: run.artifactOutcome,
+            ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
           });
           design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
