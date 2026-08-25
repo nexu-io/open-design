@@ -8,11 +8,17 @@
 // state stays with the caller via `onPick`.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { HomeHeroChip } from './chips';
+import { CREATE_RAIL_ORDER } from './chips';
 import { Icon } from '../Icon';
 import { useT } from '../../i18n';
 
-// Hard cap matching the fixed Home information architecture.
-const MAX_PILLS = 10;
+// Hard cap matching the fixed Home information architecture — derived from
+// CREATE_RAIL_ORDER, never a literal. The same trap TemplatePicker's
+// MAX_MENU_KINDS already documents: a literal that happens to equal the
+// current catalog size silently truncates the first chip added after it,
+// out of BOTH the inline row and the All popover, while every other
+// surface still shows it.
+const MAX_PILLS = Math.max(10, CREATE_RAIL_ORDER.length);
 
 // Must match .home-hero__type-pills-wrap's CSS gap.
 const PILL_GAP = 8;

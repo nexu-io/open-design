@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TypePillRow } from '../../../src/components/home-hero/TypePillRow';
 import {
   HOME_HERO_CHIPS,
+  orderedCreateChips,
   type HomeHeroChip,
 } from '../../../src/components/home-hero/chips';
 
@@ -98,6 +99,30 @@ describe('TypePillRow', () => {
     expect(screen.queryByTestId('home-hero-type-pill-deck')).not.toBeNull();
     expect(screen.queryByTestId('home-hero-type-pill-prototype')).toBeNull();
     expect(screen.queryByTestId('home-hero-type-pill-document')).toBeNull();
+  });
+
+  it('never truncates the tail of the full creation rail — the eleventh chip reaches the All popover', () => {
+    // Red before the fix: MAX_PILLS was the literal 10, which happened to
+    // equal the catalog size, so the first chip added after it (scene3d)
+    // was sliced out of BOTH the inline row and the All popover while
+    // every other surface still showed it — the exact silent-truncation
+    // trap TemplatePicker's MAX_MENU_KINDS comment documents.
+    const rail = orderedCreateChips();
+    expect(rail.length).toBeGreaterThan(10);
+    render(
+      <TypePillRow
+        chips={rail}
+        activeChipId={null}
+        labelFor={(chipId: string) => chipId}
+        onPick={vi.fn()}
+      />,
+    );
+    const last = rail[rail.length - 1]!;
+    fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
+    expect(
+      screen.queryByTestId(`home-hero-type-pill-${last.id}`) ??
+        screen.queryByTestId(`home-hero-type-pill-${last.id}-more`),
+    ).not.toBeNull();
   });
 
   it('recomputes the inline split when observed pill widths settle after render', () => {
