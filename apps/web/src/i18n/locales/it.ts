@@ -131,6 +131,7 @@ export const it: Dict = {
   'chat.runError.title.runtimeConfig': 'Errore di configurazione',
   'chat.runError.cliMissingMessage': "Lo strumento da riga di comando di {agent} non è stato trovato. Installalo e assicurati che sia nel PATH, poi riprova.",
   'chat.runError.promptTooLargeMessage': "Questo turno ha superato il limite di contesto del modello. Accorcia il messaggio, rimuovi gli allegati o avvia una nuova conversazione, poi riprova.",
+  'chat.runError.reduceContextCta': 'Nuova conversazione',
   'chat.runError.modelUnavailableMessage': "Il modello selezionato non è disponibile o non esiste. Passa a un altro modello nelle Impostazioni, poi riprova.",
   'chat.runError.rateLimitedMessage': "Hai raggiunto il limite di utilizzo del servizio del modello. Attendi un momento e riprova, oppure passa a un altro modello o servizio.",
   'chat.runError.modelWindowLimitMessage': 'Al momento il traffico è elevato. Riprova dopo le {retryAt}. Questa richiesta non è stata addebitata.',

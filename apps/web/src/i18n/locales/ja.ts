@@ -131,6 +131,7 @@ export const ja: Dict = {
   'chat.runError.title.runtimeConfig': '構成エラー',
   'chat.runError.cliMissingMessage': '{agent} のコマンドラインツールが見つかりません。インストールして PATH に含まれていることを確認してから再試行してください。',
   'chat.runError.promptTooLargeMessage': 'この入力がモデルのコンテキスト上限を超えました。プロンプトを短くするか、添付を減らすか、新しい会話を開始してから再試行してください。',
+  'chat.runError.reduceContextCta': '新しい会話',
   'chat.runError.modelUnavailableMessage': '選択したモデルは利用できないか存在しません。設定で別のモデルに切り替えてから再試行してください。',
   'chat.runError.rateLimitedMessage': 'モデルサービスの利用上限に達しました。しばらく待ってから再試行するか、別のモデルまたはサービスに切り替えてください。',
   'chat.runError.modelWindowLimitMessage': 'アクセスが集中しています。{retryAt} 以降に再度お試しください（今回のリクエストは課金されていません）。',

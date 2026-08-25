@@ -131,6 +131,7 @@ export const ru: Dict = {
   'chat.runError.title.runtimeConfig': 'Ошибка конфигурации',
   'chat.runError.cliMissingMessage': 'Инструмент командной строки {agent} не найден. Установите его и убедитесь, что он в PATH, затем повторите.',
   'chat.runError.promptTooLargeMessage': 'Этот запрос превысил лимит контекста модели. Сократите запрос, удалите вложения или начните новый разговор и повторите.',
+  'chat.runError.reduceContextCta': 'Новый диалог',
   'chat.runError.modelUnavailableMessage': 'Выбранная модель недоступна или не существует. Переключитесь на другую модель в настройках и повторите.',
   'chat.runError.rateLimitedMessage': 'Достигнут лимит использования сервиса модели. Подождите немного и повторите или переключитесь на другую модель или сервис.',
   'chat.runError.modelWindowLimitMessage': 'Сейчас высокая нагрузка. Повторите попытку после {retryAt}. Этот запрос не был оплачен.',

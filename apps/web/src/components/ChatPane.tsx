@@ -3011,6 +3011,26 @@ export function ChatPane({
                               {t('chat.amrBalanceGate.plansCta')}
                             </button>
                           ) : null}
+                          {runFailureUi.primaryAction === 'reduce-context' &&
+                          onNewConversation ? (
+                            // Context overflow: retrying re-sends the same
+                            // oversized prompt, so the primary CTA starts a
+                            // fresh conversation (dropping the bloated context)
+                            // rather than implying Retry will work. Retry stays
+                            // available as the secondary action below for users
+                            // who trimmed the prompt themselves. See #4782.
+                            // Guarded on onNewConversation so a ChatPane mount
+                            // without a new-conversation handler falls through
+                            // to the plain Retry (secondaryRetry) below instead
+                            // of rendering a dead button.
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => onNewConversation()}
+                            >
+                              {t('chat.runError.reduceContextCta')}
+                            </button>
+                          ) : null}
                           {canResumeFailedRun ? (
                             // Resumable failure: continue the agent's existing
                             // CLI session instead of restarting from scratch, so
