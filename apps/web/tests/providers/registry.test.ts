@@ -608,6 +608,55 @@ describe('design-system Workspace scope', () => {
     await inFlightBeforeMutation;
   });
 
+  it('starts a fresh catalog read when the caller brings a newer Team witness', async () => {
+    // Review catch, and a regression this PR introduced: before coalescing, this
+    // path always made its own catalog request.
+    //
+    // `DesignSystemsTab.refreshTeamShared` passes `materializedTeamIds` — never
+    // `forceTeamMaterialization` — and it only does so when the fresh `/team`
+    // read disagrees with the catalog it holds, or right after a share/unshare
+    // (`refreshSystems: true`). So supplying that witness always means "what I
+    // hold is out of date", and joining a catalog GET issued before the
+    // share/unshare would omit the newly shared system or keep a retired mirror.
+    const context = teamWorkspaceContext();
+    const pending = deferred<Response>();
+    let catalogGets = 0;
+    const rowsAfterShare = [
+      { id: 'user:brand', title: 'Brand', source: 'user', status: 'published' },
+      { id: 'user:newly-shared', title: 'Newly shared', source: 'user', status: 'published' },
+    ];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/workspace/design-systems/team') {
+        // Must not be reached: the caller already has the witness.
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      catalogGets += 1;
+      if (catalogGets === 1) return pending.promise;
+      return Promise.resolve(new Response(JSON.stringify({ designSystems: rowsAfterShare }), { status: 200 }));
+    }));
+
+    const issuedBeforeShare = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogGets).toBe(1));
+
+    const afterShare = fetchDesignSystemsResult(context, {
+      materializedTeamIds: ['user:newly-shared'],
+    });
+    pending.resolve(new Response(
+      JSON.stringify({ designSystems: [{ id: 'user:brand', title: 'Brand', source: 'user', status: 'published' }] }),
+      { status: 200 },
+    ));
+
+    await expect(afterShare).resolves.toMatchObject({
+      ok: true,
+      designSystems: [
+        expect.objectContaining({ id: 'user:brand' }),
+        expect.objectContaining({ id: 'user:newly-shared', teamShared: true }),
+      ],
+    });
+    await issuedBeforeShare;
+  });
+
   it('never lets a pre-account-boundary catalog read answer a post-boundary one', async () => {
     // A sign-out/sign-in cycle can leave every context field identical while the
     // authority behind them has changed — that is exactly why the app keys the

@@ -585,6 +585,11 @@ export interface FetchDesignSystemsOptions {
    * Exact Team ids returned by a workspace-scoped Team-index read that just
    * completed in the caller. Reuse that witness while reading the unified
    * catalog instead of issuing a duplicate `/team` materialization request.
+   *
+   * Supplying it also declares the catalog read itself authoritative: the only
+   * caller passes it when its fresh `/team` witness disagrees with the rows it
+   * holds, or straight after a share/unshare. So the catalog read starts fresh
+   * rather than joining one issued before that change.
    */
   materializedTeamIds?: readonly string[];
 }
@@ -709,7 +714,18 @@ async function readDesignSystemCatalog(
     + `:${workspaceAccountScopedCacheKey(workspaceContext)}`;
   // Same rule as the Team index above: a forced call is an authoritative read
   // for one mutation and must never join a snapshot issued before it.
-  if (options?.forceTeamMaterialization) evictCoalescedGet(cacheKey);
+  //
+  // `materializedTeamIds` counts too, and it is not obvious from the name.
+  // `DesignSystemsTab.refreshTeamShared` is the only caller that supplies it,
+  // and it does so exactly when the fresh `/team` witness disagrees with the
+  // catalog it holds — or immediately after a share/unshare. Carrying that
+  // witness therefore means "what I hold is out of date"; joining a catalog GET
+  // issued before the share would omit the newly shared system or keep a
+  // retired mirror on screen. Routine mounts do not pass it, so ordinary
+  // readers still collapse onto the shared key.
+  if (options?.forceTeamMaterialization || options?.materializedTeamIds) {
+    evictCoalescedGet(cacheKey);
+  }
   return coalescedGet(cacheKey, async () => {
     const resp = await fetch('/api/design-systems', {
       ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
