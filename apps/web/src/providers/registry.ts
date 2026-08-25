@@ -102,6 +102,7 @@ import {
   appendResourceQuery,
   workspaceIdentityCacheKey,
   workspaceResourceUrl,
+  workspaceAccountScopedCacheKey,
 } from '../collab/workspace-identity';
 import { PublicFilePublishError } from '../collab/public-file-publish';
 
@@ -660,10 +661,17 @@ async function readDesignSystemCatalog(
   workspaceContext: WorkspaceCollabContext | null | undefined,
   options?: FetchDesignSystemsOptions,
 ): Promise<DesignSystemSummary[]> {
-  // Keyed by the exact identity the request will carry. `/api/design-systems`
-  // is fail-closed on a missing scope, so a headerless read is a different,
-  // smaller catalog — never an answer a Workspace-scoped read may join.
-  const cacheKey = `design-system-catalog:${workspaceIdentityCacheKey(workspaceContext)}`;
+  // Keyed by the exact identity the request will carry, PLUS the account
+  // boundary it was captured under — the same two-part identity the app uses
+  // for this catalog and the team-project catalog carries as its request
+  // generation. `/api/design-systems` is fail-closed on a missing scope, so a
+  // headerless read is a different, smaller catalog and never an answer a
+  // Workspace-scoped read may join. The generation is load-bearing on its own:
+  // a sign-out/sign-in cycle can leave every context field identical while the
+  // authority behind them has changed, and ttl 0 would not catch it — it stops
+  // settled-result reuse, not a post-boundary reader joining a request issued
+  // before the boundary.
+  const cacheKey = `design-system-catalog:${workspaceAccountScopedCacheKey(workspaceContext)}`;
   // Same rule as the Team index above: a forced call is an authoritative read
   // for one mutation and must never join a snapshot issued before it.
   if (options?.forceTeamMaterialization) evictCoalescedGet(cacheKey);

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
+import { advanceWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -522,6 +523,40 @@ describe('design-system Workspace scope', () => {
     await fetchDesignSystemsResult(context);
     await fetchDesignSystemsResult(context);
     expect(catalogReads).toBe(2);
+  });
+
+  it('never lets a pre-account-boundary catalog read answer a post-boundary one', async () => {
+    // A sign-out/sign-in cycle can leave every context field identical while the
+    // authority behind them has changed — that is exactly why the app keys the
+    // catalog on [accountGeneration, workspaceIdentity] and the team-project
+    // catalog carries a request generation. `ttl = 0` does not cover this: it
+    // disables settled-result reuse, but a post-boundary reader could still JOIN
+    // the promise of a request issued before the boundary and adopt its answer.
+    const context = personalWorkspaceContext();
+    const gates: Array<ReturnType<typeof deferred<Response>>> = [];
+    let catalogReads = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/workspace/design-systems/team') {
+        return Promise.resolve(new Response(JSON.stringify({ ids: [] }), { status: 200 }));
+      }
+      catalogReads += 1;
+      const gate = deferred<Response>();
+      gates.push(gate);
+      return gate.promise;
+    }));
+
+    const beforeBoundary = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogReads).toBe(1));
+
+    advanceWorkspaceAccountGeneration('account-boundary');
+
+    const afterBoundary = fetchDesignSystemsResult(context);
+    await vi.waitFor(() => expect(catalogReads).toBe(2));
+
+    for (const gate of gates) {
+      gate.resolve(new Response(JSON.stringify({ designSystems: [] }), { status: 200 }));
+    }
+    await Promise.all([beforeBoundary, afterBoundary]);
   });
 
   it('never lets a headerless catalog read answer a Workspace-scoped one', async () => {

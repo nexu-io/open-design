@@ -31,7 +31,10 @@ import {
 } from './team-projects-catalog';
 import { useWorkspaceInvalidation } from './workspace-events';
 import {
+  advanceWorkspaceAccountGeneration,
   beginWorkspaceScopedRead,
+  currentWorkspaceAccountGeneration,
+  resetWorkspaceAccountGeneration,
   workspaceIdentityCacheKey,
   type WorkspaceResourceReadIdentity,
 } from './workspace-identity';
@@ -576,8 +579,7 @@ export function resetWorkspaceContextCache(): void {
   localIdentityChangeSeq = 0;
   seededWorkspaceContext = null;
   workspaceContextIdentityChangePending = false;
-  workspaceAccountGeneration = 0;
-  workspaceAccountGenerationStamp = 'initial';
+  resetWorkspaceAccountGeneration();
   resetWorkspaceContextRetrySchedules();
   inMemoryWorkspaceSelection = undefined;
   writeWorkspaceSelection(null);
@@ -1040,24 +1042,17 @@ let seededWorkspaceContext: {
   token: string;
   context: WorkspaceCollabContext;
 } | null = null;
-let workspaceAccountGeneration = 0;
-let workspaceAccountGenerationStamp = 'initial';
-
-function advanceWorkspaceAccountGeneration(stamp: string): void {
-  if (workspaceAccountGenerationStamp === stamp) return;
-  workspaceAccountGenerationStamp = stamp;
-  workspaceAccountGeneration += 1;
-}
-
 /**
  * Monotonic account boundary independent from ambient Workspace selection.
  * Fresh project binding witnesses survive A -> B navigation, but must be
  * discarded across sign-in/sign-out when another account may own the same
  * local project id.
+ *
+ * The counter itself lives in `workspace-identity` so shared catalog modules can
+ * partition their caches on it without importing this React hook module; this
+ * re-export keeps every existing caller pointed here.
  */
-export function currentWorkspaceAccountGeneration(): number {
-  return workspaceAccountGeneration;
-}
+export { currentWorkspaceAccountGeneration };
 
 /** The seed published for the CURRENT identity generation, if any. */
 function seededContextForCurrentGeneration(): WorkspaceCollabContext | null {
