@@ -4,7 +4,7 @@
  *
  * Captures "claude code design", "codex design", "cursor agent design",
  * "gemini cli design", "opencode design", "qwen design" queries. Each
- * agent gets a short card explaining how it plugs into Open Design.
+ * agent gets a short card explaining how it plugs into OpenDesign.
  * Agents with a dedicated long-form page link into `/agents/<agent>-design/`
  * (see DETAIL_ROUTES below); this hub is the SEO entry point.
  */
@@ -190,14 +190,14 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: homeUrl },
       { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: hubUrl },
     ],
   },
   {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
-    name: 'Open Design supported agents',
+    name: 'OpenDesign supported agents',
     numberOfItems: allAgents.length,
     itemListElement: allAgents.map((a, idx) => ({
       '@type': 'ListItem',
@@ -211,7 +211,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="agent" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
@@ -269,7 +269,7 @@ const jsonLd = [
       </ul>
     </section>
 
-    <section class="info-cta" aria-label="Open Design call to action">
+    <section class="info-cta" aria-label="OpenDesign call to action">
       <div>
         <h2>{page.ctaTitle(allAgents.length)}</h2>
         <p>{page.ctaBody}</p>
@@ -282,7 +282,7 @@ const jsonLd = [
       <div class="info-cta-meta">
         <span class="stamp">● {common.byok}</span>
         <span>{allAgents.length} adapters · {common.apache}</span>
-        <span>{common.macWinLinux}</span>
+        <span>{common.macWin}</span>
       </div>
     </section>
   </article>

@@ -812,7 +812,7 @@ function codexExecutableGuidance(
   ) {
     return '';
   }
-  return ` Configured Codex path failed: ${configuredOverridePath}. Open Design also detected a PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
+  return ` Configured Codex path failed: ${configuredOverridePath}. OpenDesign also detected a PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
 }
 
 function codexExecutableFallbackSuccessDetail(
@@ -1345,7 +1345,7 @@ function openAIChatCompletionsProviderCall(
       authorization: `Bearer ${apiKey}`,
       ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
         'HTTP-Referer': 'https://opendesign.dev',
-        'X-Title': 'Open Design',
+        'X-Title': 'OpenDesign',
       } : {}),
     },
     body: {
@@ -2262,7 +2262,7 @@ function runQuietCommand(command: string, args: string[], cwd: string): Promise<
 async function prepareOpenCodeConnectionTestCwd(tempDir: string): Promise<void> {
   await fsp.writeFile(
     path.join(tempDir, 'README.md'),
-    'Open Design OpenCode connection test.\n',
+    'OpenDesign OpenCode connection test.\n',
     'utf8',
   );
   try {
@@ -2567,7 +2567,14 @@ async function testAgentConnectionInternal(
         [],
         {
           model: input.model ?? null,
-          reasoning: input.reasoning ?? null,
+          // The remembered OpenCode variant catalog belongs to the detected
+          // binary. A one-off OPENCODE_BIN connection test may point at a
+          // different version, so keep the base model but do not forward a
+          // variant that was never probed on that executable.
+          reasoning:
+            input.agentId === 'opencode' && executableResolution.configuredOverridePath
+              ? null
+              : input.reasoning ?? null,
           serviceTier: input.serviceTier ?? null,
         },
         {

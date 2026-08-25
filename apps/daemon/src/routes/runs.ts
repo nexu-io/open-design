@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  composeOdNextStrategyContinuationV2,
   defaultScenarioPluginIdForProjectMetadata,
   RUN_RESULT_PACKAGE_SCHEMA,
   type AppliedPluginSnapshot,
@@ -11,6 +12,7 @@ import {
   type ByokChatProviderConfig,
   type ChatRunStatus,
   type ChatRunStatusResponse,
+  type StrategyTaskProjectionV2,
   type ProjectMetadata as ContractProjectMetadata,
   type RunResultPackageResponse,
 } from '@open-design/contracts';
@@ -35,7 +37,6 @@ import type { AuthorizeProjectRequest } from '../collab/project-request-authorit
 import {
   workspaceResourceContextFromRequest,
   type BoundWorkspaceResourceMutationGate,
-  type VerifyWorkspaceRequestAuthority,
   type WorkspaceResourceAccessInput,
 } from '../collab/workspace-resource-mutation.js';
 import {
@@ -53,7 +54,15 @@ import {
   upsertMessage,
 } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
-import { getDetectedRuntimeVersions } from '../runtimes/detection.js';
+import {
+  ensureDetectedRuntimeCapabilities,
+  ensureDetectedRuntimeVersions,
+  getDetectedRuntimeVersions,
+} from '../runtimes/detection.js';
+import {
+  odNextAdvertisedCapabilityGap,
+  resolveBundledOdNextRuntimeCapability,
+} from '../runtimes/od-next-capability-gate.js';
 import {
   deriveLangfuseDeliveryState,
   readTelemetrySinkConfig,
@@ -67,10 +76,59 @@ import {
   validatePluginWorkflowId,
 } from '../mcp-observability.js';
 import {
+  createInternalRunCreationService,
+  type InternalRunCreateInput,
+  type InternalRunCreationService,
+} from '../services/internal-run-service.js';
+import {
+  projectStrategyTask,
+  projectStrategyTaskByRunId,
+} from '../strategies/od-next/automatic-simple-production.js';
+import {
+  cancelStrategyTaskExecution,
+  createStrategyTaskExecution,
+  getStrategyTaskExecution,
+  getStrategyTaskExecutionByRunId,
+  InvalidStrategyTaskRecordError,
+  type StrategyTaskExecutionRecord,
+  StrategyTaskTransitionConflictError,
+} from '../strategies/task-store.js';
+import {
+  beginStrategyClarification,
+  prepareStrategyIntake,
+} from '../strategies/od-next/coordinator.js';
+import type { FrozenSkillPackageV1 } from '../strategies/od-next/frozen-skill-package.js';
+import { InvalidFrozenSkillPackageError } from '../strategies/od-next/frozen-skill-package.js';
+import type { ResolvedExamplePluginRecord } from '../strategies/od-next/example-skill-source.js';
+import { captureOdNextSessionSkillPackage } from '../strategies/od-next/session-skill-package.js';
+import { resolveSkillCatalogScope } from '../skill-catalog-scope.js';
+import type { SkillInfo } from '../skills.js';
+import {
+  buildOdNextTaskConfigurationV1,
+  createOdNextTaskInputSnapshot,
+  OdNextTaskInputSnapshotError,
+  removeOdNextTaskInputSnapshot,
+  type OdNextTaskInputSnapshotDescriptor,
+} from '../strategies/od-next/task-input-snapshot.js';
+import {
+  evaluateOdNextRollout,
+  odNextTaskTypeForProjectScenarioBinding,
+  readOdNextRolloutPolicy,
+  readOdNextRolloutStop,
+  type OdNextRolloutDecision,
+} from '../strategies/od-next/rollout.js';
+import { odNextRolloutAnalyticsProperties } from '../strategies/od-next/rollout-analytics.js';
+import {
   buildConnectorProbe,
+  automaticScenarioTaskProfile,
   getInstalledPlugin,
+  readVerifiedProjectScenarioBinding,
+  readVerifiedProjectStrategyBinding,
+  resolvePluginFolder,
   resolvePluginSnapshot,
+  type ResolveSnapshotResult,
 } from '../plugins/index.js';
+import { getSnapshot, linkSnapshotToRun } from '../plugins/snapshots.js';
 import {
   assertSandboxProjectRootAvailable,
   isSafeId,
@@ -107,7 +165,6 @@ import type { RunEventForFailureClassification } from '../run-failure-classifica
 import { classifyRunFailure } from '../run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from '../run-result.js';
 import type { RunStatusForAnalytics } from '../run-result.js';
-import type { PinnedRunDesignSystemScope } from '../design-systems/run-scope.js';
 import {
   parseRunToolBundleForRequest,
   validateRunToolBundleForAgent,
@@ -133,9 +190,13 @@ import {
 import {
   runArtifactCountForRun,
   runDesignSystemCreatedForRun,
+  runFilesWrittenForRun,
   runPreviewModuleCountForRun,
 } from '../runtimes/run-lifecycle-analytics.js';
-import { normalizeCommentAttachments } from '../runtimes/chat-prompt-inputs.js';
+import {
+  normalizeCommentAttachments,
+  UPLOAD_DIR,
+} from '../runtimes/chat-prompt-inputs.js';
 
 // Keep in sync with the web uploader's `looksLikeImage` (apps/web registry):
 // omit-pin seeds must classify the same extensions as `image` so reload chips
@@ -265,6 +326,7 @@ interface ProjectRecord {
   name: string;
   createdAt?: number;
   updatedAt?: number;
+  skillId?: string | null;
   designSystemId?: string | null;
   metadata?: ProjectMetadata;
   appliedPluginSnapshotId?: string | null;
@@ -293,9 +355,9 @@ interface ChatRun {
   assistantMessageId: string | null;
   clientRequestId?: string | null;
   requestFingerprint?: string | null;
+  strategyRolloutDecision?: OdNextRolloutDecision | null;
   agentId: string | null;
   workspaceScope?: RunWorkspaceScope | null;
-  designSystemScope?: PinnedRunDesignSystemScope | null;
   model?: string | null;
   status: ChatRunStatus;
   createdAt: number;
@@ -332,6 +394,17 @@ interface ChatRun {
   deliverableValidation?: ChatRunStatusResponse['deliverableValidation'];
   deliverableEntryFile?: string;
   deliverableArtifactKind?: ChatRunStatusResponse['deliverableArtifactKind'];
+  /** Shells staged for an OD Next prototype run, project-relative. */
+  odNextStagedDeviceFrames?: string[];
+  /** Run-finish observation: did the delivered entry carry the staged handset shell? */
+  odNextDeviceShell?: {
+    platform: 'ios' | 'android' | 'mobile-neutral';
+    resolvedFrom: 'request-text' | 'project-metadata';
+    entryFile: string;
+    shellPresent: boolean;
+  };
+  /** Run-finish observation: how the delivered entry carries the staged layout primitives. */
+  odNextLayoutPrimitives?: 'verbatim' | 'modified' | 'linked' | 'absent';
   analyticsTelemetry?: RunTelemetryTimestamps;
   resolvedModelId?: string | null;
   preflightAgentCliVersion?: string | null;
@@ -356,6 +429,7 @@ interface ChatRun {
     artifactsModified?: number;
     designSystemCreated: boolean;
     previewModuleCount: number;
+    filesWritten?: number;
     diff?: RunArtifactDiff;
   };
   artifactPaths?: string[];
@@ -369,15 +443,18 @@ interface ChatRun {
     missReason?: string | null;
     changedSections?: string[] | null;
   };
+  strategyTask?: StrategyTaskProjectionV2;
+  odNextTaskInputSnapshot?: OdNextTaskInputSnapshotDescriptor | null;
 }
 
-interface RunCreateMeta extends JsonRecord {
+interface RunCreateMeta extends InternalRunCreateInput, JsonRecord {
   projectId?: string;
   conversationId?: string;
   userMessageId?: string;
   assistantMessageId?: string;
   clientRequestId?: string;
   requestFingerprint?: string;
+  strategyRolloutDecision?: OdNextRolloutDecision;
   agentId?: string;
   pluginId?: string;
   appliedPluginSnapshotId?: string;
@@ -385,7 +462,45 @@ interface RunCreateMeta extends JsonRecord {
   currentPrompt?: string;
   projectMetadata?: ProjectMetadata;
   workspaceScope?: RunWorkspaceScope | null;
-  designSystemScope?: PinnedRunDesignSystemScope | null;
+  odNextTaskInputSnapshot?: OdNextTaskInputSnapshotDescriptor | null;
+}
+
+/**
+ * Invariant: a conversation runs at most one design-system enrichment
+ * ("AI Optimize") pass at a time.
+ *
+ * The enrichment turn is a hidden, seeded prompt that refines the SAME
+ * registered design system in place, so two concurrent passes bill twice and
+ * race on identical files. Incident 2026-07-28: one double-triggered UI
+ * affordance created two enrichment runs 383 ms apart in one conversation and
+ * both were billed. Ordinary chat turns are deliberately NOT gated here — the
+ * web composer already queues them while the conversation is busy, and a
+ * "send now" interrupt may legitimately overlap the run it is cancelling.
+ *
+ * Returns the non-terminal run that already owns the conversation's
+ * enrichment pass, or null when the request may proceed.
+ */
+function activeRunBlockingDesignSystemEnrichment(
+  runs: Pick<ChatRunService, 'list'>,
+  input: {
+    conversationId: unknown;
+    analyticsHints: unknown;
+    /** The optimistically created run for this request; it never blocks itself. */
+    excludeRunId?: string | null;
+  },
+): ChatRun | null {
+  const hints = input.analyticsHints;
+  const isEnrichment =
+    hints !== null
+    && typeof hints === 'object'
+    && !Array.isArray(hints)
+    && (hints as Record<string, unknown>).dsEnrichment === true;
+  if (!isEnrichment) return null;
+  if (typeof input.conversationId !== 'string' || !input.conversationId) return null;
+  const active = runs
+    .list({ conversationId: input.conversationId, status: 'active' })
+    .filter((run) => run.id !== input.excludeRunId);
+  return active[0] ?? null;
 }
 
 interface RunListFilters {
@@ -407,6 +522,7 @@ interface ChatRunService {
   statusBody(run: ChatRun): ChatRunStatusResponse;
   stream(run: ChatRun, req: Request, res: Response): void;
   start(run: ChatRun, starter: () => Promise<unknown>): ChatRun;
+  fail(run: ChatRun, code: string, message: string): void;
   wait(run: ChatRun): Promise<ChatRunStatusResponse>;
   cancel(
     run: ChatRun,
@@ -414,6 +530,8 @@ interface ChatRunService {
   ): Promise<ChatRunStatusResponse>;
   /** Undo an optimistically-created run (e.g. a failed ownership claim). */
   drop(run: ChatRun): void;
+  /** Persist daemon-owned state assigned during an atomic claim hook. */
+  persistState(run: ChatRun): void;
   isTerminal(status: ChatRunStatus): boolean;
   emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
   setAnalyticsRecovery?(run: ChatRun, recovery: {
@@ -442,6 +560,19 @@ interface RunRoutesDesignService {
   runs: ChatRunService;
   analytics: AnalyticsService;
   getAppVersion(): string;
+}
+
+/**
+ * The Skill catalogue a run resolves user-selected Skills from. Same listing
+ * the system-prompt composer reads, scoped through
+ * `resolveSkillCatalogScope`, so a Skill admitted on one surface is
+ * resolvable on the other.
+ */
+interface RunRoutesSkillCatalogService {
+  listAllSkillLikeEntries: (options?: {
+    workspaceId?: string | null;
+    workspaceMemberId?: string | null;
+  }) => Promise<readonly SkillInfo[]>;
 }
 
 interface ProjectFileEntry {
@@ -476,9 +607,71 @@ interface RunProjectKindInput {
   projectMetadata?: ProjectMetadata;
 }
 
+class AutomaticOdNextPreparationError extends Error {
+  readonly preparationCause: unknown;
+
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = 'AutomaticOdNextPreparationError';
+    this.preparationCause = cause;
+  }
+}
+
+type SuccessfulRunSnapshotResolution = Omit<
+  Extract<ResolveSnapshotResult, { ok: true }>,
+  'created'
+> & {
+  created?: boolean;
+  status?: number;
+};
+
+function removeProvisionalAutomaticSnapshot(
+  db: SqliteDb,
+  resolution: SuccessfulRunSnapshotResolution | null,
+): boolean {
+  if (
+    resolution?.created !== true
+    || resolution.snapshot.pluginId !== 'od-next-strategy'
+  ) return false;
+  const deleted = db.prepare(`
+    DELETE FROM applied_plugin_snapshots
+     WHERE id = ?
+       AND plugin_id = 'od-next-strategy'
+       AND run_id IS NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM projects
+          WHERE applied_plugin_snapshot_id = applied_plugin_snapshots.id
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM conversations
+          WHERE applied_plugin_snapshot_id = applied_plugin_snapshots.id
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM strategy_task_executions
+          WHERE snapshot_id = applied_plugin_snapshots.id
+       )
+  `).run(resolution.snapshotId);
+  return deleted.changes === 1;
+}
+
+function automaticOdNextFallbackDecision(
+  decision: OdNextRolloutDecision,
+  reasonCode: string,
+): OdNextRolloutDecision {
+  return {
+    ...decision,
+    decisionClass: 'observe',
+    effectiveMode: 'observe',
+    eligible: false,
+    reasonCodes: [reasonCode, ...decision.reasonCodes.filter((reason) => reason !== reasonCode)],
+    primaryReasonCode: reasonCode,
+  };
+}
+
 export interface RegisterRunRoutesDeps {
   db: SqliteDb;
   design: RunRoutesDesignService;
+  resources: RunRoutesSkillCatalogService;
   http: {
     createSseResponse: (res: Response) => SseResponse;
     sendApiError: (
@@ -490,6 +683,7 @@ export interface RegisterRunRoutesDeps {
     ) => Response<unknown> | void;
   };
   paths: {
+    BUNDLED_PLUGINS_DIR?: string;
     PROJECTS_DIR: string;
     RUNTIME_DATA_DIR: string;
   };
@@ -499,6 +693,13 @@ export interface RegisterRunRoutesDeps {
   };
   chat: {
     startChatRun: (meta: RunCreateMeta, run: ChatRun) => Promise<unknown>;
+    prepareOdNextInitialPromptBundle?: (input: {
+      meta: RunCreateMeta;
+      frozenSkillPackage: FrozenSkillPackageV1;
+      taskInputSnapshot: OdNextTaskInputSnapshotDescriptor;
+    }) => Promise<{
+      text: string;
+    }>;
   };
   lifecycle: {
     isDaemonShuttingDown: () => boolean;
@@ -523,6 +724,15 @@ export interface RegisterRunRoutesDeps {
       workspaceMemberId?: string | null;
     }) => Promise<Parameters<typeof resolvePluginSnapshot>[0]['registry']>;
     renderPluginBriefTemplate: (template: string, inputs?: Record<string, unknown>) => string;
+    /**
+     * Exact local catalogue lookup, the same one `/api/plugins/:id/apply-local`
+     * and project create use. Run start re-resolves a project's example
+     * binding through it instead of trusting the stored path.
+     */
+    getLocalPluginBySource?: (
+      id: string,
+      source: string,
+    ) => Promise<ResolvedExamplePluginRecord | null>;
     /**
      * Fail-closed request-scoped plugin lookup. The catalog API and the run
      * API must use the same Workspace/member visibility rules; otherwise a
@@ -558,6 +768,13 @@ export interface RegisterRunRoutesDeps {
       run: ChatRun,
     ) => void;
   };
+  /**
+   * Process-owned physical Run seam. The composition root supplies one shared
+   * instance so non-HTTP coordinators can reuse the exact create/claim/start
+   * path. Route-only fixtures may omit it and receive an equivalent local
+   * instance around their injected run registry.
+   */
+  internalRuns?: InternalRunCreationService<RunCreateMeta, ChatRun>;
   /**
    * Workspace-identity gate for POST /api/runs and POST /api/chat — this
    * file's two "create a run" entry points. Until this fix both had ZERO
@@ -611,7 +828,6 @@ export interface RegisterRunRoutesDeps {
   };
   amrWorkspaceScope?: {
     isSignedIn: () => boolean | Promise<boolean>;
-    verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority;
   };
 }
 
@@ -709,6 +925,8 @@ const SCENARIO_PROJECT_INTENTS: readonly NonNullable<ContractProjectMetadata['in
   'live-artifact',
   'web-clone',
   'document',
+  'marketing',
+  'hyperframes',
 ];
 
 function toScenarioProjectIntent(value: unknown): ContractProjectMetadata['intent'] | undefined {
@@ -797,11 +1015,9 @@ function withoutSensitiveRunInput(body: JsonRecord): JsonRecord {
   delete sanitized.byokProfileId;
   delete sanitized.apiKey;
   delete sanitized.rechargeResumeCapability;
-  // Scope objects are server-issued authorization facts, not request options.
-  // A caller must never be able to persist a forged Workspace or DS binding
-  // that startChatRun and tool-token minting will later treat as pinned.
+  // Workspace scope is a server-issued authorization fact, not a request option.
   delete sanitized.workspaceScope;
-  delete sanitized.designSystemScope;
+  delete sanitized.odNextTaskInputSnapshot;
   return sanitized;
 }
 
@@ -904,9 +1120,13 @@ function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
 export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   const { db, design } = ctx;
   const { createSseResponse, sendApiError } = ctx.http;
-  const { PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  const { BUNDLED_PLUGINS_DIR, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { detectAgents, getAgentDef } = ctx.agents;
   const { startChatRun } = ctx.chat;
+  const prepareOdNextInitialPromptBundle = ctx.chat.prepareOdNextInitialPromptBundle
+    ?? (async () => {
+      throw new Error('OD Next Prompt Bundle preparation service is unavailable.');
+    });
   const {
     connectorService,
     detectSkillPluginCandidateOnRunSuccess,
@@ -924,6 +1144,295 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     pinAssistantMessageOnRunCreate,
     reconcileAssistantMessageOnRunEnd,
   } = ctx.messages;
+  const internalRuns = ctx.internalRuns ?? createInternalRunCreationService({
+    runs: design.runs,
+    claimAssistantMessage: (run, options) =>
+      pinAssistantMessageOnRunCreate(db, run, options),
+  });
+  const strategyTaskForRun = (run: ChatRun): StrategyTaskExecutionRecord | null => {
+    const task = getStrategyTaskExecutionByRunId(db, run.id);
+    if (!task && run.odNextTaskInputSnapshot) {
+      throw new InvalidStrategyTaskRecordError(
+        'OD Next Run retains an immutable input owner but has no persisted task mapping.',
+      );
+    }
+    if (
+      task
+      && (
+        !run.odNextTaskInputSnapshot
+        || run.odNextTaskInputSnapshot.taskExecutionId !== task.taskExecutionId
+        || run.odNextTaskInputSnapshot.manifestSha256
+          !== task.frozenInputIdentity.taskInputManifestSha256
+        || run.projectId !== task.projectId
+        || run.conversationId !== task.conversationId
+        || run.agentId !== task.selectedAgentId
+        || run.appliedPluginSnapshotId !== task.snapshotId
+      )
+    ) {
+      throw new InvalidStrategyTaskRecordError(
+        'OD Next Run and immutable input owner do not match the persisted task scope.',
+      );
+    }
+    return task;
+  };
+  const statusWithStrategyTask = (run: ChatRun): ChatRunStatusResponse => {
+    try {
+      const strategyTask = strategyTaskForRun(run);
+      const projection = strategyTask ? projectStrategyTask(strategyTask, run.id) : null;
+      if (projection) run.strategyTask = projection;
+    } catch (error) {
+      if (
+        !(error instanceof InvalidFrozenSkillPackageError)
+        && !(error instanceof InvalidStrategyTaskRecordError)
+      ) throw error;
+      delete run.strategyTask;
+      if (!['succeeded', 'failed', 'canceled'].includes(run.status)) {
+        design.runs.fail(
+          run,
+          error instanceof InvalidFrozenSkillPackageError
+            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+            : 'OD_NEXT_TASK_STATE_INVALID',
+          error.message,
+        );
+      }
+    }
+    return design.runs.statusBody(run);
+  };
+
+  type ClarificationContinuation = {
+    task: StrategyTaskExecutionRecord;
+    sourceRunId: string;
+    taskRunIndex: number;
+    answer: string;
+    retry: boolean;
+    snapshot: AppliedPluginSnapshot;
+  };
+
+  type ClarificationResolution =
+    | { kind: 'ordinary' }
+    | { kind: 'error'; status: number; code: string; message: string }
+    | { kind: 'continuation'; value: ClarificationContinuation };
+
+  /**
+   * Resolve only an explicit daemon-issued task handle. Conversation order is
+   * never an ownership signal: an ordinary follow-up in a conversation that
+   * happens to contain an awaiting strategy task must stay an ordinary Run.
+   */
+  function resolveClarificationContinuation(
+    requestBody: JsonRecord,
+  ): ClarificationResolution {
+    if (requestBody.taskExecutionId === undefined) return { kind: 'ordinary' };
+    if (
+      typeof requestBody.taskExecutionId !== 'string'
+      || !requestBody.taskExecutionId.trim()
+      || !isSafeId(requestBody.taskExecutionId)
+    ) {
+      return {
+        kind: 'error',
+        status: 400,
+        code: 'BAD_REQUEST',
+        message: 'taskExecutionId must be a non-empty safe id',
+      };
+    }
+    const task = getStrategyTaskExecution(db, requestBody.taskExecutionId);
+    if (!task) {
+      return {
+        kind: 'error',
+        status: 404,
+        code: 'STRATEGY_TASK_NOT_FOUND',
+        message: 'strategy task execution not found',
+      };
+    }
+    if (
+      requestBody.projectId !== task.projectId
+      || requestBody.conversationId !== task.conversationId
+    ) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_SCOPE_MISMATCH',
+        message: 'strategy continuation must use the task\'s locked project and conversation',
+      };
+    }
+    if (
+      typeof requestBody.agentId === 'string'
+      && requestBody.agentId
+      && requestBody.agentId !== task.selectedAgentId
+    ) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_AGENT_MISMATCH',
+        message: 'strategy continuation must use the task\'s locked agent',
+      };
+    }
+    if (
+      typeof requestBody.appliedPluginSnapshotId === 'string'
+      && requestBody.appliedPluginSnapshotId
+      && requestBody.appliedPluginSnapshotId !== task.snapshotId
+    ) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_SNAPSHOT_MISMATCH',
+        message: 'strategy continuation must use the task\'s locked snapshot',
+      };
+    }
+    if (
+      typeof requestBody.pluginId === 'string'
+      && requestBody.pluginId
+      && requestBody.pluginId !== task.strategyId
+    ) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_PLUGIN_MISMATCH',
+        message: 'strategy continuation must use the task\'s locked strategy',
+      };
+    }
+    const snapshot = getSnapshot(db, task.snapshotId);
+    if (
+      !snapshot
+      || snapshot.pluginId !== task.strategyId
+      || snapshot.strategy?.id !== task.strategyId
+      || snapshot.strategy.version !== task.strategyVersion
+      || snapshot.strategy.packageHash !== task.strategyPackageHash
+    ) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_SNAPSHOT_INVALID',
+        message: 'strategy task snapshot identity is unavailable or has drifted',
+      };
+    }
+    const answer = typeof requestBody.currentPrompt === 'string'
+      ? requestBody.currentPrompt
+      : typeof requestBody.message === 'string'
+        ? requestBody.message
+        : '';
+    if (!answer.trim()) {
+      return {
+        kind: 'error',
+        status: 400,
+        code: 'STRATEGY_CLARIFICATION_ANSWER_MISSING',
+        message: 'clarification continuation requires a non-empty answer',
+      };
+    }
+    const existingClientRun =
+      typeof requestBody.clientRequestId === 'string' && requestBody.clientRequestId
+        ? design.runs.list({
+            projectId: task.projectId,
+            conversationId: task.conversationId,
+          }).find((candidate) => candidate.clientRequestId === requestBody.clientRequestId) ?? null
+        : null;
+    const existingMapping = existingClientRun
+      ? task.runs.find((mapping) => mapping.runId === existingClientRun.id)
+      : undefined;
+    const exactRetry = Boolean(
+      existingClientRun
+      && existingMapping?.inputStage === 'clarification'
+      && task.latestRunId === existingClientRun.id
+      && task.activeRunId === existingClientRun.id
+      && task.outcome === 'running',
+    );
+    if (existingClientRun && !exactRetry) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_RETRY_MISMATCH',
+        message: 'clientRequestId is not bound to this task clarification',
+      };
+    }
+    if (exactRetry && existingMapping) {
+      return {
+        kind: 'continuation',
+        value: {
+          task,
+          sourceRunId: existingMapping.sourceRunId!,
+          taskRunIndex: existingMapping.taskRunIndex,
+          answer,
+          retry: true,
+          snapshot,
+        },
+      };
+    }
+    const latestMapping = task.runs.at(-1);
+    if (
+      task.route !== 'full_plan'
+      || task.inputStage !== 'request'
+      || task.outcome !== 'clarification_required'
+      || task.activeRunId !== null
+      || task.terminalRunId !== null
+      || task.clarificationCount !== 0
+      || !latestMapping
+      || latestMapping.runId !== task.latestRunId
+      || latestMapping.inputStage !== 'request'
+    ) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_STATE_MISMATCH',
+        message: 'strategy task is not awaiting its first clarification answer',
+      };
+    }
+    const sourceRun = design.runs.get(task.latestRunId);
+    if (
+      !sourceRun
+      || sourceRun.status !== 'succeeded'
+      || sourceRun.projectId !== task.projectId
+      || sourceRun.conversationId !== task.conversationId
+      || sourceRun.agentId !== task.selectedAgentId
+      || sourceRun.appliedPluginSnapshotId !== task.snapshotId
+    ) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_SOURCE_RUN_INVALID',
+        message: 'strategy clarification source Run is unavailable or does not match the locked task',
+      };
+    }
+    return {
+      kind: 'continuation',
+      value: {
+        task,
+        sourceRunId: task.latestRunId,
+        taskRunIndex: latestMapping.taskRunIndex + 1,
+        answer,
+        retry: false,
+        snapshot,
+      },
+    };
+  }
+
+  function applyClarificationContinuationMeta(
+    meta: RunCreateMeta,
+    continuation: ClarificationContinuation,
+  ): void {
+    const { task, answer, sourceRunId, taskRunIndex } = continuation;
+    const instruction = composeOdNextStrategyContinuationV2({
+      stage: 'clarification',
+      nativeSessionResume: true,
+      taskExecutionId: task.taskExecutionId,
+      taskRunIndex,
+      answer,
+    });
+    meta.taskExecutionId = task.taskExecutionId;
+    meta.agentId = task.selectedAgentId;
+    meta.appliedPluginSnapshotId = task.snapshotId;
+    meta.pluginId = task.strategyId;
+    meta.message = instruction;
+    meta.currentPrompt = instruction;
+    meta.titleGeneration = undefined;
+    meta.analyticsHints = {
+      ...(meta.analyticsHints && typeof meta.analyticsHints === 'object'
+        ? meta.analyticsHints
+        : {}),
+      taskExecutionId: task.taskExecutionId,
+      initialRunId: task.initialRunId,
+      sourceRunId,
+      taskRunIndex,
+    };
+  }
 
   /** Authorize every bound run mutation before plugin or snapshot resolution. */
   async function authorizeRunProjectBeforePluginResolution(
@@ -978,10 +1487,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
 
   /**
    * Pin a run to its persisted project binding. The sole adoption branch is a
-   * signed-in AMR request for a truly unbound historical project: a freshly
-   * verified exact Personal identity becomes the persisted creator witness.
-   * Every other runtime keeps its legacy local path and never reads Workspace
-   * authority here.
+   * signed-in AMR request for a truly unbound historical project: an explicitly
+   * Personal local attribution becomes the persisted creator witness. Vela
+   * remains the final membership and billing authority when the run reaches
+   * the cloud; local run creation never probes the Workspace directory.
    */
   async function prepareRunWorkspaceScope(
     req: ApiRequest,
@@ -1067,8 +1576,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // compatibility lane. Home may create it before Workspace discovery
       // settles, after already running the account balance gate; requiring a
       // later identity here would turn that accepted first prompt into a 409.
-      // Explicitly bound projects still pin their persisted Workspace above,
-      // and any asserted identity below is freshly verified before adoption.
+      // Explicitly bound projects still pin their persisted Workspace above.
       return {
         ok: true,
         workspaceScope: accountScopedRunWorkspaceScopeForProject(projectId),
@@ -1084,31 +1592,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return { ok: false };
     }
 
-    const verified =
-      await ctx.amrWorkspaceScope.verifyWorkspaceRequestAuthority(req);
-    if (!verified.ok) {
-      sendApiError(
-        res,
-        verified.status,
-        verified.code,
-        verified.message,
-        verified.retryable ? { retryable: true } : {},
-      );
-      return { ok: false };
-    }
-    if (
-      verified.context.workspaceId !== requestContext.workspaceId
-      || verified.context.workspaceMemberId !== requestContext.workspaceMemberId
-    ) {
-      sendApiError(
-        res,
-        403,
-        'WORKSPACE_ACCESS_DENIED',
-        'the verified Workspace identity does not match the run request',
-      );
-      return { ok: false };
-    }
-    if (verified.context.workspaceType !== 'personal') {
+    if (requestContext.workspaceTypeAsserted === 'team') {
       sendApiError(
         res,
         409,
@@ -1116,6 +1600,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'historical projects can only be adopted into a Personal Workspace',
       );
       return { ok: false };
+    }
+    if (requestContext.workspaceTypeAsserted !== 'personal') {
+      return {
+        ok: true,
+        workspaceScope: accountScopedRunWorkspaceScopeForProject(projectId),
+      };
     }
     const ensureWorkspaceProject = ctx.projectStore.ensureWorkspaceProject;
     if (!ensureWorkspaceProject) {
@@ -1139,11 +1629,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (existing) return existing;
       ensureWorkspaceProject(db, {
         projectId,
-        workspaceId: verified.context.workspaceId,
+        workspaceId: requestContext.workspaceId,
         visibility: 'personal',
         resourceState: 'active',
-        createdByWorkspaceMemberId: verified.context.workspaceMemberId,
-        updatedByWorkspaceMemberId: verified.context.workspaceMemberId,
+        createdByWorkspaceMemberId: requestContext.workspaceMemberId,
+        updatedByWorkspaceMemberId: requestContext.workspaceMemberId,
         syncState: 'local_only',
         resourceHubResourceId: null,
         cloudTombstonedAt: null,
@@ -1153,7 +1643,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return getWorkspaceProjectByProjectId(db, projectId);
     });
     const adopted = bindPersonal();
-    if (adopted?.workspaceId !== verified.context.workspaceId) {
+    if (adopted?.workspaceId !== requestContext.workspaceId) {
       sendApiError(
         res,
         409,
@@ -1163,7 +1653,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return { ok: false };
     }
     const workspaceScope = pinRunWorkspaceScopeForProject(db, projectId);
-    if (!workspaceScope || workspaceScope.workspaceId !== verified.context.workspaceId) {
+    if (!workspaceScope || workspaceScope.workspaceId !== requestContext.workspaceId) {
       sendApiError(
         res,
         409,
@@ -1186,13 +1676,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   ): Promise<boolean> {
     if (!run.projectId || !ctx.authorizeProjectRequest) return true;
 
-    // Local CLI/MCP callers predate Workspace transport headers. Once a run
-    // exists, its persisted agentId is the reliable runtime discriminator:
-    // non-AMR runtimes do not call the Workspace billing plane, so their
-    // headerless status/stream/cancel lifecycle must not depend on Workspace
-    // membership authority. AMR remains exact-authority-only. Likewise, any
-    // caller that explicitly asserts a Workspace identity still goes through
-    // the normal gate so a conflicting or partial scope cannot be ignored.
+    // Once a run exists, status/stream/cancel are local lifecycle operations.
+    // Headerless CLI/MCP/browser callers must not lose access merely because
+    // the Workspace directory is stale or offline, regardless of which agent
+    // created the run. Explicitly asserted identity still goes through the
+    // local project gate so conflicting or partial scope cannot be ignored.
     const requestContext = workspaceResourceContextFromRequest(req);
     const carriesNavigationScope =
       options.mode === 'read'
@@ -1204,10 +1692,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           && req.query.workspaceMemberId.trim().length > 0)
       );
     if (
-      typeof run.agentId === 'string'
-      && run.agentId.length > 0
-      && run.agentId !== 'amr'
-      && requestContext === null
+      requestContext === null
       && !carriesNavigationScope
     ) {
       return true;
@@ -1281,8 +1766,41 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!authorization.ok) return;
       authorizedBoundMutation = authorization.authorizedBoundMutation;
     }
+    let clarificationResolution;
+    try {
+      clarificationResolution = resolveClarificationContinuation(requestBody);
+    } catch (error) {
+      if (
+        error instanceof InvalidFrozenSkillPackageError
+        || error instanceof InvalidStrategyTaskRecordError
+      ) {
+        return sendApiError(
+          res,
+          409,
+          error instanceof InvalidFrozenSkillPackageError
+            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+            : 'OD_NEXT_TASK_STATE_INVALID',
+          error.message,
+        );
+      }
+      throw error;
+    }
+    if (clarificationResolution.kind === 'error') {
+      return sendApiError(
+        res,
+        clarificationResolution.status,
+        clarificationResolution.code,
+        clarificationResolution.message,
+      );
+    }
+    const clarificationContinuation = clarificationResolution.kind === 'continuation'
+      ? clarificationResolution.value
+      : null;
+    const clarificationTask = clarificationContinuation?.task ?? null;
     let effectiveAgentId =
-      typeof requestBody.agentId === 'string' && requestBody.agentId
+      clarificationTask
+        ? clarificationTask.selectedAgentId
+        : typeof requestBody.agentId === 'string' && requestBody.agentId
         ? requestBody.agentId
         : null;
     if (!effectiveAgentId) {
@@ -1316,31 +1834,302 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!prepared.ok) return;
       preparedWorkspaceScope = prepared.workspaceScope;
     }
-    let resolvedSnapshot = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      const explicitPlugin =
-        requestBody.pluginId || requestBody.appliedPluginSnapshotId;
+    let resolvedSnapshot: SuccessfulRunSnapshotResolution | null = null;
+    let strategyRolloutDecision: OdNextRolloutDecision | null = null;
+    let rolloutCapabilitySnapshot: ReturnType<
+      typeof resolveBundledOdNextRuntimeCapability
+    >['snapshot'] = null;
+    let resolveAutomaticOrdinaryFallback: (() => ResolveSnapshotResult) | null = null;
+    let automaticOrdinaryFallbackPluginId: string | null = null;
+    let automaticSnapshotPreparationError: Error | null = null;
+    let idempotentStrategyRetry = null;
+    try {
+      idempotentStrategyRetry = typeof requestBody.clientRequestId === 'string'
+        && requestBody.clientRequestId
+        ? design.runs.list({
+            projectId: typeof requestBody.projectId === 'string'
+              ? requestBody.projectId
+              : undefined,
+            conversationId: typeof requestBody.conversationId === 'string'
+              ? requestBody.conversationId
+              : undefined,
+          }).find((candidate) => (
+            candidate.clientRequestId === requestBody.clientRequestId
+            && Boolean(strategyTaskForRun(candidate))
+          )) ?? null
+        : null;
+    } catch (error) {
+      if (
+        error instanceof InvalidFrozenSkillPackageError
+        || error instanceof InvalidStrategyTaskRecordError
+      ) {
+        return sendApiError(
+          res,
+          409,
+          error instanceof InvalidFrozenSkillPackageError
+            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+            : 'OD_NEXT_TASK_STATE_INVALID',
+          error.message,
+        );
+      }
+      throw error;
+    }
+    if (clarificationContinuation) {
+      const internalStrategyContinuation = Boolean(
+        clarificationTask?.strategyId === 'od-next-strategy'
+        && clarificationContinuation.snapshot.pluginId === clarificationTask.strategyId
+        && clarificationContinuation.snapshot.strategy?.id === clarificationTask.strategyId,
+      );
+      if (
+        !internalStrategyContinuation
+        && ctx.plugins.authorizePluginRequest
+        && !await ctx.plugins.authorizePluginRequest(
+          req,
+          res,
+          clarificationTask!.strategyId,
+        )
+      ) return;
+      resolvedSnapshot = {
+        ok: true,
+        status: 200,
+        snapshotId: clarificationTask!.snapshotId,
+        snapshot: clarificationContinuation.snapshot,
+      };
+    } else if (idempotentStrategyRetry?.appliedPluginSnapshotId) {
+      const retrySnapshot = getSnapshot(db, idempotentStrategyRetry.appliedPluginSnapshotId);
+      if (retrySnapshot) {
+        resolvedSnapshot = {
+          ok: true,
+          status: 200,
+          snapshotId: retrySnapshot.snapshotId,
+          snapshot: retrySnapshot,
+          created: false,
+        };
+      }
+    } else if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       let runResolveBody: JsonRecord = requestBody;
-      if (!explicitPlugin) {
-        const projectRow = toProjectRecord(getProject(db, requestBody.projectId));
+      let synthesizedAutomaticDefault = false;
+      const rolloutProject = toProjectRecord(getProject(db, requestBody.projectId));
+      const snapshotConversationId =
+        typeof requestBody.conversationId === 'string' && requestBody.conversationId
+          ? requestBody.conversationId
+          : getFirstProjectConversation(db, requestBody.projectId)?.id ?? null;
+      const defaultPluginId = defaultScenarioPluginIdForProjectMetadata(
+        toScenarioProjectMetadata(rolloutProject?.metadata),
+      );
+      const suppliedSnapshotWasNamed = typeof requestBody.appliedPluginSnapshotId === 'string'
+        && requestBody.appliedPluginSnapshotId.trim().length > 0;
+      const suppliedPluginWasNamed = typeof requestBody.pluginId === 'string'
+        && requestBody.pluginId.trim().length > 0;
+      const projectHasExplicitPin = Boolean(rolloutProject?.appliedPluginSnapshotId);
+      const verifiedScenarioBinding = rolloutProject
+        ? readVerifiedProjectScenarioBinding(db, {
+            projectId: rolloutProject.id,
+            appliedPluginSnapshotId: rolloutProject.appliedPluginSnapshotId,
+            metadata: rolloutProject.metadata as ContractProjectMetadata,
+          })
+        : null;
+      const verifiedStrategyBinding = readVerifiedProjectStrategyBinding(
+        rolloutProject?.metadata as ContractProjectMetadata | null | undefined,
+      );
+      const projectPinIsAutomaticDefault = Boolean(
+        projectHasExplicitPin
+        && verifiedScenarioBinding?.provenance === 'automatic_default'
+        && verifiedScenarioBinding.pluginId === defaultPluginId,
+      );
+      const suppliedContextPluginWasNamed = Boolean(
+        Array.isArray((rolloutProject?.metadata as ContractProjectMetadata | undefined)?.contextPlugins)
+        && (rolloutProject?.metadata as ContractProjectMetadata).contextPlugins!.length > 0
+      );
+      const explicitExecutablePlugin = Boolean(
+        suppliedSnapshotWasNamed
+        || suppliedPluginWasNamed
+        || (projectHasExplicitPin && !projectPinIsAutomaticDefault)
+      );
+      // A named Skill is deliberately absent here. Naming one — the composer's
+      // @-mention, `od run --skill`, a Skill persisted on the project — refines
+      // the task; it does not claim the route away from a task type OD Next
+      // already owns. An admitted strategy carries the Skill in
+      // `session_skills/user_selected_skills` (see
+      // `captureOdNextSessionSkillPackage`), where the strategy's conflict
+      // order already ranks a user-selected Skill above its own. A context
+      // plugin still claims authority: that is an executable surface the
+      // strategy has no slot for.
+      const explicitUserPlugin = Boolean(
+        explicitExecutablePlugin
+        || suppliedContextPluginWasNamed
+      );
+      // Read per request, not at boot: `odNextStrategyMode` is how a user opts
+      // this installation into OD Next, and "configure it and it takes effect"
+      // has to mean the next run, not the next daemon restart.
+      //
+      // Deliberately uncaught. `readAppConfig` already answers `{}` for the
+      // states that mean "nothing configured" — no file, unparseable file — and
+      // only throws when the daemon genuinely cannot read its own config. That
+      // is not the same as an opt-out, and swallowing it would silently run the
+      // ordinary route (with no `agentCliEnv` either) while telling the
+      // operator the installation was never opted in.
+      const rolloutAppConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const rolloutPolicy = readOdNextRolloutPolicy(process.env, rolloutAppConfig);
+      const rolloutTaskType = odNextTaskTypeForProjectScenarioBinding(
+        verifiedStrategyBinding ?? verifiedScenarioBinding,
+      );
+      const routeApplicability = explicitUserPlugin
+        ? 'explicit_user' as const
+        : rolloutTaskType
+          ? 'eligible' as const
+          : 'not_applicable' as const;
+      const rolloutMayObserve = routeApplicability === 'eligible'
+        && rolloutPolicy.requestedMode !== 'off'
+        && rolloutPolicy.contentEnabled
+        && rolloutPolicy.behaviorEnabled;
+      const rolloutFolder = rolloutMayObserve && BUNDLED_PLUGINS_DIR
+        ? path.join(BUNDLED_PLUGINS_DIR, 'scenarios', 'od-next-strategy')
+        : null;
+      let automaticAdmissionPreparationFailed = false;
+      let rolloutResolved: Awaited<ReturnType<typeof resolvePluginFolder>> | null = null;
+      if (rolloutFolder) {
+        try {
+          rolloutResolved = await resolvePluginFolder({
+            folder: rolloutFolder,
+            folderId: 'od-next-strategy',
+            sourceKind: 'bundled',
+            source: rolloutFolder,
+            trust: 'bundled',
+          });
+        } catch (error) {
+          automaticAdmissionPreparationFailed = true;
+          console.warn('[od-next-rollout] automatic strategy package preparation failed; using ordinary default', error);
+        }
+      }
+      const rolloutPlugin = rolloutResolved?.ok ? rolloutResolved.record : null;
+      let rolloutVersions: Awaited<ReturnType<typeof ensureDetectedRuntimeVersions>> | null = null;
+      let rolloutCapability: ReturnType<typeof resolveBundledOdNextRuntimeCapability> | null = null;
+      let advertisedCapabilityGap: string[] = [];
+      if (routeApplicability === 'eligible' && rolloutPlugin) {
+        try {
+          if (effectiveAgentId) {
+            const agentCliEnv = agentCliEnvForAgent(
+              (rolloutAppConfig as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
+              effectiveAgentId,
+            );
+            // Both probes read the same resolved launch path. The `--version`
+            // read establishes invocability; the `--help` read establishes
+            // which optional flags this installed build advertises. OD Next
+            // needs both, because the fixture registry below only proves what
+            // the runtime *path* can do, not what the user's build exposes.
+            const [versions, advertised] = await Promise.all([
+              ensureDetectedRuntimeVersions(effectiveAgentId, agentCliEnv),
+              ensureDetectedRuntimeCapabilities(effectiveAgentId, agentCliEnv),
+            ]);
+            rolloutVersions = versions;
+            advertisedCapabilityGap = odNextAdvertisedCapabilityGap({
+              agentId: effectiveAgentId,
+              advertised,
+            });
+          }
+          rolloutCapability = effectiveAgentId
+            ? resolveBundledOdNextRuntimeCapability({
+                agentId: effectiveAgentId,
+                ...(rolloutVersions?.agentCliVersion
+                  ? { agentCliVersion: rolloutVersions.agentCliVersion }
+                  : {}),
+                ...(rolloutVersions?.runtimeCompanionName
+                  ? { runtimeCompanionName: rolloutVersions.runtimeCompanionName }
+                  : {}),
+                ...(rolloutVersions?.runtimeCompanionVersion
+                  ? { runtimeCompanionVersion: rolloutVersions.runtimeCompanionVersion }
+                  : {}),
+              })
+            : null;
+        } catch (error) {
+          automaticAdmissionPreparationFailed = true;
+          console.warn('[od-next-rollout] automatic capability preparation failed; using ordinary default', error);
+        }
+      }
+      const nativeSubagents = rolloutCapability?.snapshot?.nativeSubagents;
+      const runtimeCapabilityVerified = Boolean(
+        (rolloutVersions as ({ invocable?: boolean } | null))?.invocable === true
+        && rolloutCapability?.reason === 'capability_resolved'
+        && rolloutCapability.snapshot?.nativeSessionContinuation.support === 'verified'
+        && nativeSubagents?.support === 'verified'
+        && (nativeSubagents.evidenceLevel === 'L2' || nativeSubagents.evidenceLevel === 'L3')
+        && advertisedCapabilityGap.length === 0
+      );
+      // An installed CLI that does not advertise what OD Next will demand at
+      // launch must lose admission here, not fail the user's Run at spawn.
+      const advertisedCapabilityReason = advertisedCapabilityGap.length > 0
+        ? 'advertised_capability_missing'
+        : null;
+      strategyRolloutDecision = evaluateOdNextRollout({
+        policy: rolloutPolicy,
+        assignmentIdentity: `${requestBody.projectId}:${snapshotConversationId ?? ''}`,
+        taskType: rolloutTaskType,
+        agentId: effectiveAgentId,
+        agentVersion: rolloutVersions?.agentCliVersion ?? null,
+        sourceKind: rolloutPlugin?.sourceKind ?? null,
+        runtimeCapabilityVerified,
+        runtimeCapabilityReason: advertisedCapabilityReason
+          ?? rolloutCapability?.reason
+          ?? 'runtime_out_of_scope',
+        stoppedMode: readOdNextRolloutStop(db)?.mode ?? null,
+        routeApplicability,
+      });
+      if (
+        automaticAdmissionPreparationFailed
+        && strategyRolloutDecision.effectiveMode === 'active'
+      ) {
+        strategyRolloutDecision = automaticOdNextFallbackDecision(
+          strategyRolloutDecision,
+          'od_next_rollout_prestart_preparation_failed',
+        );
+      }
+      if (strategyRolloutDecision.effectiveMode === 'active') {
+        rolloutCapabilitySnapshot = rolloutCapability?.snapshot ?? null;
+      }
+      console.info('[od-next-rollout]', {
+        decisionClass: strategyRolloutDecision.decisionClass,
+        requestedMode: strategyRolloutDecision.requestedMode,
+        effectiveMode: strategyRolloutDecision.effectiveMode,
+        taskType: strategyRolloutDecision.taskType,
+        agentId: effectiveAgentId,
+        agentVersion: rolloutVersions?.agentCliVersion ?? null,
+        sourceKind: rolloutPlugin?.sourceKind ?? null,
+        assignmentClass: strategyRolloutDecision.eligible ? 'included' : 'not_included',
+        primaryReasonCode: strategyRolloutDecision.primaryReasonCode,
+        ...(advertisedCapabilityGap.length > 0
+          ? { advertisedCapabilityGap }
+          : {}),
+      });
+      if (!explicitExecutablePlugin) {
+        const projectRow = rolloutProject;
         const hasPin =
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
-        if (!hasPin) {
-          const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(
-            toScenarioProjectMetadata(projectRow?.metadata),
-          );
+        if (strategyRolloutDecision?.effectiveMode === 'active') {
+          runResolveBody = {
+            ...requestBody,
+            pluginId: 'od-next-strategy',
+            appliedPluginSnapshotId: undefined,
+          };
+        } else if (!hasPin) {
+          const fallbackPluginId = defaultPluginId;
           if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
             runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
+            synthesizedAutomaticDefault = true;
           }
         }
       }
+      const activatingStrategy = strategyRolloutDecision?.effectiveMode === 'active'
+        && runResolveBody.pluginId === 'od-next-strategy'
+        && rolloutPlugin;
       // Authorize the final plugin id, not only the literal request field.
       // Project-kind fallback may synthesize a pluginId, and it must not gain
       // a bypass around the same scoped catalog resolver.
       if (
         typeof runResolveBody.pluginId === 'string'
         && runResolveBody.pluginId.length > 0
+        && !activatingStrategy
         && ctx.plugins.authorizePluginRequest
         && !await ctx.plugins.authorizePluginRequest(
           req,
@@ -1368,22 +2157,75 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       } catch (err) {
         return res.status(500).json({ error: String(err) });
       }
+      if (!explicitUserPlugin && strategyRolloutDecision?.effectiveMode === 'active') {
+        automaticOrdinaryFallbackPluginId = defaultPluginId;
+        const fallbackBody = !projectHasExplicitPin && defaultPluginId
+          && getInstalledPlugin(db, defaultPluginId)
+          ? { ...requestBody, pluginId: defaultPluginId }
+          : requestBody;
+        resolveAutomaticOrdinaryFallback = () => resolvePluginSnapshot({
+          db,
+          body: fallbackBody,
+          projectId: requestBody.projectId as string,
+          conversationId: snapshotConversationId,
+          registry: registryView,
+          connectorProbe: buildConnectorProbe(connectorService),
+          requireSnapshotProjectMatch: true,
+          ...(defaultPluginId
+            ? {
+                projectBinding: {
+                  provenance: 'automatic_default' as const,
+                  taskProfile: verifiedScenarioBinding?.taskProfile
+                    ?? automaticScenarioTaskProfile({
+                      metadata: rolloutProject?.metadata as ContractProjectMetadata,
+                      pluginId: defaultPluginId,
+                    }),
+                },
+              }
+            : {}),
+        });
+      }
       const resolved = resolvePluginSnapshot({
         db,
         body: runResolveBody,
         projectId: requestBody.projectId,
-        conversationId: typeof requestBody.conversationId === 'string'
-          ? requestBody.conversationId
-          : null,
+        conversationId: snapshotConversationId,
         registry: registryView,
         connectorProbe: buildConnectorProbe(connectorService),
         requireSnapshotProjectMatch: true,
+        ...(!activatingStrategy && !explicitExecutablePlugin
+          && (projectPinIsAutomaticDefault || synthesizedAutomaticDefault)
+          && defaultPluginId
+          ? {
+              projectBinding: {
+                provenance: 'automatic_default' as const,
+                taskProfile: verifiedScenarioBinding?.taskProfile
+                  ?? automaticScenarioTaskProfile({
+                    metadata: rolloutProject?.metadata as ContractProjectMetadata,
+                    pluginId: defaultPluginId,
+                  }),
+              },
+            }
+          : {}),
+        ...(activatingStrategy && strategyRolloutDecision?.taskType
+          ? {
+              internalStrategyActivation: {
+                taskType: strategyRolloutDecision.taskType,
+                plugin: rolloutPlugin,
+              },
+            }
+          : {}),
       });
       if (resolved && !resolved.ok) {
-        if (!explicitPlugin) {
+        if (!explicitExecutablePlugin) {
           console.warn(
             `[plugins] default-scenario fallback skipped for run on project ${requestBody.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
           );
+          if (strategyRolloutDecision?.effectiveMode === 'active') {
+            automaticSnapshotPreparationError = new Error(
+              `OD Next snapshot preparation failed: ${resolved.body?.error?.code ?? 'unknown'}`,
+            );
+          }
         } else {
           return res.status(resolved.status).json(resolved.body);
         }
@@ -1396,9 +2238,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
       ...(effectiveAgentId ? { agentId: effectiveAgentId } : {}),
-      // Always overwrite the untrusted HTTP field, including for an unbound
-      // project. The absence of a persisted binding is itself authoritative.
+      // Always replace any untrusted request field, including with null for an
+      // unbound project.
       workspaceScope: preparedWorkspaceScope,
+      ...(strategyRolloutDecision ? { strategyRolloutDecision } : {}),
+      ...(strategyRolloutDecision?.effectiveMode === 'active' && rolloutCapabilitySnapshot
+        ? { runtimeCapabilitySnapshot: rolloutCapabilitySnapshot }
+        : {}),
     };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
@@ -1410,6 +2256,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ).trim();
         if (renderedQuery.length > 0) meta.message = renderedQuery;
       }
+    }
+    if (clarificationContinuation) {
+      applyClarificationContinuationMeta(meta, clarificationContinuation);
+      meta.odNextTaskInputSnapshot = design.runs.get(
+        clarificationContinuation.sourceRunId,
+      )?.odNextTaskInputSnapshot ?? null;
     }
     let runProject: ProjectRecord | null = null;
     if (typeof meta.projectId === 'string' && meta.projectId) {
@@ -1771,16 +2623,369 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         updateProject(db, meta.projectId, {});
       }
     };
-    const isRunActiveForAssistantClaim = (runId: string): boolean => {
-      const existingRun = design.runs.get(runId);
-      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
+    const fallbackAutomaticBeforeStart = async (error: unknown): Promise<boolean> => {
+      if (
+        !strategyRolloutDecision
+        || strategyRolloutDecision.effectiveMode !== 'active'
+        || !resolveAutomaticOrdinaryFallback
+      ) return false;
+      const provisionalSnapshot = resolvedSnapshot;
+      if (provisionalSnapshot?.created === true) {
+        if (!removeProvisionalAutomaticSnapshot(db, provisionalSnapshot)) {
+          throw new Error(
+            'Automatic strategy snapshot became referenced before Run claim; refusing fallback cleanup.',
+          );
+        }
+        resolvedSnapshot = null;
+      }
+      if (
+        automaticOrdinaryFallbackPluginId
+        && ctx.plugins.authorizePluginRequest
+        && !await ctx.plugins.authorizePluginRequest(
+          req,
+          res,
+          automaticOrdinaryFallbackPluginId,
+        )
+      ) return false;
+
+      const fallbackResolved = resolveAutomaticOrdinaryFallback();
+      if (fallbackResolved && !fallbackResolved.ok) {
+        console.warn(
+          `[od-next-rollout] ordinary fallback snapshot unavailable for project ${String(meta.projectId)}: ${fallbackResolved.body.error.code}`,
+        );
+        resolvedSnapshot = null;
+      } else {
+        resolvedSnapshot = fallbackResolved;
+      }
+      strategyRolloutDecision = automaticOdNextFallbackDecision(
+        strategyRolloutDecision,
+        'od_next_rollout_prestart_preparation_failed',
+      );
+      rolloutCapabilitySnapshot = null;
+      meta.strategyRolloutDecision = strategyRolloutDecision;
+      delete meta.runtimeCapabilitySnapshot;
+      delete meta.odNextTaskInputSnapshot;
+      delete meta.appliedPluginSnapshotId;
+      delete meta.pluginId;
+      if (typeof requestBody.message === 'string') {
+        meta.message = requestBody.message;
+      } else {
+        delete meta.message;
+      }
+      if (resolvedSnapshot?.ok) {
+        meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
+        meta.pluginId = resolvedSnapshot.snapshot.pluginId;
+        if (typeof meta.message !== 'string' || meta.message.trim().length === 0) {
+          const renderedQuery = renderPluginBriefTemplate(
+            resolvedSnapshot.snapshot.query ?? '',
+            resolvedSnapshot.snapshot.inputs,
+          ).trim();
+          if (renderedQuery.length > 0) meta.message = renderedQuery;
+        }
+      }
+      if (runUserSeed) {
+        runUserSeed.turnMetadata = seededUserMessageTurnMetadataFields(
+          meta,
+          resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
+        );
+      }
+      const fallbackFingerprintMeta = { ...meta };
+      delete fallbackFingerprintMeta.strategyRolloutDecision;
+      delete fallbackFingerprintMeta.runtimeCapabilitySnapshot;
+      meta.requestFingerprint = runRequestFingerprint(
+        fallbackFingerprintMeta,
+        resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
+      );
+      console.warn(
+        `[od-next-rollout] automatic preparation failed before Run claim; using ordinary default: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return true;
     };
-    meta.requestFingerprint = runRequestFingerprint(
-      meta,
-      resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
-    );
-    const creation = design.runs.createOrReuse(meta);
-    if (creation.kind === 'conflict') {
+    if (
+      automaticSnapshotPreparationError
+      && !await fallbackAutomaticBeforeStart(automaticSnapshotPreparationError)
+    ) return;
+    let frozenSkillPackage: FrozenSkillPackageV1 | undefined;
+    if (
+      !clarificationContinuation
+      && !idempotentStrategyRetry
+      && strategyRolloutDecision?.effectiveMode === 'active'
+    ) {
+      // Everything the session selected inside this task type — an @-mentioned
+      // Skill, an official example card — is frozen into one package here and
+      // read back as `session_skills/user_selected_skills`. A task with no
+      // selection still persists the empty package, which is what keeps
+      // restart/continuation identity deterministic.
+      const runProjectMetadata =
+        runProject?.metadata as ContractProjectMetadata | null | undefined;
+      frozenSkillPackage = await captureOdNextSessionSkillPackage({
+        metadata: runProjectMetadata,
+        getLocalPluginBySource: ctx.plugins.getLocalPluginBySource,
+        selection: {
+          // Mirror the ordinary route's own resolution order
+          // (`composeDaemonSystemPrompt`): the request's Skill, else the one
+          // persisted on the project, plus this turn's @-mentions.
+          skillId: typeof requestBody.skillId === 'string' && requestBody.skillId
+            ? requestBody.skillId
+            : runProject?.skillId,
+          skillIds: requestBody.skillIds,
+        },
+        listSkillCatalog: () => ctx.resources.listAllSkillLikeEntries(
+          resolveSkillCatalogScope({
+            metadata: runProjectMetadata,
+            workspaceBinding: typeof requestBody.projectId === 'string' && requestBody.projectId
+              ? ctx.projectStore?.getWorkspaceProjectByProjectId(db, requestBody.projectId)
+              : null,
+          }) ?? undefined,
+        ),
+      });
+    }
+    const fingerprintSnapshot = clarificationTask
+      ? getSnapshot(db, clarificationTask.snapshotId)
+      : resolvedSnapshot?.ok
+        ? resolvedSnapshot.snapshot
+        : null;
+    const fingerprintMeta = { ...meta };
+    delete fingerprintMeta.strategyRolloutDecision;
+    delete fingerprintMeta.runtimeCapabilitySnapshot;
+    meta.requestFingerprint = runRequestFingerprint(fingerprintMeta, fingerprintSnapshot);
+    let createdTaskInputSnapshot: OdNextTaskInputSnapshotDescriptor | null = null;
+    let preparedPromptBundleText: string | null = null;
+    if (
+      !clarificationContinuation
+      && !idempotentStrategyRetry
+      && strategyRolloutDecision?.effectiveMode === 'active'
+    ) {
+      const taskType = strategyRolloutDecision.taskType;
+      if (!taskType || !meta.agentId) {
+        return sendApiError(
+          res,
+          400,
+          'OD_NEXT_INPUT_SNAPSHOT_INVALID',
+          'OD Next task inputs require a resolved task type and selected agent.',
+        );
+      }
+      // This snapshot is prepared before the SQLite claim so prompt assembly
+      // never runs inside the claim transaction. Use an attempt-unique owner:
+      // a daemon crash can leave an orphaned immutable directory, but a retry
+      // must never collide with that orphan. Concurrent duplicate requests
+      // likewise prepare independently; the losing claim removes its own
+      // provisional snapshot below.
+      const taskExecutionId = `odnext_${randomUUID().replaceAll('-', '')}`;
+      try {
+        const projectRoot = resolveProjectDir(
+          PROJECTS_DIR,
+          meta.projectId!,
+          runProject?.metadata,
+        );
+        const contextValue = requestBody.context
+          && typeof requestBody.context === 'object'
+          && !Array.isArray(requestBody.context)
+            ? requestBody.context as Record<string, unknown>
+            : {};
+        const mcpIds = Array.isArray(contextValue.mcpServerIds)
+          ? contextValue.mcpServerIds.filter((value) => typeof value === 'string')
+          : [];
+        const runToolServers = toolBundle.bundle
+          && typeof toolBundle.bundle === 'object'
+          && Array.isArray((toolBundle.bundle as { mcpServers?: unknown }).mcpServers)
+            ? (toolBundle.bundle as { mcpServers: unknown[] }).mcpServers
+            : [];
+        const taskConfiguration = buildOdNextTaskConfigurationV1({
+          taskType,
+          locale: meta.locale,
+          selectedAgentId: meta.agentId,
+          sessionMode: meta.sessionMode,
+          model: meta.model,
+          reasoning: meta.reasoning,
+          serviceTier: meta.serviceTier,
+          mediaExecution: mediaExecution.policy,
+          route: 'full_plan',
+          mode: 'unresolved',
+        });
+        createdTaskInputSnapshot = createOdNextTaskInputSnapshot({
+          snapshotsRoot: path.join(RUNTIME_DATA_DIR, 'od-next-task-inputs'),
+          taskExecutionId,
+          taskConfiguration,
+          projectRoot,
+          projectAttachments: Array.isArray(requestBody.attachments)
+            ? requestBody.attachments.filter(
+                (value): value is string => typeof value === 'string' && value.length > 0,
+              )
+            : [],
+          uploadRoot: UPLOAD_DIR,
+          imagePaths: Array.isArray(requestBody.imagePaths)
+            ? requestBody.imagePaths.filter(
+                (value): value is string => typeof value === 'string' && value.length > 0,
+              )
+            : [],
+          commentCount: Array.isArray(requestBody.commentAttachments)
+            ? requestBody.commentAttachments.length
+            : 0,
+          linkedDirectoryCount: Array.isArray(runProject?.metadata?.linkedDirs)
+            ? runProject.metadata.linkedDirs.length
+            : 0,
+          mcpServerCount: mcpIds.length + runToolServers.length,
+        });
+        meta.odNextTaskInputSnapshot = createdTaskInputSnapshot;
+        const preparedPrompt = await prepareOdNextInitialPromptBundle({
+          meta,
+          frozenSkillPackage: frozenSkillPackage!,
+          taskInputSnapshot: createdTaskInputSnapshot,
+        });
+        preparedPromptBundleText = preparedPrompt.text;
+      } catch (error) {
+        removeOdNextTaskInputSnapshot(createdTaskInputSnapshot);
+        createdTaskInputSnapshot = null;
+        preparedPromptBundleText = null;
+        frozenSkillPackage = undefined;
+        if (!await fallbackAutomaticBeforeStart(error)) return;
+      }
+    }
+    let preparedRun;
+    try {
+      preparedRun = internalRuns.prepare({
+        meta,
+        ...((runUserSeed || clarificationTask || strategyRolloutDecision?.effectiveMode === 'active')
+          ? {
+              beforeClaimCommit: (candidate) => {
+                if (!clarificationContinuation && createdTaskInputSnapshot) {
+                  candidate.odNextTaskInputSnapshot = createdTaskInputSnapshot;
+                  // `createOrReuse` persisted the optimistic Run before the
+                  // claim hook ran. Persist the daemon-owned descriptor now,
+                  // while the frozen bytes already exist and before the
+                  // assistant/task claim can commit, so daemon restart never
+                  // falls back to mutable request paths.
+                  design.runs.persistState(candidate);
+                }
+                seedRunUserMessage();
+                if (clarificationContinuation && !clarificationContinuation.retry) {
+                  beginStrategyClarification(db, {
+                    taskExecutionId: clarificationContinuation.task.taskExecutionId,
+                    sourceRunId: clarificationContinuation.sourceRunId,
+                    nextRunId: candidate.id,
+                    answer: clarificationContinuation.answer,
+                  });
+                }
+                if (
+                  !clarificationContinuation
+                  && strategyRolloutDecision?.effectiveMode === 'active'
+                  && resolvedSnapshot?.ok
+                  && resolvedSnapshot.snapshot.strategy
+                ) {
+                  try {
+                    const initialTaskInputSnapshot = createdTaskInputSnapshot;
+                    const taskExecutionId = initialTaskInputSnapshot?.taskExecutionId;
+                    if (!taskExecutionId || !preparedPromptBundleText || !frozenSkillPackage) {
+                      throw new OdNextTaskInputSnapshotError(
+                        'OD Next immutable inputs and Prompt Bundle were not prepared before claim.',
+                      );
+                    }
+                    createStrategyTaskExecution(db, {
+                      taskExecutionId,
+                      projectId: candidate.projectId!,
+                      conversationId: candidate.conversationId!,
+                      snapshotId: resolvedSnapshot.snapshotId,
+                      selectedAgentId: candidate.agentId!,
+                      initialRunId: candidate.id,
+                      frozenSkillPackage,
+                      promptBundleText: preparedPromptBundleText,
+                      taskInputManifestSha256: initialTaskInputSnapshot.manifestSha256,
+                    });
+                    // The route stays unlocked through the request turn so the
+                    // main Agent can choose Direct Edit or Full Plan from the
+                    // request itself (product spec 3.1). The daemon cannot make
+                    // that call here: four of the five eligibility facts depend
+                    // on reading what the user asked for, which only happens
+                    // once the Bundle reaches the Agent.
+                    const preparedStrategy = prepareStrategyIntake(db, {
+                      taskExecutionId,
+                      intake: {
+                        inputRefs: [{ id: 'request', accessible: true }],
+                        selectedAgentAvailable: true,
+                        nativeContinuation: strategyRolloutDecision.syntheticCanary
+                          ? 'verified'
+                          : rolloutCapabilitySnapshot?.nativeSessionContinuation.support
+                            ?? 'unknown',
+                        taskProfileAvailable: true,
+                        dependencies: [],
+                      },
+                    });
+                    if (!preparedStrategy.ok) {
+                      throw new Error(
+                        `OD Next rollout preflight blocked: ${preparedStrategy.reasonCodes.join(',')}`,
+                      );
+                    }
+                  } catch (error) {
+                    throw new AutomaticOdNextPreparationError(error);
+                  }
+                }
+              },
+            }
+          : {}),
+        resume: {
+          requested: requestBody.resume === true,
+          canResume: (candidate) =>
+            candidate.status === 'failed'
+            && candidate.agentId === 'amr'
+            && (
+              candidate.failureAction === 'recharge'
+              || candidate.errorCode === 'AMR_INSUFFICIENT_BALANCE'
+            ),
+        },
+      });
+    } catch (error) {
+      removeOdNextTaskInputSnapshot(createdTaskInputSnapshot);
+      createdTaskInputSnapshot = null;
+      if (error instanceof AutomaticOdNextPreparationError) {
+        preparedPromptBundleText = null;
+        frozenSkillPackage = undefined;
+        if (!await fallbackAutomaticBeforeStart(error.preparationCause)) return;
+        preparedRun = internalRuns.prepare({
+          meta,
+          ...(runUserSeed ? { beforeClaimCommit: () => seedRunUserMessage() } : {}),
+          resume: {
+            requested: requestBody.resume === true,
+            canResume: (candidate) =>
+              candidate.status === 'failed'
+              && candidate.agentId === 'amr'
+              && (
+                candidate.failureAction === 'recharge'
+                || candidate.errorCode === 'AMR_INSUFFICIENT_BALANCE'
+              ),
+          },
+        });
+      } else {
+      if (error instanceof OdNextTaskInputSnapshotError) {
+        return sendApiError(res, 400, error.code, error.message);
+      }
+      if (error instanceof InvalidStrategyTaskRecordError) {
+        return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
+      }
+      if (clarificationTask) {
+        return sendApiError(
+          res,
+          409,
+          'STRATEGY_TASK_TRANSITION_CONFLICT',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      throw error;
+      }
+    }
+    if (preparedRun.kind !== 'ready') {
+      removeOdNextTaskInputSnapshot(createdTaskInputSnapshot);
+      if (
+        resolvedSnapshot?.created === true
+        && resolvedSnapshot.snapshot.pluginId === 'od-next-strategy'
+        && !removeProvisionalAutomaticSnapshot(db, resolvedSnapshot)
+      ) {
+        console.warn(
+          `[od-next-rollout] retained referenced strategy snapshot ${resolvedSnapshot.snapshotId} after non-ready Run preparation`,
+        );
+      }
+    }
+    if (preparedRun.kind === 'idempotency_conflict') {
       return sendApiError(
         res,
         409,
@@ -1788,105 +2993,92 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'clientRequestId is already associated with a different logical run request',
       );
     }
-    const run = creation.run;
+    if (preparedRun.kind === 'ready' && preparedRun.creationKind === 'created') {
+      const blockingRun = activeRunBlockingDesignSystemEnrichment(design.runs, {
+        conversationId: meta.conversationId,
+        analyticsHints: meta.analyticsHints,
+        excludeRunId: preparedRun.run.id,
+      });
+      if (blockingRun) {
+        design.runs.drop(preparedRun.run);
+        return sendApiError(
+          res,
+          409,
+          'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
+          'a design-system enrichment run is already active for this conversation',
+          {
+            details: {
+              kind: 'design_system_enrichment_in_progress',
+              runId: blockingRun.id,
+              conversationId: blockingRun.conversationId ?? '',
+            },
+          },
+        );
+      }
+    }
+    const run = preparedRun.run;
     const analyticsAttributionMismatch =
-      creation.kind === 'reused'
+      (preparedRun.kind !== 'ready' || preparedRun.creationKind === 'reused')
       && externalPluginAttributionMismatch(
         run.externalPluginAnalytics,
         meta.analyticsHints,
       );
-    let resumed = false;
-    if (creation.kind === 'reused') {
-      const resumeRequested = requestBody.resume === true;
-      const rechargeFailure =
-        run.status === 'failed'
-        && run.agentId === 'amr'
-        && (
-          run.failureAction === 'recharge'
-          || run.errorCode === 'AMR_INSUFFICIENT_BALANCE'
-        );
-      if (!resumeRequested) {
-        return res.status(202).json({
-          runId: run.id,
-          conversationId: run.conversationId ?? null,
-          assistantMessageId: run.assistantMessageId ?? null,
-          clientRequestId: run.clientRequestId ?? null,
-          reused: true,
-          resumed: false,
-          ...(analyticsAttributionMismatch
-            ? { analyticsAttributionMismatch: true }
-            : {}),
-          ...(run.appliedPluginSnapshotId
-            ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
-            : {}),
-          ...(run.pluginId ? { pluginId: run.pluginId } : {}),
-        });
-      }
-      if (!rechargeFailure) {
-        return sendApiError(
-          res,
-          409,
-          'RUN_NOT_RECHARGE_RESUMABLE',
-          'Only a failed Open Design Cloud run waiting for recharge can be resumed with the same request',
-        );
-      }
-      // Claim BEFORE arming the restart. On a conflict the reused run stays
-      // terminal + resumable (never dropped) and the request is rejected —
-      // the claim writes the post-restart `queued` intent so the message row
-      // does not stay terminal while the run is being resumed (#6418).
-      const resumeClaim = pinAssistantMessageOnRunCreate(db, run, {
-        status: 'queued',
-        isRunActive: isRunActiveForAssistantClaim,
-      });
-      if (!resumeClaim.ok) {
-        return sendApiError(
-          res,
-          409,
-          'RUN_IN_PROGRESS',
-          'assistantMessageId is already bound to an active run',
-        );
-      }
-      if (!design.runs.prepareRestart(run)) {
-        return sendApiError(
-          res,
-          409,
-          'RUN_NOT_RECHARGE_RESUMABLE',
-          'Only a failed Open Design Cloud run waiting for recharge can be resumed with the same request',
-        );
-      }
-      resumed = true;
-    }
-    // Atomic ownership claim runs BEFORE any message seeding: a rejected run
-    // never leaves an orphan user turn (nettee on #6418). Only a freshly
-    // created run is dropped on failure — a resumed loser is the client's own
-    // idempotent run and must survive.
-    if (creation.kind === 'created') {
-      let claimed: { ok: boolean; reason?: 'active' | 'scope' };
+    if (preparedRun.kind === 'reused') {
+      let strategyTask;
       try {
-        const claimOptions = runUserSeed
-          ? {
-              beforeClaimCommit: () => {
-                seedRunUserMessage();
-              },
-              isRunActive: isRunActiveForAssistantClaim,
-            }
-          : { isRunActive: isRunActiveForAssistantClaim };
-        claimed = pinAssistantMessageOnRunCreate(db, run, claimOptions);
-      } catch (err) {
-        // Never let an unclaimed run start.
-        design.runs.drop(run);
-        throw err;
+        const task = strategyTaskForRun(run);
+        strategyTask = task ? projectStrategyTask(task, run.id) : null;
+      } catch (error) {
+        if (
+          error instanceof InvalidFrozenSkillPackageError
+          || error instanceof InvalidStrategyTaskRecordError
+        ) {
+          return sendApiError(
+            res,
+            409,
+            error instanceof InvalidFrozenSkillPackageError
+              ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+              : 'OD_NEXT_TASK_STATE_INVALID',
+            error.message,
+          );
+        }
+        throw error;
       }
-      if (!claimed.ok) {
-        design.runs.drop(run);
-        return sendApiError(
-          res,
-          409,
-          'RUN_IN_PROGRESS',
-          'assistantMessageId is already bound to an active run',
-        );
-      }
+      return res.status(202).json({
+        runId: run.id,
+        conversationId: run.conversationId ?? null,
+        assistantMessageId: run.assistantMessageId ?? null,
+        clientRequestId: run.clientRequestId ?? null,
+        reused: true,
+        resumed: false,
+        ...(analyticsAttributionMismatch
+          ? { analyticsAttributionMismatch: true }
+          : {}),
+        ...(run.appliedPluginSnapshotId
+          ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
+          : {}),
+        ...(run.pluginId ? { pluginId: run.pluginId } : {}),
+        ...(strategyTask ? { taskExecutionId: strategyTask.taskExecutionId } : {}),
+        ...(strategyTask ? { strategyTask } : {}),
+      });
     }
+    if (preparedRun.kind === 'resume_not_allowed') {
+      return sendApiError(
+        res,
+        409,
+        'RUN_NOT_RECHARGE_RESUMABLE',
+        'Only a failed OpenDesign Cloud run waiting for recharge can be resumed with the same request',
+      );
+    }
+    if (preparedRun.kind === 'assistant_claim_conflict') {
+      return sendApiError(
+        res,
+        409,
+        'RUN_IN_PROGRESS',
+        'assistantMessageId is already bound to an active run',
+      );
+    }
+    const resumed = preparedRun.resumed;
     const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
     if (requestAnalyticsContext?.clientType === 'external_mcp') {
       run.clientType = 'external_mcp';
@@ -1896,33 +3088,67 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const ua = String(req.get('user-agent') ?? '');
       run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
     }
-    if (resolvedSnapshot?.ok) {
+    if (resolvedSnapshot?.ok || clarificationTask) {
       try {
-        const { linkSnapshotToRun } = await import('../plugins/snapshots.js');
-        linkSnapshotToRun(db, resolvedSnapshot.snapshotId, run.id);
+        linkSnapshotToRun(
+          db,
+          clarificationTask?.snapshotId ?? resolvedSnapshot!.snapshotId,
+          run.id,
+        );
       } catch {
         // Linking is best-effort here; in-memory run still carries the id.
       }
     }
+    let strategyTask;
+    try {
+      const task = strategyTaskForRun(run);
+      strategyTask = task ? projectStrategyTask(task, run.id) : null;
+    } catch (error) {
+      if (
+        !(error instanceof InvalidFrozenSkillPackageError)
+        && !(error instanceof InvalidStrategyTaskRecordError)
+      ) throw error;
+      design.runs.fail(
+        run,
+        error instanceof InvalidFrozenSkillPackageError
+          ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+          : 'OD_NEXT_TASK_STATE_INVALID',
+        error.message,
+      );
+      return res.status(202).json({
+        runId: run.id,
+        conversationId: run.conversationId ?? null,
+        assistantMessageId: run.assistantMessageId ?? null,
+        clientRequestId: run.clientRequestId ?? null,
+        reused: false,
+        resumed: false,
+      });
+    }
+    if (strategyTask) run.strategyTask = strategyTask;
     const body = {
       runId: run.id,
       conversationId: run.conversationId ?? null,
       assistantMessageId: run.assistantMessageId ?? null,
       clientRequestId: run.clientRequestId ?? null,
-      reused: creation.kind === 'reused',
+      reused: preparedRun.creationKind === 'reused',
       resumed,
       ...(analyticsAttributionMismatch
         ? { analyticsAttributionMismatch: true }
         : {}),
-      ...(resolvedSnapshot?.ok
-        ? {
-            appliedPluginSnapshotId: resolvedSnapshot.snapshotId,
-            pluginId: resolvedSnapshot.snapshot.pluginId,
-          }
+      ...(run.appliedPluginSnapshotId
+        ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
         : {}),
+      ...(run.pluginId ? { pluginId: run.pluginId } : {}),
+      ...(strategyTask ? { taskExecutionId: strategyTask.taskExecutionId } : {}),
+      ...(strategyTask ? { strategyTask } : {}),
     };
     res.status(202).json(body);
-    if (!resumed && resolvedSnapshot?.ok && resolvedSnapshot.snapshot.pipeline) {
+    if (
+      !clarificationTask
+      && !resumed
+      && resolvedSnapshot?.ok
+      && resolvedSnapshot.snapshot.pipeline
+    ) {
       firePipelineForRun({
         run,
         snapshot: resolvedSnapshot.snapshot,
@@ -1946,7 +3172,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ? { byokProvider: requestBody.byokProvider }
         : {}),
     };
-    design.runs.start(run, () => startChatRun(executionMeta, run));
+    internalRuns.start(run, () => startChatRun(executionMeta, run));
 
     const reqBody = requestBody;
     const analyticsHints =
@@ -2201,6 +3427,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
         ...configureGlobals,
+        ...odNextRolloutAnalyticsProperties(strategyRolloutDecision),
         runtime_type: runtimeTypeForRunAnalytics({
           derived: configureGlobals.runtime_type,
           hint: analyticsHints.runtimeType,
@@ -2296,7 +3523,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                 run.externalPluginAnalytics.briefState,
               generation_slo_window_ms:
                 run.externalPluginAnalytics.generationSloWindowMs,
-              deduplicated: creation.kind === 'reused',
+              deduplicated: preparedRun.creationKind === 'reused',
               resume: resumed,
               attempt_count: (run.manualResumeAttemptCount ?? 0) + 1,
               recharge_wait_duration_ms:
@@ -2463,11 +3690,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           runDesignSystemCreatedForRun(run);
         const toolStreamPreviewModuleCount = (): number =>
           runPreviewModuleCountForRun(run);
+        const toolStreamFilesWritten = (): number => runFilesWrittenForRun(run);
         let artifactCount: number;
         let artifactsCreated: number | undefined;
         let artifactsModified: number | undefined;
         let designSystemCreated: boolean;
         let previewModuleCount: number;
+        let filesWritten: number | undefined;
         let artifactDiff: RunArtifactDiff | undefined;
         const artifactOutcome = run.artifactOutcome;
         if (artifactOutcome) {
@@ -2476,6 +3705,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           artifactsModified = artifactOutcome.artifactsModified;
           designSystemCreated = artifactOutcome.designSystemCreated;
           previewModuleCount = artifactOutcome.previewModuleCount;
+          filesWritten = artifactOutcome.filesWritten;
           artifactDiff = artifactOutcome.diff;
         } else {
           const artifactBaseline = runArtifactBaselines.take(run.id);
@@ -2496,15 +3726,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               artifactsModified = diff.modified;
               designSystemCreated = diff.designSystemCreated;
               previewModuleCount = diff.previewModuleCount;
+              filesWritten = diff.filesWritten;
             } else {
               artifactCount = toolStreamArtifactCount();
               designSystemCreated = toolStreamDesignSystemCreated();
               previewModuleCount = toolStreamPreviewModuleCount();
+              filesWritten = toolStreamFilesWritten();
             }
           } else {
             artifactCount = toolStreamArtifactCount();
             designSystemCreated = toolStreamDesignSystemCreated();
             previewModuleCount = toolStreamPreviewModuleCount();
+            filesWritten = toolStreamFilesWritten();
           }
         }
         const touchedArtifactPaths = runTouchedArtifactPaths(run);
@@ -2589,6 +3822,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             ...(activationMilestones ? { $set_once: activationMilestones } : {}),
             model_id: finishedModelId,
             artifact_count: artifactCount,
+            // Finish-time observations live on the run object only after the
+            // physical run resolved; baseProps was frozen at creation, so
+            // these must be read live here or they never reach analytics.
+            ...(run.odNextDeviceShell
+              ? {
+                  od_next_device_platform: run.odNextDeviceShell.platform,
+                  od_next_device_platform_source: run.odNextDeviceShell.resolvedFrom,
+                  od_next_device_shell_present: run.odNextDeviceShell.shellPresent,
+                }
+              : {}),
+            ...(run.odNextLayoutPrimitives
+              ? { od_next_layout_primitives: run.odNextLayoutPrimitives }
+              : {}),
             ...(run.externalPluginAnalytics
               ? {
                   deliverable_valid: deliverable?.valid === true,
@@ -2607,6 +3853,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               : {}),
             ...(artifactsCreated !== undefined ? { artifacts_created: artifactsCreated } : {}),
             ...(artifactsModified !== undefined ? { artifacts_modified: artifactsModified } : {}),
+            ...(filesWritten !== undefined ? { files_written_count: filesWritten } : {}),
             asked_user_question: clarificationRequested,
             retry_attempt_count: run.retryAttemptCount ?? 0,
             retry_final_result: run.retryFinalResult ?? 'not_attempted',
@@ -2826,7 +4073,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'projectId is required when listing Workspace-bound runs',
       );
     }
-    const body = { runs: visibleRuns.map(design.runs.statusBody) };
+    const body = { runs: visibleRuns.map(statusWithStrategyTask) };
     res.json(body);
   });
 
@@ -2875,10 +4122,24 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   app.get('/api/runs/:id/result-package', async (req: ApiRequest, res: ApiResponse) => {
     const runId = routeParamId(req);
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
-    const run = design.runs.get(runId);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    const requestedRun = design.runs.get(runId);
+    let task;
+    try {
+      task = getStrategyTaskExecutionByRunId(db, runId);
+    } catch (error) {
+      if (error instanceof InvalidStrategyTaskRecordError) {
+        return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
+      }
+      if (error instanceof InvalidFrozenSkillPackageError) {
+        return sendApiError(res, 409, 'OD_NEXT_SKILL_SNAPSHOT_INVALID', error.message);
+      }
+      throw error;
+    }
+    const resultRunId = task?.terminalRunId ?? task?.latestRunId ?? runId;
+    const run = design.runs.get(resultRunId);
+    if (!requestedRun || !run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     if (!await authorizeRunProject(req, res, run, { mode: 'read' })) return;
-    const status = design.runs.statusBody(run);
+    const status = statusWithStrategyTask(run);
     const project = run.projectId ? toProjectRecord(getProject(db, run.projectId)) : null;
     let files: ProjectFileEntry[] = [];
     if (project) {
@@ -2940,6 +4201,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ...(status.error !== undefined ? { error: status.error } : {}),
         ...(status.errorCode !== undefined ? { errorCode: status.errorCode } : {}),
       },
+      ...(status.strategyTask ? { strategyTask: status.strategyTask } : {}),
       workspace: status.workspace ?? {
         storage: { kind: 'od-owned', baseDir: null },
         provenance: null,
@@ -2965,7 +4227,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     if (!await authorizeRunProject(req, res, run, { mode: 'read' })) return;
-    const status = design.runs.statusBody(run);
+    const status = statusWithStrategyTask(run);
     if (!design.runs.isTerminal(run.status)) {
       res.json(status);
       return;
@@ -3083,8 +4345,59 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       run,
       { mode: 'write', capability: 'writeFiles' },
     )) return;
-    const status = await design.runs.cancel(run, 'user_stop');
-    const body = { ok: true, run: status };
+    let task;
+    try {
+      task = getStrategyTaskExecutionByRunId(db, runId);
+    } catch (error) {
+      if (error instanceof InvalidStrategyTaskRecordError) {
+        return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
+      }
+      if (error instanceof InvalidFrozenSkillPackageError) {
+        return sendApiError(res, 409, 'OD_NEXT_SKILL_SNAPSHOT_INVALID', error.message);
+      }
+      throw error;
+    }
+    const activeRun = task?.activeRunId ? design.runs.get(task.activeRunId) : null;
+    let cancelRun = activeRun ?? run;
+    let taskForCancel = task;
+    if (taskForCancel && !['completed', 'blocked', 'canceled'].includes(taskForCancel.outcome)) {
+      let canceled = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const physicalRunId = taskForCancel.activeRunId ?? cancelRun.id;
+        try {
+          canceled = cancelStrategyTaskExecution(db, {
+            taskExecutionId: taskForCancel.taskExecutionId,
+            expectedRevision: taskForCancel.revision,
+          });
+          cancelRun = design.runs.get(physicalRunId) ?? cancelRun;
+          break;
+        } catch (error) {
+          if (!(error instanceof StrategyTaskTransitionConflictError)) throw error;
+          const latest = getStrategyTaskExecutionByRunId(db, cancelRun.id)
+            ?? getStrategyTaskExecutionByRunId(db, runId);
+          if (!latest) throw error;
+          taskForCancel = latest;
+          if (['completed', 'blocked', 'canceled'].includes(latest.outcome)) {
+            canceled = latest;
+            break;
+          }
+        }
+      }
+      if (!canceled || !['completed', 'blocked', 'canceled'].includes(canceled.outcome)) {
+        return sendApiError(
+          res,
+          409,
+          'STRATEGY_TASK_CANCEL_CONFLICT',
+          'strategy task changed while cancellation was being applied',
+        );
+      }
+      cancelRun.strategyTask = projectStrategyTask(canceled, cancelRun.id);
+    }
+    // Logical CAS wins before physical finish: the emitted end frame therefore
+    // carries the terminal task projection and can never advertise a running
+    // task after the cancel response already succeeded.
+    await design.runs.cancel(cancelRun, 'user_stop');
+    const body = { ok: true, run: statusWithStrategyTask(cancelRun) };
     res.json(body);
   });
 
@@ -3113,19 +4426,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         throw err;
       }
     }
-    const toolBundleSupport = validateRunToolBundleForAgent(
-      toolBundle.bundle,
-      typeof requestBody.agentId === 'string' ? getAgentDef(requestBody.agentId) : null,
-      {
-        deliveryTarget: runToolBundleDeliveryTargetForProject(
-          requestBody.projectId,
-          chatProject?.metadata,
-        ),
-      },
-    );
-    if (!toolBundleSupport.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
-    }
     // A chat run may only attach to a conversation owned by its own project.
     // Without this guard, pairing projectId=A with a conversationId owned by
     // project B runs in A's cwd but pins messages and the native session under
@@ -3148,7 +4448,41 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!authorization.ok) return;
       authorizedBoundMutation = authorization.authorizedBoundMutation;
     }
-    if (!hasCompleteByokOpenCodeConfig(requestBody)) {
+    let clarificationResolution;
+    try {
+      clarificationResolution = resolveClarificationContinuation(requestBody);
+    } catch (error) {
+      if (
+        error instanceof InvalidFrozenSkillPackageError
+        || error instanceof InvalidStrategyTaskRecordError
+      ) {
+        return sendApiError(
+          res,
+          409,
+          error instanceof InvalidFrozenSkillPackageError
+            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+            : 'OD_NEXT_TASK_STATE_INVALID',
+          error.message,
+        );
+      }
+      throw error;
+    }
+    if (clarificationResolution.kind === 'error') {
+      return sendApiError(
+        res,
+        clarificationResolution.status,
+        clarificationResolution.code,
+        clarificationResolution.message,
+      );
+    }
+    const clarificationContinuation = clarificationResolution.kind === 'continuation'
+      ? clarificationResolution.value
+      : null;
+    const clarificationTask = clarificationContinuation?.task ?? null;
+    if (!hasCompleteByokOpenCodeConfig({
+      ...requestBody,
+      ...(clarificationTask ? { agentId: clarificationTask.selectedAgentId } : {}),
+    })) {
       return sendApiError(
         res,
         400,
@@ -3161,10 +4495,27 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
       ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
-      // `withoutSensitiveRunInput` strips caller scope; initialize the
-      // server-owned value explicitly and replace it below for bound projects.
       workspaceScope: null,
     };
+    if (clarificationContinuation) {
+      applyClarificationContinuationMeta(meta, clarificationContinuation);
+      meta.odNextTaskInputSnapshot = design.runs.get(
+        clarificationContinuation.sourceRunId,
+      )?.odNextTaskInputSnapshot ?? null;
+    }
+    const toolBundleSupport = validateRunToolBundleForAgent(
+      toolBundle.bundle,
+      typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
+      {
+        deliveryTarget: runToolBundleDeliveryTargetForProject(
+          meta.projectId,
+          chatProject?.metadata,
+        ),
+      },
+    );
+    if (!toolBundleSupport.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
+    }
     // Mirror the POST /api/runs ownership check: the assistantMessageId must
     // reference an assistant message in THIS conversation, or the run mutates a
     // row it does not own via the id-only writers (#6418 review).
@@ -3229,15 +4580,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!preparedWorkspaceScope.ok) return;
       meta.workspaceScope = preparedWorkspaceScope.workspaceScope;
     }
+    const chatPluginId = clarificationTask?.strategyId
+      ?? (typeof requestBody.pluginId === 'string' ? requestBody.pluginId : null);
     if (
-      typeof requestBody.pluginId === 'string'
-      && requestBody.pluginId.length > 0
+      chatPluginId
       && ctx.plugins.authorizePluginRequest
-      && !await ctx.plugins.authorizePluginRequest(
-        req,
-        res,
-        requestBody.pluginId,
-      )
+      && !await ctx.plugins.authorizePluginRequest(req, res, chatPluginId)
     ) return;
     if (
       typeof meta.projectId === 'string'
@@ -3248,9 +4596,42 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         meta.appliedPluginSnapshotId,
       )
     ) return;
-    meta.requestFingerprint = runRequestFingerprint(meta);
-    const creation = design.runs.createOrReuse(meta);
-    if (creation.kind === 'conflict') {
+    meta.requestFingerprint = runRequestFingerprint(
+      meta,
+      clarificationContinuation?.snapshot,
+    );
+    let preparedRun;
+    try {
+      preparedRun = internalRuns.prepare({
+        meta,
+        ...(clarificationContinuation && !clarificationContinuation.retry
+          ? {
+              beforeClaimCommit: (candidate) => {
+                beginStrategyClarification(db, {
+                  taskExecutionId: clarificationContinuation.task.taskExecutionId,
+                  sourceRunId: clarificationContinuation.sourceRunId,
+                  nextRunId: candidate.id,
+                  answer: clarificationContinuation.answer,
+                });
+              },
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (error instanceof InvalidStrategyTaskRecordError) {
+        return sendApiError(res, 409, 'OD_NEXT_TASK_STATE_INVALID', error.message);
+      }
+      if (clarificationContinuation) {
+        return sendApiError(
+          res,
+          409,
+          'STRATEGY_TASK_TRANSITION_CONFLICT',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      throw error;
+    }
+    if (preparedRun.kind === 'idempotency_conflict') {
       return sendApiError(
         res,
         409,
@@ -3258,28 +4639,56 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'clientRequestId is already associated with a different logical run request',
       );
     }
-    const run = creation.run;
-    if (creation.kind === 'reused') {
+    if (preparedRun.kind === 'ready' && preparedRun.creationKind === 'created') {
+      const blockingRun = activeRunBlockingDesignSystemEnrichment(design.runs, {
+        conversationId: meta.conversationId,
+        analyticsHints: meta.analyticsHints,
+        excludeRunId: preparedRun.run.id,
+      });
+      if (blockingRun) {
+        design.runs.drop(preparedRun.run);
+        return sendApiError(
+          res,
+          409,
+          'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS',
+          'a design-system enrichment run is already active for this conversation',
+          {
+            details: {
+              kind: 'design_system_enrichment_in_progress',
+              runId: blockingRun.id,
+              conversationId: blockingRun.conversationId ?? '',
+            },
+          },
+        );
+      }
+    }
+    const run = preparedRun.run;
+    if (preparedRun.kind === 'reused') {
+      let strategyTask;
+      try {
+        const task = strategyTaskForRun(run);
+        strategyTask = task ? projectStrategyTask(task, run.id) : null;
+      } catch (error) {
+        if (
+          error instanceof InvalidFrozenSkillPackageError
+          || error instanceof InvalidStrategyTaskRecordError
+        ) {
+          return sendApiError(
+            res,
+            409,
+            error instanceof InvalidFrozenSkillPackageError
+              ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+              : 'OD_NEXT_TASK_STATE_INVALID',
+            error.message,
+          );
+        }
+        throw error;
+      }
+      if (strategyTask) run.strategyTask = strategyTask;
       design.runs.stream(run, req, res);
       return;
     }
-    const isRunActiveForAssistantClaim = (runId: string): boolean => {
-      const existingRun = design.runs.get(runId);
-      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
-    };
-    // Atomic ownership claim (#6418): a created run must acquire the assistant
-    // message before streaming — otherwise drop the run and reject.
-    let claimed: { ok: boolean; reason?: 'active' | 'scope' };
-    try {
-      claimed = pinAssistantMessageOnRunCreate(db, run, {
-        isRunActive: isRunActiveForAssistantClaim,
-      });
-    } catch (err) {
-      design.runs.drop(run);
-      throw err;
-    }
-    if (!claimed.ok) {
-      design.runs.drop(run);
+    if (preparedRun.kind === 'assistant_claim_conflict') {
       return sendApiError(
         res,
         409,
@@ -3287,6 +4696,43 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'assistantMessageId is already bound to an active run',
       );
     }
+    if (preparedRun.kind === 'resume_not_allowed') {
+      return sendApiError(
+        res,
+        409,
+        'RUN_NOT_RECHARGE_RESUMABLE',
+        'Only a failed Open Design Cloud run waiting for recharge can be resumed with the same request',
+      );
+    }
+    if (clarificationContinuation) {
+      try {
+        linkSnapshotToRun(db, clarificationContinuation.task.snapshotId, run.id);
+      } catch {
+        // The locked snapshot remains on the in-memory Run; linking is best-effort.
+      }
+    }
+    let strategyTask;
+    try {
+      const task = strategyTaskForRun(run);
+      strategyTask = task ? projectStrategyTask(task, run.id) : null;
+    } catch (error) {
+      if (
+        error instanceof InvalidFrozenSkillPackageError
+        || error instanceof InvalidStrategyTaskRecordError
+      ) {
+        design.runs.fail(
+          run,
+          error instanceof InvalidFrozenSkillPackageError
+            ? 'OD_NEXT_SKILL_SNAPSHOT_INVALID'
+            : 'OD_NEXT_TASK_STATE_INVALID',
+          error.message,
+        );
+        design.runs.stream(run, req, res);
+        return;
+      }
+      throw error;
+    }
+    if (strategyTask) run.strategyTask = strategyTask;
     design.runs.stream(run, req, res);
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
     const executionMeta: RunCreateMeta = {
@@ -3295,7 +4741,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ? { byokProvider: requestBody.byokProvider }
         : {}),
     };
-    design.runs.start(run, () => startChatRun(executionMeta, run));
+    internalRuns.start(run, () => startChatRun(executionMeta, run));
   });
 }
 

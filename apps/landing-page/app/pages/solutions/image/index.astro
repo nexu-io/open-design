@@ -64,7 +64,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: SITE },
       { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: pageUrl },
     ],
   },
@@ -90,7 +90,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="solution" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
@@ -197,7 +197,7 @@ const jsonLd = [
       </ol>
     </section>
 
-    <section class="info-cta" aria-label="Open Design call to action">
+    <section class="info-cta" aria-label="OpenDesign call to action">
       <div>
         <h2>{page.ctaTitle}</h2>
         <p>{page.ctaBody}</p>
@@ -209,7 +209,7 @@ const jsonLd = [
       <div class="info-cta-meta">
         <span class="stamp">● {common.apache}</span>
         <span>{common.localFirst} · {common.byok}</span>
-        <span>{common.macWinLinux}</span>
+        <span>{common.macWin}</span>
       </div>
     </section>
   </article>

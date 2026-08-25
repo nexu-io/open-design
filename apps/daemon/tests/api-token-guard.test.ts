@@ -187,7 +187,7 @@ describe('browser authentication for non-loopback Docker peers', () => {
     const unauthenticatedShell = await fetch(`${baseUrl}/`);
     expect(unauthenticatedShell.status).toBe(401);
     expect(unauthenticatedShell.headers.get('www-authenticate')).toBe(
-      'Basic realm="Open Design", charset="UTF-8"',
+      'Basic realm="OpenDesign", charset="UTF-8"',
     );
     expect(unauthenticatedShell.headers.get('set-cookie')).toBeNull();
     expect(await unauthenticatedShell.text()).not.toContain('docker shell');
@@ -229,7 +229,7 @@ describe('browser authentication for non-loopback Docker peers', () => {
 
       expect(resp.status).toBe(401);
       expect(resp.headers.get('www-authenticate')).toBe(
-        'Basic realm="Open Design", charset="UTF-8"',
+        'Basic realm="OpenDesign", charset="UTF-8"',
       );
     }
   });

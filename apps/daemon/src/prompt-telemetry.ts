@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+
+import type { StrategyInputStageV2 } from '@open-design/contracts';
 
 import { redactSecrets } from './redact.js';
+import type { StrategyTaskFinalTextIdentity } from './strategies/task-store.js';
 
 export const PROMPT_STACK_REDACTION_VERSION = 'prompt-stack-redaction-v1';
 export const PROMPT_STACK_PATH_MARKER = '[REDACTED:path]';
@@ -10,6 +14,9 @@ const KIB = 1024;
 const DAEMON_SYSTEM_PROMPT_MAX_BYTES = 128 * KIB;
 const SECTION_MAX_BYTES = 64 * KIB;
 const TOTAL_REDACTED_CONTENT_MAX_BYTES = 512 * KIB;
+const CHILD_PROMPT_MESSAGE_MAX_BYTES = 16 * KIB;
+const CHILD_PROMPT_TOTAL_MAX_BYTES = 64 * KIB;
+const CHILD_PROMPT_MAX_MESSAGES = 16;
 
 export type PromptTelemetrySectionKind =
   | 'formOverride'
@@ -23,6 +30,7 @@ export type PromptTelemetrySectionKind =
   | 'skillPrompt'
   | 'designSystemPrompt'
   | 'pluginStagePrompt'
+  | 'odNextExactFinalText'
   | 'cwdHint'
   | 'linkedDirsHint'
   | 'attachments'
@@ -60,6 +68,24 @@ export interface PromptStackTelemetry {
   redactedContentBytes: number;
   redactedContentBudgetBytes: number;
   sections: PromptTelemetrySection[];
+  odNextExactSend?: OdNextExactSendPromptEvidenceV1;
+}
+
+export interface OdNextExactSendPromptEvidenceV1 {
+  schema: 'open-design.od-next-exact-send-prompt/v1';
+  boundary: 'hostComposed';
+  kind: StrategyTaskFinalTextIdentity['kind'];
+  promptSchema: StrategyTaskFinalTextIdentity['schema'];
+  stage: StrategyInputStageV2;
+  sha256: string;
+  utf8Bytes: number;
+}
+
+export class InvalidOdNextExactSendPromptError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidOdNextExactSendPromptError';
+  }
 }
 
 export interface StructuredPromptStackInput {
@@ -84,6 +110,32 @@ export interface StructuredPromptStackInput {
   }>;
 }
 
+export interface SafeChildPromptInput extends Record<string, unknown> {
+  type: 'open-design.child-injected-prompt';
+  redactionVersion: typeof PROMPT_STACK_REDACTION_VERSION;
+  messageCount: number;
+  capturedMessageCount: number;
+  rawBytes: number;
+  redactedContentBytes: number;
+  redactedContentBudgetBytes: number;
+  truncated: boolean;
+  messages: Array<{
+    ordinal: number;
+    rawBytes: number;
+    redactedBytes: number;
+    fingerprint: string;
+    truncated: boolean;
+    redactedContent: string;
+  }>;
+}
+
+export interface SafeChildPromptTelemetry {
+  hash: string;
+  bytes: number;
+  safePayload: SafeChildPromptInput;
+  truncated: boolean;
+}
+
 interface MutablePromptTelemetrySection extends PromptTelemetrySection {
   redactedSource: string;
 }
@@ -100,6 +152,7 @@ const REDACTED_CONTENT_KINDS = new Set<PromptTelemetrySectionKind>([
   'skillPrompt',
   'designSystemPrompt',
   'pluginStagePrompt',
+  'odNextExactFinalText',
 ]);
 
 const SECTION_PRIORITY = new Map<PromptTelemetrySectionKind, number>([
@@ -110,6 +163,7 @@ const SECTION_PRIORITY = new Map<PromptTelemetrySectionKind, number>([
   ['skillPrompt', 5],
   ['designSystemPrompt', 5],
   ['pluginStagePrompt', 5],
+  ['odNextExactFinalText', 1],
   ['researchCommandContract', 6],
   ['runContextPrompt', 7],
   ['echoGuard', 8],
@@ -155,6 +209,58 @@ export function redactLocalPaths(input: string): string {
 
 function redactPromptText(input: string): string {
   return redactLocalPaths(redactSecrets(input));
+}
+
+/**
+ * Capture the runtime-visible Child task text without retaining its raw body.
+ * The same secret/path redaction used for host-composed Prompt telemetry runs
+ * before bounded content enters a Normalized observation. Callers may persist
+ * the returned object; they must never persist the input strings separately.
+ */
+export function buildSafeChildPromptTelemetry(
+  messages: readonly string[],
+): SafeChildPromptTelemetry {
+  const rawBytes = messages.reduce((total, message) => total + byteLength(message), 0);
+  let remaining = CHILD_PROMPT_TOTAL_MAX_BYTES;
+  let truncated = messages.length > CHILD_PROMPT_MAX_MESSAGES;
+  const safeMessages = messages.slice(0, CHILD_PROMPT_MAX_MESSAGES).map((message, ordinal) => {
+    const redacted = redactPromptText(message);
+    const messageRawBytes = byteLength(message);
+    const redactedBytes = byteLength(redacted);
+    const limit = Math.min(CHILD_PROMPT_MESSAGE_MAX_BYTES, remaining);
+    const redactedContent = truncateUtf8(redacted, Math.max(0, limit));
+    const contentBytes = byteLength(redactedContent);
+    remaining -= contentBytes;
+    const messageTruncated = contentBytes < redactedBytes;
+    truncated ||= messageTruncated;
+    return {
+      ordinal,
+      rawBytes: messageRawBytes,
+      redactedBytes,
+      fingerprint: sha256(redacted),
+      truncated: messageTruncated,
+      redactedContent,
+    };
+  });
+  return {
+    hash: sha256(JSON.stringify(messages)),
+    bytes: rawBytes,
+    safePayload: {
+      type: 'open-design.child-injected-prompt',
+      redactionVersion: PROMPT_STACK_REDACTION_VERSION,
+      messageCount: messages.length,
+      capturedMessageCount: safeMessages.length,
+      rawBytes,
+      redactedContentBytes: safeMessages.reduce(
+        (total, message) => total + byteLength(message.redactedContent),
+        0,
+      ),
+      redactedContentBudgetBytes: CHILD_PROMPT_TOTAL_MAX_BYTES,
+      truncated,
+      messages: safeMessages,
+    },
+    truncated,
+  };
 }
 
 function stripRuntimeToolPromptTokens(input: string): string {
@@ -353,6 +459,76 @@ export function buildPromptStackTelemetry({
     redactedContentBudgetBytes: TOTAL_REDACTED_CONTENT_MAX_BYTES,
     sections: outputSections,
   };
+}
+
+/**
+ * Bind the mapped OD Next identity to the exact inner text that is about to
+ * cross a runtime transport. The caller must pass the same variable used by
+ * prompt-file, argv, ACP, stdin, or stream-json encoding; wrappers are applied
+ * only after this gate and therefore never enter this identity.
+ */
+export function bindOdNextExactSendPromptEvidence(input: {
+  telemetry: PromptStackTelemetry;
+  finalText: string;
+  persisted: StrategyTaskFinalTextIdentity;
+  stage: StrategyInputStageV2;
+}): PromptStackTelemetry {
+  const utf8Bytes = byteLength(input.finalText);
+  const sha256Hex = createHash('sha256').update(input.finalText, 'utf8').digest('hex');
+  if (
+    input.telemetry.rawBytes !== utf8Bytes ||
+    input.persisted.text !== input.finalText ||
+    input.persisted.utf8Bytes !== utf8Bytes ||
+    input.persisted.sha256 !== sha256Hex
+  ) {
+    throw new InvalidOdNextExactSendPromptError(
+      'OD Next exact-send Prompt does not match its persisted SHA-256 and UTF-8 byte identity.',
+    );
+  }
+  const expectedKind = input.stage === 'request' ? 'bundle' : 'turn';
+  if (input.persisted.kind !== expectedKind) {
+    throw new InvalidOdNextExactSendPromptError(
+      'OD Next exact-send Prompt kind does not match its mapped task stage.',
+    );
+  }
+  return {
+    ...input.telemetry,
+    odNextExactSend: {
+      schema: 'open-design.od-next-exact-send-prompt/v1',
+      boundary: 'hostComposed',
+      kind: input.persisted.kind,
+      promptSchema: input.persisted.schema,
+      stage: input.stage,
+      sha256: sha256Hex,
+      utf8Bytes,
+    },
+  };
+}
+
+/**
+ * Revalidate durable exact-send evidence before task-level export. The task
+ * mapping is the persisted source of truth; this comparison deliberately does
+ * not replace the run evidence or rebuild an export payload from task state.
+ */
+export function assertOdNextExactSendPromptEvidence(input: {
+  telemetry: PromptStackTelemetry;
+  persisted: StrategyTaskFinalTextIdentity;
+  stage: StrategyInputStageV2;
+}): void {
+  const expected = bindOdNextExactSendPromptEvidence({
+    telemetry: buildPromptStackTelemetry({
+      composedPrompt: input.persisted.text,
+      sections: [{ kind: 'odNextExactFinalText', content: input.persisted.text }],
+    }),
+    finalText: input.persisted.text,
+    persisted: input.persisted,
+    stage: input.stage,
+  });
+  if (!isDeepStrictEqual(input.telemetry, expected)) {
+    throw new InvalidOdNextExactSendPromptError(
+      'Persisted OD Next exact-send Prompt evidence no longer matches its authoritative task mapping.',
+    );
+  }
 }
 
 export function promptStackWithoutContent(

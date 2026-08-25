@@ -35,6 +35,8 @@ export const claudeAgentDef = {
       // subcommand, so we probe `claude -p --help` instead of `claude --help`.
       // Fixes issue #430: --add-dir never detected because it wasn't in global help.
       '--include-partial-messages': 'partialMessages',
+      '--forward-subagent-text': 'forwardSubagentText',
+      '--agents': 'customAgents',
       '--add-dir': 'addDir',
     },
     // `claude` has no list-models subcommand. Prefer local mmd/MMS routes
@@ -63,8 +65,37 @@ export const claudeAgentDef = {
       if (caps.partialMessages) {
         args.push('--include-partial-messages');
       }
+      if (runtimeContext.observeNativeChildBehavior === true) {
+        if (!caps.forwardSubagentText) {
+          throw new TypeError(
+            'Claude native Child behavior observation requires advertised --forward-subagent-text support.',
+          );
+        }
+        args.push('--forward-subagent-text');
+      }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
+      }
+      const nativeBindings = runtimeContext.nativeBuildPackageBindings ?? [];
+      if (nativeBindings.length > 0) {
+        if (!caps.customAgents) {
+          throw new TypeError(
+            'Claude native Build Package execution requires advertised --agents support.',
+          );
+        }
+        if (
+          new Set(nativeBindings.map(({ nativeAgentHandle }) => nativeAgentHandle)).size
+            !== nativeBindings.length
+        ) {
+          throw new TypeError('Claude native Build Package handles must be unique.');
+        }
+        args.push('--agents', JSON.stringify(Object.fromEntries(nativeBindings.map((binding) => [
+          binding.nativeAgentHandle,
+          {
+            description: 'Execute one daemon-bound OD Next Build Package.',
+            prompt: 'Execute only the task supplied by the parent Agent. Do not spawn another subagent.',
+          },
+        ]))));
       }
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,

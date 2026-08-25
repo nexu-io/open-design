@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_AMR_RECHARGE_URL,
+  OPEN_DESIGN_PRICING_URL,
   amrConsoleUrlForWorkspace,
   amrPlansUrlForWorkspace,
   amrProfileBadgeLabel,
@@ -90,25 +91,21 @@ describe('amr-guidance origin literals', () => {
       'utf8',
     );
     const origins = [...source.matchAll(/https?:\/\/[^'"`\s)]+/g)].map((match) => match[0]);
-    // Exactly three: the public prod console, the local dev server, and the one
-    // grandfathered internal entry that predates this rule. A fourth means
+    // Exactly four: public prod console + Pricing, the local dev server, and
+    // the one grandfathered internal entry that predates this rule. A fifth means
     // someone hardcoded an environment hostname instead of injecting it.
-    expect(origins).toHaveLength(3);
+    expect(origins).toHaveLength(4);
   });
 });
 
 describe('workspace-scoped AMR URLs', () => {
-  // `billing=plan` is the console's own state-aware upgrade intent: its
-  // dashboard resolves it against the workspace's real subscription state
-  // (personal → the personal plan modal, team → checkout or change-plan), so
-  // this client does not have to guess which dialog to ask for.
-  it('pins console and plans links to the exact workspace', () => {
+  it('pins console links to the workspace and sends plan discovery to Pricing', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(amrConsoleUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
       `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a`,
     );
     expect(amrPlansUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a&billing=plan`,
+      OPEN_DESIGN_PRICING_URL,
     );
   });
 
@@ -232,6 +229,23 @@ describe('resolveRunFailureUi', () => {
   });
 
   // Antigravity's per-model quota flow (terminal switch-model) must still win
+  // A clarification answer submitted after the daemon's OD Next protocol gate
+  // already settled the task (blocked, or otherwise past this round) 409s with
+  // STRATEGY_TASK_STATE_MISMATCH. That is a task-lifecycle verdict, not an
+  // engine failure, so it must render dedicated halted-task copy for every
+  // agent instead of the generic "task failed" card.
+  it('maps a strategy-task state mismatch to dedicated halted-task copy', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      expect(resolveRunFailureUi('STRATEGY_TASK_STATE_MISMATCH', null, agent)).toMatchObject({
+        primaryAction: 'retry',
+        titleKey: 'chat.runError.title.strategyTaskHalted',
+        messageKey: 'chat.runError.strategyTaskStateMismatchMessage',
+        secondaryRetry: false,
+        showSwitchCard: false,
+      });
+    }
+  });
+
   // over the generic hard-quota detail override — its bespoke handling is
   // resolved before the detail layer.
   it('keeps the antigravity terminal switch-model flow even with a hard_quota detail', () => {
@@ -307,6 +321,81 @@ describe('resolveRunFailureUi', () => {
     }
   });
 
+  // An ACP agent that answered `initialize` and then refused `session/new`
+  // (Kimi Code 0.37.x / 0.38.0). The daemon names it with a code and ships the
+  // runtime identity as data; the sentence the user reads is this map's job.
+  // Before this, the daemon wrote an English paragraph into `run.error` and the
+  // card printed it verbatim — untranslated in every non-English UI, and
+  // duplicated because the paragraph also restated the raw agent line the
+  // details block already shows.
+  describe('AGENT_CLI_SESSION_REFUSED', () => {
+    it('renders localized copy naming the agent that refused', () => {
+      const ui = resolveRunFailureUi(
+        'AGENT_CLI_SESSION_REFUSED',
+        'agent_protocol_error',
+        'kimi',
+        'json-rpc id 2: Internal error',
+      );
+      expect(ui).toMatchObject({
+        primaryAction: 'retry',
+        titleKey: 'chat.runError.title.cliSessionRefused',
+        messageKey: 'chat.runError.cliSessionRefusedMessage',
+        secondaryRetry: false,
+        showSwitchCard: false,
+      });
+      // One sentence, no interpolated build number. Naming the version this run
+      // started with needs a pre-spawn `--version` read the failure path does
+      // not buy; the copy says "the installed version" and stays true. Pinned
+      // so a re-land of that work cannot quietly leave a `{version}` slot in
+      // the rendered string with nothing to fill it.
+      expect(ui.messageVars?.version).toBeUndefined();
+    });
+
+    it('takes no CLI build to render — it is the same card either way', () => {
+      const withRaw = resolveRunFailureUi(
+        'AGENT_CLI_SESSION_REFUSED',
+        'agent_protocol_error',
+        'kimi',
+        'json-rpc id 2: Internal error',
+      );
+      const withoutRaw = resolveRunFailureUi(
+        'AGENT_CLI_SESSION_REFUSED',
+        'agent_protocol_error',
+        'kimi',
+        null,
+      );
+      expect(withoutRaw).toEqual(withRaw);
+    });
+
+    it('resolves the same way for every agent, hosted AMR included', () => {
+      for (const agent of ['kimi', 'devin', 'amr', 'antigravity', null]) {
+        expect(
+          resolveRunFailureUi('AGENT_CLI_SESSION_REFUSED', 'agent_protocol_error', agent, null),
+        ).toMatchObject({
+          titleKey: 'chat.runError.title.cliSessionRefused',
+          messageKey: 'chat.runError.cliSessionRefusedMessage',
+        });
+      }
+    });
+
+    it('leaves the neighbouring handshake causes on their own cards', () => {
+      // #7303 round 2: an ACP CLI can fail the same handshake because the user
+      // is signed out, throttled, out of credit, or the upstream is down. Those
+      // arrive with their own codes and must never inherit "change your CLI".
+      const neighbours: Array<[string, string]> = [
+        ['AGENT_AUTH_REQUIRED', 'chat.runError.title.signInRequired'],
+        ['UNAUTHORIZED', 'chat.runError.title.signInRequired'],
+        ['RATE_LIMITED', 'chat.runError.title.rateLimited'],
+        ['UPSTREAM_UNAVAILABLE', 'chat.runError.title.upstreamUnavailable'],
+      ];
+      for (const [code, titleKey] of neighbours) {
+        const ui = resolveRunFailureUi(code, null, 'kimi', null);
+        expect(ui.titleKey).toBe(titleKey);
+        expect(ui.messageKey).not.toBe('chat.runError.cliSessionRefusedMessage');
+      }
+    });
+  });
+
   it('shows plain retry (no card) for generic non-AMR failures', () => {
     const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', null, 'claude');
     expect(ui).toMatchObject({ primaryAction: 'retry', showSwitchCard: false, messageKey: null });
@@ -337,7 +426,7 @@ describe('resolveRunFailureUi', () => {
     });
   });
 
-  // PRD "需要登录" — non-AMR agents. Open Design can't sign in for them (their
+  // PRD "需要登录" — non-AMR agents. OpenDesign can't sign in for them (their
   // login lives in the user's own terminal), so the card shows the {agent}
   // sign-in copy, a plain Retry primary, and promotes AMR via the switch card.
   it('shows sign-in copy + retry + AMR promotion for non-AMR AGENT_AUTH_REQUIRED / UNAUTHORIZED', () => {

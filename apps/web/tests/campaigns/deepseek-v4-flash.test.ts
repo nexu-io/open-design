@@ -124,7 +124,7 @@ describe('DeepSeek V4 Flash campaign', () => {
     );
   });
 
-  it('shows a shared live countdown in both paid and unpaid campaign modals', () => {
+  it('keeps the DeepSeek live countdown on the paid campaign modal', () => {
     const start = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
     const end = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive);
     const t = (key: string, vars?: Record<string, string | number>) => {
@@ -151,12 +151,11 @@ describe('DeepSeek V4 Flash campaign', () => {
     expect(campaignDialogSource).toContain('styles.boundary');
   });
 
-  it('keeps the unpaid action on the upgrade flow without showing the paid secondary action', () => {
-    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.unpaid.cta')");
+  it('keeps the unpaid DeepSeek upgrade on Pricing without rendering Go', () => {
+    expect(campaignDialogSource).toContain('goPlanPricingUrl');
     expect(campaignDialogSource).toContain("'deepseek_unpaid_modal'");
-    expect(campaignDialogSource).toContain('attributedAmrUrl(plansUrl, attribution, deviceId)');
-    expect(campaignDialogSource).toContain('metricsConsent,');
-    expect(campaignDialogSource).toMatch(/\{paid \? \([\s\S]*campaign\.deepseekV4Flash\.later[\s\S]*\) : null\}/);
+    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.unpaid.cta')");
+    expect(campaignDialogSource).not.toContain('styles.goWelcome');
   });
 
   it('keeps campaign visibility free of every URL review backdoor (product decision)', () => {
@@ -173,7 +172,7 @@ describe('DeepSeek V4 Flash campaign', () => {
     expect(campaignDialogSource).not.toContain('location.search');
   });
 
-  it('opens for every paid user only inside the shared half-open window', () => {
+  it('opens for paid and unpaid users only inside the shared half-open window', () => {
     const start = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
     const end = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive);
 
@@ -189,6 +188,9 @@ describe('DeepSeek V4 Flash campaign', () => {
     })).toBe('unknown');
     expect(resolveDeepSeekV4FlashCampaignAudience({
       plan: 'plus', loggedIn: true, now: end,
+    })).toBe('unknown');
+    expect(resolveDeepSeekV4FlashCampaignAudience({
+      plan: 'free', loggedIn: true, now: end,
     })).toBe('unknown');
     // Inside the window the plan decides the audience; outside it nothing does.
     expect(resolveDeepSeekV4FlashCampaignAudience({

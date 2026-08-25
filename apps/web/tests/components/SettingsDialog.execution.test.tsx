@@ -1248,7 +1248,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
-  it('surfaces autosave progress, success, and failure states in the modal chrome', async () => {
+  it('surfaces autosave progress, success, and failure states outside the modal chrome', async () => {
     const first = renderSettingsDialog();
 
     fireEvent.change(screen.getByLabelText('API key'), {
@@ -1261,6 +1261,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText('All changes saved')).toBeTruthy();
     });
+    const savedStatus = screen.getByText('All changes saved').closest('[role="status"]');
+    expect(savedStatus?.parentElement).toHaveClass('settings-autosave-layer');
+    expect(savedStatus?.closest('.settings-chrome')).toBeNull();
     expect(first.onPersist).toHaveBeenCalledWith(
       expect.objectContaining({ apiKey: 'sk-ant-saved' }),
       expect.any(Object),
@@ -1281,6 +1284,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Couldn’t save changes/i)).toBeTruthy();
     });
+    const errorStatus = screen.getByText(/Couldn’t save changes/i).closest('[role="status"]');
+    expect(errorStatus?.parentElement).toHaveClass('settings-autosave-layer');
   });
 
   it('closes BYOK via the close button or backdrop', () => {
@@ -2676,7 +2681,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     vi.unstubAllGlobals();
   });
 
-  it('pins Open Design to the top of the installed CLI list', () => {
+  it('pins OpenDesign to the top of the installed CLI list', () => {
     const claudeAgent: AgentInfo = {
       id: 'claude',
       name: 'Claude Code',
@@ -4684,12 +4689,12 @@ describe('SettingsDialog MCP server interactions', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/mcp/install-info');
     });
-    expect(screen.getByRole('heading', { name: /Connect Open Design to your coding agent/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Connect OpenDesign to your coding agent/i })).toBeTruthy();
     expect(screen.queryByText(/Run this command in your terminal/i)).toBeNull();
     await waitFor(() => {
       expect(screen.getByText(/claude mcp add-json --scope user open-design/i)).toBeTruthy();
     });
-    expect(screen.getByText(/Keep Open Design running\. Restart your coding agent after setup\./i)).toBeTruthy();
+    expect(screen.getByText(/Keep OpenDesign running\. Restart your coding agent after setup\./i)).toBeTruthy();
     expect(screen.getByText(/What your agent can do/i)).toBeTruthy();
   });
 
@@ -4825,22 +4830,17 @@ describe('SettingsDialog notifications interactions', () => {
     cleanup();
   });
 
-  it('renders notifications inactive by default and only reveals sound pickers when enabled', () => {
+  it('renders notifications active by default and keeps the sound choices available', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       { initialSection: 'notifications' },
     );
 
     expect(screen.getByRole('group', { name: 'Completion sound' })).toBeTruthy();
-    // Each row is now a 使用中/未使用 pill pair instead of one toggle button;
-    // "未使用" (inactive) is pressed by default, "使用中" (active) is not.
-    expect(screen.getAllByRole('button', { name: 'inactive' })[0]?.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getAllByRole('button', { name: 'active' })[0]?.getAttribute('aria-pressed')).toBe('false');
-    expect(screen.queryByRole('group', { name: 'Success sound' })).toBeNull();
-    expect(screen.queryByRole('group', { name: 'Failure sound' })).toBeNull();
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'active' })[0] as HTMLButtonElement);
-    expect(playSoundMock).toHaveBeenCalledWith('ding');
+    expect(screen.getAllByRole('button', { name: 'active' })[0]?.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('button', { name: 'active' })[1]?.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('button', { name: 'inactive' })[0]?.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getAllByRole('button', { name: 'inactive' })[1]?.getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('group', { name: 'Success sound' })).toBeTruthy();
     expect(screen.getByRole('group', { name: 'Failure sound' })).toBeTruthy();
   });
@@ -4886,7 +4886,16 @@ describe('SettingsDialog notifications interactions', () => {
     showCompletionNotificationMock.mockResolvedValue('shown');
 
     renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex' },
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        notifications: {
+          soundEnabled: true,
+          successSoundId: 'ding',
+          failureSoundId: 'buzz',
+          desktopEnabled: false,
+        },
+      },
       { initialSection: 'notifications' },
     );
 
@@ -4914,7 +4923,16 @@ describe('SettingsDialog notifications interactions', () => {
     requestNotificationPermissionMock.mockResolvedValue('denied');
 
     renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex' },
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        notifications: {
+          soundEnabled: true,
+          successSoundId: 'ding',
+          failureSoundId: 'buzz',
+          desktopEnabled: false,
+        },
+      },
       { initialSection: 'notifications' },
     );
 
@@ -5565,6 +5583,7 @@ describe('SettingsDialog about interactions', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('drops a pending autosave when explicit onboarding reset unmounts Settings', () => {
@@ -5613,6 +5632,8 @@ describe('SettingsDialog about interactions', () => {
   });
 
   it('renders app version and runtime details when version info is available', () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       {
@@ -5637,6 +5658,12 @@ describe('SettingsDialog about interactions', () => {
     expect(screen.getByText('darwin')).toBeTruthy();
     expect(screen.getByText('Architecture')).toBeTruthy();
     expect(screen.getByText('arm64')).toBeTruthy();
+    // OD Next routing is product-owned and invisible to end users. About must
+    // not expose the daemon's internal rollout latch/reset control.
+    expect(screen.queryByTestId('od-next-rollout-control')).toBeNull();
+    expect(fetchMock.mock.calls.some(([input]) => (
+      String(input).includes('/api/strategies/od-next/rollout')
+    ))).toBe(false);
   });
 
   it('renders the unavailable fallback when app version info is missing', () => {

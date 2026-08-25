@@ -1324,6 +1324,7 @@ export interface Dict {
   'entry.authExpiredBody': string;
   'home.createFailed': string;
   'home.daemonRecovering': string;
+  'home.bundledScenarioMissing': string;
   'entry.cloudCalloutBody': string;
   'entry.cloudCalloutDismissAria': string;
   'entry.workspaceLockedNote': string;
@@ -2879,9 +2880,14 @@ export interface Dict {
   'inlineSwitcher.missingApiKey': string;
   'inlineSwitcher.openFullSettings': string;
   'inlineSwitcher.customSuffix': string;
+  'inlineSwitcher.unlimitedBadge': string;
 
   // Project view / chat pane / composer
   'project.backToProjects': string;
+  'project.restoreAutomaticScenario': string;
+  'project.restoreAutomaticScenarioConfirm': string;
+  'project.restoreAutomaticScenarioBusy': string;
+  'project.restoreAutomaticScenarioFailed': string;
   'project.brandReadyTitle': string;
   'project.brandReadyTitleGeneric': string;
   'project.brandReadyCta': string;
@@ -2969,6 +2975,8 @@ export interface Dict {
   'chat.runError.title.sessionExpired': string;
   'chat.runError.title.gitBashMissing': string;
   'chat.runError.title.cpuUnsupported': string;
+  'chat.runError.title.cliSessionRefused': string;
+  'chat.runError.title.strategyTaskHalted': string;
   'chat.runError.title.generic': string;
   'chat.runError.title.artifactMissing': string;
   'chat.runError.signInMessage.amr': string;
@@ -2991,6 +2999,8 @@ export interface Dict {
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
   'chat.runError.cpuUnsupportedMessage': string;
+  'chat.runError.cliSessionRefusedMessage': string;
+  'chat.runError.strategyTaskStateMismatchMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;
@@ -4177,6 +4187,7 @@ export interface Dict {
   'fileViewer.exportPptxBusy': string;
   'fileViewer.exportPptxHint': string;
   'fileViewer.exportPptxNa': string;
+  'fileViewer.exportDaemonUnreachable': string;
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
   'fileViewer.exportMd': string;
@@ -4518,6 +4529,7 @@ export interface Dict {
   'questions.tabLabel': string;
   'questions.banner': string;
   'questions.bannerAnswered': string;
+  'questions.strategyBlockedNotice': string;
   'questions.continue': string;
   'questions.generating': string;
   'questions.skipAll': string;
@@ -5495,4 +5507,25 @@ export interface Dict {
   'campaign.deepseekV4Flash.restricted.tooltip': string;
   'campaign.deepseekV4Flash.workbenchBadge': string;
   'campaign.deepseekV4Flash.workbenchBadgeAria': string;
+
+  'experienceSurvey.tag': string;
+  'experienceSurvey.close': string;
+  'experienceSurvey.recommendation': string;
+  'experienceSurvey.recommendationLow': string;
+  'experienceSurvey.recommendationHigh': string;
+  'experienceSurvey.improvement': string;
+  'experienceSurvey.improvement.wrongOutput': string;
+  'experienceSurvey.improvement.falseDone': string;
+  'experienceSurvey.improvement.hardToUse': string;
+  'experienceSurvey.improvement.upgradePrompts': string;
+  'experienceSurvey.improvement.stuck': string;
+  'experienceSurvey.improvement.slow': string;
+  'experienceSurvey.improvement.looks': string;
+  'experienceSurvey.improvement.regression': string;
+  'experienceSurvey.improvement.other': string;
+  'experienceSurvey.otherPlaceholder': string;
+  'experienceSurvey.submit': string;
+  'experienceSurvey.skip': string;
+  'experienceSurvey.thanksTitle': string;
+  'experienceSurvey.thanksBody': string;
 }

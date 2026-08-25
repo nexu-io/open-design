@@ -1,4 +1,4 @@
-# 贡献指南 · Contributing to Open Design
+# 贡献指南 · Contributing to OpenDesign
 
 谢谢你愿意参与。OD 是有意做小的 —— 大部分价值在 **文件** 里（skill、design system、提示词片段），而不是框架代码。这意味着收益最高的贡献往往就是一个文件夹、一份 Markdown，或者一个 PR 大小的 adapter。
 

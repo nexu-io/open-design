@@ -12,14 +12,14 @@ function runReservationCheck(options: { releaseRunId?: string }): Promise<string
       channel: "beta",
       createdAt: "2026-06-09T07:00:00.000Z",
       kind: "version-reservation",
-      lane: "release-beta-s",
+      lane: "release-beta",
       owner: {
         branch: "codex/release-stable-launcher",
         commit: "abc123",
         repository: "nexu-io/open-design",
         runAttempt: 1,
         runId: 42,
-        workflow: "release-beta-s"
+        workflow: "release-beta"
       },
       releaseNumber: 4,
       releaseVersion: "1.2.3-beta.4",
@@ -39,7 +39,7 @@ function runReservationCheck(options: { releaseRunId?: string }): Promise<string
         RELEASE_REPOSITORY: "nexu-io/open-design",
         RELEASE_RUN_ATTEMPT: "2",
         RELEASE_RUN_ID: options.releaseRunId ?? "42",
-        RELEASE_WORKFLOW: "release-beta-s",
+        RELEASE_WORKFLOW: "release-beta",
       },
     });
     let stdout = "";

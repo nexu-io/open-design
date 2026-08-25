@@ -97,7 +97,7 @@ describe('codex buildArgs session resume', () => {
     expect(args).not.toContain('resume');
   });
 
-  it('carries only the Open Design wrapper contract across Codex shell environment filtering', () => {
+  it('carries only the OpenDesign wrapper contract across Codex shell environment filtering', () => {
     const args = codexAgentDef.buildArgs('prompt', [], [], {}, {});
     const shellArgs = codexOpenDesignShellEnvironmentArgs();
 
@@ -112,12 +112,14 @@ describe('codex buildArgs session resume', () => {
     );
     expect(includeOnly).toContain('"PATH"');
     expect(includeOnly).toContain('"OD_NODE_BIN"');
+    expect(includeOnly).toContain('"OD_HYPERFRAMES_BIN"');
     expect(includeOnly).toContain('"OD_BIN"');
     expect(includeOnly).toContain('"OD_DAEMON_URL"');
     expect(includeOnly).toContain('"OD_TOOL_TOKEN"');
     expect(includeOnly).toContain('"OD_DATA_DIR"');
     expect(includeOnly).toContain('"OD_PROJECT_ID"');
     expect(includeOnly).toContain('"OD_PROJECT_DIR"');
+    expect(includeOnly).toContain('"OD_TASK_INPUT_DIR"');
     expect(includeOnly).not.toContain('OPENAI_API_KEY');
     expect(includeOnly).not.toContain('OD_API_TOKEN');
   });

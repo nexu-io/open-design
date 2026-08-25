@@ -318,6 +318,45 @@
   background: black;
   display: flex;
 }
+/* The presentation overlay is portaled to <body>, so the `.viewer`-scoped
+   `.present-exit-btn` rules in shell.css never reach it. This is the user's
+   only way out once focus moves into the sandboxed deck frame and Esc stops
+   arriving (OPEND-2156), so it sits above the frame and stays reachable.
+   Dimmed at rest so it does not compete with the slide, full strength on
+   hover/focus. */
+.present-overlay .present-exit-btn {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+  z-index: 1002;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  opacity: 0.55;
+  transition:
+    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.present-overlay:hover .present-exit-btn,
+.present-overlay .present-exit-btn:hover,
+.present-overlay .present-exit-btn:focus-visible {
+  opacity: 1;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.68);
+}
+.present-overlay .present-exit-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .present-overlay iframe {
   flex: 1;
   width: 100%;
@@ -1787,6 +1826,18 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 .qf-visual-card-on .qf-visual-card-name {
   opacity: 1;
   transform: translateY(0);
+}
+/* Terminal-blocked strategy task: the inline form is disabled and this strip
+   explains why (gate visible text, or the generic localized notice). */
+.qf-blocked-notice {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .question-form-summary {
   display: flex;

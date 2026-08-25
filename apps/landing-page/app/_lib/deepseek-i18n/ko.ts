@@ -22,17 +22,17 @@ export const ko: DeepseekCopyOverride = {
     '루프를 닫습니다. 실제 페이지에 주석을 달고, 모션 애셋을 컴파일하고, 스킬 라이브러리를 옮겨 옵니다.',
     '하네스 자체를 디자인 워크스페이스로 만듭니다. 채팅 옆의 프리뷰 패널, 워크벤치, 보드까지.',
   ],
-  collectionCloserHeading: '세팅은 건너뛰세요. Open Design 안에서 DeepSeek Harness와 디자인하기',
+  collectionCloserHeading: '세팅은 건너뛰세요. OpenDesign 안에서 DeepSeek Harness와 디자인하기',
   filterAll: '전체',
   collectionCloserBody:
-    'Open Design은 DeepSeek Harness를 감싸고 도는 오픈소스 에이전트 네이티브 디자인 워크스페이스입니다. 시스템과 스킬, 템플릿을 일관되게 지켜 주므로 에이전트가 내놓는 결과물은 온전히 여러분의 것입니다.',
+    'OpenDesign은 DeepSeek Harness를 감싸고 도는 오픈소스 에이전트 네이티브 디자인 워크스페이스입니다. 시스템과 스킬, 템플릿을 일관되게 지켜 주므로 에이전트가 내놓는 결과물은 온전히 여러분의 것입니다.',
 
   categoryVision: '비전 & 입력',
   categoryCanvas: '캔버스 & 생성형 UI',
   categoryWorkflow: '디자인 워크플로',
   categoryWorkspace: '워크스페이스 & 프리뷰',
 
-  ctaDownload: 'Open Design 다운로드',
+  ctaDownload: 'OpenDesign 다운로드',
   ctaStarList: 'DeepSeek Harness에 Star 남기기',
   ctaGuide: 'DeepSeek Harness로 디자인하는 방법 보기',
   ctaBrowseAll: '전체 플러그인 둘러보기',
@@ -71,9 +71,9 @@ export const ko: DeepseekCopyOverride = {
   detailMoreOnList: 'DeepSeek Harness 저장소에서 더 보기',
   detailRelated: '다른 DeepSeek Harness 디자인 플러그인',
   finalEyebrow: '다음 단계',
-  detailCloserHeading: '세팅 없이, Open Design으로 디자인하기',
+  detailCloserHeading: '세팅 없이, OpenDesign으로 디자인하기',
   detailCloserBody:
-    '이 플러그인을 직접 설치해도 되고, Open Design으로 DeepSeek Harness 주위에 잘 정돈된 디자인 레이어를 통째로 두를 수도 있습니다. 키는 직접 가져오고, 산출물도 직접 소유하세요.',
+    '이 플러그인을 직접 설치해도 되고, OpenDesign으로 DeepSeek Harness 주위에 잘 정돈된 디자인 레이어를 통째로 두를 수도 있습니다. 키는 직접 가져오고, 산출물도 직접 소유하세요.',
 
   skills: {
     modlens: {

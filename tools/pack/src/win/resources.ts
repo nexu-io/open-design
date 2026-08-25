@@ -1,9 +1,9 @@
 import { cp, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { hashJson, hashPath, ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
-import { copyBundledResourceTrees, packBundledDshRuntime, winResources } from "../resources.js";
+import { hashJson, hashPath, ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { copyBundledResourceTrees, packBundledDshRuntime, winResources } from "../resources/index.js";
 import {
   copyOptionalVelaCliBinary,
   resolveOptionalVelaCliBinary,

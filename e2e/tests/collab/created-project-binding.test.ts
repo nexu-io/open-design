@@ -1,10 +1,10 @@
 // @vitest-environment node
 
-// INVARIANT UNDER TEST: project creation binds only to an explicitly asserted
-// and authorized Workspace. Mutable daemon current/default state is never an
-// authority source: a headerless legacy, CLI, plugin, or signed-out create
-// remains unbound and usable, while an explicitly scoped create is persisted
-// under that exact Workspace.
+// INVARIANT UNDER TEST: project creation uses an explicit Workspace/member pair
+// only as durable local attribution. Mutable daemon current/default state is
+// never an attribution source: a headerless legacy, CLI, plugin, or signed-out
+// create remains unbound, while an explicitly scoped create is persisted under
+// that exact Workspace without making the local write depend on Vela.
 
 import { createServer, type Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -235,34 +235,22 @@ describe('a created project is bound only to an explicit Workspace', () => {
   );
 });
 
-describe('an asserted workspace identity is verified before it is persisted', () => {
+describe('an asserted workspace identity is persisted as local attribution', () => {
   test(
-    'a create asserting a workspace the caller has no membership in does not bind to it',
+    'a complete explicit pair is not blocked by the remote membership directory',
     { timeout: 300_000 },
     async () => {
       const suite = await createSmokeSuite('collab-created-project-unverified-claim');
 
-      // `OD_WORKSPACE_CONTEXT_SOURCE=vela` is what makes the daemon's
-      // project-creation membership authority exist at all
-      // (`fetchProjectCreationWorkspaceDirectory` is undefined otherwise — the
-      // documented local/dev compatibility path). The mock directory below lists
-      // AMBIENT and EXPLICIT_TEAM and deliberately does NOT list the foreign
-      // pair the request asserts.
+      // The mock directory deliberately does NOT list the asserted pair. Local
+      // project creation/duplication must still use that complete pair as a
+      // namespace and authorship witness without consulting remote membership.
       await suite.with.toolsDev(
         async ({ webUrl }) => {
           const source = await createProject(webUrl, 'Claim source');
 
-          // Duplicate is one of the paths with no authorization gate of its own,
-          // so it is where an unverified header claim used to be written
-          // straight into `workspace_projects`.
-          //
-          // Deliberately status-agnostic. Once `reconcileUnboundProjectBeforeMutation`
-          // also stopped conjuring a binding from unverified headers, the
-          // pre-existing mutation gate began refusing this forged caller outright
-          // (`workspaceResourceMutationAllowed`'s `!row -> false`) instead of
-          // letting it through on a binding it had just invented for itself. Both
-          // outcomes satisfy the property under test; what must never happen is a
-          // persisted claim to the asserted workspace.
+          // Duplicate exercises both reconciliation of the existing unbound
+          // source and attribution of the newly created copy.
           const response = await fetch(
             new URL(`/api/projects/${encodeURIComponent(source)}/duplicate`, webUrl),
             {
@@ -278,24 +266,16 @@ describe('an asserted workspace identity is verified before it is persisted', ()
               method: 'POST',
             },
           );
-          const copyId = response.ok
-            ? ((await response.json()) as CreatedProject).project.id
-            : null;
+          expect(response.status).toBe(200);
+          const copyId = ((await response.json()) as CreatedProject).project.id;
 
-          // The source is never re-homed into the asserted workspace...
           const sourceScope = await readScope(webUrl, source);
-          expect(
-            sourceScope.workspaceId,
-            'an unverifiable header claim must not be written as a binding',
-          ).not.toBe('ws-bind-foreign');
-          expect(sourceScope.kind).toBe('unbound');
+          expect(sourceScope.workspaceId).toBe('ws-bind-foreign');
+          expect(sourceScope.kind).toBe('team');
 
-          // ...and neither is the copy, when one was produced at all.
-          if (copyId) {
-            const copyScope = await readScope(webUrl, copyId);
-            expect(copyScope.workspaceId).not.toBe('ws-bind-foreign');
-            expect(copyScope.kind).toBe('unbound');
-          }
+          const copyScope = await readScope(webUrl, copyId);
+          expect(copyScope.workspaceId).toBe('ws-bind-foreign');
+          expect(copyScope.kind).toBe('team');
         },
         {
           env: {

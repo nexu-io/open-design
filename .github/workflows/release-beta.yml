@@ -787,7 +787,7 @@ jobs:
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: beta
           RELEASE_NAMESPACE: release-beta
-          RELEASE_NOTES: Open Design beta ${{ needs.metadata.outputs.beta_version }}.signed
+          RELEASE_NOTES: OpenDesign beta ${{ needs.metadata.outputs.beta_version }}.signed
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}

@@ -86,13 +86,13 @@ function connectorCard(scope: Page | Locator, id: string) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: T.long });
 }
 
 async function gotoConnectors(page: Page) {
   await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyRegion = page.getByRole('region', { name: /Help us improve Open Design/i });
+  const privacyRegion = page.getByRole('region', { name: /Help us improve OpenDesign/i });
   if (await privacyRegion.isVisible().catch(() => false)) {
     await privacyRegion.getByRole('button', { name: /I get it|not now|got it/i }).click();
   }

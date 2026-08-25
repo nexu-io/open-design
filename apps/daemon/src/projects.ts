@@ -186,7 +186,13 @@ async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) =
     if (shouldSkipDir?.(e.name)) continue;
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
-    const st = await stat(full);
+    let st;
+    try {
+      st = await stat(full);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      throw err;
+    }
     out.push({
       name: rel,
       path: rel,
@@ -293,8 +299,15 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
     }
     if (!e.isFile()) continue;
     if (e.name.endsWith('.artifact.json')) continue;
-    const st = await stat(full);
-    const manifest = await readManifestForPath(projectRoot, rel);
+    let st;
+    let manifest;
+    try {
+      st = await stat(full);
+      manifest = await readManifestForPath(projectRoot, rel);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      throw err;
+    }
     out.push({
       name: rel,
       path: rel,
@@ -612,7 +625,7 @@ function buildDesignManifest(entries, projectLabel) {
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
   return JSON.stringify({
     schema: 'open-design.design-manifest.v1',
-    title: projectLabel || 'Open Design project',
+    title: projectLabel || 'OpenDesign project',
     entryFile,
     sourceFiles: {
       all: files,
@@ -701,7 +714,7 @@ function buildDesignHandoff(entries, projectLabel) {
     files.some((name) => /(screens?|pages?|components?|app|src)\//i.test(name));
   const list = (items) => items.length > 0 ? items.map((name) => `- \`${name}\``).join('\n') : '- None detected';
 
-  return `# ${projectLabel || 'Open Design project'} implementation handoff
+  return `# ${projectLabel || 'OpenDesign project'} implementation handoff
 
 This archive is the source of truth for turning the design into production code. Start from \`${entryFile}\`, then preserve the visual system, responsive behavior, and interactions found in the exported files.
 
@@ -709,7 +722,7 @@ This archive is the source of truth for turning the design into production code.
 - Build production UI from the exported design, not a loose reinterpretation.
 - Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
 - Replace static placeholders only when the target app has real data or functional equivalents.
-- Keep generated product UI free of Open Design chrome, preview labels, or design-process annotations.
+- Keep generated product UI free of OpenDesign chrome, preview labels, or design-process annotations.
 - Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
 
 ## Source map
@@ -740,7 +753,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
 - Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
 - Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
-- Do not keep prototype-only annotations, frame labels, or Open Design chrome in the production UI.
+- Do not keep prototype-only annotations, frame labels, or OpenDesign chrome in the production UI.
 
 ## CJX-ready UX contract
 - Use \`${DESIGN_MANIFEST_FILENAME}\` as the machine-readable map for screens, app modules, OS widgets, landing pages, tokens, interactions, and viewport checks.

@@ -41,6 +41,87 @@ export interface AgentResumeContext {
 
 export type CapturedAgentSessionResult = 'stored' | 'cleared' | 'skipped';
 
+export type AgentResumeTranscriptMode = 'resume-session' | 'full-transcript';
+
+export interface AgentResumePromptPolicy {
+  mode: AgentResumeTranscriptMode;
+  /** Stored upstream handle to continue this turn, or null when reseeding. */
+  resumeSessionId: string | null;
+  /** True only when the daemon also asks the agent to resume native state. */
+  skipTranscript: boolean;
+  /** True for every guard miss, missing handle, unsupported adapter, or create turn. */
+  requiresFullTranscript: boolean;
+  invalidationReason: ResumeInvalidationReason | null;
+}
+
+export interface AgentResumeFailurePolicy {
+  resumeFailed: boolean;
+  /** Clear the persisted handle before the next attempt. */
+  clearStaleSession: boolean;
+  /** Re-run this turn fresh so the daemon sends the full transcript. */
+  autoReseedFullTranscript: boolean;
+  reason: 'resume_failed' | null;
+}
+
+/**
+ * Shared transcript policy for resumable adapters. Native continuation and
+ * transcript skipping are coupled: if the daemon cannot prove it is resuming a
+ * valid upstream session this turn, the prompt path must recompose the full
+ * transcript.
+ */
+export function resolveAgentResumePromptPolicy(
+  ctx: Pick<AgentResumeContext, 'isResuming' | 'resumeSessionId' | 'invalidationReason'>,
+): AgentResumePromptPolicy {
+  const canResume =
+    ctx.isResuming === true
+    && typeof ctx.resumeSessionId === 'string'
+    && ctx.resumeSessionId.length > 0
+    && ctx.invalidationReason == null;
+  if (canResume) {
+    return {
+      mode: 'resume-session',
+      resumeSessionId: ctx.resumeSessionId,
+      skipTranscript: true,
+      requiresFullTranscript: false,
+      invalidationReason: null,
+    };
+  }
+  return {
+    mode: 'full-transcript',
+    resumeSessionId: null,
+    skipTranscript: false,
+    requiresFullTranscript: true,
+    invalidationReason: ctx.invalidationReason ?? null,
+  };
+}
+
+/**
+ * Shared fallback policy for a resume target that no longer exists upstream.
+ * Only a run that actually attempted native resume may clear the stored handle
+ * and auto-reseed; fresh/create turns must ignore matching prose in stdout.
+ */
+export function resolveAgentResumeFailurePolicy(input: {
+  agentId: string;
+  stderr: string;
+  stdout?: string;
+  isResuming: boolean;
+  resumeSessionId: string | null | undefined;
+}): AgentResumeFailurePolicy {
+  const attemptedResume =
+    input.isResuming === true
+    && typeof input.resumeSessionId === 'string'
+    && input.resumeSessionId.length > 0;
+  const resumeFailed =
+    attemptedResume &&
+    isAgentResumeFailure(input.agentId, input.stderr, input.stdout ?? '');
+  return {
+    resumeFailed,
+    clearStaleSession: resumeFailed,
+    autoReseedFullTranscript: resumeFailed,
+    reason: resumeFailed ? 'resume_failed' : null,
+  };
+}
+
 /**
  * Resume identity guard. A stored upstream session is only safe to continue
  * (and to `skipTranscript` for) when the conversation has not changed shape

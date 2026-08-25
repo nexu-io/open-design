@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const VI: SolutionLocaleCopy = {
   prototype: {
-    title: 'Xây dựng nguyên mẫu tương tác với Open Design + Claude Code',
+    title: 'Xây dựng nguyên mẫu tương tác với OpenDesign + Claude Code',
     description:
-      'Biến một câu lệnh thành nguyên mẫu nhiều màn hình có thể nhấp được mà không cần rời khỏi terminal. Open Design trang bị cho coding agent của bạn các kỹ năng thiết kế, mẫu và hệ thống thiết kế để tạo ra nguyên mẫu thực sự mà bạn có thể mở trong trình duyệt.',
+      'Biến một câu lệnh thành nguyên mẫu nhiều màn hình có thể nhấp được mà không cần rời khỏi terminal. OpenDesign trang bị cho coding agent của bạn các kỹ năng thiết kế, mẫu và hệ thống thiết kế để tạo ra nguyên mẫu thực sự mà bạn có thể mở trong trình duyệt.',
     breadcrumb: 'Nguyên mẫu',
     label: 'Trường hợp sử dụng · Nguyên mẫu',
     heading: 'Tạo nguyên mẫu nhanh như một câu lệnh',
@@ -13,18 +13,18 @@ export const VI: SolutionLocaleCopy = {
       'Minh họa kiểu biên tập về một bàn tay phác thảo wireframe biến thành nguyên mẫu ứng dụng nhiều màn hình có thể nhấp được',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design là lớp thiết kế cho coding agent mà bạn đang dùng. Với việc tạo nguyên mẫu, điều đó nghĩa là đi từ một ý tưởng dài một đoạn đến một nguyên mẫu có thể điều hướng, được tạo kiểu trong một phiên làm việc — không cần công cụ thiết kế, không cần bước xuất, không có khoảng trống bàn giao.',
-    stepsTitle: 'Tạo nguyên mẫu với Open Design hoạt động như thế nào',
+      'OpenDesign là lớp thiết kế cho coding agent mà bạn đang dùng. Với việc tạo nguyên mẫu, điều đó nghĩa là đi từ một ý tưởng dài một đoạn đến một nguyên mẫu có thể điều hướng, được tạo kiểu trong một phiên làm việc — không cần công cụ thiết kế, không cần bước xuất, không có khoảng trống bàn giao.',
+    stepsTitle: 'Tạo nguyên mẫu với OpenDesign hoạt động như thế nào',
     steps: [
       {
         title: 'Mô tả luồng',
-        body: 'Nói cho agent biết bạn đang xây dựng gì bằng ngôn ngữ tự nhiên — “một luồng onboarding với màn hình chào mừng, bộ chọn gói và màn hình xác nhận.” Open Design nạp kỹ năng nguyên mẫu để agent biết phải tạo ra các màn hình, chứ không phải một trang đơn lẻ.',
+        body: 'Nói cho agent biết bạn đang xây dựng gì bằng ngôn ngữ tự nhiên — “một luồng onboarding với màn hình chào mừng, bộ chọn gói và màn hình xác nhận.” OpenDesign nạp kỹ năng nguyên mẫu để agent biết phải tạo ra các màn hình, chứ không phải một trang đơn lẻ.',
         imageAlt:
           'Minh họa một người gõ mô tả bằng ngôn ngữ tự nhiên về một luồng ứng dụng vào terminal',
       },
       {
         title: 'Tạo các màn hình đã được tạo kiểu',
-        body: 'Agent áp dụng hệ thống thiết kế và mẫu nguyên mẫu từ Open Design, nên mọi màn hình đều dùng chung kiểu chữ, khoảng cách và các thành phần thay vì trông như bản nháp thô. Bạn nhận được một bộ màn hình mạch lạc, không phải những mockup rời rạc.',
+        body: 'Agent áp dụng hệ thống thiết kế và mẫu nguyên mẫu từ OpenDesign, nên mọi màn hình đều dùng chung kiểu chữ, khoảng cách và các thành phần thay vì trông như bản nháp thô. Bạn nhận được một bộ màn hình mạch lạc, không phải những mockup rời rạc.',
         imageAlt:
           'Minh họa nhiều màn hình ứng dụng xuất hiện theo trình tự, tất cả cùng chung một phong cách thị giác nhất quán',
       },
@@ -41,9 +41,9 @@ export const VI: SolutionLocaleCopy = {
           'Minh họa một nguyên mẫu đang được chỉnh sửa rồi chuyển cho một kỹ sư, với thiết kế và mã nguồn hợp nhất thành một tệp',
       },
     ],
-    tableTitle: 'Tạo nguyên mẫu với Open Design so với cách cũ',
+    tableTitle: 'Tạo nguyên mẫu với OpenDesign so với cách cũ',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'Công cụ tạo nguyên mẫu truyền thống',
     tableRows: [
       {
@@ -110,7 +110,7 @@ export const VI: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Những nguyên mẫu mọi người đã xây dựng với Open Design',
+    galleryTitle: 'Những nguyên mẫu mọi người đã xây dựng với OpenDesign',
     galleryLead:
       'Mỗi cái trong số này bắt đầu từ một câu lệnh và kết xuất thành một sản phẩm có thể nhấp được. Chọn một mẫu gần với ý tưởng của bạn, mô tả biến thể của bạn, và agent sẽ điều chỉnh nó.',
     gallery: [
@@ -124,8 +124,8 @@ export const VI: SolutionLocaleCopy = {
     faqTitle: 'Câu hỏi thường gặp về tạo nguyên mẫu',
     faq: [
       {
-        q: 'Tôi có cần một công cụ thiết kế như Figma để tạo nguyên mẫu với Open Design không?',
-        a: 'Không. Open Design chạy bên trong coding agent của bạn và kết xuất nguyên mẫu thành HTML. Bạn mô tả luồng bằng ngôn ngữ; agent tạo ra các màn hình. Không có công cụ canvas riêng nào để học hay phải trả phí.',
+        q: 'Tôi có cần một công cụ thiết kế như Figma để tạo nguyên mẫu với OpenDesign không?',
+        a: 'Không. OpenDesign chạy bên trong coding agent của bạn và kết xuất nguyên mẫu thành HTML. Bạn mô tả luồng bằng ngôn ngữ; agent tạo ra các màn hình. Không có công cụ canvas riêng nào để học hay phải trả phí.',
       },
       {
         q: 'Các nguyên mẫu có tương tác được hay chỉ là mockup tĩnh?',
@@ -133,7 +133,7 @@ export const VI: SolutionLocaleCopy = {
       },
       {
         q: 'Tôi có thể dùng những agent nào?',
-        a: 'Open Design hoạt động với Claude Code, Codex, Cursor Agent, Gemini CLI và hơn một chục adapter chính chủ khác. Bạn dùng khóa nhà cung cấp của riêng mình; không có gì được lưu trữ thay cho bạn.',
+        a: 'OpenDesign hoạt động với Claude Code, Codex, Cursor Agent, Gemini CLI và hơn một chục adapter chính chủ khác. Bạn dùng khóa nhà cung cấp của riêng mình; không có gì được lưu trữ thay cho bạn.',
       },
       {
         q: 'Một nguyên mẫu có thể trở thành sản phẩm thật không?',
@@ -142,22 +142,22 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Tạo nguyên mẫu cho ý tưởng tiếp theo của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và biến câu “sẽ ra sao nếu” tiếp theo của bạn thành thứ bạn có thể nhấp vào — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và biến câu “sẽ ra sao nếu” tiếp theo của bạn thành thứ bạn có thể nhấp vào — ngay trong agent bạn đang dùng.',
   },
   dashboard: {
-    title: 'Tạo dashboard dữ liệu với Open Design + Claude Code',
+    title: 'Tạo dashboard dữ liệu với OpenDesign + Claude Code',
     description:
       'Mô tả các chỉ số bạn theo dõi và để coding agent dựng nên một dashboard được tạo kiểu, đáp ứng — biểu đồ, thẻ KPI và bảng kết xuất thành HTML mà bạn có thể lưu trữ ở bất cứ đâu. Không cần chỗ trong công cụ BI, không cần trình dựng kéo-thả.',
     breadcrumb: 'Dashboard',
     label: 'Trường hợp sử dụng · Dashboard',
     heading: 'Dashboard từ một mô tả, không phải trình dựng kéo-thả',
-    lead: 'Nói cho agent biết phải hiển thị gì và nó nên trông như thế nào. Open Design cung cấp các mẫu biểu đồ, hệ thống bố cục và ngôn ngữ thị giác để bạn có được một dashboard mạch lạc, trình bày được — không phải một bức tường widget kiểu mặc định.',
+    lead: 'Nói cho agent biết phải hiển thị gì và nó nên trông như thế nào. OpenDesign cung cấp các mẫu biểu đồ, hệ thống bố cục và ngôn ngữ thị giác để bạn có được một dashboard mạch lạc, trình bày được — không phải một bức tường widget kiểu mặc định.',
     heroImageAlt:
       'Minh họa kiểu biên tập về những con số thô bên trái chảy thành một dashboard gọn gàng gồm biểu đồ và thẻ KPI bên phải',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design biến một bản mô tả các chỉ số bằng ngôn ngữ tự nhiên thành một dashboard được tạo kiểu mà agent kết xuất ra HTML — được phiên bản hóa trong repo của bạn, lưu trữ được ở bất cứ đâu, không có thuê bao BI theo từng chỗ.',
-    stepsTitle: 'Dashboard với Open Design hoạt động như thế nào',
+      'OpenDesign biến một bản mô tả các chỉ số bằng ngôn ngữ tự nhiên thành một dashboard được tạo kiểu mà agent kết xuất ra HTML — được phiên bản hóa trong repo của bạn, lưu trữ được ở bất cứ đâu, không có thuê bao BI theo từng chỗ.',
+    stepsTitle: 'Dashboard với OpenDesign hoạt động như thế nào',
     steps: [
       {
         title: 'Mô tả các chỉ số',
@@ -166,7 +166,7 @@ export const VI: SolutionLocaleCopy = {
       },
       {
         title: 'Chọn các mẫu biểu đồ',
-        body: 'Open Design đi kèm các mẫu biểu đồ và bố cục, nên xu hướng trở thành biểu đồ đường, các phân tách trở thành biểu đồ cột, và tỷ lệ trở thành kiểu biểu đồ phù hợp — kiểu chữ và khoảng cách nhất quán xuyên suốt thay vì các mặc định lệch lạc.',
+        body: 'OpenDesign đi kèm các mẫu biểu đồ và bố cục, nên xu hướng trở thành biểu đồ đường, các phân tách trở thành biểu đồ cột, và tỷ lệ trở thành kiểu biểu đồ phù hợp — kiểu chữ và khoảng cách nhất quán xuyên suốt thay vì các mặc định lệch lạc.',
         imageAlt: 'Minh họa nhiều loại biểu đồ được sắp xếp thành một lưới mạch lạc',
       },
       {
@@ -180,9 +180,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa một dashboard đang được tinh chỉnh rồi triển khai',
       },
     ],
-    tableTitle: 'Dashboard với Open Design so với cách cũ',
+    tableTitle: 'Dashboard với OpenDesign so với cách cũ',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'Công cụ BI / viết mã thủ công',
     tableRows: [
       {
@@ -225,7 +225,7 @@ export const VI: SolutionLocaleCopy = {
       { title: "Mạng xã hội và tiếp thị", body: "Hiệu suất kênh và theo dõi chiến dịch trong một khung nhìn.", thumb: "example-social-media-dashboard" },
       { title: "Báo cáo theo lĩnh vực", body: "Báo cáo có cấu trúc cho bất kỳ ngành nào — từ lâm sàng đến giao dịch.", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: 'Những dashboard mọi người đã xây dựng với Open Design',
+    galleryTitle: 'Những dashboard mọi người đã xây dựng với OpenDesign',
     galleryLead:
       'Những dashboard thật được kết xuất từ một câu lệnh và một nguồn dữ liệu. Bắt đầu từ một cái gần với của bạn và mô tả các chỉ số bạn theo dõi.',
     gallery: [
@@ -240,7 +240,7 @@ export const VI: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Tôi có cần một công cụ BI như Tableau hay Looker không?',
-        a: 'Không. Open Design kết xuất dashboard thành HTML bên trong coding agent của bạn. Bạn mô tả các chỉ số và trỏ nó tới dữ liệu của bạn; không có nền tảng BI riêng nào để cấp phép hay học.',
+        a: 'Không. OpenDesign kết xuất dashboard thành HTML bên trong coding agent của bạn. Bạn mô tả các chỉ số và trỏ nó tới dữ liệu của bạn; không có nền tảng BI riêng nào để cấp phép hay học.',
       },
       {
         q: 'Dữ liệu đến từ đâu?',
@@ -257,22 +257,22 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Xây dashboard của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và biến các chỉ số của bạn thành một dashboard bạn có thể lưu trữ ở bất cứ đâu — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và biến các chỉ số của bạn thành một dashboard bạn có thể lưu trữ ở bất cứ đâu — ngay trong agent bạn đang dùng.',
   },
   slides: {
-    title: 'Tạo bộ slide thuyết trình với Open Design + Claude Code',
+    title: 'Tạo bộ slide thuyết trình với OpenDesign + Claude Code',
     description:
-      'Biến một dàn ý thành một bộ slide được thiết kế, đúng thương hiệu mà không cần mở ứng dụng thuyết trình. Open Design trang bị cho coding agent của bạn các mẫu slide và một hệ thống thị giác, kết xuất slide thành HTML mà bạn có thể trình bày, xuất hoặc chia sẻ.',
+      'Biến một dàn ý thành một bộ slide được thiết kế, đúng thương hiệu mà không cần mở ứng dụng thuyết trình. OpenDesign trang bị cho coding agent của bạn các mẫu slide và một hệ thống thị giác, kết xuất slide thành HTML mà bạn có thể trình bày, xuất hoặc chia sẻ.',
     breadcrumb: 'Slide',
     label: 'Trường hợp sử dụng · Slide',
     heading: 'Bộ slide trông được thiết kế, viết bằng một câu lệnh',
-    lead: 'Trao cho agent một dàn ý và một tông giọng. Open Design áp dụng một mẫu slide và hệ thống thị giác để mọi slide đều được bố trí, sắp chữ và đúng thương hiệu — không phải một danh sách gạch đầu dòng trên nền trống.',
+    lead: 'Trao cho agent một dàn ý và một tông giọng. OpenDesign áp dụng một mẫu slide và hệ thống thị giác để mọi slide đều được bố trí, sắp chữ và đúng thương hiệu — không phải một danh sách gạch đầu dòng trên nền trống.',
     heroImageAlt:
       'Minh họa kiểu biên tập về một dàn ý bên trái biến thành một chuỗi slide thuyết trình được thiết kế bên phải',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design biến một dàn ý thành một bộ slide HTML được thiết kế mà agent kết xuất trong một phiên — trình bày trong trình duyệt, xuất ra PDF hoặc PPTX, và giữ mã nguồn trong repo của bạn.',
-    stepsTitle: 'Bộ slide với Open Design hoạt động như thế nào',
+      'OpenDesign biến một dàn ý thành một bộ slide HTML được thiết kế mà agent kết xuất trong một phiên — trình bày trong trình duyệt, xuất ra PDF hoặc PPTX, và giữ mã nguồn trong repo của bạn.',
+    stepsTitle: 'Bộ slide với OpenDesign hoạt động như thế nào',
     steps: [
       {
         title: 'Đưa cho nó dàn ý',
@@ -281,7 +281,7 @@ export const VI: SolutionLocaleCopy = {
       },
       {
         title: 'Chọn phong cách bộ slide',
-        body: 'Open Design đi kèm các mẫu slide — biên tập, Thụy Sĩ quốc tế, kỹ thuật tối màu và nhiều hơn nữa. Agent áp dụng một mẫu để kiểu chữ, lưới và điểm nhấn nhất quán trên mọi slide.',
+        body: 'OpenDesign đi kèm các mẫu slide — biên tập, Thụy Sĩ quốc tế, kỹ thuật tối màu và nhiều hơn nữa. Agent áp dụng một mẫu để kiểu chữ, lưới và điểm nhấn nhất quán trên mọi slide.',
         imageAlt: 'Minh họa nhiều tùy chọn phong cách bộ slide được đặt cạnh nhau',
       },
       {
@@ -295,9 +295,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa một bộ slide đang được trình bày và xuất ra nhiều định dạng',
       },
     ],
-    tableTitle: 'Bộ slide với Open Design so với cách cũ',
+    tableTitle: 'Bộ slide với OpenDesign so với cách cũ',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'PowerPoint / Keynote / công cụ slide AI',
     tableRows: [
       {
@@ -340,7 +340,7 @@ export const VI: SolutionLocaleCopy = {
       { title: "Chế độ người trình bày", body: "Bộ slide kiểu reveal được dựng để trình bày trực tiếp trong trình duyệt.", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "Bản thiết kế kỹ thuật", body: "Bộ slide kiến trúc và kiến thức ánh xạ các hệ thống phức tạp.", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: 'Những bộ slide mọi người đã xây dựng với Open Design',
+    galleryTitle: 'Những bộ slide mọi người đã xây dựng với OpenDesign',
     galleryLead:
       'Những bộ slide thật được kết xuất từ một dàn ý. Chọn một phong cách gần với bài nói của bạn và mô tả nội dung.',
     gallery: [
@@ -355,7 +355,7 @@ export const VI: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Tôi có cần PowerPoint hoặc Keynote không?',
-        a: 'Không. Open Design kết xuất bộ slide thành HTML bên trong coding agent của bạn và có thể xuất ra PDF hoặc PPTX. Bạn trình bày từ trình duyệt hoặc bàn giao một tệp — không cần ứng dụng thuyết trình nào để dựng nó.',
+        a: 'Không. OpenDesign kết xuất bộ slide thành HTML bên trong coding agent của bạn và có thể xuất ra PDF hoặc PPTX. Bạn trình bày từ trình duyệt hoặc bàn giao một tệp — không cần ứng dụng thuyết trình nào để dựng nó.',
       },
       {
         q: 'Đây có chỉ là các gạch đầu dòng do AI tạo ra không?',
@@ -372,22 +372,22 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Dựng bộ slide tiếp theo của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và biến dàn ý của bạn thành một bộ slide được thiết kế — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và biến dàn ý của bạn thành một bộ slide được thiết kế — ngay trong agent bạn đang dùng.',
   },
   image: {
-    title: 'Tạo đồ họa đúng thương hiệu với Open Design + Claude Code',
+    title: 'Tạo đồ họa đúng thương hiệu với OpenDesign + Claude Code',
     description:
       'Tạo thẻ mạng xã hội, ảnh bìa bài viết và đồ họa tiếp thị từ một câu lệnh — được bố trí với kiểu chữ thực sự và hệ thống thương hiệu của bạn, kết xuất thành HTML sắc nét mà bạn có thể xuất ra PNG. Không cần ứng dụng thiết kế, không cần thuê bao mẫu.',
     breadcrumb: 'Hình ảnh',
     label: 'Trường hợp sử dụng · Hình ảnh',
     heading: 'Đồ họa đúng thương hiệu, được tạo và bố trí cho bạn',
-    lead: 'Mô tả thẻ hoặc ảnh bìa bạn cần. Open Design dựng nó với kiểu chữ, lưới thực sự và màu thương hiệu của bạn — rồi kết xuất thành HTML mà bạn có thể xuất ra hình ảnh, thay vì vật lộn với một ứng dụng thiết kế hay một mẫu chung chung.',
+    lead: 'Mô tả thẻ hoặc ảnh bìa bạn cần. OpenDesign dựng nó với kiểu chữ, lưới thực sự và màu thương hiệu của bạn — rồi kết xuất thành HTML mà bạn có thể xuất ra hình ảnh, thay vì vật lộn với một ứng dụng thiết kế hay một mẫu chung chung.',
     heroImageAlt:
       'Minh họa kiểu biên tập về một câu lệnh biến thành một bộ thẻ mạng xã hội và ảnh bìa bài viết được bố trí',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design biến một câu lệnh thành một đồ họa được sắp chữ, đúng thương hiệu mà agent kết xuất thành HTML và xuất ra PNG — lặp lại được, phiên bản hóa được, và không có công cụ thiết kế theo từng chỗ.',
-    stepsTitle: 'Đồ họa với Open Design hoạt động như thế nào',
+      'OpenDesign biến một câu lệnh thành một đồ họa được sắp chữ, đúng thương hiệu mà agent kết xuất thành HTML và xuất ra PNG — lặp lại được, phiên bản hóa được, và không có công cụ thiết kế theo từng chỗ.',
+    stepsTitle: 'Đồ họa với OpenDesign hoạt động như thế nào',
     steps: [
       {
         title: 'Mô tả đồ họa',
@@ -396,7 +396,7 @@ export const VI: SolutionLocaleCopy = {
       },
       {
         title: 'Áp dụng hệ thống thương hiệu',
-        body: 'Open Design lấy màu sắc, kiểu chữ và khoảng cách của bạn từ một hệ thống thiết kế tái sử dụng, nên mọi thẻ đều khớp với phần còn lại của thương hiệu thay vì trông như một thứ làm một lần.',
+        body: 'OpenDesign lấy màu sắc, kiểu chữ và khoảng cách của bạn từ một hệ thống thiết kế tái sử dụng, nên mọi thẻ đều khớp với phần còn lại của thương hiệu thay vì trông như một thứ làm một lần.',
         imageAlt: 'Minh họa màu thương hiệu và kiểu chữ đang được áp dụng vào một bố cục thẻ',
       },
       {
@@ -410,9 +410,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa một mẫu thẻ tạo ra một loạt đồ họa nhất quán',
       },
     ],
-    tableTitle: 'Đồ họa với Open Design so với cách cũ',
+    tableTitle: 'Đồ họa với OpenDesign so với cách cũ',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'Ứng dụng thiết kế / mẫu chung chung',
     tableRows: [
       {
@@ -455,7 +455,7 @@ export const VI: SolutionLocaleCopy = {
       { title: "Carousel", body: "Carousel mạng xã hội nhiều slide giữ nhất quán qua các khung.", thumb: "example-social-carousel" },
       { title: "Khung mockup UI", body: "Khung thông báo và khung thiết bị để kể chuyện sản phẩm.", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: 'Những đồ họa mọi người đã xây dựng với Open Design',
+    galleryTitle: 'Những đồ họa mọi người đã xây dựng với OpenDesign',
     galleryLead:
       'Những thẻ và ảnh bìa thật được kết xuất từ một câu lệnh. Chọn một cái gần với điều bạn cần và thay nội dung của bạn vào.',
     gallery: [
@@ -470,7 +470,7 @@ export const VI: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Đây có phải là một trình tạo ảnh AI như Midjourney không?',
-        a: 'Không. Open Design dựng đồ họa với bố cục và kiểu chữ thực sự — tiêu đề của bạn, thương hiệu của bạn, kích thước chính xác — và kết xuất thành HTML mà bạn xuất ra PNG. Đó là việc dựng thiết kế, không phải tạo điểm ảnh.',
+        a: 'Không. OpenDesign dựng đồ họa với bố cục và kiểu chữ thực sự — tiêu đề của bạn, thương hiệu của bạn, kích thước chính xác — và kết xuất thành HTML mà bạn xuất ra PNG. Đó là việc dựng thiết kế, không phải tạo điểm ảnh.',
       },
       {
         q: 'Tôi có thể tạo một loạt thẻ nhất quán không?',
@@ -487,22 +487,22 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Tạo đồ họa tiếp theo của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và biến một câu lệnh thành một đồ họa đúng thương hiệu — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và biến một câu lệnh thành một đồ họa đúng thương hiệu — ngay trong agent bạn đang dùng.',
   },
   video: {
-    title: 'Tạo đồ họa chuyển động và video ngắn với Open Design + Claude Code',
+    title: 'Tạo đồ họa chuyển động và video ngắn với OpenDesign + Claude Code',
     description:
       'Biến một kịch bản thành các khung hình động và video dạng ngắn — thẻ tiêu đề, nền chuyển động và đoạn kết được dựng với hệ thống thương hiệu của bạn và kết xuất từ HTML. Không cần bộ công cụ đồ họa chuyển động, không cần kéo timeline.',
     breadcrumb: 'Video',
     label: 'Trường hợp sử dụng · Video',
     heading: 'Đồ họa chuyển động từ một kịch bản, không phải một timeline',
-    lead: 'Mô tả khoảnh khắc bạn muốn — một màn hé lộ tiêu đề, một hoạt cảnh dữ liệu, một đoạn kết logo. Open Design dựng các khung hình động với hệ thống thương hiệu của bạn và kết xuất chúng thành video, không cần bộ công cụ đồ họa chuyển động.',
+    lead: 'Mô tả khoảnh khắc bạn muốn — một màn hé lộ tiêu đề, một hoạt cảnh dữ liệu, một đoạn kết logo. OpenDesign dựng các khung hình động với hệ thống thương hiệu của bạn và kết xuất chúng thành video, không cần bộ công cụ đồ họa chuyển động.',
     heroImageAlt:
       'Minh họa kiểu biên tập về một kịch bản biến thành một chuỗi khung hình video động',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design biến một kịch bản thành các khung hình động, đúng thương hiệu mà agent kết xuất thành video dạng ngắn — được dựng từ HTML, phiên bản hóa trong repo của bạn, không có trình chỉnh sửa timeline nào để học.',
-    stepsTitle: 'Chuyển động với Open Design hoạt động như thế nào',
+      'OpenDesign biến một kịch bản thành các khung hình động, đúng thương hiệu mà agent kết xuất thành video dạng ngắn — được dựng từ HTML, phiên bản hóa trong repo của bạn, không có trình chỉnh sửa timeline nào để học.',
+    stepsTitle: 'Chuyển động với OpenDesign hoạt động như thế nào',
     steps: [
       {
         title: 'Mô tả khoảnh khắc',
@@ -511,7 +511,7 @@ export const VI: SolutionLocaleCopy = {
       },
       {
         title: 'Áp dụng phong cách thương hiệu và chuyển động',
-        body: 'Open Design cung cấp các mẫu khung hình — vệt sáng điện ảnh, tiêu đề glitch, đoạn kết logo — và áp dụng màu sắc cùng kiểu chữ của bạn, nên chuyển động trông có chủ ý và đúng thương hiệu.',
+        body: 'OpenDesign cung cấp các mẫu khung hình — vệt sáng điện ảnh, tiêu đề glitch, đoạn kết logo — và áp dụng màu sắc cùng kiểu chữ của bạn, nên chuyển động trông có chủ ý và đúng thương hiệu.',
         imageAlt: 'Minh họa kiểu dáng thương hiệu được áp dụng vào các khung hình động',
       },
       {
@@ -525,9 +525,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa một đoạn video đang được tinh chỉnh và xuất ra cho mạng xã hội',
       },
     ],
-    tableTitle: 'Chuyển động với Open Design so với cách cũ',
+    tableTitle: 'Chuyển động với OpenDesign so với cách cũ',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'After Effects / bộ công cụ chuyển động',
     tableRows: [
       {
@@ -570,7 +570,7 @@ export const VI: SolutionLocaleCopy = {
       { title: "Tiêu đề glitch", body: "Màn hé lộ tiêu đề với chuyển động và kết cấu.", thumb: "example-frame-glitch-title" },
       { title: "Đoạn kết logo", body: "Hoạt cảnh kết thúc gắn thương hiệu cho bất kỳ đoạn clip nào.", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: 'Những chuyển động mọi người đã xây dựng với Open Design',
+    galleryTitle: 'Những chuyển động mọi người đã xây dựng với OpenDesign',
     galleryLead:
       'Những khung hình động và đoạn clip thật được kết xuất từ một câu lệnh. Chọn một cái gần với ý tưởng của bạn và mô tả chuyển động.',
     gallery: [
@@ -585,7 +585,7 @@ export const VI: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Tôi có cần After Effects hoặc một bộ công cụ đồ họa chuyển động không?',
-        a: 'Không. Open Design dựng các khung hình động trong HTML và kết xuất chúng thành video bên trong coding agent của bạn. Không có trình chỉnh sửa timeline nào để học hay cấp phép.',
+        a: 'Không. OpenDesign dựng các khung hình động trong HTML và kết xuất chúng thành video bên trong coding agent của bạn. Không có trình chỉnh sửa timeline nào để học hay cấp phép.',
       },
       {
         q: 'Loại video này phù hợp cho việc gì?',
@@ -602,31 +602,31 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Làm động ý tưởng tiếp theo của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và biến một kịch bản thành chuyển động — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và biến một kịch bản thành chuyển động — ngay trong agent bạn đang dùng.',
   },
   designSystem: {
-    title: 'Xây dựng và áp dụng một hệ thống thiết kế với Open Design + Claude Code',
+    title: 'Xây dựng và áp dụng một hệ thống thiết kế với OpenDesign + Claude Code',
     description:
       'Nắm bắt thương hiệu của bạn thành một hệ thống thiết kế tái sử dụng mà coding agent áp dụng cho mọi sản phẩm — màu sắc, kiểu chữ, thành phần và tông giọng trong một DESIGN.md. Định nghĩa một lần; mọi nguyên mẫu, bộ slide và dashboard đều giữ đúng thương hiệu.',
     breadcrumb: 'Hệ thống thiết kế',
     label: 'Trường hợp sử dụng · Hệ thống thiết kế',
     heading: 'Một hệ thống thiết kế, áp dụng cho mọi thứ agent của bạn tạo ra',
-    lead: 'Định nghĩa thương hiệu của bạn một lần và Open Design mang nó vào mọi đầu ra — nguyên mẫu, bộ slide, dashboard, đồ họa. Hệ thống nằm trong repo của bạn dưới dạng một DESIGN.md mà agent đọc, nên sự nhất quán là tự động, không phải thủ công.',
+    lead: 'Định nghĩa thương hiệu của bạn một lần và OpenDesign mang nó vào mọi đầu ra — nguyên mẫu, bộ slide, dashboard, đồ họa. Hệ thống nằm trong repo của bạn dưới dạng một DESIGN.md mà agent đọc, nên sự nhất quán là tự động, không phải thủ công.',
     heroImageAlt:
       'Minh họa kiểu biên tập về một hệ thống thiết kế duy nhất tỏa ra thành nhiều sản phẩm đúng thương hiệu',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design nắm bắt thương hiệu của bạn thành một hệ thống thiết kế di động mà agent áp dụng cho mọi sản phẩm — định nghĩa một lần trong repo của bạn, thực thi ở mọi nơi, không có công cụ thiết kế trung tâm nào canh giữ nó.',
-    stepsTitle: 'Hệ thống thiết kế với Open Design hoạt động như thế nào',
+      'OpenDesign nắm bắt thương hiệu của bạn thành một hệ thống thiết kế di động mà agent áp dụng cho mọi sản phẩm — định nghĩa một lần trong repo của bạn, thực thi ở mọi nơi, không có công cụ thiết kế trung tâm nào canh giữ nó.',
+    stepsTitle: 'Hệ thống thiết kế với OpenDesign hoạt động như thế nào',
     steps: [
       {
         title: 'Nắm bắt hệ thống',
-        body: 'Mô tả thương hiệu của bạn — màu sắc, kiểu chữ, khoảng cách, giọng điệu — hoặc trỏ agent tới một website hiện có để trích xuất nó. Open Design viết nó vào một DESIGN.md nằm trong dự án của bạn.',
+        body: 'Mô tả thương hiệu của bạn — màu sắc, kiểu chữ, khoảng cách, giọng điệu — hoặc trỏ agent tới một website hiện có để trích xuất nó. OpenDesign viết nó vào một DESIGN.md nằm trong dự án của bạn.',
         imageAlt: 'Minh họa một thương hiệu đang được nắm bắt vào một tệp hệ thống thiết kế duy nhất',
       },
       {
         title: 'Bắt đầu từ một nền tảng đã được kiểm chứng',
-        body: 'Open Design đi kèm hơn 140 hệ thống thiết kế tham khảo — từ Apple và Linear đến biên tập và brutalist. Fork một cái gần với thương hiệu của bạn thay vì bắt đầu từ một trang trống.',
+        body: 'OpenDesign đi kèm hơn 140 hệ thống thiết kế tham khảo — từ Apple và Linear đến biên tập và brutalist. Fork một cái gần với thương hiệu của bạn thay vì bắt đầu từ một trang trống.',
         imageAlt: 'Minh họa một thư viện các hệ thống thiết kế tham khảo đang được duyệt',
       },
       {
@@ -640,9 +640,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa một hệ thống thiết kế đang được cập nhật và lan truyền tới mọi đầu ra',
       },
     ],
-    tableTitle: 'Hệ thống thiết kế với Open Design so với cách cũ',
+    tableTitle: 'Hệ thống thiết kế với OpenDesign so với cách cũ',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'Thư viện công cụ thiết kế / hướng dẫn phong cách',
     tableRows: [
       {
@@ -685,7 +685,7 @@ export const VI: SolutionLocaleCopy = {
       { title: "OpenAI", body: "Tối giản, trung tính, cấp độ nghiên cứu.", thumb: "design-system-openai" },
       { title: "GitHub", body: "Dày đặc, kỹ thuật, native với lập trình viên.", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Các hệ thống thiết kế trong Open Design',
+    galleryTitle: 'Các hệ thống thiết kế trong OpenDesign',
     galleryLead:
       'Một vài trong số hơn 140 hệ thống tham khảo mà bạn có thể fork làm điểm khởi đầu. Chọn một cái gần với thương hiệu của bạn và điều chỉnh nó.',
     gallery: [
@@ -700,11 +700,11 @@ export const VI: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Hệ thống thiết kế ở đây chính xác là gì?',
-        a: 'Một tệp DESIGN.md trong repo của bạn nắm bắt màu sắc, kiểu chữ, khoảng cách, thành phần và giọng điệu. Mọi kỹ năng của Open Design đều đọc nó, nên thương hiệu của bạn được áp dụng tự động cho bất cứ thứ gì agent tạo ra.',
+        a: 'Một tệp DESIGN.md trong repo của bạn nắm bắt màu sắc, kiểu chữ, khoảng cách, thành phần và giọng điệu. Mọi kỹ năng của OpenDesign đều đọc nó, nên thương hiệu của bạn được áp dụng tự động cho bất cứ thứ gì agent tạo ra.',
       },
       {
         q: 'Tôi có phải bắt đầu từ con số không không?',
-        a: 'Không. Open Design đi kèm hơn 140 hệ thống thiết kế tham khảo mà bạn có thể fork — từ Apple và Linear đến biên tập và brutalist — rồi điều chỉnh theo thương hiệu của bạn.',
+        a: 'Không. OpenDesign đi kèm hơn 140 hệ thống thiết kế tham khảo mà bạn có thể fork — từ Apple và Linear đến biên tập và brutalist — rồi điều chỉnh theo thương hiệu của bạn.',
       },
       {
         q: 'Làm sao nó giữ nhất quán qua các bộ slide, dashboard và nguyên mẫu?',
@@ -717,12 +717,12 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Định nghĩa hệ thống thiết kế của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và trao cho agent của bạn một thương hiệu để áp dụng ở mọi nơi — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và trao cho agent của bạn một thương hiệu để áp dụng ở mọi nơi — ngay trong agent bạn đang dùng.',
   },
   roleSoloBuilder: {
-    title: 'Open Design cho nhà phát triển độc lập & indie hacker',
+    title: 'OpenDesign cho nhà phát triển độc lập & indie hacker',
     description:
-      'Bứt tốc như cả một đội ngũ chỉ với một người. Open Design biến coding agent của bạn thành nửa thiết kế cho startup của bạn — prototype, trang đích, dashboard và hình ảnh thương hiệu, tất cả từ một câu lệnh, tất cả đúng nhận diện thương hiệu, tất cả nằm trong repo của bạn.',
+      'Bứt tốc như cả một đội ngũ chỉ với một người. OpenDesign biến coding agent của bạn thành nửa thiết kế cho startup của bạn — prototype, trang đích, dashboard và hình ảnh thương hiệu, tất cả từ một câu lệnh, tất cả đúng nhận diện thương hiệu, tất cả nằm trong repo của bạn.',
     breadcrumb: 'Nhà phát triển độc lập',
     label: 'Dành cho · Nhà phát triển độc lập',
     heading: 'Đội ngũ thiết kế của bạn chính là agent bạn đang chạy',
@@ -731,8 +731,8 @@ export const VI: SolutionLocaleCopy = {
       'Minh họa kiểu biên tập về một người ngồi tại bàn làm việc được bao quanh bởi một trang đích, một ứng dụng, một dashboard và các thẻ mạng xã hội, tất cả cùng một phong cách nhất quán',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design là bộ phận thiết kế mà một nhà sáng lập đơn độc chưa từng có: từ câu lệnh đến sản phẩm trên mọi bề mặt mà sản phẩm của bạn cần, trên một thương hiệu, không cần bàn giao và không cần công cụ phụ.',
-    stepsTitle: 'Cách một nhà phát triển độc lập dùng Open Design',
+      'OpenDesign là bộ phận thiết kế mà một nhà sáng lập đơn độc chưa từng có: từ câu lệnh đến sản phẩm trên mọi bề mặt mà sản phẩm của bạn cần, trên một thương hiệu, không cần bàn giao và không cần công cụ phụ.',
+    stepsTitle: 'Cách một nhà phát triển độc lập dùng OpenDesign',
     steps: [
       {
         title: 'Định nghĩa thương hiệu một lần',
@@ -750,9 +750,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa một sản phẩm đi thẳng từ câu lệnh đến trạng thái phát hành trực tiếp',
       },
     ],
-    tableTitle: 'Làm độc lập với Open Design so với làm theo cách vất vả',
+    tableTitle: 'Làm độc lập với OpenDesign so với làm theo cách vất vả',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'Tự xoay xở như hiện nay',
     tableRows: [
       { capability: 'Bao phủ mọi bề mặt thiết kế', withOd: 'Một agent làm prototype, trang đích, dashboard, thương hiệu', without: 'Chắp vá năm công cụ SaaS và hướng dẫn lại với nhau' },
@@ -770,7 +770,7 @@ export const VI: SolutionLocaleCopy = {
       { title: 'Luồng di động', body: 'Các màn hình ứng dụng khi bạn vượt ra ngoài web.', thumb: 'example-mobile-app' },
       { title: 'Thẻ mạng xã hội', body: 'Thẻ ra mắt và cập nhật cho mọi kênh.', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: 'Dựng độc lập với Open Design',
+    galleryTitle: 'Dựng độc lập với OpenDesign',
     galleryLead:
       'Mọi bề mặt mà một startup một người cần, từ một câu lệnh. Hãy chọn một thứ gần với bước đi tiếp theo của bạn và mô tả nó.',
     gallery: [
@@ -790,12 +790,12 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Dựng trọn dự án của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và để một agent trở thành đội ngũ thiết kế của bạn — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và để một agent trở thành đội ngũ thiết kế của bạn — ngay trong agent bạn đang dùng.',
   },
   roleDesigner: {
-    title: 'Open Design cho nhà thiết kế',
+    title: 'OpenDesign cho nhà thiết kế',
     description:
-      'Dành thời gian cho gu thẩm mỹ, không phải cho việc cực nhọc. Open Design để agent của bạn lo phần sản xuất lặp đi lặp lại — biến thể, trạng thái, toàn bộ hệ thống thiết kế — trong khi bạn định hướng diện mạo và giữ quyền quyết định cuối cùng.',
+      'Dành thời gian cho gu thẩm mỹ, không phải cho việc cực nhọc. OpenDesign để agent của bạn lo phần sản xuất lặp đi lặp lại — biến thể, trạng thái, toàn bộ hệ thống thiết kế — trong khi bạn định hướng diện mạo và giữ quyền quyết định cuối cùng.',
     breadcrumb: 'Nhà thiết kế',
     label: 'Dành cho · Nhà thiết kế',
     heading: 'Định hướng thiết kế — để agent lo phần sản xuất',
@@ -804,8 +804,8 @@ export const VI: SolutionLocaleCopy = {
       'Minh họa kiểu biên tập về một nhà thiết kế đang định hướng trong khi một agent điền vào các màn hình, biến thể và một hệ thống thiết kế',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design là trợ lý sản xuất không bao giờ biết mệt: bạn định nghĩa hệ thống thiết kế và phán định gu thẩm mỹ; agent tạo ra phần còn lại, đúng hệ thống, trong repo của bạn.',
-    stepsTitle: 'Cách một nhà thiết kế dùng Open Design',
+      'OpenDesign là trợ lý sản xuất không bao giờ biết mệt: bạn định nghĩa hệ thống thiết kế và phán định gu thẩm mỹ; agent tạo ra phần còn lại, đúng hệ thống, trong repo của bạn.',
+    stepsTitle: 'Cách một nhà thiết kế dùng OpenDesign',
     steps: [
       {
         title: 'Mã hóa hệ thống của bạn',
@@ -823,9 +823,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa một nhà thiết kế đưa ra định hướng và thiết kế cập nhật theo',
       },
     ],
-    tableTitle: 'Thiết kế với Open Design so với cách thủ công',
+    tableTitle: 'Thiết kế với OpenDesign so với cách thủ công',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'Công cụ thiết kế thủ công',
     tableRows: [
       { capability: 'Dựng một hệ thống thiết kế', withOd: 'Một DESIGN.md mà agent áp dụng ở mọi nơi', without: 'Một thư viện bạn bảo trì bằng tay trên từng công cụ' },
@@ -843,7 +843,7 @@ export const VI: SolutionLocaleCopy = {
       { title: 'Màn hình ứng dụng', body: 'Màn hình di động và web độ trung thực cao.', thumb: 'example-mobile-app' },
       { title: 'Dashboard', body: 'Giao diện dữ liệu tôn trọng hệ thống của bạn.', thumb: 'example-dashboard' },
     ],
-    galleryTitle: 'Được định hướng với Open Design',
+    galleryTitle: 'Được định hướng với OpenDesign',
     galleryLead:
       'Công việc độ trung thực cao, đúng hệ thống mà agent tạo ra từ định hướng. Hãy chọn một thứ gần với phong cách của bạn và tinh chỉnh nó.',
     gallery: [
@@ -863,12 +863,12 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Định hướng thiết kế tiếp theo của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và để agent lo phần sản xuất trong khi bạn phán định gu thẩm mỹ — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và để agent lo phần sản xuất trong khi bạn phán định gu thẩm mỹ — ngay trong agent bạn đang dùng.',
   },
   roleEngineering: {
-    title: 'Open Design cho kỹ sư',
+    title: 'OpenDesign cho kỹ sư',
     description:
-      'Bỏ qua bước bàn giao thiết kế. Open Design biến một DESIGN.md thành front-end thật mà coding agent của bạn viết trực tiếp — giao diện đúng hệ thống, prototype và dashboard, ngay trong repo, không cần vòng lặp qua lại với Figma.',
+      'Bỏ qua bước bàn giao thiết kế. OpenDesign biến một DESIGN.md thành front-end thật mà coding agent của bạn viết trực tiếp — giao diện đúng hệ thống, prototype và dashboard, ngay trong repo, không cần vòng lặp qua lại với Figma.',
     breadcrumb: 'Kỹ thuật',
     label: 'Dành cho · Kỹ thuật',
     heading: 'Từ đặc tả đến front-end, không bàn giao ở giữa',
@@ -877,8 +877,8 @@ export const VI: SolutionLocaleCopy = {
       'Minh họa kiểu biên tập về một DESIGN.md chảy thẳng vào mã front-end và giao diện được kết xuất, bỏ qua bước bàn giao',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design khép lại khoảng cách từ nhà thiết kế đến kỹ sư bằng cách làm cho hệ thống thiết kế trở nên máy đọc được: chính agent viết mã của bạn cũng áp dụng hệ thống và kết xuất giao diện thật.',
-    stepsTitle: 'Cách một kỹ sư dùng Open Design',
+      'OpenDesign khép lại khoảng cách từ nhà thiết kế đến kỹ sư bằng cách làm cho hệ thống thiết kế trở nên máy đọc được: chính agent viết mã của bạn cũng áp dụng hệ thống và kết xuất giao diện thật.',
+    stepsTitle: 'Cách một kỹ sư dùng OpenDesign',
     steps: [
       {
         title: 'Đọc hệ thống, không phải bản đánh dấu',
@@ -896,9 +896,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa giao diện được tạo ra hạ cánh thành một PR có thể xem xét',
       },
     ],
-    tableTitle: 'Front-end với Open Design so với cách bàn giao',
+    tableTitle: 'Front-end với OpenDesign so với cách bàn giao',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'Bàn giao từ thiết kế sang phát triển',
     tableRows: [
       { capability: 'Có một thiết kế để dựng từ đó', withOd: 'Một DESIGN.md mà agent của bạn đọc trực tiếp', without: 'Một tệp Figma mà bạn diễn giải lại bằng tay' },
@@ -916,7 +916,7 @@ export const VI: SolutionLocaleCopy = {
       { title: 'Trang đích', body: 'Trang tiếp thị mà không cần chờ thiết kế.', thumb: 'example-saas-landing' },
       { title: 'Kanban / bảng', body: 'Giao diện quy trình làm việc nội bộ.', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: 'Được dựng bởi kỹ sư với Open Design',
+    galleryTitle: 'Được dựng bởi kỹ sư với OpenDesign',
     galleryLead:
       'Front-end thật, đúng hệ thống được tạo ra ngay trong repo. Hãy chọn một thứ gần với cái bạn đang dựng và mô tả nó.',
     gallery: [
@@ -936,12 +936,12 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Tạo giao diện tiếp theo của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và biến một DESIGN.md thành front-end — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và biến một DESIGN.md thành front-end — ngay trong agent bạn đang dùng.',
   },
   roleProductManagers: {
-    title: 'Open Design cho quản lý sản phẩm',
+    title: 'OpenDesign cho quản lý sản phẩm',
     description:
-      'Đừng chờ băng thông thiết kế để truyền đạt một ý tưởng. Open Design để một PM biến một câu lệnh thành một prototype có thể nhấp được hoặc một wireframe — để đồng thuận với các bên liên quan và brief cho đội, mà không cần một phiếu yêu cầu thiết kế.',
+      'Đừng chờ băng thông thiết kế để truyền đạt một ý tưởng. OpenDesign để một PM biến một câu lệnh thành một prototype có thể nhấp được hoặc một wireframe — để đồng thuận với các bên liên quan và brief cho đội, mà không cần một phiếu yêu cầu thiết kế.',
     breadcrumb: 'Quản lý sản phẩm',
     label: 'Dành cho · Quản lý sản phẩm',
     heading: 'Biến ý tưởng thành có thể nhấp được trước buổi kickoff',
@@ -950,8 +950,8 @@ export const VI: SolutionLocaleCopy = {
       'Minh họa kiểu biên tập về một PM biến một ý tưởng đã viết thành một prototype có thể nhấp được trình bày cho các bên liên quan',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design trao cho một PM một cách không cần thiết kế để làm ý tưởng trở nên hữu hình: từ câu lệnh đến prototype phục vụ sự đồng thuận và các bản brief, mà không tiêu hết ngân sách thiết kế của đội.',
-    stepsTitle: 'Cách một PM dùng Open Design',
+      'OpenDesign trao cho một PM một cách không cần thiết kế để làm ý tưởng trở nên hữu hình: từ câu lệnh đến prototype phục vụ sự đồng thuận và các bản brief, mà không tiêu hết ngân sách thiết kế của đội.',
+    stepsTitle: 'Cách một PM dùng OpenDesign',
     steps: [
       {
         title: 'Mô tả luồng',
@@ -969,9 +969,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa một prototype được chia sẻ để đồng thuận rồi bàn giao cho đội',
       },
     ],
-    tableTitle: 'Công việc PM với Open Design so với chờ thiết kế',
+    tableTitle: 'Công việc PM với OpenDesign so với chờ thiết kế',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'Không có nó như hiện nay',
     tableRows: [
       { capability: 'Làm một ý tưởng trở nên hữu hình', withOd: 'Câu lệnh → prototype có thể nhấp được do chính bạn làm', without: 'Mở một phiếu thiết kế và chờ băng thông' },
@@ -989,7 +989,7 @@ export const VI: SolutionLocaleCopy = {
       { title: 'Prototype web', body: 'Luồng web nhiều màn hình để review.', thumb: 'example-web-prototype' },
       { title: 'Góc nhìn xu hướng', body: 'Ảnh chụp 30 ngày và xu hướng để có bối cảnh.', thumb: 'example-last30days' },
     ],
-    galleryTitle: 'Được làm prototype bởi các PM với Open Design',
+    galleryTitle: 'Được làm prototype bởi các PM với OpenDesign',
     galleryLead:
       'Các luồng có thể nhấp được kết xuất từ một bản mô tả, sẵn sàng cho một buổi review của bên liên quan. Hãy chọn một thứ gần với ý tưởng của bạn và mô tả nó.',
     gallery: [
@@ -1009,12 +1009,12 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Biến ý tưởng của bạn thành có thể nhấp được ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và biến đặc tả tiếp theo của bạn thành thứ mà mọi người có thể nhấp — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và biến đặc tả tiếp theo của bạn thành thứ mà mọi người có thể nhấp — ngay trong agent bạn đang dùng.',
   },
   roleMarketing: {
-    title: 'Open Design cho đội tiếp thị',
+    title: 'OpenDesign cho đội tiếp thị',
     description:
-      'Phát hành chiến dịch với tốc độ của nội dung. Open Design để agent của bạn tạo ra trang đích, thẻ mạng xã hội và hình ảnh chiến dịch từ một câu lệnh — đúng thương hiệu, theo yêu cầu, không cần xếp hàng chờ thiết kế.',
+      'Phát hành chiến dịch với tốc độ của nội dung. OpenDesign để agent của bạn tạo ra trang đích, thẻ mạng xã hội và hình ảnh chiến dịch từ một câu lệnh — đúng thương hiệu, theo yêu cầu, không cần xếp hàng chờ thiết kế.',
     breadcrumb: 'Tiếp thị',
     label: 'Dành cho · Tiếp thị',
     heading: 'Hình ảnh chiến dịch với tốc độ của một câu lệnh',
@@ -1023,8 +1023,8 @@ export const VI: SolutionLocaleCopy = {
       'Minh họa kiểu biên tập về một người làm tiếp thị biến một bản brief thành một trang đích và một bộ thẻ mạng xã hội đúng thương hiệu',
     tldrTitle: 'Tóm lại một câu',
     tldrBody:
-      'Open Design là nguồn lực thiết kế luôn sẵn sàng cho tiếp thị: từ câu lệnh đến tài sản cho trang đích và mạng xã hội, đúng thương hiệu, để chiến dịch phát hành với tốc độ bạn viết nội dung.',
-    stepsTitle: 'Cách một đội tiếp thị dùng Open Design',
+      'OpenDesign là nguồn lực thiết kế luôn sẵn sàng cho tiếp thị: từ câu lệnh đến tài sản cho trang đích và mạng xã hội, đúng thương hiệu, để chiến dịch phát hành với tốc độ bạn viết nội dung.',
+    stepsTitle: 'Cách một đội tiếp thị dùng OpenDesign',
     steps: [
       {
         title: 'Khóa thương hiệu',
@@ -1042,9 +1042,9 @@ export const VI: SolutionLocaleCopy = {
         imageAlt: 'Minh họa các tài sản chiến dịch được phát hành và được lặp lại nhanh chóng',
       },
     ],
-    tableTitle: 'Tiếp thị với Open Design so với cảnh chạy đôn chạy đáo thường lệ',
+    tableTitle: 'Tiếp thị với OpenDesign so với cảnh chạy đôn chạy đáo thường lệ',
     tableColCapability: 'Điều bạn cần',
-    tableColWithOd: 'Với Open Design',
+    tableColWithOd: 'Với OpenDesign',
     tableColWithout: 'Không có nó như hiện nay',
     tableRows: [
       { capability: 'Ra mắt một trang đích', withOd: 'Câu lệnh → trang đúng thương hiệu, có thể triển khai', without: 'Brief thiết kế hoặc vật lộn với một trình dựng website' },
@@ -1062,7 +1062,7 @@ export const VI: SolutionLocaleCopy = {
       { title: 'Bìa bài viết', body: 'Bìa blog và bản tin.', thumb: 'example-article-magazine' },
       { title: 'Trang web', body: 'Microsite và trang chiến dịch.', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: 'Được phát hành bởi tiếp thị với Open Design',
+    galleryTitle: 'Được phát hành bởi tiếp thị với OpenDesign',
     galleryLead:
       'Các tài sản chiến dịch đúng thương hiệu được kết xuất từ một câu lệnh. Hãy chọn một thứ gần với chiến dịch của bạn và thay nội dung của bạn vào.',
     gallery: [
@@ -1082,6 +1082,6 @@ export const VI: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Phát hành chiến dịch tiếp theo của bạn ngay tối nay',
     ctaBody:
-      'Gắn sao cho repo, cài Open Design, và biến các bản brief thành tài sản đúng thương hiệu — ngay trong agent bạn đang dùng.',
+      'Gắn sao cho repo, cài OpenDesign, và biến các bản brief thành tài sản đúng thương hiệu — ngay trong agent bạn đang dùng.',
   },
 };

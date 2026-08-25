@@ -1,4 +1,4 @@
-import { access, chmod, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, link, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
@@ -28,6 +28,91 @@ async function writePackage(packageRoot: string, packageName: string): Promise<v
     "utf8",
   );
   await writeFile(join(packageRoot, "index.js"), "module.exports = {};\n", "utf8");
+}
+
+async function writeEsmPackage(packageRoot: string, packageName: string, source: string): Promise<void> {
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(
+    join(packageRoot, "package.json"),
+    `${JSON.stringify({ exports: "./index.js", name: packageName, type: "module", version: "0.0.0" }, null, 2)}\n`,
+    "utf8",
+  );
+  await writeFile(join(packageRoot, "index.js"), source, "utf8");
+}
+
+async function writeHyperframesRuntimeFixture(options: {
+  omitPackage?: string;
+  platformName: "darwin" | "win32";
+  resourcesRoot: string;
+  runtimeSourceRoot: string;
+}): Promise<void> {
+  const arch = options.platformName === "win32" ? "x64" : process.arch;
+  const platform = options.platformName === "darwin" ? "darwin" : "win32";
+  const nativePackage = `@img/sharp-${platform}-${arch}`;
+  const libvipsPackage = options.platformName === "darwin"
+    ? `@img/sharp-libvips-${platform}-${arch}`
+    : null;
+  const packages = ["@img/colour", nativePackage, ...(libvipsPackage == null ? [] : [libvipsPackage])];
+  const sourceNodeModulesRoot = join(options.runtimeSourceRoot, "node_modules");
+
+  for (const packageName of packages) {
+    if (packageName === options.omitPackage) continue;
+    await writeEsmPackage(
+      join(sourceNodeModulesRoot, ...packageName.split("/")),
+      packageName,
+      `export default ${JSON.stringify(packageName)};\n`,
+    );
+  }
+  if (options.omitPackage !== "sharp") {
+    await writeEsmPackage(
+      join(sourceNodeModulesRoot, "sharp"),
+      "sharp",
+      [
+        'import colour from "@img/colour";',
+        `import native from ${JSON.stringify(nativePackage)};`,
+        ...(libvipsPackage == null
+          ? ["export default { colour, native };"]
+          : [
+              `import libvips from ${JSON.stringify(libvipsPackage)};`,
+              "export default { colour, native, libvips };",
+            ]),
+        "",
+      ].join("\n"),
+    );
+  }
+
+  const hyperframesRoot = join(options.resourcesRoot, "app", "node_modules", "hyperframes");
+  await mkdir(join(hyperframesRoot, "dist"), { recursive: true });
+  await writeFile(
+    join(hyperframesRoot, "package.json"),
+    `${JSON.stringify({ name: "hyperframes", type: "module", version: "0.8.1" }, null, 2)}\n`,
+    "utf8",
+  );
+  await writeFile(
+    join(hyperframesRoot, "dist", "cli.js"),
+    [
+      'import sharp from "sharp";',
+      'if (sharp == null) throw new Error("sharp failed to load");',
+      'console.log("hyperframes 0.8.1");',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const appPath = options.platformName === "darwin"
+    ? path.dirname(path.dirname(options.resourcesRoot))
+    : path.dirname(options.resourcesRoot);
+  const bundledNodePath = options.platformName === "win32"
+    ? join(appPath, "Open Design.exe")
+    : join(appPath, "Contents", "MacOS", "Open Design");
+  await mkdir(path.dirname(bundledNodePath), { recursive: true });
+  try {
+    await link(process.execPath, bundledNodePath);
+  } catch {
+    await copyFile(process.execPath, bundledNodePath);
+    // A successful hard link may share a CI-owned inode that the test user cannot chmod.
+    await chmod(bundledNodePath, 0o755);
+  }
 }
 
 async function writePnpmLinkedPackage(standaloneRoot: string, packageName: string): Promise<string> {
@@ -90,6 +175,7 @@ async function runFixture(options: {
   includeHoistedNext?: boolean;
   includeWebNext: boolean;
   macAdhocBundleSign?: boolean;
+  omitHyperframesRuntimePackage?: string;
   omitMacAdhocBundleSign?: boolean;
   omitRootWebPackage?: boolean;
   platformName?: "darwin" | "win32";
@@ -117,6 +203,7 @@ async function runFixture(options: {
   const appPath = join(appOutDir, "Open Design.app");
   const auditReportPath = join(root, "audit.json");
   const configPath = join(root, "config.json");
+  const hyperframesRuntimeSourceRoot = join(workspaceRoot, "assembled", "app");
   const oldConfigEnv = process.env[CONFIG_ENV];
 
   await mkdir(resourcesRoot, { recursive: true });
@@ -137,15 +224,22 @@ async function runFixture(options: {
   if (options.omitRootWebPackage !== true) {
     await writeRootWebPackage(resourcesRoot);
   }
+  await writeHyperframesRuntimeFixture({
+    omitPackage: options.omitHyperframesRuntimePackage,
+    platformName,
+    resourcesRoot,
+    runtimeSourceRoot: hyperframesRuntimeSourceRoot,
+  });
   await writeFile(
     configPath,
     `${JSON.stringify(
       {
         auditReportPath,
+        hyperframesRuntimeSourceRoot,
         ...(options.omitMacAdhocBundleSign ? {} : { macAdhocBundleSign: options.macAdhocBundleSign ?? false }),
         pruneCopiedSharp: false,
         pruneRootNext: false,
-        pruneRootSharp: false,
+        pruneRootSharp: true,
         ...(options.requireRootWebPackageAudit == null
           ? {}
           : { requireRootWebPackageAudit: options.requireRootWebPackageAudit }),
@@ -189,6 +283,47 @@ async function runFixture(options: {
 }
 
 describe("web standalone afterPack hook", () => {
+  it("restores HyperFrames' native sharp closure and executes its CLI from the final payload", async () => {
+    const fixture = await runFixture({ includeWebNext: true });
+
+    try {
+      const report = JSON.parse(await readFile(fixture.auditReportPath, "utf8")) as {
+        hyperframesCliSmoke: { cliPath: string; nodePath: string; stdout: string };
+        hyperframesRuntimeCopies: Array<{ bytes: number; packageName: string }>;
+      };
+      expect(report.hyperframesRuntimeCopies.map((entry) => entry.packageName)).toEqual([
+        "sharp",
+        "@img/colour",
+        "@img/sharp-win32-x64",
+      ]);
+      expect(report.hyperframesRuntimeCopies.every((entry) => entry.bytes > 0)).toBe(true);
+      expect(report.hyperframesCliSmoke.stdout).toBe("hyperframes 0.8.1");
+      expect(report.hyperframesCliSmoke.cliPath.split(path.sep).join("/")).toMatch(
+        /resources\/app\/node_modules\/hyperframes\/dist\/cli\.js$/,
+      );
+      expect(report.hyperframesCliSmoke.nodePath.split(path.sep).join("/")).toMatch(
+        /win-unpacked\/Open Design\.exe$/,
+      );
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
+  });
+
+  it("fails packaging when HyperFrames' target native sharp payload is absent", async () => {
+    await expect(runFixture({
+      includeWebNext: true,
+      omitHyperframesRuntimePackage: "@img/sharp-win32-x64",
+    })).rejects.toThrow(/required source missing.*sharp-win32-x64/);
+  });
+
+  it("rejects unsupported packaging platforms", async () => {
+    await expect(runWebStandaloneAfterPack({
+      appOutDir: "/tmp/open-design-linux",
+      electronPlatformName: "linux",
+      packager: { appInfo: { productFilename: "Open Design" } },
+    })).rejects.toThrow(/unsupported platform: linux/);
+  });
+
   it("deduplicates win32 copied standalone Next while retaining the app-local Next package", async () => {
     const fixture = await runFixture({ includeWebNext: true });
 

@@ -42,14 +42,14 @@ const RETIRED_SECURE_BYOK_KEYS = [
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
 // summon them. Keeps the workspace quiet for first-run users.
-// Both switches default off so first-run users are not greeted by a
-// surprise sound or a permission prompt; they can opt in from Settings →
-// Notifications when they want it.
+// Completion feedback is useful precisely when a task finishes out of focus,
+// so new installs opt in by default. Explicit saved opt-outs still win through
+// normalizeNotifications' field merge below.
 export const DEFAULT_NOTIFICATIONS: NotificationsConfig = {
-  soundEnabled: false,
+  soundEnabled: true,
   successSoundId: DEFAULT_SUCCESS_SOUND_ID,
   failureSoundId: DEFAULT_FAILURE_SOUND_ID,
-  desktopEnabled: false,
+  desktopEnabled: true,
 };
 
 export const DEFAULT_PET: PetConfig = {
@@ -122,7 +122,7 @@ export interface KnownProvider {
   baseUrl: string;
   /** Ranked provider-owned preferences, matched against the live account catalogue. */
   preferredModels: string[];
-  /** Model ids that Open Design previously preselected but the provider retired. */
+  /** Model ids that OpenDesign previously preselected but the provider retired. */
   retiredModels?: string[];
   /** Optional provider-specific key console link shown in Settings. */
   apiKeyConsoleLink?: { host: string; url: string };

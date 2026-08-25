@@ -6,11 +6,13 @@ import type { RouteDeps } from '../../server-context.js';
 import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-resource-mutation.js';
 import type { AuthorizeProjectRequest } from '../../collab/project-request-authority.js';
 import { TERMINAL_RUN_STATUSES } from '../../runtimes/runs.js';
+import { strategyTaskTurnsForRunIds } from '../../strategies/task-store.js';
 
 import { registerProjectCommentRoutes } from './comments.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 import {
   compactAdjacentMessageAgentEvents,
+  countMessages,
   deleteConversationAndRepairTeamCommentAnchor,
   isProjectCommentAnchorConversationId,
 } from '../../db.js';
@@ -265,7 +267,11 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       return res.status(404).json({ error: 'conversation not found' });
     }
     const project = getProject(db, req.params.id);
-    if (project && listMessages(db, req.params.cid).length === 0) {
+    // COUNT(*) rather than listMessages(...).length: the backfill only needs to
+    // know whether the conversation is empty, and loading every message to
+    // answer that parses each one's JSON columns — including event logs that
+    // grow with tool output — before throwing the result away.
+    if (project && countMessages(db, req.params.cid) === 0) {
       const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(() => ({}));
       const agentId = typeof config.agentId === 'string' && config.agentId ? config.agentId : null;
       await backfillBrandExtractionTranscriptForProject({
@@ -285,7 +291,29 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         console.warn(`[brand] failed to backfill programmatic extraction transcript for ${req.params.id}`, err);
       });
     }
-    res.json({ messages: listMessages(db, req.params.cid) });
+    // A Full Plan turn spans several physical Runs and the daemon-issued
+    // continuation carries no user prompt, so the client needs each message's
+    // logical-task position to render one turn instead of an orphan answer.
+    const messages = listMessages(db, req.params.cid) as Array<Record<string, unknown>>;
+    const turns = strategyTaskTurnsForRunIds(
+      db,
+      messages
+        .map((message) => message['runId'])
+        .filter((runId): runId is string => typeof runId === 'string' && runId.length > 0),
+    );
+    res.json({
+      messages: messages.map((message) => {
+        const runId = typeof message['runId'] === 'string' ? message['runId'] : null;
+        const turn = runId ? turns.get(runId) : undefined;
+        if (!turn) return message;
+        return {
+          ...message,
+          strategyTaskExecutionId: turn.taskExecutionId,
+          strategyTaskRunIndex: turn.taskRunIndex,
+          ...(turn.delivered ? { strategyTaskDelivered: true } : {}),
+        };
+      }),
+    });
   });
 
   // #6396: the daemon is the single writer of a daemon-backed assistant

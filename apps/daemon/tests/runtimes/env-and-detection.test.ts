@@ -15,7 +15,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
 
 // Claude Code owns its own auth resolution. Preserve credentials from the
 // inherited environment so users who run the local CLI with API-key auth get
-// the same behavior through Open Design.
+// the same behavior through OpenDesign.
 test('spawnEnvForAgent preserves inherited Anthropic API credentials for the claude adapter', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
@@ -1301,7 +1301,7 @@ test('spawnEnvForAgent preserves Anthropic credentials for non-claude adapters',
 
 // Codex CLI owns its own auth resolution. Preserve credentials from the
 // inherited environment so users who run the local CLI with API-key auth get
-// the same behavior through Open Design.
+// the same behavior through OpenDesign.
 test('spawnEnvForAgent preserves inherited OPENAI_API_KEY for the codex adapter', () => {
   const env = spawnEnvForAgent('codex', {
     OPENAI_API_KEY: 'sk-stale-byok',

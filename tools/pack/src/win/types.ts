@@ -6,10 +6,10 @@ import type {
   DesktopUpdateResult,
   WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
-import type { ToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
-import type { CacheReport } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackLauncherRuntimeSnapshot } from "../launcher/runtime-snapshot.js";
+import type { ToolPackUpdateCacheLifecycleSnapshot } from "../updates/cache-lifecycle-snapshot.js";
+import type { CacheReport } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import type { INTERNAL_PACKAGES } from "./constants.js";
 
 export type PackedTarballInfo = {

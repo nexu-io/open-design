@@ -70,6 +70,10 @@ export type AnalyticsEventName =
   | 'settings_byok_models_fetch_result'
   | 'byok_preflight_blocked'
   | 'settings_connector_auth_result'
+  // Fleet health for locally installed agent CLIs. Detection is the only stage
+  // that learns an installed CLI cannot actually be used; without this, the
+  // only way we hear about it is a user filing a report with a diagnostics zip.
+  | 'agent_detect_diagnostic'
   // AMR (hosted model) account auth result.
   | 'amr_auth_stage'
   | 'amr_auth_result'

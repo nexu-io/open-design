@@ -170,7 +170,7 @@ describe('inspiration action prompts', () => {
     });
 
     expect(prompt).toContain('@agent-browser');
-    expect(prompt).toContain('Use the selected Open Design Browser tab as the bound target.');
+    expect(prompt).toContain('Use the selected OpenDesign Browser tab as the bound target.');
     expect(prompt).toContain('- tab: Example landing');
     expect(prompt).toContain('- url: https://example.com');
     expect(prompt).toContain('Operation: extract_colors');

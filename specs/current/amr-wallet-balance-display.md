@@ -2,16 +2,16 @@
 
 ## Purpose
 
-Open Design should show the signed-in AMR wallet balance inside the local
+OpenDesign should show the signed-in AMR wallet balance inside the local
 client so users can understand why AMR runs are available, low on balance, or
 blocked by AMR billing.
 
 This spec defines the first vertical slice. It intentionally keeps wallet
-truth in Vela/AMR and does not add a new Open Design billing model.
+truth in Vela/AMR and does not add a new OpenDesign billing model.
 
 ## Problem Statement
 
-The Open Design client can show that the user is signed in to AMR, but it does
+The OpenDesign client can show that the user is signed in to AMR, but it does
 not show the AMR wallet balance. Users discover balance issues only after a
 run fails or enters AMR Cloud Recovery.
 
@@ -21,7 +21,7 @@ costs:
 - Vela API exposes the wallet ledger balance from `credit_balances`.
 - Link owns the Redis projection used for model-call preflight and pending
   usage.
-- Open Design daemon owns AMR local auth, CLI config, run preflight, and the
+- OpenDesign daemon owns AMR local auth, CLI config, run preflight, and the
   web/CLI surfaces.
 
 The accepted v1 tradeoff is to show the Vela API ledger balance and accept a
@@ -29,11 +29,11 @@ short inconsistency window while Link has pending usage in Redis.
 
 ## Goals
 
-- Show AMR wallet balance in Open Design after the user signs in to AMR.
-- Keep Open Design balance display sourced from Vela API, not from Link Redis.
+- Show AMR wallet balance in OpenDesign after the user signs in to AMR.
+- Keep OpenDesign balance display sourced from Vela API, not from Link Redis.
 - Avoid adding an API-to-Link read path for wallet display.
 - Avoid adding Redis to the Vela API service for this feature.
-- Avoid excess DB reads from the Open Design client by adding daemon-side short
+- Avoid excess DB reads from the OpenDesign client by adding daemon-side short
   TTL caching and request coalescing.
 - Keep run authorization owned by Link `CreditGuard.Check()`.
 - Make UI copy clear that the displayed value is wallet balance, not a
@@ -44,33 +44,33 @@ short inconsistency window while Link has pending usage in Redis.
 
 - Do not show full subscription/package management in v1.
 - Do not show usage history, recharge history, billing summary, or checkout
-  controls inside Open Design.
-- Do not read Link Redis from Vela API or Open Design.
+  controls inside OpenDesign.
+- Do not read Link Redis from Vela API or OpenDesign.
 - Do not make UI balance a run admission decision.
 - Do not promise that the displayed balance already subtracts in-flight pending
   usage.
-- Do not add a new Open Design billing database, wallet store, or persisted
+- Do not add a new OpenDesign billing database, wallet store, or persisted
   balance cache.
 - Do not allow runtime keys to read wallet balance unless Vela API explicitly
   chooses that as a separate security decision.
 
 ## Accepted Product Semantics
 
-Open Design displays the AMR ledger wallet balance returned by Vela API.
+OpenDesign displays the AMR ledger wallet balance returned by Vela API.
 
 This balance may briefly differ from Link's runtime projection while one or
 more model requests are in flight. That inconsistency is acceptable for v1.
 
 Run start and model calls still rely on Link's runtime balance projection. If
 the displayed wallet balance appears positive but Link rejects a run for
-insufficient balance, Open Design should show the existing insufficient-balance
+insufficient balance, OpenDesign should show the existing insufficient-balance
 or AMR Cloud Recovery surface.
 
 ## Existing Context
 
-### Open Design
+### OpenDesign
 
-Open Design currently exposes AMR login status through:
+OpenDesign currently exposes AMR login status through:
 
 ```http
 GET /api/integrations/vela/status
@@ -83,7 +83,7 @@ The web client calls this status endpoint from multiple surfaces, including
 Settings, Chat, EntryShell, and InlineModelSwitcher. Those surfaces must not
 each create independent wallet polling loops.
 
-Open Design's AMR config shape already recognizes profile fields including
+OpenDesign's AMR config shape already recognizes profile fields including
 `controlKey` and `runtimeKey`. Current AMR Cloud Recovery uses `runtimeKey`
 for recovery endpoints. Wallet balance display should use the least-privileged
 key accepted by Vela API.
@@ -107,7 +107,7 @@ The current public response is:
 
 The route currently authenticates browser sessions. Other control-plane routes
 such as `/api/v1/me` accept control keys and reject runtime keys. Wallet
-balance display from Open Design daemon requires the wallet balance route to
+balance display from OpenDesign daemon requires the wallet balance route to
 accept a control key or a narrow equivalent read-only credential path.
 
 Vela API currently has no Redis dependency, Redis client, or `REDIS_*` config.
@@ -123,11 +123,11 @@ Link owns Redis-backed runtime projection through `CreditGuard`:
 - `/internal/credits/projection` lets API correct or invalidate Link's
   projection after settlement or recharge.
 
-Open Design balance display must not read those Redis keys.
+OpenDesign balance display must not read those Redis keys.
 
 ## Required Contract Changes
 
-### Open Design Contracts
+### OpenDesign Contracts
 
 Add a shared account snapshot DTO in `packages/contracts`, for example:
 
@@ -159,7 +159,7 @@ make unavailable and stale states explicit. Do not represent unknown balance as
 
 ### Vela API External Dependency
 
-Extend `GET /api/v1/wallet/balance` so Open Design daemon can call it with the
+Extend `GET /api/v1/wallet/balance` so OpenDesign daemon can call it with the
 AMR control key from the CLI device-login profile.
 
 Rules:
@@ -169,13 +169,13 @@ Rules:
 - Keep runtime-key bearer auth rejected for wallet reads unless separately
   approved.
 - Return the existing response shape unless Vela wants to add optional
-  metadata. Open Design v1 can work with `balanceUsd` and `updatedAt`.
+  metadata. OpenDesign v1 can work with `balanceUsd` and `updatedAt`.
 
-This is an external dependency for the Open Design workstream, not part of the
-Open Design implementation slice. Open Design must still handle the current
+This is an external dependency for the OpenDesign workstream, not part of the
+OpenDesign implementation slice. OpenDesign must still handle the current
 state where this endpoint returns unauthorized for daemon-held credentials.
 
-## Open Design Daemon API
+## OpenDesign Daemon API
 
 Add a daemon route:
 
@@ -305,7 +305,7 @@ insufficient-balance and recovery UI handles the user-facing consequence.
 
 ## DB Load Strategy
 
-The main DB-load mitigation lives in Open Design daemon:
+The main DB-load mitigation lives in OpenDesign daemon:
 
 - one balance endpoint for all web surfaces;
 - short TTL cache;
@@ -321,12 +321,12 @@ follow-up optimization, not v1 scope.
 
 Because v1 display does not read Link Redis:
 
-- Redis outages do not directly affect Open Design wallet display.
+- Redis outages do not directly affect OpenDesign wallet display.
 - Redis outages may still affect Link run admission or model calls.
-- Open Design should keep showing the wallet ledger balance if Vela API is
+- OpenDesign should keep showing the wallet ledger balance if Vela API is
   available, but should not infer that a run can start.
 
-If Link rejects a run because projection is unavailable, Open Design should use
+If Link rejects a run because projection is unavailable, OpenDesign should use
 normal run failure/recovery handling and avoid converting the wallet display
 into a misleading success signal.
 
@@ -342,7 +342,7 @@ into a misleading success signal.
 
 ## Implementation Plan
 
-### Slice 1: Open Design Contracts and Daemon Client
+### Slice 1: OpenDesign Contracts and Daemon Client
 
 - Add `AmrWalletSnapshot` contract type.
 - Extend Vela config helpers to expose a control-key API context without
@@ -378,7 +378,7 @@ External Vela API dependency:
 - `GET /api/v1/wallet/balance` rejects runtime-key bearer auth.
 - OpenAPI and shared schema remain compatible.
 
-Open Design daemon:
+OpenDesign daemon:
 
 - wallet endpoint returns signed-out without upstream call.
 - missing control key returns unavailable, not zero balance.
@@ -388,7 +388,7 @@ Open Design daemon:
 - cache TTL is honored and can be bypassed by refresh.
 - logout invalidates cached wallet snapshot.
 
-Open Design web:
+OpenDesign web:
 
 - Settings AMR card shows balance for signed-in account.
 - Balance unavailable state does not hide AMR Console.
@@ -396,7 +396,7 @@ Open Design web:
 - Components share one snapshot and do not start duplicate polling loops.
 - Existing AMR sign-in and model-list behavior remains intact.
 
-Open Design CLI:
+OpenDesign CLI:
 
 - human status prints account and wallet balance.
 - `--json` prints the snapshot contract.
@@ -407,7 +407,7 @@ Open Design CLI:
 Minimum local validation after implementation:
 
 ```sh
-# Open Design
+# OpenDesign
 pnpm --filter @open-design/contracts typecheck
 pnpm --filter @open-design/daemon test
 pnpm --filter @open-design/web test
@@ -415,8 +415,8 @@ pnpm guard
 pnpm typecheck
 ```
 
-Do not require Vela repository validation for the Open Design-only workstream.
-If the external Vela dependency is not deployed yet, Open Design validation
+Do not require Vela repository validation for the OpenDesign-only workstream.
+If the external Vela dependency is not deployed yet, OpenDesign validation
 should use mocked upstream responses and verify the unauthorized/unavailable
 states.
 

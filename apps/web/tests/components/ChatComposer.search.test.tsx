@@ -753,7 +753,7 @@ describe('ChatComposer /search command', () => {
     expect(activeFileStrip.textContent).toContain('site/index.html');
     expect(screen.getByTestId('chat-composer').className).toContain('composer-active-file-mode');
 
-    expect(screen.getAllByText('Ask Open Design to change index.html...').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ask OpenDesign to change index.html...').length).toBeGreaterThan(0);
     await typeAndSettle('Make the hero clearer');
     fireEvent.click(screen.getByTestId('chat-send'));
 

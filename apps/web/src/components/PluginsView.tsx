@@ -29,7 +29,8 @@ import {
   type SkillImportInput,
   type SkillImportError,
 } from '../providers/registry';
-import { localizeSkillName } from '../i18n/content';
+import { localizeSkillDescription, localizeSkillName } from '../i18n/content';
+import type { Locale } from '../i18n/types';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackPageView,
@@ -193,22 +194,22 @@ const PLUGIN_SHARE_DETAILS: Record<PluginShareAction, {
     eyebrow: 'GitHub repository',
     fallbackTitle: 'Publish Plugin to GitHub',
     fallbackDescription:
-      'Creates a public GitHub repository for this local Open Design plugin.',
+      'Creates a public GitHub repository for this local OpenDesign plugin.',
     confirmLabel: 'Start publishing',
     steps: [
-      'Create a new Open Design project for the publish workflow.',
+      'Create a new OpenDesign project for the publish workflow.',
       'Copy this plugin into that project as isolated source context.',
       'Run the official publish action plugin against the local daemon.',
     ],
   },
   'contribute-open-design': {
-    eyebrow: 'Open Design pull request',
-    fallbackTitle: 'Contribute Plugin to Open Design',
+    eyebrow: 'OpenDesign pull request',
+    fallbackTitle: 'Contribute Plugin to OpenDesign',
     fallbackDescription:
-      'Opens a pull request that adds this plugin to the Open Design community catalog.',
+      'Opens a pull request that adds this plugin to the OpenDesign community catalog.',
     confirmLabel: 'Start contribution',
     steps: [
-      'Create a new Open Design project for the contribution workflow.',
+      'Create a new OpenDesign project for the contribution workflow.',
       'Copy this plugin into that project as isolated source context.',
       'Run the official contribution action plugin against the local daemon.',
     ],
@@ -922,6 +923,26 @@ function skillCardCategory(skill: SkillSummary): MarketCardCategory | null {
   const slug = skill.category?.trim();
   if (!slug) return null;
   return { slug, label: humanizeCategory(slug) };
+}
+
+/**
+ * A card's headline and its summary always resolve through the SAME locale.
+ * A skill carries both halves — `displayName` from the `en_name` / `zh_name`
+ * frontmatter and `descriptionI18n` from `en_description` / `zh_description`,
+ * plus the built-in `skillCopy` translation tables in `i18n/content` — so
+ * pairing a localized title with the raw frontmatter `description` is what
+ * produced OPEND-2250's Chinese-title / English-summary card. The plugin
+ * builder above already holds this invariant through `localizePluginTitle` +
+ * `localizePluginDescription`; skills go through here for the same reason.
+ */
+function localizeSkillCardCopy(
+  locale: Locale,
+  skill: SkillSummary,
+): { title: string; description: string } {
+  return {
+    title: localizeSkillName(locale, skill),
+    description: localizeSkillDescription(locale, skill),
+  };
 }
 
 type MarketCardAction =
@@ -1838,13 +1859,13 @@ export function ExtensionsMarketplace({
       };
     };
     const skillCard = (skill: SkillSummary, personal: boolean): MarketCard => {
-      const title = localizeSkillName(locale, skill);
+      const { title, description } = localizeSkillCardCopy(locale, skill);
       const shared = sharedSkillIds.has(skill.id);
       const canUnshare = sharedSkillMeta.get(skill.id)?.canUnshare === true;
       return {
         id: skill.id,
         title,
-        description: skill.description || '',
+        description,
         accent: marketAccent(skill.id),
         // #5517's skill row carries a "试一试" action just like a plugin row;
         // the port dropped it, which left every skill card with no way to use
@@ -1946,11 +1967,15 @@ export function ExtensionsMarketplace({
       const meta = sharedSkillMeta.get(id);
       const canUnshare = meta?.canUnshare === true;
       const skill = skills.find((row) => row.id === id) ?? null;
-      const title = skill ? localizeSkillName(locale, skill) : meta?.title || id;
+      // A team-shared skill that is also on this machine resolves through the
+      // same locale invariant as a local one; a shared row we have no local
+      // copy of falls back to the share record, which carries no translations.
+      const localized = skill ? localizeSkillCardCopy(locale, skill) : null;
+      const title = localized?.title ?? (meta?.title || id);
       return {
         id,
         title,
-        description: skill?.description || meta?.description || '',
+        description: localized?.description || meta?.description || '',
         accent: marketAccent(id),
         action: skill ? { kind: 'use-skill', skill } : { kind: 'none' },
         detail: skill ? { kind: 'skill', skill } : null,
@@ -2036,7 +2061,7 @@ export function ExtensionsMarketplace({
         skill={selectedSkill}
         author={
           scope === 'official'
-            ? 'Open Design'
+            ? 'OpenDesign'
             : scope === 'team'
               ? 'Nexu Team'
               : t('chat.you')
@@ -3289,7 +3314,7 @@ function AvailablePluginDetailsModal({
                 </h3>
               </div>
               <p className="plugin-details-modal__section-hint">
-                This official catalog entry is bundled with Open Design and is ready to use.
+                This official catalog entry is bundled with OpenDesign and is ready to use.
               </p>
             </section>
           ) : (

@@ -22,17 +22,17 @@ export const zh: DeepseekCopyOverride = {
     '把闭环补上：在真实页面上做标注、编译动效资产、把你的 Skill 库带过来。',
     '把 harness 本身变成设计工作空间：对话旁边的预览面板、工作台和看板。',
   ],
-  collectionCloserHeading: '省掉配置，在 Open Design 里用 DeepSeek Harness 做设计',
+  collectionCloserHeading: '省掉配置，在 OpenDesign 里用 DeepSeek Harness 做设计',
   filterAll: '全部',
   collectionCloserBody:
-    'Open Design 是围绕 DeepSeek Harness 运转的开源、Agent 原生设计工作空间。它让你的设计系统、Skill 和模板始终保持一致，Agent 交付的成果真正属于你。',
+    'OpenDesign 是围绕 DeepSeek Harness 运转的开源、Agent 原生设计工作空间。它让你的设计系统、Skill 和模板始终保持一致，Agent 交付的成果真正属于你。',
 
   categoryVision: '视觉与输入',
   categoryCanvas: '画布与生成式 UI',
   categoryWorkflow: '设计工作流',
   categoryWorkspace: '工作空间与预览',
 
-  ctaDownload: '下载 Open Design',
+  ctaDownload: '下载 OpenDesign',
   ctaStarList: '给 DeepSeek Harness 点 Star',
   ctaGuide: '了解如何用 DeepSeek Harness 做设计',
   ctaBrowseAll: '浏览全部插件',
@@ -70,9 +70,9 @@ export const zh: DeepseekCopyOverride = {
   detailMoreOnList: '在 DeepSeek Harness 仓库里了解更多',
   detailRelated: '更多 DeepSeek Harness 设计插件',
   finalEyebrow: '下一步',
-  detailCloserHeading: '用 Open Design 做设计，省掉那些配置',
+  detailCloserHeading: '用 OpenDesign 做设计，省掉那些配置',
   detailCloserBody:
-    '你可以自己装这个插件，也可以用 Open Design 在 DeepSeek Harness 外面套一整层精选设计层。自带 API Key，产出归你所有。',
+    '你可以自己装这个插件，也可以用 OpenDesign 在 DeepSeek Harness 外面套一整层精选设计层。自带 API Key，产出归你所有。',
 
   skills: {
     modlens: {

@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { teamConsoleUrl, workspaceUpgradeUrl } from '../../src/components/EntryNavRail';
-import { setRuntimeAmrConsoleOrigin } from '../../src/runtime/amr-guidance';
+import {
+  OPEN_DESIGN_PRICING_URL,
+  setRuntimeAmrConsoleOrigin,
+} from '../../src/runtime/amr-guidance';
 import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
 
 // Stand-in for an internal deployment's console origin — the real hostnames are
@@ -35,35 +38,6 @@ describe('teamConsoleUrl', () => {
     expect(teamConsoleUrl(base, 'billing')).toBe('https://web.example/dashboard?workspaceId=ws-1');
   });
 
-  // "Upgrade" must land ON a subscription dialog, not on a billing page where
-  // the user has to hunt for it. B gates the FIRST-checkout dialog and the
-  // change-PLAN dialog on mutually exclusive subscription states
-  // (team-dashboard.tsx: `canUpgradeTeam` needs billingState in
-  // free/inactive/locked, `ownerBillingActionsAvailable` needs 'active') — so
-  // the caller's `hasActivePlan` picks which one actually matches. Default
-  // (no options / `hasActivePlan: false`) keeps the never-subscribed-yet
-  // behavior so existing callers that have not been taught about the split
-  // keep landing on the FIRST-checkout dialog, same as before this test grew
-  // the `hasActivePlan` branch.
-  it('deep-links upgrade straight into the first-checkout dialog when the team has never subscribed', () => {
-    expect(teamConsoleUrl(base, 'upgrade')).toBe(
-      'https://web.example/dashboard?workspaceId=ws-1&billing=checkout',
-    );
-    expect(teamConsoleUrl(base, 'upgrade', { hasActivePlan: false })).toBe(
-      'https://web.example/dashboard?workspaceId=ws-1&billing=checkout',
-    );
-  });
-
-  // recvpYEiH019cD / recvpSQKna0LwR: `billing=checkout` silently opens no
-  // dialog for a team that already has an active plan (confirmed live —
-  // an already-subscribed "Team Pro" workspace landed on the bare Overview
-  // page). `billing=plan` is B's change-plan deep link for that state.
-  it('deep-links upgrade into the change-plan dialog when the team already has an active plan', () => {
-    expect(teamConsoleUrl(base, 'upgrade', { hasActivePlan: true })).toBe(
-      'https://web.example/dashboard?workspaceId=ws-1&billing=plan',
-    );
-  });
-
   // recvq725Kx0rM4 / recvqfXzHtY5wg: B's create-workspace dialog opens from a
   // `?workspace=create` deep link (vela `sidebar-actions.tsx`, PR #905 /
   // commit 501c0069, live on the `feat/workspace-team` branch the
@@ -73,19 +47,6 @@ describe('teamConsoleUrl', () => {
   it('deep-links create-team into the create-workspace dialog', () => {
     expect(teamConsoleUrl(base, 'create-team')).toBe(
       'https://web.example/dashboard?workspaceId=ws-1&workspace=create',
-    );
-  });
-
-  // The personal upgrade path is the console dashboard with B's plan modal
-  // auto-opened. `billing=plan` is B's ONE state-aware upgrade intent: its
-  // dashboard resolves it against the workspace's real subscription state, so
-  // a personal owner gets the personal plan modal (the same one the console's
-  // own 「升级订阅」 hero button opens) while a team owner gets checkout or
-  // change-plan — this client no longer has to guess which dialog to request,
-  // and a wrong guess can no longer silently open nothing (recvpSQKna0LwR).
-  it('deep-links plans into the console plan modal', () => {
-    expect(teamConsoleUrl(base, 'plans')).toBe(
-      'https://web.example/dashboard?workspaceId=ws-1&billing=plan',
     );
   });
 
@@ -137,35 +98,27 @@ describe('workspaceUpgradeUrl', () => {
     workspaceBalance: null,
   });
 
-  // Product requirement: the free-tier 「升级」 button lands on `/dashboard`
-  // and opens the SAME modal the console's own 「升级订阅」 hero button opens.
-  // `billing=plan` on a personal workspace is exactly that modal
-  // (`setPlanSelectionAudience('creator')` in B's `team-dashboard.tsx`).
-  it('sends a personal workspace to the dashboard plan modal, never a team billing deep link', () => {
+  it('sends a personal workspace to public Pricing', () => {
     const context: WorkspaceCollabContext = {
       ...baseContext,
       workspaceType: 'personal',
     };
-    expect(workspaceUpgradeUrl(context, null)).toBe(
-      'https://web.example/dashboard?workspaceId=ws-1&billing=plan',
-    );
+    expect(workspaceUpgradeUrl(context, null)).toBe(OPEN_DESIGN_PRICING_URL);
   });
 
-  it('sends a never-subscribed team to the first-checkout dialog', () => {
-    expect(workspaceUpgradeUrl(baseContext, null)).toBe(
-      'https://web.example/dashboard?workspaceId=ws-1&billing=checkout',
-    );
+  it('sends a never-subscribed team to public Pricing', () => {
+    expect(workspaceUpgradeUrl(baseContext, null)).toBe(OPEN_DESIGN_PRICING_URL);
     expect(workspaceUpgradeUrl(baseContext, billingSummary(''))).toBe(
-      'https://web.example/dashboard?workspaceId=ws-1&billing=checkout',
+      OPEN_DESIGN_PRICING_URL,
     );
   });
 
-  it('sends an already-subscribed team to the change-plan dialog', () => {
+  it('sends an already-subscribed team to public Pricing', () => {
     expect(
       workspaceUpgradeUrl({ ...baseContext, planId: 'team_pro', billingState: 'active' }, null),
-    ).toBe('https://web.example/dashboard?workspaceId=ws-1&billing=plan');
+    ).toBe(OPEN_DESIGN_PRICING_URL);
     expect(workspaceUpgradeUrl(baseContext, billingSummary('team_pro'))).toBe(
-      'https://web.example/dashboard?workspaceId=ws-1&billing=plan',
+      OPEN_DESIGN_PRICING_URL,
     );
   });
 
@@ -190,17 +143,17 @@ describe('workspaceUpgradeUrl', () => {
     },
   );
 
-  it('returns null without a console URL so entry points hide the affordance', () => {
+  it('does not require a console URL when workspace ownership is known', () => {
     const context: WorkspaceCollabContext = { ...baseContext };
     delete context.workspaceSettingsUrl;
-    expect(workspaceUpgradeUrl(context, null)).toBeNull();
+    expect(workspaceUpgradeUrl(context, null)).toBe(OPEN_DESIGN_PRICING_URL);
     expect(workspaceUpgradeUrl(null, null)).toBeNull();
   });
 
-  it('falls back to the profile plans deep link for CTA callers that must always link somewhere', () => {
+  it('falls back to Pricing for CTA callers that must always link somewhere', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(workspaceUpgradeUrl(null, null, { fallbackProfile: 'feature-test' })).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&billing=plan`,
+      OPEN_DESIGN_PRICING_URL,
     );
   });
 });

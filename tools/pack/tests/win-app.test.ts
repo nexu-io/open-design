@@ -4,9 +4,10 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import type { ToolPackConfig } from "../src/config.js";
-import { INTERNAL_PACKAGES } from "../src/win/constants.js";
-import { createWorkspaceTarballsCacheKey } from "../src/win/app.js";
+import type { ToolPackConfig } from "@/config/index.js";
+import { INTERNAL_PACKAGES } from "@/win/constants.js";
+import { createWinPackagedAppCacheKey, createWorkspaceTarballsCacheKey } from "@/win/app.js";
+import type { PackedTarballInfo } from "@/win/types.js";
 
 const PACKAGE_DIRS = INTERNAL_PACKAGES.map((packageInfo) => packageInfo.directory);
 
@@ -145,6 +146,59 @@ describe("createWorkspaceTarballsCacheKey", () => {
       await writeFile(join(root, PACKAGE_DIRS[0]!, "dist", "index.js"), "export const built = 1;\n", "utf8");
 
       await expect(createWorkspaceTarballsCacheKey(config, "workspace-build")).resolves.toBe(baseline);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("createWinPackagedAppCacheKey", () => {
+  const packedTarballs = [
+    { fileName: "contracts.tgz", packageName: "@open-design/contracts" },
+  ] satisfies PackedTarballInfo[];
+
+  it("covers every mutable packaged-app input", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-packaged-app-key-"));
+
+    try {
+      const config = createConfig(root, "standalone");
+      const baseline = await createWinPackagedAppCacheKey(config, "tarballs-a", packedTarballs);
+
+      await expect(createWinPackagedAppCacheKey(
+        { ...config, electronVersion: "41.4.0" },
+        "tarballs-a",
+        packedTarballs,
+      )).resolves.not.toBe(baseline);
+      await expect(createWinPackagedAppCacheKey(config, "tarballs-b", packedTarballs)).resolves.not.toBe(baseline);
+      await expect(createWinPackagedAppCacheKey(config, "tarballs-a", [
+        ...packedTarballs,
+        { fileName: "platform.tgz", packageName: "@open-design/platform" },
+      ])).resolves.not.toBe(baseline);
+      await expect(createWinPackagedAppCacheKey(config, "tarballs-a", packedTarballs, {
+        "hyperframes": "0.8.1",
+        "sharp": "0.35.4",
+      })).resolves.not.toBe(baseline);
+      await expect(createWinPackagedAppCacheKey(
+        createConfig(root, "server"),
+        "tarballs-a",
+        packedTarballs,
+      )).resolves.not.toBe(baseline);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("ignores namespace because it is applied after the cached app is materialized", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-packaged-app-key-"));
+
+    try {
+      const config = createConfig(root, "standalone");
+      const baseline = await createWinPackagedAppCacheKey(config, "tarballs-a", packedTarballs);
+      await expect(createWinPackagedAppCacheKey(
+        { ...config, namespace: "another-namespace" },
+        "tarballs-a",
+        packedTarballs,
+      )).resolves.toBe(baseline);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

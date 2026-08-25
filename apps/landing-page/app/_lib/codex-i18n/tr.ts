@@ -8,7 +8,7 @@ export const tr: CodexCopyOverride = {
   collectionEyebrow: 'Küratörlü koleksiyon',
   collectionHeading: 'Codex’e gerçek arayüz çıkarttıran tasarım eklentileri',
   collectionLede:
-    'OpenAI Codex çalışan kod yazar. Kendi haline bırakılırsa güvenli fontlara, ortalama boşluklara ve ortalanmış Helvetica’ya kaçar. Ona zevk kazandıran eklentiler bunlar: estetik skill’ler ve tasarım sistemi kuralları. Birini kurun ya da hepsini Open Design içinde çalıştırın.',
+    'OpenAI Codex çalışan kod yazar. Kendi haline bırakılırsa güvenli fontlara, ortalama boşluklara ve ortalanmış Helvetica’ya kaçar. Ona zevk kazandıran eklentiler bunlar: estetik skill’ler ve tasarım sistemi kuralları. Birini kurun ya da hepsini OpenDesign içinde çalıştırın.',
   collectionStats: [
     { value: '50', label: 'seçilmiş eklenti' },
     { value: '13', label: 'kaynak repo' },
@@ -20,13 +20,13 @@ export const tr: CodexCopyOverride = {
     'Tek satır kod yazılmadan önce Codex’in varsayılan estetik kararlarını geçersiz kılın.',
     'Token’larınızı ve bileşenlerinizi, Codex’in uydurmak yerine uyduğu kurallara dönüştürün.',
   ],
-  collectionCloserHeading: 'Kurulumu atlayın: Codex ile Open Design içinde tasarlayın',
+  collectionCloserHeading: 'Kurulumu atlayın: Codex ile OpenDesign içinde tasarlayın',
   filterAll: 'Tümü',
   collectionCloserBody:
-    'Open Design, Codex’in etrafında çalışan açık kaynaklı, agent-native tasarım çalışma alanıdır. Sistemlerinizi, skill’lerinizi ve şablonlarınızı tutarlı tutar; ajan da sahibi olduğunuz işi çıkarır.',
+    'OpenDesign, Codex’in etrafında çalışan açık kaynaklı, agent-native tasarım çalışma alanıdır. Sistemlerinizi, skill’lerinizi ve şablonlarınızı tutarlı tutar; ajan da sahibi olduğunuz işi çıkarır.',
   categoryFrontend: 'Frontend & Arayüz',
   categoryDesignSystems: 'Tasarım Sistemleri',
-  ctaDownload: 'Open Design’ı indir',
+  ctaDownload: 'OpenDesign’ı indir',
   ctaStarList: 'Listeye yıldız ver',
   ctaBrowseAll: 'Tüm eklentilere göz at',
   ctaViewSource: 'Kaynağı gör',
@@ -61,9 +61,9 @@ export const tr: CodexCopyOverride = {
   detailMoreOnList: 'codex-design listesinde dahası',
   detailRelated: 'Diğer Codex tasarım eklentileri',
   finalEyebrow: 'Sonraki adım',
-  detailCloserHeading: 'Kurulum derdi olmadan Open Design ile tasarlayın',
+  detailCloserHeading: 'Kurulum derdi olmadan OpenDesign ile tasarlayın',
   detailCloserBody:
-    'Bu eklentiyi kendiniz kurun ya da Open Design ile Codex’in etrafına baştan sona küratörlü bir tasarım katmanı geçirin. Kendi anahtarınızı getirin, çıktınızın sahibi olun.',
+    'Bu eklentiyi kendiniz kurun ya da OpenDesign ile Codex’in etrafına baştan sona küratörlü bir tasarım katmanı geçirin. Kendi anahtarınızı getirin, çıktınızın sahibi olun.',
   skills: {
     'gpt-taste': {
       tagline:

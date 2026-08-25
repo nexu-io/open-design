@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { HYPERFRAMES_VIDEO_MODEL } from '@open-design/contracts';
 import type {
   ChatRunStatus,
   ProjectFile,
@@ -77,13 +78,51 @@ function projectKind(
     : null;
 }
 
+function isHyperFramesProject(
+  metadata: ValidateRunDeliverableInput['projectMetadata'],
+): boolean {
+  return metadata?.videoModel === HYPERFRAMES_VIDEO_MODEL
+    || metadata?.intent === 'hyperframes';
+}
+
+/**
+ * The file kinds a project may deliver as its canonical entry, or `null` when
+ * any kind is acceptable.
+ *
+ * `metadata.kind` records the Home surface a project was created from, not the
+ * shape of what it delivers. For most kinds those coincide; HyperFrames breaks
+ * the identity. A HyperFrames project rides on `kind: 'video'` because Video is
+ * the surface that offers it, while the artifact the user authors, edits and
+ * previews is an HTML composition — the MP4 is a render of that HTML, produced
+ * on demand and not necessarily present in the project at all. OD Next already
+ * says so on the way in: `DAEMON_OWNED_OUTPUT_KINDS.hyperframes` admits `html`
+ * and `source` as supported deliverable kinds at plan time, so rejecting them
+ * at completion time contradicts the plan the same daemon approved.
+ *
+ * Generative video projects (fal / Veo / Sora / Volcengine) keep the strict
+ * video-only contract: there the provider returns a video file, and an HTML
+ * "preview page" in its place is a genuine delivery failure.
+ */
+function acceptedDeliverableKinds(
+  metadata: ValidateRunDeliverableInput['projectMetadata'],
+): ReadonlySet<ProjectFileKind> | null {
+  const kind = projectKind(metadata);
+  if (!kind || kind === 'other') return null;
+  const declared = PROJECT_KIND_FILE_KINDS[kind];
+  if (!declared) return null;
+  if (kind === 'video' && isHyperFramesProject(metadata)) {
+    return new Set<ProjectFileKind>([...declared, 'html']);
+  }
+  return declared;
+}
+
 function filePath(file: ProjectFile): string {
   return typeof file.path === 'string' && file.path ? file.path : file.name;
 }
 
 function inferredEntry(
   files: ProjectFile[],
-  kind: ProjectMetadata['kind'] | null,
+  acceptedKinds: ReadonlySet<ProjectFileKind> | null,
 ): ProjectFile | null {
   const rootIndex = files.find((file) => filePath(file) === 'index.html');
   if (rootIndex) return rootIndex;
@@ -94,7 +133,6 @@ function inferredEntry(
   });
   if (rootHtml.length === 1) return rootHtml[0] ?? null;
 
-  const acceptedKinds = kind ? PROJECT_KIND_FILE_KINDS[kind] : null;
   if (acceptedKinds) {
     const compatible = files.filter((file) => acceptedKinds.has(file.kind));
     if (compatible.length === 1) return compatible[0] ?? null;
@@ -103,12 +141,11 @@ function inferredEntry(
   return files.length === 1 ? files[0] ?? null : null;
 }
 
-function matchesProjectKind(
-  kind: ProjectMetadata['kind'] | null,
+function matchesAcceptedKinds(
+  acceptedKinds: ReadonlySet<ProjectFileKind> | null,
   fileKind: ProjectFileKind,
 ): boolean {
-  if (!kind || kind === 'other') return true;
-  return PROJECT_KIND_FILE_KINDS[kind]?.has(fileKind) ?? true;
+  return !acceptedKinds || acceptedKinds.has(fileKind);
 }
 
 /**
@@ -146,10 +183,11 @@ export async function validateRunDeliverable(
     return { valid: false, validation: 'project_missing' };
   }
 
+  const acceptedKinds = acceptedDeliverableKinds(input.projectMetadata);
   const declared = safeRelativeFile(input.projectMetadata?.entryFile);
   const selected = declared
     ? files.find((file) => filePath(file) === declared) ?? null
-    : inferredEntry(files, projectKind(input.projectMetadata));
+    : inferredEntry(files, acceptedKinds);
   if (!selected) {
     return { valid: false, validation: 'entry_missing' };
   }
@@ -185,7 +223,7 @@ export async function validateRunDeliverable(
       };
     }
   }
-  if (!matchesProjectKind(projectKind(input.projectMetadata), selected.kind)) {
+  if (!matchesAcceptedKinds(acceptedKinds, selected.kind)) {
     return {
       valid: false,
       validation: 'type_mismatch',

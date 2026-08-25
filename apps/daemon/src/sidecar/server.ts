@@ -32,6 +32,7 @@ import {
   setDesktopAuthSecret,
   signDesktopImportToken,
 } from "../desktop-auth.js";
+import { attachParentMonitor, scheduleHeldDaemonExit } from "./parent-monitor-gate.js";
 
 /**
  * PR #974 round 6 (mrcfps): pure wrapper that overlays the live
@@ -48,7 +49,6 @@ export function withCurrentDesktopAuthGate(snapshot: DaemonStatusSnapshot): Daem
 
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
-const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 
 export type DaemonSidecarHandle = {
@@ -69,27 +69,6 @@ function parsePort(value: string | undefined): number {
 function parseOptionalTrustedWebPort(value: string | undefined): number | null {
   const port = parsePort(value);
   return port > 0 ? port : null;
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function attachParentMonitor(stop: () => Promise<void>): void {
-  const parentPid = Number(process.env[TOOLS_DEV_PARENT_PID_ENV]);
-  if (!Number.isInteger(parentPid) || parentPid <= 0) return;
-
-  const timer = setInterval(() => {
-    if (isProcessAlive(parentPid)) return;
-    clearInterval(timer);
-    void stop().finally(() => process.exit(0));
-  }, 1000);
-  timer.unref();
 }
 
 export function mintImportTokenForCli(baseDir: string): MintImportTokenResult {
@@ -119,7 +98,10 @@ export function mintImportTokenForCli(baseDir: string): MintImportTokenResult {
   };
 }
 
-export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<DaemonSidecarHandle> {
+export async function startDaemonSidecar(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+  options: { exit?: (code?: number) => void } = {},
+): Promise<DaemonSidecarHandle> {
   const serverHandle: StartedDaemonRuntime = await startDaemonRuntime({
     desktopPdfExporter: async (input: DesktopExportPdfInput): Promise<DesktopExportPdfResult> => {
       const desktopIpc = resolveAppIpcPath({
@@ -204,11 +186,10 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
           // request so `tools-dev start desktop` sees the live value
           // (the flag flips after REGISTER_DESKTOP_AUTH and stays sticky).
           return withCurrentDesktopAuthGate(state);
-        case SIDECAR_MESSAGES.SHUTDOWN:
-          setImmediate(() => {
-            void stop().finally(() => process.exit(0));
-          });
-          return { accepted: true };
+        case SIDECAR_MESSAGES.SHUTDOWN: {
+          const deferred = scheduleHeldDaemonExit(stop, options.exit);
+          return deferred ? { accepted: true, deferred: true } : { accepted: true };
+        }
         case SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH:
           // PR #974: the desktop main process registers its per-process
           // auth secret here at startup. From this point on the HTTP
@@ -238,7 +219,11 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      void stop().finally(() => process.exit(0));
+      // Packaged beforeShutdown sends SHUTDOWN. When the handoff hold is
+      // active the SHUTDOWN ack includes deferred:true so closeManagedChild
+      // waits a longer bounded grace before stopProcesses(). SIGTERM from
+      // that escalation still uses this hold; SIGKILL remains the ceiling.
+      scheduleHeldDaemonExit(stop, options.exit);
     });
   }
 

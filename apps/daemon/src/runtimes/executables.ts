@@ -128,19 +128,36 @@ export function agentBinEnvKey(agentId: string | undefined): string | null {
   return AGENT_BIN_ENV_KEYS.get(agentId) ?? null;
 }
 
-export function resolveOnPath(bin: string): string | null {
+// Every file named `bin` that exists on the search path, in resolution
+// order. Detection needs the whole list, not just the winner: a directory
+// that ranks earlier can hold a wrapper left behind by a half-finished
+// install, and executing it fails even though a working CLI of the same
+// name sits in a later directory. Resolution alone cannot tell the two
+// apart — only spawning can — so the caller walks candidates until one
+// actually runs.
+export function resolveAllOnPath(bin: string): string[] {
   const exts =
     process.platform === 'win32'
       ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
       : [''];
   const dirs = resolvePathDirs();
+  const found: string[] = [];
+  const seen = new Set<string>();
   for (const dir of dirs) {
     for (const ext of exts) {
       const full = path.join(dir, bin + ext);
-      if (full && existsSync(full)) return full;
+      if (!full || seen.has(full)) continue;
+      if (existsSync(full)) {
+        seen.add(full);
+        found.push(full);
+      }
     }
   }
-  return null;
+  return found;
+}
+
+export function resolveOnPath(bin: string): string | null {
+  return resolveAllOnPath(bin)[0] ?? null;
 }
 
 function looksExecutableOnWindows(filePath: string): boolean {
@@ -336,9 +353,48 @@ export function resolveAgentExecutable(
   return inspectAgentExecutableResolution(def, configuredEnv).selectedPath;
 }
 
+// The executables a completed detection pass proved cannot be launched, per
+// agent id.
+//
+// Detection is the only stage that learns this — it is the only one that spawns
+// anything. Without recording the answer, every later resolution (chat,
+// connection test, memory summariser, companion install) would redo the naive
+// "first hit on PATH" walk and land back on the very shim detection just
+// rejected: Settings would advertise the agent as installed while each turn
+// exec'd a broken wrapper.
+//
+// This deliberately records what is *broken* rather than which candidate won.
+// Skipping proven-dead paths leaves PATH order in charge of everything still
+// standing, so a CLI that becomes visible earlier after detection ran — a fresh
+// install, a version manager swapping shims, a caller resolving under its own
+// environment — still wins. Remembering the winner instead pins the daemon to
+// one binary for its whole lifetime and silently outranks the caller's PATH.
+const unusableExecutables = new Map<string, Set<string>>();
+
+/** Record an executable a detection pass proved could not be launched. */
+export function rememberUnusableExecutable(agentId: string, resolvedPath: string): void {
+  const known = unusableExecutables.get(agentId);
+  if (known) known.add(resolvedPath);
+  else unusableExecutables.set(agentId, new Set([resolvedPath]));
+}
+
+/**
+ * Drop what an agent proved unusable. Detection clears it before each pass, so
+ * a rescan after the user repairs or reinstalls a CLI never keeps skipping it.
+ */
+export function forgetUnusableExecutables(agentId: string): void {
+  unusableExecutables.delete(agentId);
+}
+
 export function inspectAgentExecutableResolution(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
+  // Paths already proven unusable by a spawn attempt. Only PATH-derived
+  // candidates are skippable: an explicit `*_BIN` override, a packaged
+  // built-in, and the Codex app bundle are deliberate selections, so a
+  // broken one must surface as an error rather than silently resolving to
+  // some other binary the user never pointed at.
+  options: { skipPathCandidates?: readonly string[] } = {},
 ): {
   configuredOverridePath: string | null;
   pathResolvedPath: string | null;
@@ -356,14 +412,19 @@ export function inspectAgentExecutableResolution(
     def.bin,
     ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : []),
   ];
-  let pathResolvedPath: string | null = null;
+  const skip = new Set(options.skipPathCandidates ?? []);
+  for (const proven of unusableExecutables.get(def.id) ?? []) skip.add(proven);
+  const pathCandidates: string[] = [];
   for (const bin of candidates) {
-    const resolved = resolveOnPath(bin);
-    if (resolved) {
-      pathResolvedPath = resolved;
-      break;
+    for (const resolved of resolveAllOnPath(bin)) {
+      if (skip.has(resolved) || pathCandidates.includes(resolved)) continue;
+      pathCandidates.push(resolved);
     }
   }
+  // First hit among what is left. Plain order is not enough on its own — the
+  // first file that merely *exists* can be a shim detection already proved
+  // dead, which is why those are filtered out above rather than ranked below.
+  const pathResolvedPath: string | null = pathCandidates[0] ?? null;
   const builtInPath = packagedBuiltInExecutable(def, configuredEnv);
   const appBundlePath = codexAppBundleExecutable(def);
   return {

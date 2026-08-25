@@ -60,7 +60,11 @@ import {
 } from '../providers/daemon';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
 import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
-import { deepSeekHarnessNeedsSetup, isVisibleLocalCliAgent } from '../utils/visibleAgents';
+import {
+  availableVisibleAgentCount,
+  deepSeekHarnessNeedsSetup,
+  isVisibleLocalCliAgent,
+} from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
@@ -879,7 +883,7 @@ function cleanAgentVersionLabel(
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : agent.name;
+  return agent.id === 'amr' ? 'OpenDesign' : agent.name;
 }
 
 const AGENT_CLI_ENV_FIELDS = [
@@ -1652,14 +1656,9 @@ export function SettingsDialog({
     workspaceContext,
   );
   const showWorkspaceSettings = canShowWorkspaceSettings(workspaceContext);
-  // The 「升级」 buttons on the AMR model card route through
-  // `workspaceUpgradeUrl` — the one decision point every upgrade affordance
-  // shares (see its docblock in `EntryNavRail.tsx`): personal workspace →
-  // B's personal plan modal (`billing=plan`, recvpYEiH019cD); team → the
-  // checkout vs change-plan dashboard dialog by subscription state
-  // (recvpSQKna0LwR). The profile fallback keeps the buttons alive after a
-  // signed-out/no-context read; while that read is still loading, hide them so
-  // an owner-only action cannot flash briefly for an admin/member.
+  // All generic AMR upgrade buttons route through public Pricing. While the
+  // workspace read is pending, hide the owner-only action to avoid a flash for
+  // admins or members.
   const amrUpgradeUrl = (profile: string | null | undefined): string | null =>
     workspaceContextLoading
       ? null
@@ -2331,7 +2330,7 @@ export function SettingsDialog({
       const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
       setAgentRescanNotice({
         kind: 'success',
-        count: nextAgents.filter((a) => a.available).length,
+        count: availableVisibleAgentCount(nextAgents),
       });
     } catch {
       setAgentRescanNotice({ kind: 'error' });
@@ -4191,22 +4190,11 @@ export function SettingsDialog({
         aria-labelledby="settings-dialog-title"
         onClick={pageMode ? undefined : (e) => e.stopPropagation()}
       >
-        {/* Top-right chrome strip — anchored to the modal corner so the
-            autosave indicator and the close button float above the
-            sidebar/content rhythm without competing with the title.
-            We use `position: absolute` instead of putting these inside
-            `.modal-head` so the welcome variant's tall hero (kicker /
-            title / subtitle / pet teaser) keeps its centred reading
-            measure, and the close button always lands at the same
-            optical location regardless of how much copy the header
-            renders. */}
-        <div className="settings-chrome" aria-hidden={false}>
-          {/* Autosave status pill. Only renders something while a save
-              is in flight or has just completed — idle = invisible so
-              first-open feels calm. The chrome strip itself stays
-              mounted so the close button never shifts when the pill
-              appears, and the pill is announced via aria-live for
-              assistive tech. */}
+        {/* Autosave feedback is viewport-level rather than part of the
+            top-right dialog chrome. Local CLI pickers and the page-mode
+            content both occupy that upper band, so keeping this passive
+            status at the bottom avoids obscuring the active controls. */}
+        <div className="settings-autosave-layer">
           <div
             className={`settings-autosave is-${autosaveStatus}`}
             role="status"
@@ -4229,6 +4217,11 @@ export function SettingsDialog({
               </>
             ) : null}
           </div>
+        </div>
+        {/* Top-right chrome strip — anchored to the modal corner so the
+            close and fullscreen controls stay at a stable optical location
+            regardless of the header copy. */}
+        <div className="settings-chrome" aria-hidden={false}>
           {pageMode ? null : (
             <button
               type="button"
@@ -4451,7 +4444,7 @@ export function SettingsDialog({
               </div>
               </div>
               {cfg.mode === 'daemon' && !amrCardSignedIn ? (
-                // Only prompt to sign into Open Design Cloud when NOT already
+                // Only prompt to sign into OpenDesign Cloud when NOT already
                 // signed in — the AMR/vela session IS the cloud identity (one
                 // session drives both), so a logged-in user has nothing to do
                 // here and the callout was showing spuriously.
@@ -4460,7 +4453,7 @@ export function SettingsDialog({
                     <strong>{t('settings.cloudCalloutTitle')}</strong>
                     <p>{t('settings.cloudCalloutBody')}</p>
                   </div>
-                  {/* Same device-auth flow as the 授权 button on the Open Design
+                  {/* Same device-auth flow as the 授权 button on the OpenDesign
                       agent card below — the AMR/vela session IS the cloud
                       identity, so signing in here is that one flow. This used to
                       navigate to onboarding, which walked the user through the
@@ -8105,7 +8098,7 @@ function MediaProvidersSection({
 // Important: every snippet uses absolute paths to the daemon's current
 // Node-compatible runtime and built cli.js, fetched at runtime. macOS
 // and Linux ship a system /usr/bin/od (octal-dump) that shadows any
-// `od` we might add to PATH, and most Open Design users run from
+// `od` we might add to PATH, and most OpenDesign users run from
 // source where `od` is not installed globally. The installer panel
 // must NOT reference bare `od`.
 type McpClientId =

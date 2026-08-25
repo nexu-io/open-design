@@ -291,6 +291,19 @@
 .settings-about-version-row {
   justify-content: space-between;
 }
+/* The update action and "View release notes" are adjacent JSX siblings, so no
+   whitespace text node separates them — without an explicit row the two
+   inline-flex buttons render with their borders touching at 0px. The
+   container owns their spacing; `flex-shrink: 0` keeps the buttons off the
+   version copy when a long status string competes for the row. */
+.settings-about-update-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .settings-about-list dt {
   font-size: 12px;
   color: var(--text-muted);
@@ -1619,7 +1632,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   overflow: hidden;
 }
 
-/* Failed-run AMR nudge: when the chat error card's "Try Open Design AMR" link
+/* Failed-run AMR nudge: when the chat error card's "Try OpenDesign AMR" link
    opens Settings, the AMR card scrolls into view and pulses a couple of times.
    The card's own box-shadow is not clipped by `overflow: hidden`, so the glow
    reads fully even though inner content is clipped. */
@@ -4196,7 +4209,7 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
    knob stays visible against the (now lighter) track. On-state already
    used --text (#e8e4dc) which is high-contrast, so it is left alone.
 
-   Two selector paths needed because Open Design supports both explicit
+   Two selector paths needed because OpenDesign supports both explicit
    [data-theme='dark'] AND system dark via @media prefers-color-scheme
    (the default "system" theme removes data-theme and falls back on the
    media query in tokens.css). */

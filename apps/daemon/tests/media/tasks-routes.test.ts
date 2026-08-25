@@ -200,7 +200,7 @@ describe('media task route recovery', () => {
     }
   });
 
-  it('checks fresh tool authority before revealing whether a media task exists', async () => {
+  it('uses the tool grant and persisted project binding without querying Workspace authority', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
     const projectId = `project_${randomUUID()}`;
@@ -226,7 +226,9 @@ describe('media task route recovery', () => {
       allowedOperations: ['media:generate'],
     }).token;
     let authorityMode: 'active' | 'outage' | 'removed' = 'removed';
+    let authorityRequests = 0;
     authorityServer = http.createServer((_req, res) => {
+      authorityRequests += 1;
       res.setHeader('content-type', 'application/json');
       if (authorityMode === 'outage') {
         res.statusCode = 503;
@@ -261,6 +263,8 @@ describe('media task route recovery', () => {
       server: http.Server;
     };
     server = started.server;
+    await vi.waitFor(() => expect(authorityRequests).toBeGreaterThanOrEqual(1));
+    const startupAuthorityRequests = authorityRequests;
     const waitForMissingTask = () => fetch(
       `${started.url}/api/media/tasks/missing-task/wait`,
       {
@@ -274,21 +278,16 @@ describe('media task route recovery', () => {
     );
 
     const removed = await waitForMissingTask();
-    expect(removed.status).toBe(403);
-    await expect(removed.json()).resolves.toMatchObject({
-      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
-    });
+    expect(removed.status).toBe(404);
 
     authorityMode = 'outage';
     const unavailable = await waitForMissingTask();
-    expect(unavailable.status).toBe(503);
-    await expect(unavailable.json()).resolves.toMatchObject({
-      error: { code: 'WORKSPACE_AUTHORITY_UNAVAILABLE' },
-    });
+    expect(unavailable.status).toBe(404);
 
     authorityMode = 'active';
     const authorized = await waitForMissingTask();
     expect(authorized.status).toBe(404);
+    expect(authorityRequests).toBe(startupAuthorityRequests);
   });
 
   it('recovers a pre-restart running task so wait returns interrupted instead of 404', async () => {

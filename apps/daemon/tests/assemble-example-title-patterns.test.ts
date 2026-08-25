@@ -13,7 +13,7 @@ test('assembleExample keeps replacement-pattern sequences verbatim', () => {
   for (const title of ['Save $$$ This Quarter', "Rock $'n Roll Tour", 'Before $& After', 'Backtick $` Pattern']) {
     assert.equal(
       assembleExample(template, slides, title),
-      `<html><head><title>${title} | Open Design Example</title></head><body>${slides}</body></html>`,
+      `<html><head><title>${title} | OpenDesign Example</title></head><body>${slides}</body></html>`,
     );
   }
 });

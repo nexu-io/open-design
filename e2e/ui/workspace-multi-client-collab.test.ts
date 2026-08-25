@@ -1061,7 +1061,7 @@ async function pinWorkspace(page: Page, workspaceMemberId: string): Promise<void
 async function openHome(page: Page): Promise<void> {
   await page.bringToFront();
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: T.xlong });
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, {
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, {
     timeout: T.xlong,
   });
   // Do not wait on the long-lived SSE response itself: Chromium may not emit
@@ -1069,7 +1069,7 @@ async function openHome(page: Page): Promise<void> {
   // convergence assertions below are the actual connection contract.
   const privacyDialog = page
     .getByRole('dialog')
-    .filter({ hasText: 'Help us improve Open Design' });
+    .filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog
       .getByRole('button', { name: /I get it|not now|got it|don't share/i })

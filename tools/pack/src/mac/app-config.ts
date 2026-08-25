@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { pathExists } from "./fs.js";
 import type { SeededAppConfigPaths } from "./types.js";
 

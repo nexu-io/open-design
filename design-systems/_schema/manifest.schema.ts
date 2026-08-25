@@ -1,7 +1,7 @@
 /* ─────────────────────────────────────────────────────────────────────────
  * design-systems/_schema/manifest.schema.ts
  *
- * Canonical contract for an Open Design Design System Project.
+ * Canonical contract for an OpenDesign Design System Project.
  *
  * `DESIGN.md` remains the prose source that agents read. The project
  * manifest is the stable discovery layer around it: picker / daemon /
@@ -9,21 +9,16 @@
  * optional component fixtures, and optional preview/assets directories
  * without guessing from folder contents.
  *
- * The import-project structure also defines optional index fields
+ * PR0 for the import-project structure also defines optional index fields
  * for richer imported systems (`USAGE.md`, preview pages, source evidence,
  * and a rebuildable component manifest cache). These fields are structural
  * only in PR0: guards validate their paths and JSON shape, but runtime
  * behavior remains unchanged until later PRs consume them.
  *
- * Structured runtime files are opt-in. Existing DESIGN.md-only systems and
- * v1 manifests without `runtime` stay valid; packages that declare the field
- * must provide the complete component, intent, lint, and fallback graph.
+ * PR1 deliberately defines the contract without changing runtime
+ * discovery. Existing DESIGN.md-only systems stay valid; this schema is
+ * enforced only for folders that choose to ship `manifest.json`.
  * ─────────────────────────────────────────────────────────────────── */
-
-import {
-  DesignSystemRuntimePathsSchema,
-  type DesignSystemRuntimePaths,
-} from "./runtime.schema.ts";
 
 export const DESIGN_SYSTEM_PROJECT_SCHEMA_VERSION = "od-design-system-project/v1" as const;
 
@@ -142,8 +137,6 @@ export type DesignSystemProjectManifest = {
   readonly preview?: DesignSystemProjectPreview;
   /** Optional imported-source evidence indexes. */
   readonly sourceFiles?: DesignSystemProjectSourceFiles;
-  /** Optional machine-readable intent-to-component runtime contract. */
-  readonly runtime?: DesignSystemRuntimePaths;
 };
 
 export type DesignSystemManifestValidationResult =
@@ -167,7 +160,6 @@ const ALLOWED_TOP_LEVEL_KEYS = new Set([
   "fonts",
   "preview",
   "sourceFiles",
-  "runtime",
 ]);
 
 const ALLOWED_SOURCE_KEYS: Record<DesignSystemProjectSource["type"], ReadonlySet<string>> = {
@@ -231,7 +223,6 @@ export function validateDesignSystemProjectManifest(
   if (value.fonts !== undefined) validateFonts(errors, value.fonts);
   if (value.preview !== undefined) validatePreview(errors, value.preview);
   if (value.sourceFiles !== undefined) validateSourceFiles(errors, value.sourceFiles);
-  if (value.runtime !== undefined) validateRuntimePaths(errors, value.runtime);
 
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, manifest: value as DesignSystemProjectManifest };
@@ -376,15 +367,6 @@ function validateSourceFiles(errors: string[], value: unknown): void {
   for (const key of ALLOWED_SOURCE_FILES_KEYS) {
     const sourcePath = value[key];
     if (sourcePath !== undefined) expectSafeRelativePath(errors, `$.sourceFiles.${key}`, sourcePath);
-  }
-}
-
-function validateRuntimePaths(errors: string[], value: unknown): void {
-  const parsed = DesignSystemRuntimePathsSchema.safeParse(value);
-  if (parsed.success) return;
-  for (const issue of parsed.error.issues) {
-    const suffix = issue.path.length === 0 ? "" : `.${issue.path.join(".")}`;
-    errors.push(`$.runtime${suffix} ${issue.message}`);
   }
 }
 

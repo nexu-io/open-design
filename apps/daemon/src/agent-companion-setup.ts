@@ -75,7 +75,7 @@ async function materializeDevelopmentBundle(
   if (!(await fileExists(packageJsonPath))) {
     throw new AgentCompanionSetupError(
       'BUNDLED_COMPANION_INVALID',
-      'This Open Design build does not contain the DeepSeek Harness connection component.',
+      'This OpenDesign build does not contain the DeepSeek Harness connection component.',
     );
   }
   const destination = path.join(runtimeDataDir, 'runtime-packages', DSH_AGENT_ID);
@@ -159,7 +159,7 @@ async function stageVerifiedBundleInProfile(
   await writeFile(path.join(bundleDirectory, file), bytes);
   // dsh runs pnpm with the profile directory as cwd. Keeping this spec
   // relative avoids rc.6's Windows shell forwarder splitting an absolute
-  // packaged-app path such as "Open Design" at its spaces.
+  // packaged-app path such as "OpenDesign" at its spaces.
   return `${relativeDirectory}/${file}`;
 }
 
@@ -239,7 +239,7 @@ async function installDeepSeekHarnessCompanionOnce(options: {
     );
     throw new AgentCompanionSetupError(
       'COMPANION_INSTALL_FAILED',
-      'DeepSeek Harness could not install the Open Design connection component. No agent selection was changed.',
+      'DeepSeek Harness could not install the OpenDesign connection component. No agent selection was changed.',
     );
   }
 

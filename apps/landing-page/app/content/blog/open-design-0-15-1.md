@@ -1,22 +1,22 @@
 ---
-title: "Open Design 0.15.1 — Sharper Vision, Longer Flow"
+title: "OpenDesign 0.15.1 — Sharper Vision, Longer Flow"
 date: 2026-07-17
 category: "Product"
 readingTime: 3
 summary: "0.15.1 sharpens the OpenDesign Agent: finer image detail, smoother long-session recovery, in-chat clarifying questions, and more model runtimes — plus HTML, deck-export, and desktop fixes."
 socialImage: "/blog/open-design-0-15-1-cover.webp"
 ctaKind: download-app
-ctaTitle: "Update to Open Design 0.15.1"
+ctaTitle: "Update to OpenDesign 0.15.1"
 ctaBody: "Free, open-source, local-first. macOS and Windows builds are live."
 ctaLabel: "Download 0.15.1"
 ctaHref: "https://releases.open-design.ai/?utm_source=blog&utm_medium=docs&utm_campaign=202607_0_15_1&utm_content=official"
 i18n:
   zh:
-    title: 'Open Design 0.15.1：看得更清，跑得更久'
+    title: 'OpenDesign 0.15.1：看得更清，跑得更久'
     summary: '0.15.1 打磨的是 OpenDesign Agent：图像细节更清晰、长会话更扛得住、也更容易恢复，需要跟你确认的问题直接留在对话里、可用的模型运行时更多——另有 HTML、演示导出与桌面端的一批修复。'
     category: '产品'
     bodyHtml: |
-      <p>Open Design 0.15.1 是一次围绕运行时的发布。我们升级了内置的 <strong>OpenDesign Agent</strong>：多模态模型能看到图像里更多的细节，长时间的工作会话更不容易散架、也更容易恢复，而日常流程——确认追问、模型选择、导出——则安静地退到一边。它让 <a href="/blog/what-is-vibe-design/">vibe design</a> 的循环——提出、查看、打磨——一路无摩擦地转下去。</p>
+      <p>OpenDesign 0.15.1 是一次围绕运行时的发布。我们升级了内置的 <strong>OpenDesign Agent</strong>：多模态模型能看到图像里更多的细节，长时间的工作会话更不容易散架、也更容易恢复，而日常流程——确认追问、模型选择、导出——则安静地退到一边。它让 <a href="/blog/what-is-vibe-design/">vibe design</a> 的循环——提出、查看、打磨——一路无摩擦地转下去。</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">下载 0.15.1</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">完整发布说明</a></p>
 
       <h2>你的 agent 把图看得更清楚了</h2>
@@ -44,11 +44,11 @@ i18n:
       <p>0.15.1 免费、开源、本地优先。</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">下载 0.15.1</a></p>
   ja:
-    title: 'Open Design 0.15.1 — より鮮明な視界、より長いフロー'
+    title: 'OpenDesign 0.15.1 — より鮮明な視界、より長いフロー'
     summary: '0.15.1 は OpenDesign Agent を磨き上げます。画像のディテールをより細かく捉え、長時間セッションの復帰がスムーズになり、確認のための質問がチャット内に収まり、対応するモデルランタイムも増えました。あわせて HTML・スライド書き出し・デスクトップの修正も。'
     category: 'プロダクト'
     bodyHtml: |
-      <p>Open Design 0.15.1 はランタイムに焦点を当てたリリースです。組み込みの <strong>OpenDesign Agent</strong> を強化し、マルチモーダルモデルが画像のディテールをより多く読み取れるようにしました。長時間の作業セッションはまとまりを保ち、より確実に復帰します。そして日々の流れ — 確認のための質問、モデルの選択、書き出し — は邪魔をしません。<a href="/blog/what-is-vibe-design/">vibe design</a> のループ — 指示し、見て、磨く — が摩擦なく回り続けます。</p>
+      <p>OpenDesign 0.15.1 はランタイムに焦点を当てたリリースです。組み込みの <strong>OpenDesign Agent</strong> を強化し、マルチモーダルモデルが画像のディテールをより多く読み取れるようにしました。長時間の作業セッションはまとまりを保ち、より確実に復帰します。そして日々の流れ — 確認のための質問、モデルの選択、書き出し — は邪魔をしません。<a href="/blog/what-is-vibe-design/">vibe design</a> のループ — 指示し、見て、磨く — が摩擦なく回り続けます。</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1 をダウンロード</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">リリースノート全文</a></p>
 
       <h2>エージェントが画像をより鮮明に見る</h2>
@@ -76,11 +76,11 @@ i18n:
       <p>0.15.1 は無料、オープンソース、ローカルファーストです。</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1 をダウンロード</a></p>
   ko:
-    title: 'Open Design 0.15.1 — 더 또렷한 시야, 더 긴 몰입'
+    title: 'OpenDesign 0.15.1 — 더 또렷한 시야, 더 긴 몰입'
     summary: '0.15.1은 OpenDesign Agent를 다듬습니다. 이미지 디테일을 더 세밀하게 보고, 긴 세션의 복구가 매끄러워지고, 확인 질문이 채팅 안에 머물며, 사용할 수 있는 모델 런타임도 늘었습니다. 여기에 HTML·덱 내보내기·데스크톱 수정까지.'
     category: '제품'
     bodyHtml: |
-      <p>Open Design 0.15.1은 런타임에 집중한 릴리스입니다. 내장 <strong>OpenDesign Agent</strong>를 개선해 멀티모달 모델이 이미지의 디테일을 더 많이 보도록 했고, 긴 작업 세션이 흐트러지지 않고 더 잘 복구되도록 했습니다. 그리고 일상의 흐름 — 확인 질문, 모델 선택, 내보내기 — 은 방해되지 않게 물러납니다. <a href="/blog/what-is-vibe-design/">vibe design</a> 루프 — 요청하고, 보고, 다듬는 — 가 마찰 없이 계속 돌아갑니다.</p>
+      <p>OpenDesign 0.15.1은 런타임에 집중한 릴리스입니다. 내장 <strong>OpenDesign Agent</strong>를 개선해 멀티모달 모델이 이미지의 디테일을 더 많이 보도록 했고, 긴 작업 세션이 흐트러지지 않고 더 잘 복구되도록 했습니다. 그리고 일상의 흐름 — 확인 질문, 모델 선택, 내보내기 — 은 방해되지 않게 물러납니다. <a href="/blog/what-is-vibe-design/">vibe design</a> 루프 — 요청하고, 보고, 다듬는 — 가 마찰 없이 계속 돌아갑니다.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1 다운로드</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">전체 릴리스 노트</a></p>
 
       <h2>에이전트가 이미지를 더 또렷하게 봅니다</h2>
@@ -108,11 +108,11 @@ i18n:
       <p>0.15.1은 무료이고, 오픈소스이며, 로컬 우선입니다.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1 다운로드</a></p>
   de:
-    title: 'Open Design 0.15.1 — schärferer Blick, längerer Flow'
+    title: 'OpenDesign 0.15.1 — schärferer Blick, längerer Flow'
     summary: '0.15.1 schärft den OpenDesign Agent: mehr Bilddetails, sanftere Wiederherstellung langer Sitzungen, Rückfragen direkt im Chat und mehr Modell-Runtimes — dazu Korrekturen an HTML, Deck-Export und Desktop.'
     category: 'Produkt'
     bodyHtml: |
-      <p>Open Design 0.15.1 ist ein Release rund um die Runtime. Wir haben den eingebauten <strong>OpenDesign Agent</strong> überarbeitet: Multimodale Modelle sehen mehr von den Details eines Bildes, lange Arbeitssitzungen halten zusammen und erholen sich besser, und der Alltag — Rückfragen, Modellwahl, Exporte — bleibt einem aus dem Weg. Die <a href="/blog/what-is-vibe-design/">Vibe-Design</a>-Schleife — anfragen, sehen, verfeinern — läuft ohne Reibung weiter.</p>
+      <p>OpenDesign 0.15.1 ist ein Release rund um die Runtime. Wir haben den eingebauten <strong>OpenDesign Agent</strong> überarbeitet: Multimodale Modelle sehen mehr von den Details eines Bildes, lange Arbeitssitzungen halten zusammen und erholen sich besser, und der Alltag — Rückfragen, Modellwahl, Exporte — bleibt einem aus dem Weg. Die <a href="/blog/what-is-vibe-design/">Vibe-Design</a>-Schleife — anfragen, sehen, verfeinern — läuft ohne Reibung weiter.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1 herunterladen</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Vollständige Release Notes</a></p>
 
       <h2>Ihr Agent sieht Bilder klarer</h2>
@@ -140,11 +140,11 @@ i18n:
       <p>0.15.1 ist kostenlos, quelloffen und local-first.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1 herunterladen</a></p>
   fr:
-    title: 'Open Design 0.15.1 — vision plus nette, flow plus long'
+    title: 'OpenDesign 0.15.1 — vision plus nette, flow plus long'
     summary: '0.15.1 affûte l''OpenDesign Agent : plus de détails dans les images, une meilleure reprise des longues sessions, des questions de clarification qui restent dans le chat et davantage de runtimes de modèles — plus des correctifs HTML, export de deck et bureau.'
     category: 'Produit'
     bodyHtml: |
-      <p>Open Design 0.15.1 est une version centrée sur le runtime. Nous avons amélioré l'<strong>OpenDesign Agent</strong> intégré : les modèles multimodaux voient davantage des détails d'une image, les longues sessions de travail tiennent mieux et se rétablissent plus proprement, et le quotidien — questions de clarification, choix du modèle, exports — reste hors du chemin. La boucle du <a href="/blog/what-is-vibe-design/">vibe design</a> — demander, voir, affiner — continue de tourner sans friction.</p>
+      <p>OpenDesign 0.15.1 est une version centrée sur le runtime. Nous avons amélioré l'<strong>OpenDesign Agent</strong> intégré : les modèles multimodaux voient davantage des détails d'une image, les longues sessions de travail tiennent mieux et se rétablissent plus proprement, et le quotidien — questions de clarification, choix du modèle, exports — reste hors du chemin. La boucle du <a href="/blog/what-is-vibe-design/">vibe design</a> — demander, voir, affiner — continue de tourner sans friction.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Télécharger 0.15.1</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Notes de version complètes</a></p>
 
       <h2>Votre agent voit les images plus nettement</h2>
@@ -172,11 +172,11 @@ i18n:
       <p>0.15.1 est gratuit, open source et local-first.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Télécharger 0.15.1</a></p>
   ru:
-    title: 'Open Design 0.15.1 — чётче взгляд, длиннее поток'
+    title: 'OpenDesign 0.15.1 — чётче взгляд, длиннее поток'
     summary: '0.15.1 затачивает OpenDesign Agent: больше деталей на изображениях, аккуратное восстановление длинных сессий, уточняющие вопросы прямо в чате и новые рантаймы моделей — плюс исправления в HTML, экспорте презентаций и десктопе.'
     category: 'Продукт'
     bodyHtml: |
-      <p>Open Design 0.15.1 — релиз про рантайм. Мы доработали встроенный <strong>OpenDesign Agent</strong>: мультимодальные модели видят больше деталей изображения, длинные рабочие сессии держатся вместе и лучше восстанавливаются, а повседневное — уточняющие вопросы, выбор модели, экспорт — не мешается под ногами. Петля <a href="/blog/what-is-vibe-design/">vibe design</a> — запрос, взгляд, доводка — продолжает крутиться без трения.</p>
+      <p>OpenDesign 0.15.1 — релиз про рантайм. Мы доработали встроенный <strong>OpenDesign Agent</strong>: мультимодальные модели видят больше деталей изображения, длинные рабочие сессии держатся вместе и лучше восстанавливаются, а повседневное — уточняющие вопросы, выбор модели, экспорт — не мешается под ногами. Петля <a href="/blog/what-is-vibe-design/">vibe design</a> — запрос, взгляд, доводка — продолжает крутиться без трения.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Скачать 0.15.1</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Полные заметки о релизе</a></p>
 
       <h2>Агент видит изображения чётче</h2>
@@ -204,11 +204,11 @@ i18n:
       <p>0.15.1 бесплатен, открыт и local-first.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Скачать 0.15.1</a></p>
   es:
-    title: 'Open Design 0.15.1 — visión más nítida, flow más largo'
+    title: 'OpenDesign 0.15.1 — visión más nítida, flow más largo'
     summary: '0.15.1 afina el OpenDesign Agent: más detalle en las imágenes, mejor recuperación de sesiones largas, preguntas de aclaración dentro del chat y más runtimes de modelos, además de correcciones en HTML, exportación de presentaciones y escritorio.'
     category: 'Producto'
     bodyHtml: |
-      <p>Open Design 0.15.1 es una versión centrada en el runtime. Hemos mejorado el <strong>OpenDesign Agent</strong> integrado: los modelos multimodales ven más detalle de una imagen, las sesiones largas de trabajo aguantan mejor y se recuperan con más solidez, y el día a día — preguntas de aclaración, elección de modelo, exportaciones — se aparta del camino. El bucle del <a href="/blog/what-is-vibe-design/">vibe design</a> — pedir, ver, refinar — sigue girando sin fricción.</p>
+      <p>OpenDesign 0.15.1 es una versión centrada en el runtime. Hemos mejorado el <strong>OpenDesign Agent</strong> integrado: los modelos multimodales ven más detalle de una imagen, las sesiones largas de trabajo aguantan mejor y se recuperan con más solidez, y el día a día — preguntas de aclaración, elección de modelo, exportaciones — se aparta del camino. El bucle del <a href="/blog/what-is-vibe-design/">vibe design</a> — pedir, ver, refinar — sigue girando sin fricción.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Descargar 0.15.1</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Notas de la versión completas</a></p>
 
       <h2>Tu agente ve las imágenes con más nitidez</h2>
@@ -236,11 +236,11 @@ i18n:
       <p>0.15.1 es gratuito, de código abierto y local-first.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Descargar 0.15.1</a></p>
   pt-br:
-    title: 'Open Design 0.15.1 — visão mais nítida, flow mais longo'
+    title: 'OpenDesign 0.15.1 — visão mais nítida, flow mais longo'
     summary: '0.15.1 afia o OpenDesign Agent: mais detalhe nas imagens, recuperação mais suave de sessões longas, perguntas de esclarecimento dentro do chat e mais runtimes de modelos — além de correções em HTML, exportação de apresentações e desktop.'
     category: 'Produto'
     bodyHtml: |
-      <p>O Open Design 0.15.1 é um lançamento focado no runtime. Melhoramos o <strong>OpenDesign Agent</strong> embutido: modelos multimodais enxergam mais do detalhe de uma imagem, sessões longas de trabalho se mantêm inteiras e se recuperam melhor, e o cotidiano — perguntas de esclarecimento, escolha de modelo, exportações — sai do seu caminho. O ciclo do <a href="/blog/what-is-vibe-design/">vibe design</a> — pedir, ver, refinar — continua girando sem atrito.</p>
+      <p>O OpenDesign 0.15.1 é um lançamento focado no runtime. Melhoramos o <strong>OpenDesign Agent</strong> embutido: modelos multimodais enxergam mais do detalhe de uma imagem, sessões longas de trabalho se mantêm inteiras e se recuperam melhor, e o cotidiano — perguntas de esclarecimento, escolha de modelo, exportações — sai do seu caminho. O ciclo do <a href="/blog/what-is-vibe-design/">vibe design</a> — pedir, ver, refinar — continua girando sem atrito.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Baixar 0.15.1</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Notas de versão completas</a></p>
 
       <h2>Seu agente enxerga imagens com mais clareza</h2>
@@ -268,11 +268,11 @@ i18n:
       <p>O 0.15.1 é gratuito, open source e local-first.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Baixar 0.15.1</a></p>
   it:
-    title: 'Open Design 0.15.1 — sguardo più nitido, flow più lungo'
+    title: 'OpenDesign 0.15.1 — sguardo più nitido, flow più lungo'
     summary: '0.15.1 affina l''OpenDesign Agent: più dettaglio nelle immagini, ripresa più fluida delle sessioni lunghe, domande di chiarimento dentro la chat e più runtime di modelli, oltre a correzioni su HTML, esportazione delle presentazioni e desktop.'
     category: 'Prodotto'
     bodyHtml: |
-      <p>Open Design 0.15.1 è una release incentrata sul runtime. Abbiamo migliorato l'<strong>OpenDesign Agent</strong> integrato: i modelli multimodali vedono più dettaglio di un'immagine, le lunghe sessioni di lavoro reggono meglio e si riprendono più solidamente, e la quotidianità — domande di chiarimento, scelta del modello, esportazioni — resta fuori dai piedi. Il ciclo del <a href="/blog/what-is-vibe-design/">vibe design</a> — chiedere, vedere, rifinire — continua a girare senza attrito.</p>
+      <p>OpenDesign 0.15.1 è una release incentrata sul runtime. Abbiamo migliorato l'<strong>OpenDesign Agent</strong> integrato: i modelli multimodali vedono più dettaglio di un'immagine, le lunghe sessioni di lavoro reggono meglio e si riprendono più solidamente, e la quotidianità — domande di chiarimento, scelta del modello, esportazioni — resta fuori dai piedi. Il ciclo del <a href="/blog/what-is-vibe-design/">vibe design</a> — chiedere, vedere, rifinire — continua a girare senza attrito.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Scarica 0.15.1</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Note di rilascio complete</a></p>
 
       <h2>Il tuo agente vede le immagini più nitide</h2>
@@ -300,11 +300,11 @@ i18n:
       <p>0.15.1 è gratuito, open source e local-first.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Scarica 0.15.1</a></p>
   tr:
-    title: 'Open Design 0.15.1 — daha keskin görüş, daha uzun akış'
+    title: 'OpenDesign 0.15.1 — daha keskin görüş, daha uzun akış'
     summary: '0.15.1 OpenDesign Agent''ı keskinleştiriyor: görsellerde daha ince ayrıntı, uzun oturumlarda daha pürüzsüz toparlanma, sohbetin içinde kalan netleştirme soruları ve daha fazla model çalışma zamanı — ayrıca HTML, sunum dışa aktarma ve masaüstü düzeltmeleri.'
     category: 'Ürün'
     bodyHtml: |
-      <p>Open Design 0.15.1, çalışma zamanına odaklanan bir sürüm. Yerleşik <strong>OpenDesign Agent</strong>'ı geliştirdik: çok kipli modeller bir görselin ayrıntısını daha fazla görüyor, uzun çalışma oturumları dağılmadan sürüyor ve daha iyi toparlanıyor, günlük akış — netleştirme soruları, model seçimi, dışa aktarmalar — ise yolunuzdan çekiliyor. <a href="/blog/what-is-vibe-design/">Vibe design</a> döngüsü — iste, gör, inceltip düzelt — sürtünmesiz dönmeye devam ediyor.</p>
+      <p>OpenDesign 0.15.1, çalışma zamanına odaklanan bir sürüm. Yerleşik <strong>OpenDesign Agent</strong>'ı geliştirdik: çok kipli modeller bir görselin ayrıntısını daha fazla görüyor, uzun çalışma oturumları dağılmadan sürüyor ve daha iyi toparlanıyor, günlük akış — netleştirme soruları, model seçimi, dışa aktarmalar — ise yolunuzdan çekiliyor. <a href="/blog/what-is-vibe-design/">Vibe design</a> döngüsü — iste, gör, inceltip düzelt — sürtünmesiz dönmeye devam ediyor.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1'i indir</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Tüm sürüm notları</a></p>
 
       <h2>Ajanınız görselleri daha net görüyor</h2>
@@ -333,7 +333,7 @@ i18n:
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1'i indir</a></p>
 ---
 
-Open Design 0.15.1 is a runtime-focused release. We upgraded the built-in **OpenDesign Agent** so multimodal models see more of an image's detail, long working sessions hold together and recover better, and the everyday flow — clarifying questions, model choice, exports — stays out of your way. It keeps the [vibe-design](/blog/what-is-vibe-design/) loop — prompt, see, refine — moving without friction.
+OpenDesign 0.15.1 is a runtime-focused release. We upgraded the built-in **OpenDesign Agent** so multimodal models see more of an image's detail, long working sessions hold together and recover better, and the everyday flow — clarifying questions, model choice, exports — stays out of your way. It keeps the [vibe-design](/blog/what-is-vibe-design/) loop — prompt, see, refine — moving without friction.
 
 [Download 0.15.1](https://releases.open-design.ai/?utm_source=blog&utm_medium=docs&utm_campaign=202607_0_15_1&utm_content=official) · [Full release notes](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1)
 

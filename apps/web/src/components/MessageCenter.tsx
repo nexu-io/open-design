@@ -1,5 +1,5 @@
 import { Button } from '@open-design/components';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useI18n, type Locale } from '../i18n';
@@ -7,22 +7,14 @@ import {
   clearAnonymousState,
   isAmrLoggedIn,
   markAccountMessageRead,
-  markAllAccountMessagesRead,
   pullMessageCenter,
   readAnonymousMessages,
   readAnonymousReadIds,
-  type MessageCenterFilter,
   type MessageCenterMessage,
   writeAnonymousState,
 } from '../message-center-client';
 import { Icon } from './Icon';
 import styles from './MessageCenter.module.css';
-
-const FILTERS: Array<{ id: MessageCenterFilter; label: 'messageCenter.filterAll' | 'messageCenter.filterUnread' | 'messageCenter.filterRead' }> = [
-  { id: 'all', label: 'messageCenter.filterAll' },
-  { id: 'unread', label: 'messageCenter.filterUnread' },
-  { id: 'read', label: 'messageCenter.filterRead' },
-];
 
 function unreadBadgeLabel(count: number): string {
   return count > 9 ? '9+' : String(count);
@@ -74,7 +66,6 @@ export function MessageCenter({
     },
     [onOpenChange],
   );
-  const [filter, setFilter] = useState<MessageCenterFilter>('all');
   const [messages, setMessages] = useState<MessageCenterMessage[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [loggedIn, setLoggedIn] = useState(false);
@@ -174,10 +165,6 @@ export function MessageCenter({
   useEffect(() => {
     onUnreadCountChange?.(unreadCount);
   }, [unreadCount, onUnreadCountChange]);
-  const visibleMessages = useMemo(
-    () => messages.filter((message) => filter === 'all' || (filter === 'read' ? Boolean(message.readAt) : !message.readAt)),
-    [filter, messages],
-  );
 
   /** The control keyboard focus must land on after the panel closes. Opening
    *  focuses the portaled dialog, so closing always unmounts the focused node —
@@ -226,30 +213,14 @@ export function MessageCenter({
     commitState(nextMessages, nextIds, { persistAnonymous: !account });
   };
 
-  const markAllRead = async () => {
-    const account = await resolveLoggedInForWrite();
-    if (account) await markAllAccountMessagesRead();
-    const readAt = new Date().toISOString();
-    const nextIds = new Set(messagesRef.current.map((message) => message.id));
-    const nextMessages = messagesRef.current.map((message) => ({ ...message, readAt: message.readAt ?? readAt }));
-    if (account) {
-      pendingReadIdsRef.current = new Set(nextIds);
-      clearAnonymousState(window.localStorage);
-    }
-    invalidateSyncResponses();
-    commitState(nextMessages, nextIds, { persistAnonymous: !account });
-  };
-
   const openLabel = unreadCount > 0 ? `${t('messageCenter.openAria')} (${t('messageCenter.unreadCount', { count: unreadCount })})` : t('messageCenter.openAria');
-  const emptyTitle = filter === 'unread' ? t('messageCenter.emptyUnreadTitle') : filter === 'read' ? t('messageCenter.emptyReadTitle') : t('messageCenter.emptyAllTitle');
 
   return <div className={styles.root}>
     {hideTrigger ? null : <button ref={triggerRef} type="button" className={`settings-icon-btn od-tooltip ${styles.trigger}`} onClick={() => setOpen(!open)} title={t('messageCenter.openAria')} data-tooltip={t('messageCenter.openAria')} data-tooltip-placement="bottom" aria-label={openLabel} aria-haspopup="dialog" aria-expanded={open} data-testid="message-center-trigger">
       <Icon name="bell" size={17} />{unreadCount > 0 ? <span className={styles.badge} aria-hidden>{unreadBadgeLabel(unreadCount)}</span> : null}
     </button>}
     {open ? createPortal(<div className={styles.backdrop} data-testid="message-center-backdrop"><aside ref={panelRef} className={styles.panel} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-testid="message-center-dialog">
-      <header className={styles.header}><div className={styles.headerCopy}><h2 id={titleId}>{t('messageCenter.title')}</h2><p>{t('messageCenter.subtitle')}</p></div></header>
-      <div className={styles.controls}><div className={styles.filters} role="group" aria-label={t('messageCenter.title')}>{FILTERS.map((item) => <button key={item.id} type="button" className={`${styles.filter}${filter === item.id ? ` ${styles.filterActive}` : ''}`} aria-pressed={filter === item.id} onClick={() => setFilter(item.id)}>{t(item.label)}{item.id === 'unread' && unreadCount > 0 ? <span className={styles.filterBadge} aria-hidden>{unreadBadgeLabel(unreadCount)}</span> : null}</button>)}</div><button type="button" className={styles.markAll} onClick={() => void markAllRead().catch(() => setSyncState('error'))} disabled={unreadCount === 0}>{t('messageCenter.markAllRead')}</button></div>
+      <header className={styles.header}><div className={styles.headerCopy}><h2 id={titleId}>{t('messageCenter.title')}</h2><p>{t('messageCenter.subtitle')}</p></div><Button size="icon" className={styles.close} onClick={closePanel} aria-label={t('messageCenter.close')}><Icon name="close" size={18} strokeWidth={2}/></Button></header>
       <div className={styles.list} aria-live="polite">
         {syncState === 'error' && messages.length > 0 ? (
           <div className={styles.syncStatus} role="status">
@@ -274,7 +245,7 @@ export function MessageCenter({
               </button>
             </div>
           </div>
-        ) : visibleMessages.length === 0 ? <div className={styles.empty}><Icon name="bell" size={20}/><strong>{emptyTitle}</strong><p>{t('messageCenter.emptyBody')}</p></div> : visibleMessages.map((message) => <MessageItem key={message.id} locale={locale} message={message} onRead={markRead} onError={() => setSyncState('error')}/>)}
+        ) : messages.length === 0 ? <div className={styles.empty}><Icon name="bell" size={20}/><strong>{t('messageCenter.emptyAllTitle')}</strong><p>{t('messageCenter.emptyBody')}</p></div> : messages.map((message) => <MessageItem key={message.id} locale={locale} message={message} onRead={markRead} onError={() => setSyncState('error')}/>)}
       </div>
       <footer className={styles.footer}><p>{t('messageCenter.desktopSettingsHint')}</p>{onOpenNotificationSettings ? <Button variant="ghost" onClick={() => { closePanel(); onOpenNotificationSettings(); }}>{t('messageCenter.desktopSettings')}</Button> : null}</footer>
     </aside></div>, document.body) : null}

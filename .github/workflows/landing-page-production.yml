@@ -185,32 +185,46 @@ jobs:
 
       # The short open-design.ai/install-dsh.* entry points ship with the
       # landing page. Preserve the exact production bytes separately under an
-      # immutable R2 version before allowing Pages to deploy them. Re-running a
-      # production promotion is idempotent; changing an already-published v1
-      # fails closed and requires an explicit v2 instead.
+      # immutable R2 version before allowing Pages to deploy them. The version
+      # is derived from the installer bytes rather than pinned here: unchanged
+      # installers reuse the version already published, edited ones mint the
+      # next one, and every published version stays byte-for-byte immutable.
+      # `DSH_BOOTSTRAP_VERSION` remains an escape hatch that forces one specific
+      # version and still fails closed on a content mismatch.
       - name: Publish immutable DeepSeek Harness bootstrap installers to R2
+        id: dsh_bootstrap
         env:
           DSH_BOOTSTRAP_SOURCE_DIR: apps/landing-page/public
-          DSH_BOOTSTRAP_VERSION: v1
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
           RELEASE_STORAGE_REGION: auto
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_WORKFLOW: ${{ github.workflow }}
         run: pnpm exec tools-release publish-dsh-bootstrap
 
       - name: Verify public DeepSeek Harness bootstrap downloads
         env:
+          DSH_BOOTSTRAP_VERSION: ${{ steps.dsh_bootstrap.outputs.version }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         run: |
           set -euo pipefail
+          if [ -z "$DSH_BOOTSTRAP_VERSION" ]; then
+            echo "::error::publish step did not report a bootstrap version"
+            exit 1
+          fi
           download_dir="$(mktemp -d)"
           trap 'rm -rf "$download_dir"' EXIT
           for name in install-dsh.sh install-dsh.ps1 install-dsh.cmd SHA256SUMS; do
             curl --fail --silent --show-error --location \
               --retry 5 --retry-delay 1 --retry-all-errors \
-              "$RELEASE_PUBLIC_ORIGIN/bootstrap/dsh/v1/$name" \
+              "$RELEASE_PUBLIC_ORIGIN/bootstrap/dsh/$DSH_BOOTSTRAP_VERSION/$name" \
               --output "$download_dir/$name"
           done
           (

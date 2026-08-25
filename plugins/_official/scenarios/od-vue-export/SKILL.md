@@ -1,6 +1,6 @@
 # Export To Vue
 
-Use this plugin when the user wants to hand an accepted Open Design artifact to a Vue 3 project.
+Use this plugin when the user wants to hand an accepted OpenDesign artifact to a Vue 3 project.
 
 ## Workflow
 

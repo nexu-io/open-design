@@ -119,7 +119,7 @@ created: '2026-05-09'
 - Decision: use Tailwind CSS v4 in `apps/web`, with `tailwindcss`, `@tailwindcss/postcss`, and `postcss`, configured through PostCSS, and import the official layered theme/utilities CSS entries in the existing global CSS entry: `@layer theme, base, utilities;`, `@import "tailwindcss/theme.css" layer(theme);`, and `@import "tailwindcss/utilities.css" layer(utilities);`. This keeps Tailwind Preflight out of the foundation slice while putting retained base rules that must coexist with utilities into `@layer base`; unlayered element rules that set properties later migrated to utilities must be removed, constrained, or moved into the base layer before those elements migrate. Add the narrow local border-style reset from Tailwind's Preflight contract inside `@layer base` so `border border-*` utilities render solid borders from the later utilities layer without importing the full Preflight reset. Source: `apps/web/package.json:23-50`; `apps/web/app/layout.tsx:1-4`; `apps/web/src/index.css:183-219`; `https://tailwindcss.com/docs/guides/nextjs`; `https://tailwindcss.com/docs/preflight#border-styles-are-reset`; `https://developer.mozilla.org/en-US/docs/Web/CSS/@layer`
 - Decision: define Tailwind theme values through CSS `@theme` because v4 converts `--color-*` theme variables into utilities such as `bg-*`, `text-*`, and `border-*`. Source: `https://tailwindcss.com/docs/theme`; `https://tailwindcss.com/docs/customizing-colors`
 - Decision: map Tailwind color tokens to existing runtime CSS variables, such as `--color-bg: var(--bg)`, `--color-panel: var(--bg-panel)`, `--color-accent: var(--accent)`, `--color-danger: var(--red)`, and `--color-success: var(--green)`. Source: `apps/web/src/index.css:6-63`; `apps/web/src/state/appearance.ts:17-52`; `specs/change/20260509-token-first-tailwind/token.md`
-- Decision: clear Tailwind's default color namespace with `--color-*: initial` before declaring project colors, so project classes express the Open Design token set. Source: `https://tailwindcss.com/docs/customizing-colors`; `apps/web/src/index.css:6-49`
+- Decision: clear Tailwind's default color namespace with `--color-*: initial` before declaring project colors, so project classes express the OpenDesign token set. Source: `https://tailwindcss.com/docs/customizing-colors`; `apps/web/src/index.css:6-49`
 - Decision: keep theme state and custom accent behavior CSS-variable-first; Tailwind utilities resolve through variables and automatically inherit light/dark/system/user accent changes. Source: `apps/web/src/index.css:65-157`; `apps/web/src/state/appearance.ts:28-52`; `apps/web/app/layout.tsx:21-29`
 - Decision: `index.css` continues to own token definitions, layered reset/base behavior, loading shell, keyframes, and cross-content-area styles; this change preserves existing component abstractions and migrates all replaceable component-level global classes in existing TSX to token-first Tailwind classes. Any retained unlayered selector must avoid overriding migrated utilities for the same element/property, and migration notes must call out the resolution for conflicts such as global button base declarations. Source: `apps/web/src/index.css:160-219,1121-1143,6219-6299`; `apps/web/app/[[...slug]]/client-app.tsx:5-13`
 - Decision: add project-owned style constraint checks inside `scripts/guard.ts`, reusing the existing guard aggregation model and root command boundary. Source: `scripts/guard.ts:138-151,205-221,401-422`; `AGENTS.md#Root command boundary`
@@ -190,7 +190,7 @@ Each phase maps to one PR. Every PR must be reviewable on its own, keep business
 
 ### Phase 1: Foundation PR
 
-Goal: add Tailwind v4 infrastructure, expose Open Design tokens as Tailwind utilities, and land the first style guard scaffolding.
+Goal: add Tailwind v4 infrastructure, expose OpenDesign tokens as Tailwind utilities, and land the first style guard scaffolding.
 
 - [x] Step 1: Install Tailwind foundations
   - [x] Substep 1.1 Implement: Add Tailwind v4/PostCSS dependencies to `apps/web/package.json`.
@@ -200,7 +200,7 @@ Goal: add Tailwind v4 infrastructure, expose Open Design tokens as Tailwind util
   - [x] Substep 1.5 Verify: Run `pnpm install`.
   - [x] Substep 1.6 Verify: Run `pnpm guard` and confirm the PostCSS config allowlist works.
   - [x] Substep 1.7 Verify: Run `pnpm --filter @open-design/web build`.
-- [x] Step 2: Expose Open Design tokens as Tailwind utilities
+- [x] Step 2: Expose OpenDesign tokens as Tailwind utilities
   - [x] Substep 2.1 Implement: Add CSS-first `@theme` aliases for colors, core semantic status, selection/inspect overlays, radius, shadow, font tokens, and exact existing UI text-size aliases; use native Tailwind utilities for spacing and standard typography scale. Confirm token border examples such as `border border-border` render against the local border-style reset when Preflight is omitted.
   - [x] Substep 2.2 Implement: Clear default Tailwind colors and declare the project-approved color namespace.
   - [x] Substep 2.3 Implement: Document the token class vocabulary near the theme block.

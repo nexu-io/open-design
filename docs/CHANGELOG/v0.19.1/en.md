@@ -1,24 +1,24 @@
 ---
-title: Open Design 0.19.1 — Design with DeepSeek Harness
-description: Connect your official DeepSeek Harness installation to Open Design for model discovery, structured runs, and session resume. Paid plans also get DeepSeek V4 Pro and Flash unlimited for two weeks.
+title: OpenDesign 0.19.1 — Design with DeepSeek Harness
+description: Connect your official DeepSeek Harness installation to OpenDesign for model discovery, structured runs, and session resume. Paid plans also get DeepSeek V4 Pro and Flash unlimited for two weeks.
 ---
 
 ### 🌟 Codename: *Design with DeepSeek Harness*
 
 🧰 **59 PRs · 24 contributors · 4 days** — **DeepSeek Harness now runs as an
-agent inside Open Design.** Open Design finds your official `dsh`, guides setup
-of the Open Design connection profile, lists Harness models and
+agent inside OpenDesign.** OpenDesign finds your official `dsh`, guides setup
+of the OpenDesign connection profile, lists Harness models and
 reasoning options, and resumes the same Harness session on later turns. 0.19.1
 also starts two weeks of unlimited DeepSeek V4 Pro and Flash for paid plans and
 keeps Home and team projects responsive under load.
 
 ## 🔥 Highlights
 
-- 🧰 **Bring your official DeepSeek Harness installation into Open Design.**
-  Open Design discovers `dsh`, reads its model and reasoning choices, and gives
+- 🧰 **Bring your official DeepSeek Harness installation into OpenDesign.**
+  OpenDesign discovers `dsh`, reads its model and reasoning choices, and gives
   specific guidance for missing credentials, profile setup, or an untested
   Harness version. Settings and `od agent setup deepseek-harness` can install or
-  repair only the Open Design connection profile; Open Design does not replace
+  repair only the OpenDesign connection profile; OpenDesign does not replace
   or upgrade Harness itself. Runs stream thinking, text, tool calls, results,
   and usage as structured events, then resume the same Harness session on later
   turns. Cancellation and process cleanup also cover Windows `.cmd` installs.
@@ -28,13 +28,13 @@ keeps Home and team projects responsive under load.
   From August 13 at 20:00 to August 27 at 20:00 (Asia/Shanghai), both models
   carry the Unlimited badge across the workbench, and the campaign action picks
   V4 Pro. Users who dismissed the previous Flash campaign still see this one
-  once. When a rolling model window fills up, Open Design shows the retry time
+  once. When a rolling model window fills up, OpenDesign shows the retry time
   and confirms that the request was not charged. (#6861)
 
 - 🏠 **Home gets you into a project sooner.** The refreshed Home adds a
   clearer creation-type row and more direct workspace controls. Local projects
   no longer wait for a Cloud workspace identity before they can start, while
-  Cloud projects keep their balance checks. After you submit, Open Design moves
+  Cloud projects keep their balance checks. After you submit, OpenDesign moves
   straight into the new project's Preparing state and rolls back cleanly if
   creation fails. (#6692, #6741, #6756)
 
@@ -55,12 +55,12 @@ keeps Home and team projects responsive under load.
 
 - The design-system catalog now includes **Cloudflare Kumo UI**, ready to use
   as a visual foundation for generated interfaces. (#6769)
-- `od mcp install claude-desktop` can configure Open Design for Claude Desktop
+- `od mcp install claude-desktop` can configure OpenDesign for Claude Desktop
   on macOS and Windows. (#6489)
 - The public Pricing page now describes hosted image generation alongside text
   models. (#6395)
 - Launch Week is easier to discover from the landing page, and community links
-  are labeled before they take you away from Open Design. (#6680, #6684)
+  are labeled before they take you away from OpenDesign. (#6680, #6684)
 
 ## 🔁 Changed
 

@@ -22,17 +22,17 @@ export const ru: DeepseekCopyOverride = {
     'Замкните цикл: аннотируйте реальные страницы, компилируйте анимационные ассеты, переносите свою библиотеку скиллов.',
     'Сделайте сам харнесс рабочим пространством дизайна: панели предпросмотра, рабочие столы и доски рядом с чатом.',
   ],
-  collectionCloserHeading: 'Пропустите настройку. Проектируйте с DeepSeek Harness внутри Open Design',
+  collectionCloserHeading: 'Пропустите настройку. Проектируйте с DeepSeek Harness внутри OpenDesign',
   filterAll: 'Все',
   collectionCloserBody:
-    'Open Design разворачивается вокруг DeepSeek Harness: это открытая agent-native рабочая среда для дизайна. Она держит ваши системы, скиллы и шаблоны согласованными, чтобы агент выдавал работу, которая принадлежит вам.',
+    'OpenDesign разворачивается вокруг DeepSeek Harness: это открытая agent-native рабочая среда для дизайна. Она держит ваши системы, скиллы и шаблоны согласованными, чтобы агент выдавал работу, которая принадлежит вам.',
 
   categoryVision: 'Зрение и ввод',
   categoryCanvas: 'Холст и генеративный UI',
   categoryWorkflow: 'Дизайн-процесс',
   categoryWorkspace: 'Рабочее пространство и превью',
 
-  ctaDownload: 'Скачать Open Design',
+  ctaDownload: 'Скачать OpenDesign',
   ctaStarList: 'Поставить звезду DeepSeek Harness',
   ctaGuide: 'Как заниматься дизайном с DeepSeek Harness',
   ctaBrowseAll: 'Все плагины',
@@ -71,9 +71,9 @@ export const ru: DeepseekCopyOverride = {
   detailMoreOnList: 'Больше в репозитории DeepSeek Harness',
   detailRelated: 'Другие дизайн-плагины для DeepSeek Harness',
   finalEyebrow: 'Следующий шаг',
-  detailCloserHeading: 'Проектируйте с Open Design без возни с настройкой',
+  detailCloserHeading: 'Проектируйте с OpenDesign без возни с настройкой',
   detailCloserBody:
-    'Поставьте этот плагин сами или разверните вокруг DeepSeek Harness целый кураторский дизайн-слой в Open Design. Свой ключ, свой результат.',
+    'Поставьте этот плагин сами или разверните вокруг DeepSeek Harness целый кураторский дизайн-слой в OpenDesign. Свой ключ, свой результат.',
 
   skills: {
     modlens: {

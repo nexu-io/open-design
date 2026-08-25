@@ -908,6 +908,7 @@ describe('ProjectView conversation run isolation', () => {
     cleanup();
     window.localStorage.clear();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -1076,7 +1077,36 @@ describe('ProjectView conversation run isolation', () => {
     },
   );
 
-  // An Open Design Cloud run is billed to the CALLER's own wallet. The gate must
+  it('preserves the configured system notification for a background completion', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+
+    renderProjectView({
+      ...config,
+      notifications: {
+        ...config.notifications!,
+        desktopEnabled: true,
+      },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    resolveConversationBMessages?.([]);
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+
+    conversationAMessages = [succeededAssistant];
+    fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
+
+    await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
+    expect(showCompletionNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'succeeded', body: 'done' }),
+    );
+  });
+
+  // An OpenDesign Cloud run is billed to the CALLER's own wallet. The gate must
   // therefore ask about the caller's identity, not about this project's
   // workspace scope — a project whose scope is unresolved says nothing about
   // whether the signed-in user can pay, and holding the send closed there just
@@ -1423,6 +1453,7 @@ describe('ProjectView conversation run isolation', () => {
       profile: 'prod',
       user: null,
       balanceUsd: '0',
+      codingPlanModels: [],
       updatedAt: null,
       fetchedAt: '2026-07-02T00:00:00.000Z',
       stale: false,
@@ -1459,6 +1490,7 @@ describe('ProjectView conversation run isolation', () => {
       profile: 'prod',
       user: { id: 'u-paid', plan: 'plus' },
       balanceUsd: '1.20',
+      codingPlanModels: [],
       updatedAt: null,
       fetchedAt: '2026-07-02T00:00:00.000Z',
       stale: false,
@@ -1823,6 +1855,48 @@ describe('ProjectView conversation run isolation', () => {
     expect(showCompletionNotification).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      label: 'run failure',
+      terminalMessage: { ...succeededAssistant, runStatus: 'failed' as const },
+    },
+    {
+      label: 'delivery failure',
+      terminalMessage: {
+        ...succeededAssistant,
+        resultDeliveryState: 'delivery_failed' as const,
+      },
+    },
+  ])(
+    'keeps the foreground $label system notification silent while preserving its sound',
+    async ({ terminalMessage }) => {
+      vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+
+      renderProjectView({
+        ...config,
+        notifications: {
+          ...config.notifications!,
+          desktopEnabled: true,
+        },
+      });
+
+      await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+      await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+      fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+      await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+      resolveConversationBMessages?.([]);
+      await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+
+      conversationAMessages = [terminalMessage];
+      fireEvent.click(screen.getByTestId('conversation-select-conv-a'));
+
+      await waitFor(() => expect(playSound).toHaveBeenCalledWith('failure-sound'));
+      expect(showCompletionNotification).not.toHaveBeenCalled();
+    },
+  );
+
   it('downgrades a reloaded terminal Design run whose file writes never landed', async () => {
     conversationAMessages = [
       {
@@ -1877,6 +1951,62 @@ describe('ProjectView conversation run isolation', () => {
     expect(screen.getByTestId('chat-error').textContent).toMatch(
       /finished without producing a deliverable project file/i,
     );
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('trusts the daemon artifact count when browser file reconciliation misses delivered output', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: '',
+        sessionMode: 'design',
+        events: [
+          { kind: 'text', text: 'I finished the design.' },
+          {
+            kind: 'tool_use',
+            id: 'write-1',
+            name: 'Write',
+            input: { file_path: 'index.html', content: '<!doctype html>' },
+          },
+        ],
+        preTurnFileNames: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+      artifactCount: 1,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const recoveredMessage = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find(
+          (message) =>
+            message.id === succeededAssistant.id
+            && message.resultDeliveryState === 'delivered',
+        );
+      expect(recoveredMessage).toMatchObject({
+        runStatus: 'succeeded',
+        resultDeliveryState: 'delivered',
+        producedFiles: [],
+        traceObjectFiles: [],
+      });
+      expect(recoveredMessage?.events).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'ARTIFACT_NOT_FOUND' }),
+        ]),
+      );
+    });
+    expect(screen.getByTestId('chat-error').textContent).toBe('');
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 

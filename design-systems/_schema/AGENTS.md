@@ -13,7 +13,6 @@ user-installed folders.
 ```
 _schema/
 ├── manifest.schema.ts ← project manifest schema (TS, machine-enforced when present)
-├── runtime.schema.ts  ← structured component/intent contract re-export
 ├── tokens.schema.ts   ← token schema re-export (TS, machine-enforced)
 ├── defaults.css       ← A2 fallback values (CSS, human reference)
 └── AGENTS.md          ← this file
@@ -48,8 +47,6 @@ Design System Project folders use fixed v1 file names:
 - `source/` — optional importer evidence (`scanned-files.json`,
   `evidence.md`, `tokens.source.json`, `token-contract.report.json`,
   and `snippets/INDEX.json`).
-- `manifests/`, `components/`, and `rules/` — optional structured runtime graph,
-  declared atomically through `manifest.runtime`.
 
 The manifest guard validates every bundled package through its `manifest.json`.
 When rich fields are declared, paths must be safe and present, JSON indexes
@@ -60,10 +57,6 @@ composition consumes usage, tokens, component information, import mode, craft
 bindings, and the manifest-derived pull index; package/static-file routes expose
 only declared preview and source files. Legacy `DESIGN.md`-only folders remain
 outside this manifest guard because they have no manifest to validate.
-
-The runtime schema itself is canonical in
-`packages/contracts/src/design-systems/runtime-schema.ts` and re-exported here so
-the repository guard and daemon share schema versions and reference rules.
 
 ## Four layers, two questions
 

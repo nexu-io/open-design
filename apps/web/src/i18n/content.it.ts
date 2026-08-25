@@ -21,7 +21,7 @@ export const IT_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     description:
-      'CLI di automazione del browser per agenti AI. Da usare quando l\'utente ha bisogno di ispezionare,\ntestare o automatizzare il comportamento del browser: navigare tra le pagine, compilare moduli,\ncliccare pulsanti, acquisire screenshot, estrarre dati dalle pagine, leggere il contesto selezionato\ndella scheda del browser di Open Design, testare app web, fare dogfooding delle anteprime di Open Design,\nQA, ricerca di bug o revisione della qualità dell\'app. Preferisci gli URL di anteprima locali di Open Design\na meno che l\'utente non richieda esplicitamente la navigazione esterna.',
+      'CLI di automazione del browser per agenti AI. Da usare quando l\'utente ha bisogno di ispezionare,\ntestare o automatizzare il comportamento del browser: navigare tra le pagine, compilare moduli,\ncliccare pulsanti, acquisire screenshot, estrarre dati dalle pagine, leggere il contesto selezionato\ndella scheda del browser di OpenDesign, testare app web, fare dogfooding delle anteprime di OpenDesign,\nQA, ricerca di bug o revisione della qualità dell\'app. Preferisci gli URL di anteprima locali di OpenDesign\na meno che l\'utente non richieda esplicitamente la navigazione esterna.',
     examplePrompt:
       'CLI di automazione del browser per agenti AI.',
   },
@@ -849,7 +849,7 @@ export const IT_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'ui-ux-pro-max': {
     description:
-      'Voce UI/UX Pro Max solo a catalogo. I template upstream completi, i dati e il flusso di ricerca non sono inclusi in Open Design.',
+      'Voce UI/UX Pro Max solo a catalogo. I template upstream completi, i dati e il flusso di ricerca non sono inclusi in OpenDesign.',
     examplePrompt:
       'Voce UI/UX Pro Max solo a catalogo.',
   },

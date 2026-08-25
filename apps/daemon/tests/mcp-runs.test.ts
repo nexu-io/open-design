@@ -724,7 +724,7 @@ describe('public MCP discovery + generation tools', () => {
     expect(parsed.previewUrl).toBeUndefined();
   });
 
-  // Discovery-stage / clarifying-question fallback: when Open Design's
+  // Discovery-stage / clarifying-question fallback: when OpenDesign's
   // inner agent does NOT write files (e.g. it asks back with a discovery
   // form), the run still terminates "succeeded" but the only output
   // lives in the SSE event stream as text_delta chunks. get_run must
@@ -852,7 +852,7 @@ describe('public MCP discovery + generation tools', () => {
     expect(parsed.hint).not.toMatch(/project defaults to this run/i);
   });
 
-  // #2: MCP-driven projects skip Open Design's interactive discovery
+  // #2: MCP-driven projects skip OpenDesign's interactive discovery
   // stage. The outer agent (Codex, Cursor, …) IS the user-facing surface;
   // having OD ask a discovery form back through MCP creates a confusing
   // nested-clarification loop where the form ends up dropped because no

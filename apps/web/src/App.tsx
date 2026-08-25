@@ -2,8 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { flushSync } from 'react-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { Button } from '@open-design/components';
+import { reportAgentDetectDiagnostics } from './analytics/agent-detect';
 import { useAnalytics } from './analytics/provider';
 import {
+  trackExperienceSurveyDismissed,
+  trackExperienceSurveySent,
+  trackExperienceSurveyShown,
   trackFileUploadResult,
   trackProjectCreateResult,
 } from './analytics/events';
@@ -22,12 +26,14 @@ import {
 import type {
   AmrModelsResponse,
   ChatSessionMode,
+  CreateProjectExampleReference,
   LocalCatalogScope,
   RunContextSelection,
   TeamProject,
   WorkspaceCollabContext,
   WorkspaceInvalidationSsePayload,
   ProjectWorkspaceScope,
+  ProjectScenarioTaskProfile,
   WorkspaceProjectSummary,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
@@ -54,14 +60,17 @@ import {
 import { ProjectCreationPendingView } from './components/ProjectCreationPendingView';
 import { AmrArtifactUpgradeGate } from './components/AmrArtifactUpgradeGate';
 import { AmrArtifactUpgradeHomeCard } from './components/AmrArtifactUpgradeHomeCard';
+import { ExperienceSurvey } from './components/ExperienceSurvey';
 import { TooltipLayer } from './components/TooltipLayer';
 import { UpdateDialog } from './components/UpdateDialog';
+import { UpdaterPopup } from './components/UpdaterPopup';
 import {
   openWorkspaceTab,
   removeWorkspaceProjectTabs,
   WorkspaceTabsBar,
 } from './components/WorkspaceTabsBar';
 import { WorkspaceTopRightAccountCluster } from './components/EntryNavRail';
+import { ProjectWorkspaceRecoveryTip } from './components/ProjectWorkspaceRecoveryTip';
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
@@ -143,6 +152,7 @@ import { goBack, navigate, useRoute, type Route } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_CONFIG,
+  DEFAULT_NOTIFICATIONS,
   DEFAULT_PET,
   fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
@@ -161,6 +171,7 @@ import { applyAppearanceToDocument } from './state/appearance';
 import { isMacPlatform } from './utils/platform';
 import { randomUUID } from './utils/uuid';
 import { summarizeProjectNameFromPrompt } from './utils/projectName';
+import { armCompletionFeedbackOnFirstGesture } from './utils/notifications';
 import {
   amrArtifactUpgradeHomeMockOffer,
   type AmrArtifactUpgradeHomeOffer,
@@ -177,8 +188,9 @@ import {
 } from './runtime/amr-auth-retry-continuation';
 import { installFontRecovery } from './runtime/font-recovery';
 import {
-  createDesignSystemProjectFromProject,
+  bootstrapFirstOpenTeamProjectRoute,
   bootstrapProjectRoute,
+  createDesignSystemProjectFromProject,
   createProject,
   createPluginShareProject,
   deleteProject as deleteProjectApi,
@@ -241,6 +253,9 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   pluginType?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
+  automaticStrategyTaskProfile?: ProjectScenarioTaskProfile;
+  /** Official example card the user picked under the automatic route. */
+  exampleReference?: CreateProjectExampleReference;
   initialRunContext?: RunContextSelection | null;
   conversationMode?: ChatSessionMode;
   autoSendFirstMessage?: boolean;
@@ -910,7 +925,7 @@ function AppInner() {
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
   // because the dynamic-import loading shell (`<div class="od-loading-shell">
-  // Loading Open Design…</div>`) is itself >MIN_VISIBLE_TEXT and would
+  // Loading OpenDesign…</div>`) is itself >MIN_VISIBLE_TEXT and would
   // otherwise be mistaken for a real mount. Survives subsequent render
   // crashes — once App has mounted at least once, it's no longer a white
   // screen (subsequent failures show up as `$exception`).
@@ -946,6 +961,34 @@ function AppInner() {
   const latestPersistedConfigRef = useRef(config);
   latestPersistedConfigRef.current = config;
   const settingsDraftConfigRef = useRef<AppConfig | null>(null);
+  const completionFeedbackGestureConsumedRef = useRef(false);
+  useEffect(() => {
+    if (completionFeedbackGestureConsumedRef.current) return undefined;
+    const notifications = config.notifications ?? DEFAULT_NOTIFICATIONS;
+    if (!notifications.soundEnabled && !notifications.desktopEnabled) return undefined;
+    return armCompletionFeedbackOnFirstGesture(notifications, ({ desktopPermission }) => {
+      completionFeedbackGestureConsumedRef.current = true;
+      if (
+        !notifications.desktopEnabled
+        || desktopPermission === null
+        || desktopPermission === 'granted'
+      ) return;
+      // The product default expresses intent, but an unsupported/denied browser
+      // permission cannot honestly remain Active. Reconcile only the desktop
+      // switch; the independent completion-sound preference stays enabled.
+      setConfig((previous) => {
+        const previousNotifications = previous.notifications ?? DEFAULT_NOTIFICATIONS;
+        if (!previousNotifications.desktopEnabled) return previous;
+        const next: AppConfig = {
+          ...previous,
+          notifications: { ...previousNotifications, desktopEnabled: false },
+        };
+        latestPersistedConfigRef.current = next;
+        saveConfig(next);
+        return next;
+      });
+    });
+  }, [config.notifications?.desktopEnabled, config.notifications?.soundEnabled]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [amrArtifactUpgradeHomeMockConfig] = useState<AmrArtifactUpgradeHomeOffer | null>(
     () => process.env.NODE_ENV === 'development' && typeof window !== 'undefined'
@@ -1221,6 +1264,8 @@ function AppInner() {
   const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(
     null,
   );
+
+
   const [daemonMediaProviders, setDaemonMediaProviders] = useState<
     AppConfig['mediaProviders'] | null
   >(null);
@@ -2015,6 +2060,7 @@ function AppInner() {
       })
         .then((list) => {
           if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
+          reportAgentDetectDiagnostics(analytics.track, list);
           setAgents(
             mergeAmrModelsIntoAgents(
               orderAgentsByRegistry(list),
@@ -2818,6 +2864,7 @@ function AppInner() {
           },
         });
         const ordered = orderAgentsByRegistry(next);
+        reportAgentDetectDiagnostics(analytics.track, ordered);
         if (isCurrentAgentStreamRequest(agentRequestId)) {
           setAgents(mergeAmrModelsIntoAgents(ordered, amrModelsRef.current));
           setAgentsLoading(false);
@@ -2987,6 +3034,12 @@ function AppInner() {
             ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
             : {}),
           ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
+          ...(input.automaticStrategyTaskProfile
+            ? { automaticStrategyTaskProfile: input.automaticStrategyTaskProfile }
+            : {}),
+          ...(input.exampleReference
+            ? { exampleReference: input.exampleReference }
+            : {}),
           workspaceContext: createWorkspaceContext,
         });
       } catch (err) {
@@ -4188,6 +4241,23 @@ function AppInner() {
     [iframeKeepAlivePool, refreshDesignSystems],
   );
 
+  /**
+   * Invariant: leaving `/design-systems/create` returns the user to whatever
+   * surface opened it — the project conversation they were mid-task in, the
+   * composer's design-system picker, the Library, a home card — instead of a
+   * fixed destination. The page is reachable from all of those, so a hardcoded
+   * exit route silently abandons the work the user was in the middle of
+   * (OPEND-2249: creating a design system from inside a project conversation
+   * dropped them on the Design systems tab).
+   *
+   * The Design systems tab stays the fallback: it is where the standalone
+   * entry lives, so a deep link or fresh load — the only case with no in-app
+   * layer to step back to — still lands somewhere that makes sense.
+   */
+  const handleDesignSystemCreateBack = useCallback(() => {
+    goBack({ kind: 'home', view: 'design-systems' });
+  }, []);
+
   const handlePluginsChanged = useCallback((
     context: WorkspaceCollabContext | null,
     accountGeneration: number,
@@ -4235,6 +4305,7 @@ function AppInner() {
     workspaceScope?: ProjectWorkspaceScope;
     resolvedDir?: string | null;
     workspaceContext?: WorkspaceCollabContext;
+    awaitingFirstMaterialization?: boolean;
   } | null>(null);
   const [, setRouteProjectSnapshotRevision] = useState(0);
   const activeAccountGeneration = currentWorkspaceAccountGeneration();
@@ -4269,6 +4340,10 @@ function AppInner() {
           : exactOpeningContext
             ? { workspaceContext: exactOpeningContext }
             : {}),
+        ...((preservesBootstrapWitness && previous.awaitingFirstMaterialization)
+          || listedProject.metadata?.sharedProjectPlaceholderAt != null
+          ? { awaitingFirstMaterialization: true }
+          : {}),
       };
       if (exactOpeningContext) projectOpenWorkspaceWitnessRef.current = null;
     } else if (
@@ -4465,6 +4540,8 @@ function AppInner() {
           capturedAfterListGeneration: latestAppliedProjectListGenerationRef.current,
           workspaceScope: bootstrap.scope,
           resolvedDir: bootstrap.resolvedDir,
+          awaitingFirstMaterialization:
+            bootstrap.project.metadata?.sharedProjectPlaceholderAt != null,
         };
         setRouteProjectSnapshotRevision((current) => current + 1);
         return;
@@ -4484,8 +4561,48 @@ function AppInner() {
         });
         return;
       }
-      // Preserve the existing shared-project recovery lane, but only after the
-      // ambient boot has settled enough to supply its exact catalog identity.
+      // A verified Team identity can bootstrap independently of the shell's
+      // project list, so begin local authority + background content work now.
+      const firstOpenTeamContext = exactOpenContext ?? deepLinkContext;
+      if (
+        firstOpenTeamContext?.workspaceType === 'team'
+        && firstOpenTeamContext.memberStatus === 'active'
+        && firstOpenTeamContext.lifecycleState === 'active'
+      ) {
+        const progressive = await bootstrapFirstOpenTeamProjectRoute(projectId, {
+          accountGeneration,
+          exactContext: firstOpenTeamContext,
+        });
+        if (
+          cancelled
+          || accountChanged()
+          || (!exactOpenContext && identityChanged())
+        ) return;
+        if (progressive.kind === 'found') {
+          routeProjectSnapshotRef.current = {
+            project: progressive.project,
+            accountGeneration,
+            capturedAfterListGeneration: latestAppliedProjectListGenerationRef.current,
+            workspaceScope: progressive.scope,
+            resolvedDir: progressive.resolvedDir,
+            workspaceContext: firstOpenTeamContext,
+            awaitingFirstMaterialization:
+              progressive.awaitingFirstMaterialization,
+          };
+          setRouteProjectSnapshotRevision((current) => current + 1);
+          return;
+        }
+        if (progressive.kind === 'forbidden') {
+          setDeepLinkResolutionFailure({ projectId, failure: 'missing' });
+          return;
+        }
+        // `not-found` can be a hub propagation race and `unavailable` includes
+        // old daemons that registered an unbound placeholder. Both retain the
+        // proven, bounded full-pull fallback below.
+      }
+      // The exact Team bootstrap above is independent of the shell project
+      // list, so it intentionally starts while that list is still loading.
+      // Only the legacy catalog+blocking-pull fallback waits for ambient boot.
       if (projectsLoading || !daemonLive) return;
       const resolution = await resolveDeepLinkedTeamSharedProject(projectId, {
         getProject: (id) => getProject(id, deepLinkContext),
@@ -4962,7 +5079,7 @@ function AppInner() {
   } else if (route.kind === 'design-system-create') {
     appMain = (
       <DesignSystemCreationFlow
-        onBack={() => navigate({ kind: 'home', view: 'design-systems' })}
+        onBack={handleDesignSystemCreateBack}
         designSystems={enabledDS}
         onCreated={(projectId, project, conversationId) => {
           if (project) {
@@ -5019,13 +5136,21 @@ function AppInner() {
           : undefined,
     });
     if (pendingCreation && activeProject) {
+      // Same `div.app` element as the ProjectView branch below, deliberately.
+      // React reconciles one element across the pending -> real hand-off, so
+      // the `.app` entrance animation plays once for the whole transition
+      // instead of restarting when ProjectView takes over (the pending surface
+      // lives ~150ms, shorter than the 180ms animation, so a second mount read
+      // as the project frame flashing twice).
       appMain = (
-        <ProjectCreationPendingView
-          project={activeProject}
-          prompt={pendingCreation.prompt}
-          agentId={config.agentId}
-          onBack={handleBack}
-        />
+        <div className="app">
+          <ProjectCreationPendingView
+            project={activeProject}
+            prompt={pendingCreation.prompt}
+            agentId={config.agentId}
+            onBack={handleBack}
+          />
+        </div>
       );
     } else if (
       routeSurfaceState === 'loading-projects'
@@ -5068,7 +5193,14 @@ function AppInner() {
           </div>
         </div>
       );
-    } else if (activeProject && projectRouteWorkspaceContext.failure) {
+    } else if (
+      activeProject
+      && projectRouteWorkspaceContext.failure
+      && (
+        projectRouteWorkspaceContext.failure === 'forbidden'
+        || activeProjectWorkspaceContext === null
+      )
+    ) {
       appMain = (
         <div className="entry-shell entry-shell--no-header">
           <div className="centered-loader">
@@ -5085,6 +5217,7 @@ function AppInner() {
       );
     } else if (activeProject) {
       appMain = (
+        <div className="app">
         <ProjectView
           key={projectViewAuthorizationLifetimeKey(
             activeProject.id,
@@ -5108,6 +5241,12 @@ function AppInner() {
                   project: routeProjectSnapshotRef.current.project,
                   resolvedDir: routeProjectSnapshotRef.current.resolvedDir,
                 }
+              : undefined
+          }
+          initialMaterializationPending={
+            routeProjectSnapshotRef.current?.project.id === activeProject.id
+              ? routeProjectSnapshotRef.current.awaitingFirstMaterialization
+                ?? (activeProject.metadata?.sharedProjectPlaceholderAt != null)
               : undefined
           }
           projectAuthorizationKey={
@@ -5155,6 +5294,7 @@ function AppInner() {
           onDuplicateProject={handleDuplicateProject}
           onRunActivityChange={handleProjectRunActivityChange}
         />
+        </div>
       );
     }
   } else {
@@ -5297,6 +5437,13 @@ function AppInner() {
           <WorkspaceTopRightAccountCluster
             onOpenSettings={openSettings}
             onSignedOut={handleActiveCloudSignOut}
+            updaterSlot={
+              <UpdaterPopup
+                allowSilentUpdates={config.allowSilentUpdates}
+                silentUpdatePreferenceReady={daemonAppConfigReady}
+                onAllowSilentUpdatesChange={handleSilentUpdatePreferenceChange}
+              />
+            }
             workspaceContextOverride={
               activeProject?.workspaceId
                 ? activeProjectWorkspaceContext
@@ -5307,7 +5454,20 @@ function AppInner() {
                 ? projectRouteWorkspaceContext.loading
                 : undefined
             }
+            amrLoggedIn={amrLoginStatus?.loggedIn ?? null}
+            amrAccountPlan={
+              amrLoginStatus?.account?.plan?.trim()
+              || amrLoginStatus?.user?.plan?.trim()
+              || null
+            }
+            metricsConsent={config.telemetry?.metrics === true}
+            installationId={config.installationId}
           />
+        ) : null}
+        {route.kind === 'project'
+          && activeProjectWorkspaceContext
+          && projectRouteWorkspaceContext.failure === 'unavailable' ? (
+          <ProjectWorkspaceRecoveryTip />
         ) : null}
         <div className="workspace-shell__body">
           {appMain}
@@ -5323,7 +5483,17 @@ function AppInner() {
       )}
       <TooltipLayer />
       <UpdateDialog />
+      {/* Mounted at shell level, outside the route views, so a survey armed by
+          an export inside a project stays on screen when the user navigates
+          back to home. */}
+      <ExperienceSurvey
+        metricsConsent={config.telemetry?.metrics === true}
+        onExposure={() => trackExperienceSurveyShown(analytics.track)}
+        onDismiss={() => trackExperienceSurveyDismissed(analytics.track)}
+        onSubmit={(answers) => trackExperienceSurveySent(analytics.track, answers)}
+      />
       <AmrArtifactUpgradeGate
+        cloudModelSelected={config.mode === 'daemon' && config.agentId === 'amr'}
         homeVisible={route.kind === 'home' && route.view === 'home'}
         activeProjectId={route.kind === 'project' ? route.projectId : null}
         activeConversationId={

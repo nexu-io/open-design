@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { ToolPackConfig } from "../config.js";
-import { readRuntimeAppVersion } from "../versions.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { readRuntimeAppVersion } from "../versioning/index.js";
 import { pathExists } from "./fs.js";
 import type { WinBuiltAppManifest, WinPaths } from "./types.js";
 

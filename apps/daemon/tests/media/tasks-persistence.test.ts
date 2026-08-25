@@ -232,3 +232,130 @@ describe('media task persistence', () => {
     expect(getMediaTask(db, 'task_delete')).toBeNull();
   });
 });
+
+// A refusal's attribution and retry verdict have to survive the database, not
+// just the request that produced them. Every daemon restart and every cache
+// rehydration reads the task back through normalizeError, so a field the write
+// path stores but the read path drops disappears on the first bounce -- and a
+// mocked-transport test cannot see that, because it never touches SQLite.
+describe('media task error round-trip', () => {
+  it('preserves subject and retryable through insert and read-back', () => {
+    const db = freshDb();
+    insertMediaTask(db, {
+      id: 'task-refused',
+      projectId: 'p1',
+      status: 'failed',
+      error: {
+        message: 'the request was rejected by a content safety policy',
+        status: 400,
+        code: 'safety_rejection',
+        subject: 'prompt',
+        retryable: false,
+      },
+    });
+
+    const reloaded = getMediaTask(db, 'task-refused');
+
+    expect(reloaded?.error).toEqual({
+      message: 'the request was rejected by a content safety policy',
+      status: 400,
+      code: 'safety_rejection',
+      subject: 'prompt',
+      retryable: false,
+    });
+    db.close();
+  });
+
+  it.each(['prompt', 'input_image', 'output_image'] as const)(
+    'preserves the %s subject',
+    (subject) => {
+      const db = freshDb();
+      insertMediaTask(db, {
+        id: `task-${subject}`,
+        projectId: 'p1',
+        status: 'failed',
+        error: { message: 'refused', code: 'safety_rejection', subject },
+      });
+      expect(getMediaTask(db, `task-${subject}`)?.error?.subject).toBe(subject);
+      db.close();
+    },
+  );
+
+  it('preserves the fields across an update, not only an insert', () => {
+    const db = freshDb();
+    insertMediaTask(db, { id: 'task-update', projectId: 'p1', status: 'running' });
+    updateMediaTask(db, 'task-update', {
+      status: 'failed',
+      error: {
+        message: 'refused',
+        code: 'safety_rejection',
+        subject: 'input_image',
+        retryable: false,
+      },
+    });
+
+    const reloaded = getMediaTask(db, 'task-update');
+    expect(reloaded?.error?.subject).toBe('input_image');
+    expect(reloaded?.error?.retryable).toBe(false);
+    db.close();
+  });
+
+  // Absent must stay absent. "The producer did not say" and "the producer said
+  // retrying is pointless" are different answers, and defaulting the first to
+  // the second tells a user a transient outage is permanent.
+  it('leaves absent fields absent rather than defaulting them', () => {
+    const db = freshDb();
+    insertMediaTask(db, {
+      id: 'task-plain',
+      projectId: 'p1',
+      status: 'failed',
+      error: { message: 'the image provider request failed', code: 'provider_error' },
+    });
+
+    const error = getMediaTask(db, 'task-plain')?.error;
+    expect(error?.code).toBe('provider_error');
+    expect(error).not.toHaveProperty('subject');
+    expect(error).not.toHaveProperty('retryable');
+    db.close();
+  });
+
+  // The column is JSON, so a row written by a newer daemon (or edited by hand)
+  // can carry a vocabulary this build does not know. Validating on read keeps
+  // an unknown subject out of the API response instead of passing it through.
+  it('drops a subject outside the known vocabulary on read', () => {
+    const db = freshDb();
+    insertMediaTask(db, {
+      id: 'task-unknown-subject',
+      projectId: 'p1',
+      status: 'failed',
+      error: {
+        message: 'refused',
+        code: 'safety_rejection',
+        subject: 'something_added_later' as never,
+        retryable: false,
+      },
+    });
+
+    const error = getMediaTask(db, 'task-unknown-subject')?.error;
+    expect(error).not.toHaveProperty('subject');
+    expect(error?.retryable).toBe(false);
+    db.close();
+  });
+
+  it('ignores a non-boolean retryable on read', () => {
+    const db = freshDb();
+    insertMediaTask(db, {
+      id: 'task-bad-retryable',
+      projectId: 'p1',
+      status: 'failed',
+      error: {
+        message: 'refused',
+        code: 'safety_rejection',
+        retryable: 'false' as never,
+      },
+    });
+
+    expect(getMediaTask(db, 'task-bad-retryable')?.error).not.toHaveProperty('retryable');
+    db.close();
+  });
+});

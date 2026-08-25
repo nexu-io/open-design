@@ -9,7 +9,7 @@ const ko: DeepPartial<CodexSlidesCopy> = {
   heading: "코딩 에이전트 안에 있는 AI 슬라이드 스튜디오",
   lead:
     "대부분의 AI 슬라이드 생성기는 요청 한 번 뒤로 작업을 숨긴 뒤 파일 하나만 건넵니다. Codex Slides는 다릅니다. 조사, 개요, 비주얼 방향, 렌더링, 편집, 발표, 내보내기까지 전 과정이 Codex 안에서 그대로 보이고 언제든 손댈 수 있습니다. 모든 덱은 내 디스크에 남아 내일 다시 이어서 작업할 수 있는 프로젝트가 됩니다. 게다가 image-native라 각 슬라이드는 텍스트만 갈아 끼운 템플릿이 아니라 온전한 비주얼 캔버스입니다.",
-  downloadCta: "Open Design 다운로드",
+  downloadCta: "OpenDesign 다운로드",
   heroAlt:
     "Codex Slides — 왼쪽에서는 Codex가 브라우저 속 슬라이드 스튜디오를 조작하고, 오른쪽에는 완성된 시장 보고서 슬라이드가 보인다",
 
@@ -105,9 +105,9 @@ const ko: DeepPartial<CodexSlidesCopy> = {
     "저장소를 플러그인 마켓플레이스로 추가하고, 플러그인을 설치하고, Codex를 재시작한 다음 새 작업을 시작하면 됩니다. 플러그인을 지원하는 Codex, Node.js 20 이상, 그리고 `codex login` 한 번이면 충분합니다. 기본 워크플로에는 별도의 OpenAI 키도, `.env` 파일도 필요 없습니다.",
 
   finalEyebrow: "다음 단계",
-  tiebackTitle: "Open Design 제품군에서",
+  tiebackTitle: "OpenDesign 제품군에서",
   tiebackBody:
-    "Open Design은 이미 쓰고 있는 코딩 에이전트 바깥에 놓이는, 개방적이고 local-first인 디자인 워크스페이스입니다. Codex Slides는 같은 발상을 프레젠테이션에 겨눈 제품입니다. 에이전트는 드러난 곳에서 일하고, 프로젝트는 내 컴퓨터에 남으며, 구독 뒤에 잠기는 것은 아무것도 없습니다. 슬라이드 너머의 완전한 디자인 도구 모음이 필요하다면 Open Design 앱을 받으세요.",
+    "OpenDesign은 이미 쓰고 있는 코딩 에이전트 바깥에 놓이는, 개방적이고 local-first인 디자인 워크스페이스입니다. Codex Slides는 같은 발상을 프레젠테이션에 겨눈 제품입니다. 에이전트는 드러난 곳에서 일하고, 프로젝트는 내 컴퓨터에 남으며, 구독 뒤에 잠기는 것은 아무것도 없습니다. 슬라이드 너머의 완전한 디자인 도구 모음이 필요하다면 OpenDesign 앱을 받으세요.",
 
   schemaAlternateName: "Codex 안에서 돌아가는 오픈소스 AI 슬라이드 스튜디오",
   schemaWhatQuestion: "Codex Slides란 무엇인가요?",
@@ -119,9 +119,9 @@ const ko: DeepPartial<CodexSlidesCopy> = {
   schemaExportQuestion: "Codex Slides는 진짜 PowerPoint 파일을 내보낼 수 있나요?",
   schemaExportAnswer:
     "네. Codex Slides는 진짜 PPTX와 인쇄용 PDF를 내보내며, 둘 다 프로젝트의 발표자 노트를 그대로 유지합니다. 렌더링 품질은 1K/2K/4K, 화면 비율은 다섯 가지(16:9, 4:3, 1:1, 9:16, 3:4)를 지원합니다. image-native 방식이기 때문에 내보낸 PPTX의 각 슬라이드는 개별 편집이 가능한 PowerPoint 도형이 아니라 전체 화면 이미지로 들어갑니다. 도형을 편집할 수 있는 내보내기는 로드맵에 올라 있습니다.",
-  schemaRelationQuestion: "Codex Slides는 Open Design과 관련이 있나요?",
+  schemaRelationQuestion: "Codex Slides는 OpenDesign과 관련이 있나요?",
   schemaRelationAnswer:
-    "네. Codex Slides는 Open Design을 만든 팀의 자매 프로젝트로, 개방적이고 local-first이며 agent-native라는 같은 접근을 디자인 파일이 아니라 프레젠테이션에 적용한 것입니다.",
+    "네. Codex Slides는 OpenDesign을 만든 팀의 자매 프로젝트로, 개방적이고 local-first이며 agent-native라는 같은 접근을 디자인 파일이 아니라 프레젠테이션에 적용한 것입니다.",
 };
 
 export default ko;

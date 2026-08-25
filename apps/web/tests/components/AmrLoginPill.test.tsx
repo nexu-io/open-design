@@ -107,7 +107,7 @@ describe('AmrAccountControl', () => {
     });
 
     expect(
-      screen.getByRole('group', { name: 'Open Design Cloud account status' }),
+      screen.getByRole('group', { name: 'OpenDesign Cloud account status' }),
     ).toBeTruthy();
     expect(screen.getByText('Not signed in')).toBeTruthy();
     const signIn = screen.getByRole('button', { name: 'Sign in' });
@@ -476,7 +476,7 @@ describe('AmrLoginPill', () => {
     });
   });
 
-  it('passes the Open Design device id in login attribution when metrics consent is enabled', async () => {
+  it('passes the OpenDesign device id in login attribution when metrics consent is enabled', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -638,7 +638,7 @@ describe('AmrLoginPill', () => {
   });
 
   // This pill is what Settings' "Sign in / Register" cloud callout and the
-  // Open Design agent card's "Authorize" action both render (SettingsDialog
+  // OpenDesign agent card's "Authorize" action both render (SettingsDialog
   // renders it from a full-page `/settings` route, so the entry rail — and
   // its `useWorkspaceContext` hook — is unmounted the whole time the user is
   // on that page). Besides notifyAmrLoginStatusChanged(), it also fires

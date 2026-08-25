@@ -7,7 +7,7 @@ Date: 2026-08-14
 Related contract: `specs/current/deepseek-harness-profile-adapter.md`
 
 The implementation uses a user-installed official `dsh` plus an OD profile
-bundle and a versioned JSONL protocol; Open Design does not package a Harness
+bundle and a versioned JSONL protocol; OpenDesign does not package a Harness
 carrier.
 
 ## 1. Phase-one goal
@@ -15,7 +15,7 @@ carrier.
 Deliver the smallest useful vertical slice:
 
 > A user who has installed official DSH can explicitly connect it from the
-> normal Open Design CLI picker, select a discovered model and reasoning level,
+> normal OpenDesign CLI picker, select a discovered model and reasoning level,
 > generate a previewable file artifact, cold-resume the conversation in a new
 > process, and modify that artifact.
 
@@ -367,5 +367,5 @@ Windows process-tree smoke
 credentialed OD artifact E2E
 ```
 
-No upstream DeepSeek PR and no Open Design-packaged Harness carrier are on the
+No upstream DeepSeek PR and no OpenDesign-packaged Harness carrier are on the
 phase-one critical path.

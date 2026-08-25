@@ -65,6 +65,15 @@ export interface RegisterProjectCommentRoutesDeps extends RouteDeps<'db' | 'proj
     projectId: string,
   ) => Promise<ProjectCommentWorkspaceContextResolution>;
   /**
+   * Fresh cloud authority used only before pulling remote comment state. Local
+   * list/create/edit/delete paths use the persisted project binding and must
+   * remain available while the membership directory is offline.
+   */
+  resolveFreshWorkspaceContext?: (
+    req: Request,
+    projectId: string,
+  ) => Promise<ProjectCommentWorkspaceContextResolution>;
+  /**
    * Resolve the CURRENT caller's workspaceMemberId from the request identity
    * (workspace context). Server-authoritative — used both to stamp the author on
    * a new/edited comment and to gate status/delete on the caller's identity.
@@ -378,7 +387,9 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
     await ctx.onCommentsRead?.(
       req.params.id,
       workspaceResolution.context,
-      () => resolveRequestWorkspaceContext(req, req.params.id),
+      () => ctx.resolveFreshWorkspaceContext
+        ? ctx.resolveFreshWorkspaceContext(req, req.params.id)
+        : resolveRequestWorkspaceContext(req, req.params.id),
     );
     res.json({
       comments: commentsAreProjectScoped(

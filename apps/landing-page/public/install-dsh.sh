@@ -2,14 +2,28 @@
 set -eu
 
 NODE_VERSION='24.19.0'
-DSH_VERSION='0.1.0-rc.6'
+DSH_VERSION='0.1.1-rc.2'
 PNPM_VERSION='11.7.0'
+# Freeze npm's view of the registry to just after DSH_VERSION was published.
+#
+# Every @deepseek-ai/dsh-* package declares its ~190 siblings with a caret
+# range (^0.1.0-rc.N). npm reads a caret whose floor carries a prerelease tag
+# as "this prerelease or any newer version", so pinning the top-level package
+# alone lets the entire tree float onto whichever release candidate is newest.
+# The generations are mutually exclusive — an rc.8 package peer-requires
+# rc.8 siblings — so a mixed tree sends npm into an ERESOLVE backtrack across
+# a combinatorial search space that never converges: the install appears to
+# hang while scrolling warnings forever.
+#
+# The cutoff must stay LATER than DSH_VERSION's publish time and EARLIER than
+# the next release candidate's. Update both values together.
+DSH_RESOLUTION_CUTOFF='2026-08-21T13:00:00Z'
 
 NO_LAUNCH=0
 
 usage() {
   cat <<'EOF'
-Install the DeepSeek Harness toolchain supported by Open Design.
+Install the DeepSeek Harness toolchain supported by OpenDesign.
 
 Usage:
   install-dsh.sh [--no-launch]
@@ -107,7 +121,7 @@ finish() {
   label=$1
   info "DeepSeek Harness $DSH_VERSION is ready ($label)."
   info "Command: $LAUNCHER"
-  info 'Open Design can discover this command without editing your shell profile.'
+  info 'OpenDesign can discover this command without editing your shell profile.'
   if [ "$NO_LAUNCH" -eq 1 ]; then
     return 0
   fi
@@ -222,12 +236,13 @@ fi
 
 runtime_staging=$INSTALL_ROOT/.runtime-dsh-$DSH_VERSION.$$
 mkdir -p "$runtime_staging"
-info "Installing dsh $DSH_VERSION and pnpm $PNPM_VERSION in Open Design's user toolchain..."
+info "Installing dsh $DSH_VERSION and pnpm $PNPM_VERSION in OpenDesign's user toolchain..."
 PATH="$managed_node_dir/bin:${PATH:-}" "$managed_node_dir/bin/npm" install \
   --prefix "$runtime_staging" \
   --no-save \
   --no-package-lock \
   --omit=dev \
+  --before "$DSH_RESOLUTION_CUTOFF" \
   "@deepseek-ai/dsh@$DSH_VERSION" \
   "pnpm@$PNPM_VERSION"
 

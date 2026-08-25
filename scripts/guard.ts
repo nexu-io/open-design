@@ -3,9 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
-import { checkCertainExemptConsumption } from "./check-certain-exempt-consumption.ts";
 import { checkCrossAppImports } from "./check-cross-app-imports.ts";
-import { checkPackagedLeafBoundary } from "./check-packaged-leaf-boundary.ts";
 import { checkTsNocheckImports } from "./check-ts-nocheck-imports.ts";
 import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
 import { checkDesignSystemPackageQuality } from "./check-design-system-package-quality.ts";
@@ -13,7 +11,6 @@ import { checkDesignSystemComponentFixtureReport } from "./check-components-fixt
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
 import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
 import { checkPluginPreviewManifest } from "./check-plugin-preview-manifest.ts";
-import { validatePlaywrightSuiteTopology } from "../e2e/lib/playwright/suites.ts";
 import {
   checkDesignSystemA1RequiredTokens,
   checkDesignSystemA2DefaultsParity,
@@ -26,10 +23,6 @@ import { checkCraftReferences } from "./lint-craft-references.ts";
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 import { checkScriptsLibraryArchitecture } from "./lib/guard/architecture.ts";
 import { runGuardChecks, type GuardCheck, type GuardContext } from "./lib/guard/core.ts";
-import {
-  checkDaemonCoreBoundary as checkDaemonCoreScopeBoundary,
-  checkUiP0ShadowContract,
-} from "./lib/guard/scope.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
@@ -151,6 +144,16 @@ const residualAllowedExactPaths = new Set([
   // integration tests. The Vitest test spawns it via `child_process.spawn`,
   // which needs a directly-executable file (shebang + .mjs).
   "apps/daemon/tests/fixtures/fake-vela.mjs",
+  // Fake ACP agent CLI that answers `initialize` and then rejects
+  // `session/new`, used by the ACP handshake-rejection wiring tests. Same
+  // precedent as `fake-vela.mjs`: Vitest puts it on PATH and the daemon
+  // spawns it, so it must be directly executable (shebang + .mjs).
+  "apps/daemon/tests/fixtures/fake-acp-handshake-cli.mjs",
+  // Fake `kimi acp` ACP stdio stub used by the stdio-MCP wiring test. It
+  // records the `session/new` params the daemon actually sends, and the test
+  // spawns it through a PATH shim, so it must be directly executable by Node
+  // without a transform — same precedent as `fake-vela.mjs` above.
+  "apps/daemon/tests/fixtures/fake-kimi-acp-cli.mjs",
   "tools/dev/bin/tools-dev.mjs",
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
@@ -313,6 +316,7 @@ type DependencySpecViolation = {
 
 type DependencySpecStats = {
   exact: number;
+  externalHostPeer: number;
   manifests: number;
   total: number;
   workspace: number;
@@ -324,6 +328,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isAllowedDependencySpec(spec: string): boolean {
   return spec === "workspace:*" || exactVersionPattern.test(spec) || exactNpmAliasPattern.test(spec);
+}
+
+// Manifests published for an EXTERNAL host to load as a plugin, where
+// `peerDependencies` describes packages the host supplies rather than
+// anything this repository installs or can pin.
+//
+// Exact specs are right everywhere else: they keep our own installs
+// reproducible. A peer range aimed at a third-party host is the opposite
+// case — the host's version is chosen by the user, so an exact peer means
+// any host upgrade leaves the peer unsatisfiable and the plugin refuses to
+// install at all. `@open-design/dsh-runtime` hit exactly that: pinned to a
+// single DeepSeek Harness release candidate, it became uninstallable the
+// moment the upstream shipped the next one.
+//
+// This exemption covers `peerDependencies` only. `dependencies` and
+// `devDependencies` in these manifests are still installed by us and still
+// have to be exact.
+const externalHostPluginManifests = new Set(["packages/dsh-runtime/package.json"]);
+
+function isExternalHostPeerSpec(filePath: string, fieldPath: string): boolean {
+  return (
+    externalHostPluginManifests.has(filePath) &&
+    fieldPath.split(".")[0] === "peerDependencies"
+  );
 }
 
 function dependencySpecReason(spec: string): string {
@@ -408,6 +436,11 @@ function checkDependencySpecRecord(
       continue;
     }
 
+    if (isExternalHostPeerSpec(filePath, fieldPath)) {
+      stats.externalHostPeer += 1;
+      continue;
+    }
+
     violations.push({
       filePath,
       fieldPath,
@@ -423,6 +456,7 @@ async function checkPackageDependencySpecs(): Promise<boolean> {
   const violations: DependencySpecViolation[] = [];
   const stats: DependencySpecStats = {
     exact: 0,
+    externalHostPeer: 0,
     manifests: manifestPaths.length,
     total: 0,
     workspace: 0,
@@ -477,7 +511,7 @@ async function checkPackageDependencySpecs(): Promise<boolean> {
   }
 
   console.log(
-    `Package dependency spec check passed: ${stats.manifests} package.json files, ${stats.exact} exact specs, ${stats.workspace} workspace:* specs.`,
+    `Package dependency spec check passed: ${stats.manifests} package.json files, ${stats.exact} exact specs, ${stats.workspace} workspace:* specs, ${stats.externalHostPeer} external-host peer ranges.`,
   );
   return true;
 }
@@ -1220,7 +1254,7 @@ function collectStylePolicyViolationsFromSource(repositoryPath: string, source: 
         filePath: repositoryPath,
         lineNumber: lineNumberForIndex(source, match.index ?? 0),
         match: match[0],
-        reason: "default Tailwind palette classes must use Open Design token utilities instead",
+        reason: "default Tailwind palette classes must use OpenDesign token utilities instead",
       });
     }
   }
@@ -1237,7 +1271,7 @@ function collectStylePolicyViolationsFromSource(repositoryPath: string, source: 
           source,
           match.index,
           value,
-          "unregistered hardcoded UI colors must use Open Design tokens or an explicit allowlist entry",
+          "unregistered hardcoded UI colors must use OpenDesign tokens or an explicit allowlist entry",
         );
       }
     } else {
@@ -1252,7 +1286,7 @@ function collectStylePolicyViolationsFromSource(repositoryPath: string, source: 
           source,
           match.index ?? 0,
           value,
-          "unregistered hardcoded UI colors must use Open Design tokens or an explicit allowlist entry",
+          "unregistered hardcoded UI colors must use OpenDesign tokens or an explicit allowlist entry",
         );
       }
     }
@@ -1313,42 +1347,11 @@ async function checkStylePolicy(): Promise<boolean> {
     for (const violation of violations) {
       console.error(`- ${violation.filePath}:${violation.lineNumber} \`${violation.match}\` -> ${violation.reason}`);
     }
-    console.error("Use Open Design token utilities/CSS variables or add a narrow allowlist entry with a reason.");
+    console.error("Use OpenDesign token utilities/CSS variables or add a narrow allowlist entry with a reason.");
     return false;
   }
 
   console.log("Style policy check passed: Tailwind palette classes and enforced hardcoded UI colors stay token-first.");
-  return true;
-}
-
-async function checkCiTopology(): Promise<boolean> {
-  const ciWorkflow = await readFile(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
-  const errors = [
-    ...validatePlaywrightSuiteTopology(),
-    ...[
-      "run: node --experimental-strip-types scripts/scopes.ts github-output",
-      "ci_mode: ${{ steps.detect.outputs.ci_mode }}",
-      "ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}",
-      "run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}",
-      "ui_p0_matrix: ${{ steps.detect.outputs.ui_p0_matrix }}",
-      "visual_matrix: ${{ steps.detect.outputs.visual_matrix }}",
-      "include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}",
-      "include: ${{ fromJSON(needs.scopes.outputs.visual_matrix) }}",
-      "needs.scopes.outputs.run_ui_p0 == 'true'",
-      "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group critical-extras",
-      "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}",
-    ]
-      .filter((needle) => !ciWorkflow.includes(needle))
-      .map((needle) => `.github/workflows/ci.yml is missing ${needle}`),
-  ];
-
-  if (errors.length > 0) {
-    console.error("CI topology check failed:");
-    for (const error of errors) console.error(`- ${error}`);
-    return false;
-  }
-
-  console.log("CI topology check passed: scopes, Playwright suites, and workflow matrices stay aligned.");
   return true;
 }
 
@@ -1359,20 +1362,8 @@ function checkCrossAppImportsOnce(): Promise<boolean> {
   return crossAppImportsResult;
 }
 
-async function checkDaemonCoreBoundary(context: GuardContext): Promise<boolean> {
-  const [crossAppImportsPass, scopeBoundaryPass] = await Promise.all([
-    checkCrossAppImportsOnce(),
-    checkDaemonCoreScopeBoundary(context),
-  ]);
-  return crossAppImportsPass && scopeBoundaryPass;
-}
-
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
-  { name: "certain-exempt surface consumption", run: checkCertainExemptConsumption },
-  { name: "packaged leaf boundary", run: checkPackagedLeafBoundary },
-  { name: "daemon core boundary", run: checkDaemonCoreBoundary },
-  { name: "UI P0 shadow contract", run: checkUiP0ShadowContract },
   { name: "package dependency specs", run: checkPackageDependencySpecs },
   { name: "product neutrality", run: checkProductNeutrality },
   { name: "cross-app imports", run: checkCrossAppImportsOnce },
@@ -1385,7 +1376,6 @@ const checks: GuardCheck[] = [
   { name: "web import isolation", run: checkWebImportIsolation },
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
-  { name: "CI topology", run: checkCiTopology },
   { name: "craft references", run: checkCraftReferences },
   { name: "plugin preview manifest", run: checkPluginPreviewManifest },
   { name: "design system manifests", run: checkDesignSystemManifests },
@@ -1403,9 +1393,7 @@ const checks: GuardCheck[] = [
 
 const isMain = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
 if (isMain) {
-  // `--list-checks` is the machine-readable registry of guard check names; the
-  // scope rule-table invariant test resolves `certain` rules' guard fields
-  // against it so a renamed or deleted guard fails CI.
+  // `--list-checks` is the machine-readable registry of repository guard checks.
   if (process.argv[2] === "--list-checks") {
     for (const check of checks) console.log(check.name);
   } else if (!(await runGuardChecks(checks, { repoRoot }))) {

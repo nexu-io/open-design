@@ -13,6 +13,7 @@
 import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
+import { isDaemonProxyConnectionFailure } from './daemon-proxy-failure';
 import { randomUUID } from '../utils/uuid';
 import {
   captureHostPage,
@@ -157,7 +158,7 @@ export function buildDesignManifestContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Design artifact';
+  const title = opts.title || 'OpenDesign artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
@@ -248,7 +249,7 @@ export function buildDesignHandoffContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Design artifact';
+  const title = opts.title || 'OpenDesign artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const accentLikelyBrandLed =
@@ -271,7 +272,7 @@ This archive is the source of truth for turning the design into production code.
 - Build production UI from the exported design, not a loose reinterpretation.
 - Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
 - Replace static placeholders only when the target app has real data or functional equivalents.
-- Keep generated product UI free of Open Design chrome, preview labels, or design-process annotations.
+- Keep generated product UI free of OpenDesign chrome, preview labels, or design-process annotations.
 - Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
 
 ## Source map
@@ -302,7 +303,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
 - Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
 - Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
-- Do not keep prototype-only annotations, frame labels, or Open Design chrome in the production UI.
+- Do not keep prototype-only annotations, frame labels, or OpenDesign chrome in the production UI.
 
 ## CJX-ready UX contract
 - Use \`${DESIGN_MANIFEST_FILENAME}\` as the machine-readable map for screens, app modules, OS widgets, landing pages, tokens, interactions, and viewport checks.
@@ -956,9 +957,27 @@ export async function exportProjectAsZip(opts: {
 // renderer-side 502, "page too tall", …), which must be surfaced rather than
 // silently masked by the old vector path (which can reintroduce the CJK-glyph /
 // fidelity bugs this screenshot path exists to avoid).
+/**
+ * Why the off-screen renderer could not be used. Both values keep
+ * `unavailable: true` so the existing fallback checks (`'unavailable' in res`)
+ * still classify them as "renderer not usable, you may fall back", but callers
+ * that surface a message can now tell the two apart:
+ *
+ * - `no-renderer` — the daemon answered 501: this runtime has no off-screen
+ *   renderer at all. Permanent until the deployment changes.
+ * - `unreachable` — the request never got an answer (daemon down, connection
+ *   dropped). Says nothing about whether the feature exists, and is very likely
+ *   transient.
+ *
+ * They were previously collapsed into one flag, so a dead daemon was reported
+ * to the user as "this export is not available here" — a claim about the
+ * product when the real problem was the connection.
+ */
+export type ExportUnavailableReason = 'no-renderer' | 'unreachable';
+
 export type ProjectScreenshotExportResult =
   | { ok: true }
-  | { ok: false; unavailable: true }
+  | { ok: false; unavailable: true; reason: ExportUnavailableReason }
   | { ok: false; error: string };
 
 // Programmatic screenshot-based PPTX export. POSTs to the daemon, which renders
@@ -1005,13 +1024,20 @@ export async function exportProjectAsPptx(opts: {
   } catch {
     // Transport-level failure (offline, daemon down) — genuinely unavailable, so
     // the caller may fall back to the vector/browser PDF.
-    return { ok: false, unavailable: true };
+    return { ok: false, unavailable: true, reason: 'unreachable' };
   }
   if (!resp.ok) {
     // 501 = this runtime has no off-screen renderer → caller may fall back to
     // the vector/browser PDF. Everything else is a real (semantic) failure that
     // must surface, not be masked by the vector path.
-    if (resp.status === 501) return { ok: false, unavailable: true };
+    if (resp.status === 501) return { ok: false, unavailable: true, reason: 'no-renderer' };
+    // The proxy in front of the daemon answers instead of failing the fetch
+    // when the daemon is down, so an outage arrives as a plain-text 5xx rather
+    // than a rejection. Classify it before the generic branch below, otherwise
+    // the daemon-down diagnostic never fires on the packaged / sidecar path.
+    if (await isDaemonProxyConnectionFailure(resp)) {
+      return { ok: false, unavailable: true, reason: 'unreachable' };
+    }
     let message = `export request failed (${resp.status})`;
     try {
       const err = await resp.json();
@@ -1047,15 +1073,23 @@ export async function exportProjectAsPptx(opts: {
 // a plain `.slide` class as proof of a deck: ordinary pages often use that token
 // for carousels/testimonials and still need full-page/scroll-stitch capture.
 function sourceLooksLikeStructuredDeck(source: string): boolean {
+  // Inspect markup, not examples or compatibility notes embedded in the
+  // document. Print bridges commonly mention `<deck-stage>` in comments or
+  // script strings while guarding optional deck behavior; treating those
+  // literals as real elements turns ordinary reports into a one-slide deck and
+  // incorrectly mounts navigation and speaker notes.
+  const markup = source
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
   return (
     /<deck-stage[\s/>]|class\s*=\s*['"](?:[^'"]*\s)?(?:deck-slide|ppt-slide)(?:\s|['"])/i.test(
-      source,
+      markup,
     ) ||
     /<[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])[^>]*\bdata-title\s*=|<[^>]*\bdata-title\s*=[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(
-      source,
+      markup,
     ) ||
     /<[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?deck(?:\s|['"])[^>]*>\s*<[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(
-      source,
+      markup,
     )
   );
 }
@@ -1120,8 +1154,14 @@ export function planDeckImageCapture(opts: {
 // must be surfaced rather than silently downgraded to a partial viewport shot.
 export type ProjectImageExportResult =
   | { ok: true; snapshot: PreviewSnapshot }
-  | { ok: false; unavailable: true }
-  | { ok: false; error: string };
+  | { ok: false; unavailable: true; reason: ExportUnavailableReason }
+  // `code` / `status` carry the daemon's own classification through to the
+  // caller. Dropping them (as this used to) forced `exportErrorCode` to
+  // re-derive a code by regex-matching the message, and anything it could not
+  // match fell through to `err.name` — the literal string "Error", which is
+  // what 48% of image-export failures reported in analytics. See
+  // `apps/web/src/analytics/export-error-code.ts`.
+  | { ok: false; error: string; code?: string; status?: number };
 
 export async function exportProjectImageDataUrl(opts: {
   projectId: string;
@@ -1156,19 +1196,28 @@ export async function exportProjectImageDataUrl(opts: {
   } catch {
     // Transport-level failure (offline, daemon down) — genuinely unavailable, so
     // the caller may fall back to a visible-preview capture.
-    return { ok: false, unavailable: true };
+    return { ok: false, unavailable: true, reason: 'unreachable' };
   }
   if (!resp.ok) {
     // 501 = this runtime has no off-screen renderer → caller may fall back.
-    if (resp.status === 501) return { ok: false, unavailable: true };
+    if (resp.status === 501) return { ok: false, unavailable: true, reason: 'no-renderer' };
+    // The proxy in front of the daemon answers instead of failing the fetch
+    // when the daemon is down, so an outage arrives as a plain-text 5xx rather
+    // than a rejection. Classify it before the generic branch below, otherwise
+    // the daemon-down diagnostic never fires on the packaged / sidecar path.
+    if (await isDaemonProxyConnectionFailure(resp)) {
+      return { ok: false, unavailable: true, reason: 'unreachable' };
+    }
     let message = `image export failed (${resp.status})`;
+    let code: string | undefined;
     try {
       const err = await resp.json();
       if (err?.error?.message) message = String(err.error.message);
+      if (typeof err?.error?.code === 'string' && err.error.code) code = err.error.code;
     } catch {
       // non-JSON body; keep the status-based message
     }
-    return { ok: false, error: message };
+    return { ok: false, error: message, status: resp.status, ...(code ? { code } : {}) };
   }
   // A 200 with an unreadable/corrupt payload is a real export failure, NOT
   // "renderer unavailable" — surface it instead of silently downgrading to the

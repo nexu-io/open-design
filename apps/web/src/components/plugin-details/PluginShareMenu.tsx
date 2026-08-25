@@ -5,7 +5,7 @@
 //
 //   - Copy plugin id          (raw `<id>` for paste-into-yaml)
 //   - Copy install command    (`od plugin install <ref>`)
-//   - Copy README badge       (Open Design powered, includes link)
+//   - Copy README badge       (OpenDesign powered, includes link)
 //   - Open source on GitHub   (when the source is a github repo)
 //   - Open homepage           (when manifest.homepage is set)
 //   - Open in marketplace     (always — the canonical detail page)
@@ -105,7 +105,7 @@ function buildPluginMarketplacePath(record: InstalledPluginRecord): string {
 }
 
 function buildMarkdownBadge(record: InstalledPluginRecord, url: string): string {
-  return `[![${record.title} — Open Design plugin](https://img.shields.io/badge/Open%20Design-${encodeURIComponent(record.title)}-d65a31?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2C)](${url})`;
+  return `[![${record.title} — OpenDesign plugin](https://img.shields.io/badge/Open%20Design-${encodeURIComponent(record.title)}-d65a31?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2C)](${url})`;
 }
 
 export function PluginShareMenu({ record, variant = 'default' }: Props) {

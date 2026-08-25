@@ -36,7 +36,8 @@ body.sub-page {
 
 /* ---------- nav active state ---------- */
 
-.nav-links a.is-active {
+.nav-links a.is-active,
+.nav-links .nav-trigger.is-active {
   color: var(--ink);
 }
 .nav-links a.is-active::after {
@@ -47,11 +48,27 @@ body.sub-page {
   margin-top: 4px;
   border-radius: 2px;
 }
+/* The Product / Resources triggers are <button>s since the 2026-08 nav
+   consolidation and lay out as inline-flex, where a block ::after becomes
+   a collapsed flex item and the bar never paints. The trigger already has
+   position: relative (globals.css), so anchor the bar to its own box —
+   anchors keep the block-flow rule above because .nav-links a is NOT
+   positioned and an absolute bar would escape it. */
+.nav-links .nav-trigger.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5.5px; /* mirrors the anchors' 4px gap + 1.5px bar height */
+  height: 1.5px;
+  background: var(--coral);
+  border-radius: 2px;
+}
 
 /* ---------- breadcrumb ---------- */
 
 /*
- * The "OPEN DESIGN / <page>" breadcrumb strip was removed from the sub-page
+ * The "OpenDesign / <page>" breadcrumb strip was removed from the sub-page
  * design. The <nav class="breadcrumb"> markup still renders on ~100 pages
  * (and feeds the BreadcrumbList JSON-LD on some), so it is suppressed here
  * once instead of being stripped from every page file.

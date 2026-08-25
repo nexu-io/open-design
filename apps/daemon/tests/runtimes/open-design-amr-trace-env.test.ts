@@ -21,7 +21,7 @@ test('openDesignAmrRunAttempt counts automatic retries and manual recharge resum
   );
 });
 
-test('openDesignAmrTraceEnv builds Open Design trace identity env for AMR only', () => {
+test('openDesignAmrTraceEnv builds OpenDesign trace identity env for AMR only', () => {
   const amrEnv = openDesignAmrTraceEnv({
     agentId: 'amr',
     runId: ' run_trace_123 ',

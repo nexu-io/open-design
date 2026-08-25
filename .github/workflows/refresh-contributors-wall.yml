@@ -38,7 +38,7 @@ jobs:
           fi
           perl -0pi -e "s/cache_bust=\d{4}-\d{2}-\d{2}/cache_bust=$DATE/g" "${README_FILES[@]}"
 
-      - name: Generate Open Design bot token
+      - name: Generate OpenDesign bot token
         id: open-design-bot-token
         uses: actions/create-github-app-token@v3.2.0
         with:
