@@ -337,6 +337,8 @@ export const PRINTABLE_CONTENT_WAIT_TIMEOUT_MS = 15_000;
  *  stalled image drops out while the rest of the document still settles
  *  normally, instead of every export paying the full outer timeout. */
 const IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS = 10_000;
+const EMBEDDED_FRAME_RECONCILE_INTERVAL_MS = 50;
+const EMBEDDED_FRAME_MISSING_GRACE_MS = 150;
 
 type EmbeddedFrameWaitResult = { stalled: boolean };
 
@@ -349,6 +351,7 @@ type PendingEmbeddedFrame = {
   frame: WebFrameMain;
   frameTreeNodeId: number | null;
   key: string;
+  missingSince: number | null;
   probedIdentities: Set<string>;
 };
 
@@ -379,16 +382,24 @@ export async function waitForEmbeddedFrames(
         const key = embeddedFrameKey(frame, frameTreeNodeId);
         return [
           key,
-          { frame, frameTreeNodeId, key, probedIdentities: new Set<string>() },
+          {
+            frame,
+            frameTreeNodeId,
+            key,
+            missingSince: null,
+            probedIdentities: new Set<string>(),
+          },
         ];
       }),
     );
+    let reconcileTimer: ReturnType<typeof setTimeout> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let done = false;
     const finish = (stalled: boolean) => {
       if (done) return;
       done = true;
       webContents.off("did-frame-finish-load", onFrameFinished);
+      if (reconcileTimer !== undefined) clearTimeout(reconcileTimer);
       if (timer !== undefined) clearTimeout(timer);
       resolve({ stalled });
     };
@@ -462,16 +473,45 @@ export async function waitForEmbeddedFrames(
     ) => {
       if (done || !pending.has(entry.key)) return;
       const current = currentEmbeddedFrame(webContents, entry);
-      // A cross-process navigation can transiently disappear from the frame
-      // snapshot between renderer detach and replacement registration. Missing
-      // here is therefore not proof that the iframe was removed; keep the wait
-      // pending for its finish event or the shared deadline.
-      if (!current) return;
+      if (!current) {
+        entry.missingSince ??= Date.now();
+        return;
+      }
+      entry.missingSince = null;
       if (
         current.processId !== previous.processId ||
         current.routingId !== previous.routingId
       ) {
         probe(entry, current);
+      }
+    };
+
+    const reconcileFrames = () => {
+      if (done) return;
+      reconcileTimer = undefined;
+      const now = Date.now();
+      for (const entry of Array.from(pending.values())) {
+        const current = currentEmbeddedFrame(webContents, entry);
+        if (!current) {
+          entry.missingSince ??= now;
+          if (now - entry.missingSince >= EMBEDDED_FRAME_MISSING_GRACE_MS) {
+            settle(entry.key);
+          }
+          continue;
+        }
+        entry.missingSince = null;
+        if (
+          current.processId !== entry.frame.processId ||
+          current.routingId !== entry.frame.routingId
+        ) {
+          probe(entry, current);
+        }
+      }
+      if (!done) {
+        reconcileTimer = setTimeout(
+          reconcileFrames,
+          EMBEDDED_FRAME_RECONCILE_INTERVAL_MS,
+        );
       }
     };
 
@@ -481,6 +521,10 @@ export async function waitForEmbeddedFrames(
     // by probing the current frame with the same stable frameTreeNodeId.
     webContents.on("did-frame-finish-load", onFrameFinished);
     timer = setTimeout(() => finish(true), Math.max(0, deadlineAt - Date.now()));
+    reconcileTimer = setTimeout(
+      reconcileFrames,
+      EMBEDDED_FRAME_RECONCILE_INTERVAL_MS,
+    );
     for (const entry of pending.values()) probe(entry, entry.frame);
   });
 }

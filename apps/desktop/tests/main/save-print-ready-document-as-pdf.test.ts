@@ -746,6 +746,7 @@ describe('waitForPrintableContent', () => {
       mainFrame.framesInSubtree = [mainFrame];
       await Promise.resolve();
       await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(100);
       expect(settled).toBe(false);
 
       const committedFrame = {
@@ -770,6 +771,46 @@ describe('waitForPrintableContent', () => {
       await expect(waiting).resolves.toEqual({ stalled: false });
       expect(committedFrame.executeJavaScript).toHaveBeenCalledTimes(1);
       expect(events.listenerCount('did-frame-finish-load')).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('settles a pending frame after its browsing context is actually removed', async () => {
+    vi.useFakeTimers();
+    try {
+      const events = new EventEmitter();
+      const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+      const removedFrame = {
+        frameTreeNodeId: 43,
+        url: 'https://example.test/removed.html',
+        processId: 18,
+        routingId: 36,
+        executeJavaScript: vi.fn().mockResolvedValue({
+          readyState: 'loading',
+          url: 'https://example.test/removed.html',
+        }),
+      };
+      mainFrame.framesInSubtree = [mainFrame, removedFrame];
+      const stop = vi.fn();
+      const webContents = Object.assign(events, {
+        mainFrame,
+        executeJavaScript: vi.fn().mockResolvedValue({ stalled: false }),
+        stop,
+      });
+      const waiting = waitForPrintableContent(
+        { webContents } as unknown as Parameters<typeof waitForPrintableContent>[0],
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      mainFrame.framesInSubtree = [mainFrame];
+      await vi.advanceTimersByTimeAsync(250);
+      await waiting;
+
+      expect(stop).not.toHaveBeenCalled();
+      expect(events.listenerCount('did-frame-finish-load')).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }
