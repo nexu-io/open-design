@@ -145,7 +145,7 @@ async function renderWithDownloadedUpdate(context: WorkspaceCollabContext | null
 }
 
 describe('standalone updater rocket placement after the account capsule', () => {
-  it('shows the shared Go campaign badge on an unpaid project detail route', () => {
+  it('shows the shared DeepSeek campaign badge on an unpaid project detail route', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'));
 
@@ -161,7 +161,7 @@ describe('standalone updater rocket placement after the account capsule', () => 
     );
 
     expect(screen.getByTestId('deepseek-campaign-pricing-badge').textContent).toContain(
-      '全新 Go 套餐 · 首月 ¥5 · 模型无限用',
+      'DeepSeek V4 Pro + V4 Flash 无限免费用',
     );
   });
 

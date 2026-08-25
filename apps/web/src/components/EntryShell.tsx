@@ -161,10 +161,6 @@ import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolvePlanLabelTier } from '../collab/team-plan';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
-import {
-  resolveSubscriptionAudience,
-} from '../campaigns/go-plan';
-import { useGoPlanCampaignVisibility } from '../campaigns/use-go-plan-campaign';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
 import {
   beginWorkspaceScopedRead,
@@ -663,7 +659,6 @@ export function EntryShell({
     workspaceContext,
   );
   const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
-  const goPlanCampaignVisibility = useGoPlanCampaignVisibility();
   // Same personal-vs-team accountPlan rule as App's `resolvedAmrPlan`.
   const deepSeekCampaignPlan = resolvePlanLabelTier({
     billing: workspaceBilling,
@@ -681,24 +676,10 @@ export function EntryShell({
     loggedIn: amrLoggedIn,
     now: deepSeekCampaignVisibility.now,
   });
-  const subscriptionAudience = resolveSubscriptionAudience({
-    plan: deepSeekCampaignPlan,
-    loggedIn: amrLoggedIn,
-  });
-  const homeCampaignModalAudience =
-    subscriptionAudience === 'unpaid' && goPlanCampaignVisibility.visible
-      ? 'unpaid'
-      : deepSeekV4FlashCampaignAudience === 'paid'
-        ? 'paid'
-        : 'unknown';
-  const topRightCampaignKind =
-    subscriptionAudience === 'unpaid'
-      ? goPlanCampaignVisibility.visible
-        ? 'go'
-        : null
-      : deepSeekV4FlashCampaignAudience === 'paid'
-        ? 'deepseek'
-        : null;
+  const topRightCampaignAudience =
+    deepSeekV4FlashCampaignAudience === 'unknown'
+      ? null
+      : deepSeekV4FlashCampaignAudience;
   const workspaceBalanceUsd = workspaceBillingBalanceUsd(
     workspaceBillingResponse,
     workspaceContext,
@@ -1642,9 +1623,9 @@ export function EntryShell({
           onOpenSearch={() => setProjectSearchOpen(true)}
           open={railOpen}
           topRightSlot={
-            topRightCampaignKind ? (
+            topRightCampaignAudience ? (
               <WorkbenchCampaignBadge
-                kind={topRightCampaignKind}
+                audience={topRightCampaignAudience}
                 page="home"
                 metricsConsent={config.telemetry?.metrics === true}
                 installationId={config.installationId}
@@ -1744,7 +1725,7 @@ export function EntryShell({
                 promptTemplates={promptTemplates}
                 executionSwitcher={view === 'home' ? homeExecutionSwitcher : undefined}
                 artifactUpgradeSlot={artifactUpgradeSlot}
-                deepSeekV4FlashCampaignAudience={homeCampaignModalAudience}
+                deepSeekV4FlashCampaignAudience={deepSeekV4FlashCampaignAudience}
                 onDeepSeekV4FlashCampaignUseNow={applyDeepSeekCampaignModel}
                 deepSeekV4FlashCampaignMetricsConsent={config.telemetry?.metrics === true}
                 deepSeekV4FlashCampaignInstallationId={config.installationId ?? null}

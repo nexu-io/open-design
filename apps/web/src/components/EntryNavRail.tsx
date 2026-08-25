@@ -77,8 +77,6 @@ import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
-import { resolveSubscriptionAudience } from '../campaigns/go-plan';
-import { useGoPlanCampaignVisibility } from '../campaigns/use-go-plan-campaign';
 import type { EntryHomeView } from '../router';
 import type {
   AccountMenuClickProps,
@@ -1083,7 +1081,6 @@ export function WorkspaceTopRightAccountCluster({
   const billing = workspaceBillingSummaryForContext(billingResponse, context);
   const balanceUsd = workspaceBillingBalanceUsd(billingResponse, context);
   const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
-  const goPlanCampaignVisibility = useGoPlanCampaignVisibility();
   const campaignPlan = resolvePlanLabelTier({
     billing,
     context,
@@ -1097,27 +1094,19 @@ export function WorkspaceTopRightAccountCluster({
     loggedIn: amrLoggedIn,
     now: deepSeekCampaignVisibility.now,
   });
-  const subscriptionAudience = resolveSubscriptionAudience({
-    plan: campaignPlan,
-    loggedIn: amrLoggedIn,
-  });
-  const campaignKind =
-    subscriptionAudience === 'unpaid'
-      ? goPlanCampaignVisibility.visible
-        ? 'go'
-        : null
-      : deepSeekCampaignAudience === 'paid'
-        ? 'deepseek'
-        : null;
+  const campaignAudience =
+    deepSeekCampaignAudience === 'unknown'
+      ? null
+      : deepSeekCampaignAudience;
   return (
     <EntryTopRightCluster
       page="project"
       context={context}
       billing={billing}
       balanceUsd={balanceUsd}
-      leadingSlot={campaignKind ? (
+      leadingSlot={campaignAudience ? (
         <WorkbenchCampaignBadge
-          kind={campaignKind}
+          audience={campaignAudience}
           page="project"
           metricsConsent={metricsConsent}
           installationId={installationId}
