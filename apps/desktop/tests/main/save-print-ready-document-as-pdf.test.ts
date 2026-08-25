@@ -23,6 +23,7 @@ import {
   savePrintReadyDocumentAsPdf,
   waitForEmbeddedFrames,
   waitForPrintableContent,
+  waitForPrintReadyPdfContent,
   type PrintReadyPdfTarget,
 } from '../../src/main/pdf-export.js';
 
@@ -110,6 +111,58 @@ describe('savePrintReadyDocumentAsPdf', () => {
     const { target, calls } = createStubTarget();
 
     await savePrintReadyDocumentAsPdf('<html></html>', 'nonce-2', target);
+
+    expect(calls).toEqual([
+      'promptSavePath',
+      'load',
+      'waitUntilReady',
+      'measurePageSize',
+      'printToPdf',
+      'write',
+      'dispose',
+    ]);
+  });
+
+  test('does not capture the direct desktop PDF until an embedded frame settles', async () => {
+    const events = new EventEmitter();
+    const mainFrame: Record<string, unknown> = { framesInSubtree: [] };
+    const pendingFrame = {
+      processId: 41,
+      routingId: 73,
+      executeJavaScript: vi.fn().mockResolvedValue('loading'),
+    };
+    mainFrame.framesInSubtree = [mainFrame, pendingFrame];
+    const webContents = Object.assign(events, {
+      mainFrame,
+      executeJavaScript: vi.fn(async (script: string) =>
+        script.includes('__odPrintReady') ? true : { stalled: false },
+      ),
+      stop: vi.fn(),
+    });
+    const window = { webContents };
+    const { target, calls } = createStubTarget();
+    target.waitUntilReady = async (nonce) => {
+      calls.push('waitUntilReady');
+      await waitForPrintReadyPdfContent(
+        window as unknown as Parameters<typeof waitForPrintReadyPdfContent>[0],
+        nonce,
+      );
+    };
+
+    const saving = savePrintReadyDocumentAsPdf('<html></html>', 'nonce-frame', target);
+    await vi.waitFor(() => expect(pendingFrame.executeJavaScript).toHaveBeenCalled());
+
+    expect(calls).toContain('waitUntilReady');
+    expect(calls).not.toContain('printToPdf');
+
+    events.emit(
+      'did-frame-finish-load',
+      {},
+      false,
+      pendingFrame.processId,
+      pendingFrame.routingId,
+    );
+    await saving;
 
     expect(calls).toEqual([
       'promptSavePath',

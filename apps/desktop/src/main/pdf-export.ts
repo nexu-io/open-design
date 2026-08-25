@@ -218,7 +218,7 @@ export function createElectronPdfTarget(): PrintReadyPdfTarget {
     },
     async waitUntilReady(nonce) {
       if (!window) throw new Error("PDF render window has not been loaded");
-      await waitForPrintReadyHandshake(window.webContents, nonce);
+      await waitForPrintReadyPdfContent(window, nonce);
     },
     async measurePageSize() {
       if (!window) throw new Error("PDF render window has not been loaded");
@@ -239,6 +239,23 @@ export function createElectronPdfTarget(): PrintReadyPdfTarget {
       window = null;
     },
   };
+}
+
+/**
+ * Gate direct desktop PDF capture on both readiness signals. The wrapper
+ * handshake says the artifact has rendered its outer document, while the
+ * printable-content wait covers resources and embedded adapter frames that
+ * can still be loading at that point. Start both waits together so a child
+ * frame cannot finish in the gap between two sequential subscriptions.
+ */
+export async function waitForPrintReadyPdfContent(
+  window: BrowserWindow,
+  nonce: string,
+): Promise<void> {
+  await Promise.all([
+    waitForPrintReadyHandshake(window.webContents, nonce),
+    waitForPrintableContent(window),
+  ]);
 }
 
 function printToPdfOptions(pageSize: PageSize): PrintToPdfOptions {
