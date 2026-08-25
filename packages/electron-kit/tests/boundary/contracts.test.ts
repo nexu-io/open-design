@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -28,5 +30,14 @@ describe("Electron/Closure boundary", () => {
       window: { width: 960, height: 640, title: "Electron Foundation" },
       shell: { type: "electron", version: "0.1.0", buildHash: hash, digest: hash },
     }).namespace).toBe("electron-foundation");
+  });
+
+  it("keeps generic Sidecar control free of product messages", async () => {
+    const source = await Promise.all([
+      readFile(new URL("../../src/sidecar/contracts.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../src/sidecar/control.ts", import.meta.url), "utf8"),
+    ]).then((parts) => parts.join("\n"));
+    expect(source).toContain('@open-design/sidecar"');
+    expect(source).not.toMatch(/sidecar-proto|SIDECAR_MESSAGES|apps\/web|apps\/daemon/u);
   });
 });

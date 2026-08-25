@@ -28,6 +28,7 @@ const publicEntries = {
   "carrier/index": "carrier/index",
   "installer/index": "installer/index",
   "warmup/index": "warmup/index",
+  "sidecar/index": "sidecar/index",
   "lifecycle/fixture-port": "lifecycle/fixture-port",
   "updater/fixture-provider": "updater/fixture-provider",
   "build/index": "build/index",

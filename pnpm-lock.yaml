@@ -609,6 +609,9 @@ importers:
 
   packages/electron-kit:
     dependencies:
+      '@open-design/sidecar':
+        specifier: workspace:*
+        version: link:../sidecar
       '@open-design/standalone':
         specifier: workspace:*
         version: link:../standalone
