@@ -1101,6 +1101,13 @@ export function renderKitHtml(page: KitPage): string {
     transition: opacity .14s cubic-bezier(0.23, 1, 0.32, 1);
   }
   .measure.off { display: none; }
+  /* Perf tenancy of the measure box: while frames stream with NO gesture
+     readout to show (an orbit measures nothing), the box reports the frame
+     rate instead of hiding. A muted value keeps it quieter than a real
+     measurement; a slow stream borrows the polarity red the box already
+     speaks. Any gesture evicts it instantly — the VCB always outranks it. */
+  .measure.perf .mval { color: var(--muted); }
+  .measure.perf-slow .mval { color: var(--bad); }
   .mlabel { color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
   .mval {
     font: 600 13px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink);
@@ -1515,6 +1522,7 @@ function advanceXray(now) {
 
 function draw(now) {
   frame = null;
+  const perfT0 = performance.now();
   // Advance time-based motion once per frame, before anything reads it, so
   // every consumer of the spring sees the same instant.
   advanceXray(now || 0);
@@ -1525,6 +1533,69 @@ function draw(now) {
   // selection changes; frames just move it.
   positionGizmo();
   positionTip();
+  notePerfFrame(perfT0);
+}
+
+/* ---- Frame-rate tenancy of the measure box -------------------------- */
+/* The renderer is on-demand: invalidate() schedules one frame per state
+   change, and idle means zero redraws by design. A frame rate therefore
+   only EXISTS during a sustained stretch (orbit, drag, x-ray fade) — and
+   the stretch with nothing else to report is exactly when the measure box
+   sits empty, so the rate borrows THAT box rather than adding chrome. A
+   gesture readout always evicts it (showMeasure owns the box whenever the
+   gesture variable is set); it moves back in the frame after the gesture ends if
+   frames are still streaming. It engages after ~10 consecutive frames,
+   repaints a few times a second (writing DOM every frame is the
+   layout-thrash mistake the comment in draw() records), and hands the box
+   back shortly after the stream stops. The value is the frame-to-frame
+   rate; the title carries this page's own draw cost. */
+let perfLastAt = 0;
+let perfRun = 0;
+let perfDelta = 16.7;
+let perfCost = 0;
+let perfShownAt = 0;
+let perfHideTimer = null;
+function paintPerfMeasure() {
+  const box = document.getElementById('measure');
+  if (!box || gesture) return;
+  const fps = Math.min(999, Math.round(1000 / Math.max(1, perfDelta)));
+  document.getElementById('mlabel').textContent = 'Frames';
+  document.getElementById('mval').textContent = fps + ' fps';
+  box.title = 'draw cost ' + perfCost.toFixed(1) + ' ms per frame';
+  box.classList.remove('off', 'snapped', 'typing');
+  box.classList.add('perf');
+  box.classList.toggle('perf-slow', fps < 30);
+}
+function endPerfMeasure() {
+  const box = document.getElementById('measure');
+  if (!box) return;
+  box.classList.remove('perf', 'perf-slow');
+  box.title = '';
+  if (!gesture) box.classList.add('off');
+}
+function notePerfFrame(t0) {
+  const nowMs = performance.now();
+  const delta = nowMs - perfLastAt;
+  perfLastAt = nowMs;
+  if (delta > 250) { perfRun = 1; return; }
+  perfRun += 1;
+  // EMAs, so one janky frame reads as a dip rather than a flicker.
+  perfDelta += (delta - perfDelta) * 0.12;
+  perfCost += ((nowMs - t0) - perfCost) * 0.12;
+  if (perfRun < 10) return;
+  if (gesture) {
+    // The VCB outranks the rate; keep counting so the box is retaken the
+    // frame after the gesture releases it, without re-earning the run.
+    if (perfHideTimer !== null) clearTimeout(perfHideTimer);
+    perfHideTimer = setTimeout(() => { perfHideTimer = null; perfRun = 0; endPerfMeasure(); }, 700);
+    return;
+  }
+  if (nowMs - perfShownAt > 250 || !document.getElementById('measure').classList.contains('perf')) {
+    perfShownAt = nowMs;
+    paintPerfMeasure();
+  }
+  if (perfHideTimer !== null) clearTimeout(perfHideTimer);
+  perfHideTimer = setTimeout(() => { perfHideTimer = null; perfRun = 0; endPerfMeasure(); }, 700);
 }
 
 /* ---- Translate gizmo ------------------------------------------------ */
@@ -1918,6 +1989,10 @@ function showMeasure() {
     return;
   }
   box.classList.remove('off');
+  // A gesture readout evicts the frame-rate tenancy on the spot — the muted
+  // perf styling must never dress a real measurement.
+  box.classList.remove('perf', 'perf-slow');
+  box.title = '';
   box.classList.toggle('typing', typed !== '');
   // Name what it snapped to. "Flush" is only trustworthy if the reader can
   // see WHAT it went flush against.

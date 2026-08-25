@@ -236,7 +236,14 @@ not mistake today's supported syntax for a permanent ceiling.
     in-page download control.
 14. **The host never scales a 3D viewport.** In `HtmlViewer`,
     `isScene3dArtifact` is declared above zoom/viewport state so zoom is
-    forced to 100 and the page camera is the only zoom.
+    forced to 100 and the page camera is the only zoom. This is why a kit
+    page shows less preview chrome than a generic WebGL artifact (which
+    keeps the zoom menu and the device-viewport picker): CSS-zooming an
+    orbit camera's canvas resamples pixels without changing framing, and a
+    phone-width simulation of a self-fitting 3D viewport simulates nothing.
+    The suppression is the seam working, not a missing feature; a
+    scene3d-native equivalent (camera distance, FOV) would belong in the
+    page's own chrome, not the host toolbar.
 15. **Kit pages talk to the API through the host.** Srcdoc is an opaque
     origin. `Origin: null` is rejected by the daemon on purpose. Tweaks and
     compile-from-viewer go through `od:scene3d-tweaks` postMessage.
