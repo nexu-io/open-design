@@ -4301,16 +4301,6 @@ export async function startServer({
       scope,
     );
   };
-  const teamProjectsForRequest = async (
-    context: WorkspaceCollabContext,
-  ): Promise<TeamProject[]> =>
-    withoutLocallyUnsharedProjects(
-      await teamProjectsLister(context.workspaceId),
-      {
-        workspaceId: context.workspaceId,
-        workspaceMemberId: context.workspaceMemberId,
-      },
-    );
   /**
    * Non-destructive quarantine marker for a pulled Team mirror. The binding
    * state is the central data-plane gate; the project metadata marker also
@@ -5439,10 +5429,19 @@ export async function startServer({
     // per request against a live workspace, cold and warm alike, on a path the
     // UI hits on every launch and every deep link.
     //
-    // The uncached lookup stays where its doc says it belongs: the pull gate
-    // and comment/presence relays, which must observe an unshare immediately.
-    // Display freshness does not rely on the 3s TTL alone — share, unshare and
-    // workspace-change all invalidate this cache explicitly.
+    // These routes are display reads: the Home team-project grid and the
+    // deep-link "is this shared to my team?" check. Nothing here gates data
+    // access — the pull gate and the comment/presence relays reach
+    // `teamProjectsLister` on their own and still observe an unshare
+    // immediately.
+    //
+    // Display freshness does not rest on the 3s TTL alone: share, unshare and
+    // workspace-change invalidate this cache explicitly, via
+    // `invalidateTeamProjectCatalog` (collab-sync and the project routes) and
+    // the per-scope invalidations beside the cache itself.
+    //
+    // This was the last caller of the uncached `teamProjectsForRequest`
+    // wrapper, so that helper is removed with it rather than left orphaned.
     listTeamProjects: teamProjectsForDisplay,
     // Expose the collab-cloud member directory so the web client can resolve
     // comment authors + owner names to a name + role.
