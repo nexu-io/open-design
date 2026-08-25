@@ -68,6 +68,7 @@ export const SCENE3D_ISSUE_TITLES: Readonly<Record<string, string>> = {
   'S3D-W-334': 'Wall too thin to print',
   'S3D-W-336': 'Contact scan skipped',
   'S3D-W-337': 'Rested pair never touches',
+  'S3D-W-338': 'File part underfills its declared box',
 
   /* lint: world placement + budgets */
   'S3D-W-325': 'Part floats above support',

@@ -536,6 +536,7 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-335` | Triangle budget approximated |
 | `S3D-W-336` | Contact scan skipped |
 | `S3D-W-337` | Rested pair never touches |
+| `S3D-W-338` | File part underfills its declared box |
 | `S3D-E-341` | Metallic outside convention |
 | `S3D-E-342` | Roughness out of range |
 | `S3D-W-341` | Untouched default material |

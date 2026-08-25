@@ -1087,13 +1087,33 @@ async function runScene3d(args) {
     }
     for (const issue of result.issues) {
       const target = issue.target ? ` [${issue.target}]` : '';
-      console.log(`${issue.code}${target} ${issue.message}`);
+      // Carry the demotion arrow into the terse stream. A relaxed finding
+      // keeps its original code (S3D-E-321), so without the arrow the
+      // stream prints error-family codes directly above "0 errors" — the
+      // two lines contradict each other and the stream is what a reader
+      // (and a truncated log) sees first.
+      const relaxedFrom = (issue.detail as { relaxedFrom?: string } | undefined)?.relaxedFrom;
+      const arrow = relaxedFrom && relaxedFrom !== issue.severity ? `→${issue.severity}` : '';
+      console.log(`${issue.code}${arrow}${target} ${issue.message}`);
       if (issue.hint) console.log(`      fix: ${issue.hint}`);
     }
     const counts = `${summary.errors} error${summary.errors === 1 ? '' : 's'} · ${summary.warnings} warning${summary.warnings === 1 ? '' : 's'}`;
     console.log(result.ok ? `compiles clean — ${counts}` : `compile failed — ${counts}`);
     if (result.proofImages.length > 0) {
       console.log(`proof: ${result.proofImages.length} frame(s) — ${result.proofImages[0].path}`);
+    }
+    // The light measurements, in the terse stream too: they existed in the
+    // full letter only, so a blind reader's sole default answer to "did my
+    // render blow out" was the absence of a threshold complaint.
+    {
+      const frames = result.manifest?.proofFrames ?? [];
+      const measured = frames.filter((f) => f.coverage !== null && f.coverage !== undefined);
+      if (measured.length > 0) {
+        const mean = (pick) => measured.reduce((s, f) => s + (pick(f) ?? 0), 0) / measured.length;
+        console.log(
+          `light: subject ${(mean((f) => f.coverage) * 100).toFixed(0)}% of frame · lum ${mean((f) => f.meanLuminance).toFixed(2)} · clipped ${(mean((f) => f.blownRatio) * 100).toFixed(1)}%`,
+        );
+      }
     }
     if (result.exportedAssets.length > 0) {
       console.log(`assets: ${result.exportedAssets.map((a) => a.path).join(', ')}`);

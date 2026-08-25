@@ -54,6 +54,14 @@ export function lintWorld(
       if (!meshNames.has(part.id) || !meshNames.has(part.restsOn)) continue;
       const separation = separationOf.get(pairKey(part.id, part.restsOn));
       if (separation !== undefined && separation <= touch) continue;
+      // Name what the built geometry ACTUALLY rests on before guessing at
+      // causes: the census has already measured it, and "it sits on
+      // 'prp_slat_3' instead" turns three hypothetical causes into one
+      // observed fact (the commonest being a repeat clone whose support
+      // edge came from its base part's relation). The generic causes are
+      // the fallback for when nothing measurable is underneath.
+      const actual = nearestSupportBelow(census, part.id);
+      const actualIsOther = actual !== null && actual.name !== part.restsOn;
       issues.push({
         code: ISSUE_CODES.REST_NOT_TOUCHING,
         severity: "warning",
@@ -61,9 +69,15 @@ export function lintWorld(
           separation === undefined
             ? `the solver rested '${part.id}' on '${part.restsOn}', but the built geometry never comes near it — no contact was measured between them`
             : `the solver rested '${part.id}' on '${part.restsOn}', but the built geometry sits ${fmt(separation)}m apart`,
-        hint: "the plan and the build disagree — check a viewer tweak that moved one of them, a file/script part that does not fill its declared box, or a support whose curved surface falls short of its box",
+        hint: actualIsOther
+          ? `the built geometry rests on '${actual.name}' instead (${fmt(Math.abs(actual.gap))}m ${actual.gap >= 0 ? "clear" : "deep"}) — the solver's support edge came from the relation as authored; for a repeat clone that is the base part's relation, which is expected for stacked repeats`
+          : "the plan and the build disagree — check a viewer tweak that moved one of them, a file/script part that does not fill its declared box, or a support whose curved surface falls short of its box",
         target: `${part.id} <-> ${part.restsOn}`,
-        detail: { restsOn: part.restsOn, ...(separation !== undefined ? { separation } : {}) },
+        detail: {
+          restsOn: part.restsOn,
+          ...(separation !== undefined ? { separation } : {}),
+          ...(actualIsOther ? { actualSupport: actual.name, actualGap: actual.gap } : {}),
+        },
       });
     }
   }

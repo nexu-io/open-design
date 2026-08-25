@@ -442,8 +442,14 @@ export interface ClaimsSpec {
   grounded?: boolean;
   /** Ceiling on the scene's world-space height in metres. */
   maxHeight?: number;
+  /** FLOOR on the scene's world-space height in metres — a one-line
+   *  signature of real-world magnitude. A uniform unit slip has no
+   *  intra-scene outliers, so no relative check catches it; this does. */
+  minHeight?: number;
   /** Ceiling on the scene's world-space [x, y] footprint in metres. */
   footprint?: [number, number];
+  /** Floor on the [x, y] footprint — minHeight's horizontal twin. */
+  minFootprint?: [number, number];
   /** Every mesh is a closed manifold — no open edges, no non-manifold ones. */
   watertight?: boolean;
   /** Each named material is actually bound to at least one part. */

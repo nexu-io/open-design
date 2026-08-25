@@ -64,6 +64,85 @@ describe("lintClaims grounding exemptions (CL-1)", () => {
   });
 });
 
+describe("lintClaims floor claims (scale honesty)", () => {
+  it("fails minHeight on a scene shrunk by a unit slip, with the slip named", () => {
+    // A 1m-tall spec authored in millimetres builds 1mm tall: no relative
+    // check sees a uniformly wrong scene, but the declared floor does.
+    const c = census([{ object: "prp_a", spatial: spatial(0) }]); // top at 1m
+    const held = run({ minHeight: 0.5 }, c);
+    expect(held.some((i) => i.code === ISSUE_CODES.CLAIM_FAILED)).toBe(false);
+    const tiny = census([
+      { object: "prp_a", spatial: { ...spatial(0), worldMax: [0.001, 0.001, 0.001] } },
+    ]);
+    const failed = run({ minHeight: 0.5 }, tiny).filter(
+      (i) => i.code === ISSUE_CODES.CLAIM_FAILED,
+    );
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.message).toContain("only reaches 0.0010m");
+    expect(failed[0]!.message).toContain("unit slip");
+    expect(failed[0]!.detail).toMatchObject({ claim: "minHeight", expected: 0.5 });
+  });
+
+  it("fails minFootprint per axis with the measured span", () => {
+    const c = census([{ object: "prp_a", spatial: spatial(0) }]); // 1 × 1 plan
+    const failed = run({ minFootprint: [3, 0.5] }, c).filter(
+      (i) => i.code === ISSUE_CODES.CLAIM_FAILED,
+    );
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.detail).toMatchObject({ claim: "minFootprint", axis: "x" });
+  });
+
+  it("reports UNCHECKED for floors when nothing spatial was measured", () => {
+    const c = census([{ object: "prp_a" }]);
+    c.meshes.forEach((m) => delete (m as { spatial?: unknown }).spatial);
+    const issues = run({ minHeight: 1, minFootprint: [1, 1] }, c);
+    expect(issues.some((i) => i.code === ISSUE_CODES.CLAIM_FAILED)).toBe(false);
+    expect(
+      issues.filter((i) => i.code === ISSUE_CODES.CLAIM_UNCHECKED).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("lintClaims grounded chain attribution", () => {
+  it("fails at the chain's break and names the riders, not every member", () => {
+    // A chock resting 1mm on an unsupported plinth: the failure belongs to
+    // the plinth (whose underside really has nothing), with the chock named
+    // as inheriting the break — not a second self-contradicting failure
+    // ("nothing supporting it — nearest surface 0.001m clear").
+    const c = census([
+      { object: "prp_plinth", spatial: { ...spatial(1.0), worldMin: [0, 0, 1], worldMax: [1, 1, 1.5] } },
+      { object: "prp_chock", spatial: { ...spatial(1.5), worldMin: [0, 0, 1.501], worldMax: [1, 1, 1.7] } },
+    ]);
+    // nearestSupportBelow reads OBJECT-level world bounds (the runner
+    // writes them); build the object rows a real census carries beside
+    // the mesh spatials.
+    c.objects = c.meshes.map(
+      (m) =>
+        ({
+          name: m.object,
+          type: "MESH",
+          parent: null,
+          location: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 1],
+          dimensions: [1, 1, 1],
+          visible: true,
+          hasMeshData: true,
+          worldMin: m.spatial!.worldMin,
+          worldMax: m.spatial!.worldMax,
+        }) as Census["objects"][number],
+    );
+    c.contacts = [
+      { a: "prp_plinth", b: "prp_chock", gap: [0, 0, 0.001], separation: 0.001, intersects: false },
+    ];
+    const failed = run({ grounded: true }, c).filter((i) => i.code === ISSUE_CODES.CLAIM_FAILED);
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.target).toBe("prp_plinth");
+    expect(failed[0]!.message).toContain("1 part(s) standing on it inherit the break: prp_chock");
+    expect(failed[0]!.detail).toMatchObject({ chainRiders: ["prp_chock"] });
+  });
+});
+
 describe("lintClaims materialsUsed guard (CL-2)", () => {
   it("reports UNCHECKED, not FAILED, when the census carries no material bindings", () => {
     // A census that never measured per-mesh materials (materials: undefined on

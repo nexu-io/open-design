@@ -365,22 +365,27 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       // the source list so their bytes participate in the content hash —
       // replacing the asset file recompiles the scene.
       for (const part of spec.parts) {
-        if (!part.file) continue;
-        if (fs.existsSync(path.join(request.projectDir, part.file))) {
-          if (!source.files.includes(part.file)) source.files.push(part.file);
-        } else {
-          missingAssets = true;
-          issues.push({
-            code: ISSUE_CODES.SPEC_INVALID,
-            severity: "error",
-            message: `part '${part.id}': asset file '${part.file}' does not exist in the scene directory`,
-            file: "scene.json",
-            target: part.id,
-          });
+        if (part.file) {
+          if (fs.existsSync(path.join(request.projectDir, part.file))) {
+            if (!source.files.includes(part.file)) source.files.push(part.file);
+          } else {
+            missingAssets = true;
+            issues.push({
+              code: ISSUE_CODES.SPEC_INVALID,
+              severity: "error",
+              message: `part '${part.id}': asset file '${part.file}' does not exist in the scene directory`,
+              file: "scene.json",
+              target: part.id,
+            });
+          }
         }
         // A script-backed part's bytes join the content hash too: editing
         // the script must recompile the scene, exactly like replacing an
         // asset file. Existence is a parse error, not a Blender traceback.
+        // An INDEPENDENT check, never chained behind `file` — a part is
+        // script-backed OR file-backed, and gating this behind the file
+        // branch let every script-only part skip validation entirely and
+        // crash the runner with a traceback for a one-line typo.
         if (!part.script) continue;
         if (fs.existsSync(path.join(request.projectDir, part.script))) {
           if (!source.files.includes(part.script)) source.files.push(part.script);
@@ -821,6 +826,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   const materialBalls: string[] = [];
   let materialBallsSkipped = 0;
   let materialBallsSkippedNames: string[] = [];
+  let materialBallStats: Array<{ material: string; clipped: number }> = [];
   let proofFrames: ProofFrameStats[] | undefined;
   /** Per-frame off-camera facts from the proof turntable, when it ran. */
   let offByFrame: Array<{ frame: number; objects: string[] }> | undefined;
@@ -879,6 +885,16 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           typeof (cached.data as { materialBallsSkipped?: unknown } | null)?.materialBallsSkipped === "number"
             ? ((cached.data as { materialBallsSkipped: number }).materialBallsSkipped)
             : 0;
+        const cachedBallStats = (cached.data as { materialBallStats?: unknown } | null)
+          ?.materialBallStats;
+        materialBallStats = Array.isArray(cachedBallStats)
+          ? cachedBallStats
+              .map((s) => s as { material?: unknown; clipped?: unknown })
+              .filter(
+                (s): s is { material: string; clipped: number } =>
+                  typeof s.material === "string" && typeof s.clipped === "number",
+              )
+          : [];
         // The cache carries the frame statistics, not just the file list:
         // without them a cached rerun would drop S3D-E-383 and a scene that
         // rendered black would start reporting clean on its second compile.
@@ -965,6 +981,20 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
                 .map((n) => (n as { material?: unknown })?.material)
                 .filter((m): m is string => typeof m === "string")
             : [];
+          /* Per-ball clipped fractions — the one number that answers "does
+             my emission read as the colour I authored". Measured on the
+             same lit-sphere the author is told to look at; the report
+             names the balls that blow out. */
+          const rawBallStats = (result.data as { materialBallStats?: unknown } | undefined)
+            ?.materialBallStats;
+          materialBallStats = Array.isArray(rawBallStats)
+            ? rawBallStats
+                .map((s) => s as { material?: unknown; clipped?: unknown })
+                .filter(
+                  (s): s is { material: string; clipped: number } =>
+                    typeof s.material === "string" && typeof s.clipped === "number",
+                )
+            : [];
           proofFrames = asProofFrames((result.data as { frames?: unknown } | undefined)?.frames);
           offByFrame = (result.data as { offByFrame?: unknown } | undefined)?.offByFrame as
             | Array<{ frame: number; objects: string[] }>
@@ -995,6 +1025,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
                 materialBalls,
                 materialBallsSkipped,
                 materialBallsSkippedNames,
+                materialBallStats,
               },
             });
           }
@@ -1377,6 +1408,35 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         exportedAssets.push(mvRel);
       }
     }
+    /* Sweep bakes from shaders that no longer exist — the same discipline
+       the proof-frame sweep applies, for the same reason: a deleted
+       shader's atlas otherwise survives every clean recompile and SHIPS.
+       Only the generated naming pattern is touched (shd_ ids are
+       charset-gated, so the pattern is tight); anything else in the
+       directory is the user's and stays. */
+    {
+      const texDir = path.join(request.projectDir, "out", "textures");
+      if (fs.existsSync(texDir)) {
+        const current = new Set<string>();
+        for (const job of shaderJobs) {
+          for (const output of job.outputs) current.add(`${job.name}_${output}.png`);
+          current.add(`${job.name}_mv.png`);
+          // The compiler DERIVES a normal map from a height output — a
+          // product of the job that appears in no outputs list, and the
+          // first thing this sweep wrongly deleted.
+          if (job.outputs.includes("height")) current.add(`${job.name}_normal.png`);
+        }
+        for (const entry of fs.readdirSync(texDir)) {
+          if (!/^shd_[a-z0-9_]+_[a-z]+(?:Color)?\.png$/i.test(entry)) continue;
+          if (current.has(entry)) continue;
+          try {
+            fs.rmSync(path.join(texDir, entry));
+          } catch {
+            /* A locked file stays; it will be reported stale next compile. */
+          }
+        }
+      }
+    }
   }
 
   /* ---- lint ------------------------------------------------------- */
@@ -1454,6 +1514,45 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
        box and were deleted when the calculus generalised them (they could
        also contradict the census layer about the same claim, two lines
        apart — the D7 field finding). */
+    /* Plan-versus-build for the escape hatches: a file/script part's
+       declared box is a placement ENVELOPE, and the fit inside it is
+       uniform-scale to the tightest axis — so a declared aspect ratio the
+       asset does not have shrinks the whole part and leaves the box mostly
+       empty. Measured (census box vs solved box), judged structurally: half
+       the declared extent unused on some axis is past any plausible
+       "loose framing" and into "the plan and the build are different
+       objects". The half threshold needs no contract knob — it separates
+       intent mismatch from slack, not taste from taste. */
+    if (solved && census) {
+      for (const part of solved.parts) {
+        if (!part.file && !part.script) continue;
+        const mesh = census.meshes.find((m) => m.object === part.id);
+        if (!mesh?.spatial?.worldMin || !mesh.spatial.worldMax) continue;
+        const built = [0, 1, 2].map(
+          (i) => mesh.spatial!.worldMax![i]! - mesh.spatial!.worldMin![i]!,
+        );
+        const fit = built.map((d, i) => (part.size[i]! > 1e-9 ? d / part.size[i]! : 1));
+        const worst = fit.indexOf(Math.min(...fit));
+        const best = Math.max(...fit);
+        if (fit[worst]! < 0.5) {
+          // The suggested box keeps the constraining axis where the author
+          // put it and reshapes the others to the asset's own proportions.
+          const proposed = built.map((d) => Number((d / best).toFixed(3)));
+          lintIssues.push({
+            code: ISSUE_CODES.FILE_PART_UNDERFILLS,
+            severity: "warning",
+            message: `'${part.id}' fills ${(fit[worst]! * 100).toFixed(0)}% of its declared box on ${"xyz"[worst]} — the asset's aspect ratio does not match the box, so the uniform fit shrank the whole part (built ${built.map((d) => d.toFixed(3)).join(" × ")}m inside a declared ${part.size.map((v) => v.toFixed(3)).join(" × ")}m)`,
+            target: part.id,
+            hint: `reshape the declared size toward the asset's own proportions (about ${proposed.join(" × ")} keeps the constraining axis and fills the rest), or accept the slack if the envelope is intentional`,
+            detail: {
+              fit: fit.map((f) => Number(f.toFixed(4))),
+              built: built.map((d) => Number(d.toFixed(4))),
+              declared: part.size.map((v) => Number(v.toFixed(4))),
+            },
+          });
+        }
+      }
+    }
     // Hand every exported .glb to Khronos's reference validator — a second,
     // independent authority on the bytes that ship, in ADDITION to our rules.
     // The UNCHECKED warning is NOT filtered here (unlike USD below): the
@@ -1516,9 +1615,19 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
     }
     digest = census ? describeScene(census, allIssues) : "no census — build stage did not run";
     try {
+      /* The baseline is the last SUCCESSFUL build, held across failures: a
+         failed compile writes its own issues (the parse error IS the delta
+         worth diffing against) but keeps the prior census, so the first
+         success after a red stretch diffs against the world as it last
+         measurably was — not against the empty world of the failure, which
+         used to re-announce the whole scene as `appeared`. The carry is
+         marked so a read-model reader can tell measurement from memory. */
       writeReadModel(request.projectDir, {
         version: READ_MODEL_VERSION,
-        census,
+        census: census ?? prior?.census,
+        ...(census === undefined && prior?.census !== undefined
+          ? { censusFrom: "previous successful build" }
+          : {}),
         issues: allIssues,
         digest,
         impact,
@@ -1552,6 +1661,16 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       sheets: [...normalized.sheets, ...derivedSheets],
       ...(spec?.claims ? { claimsDeclared: Object.keys(spec.claims).length } : {}),
       ...(spec?.claims ? { claimMargins: claimMargins(spec.claims, census, solved?.parts) } : {}),
+      // The licence behind a held grounded claim, for the ledger: the
+      // reader must be able to tell "everything reaches the ground" from
+      // "the hovering parts were declared as hovering on purpose".
+      ...(spec?.claims?.grounded
+        ? {
+            claimsLicensedFloats: [
+              ...new Set(spec.relations.filter((r) => r.type === "above").map((r) => r.part)),
+            ].sort(),
+          }
+        : {}),
     });
     try {
       finalManifest = writeManifest(request.projectDir, manifest);
@@ -1609,11 +1728,22 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
         sheets: [...normalized.sheets, ...derivedSheets],
         ...(spec?.claims ? { claimsDeclared: Object.keys(spec.claims).length } : {}),
       ...(spec?.claims ? { claimMargins: claimMargins(spec.claims, census, solved?.parts) } : {}),
+      // The licence behind a held grounded claim, for the ledger: the
+      // reader must be able to tell "everything reaches the ground" from
+      // "the hovering parts were declared as hovering on purpose".
+      ...(spec?.claims?.grounded
+        ? {
+            claimsLicensedFloats: [
+              ...new Set(spec.relations.filter((r) => r.type === "above").map((r) => r.part)),
+            ].sort(),
+          }
+        : {}),
       }),
     proofImages,
     materialBalls,
     ...(materialBallsSkipped > 0 ? { materialBallsSkipped } : {}),
     ...(materialBallsSkippedNames.length > 0 ? { materialBallsSkippedNames } : {}),
+    ...(materialBallStats.length > 0 ? { materialBallStats } : {}),
     exportedAssets,
     summary,
     digest,
@@ -1699,6 +1829,10 @@ interface ReadModel {
   /** Absent on read → written before versioning → treat as no baseline. */
   version?: number;
   census?: Census;
+  /** Present when `census` is carried forward from an earlier successful
+   *  build because THIS compile measured nothing — memory, not
+   *  measurement, and labelled as such. */
+  censusFrom?: string;
   issues: Issue[];
   digest: string;
   impact: ImpactReport;

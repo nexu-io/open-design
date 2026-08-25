@@ -100,6 +100,15 @@ export const ISSUE_CODES = {
      disagreed and nothing said so. */
   REST_NOT_TOUCHING: "S3D-W-337",
 
+  /* A file/script part's built geometry fills a small fraction of its
+     declared box: the fit is uniform-scale to the tightest axis, so a
+     declared aspect ratio the asset does not have shrinks the whole part
+     and leaves the rest of the box empty. Found by a field build whose
+     fox shrank to a sixth of its requested volume through a compile with
+     zero errors — the report printed the plan and the proof showed a
+     mouse, with nothing between them saying which was real. */
+  FILE_PART_UNDERFILLS: "S3D-W-338",
+
   /* lint: naming */
   NAME_DEFAULT: "S3D-E-301",
   NAME_PATTERN: "S3D-E-302",

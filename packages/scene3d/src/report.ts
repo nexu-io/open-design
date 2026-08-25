@@ -104,9 +104,35 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     // size, and the old header let one column mean two things per row.
     lines.push("solved boxes (id · centre · world box · rests on):");
     const CAP = 40;
+    // For a file/script part the solved box is the PLACEMENT ENVELOPE, not
+    // the geometry: the asset is fitted inside it with a uniform scale, so
+    // a declared aspect ratio the asset does not have leaves most of the
+    // box empty. Printing the declared numbers alone read as measurement
+    // and overstated a real fox 14× on one axis — so where the census
+    // measured the built body, the row says both, marked, with the fit
+    // factor; where it has not (parse-only), the row says `planned`.
+    const builtBox = new Map(
+      (result.census?.meshes ?? [])
+        .filter((m) => m.spatial?.worldMin && m.spatial.worldMax)
+        .map((m) => [m.object, m.spatial!] as const),
+    );
     for (const part of result.solved.parts.slice(0, CAP)) {
       const centre = part.center.map((v: number) => fmtM(v)).join(", ");
-      const size = part.size.map((v: number) => fmtM(v)).join(" × ");
+      let size = part.size.map((v: number) => fmtM(v)).join(" × ");
+      if (part.file || part.script) {
+        const built = builtBox.get(part.id);
+        if (built) {
+          const dims = [0, 1, 2].map((i) => built.worldMax![i]! - built.worldMin![i]!);
+          const fit = dims.map((d, i) => (part.size[i]! > 1e-9 ? d / part.size[i]! : 1));
+          const worst = fit.indexOf(Math.min(...fit));
+          const differs = fit.some((f) => Math.abs(1 - f) > 0.02);
+          size = differs
+            ? `planned ${size} → built ${dims.map((d) => fmtM(d)).join(" × ")} (fitted ${fit[worst]!.toFixed(2)}× on ${"xyz"[worst]})`
+            : `${dims.map((d) => fmtM(d)).join(" × ")} (fills its box)`;
+        } else {
+          size = `${size} (planned — the asset is fitted inside this box at build)`;
+        }
+      }
       const origin = part.from ? ` (from ${part.from})` : "";
       const rests = part.restsOn ? ` · rests on ${part.restsOn}` : "";
       // The size printed above is the WORLD box (the rotated bound), so a
@@ -233,6 +259,17 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     lines.push(
       `material balls: ${result.materialBalls!.length} lit-sphere preview(s) in out/materials/${skipped} — judge emission/alpha here before paying for a turntable`,
     );
+    // The measured answer to "does my emission read as the colour I
+    // authored": a ball that clips is a material whose product exceeds
+    // display range under the shot's own lighting — the authored hue is
+    // gone and only this number says so without eyes.
+    const blown = (result.materialBallStats ?? []).filter((s) => s.clipped > 0.05);
+    for (const s of blown.slice(0, 6)) {
+      lines.push(
+        `  ${s.material}: ball clips ${(s.clipped * 100).toFixed(0)}% — its output exceeds display range under this lighting (lower emissionStrength or the colour, or accept the bloom)`,
+      );
+    }
+    if (blown.length > 6) lines.push(`  … +${blown.length - 6} more clipping`);
   }
   /* The claims ledger, in both directions. Failures already surface as
      S3D-E-701 lines; the SUCCESS was silent, so an author who declared
@@ -250,10 +287,17 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     // place was the one that lied.
     const checked = ledger.checked ?? ledger.declared;
     const tightest = ledger.margins?.[0];
-    const margin =
-      ledger.failed === 0 && tightest
-        ? ` — tightest: ${tightest.claim} at ${Math.round(tightest.used * 100)}% of its bound (${tightest.measured} of ${tightest.limit})`
+    // A grounded claim held partly by licence says so on the ledger line:
+    // the reader must be able to tell "everything reaches the ground" from
+    // "the hovering parts were declared as hovering on purpose".
+    const floats =
+      ledger.licensedFloats && ledger.licensedFloats.length > 0
+        ? ` · ${ledger.licensedFloats.length} declared float(s) licensed: ${ledger.licensedFloats.join(", ")}`
         : "";
+    const margin =
+      (ledger.failed === 0 && tightest
+        ? ` — tightest: ${tightest.claim} at ${Math.round(tightest.used * 100)}% of its bound (${tightest.measured} of ${tightest.limit})`
+        : "") + floats;
     if (ledger.failed > 0) {
       lines.push(
         `claims: ${Math.max(0, checked - ledger.failed)}/${ledger.declared} held — ${ledger.failed} failed (S3D-E-701 below)`,
@@ -281,9 +325,26 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     const mean = (pick: (f: (typeof measured)[number]) => number | null | undefined) =>
       measured.reduce((sum, f) => sum + (pick(f) ?? 0), 0) / measured.length;
     const dark = measured.filter((f) => (f.coverage ?? 0) < 0.01).length;
+    // Name the WORST frame beside the mean when they diverge: a turntable
+    // that clips hard on one angle averages down to a number that reads
+    // fine, and a reader who trusts the visible per-frame samples (chosen
+    // evenly, not adversarially) concludes there is no clipping at all.
+    const meanClip = mean((f) => f.blownRatio);
+    let worstClip = 0;
+    let worstIdx = 0;
+    measured.forEach((f, i) => {
+      if ((f.blownRatio ?? 0) > worstClip) {
+        worstClip = f.blownRatio ?? 0;
+        worstIdx = i;
+      }
+    });
+    const worst =
+      worstClip > 0.02 && worstClip > meanClip * 1.5
+        ? ` (worst ${(worstClip * 100).toFixed(1)}% on frame ${worstIdx})`
+        : "";
     lines.push(
       `frames: ${measured.length} · subject ${(mean((f) => f.coverage) * 100).toFixed(0)}% of frame · ` +
-        `lum ${mean((f) => f.meanLuminance).toFixed(2)} · clipped ${(mean((f) => f.blownRatio) * 100).toFixed(1)}%` +
+        `lum ${mean((f) => f.meanLuminance).toFixed(2)} · clipped ${(meanClip * 100).toFixed(1)}%${worst}` +
         (dark > 0 ? ` · ${dark} empty` : ""),
     );
   }
@@ -292,18 +353,24 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
   // scene that came out as islands rather than one object is invisible to an
   // author who cannot see the render, and this is the only place it shows.
   const connectivity = result.manifest.connectivity;
+  // Contacts are measured at the rest pose. In a scene that animates, the
+  // sentence must SAY so — it used to share a report with a maxHeight
+  // claim carrying overTime=true, one line scoped in time and one not,
+  // with identical grammar.
+  const restQualifier =
+    (result.census?.animation?.keyframedObjects?.length ?? 0) > 0 ? " (rest pose)" : "";
   if (connectivity && connectivity.isolated > 0) {
     const names = connectivity.isolatedParts.join(", ");
     const more = connectivity.isolated - connectivity.isolatedParts.length;
     lines.push(
-      `contact: ${connectivity.touching} part(s) touch another, ${connectivity.isolated} touch nothing` +
+      `contact: ${connectivity.touching} part(s) touch another, ${connectivity.isolated} touch nothing${restQualifier}` +
         ` — ${names}${more > 0 ? ` +${more} more` : ""}`,
     );
   } else if (connectivity && connectivity.touching > 0) {
     // Absence used to mean good — an unstated convention a reader spent a
     // compile second-guessing ("did contacts fail to run?"). One short line
     // states the healthy case instead of implying it.
-    lines.push(`contact: all ${connectivity.touching} part(s) touch another`);
+    lines.push(`contact: all ${connectivity.touching} part(s) touch another${restQualifier}`);
   }
   appendFrames(lines, result, options);
 
@@ -496,6 +563,17 @@ function appendDelta(lines: string[], result: CompileResult): void {
     lines.push("delta: first compile — no baseline");
     // A first compile can still carry a solve delta in principle (a prior
     // read-model with no census); render whatever exists rather than gate.
+    appendSolveDelta(lines, result.solveDelta);
+    return;
+  }
+  if (impact.noBuild) {
+    // This compile measured nothing, so no geometric diff can honestly
+    // exist — say exactly that, keep the baseline, and still report the
+    // issue delta (the error that stopped the build IS the change).
+    lines.push("delta: no build to compare — this compile produced no measurements; baseline kept from the last successful build");
+    for (const line of formatImpact(impact, { maxLines: 20 }).split("\n")) {
+      if (line.trim().length > 0) lines.push(`  ${line}`);
+    }
     appendSolveDelta(lines, result.solveDelta);
     return;
   }

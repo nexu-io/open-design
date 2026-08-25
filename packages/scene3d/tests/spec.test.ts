@@ -498,6 +498,63 @@ describe("validateSceneSpec", () => {
     );
   });
 
+  it("refuses unknown keys on spin and bob — the contract is uniform across motion", () => {
+    // The audit case verbatim: both compiled clean and derived an
+    // animation off defaults, while rotate/screw refused the same shape
+    // of mistake. `rpm` is the natural first guess, so its refusal
+    // teaches the conversion.
+    const spec = (parts: object[]): unknown => ({
+      schemaVersion: 1,
+      parts,
+      relations: (parts as Array<{ id: string }>).map((p, i) => ({
+        type: "at", part: p.id, center: [i, 0, 0.1],
+      })),
+    });
+    const spun = validateSceneSpec(
+      spec([{ id: "prp_spin", size: [0.2, 0.2, 0.2], spin: { zzz: 1, wobble: "yes" } }]),
+    );
+    expect(spun.errors.some((e) => /spin\.zzz is not a spin field/.test(e))).toBe(true);
+    expect(spun.errors.some((e) => /spin\.wobble is not a spin field/.test(e))).toBe(true);
+    const rpm = validateSceneSpec(
+      spec([{ id: "prp_spin", size: [0.2, 0.2, 0.2], spin: { rpm: 30 } }]),
+    );
+    expect(rpm.errors.some((e) => /seconds = 60 \/ rpm/.test(e))).toBe(true);
+    const bobbed = validateSceneSpec(
+      spec([{ id: "prp_bob", size: [0.2, 0.2, 0.2], bob: { amplitude: 0.2, zzz: 1 } }]),
+    );
+    expect(bobbed.errors.some((e) => /bob\.zzz is not a bob field/.test(e))).toBe(true);
+    // Margin notes stay legal inside both, like every other object.
+    const commented = validateSceneSpec(
+      spec([{ id: "prp_ok", size: [0.2, 0.2, 0.2], spin: { "//": "slow", seconds: 6 }, bob: { amplitude: 0.05, "// why": "breathing" } }]),
+    );
+    expect(commented.errors).toEqual([]);
+  });
+
+  it("validates the floor claims and refuses an impossible floor/ceiling pair", () => {
+    const spec = (claims: object): unknown => ({
+      schemaVersion: 1,
+      parts: [{ id: "prp_a", size: [0.2, 0.2, 0.2] }],
+      relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.1] }],
+      claims,
+    });
+    expect(validateSceneSpec(spec({ minHeight: 0.1, minFootprint: [0.1, 0.1] })).errors).toEqual([]);
+    expect(
+      validateSceneSpec(spec({ minHeight: -1 })).errors.some((e) =>
+        /minHeight must be a positive number/.test(e),
+      ),
+    ).toBe(true);
+    expect(
+      validateSceneSpec(spec({ minHeight: 2, maxHeight: 1 })).errors.some((e) =>
+        /no scene can hold both/.test(e),
+      ),
+    ).toBe(true);
+    expect(
+      validateSceneSpec(spec({ minFootprint: [3, 1], footprint: [2, 2] })).errors.some((e) =>
+        /no scene can hold both/.test(e),
+      ),
+    ).toBe(true);
+  });
+
   it("names the nearest screw field on an unknown key", () => {
     const { errors } = validateSceneSpec(screwSpec({ rise: 0.2, second: 3 }));
     expect(errors).toContain(

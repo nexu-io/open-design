@@ -3652,9 +3652,14 @@ def z_fighting_pairs(objects, pair_budget=COPLANAR_TRI_PRODUCT_CAP):
     for name in sorted(heavy):
         skipped.append("%s exceeds the %d-face per-mesh limit" % (name, 1500))
     for a_name, b_name, cost in sorted(dense):
+        # Pairs only reach this skip AFTER their bounding boxes proved to
+        # overlap (the broad phase above), so the exclusion can honestly
+        # say raising the budget might find something — the question a
+        # reader of this note is actually asking.
         skipped.append(
             "%s vs %s is %d triangle pairs, above the %d-pair comparison budget"
-            "; raise conventions.geometry.zFightingPairBudget to compare it"
+            " (their bounding boxes DO overlap, so the comparison could find something"
+            "; raise conventions.geometry.zFightingPairBudget to run it)"
             % (a_name, b_name, cost, pair_budget)
         )
     return pairs, skipped
@@ -4365,6 +4370,7 @@ def _proof_frames(job, scene, opts, auto_cam, is_auto, steps, filepaths, turntab
             "idMaps": id_maps,
             "idParts": id_parts,
             "materialBalls": balls["paths"],
+            "materialBallStats": balls.get("measured", []),
             # The caller owns the cap, so the caller is told what it cost.
             "materialBallsSkipped": len(balls["skipped"]),
             "materialBallNotes": balls["skipped"],
@@ -4590,6 +4596,7 @@ def render_material_balls(scene, engine, out_dir):
 
     ball_scene, sphere, cleanup = _material_ball_scene(scene, engine)
     paths = []
+    measured = []
     try:
         # Alphabetical, so the ordinal a collision picks up is a property of
         # the material set and not of iteration order.
@@ -4607,12 +4614,16 @@ def render_material_balls(scene, engine, out_dir):
                 bpy.ops.render.render(write_still=True, scene=ball_scene.name)
                 if not os.path.exists(target):
                     raise RuntimeError("renderer wrote no file")
-                # Called for its MATTE, not its statistics: the ball is
-                # rendered on the same transparent film as the proof, and
-                # every consumer that drops alpha would otherwise show a
-                # black square. The stats are the proof's question, not this
-                # one's.
-                frame_stats(target)
+                # Called for its matte AND its statistics: the matte keeps
+                # alpha-dropping consumers from showing a black square, and
+                # the clipped fraction is the one number that answers "does
+                # my emission read as the colour I authored" — an authored
+                # ember at strength 6 renders as flat cream, and without
+                # this measurement nothing in any output said so.
+                stats = frame_stats(target)
+                clipped = stats.get("blownRatio")
+                if clipped is not None:
+                    measured.append({"material": name, "clipped": R6(clipped)})
                 paths.append(target)
                 log("material ball %s -> %s" % (name, target))
             except Exception as exc:
@@ -4620,7 +4631,7 @@ def render_material_balls(scene, engine, out_dir):
                 log("material ball skipped for %s: %s" % (name, exc))
     finally:
         cleanup()
-    return {"paths": paths, "skipped": skipped}
+    return {"paths": paths, "skipped": skipped, "measured": measured}
 
 
 # ------------------------------------------------------------------

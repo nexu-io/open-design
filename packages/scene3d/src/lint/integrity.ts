@@ -1,6 +1,7 @@
 import { Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import { LintContext } from "./naming.js";
+import { AUTOFIT_DISTANCE } from "../solve/types.js";
 
 /**
  * Scene integrity: can this scene actually be rendered and seen? A missing
@@ -73,8 +74,11 @@ export function lintIntegrity(ctx: LintContext, issues: Issue[]): void {
       // The reflex fix ("move the part") is often wrong: the part may be
       // exactly where the author wants it and the FRAMING is what lost it —
       // a wider subject needs the camera pulled back or the lens widened,
-      // not geometry dragged toward a shot. Name both levers.
-      hint: "move it into frame, or widen the framing: pull the camera back / reduce the lens so the whole subject fits",
+      // not geometry dragged toward a shot. Name both levers, WITH the
+      // number: distance is in bounding radii, so the fit-everything value
+      // is the same constant for every scene, and "pull it back" without
+      // it cost a field agent five compiles of guessing how far.
+      hint: `move it into frame, or widen the framing: raise camera.distance toward ${AUTOFIT_DISTANCE.toFixed(2)} (the fits-everything distance, in bounding radii — omitting the field uses it) or reduce the lens`,
       target: name,
     });
   }

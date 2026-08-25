@@ -88,6 +88,10 @@ export function buildManifest(input: {
   /** Budget usage per numeric claim, from the adjudicator's own
    *  measurements (lint/claims.ts claimMargins). Tightest first. */
   claimMargins?: Array<{ claim: string; measured: number; limit: number; used: number }>;
+  /** Parts a held grounded claim licensed as declared floats (`above`
+   *  relations) — the ledger states the licence rather than letting
+   *  "held" read as "everything reaches the ground". */
+  claimsLicensedFloats?: string[];
 }): Scene3dManifest {
   const { census } = input;
   const issueCodes = [...new Set(input.issues.map((i) => i.code))].sort();
@@ -130,6 +134,9 @@ export function buildManifest(input: {
       checked: Math.max(0, declared - unadjudicated),
       ...(input.claimMargins && input.claimMargins.length > 0
         ? { margins: input.claimMargins }
+        : {}),
+      ...(input.claimsLicensedFloats && input.claimsLicensedFloats.length > 0
+        ? { licensedFloats: input.claimsLicensedFloats }
         : {}),
     };
   })();

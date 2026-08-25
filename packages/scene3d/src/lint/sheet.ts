@@ -197,7 +197,13 @@ export function lintSheets(input: SheetLintInput, issues: Issue[]): void {
   for (const spec of input.specs) {
     const m = input.measurements.get(spec.file);
     if (!m) continue;
-    const at = { file: spec.file };
+    // The [subject] slot carries the sheet's IDENTITY — its file stem, which
+    // for a kernel-baked atlas is the shader id — the way every other rule
+    // family brackets its subject. The path stays in `file`. Without a
+    // target, a scene with two flipbooks printed findings no reader could
+    // attribute from the terse stream, where only the brackets survive.
+    const stem = spec.file.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, "");
+    const at = { file: spec.file, target: stem };
 
     // POT is judged on the addressing unit. For a flipbook whose grid divides
     // evenly the shader addresses CELLS, so a 768² sheet of 256² cells is

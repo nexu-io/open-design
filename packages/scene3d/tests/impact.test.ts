@@ -40,6 +40,57 @@ function base(): Census {
   };
 }
 
+describe("changeImpact across a compile that measured nothing", () => {
+  // The three-directions-at-once lie a field audit measured: entering a
+  // failure diffed the empty world as a catastrophe (every contact broken),
+  // being inside one read as "unchanged" while real edits accumulated, and
+  // the first success afterwards re-announced the whole scene as appeared.
+  const withPart = (): Census => {
+    const c = base();
+    c.objects = [{
+      name: "prp_box", type: "MESH", parent: null,
+      location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1],
+      dimensions: [1, 1, 1], visible: true, hasMeshData: true,
+    } as Census["objects"][number]];
+    c.meshes = [{
+      object: "prp_box", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0,
+      zeroAreaFaces: 0, nan: false, uvLayers: [],
+      spatial: {
+        worldMin: [0, 0, 0], worldMax: [1, 1, 1], size: [1, 1, 1],
+        bboxCenter: [0.5, 0.5, 0.5], centroid: [0.5, 0.5, 0.5], groundGap: 0,
+      },
+    } as Census["meshes"][number]];
+    c.contacts = [{ a: "prp_box", b: "prp_other", gap: [0, 0, 0], separation: 0, intersects: false }];
+    return c;
+  };
+
+  it("refuses the geometric diff and keeps the issue diff when this compile has no census", () => {
+    const impact = changeImpact(withPart(), undefined, [], [
+      { code: "S3D-E-105", severity: "error", message: "size must be a positive number" },
+    ]);
+    expect(impact.noBuild).toBe(true);
+    expect(impact.unchanged).toBe(false);
+    // The phantom catastrophe: nothing may read as removed or broken.
+    expect(impact.partsRemoved).toEqual([]);
+    expect(impact.contactsBroken).toEqual([]);
+    // The parse error IS the change, and it is reported.
+    expect(impact.issuesAppeared).toEqual([{ code: "S3D-E-105", target: undefined }]);
+  });
+
+  it("reports real edits between two failures instead of 'unchanged'", () => {
+    const impact = changeImpact(
+      undefined,
+      undefined,
+      [{ code: "S3D-E-105", severity: "error", message: "old error" }],
+      [{ code: "S3D-E-106", severity: "error", message: "new error" }],
+    );
+    expect(impact.noBuild).toBe(true);
+    expect(impact.unchanged).toBe(false);
+    expect(impact.issuesAppeared.map((i) => i.code)).toEqual(["S3D-E-106"]);
+    expect(impact.issuesResolved.map((i) => i.code)).toEqual(["S3D-E-105"]);
+  });
+});
+
 describe("changeImpact non-geometric edits", () => {
   it("sees a material roughness edit", () => {
     const before = base();

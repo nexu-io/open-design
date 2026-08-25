@@ -178,6 +178,10 @@ export interface Scene3dManifest {
     checked?: number;
     /** Budget usage per numeric claim, tightest first: `used` = measured/limit. */
     margins?: Array<{ claim: string; measured: number; limit: number; used: number }>;
+    /** Parts a held grounded claim licensed as declared floats (`above`
+     *  relations): "held" with entries here means "the hovering parts were
+     *  declared as hovering on purpose", not "everything reaches the ground". */
+    licensedFloats?: string[];
   };
   /** Scale readout, when the build stage produced a census. */
   metrics?: {

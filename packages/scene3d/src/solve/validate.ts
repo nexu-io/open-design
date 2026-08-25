@@ -569,6 +569,20 @@ function validatePart(
     } else {
       const s = part.spin as Record<string, unknown>;
       const spinBefore = errors.length;
+      // The unknown-key gate every sub-object carries (rotate and screw
+      // already did) — without it `spin: { rpm: 30 }`, the natural first
+      // guess, compiled clean and spun at the default speed, and the
+      // documented "did you mean" promise was false for exactly the two
+      // motion objects an author reaches for first.
+      const KNOWN_SPIN_KEYS = new Set(["axis", "seconds"]);
+      for (const key of Object.keys(s)) {
+        if (isCommentKey(key)) continue;
+        if (!KNOWN_SPIN_KEYS.has(key)) {
+          errors.push(
+            `${at}.spin.${key} is not a spin field — ${didYouMean(key, KNOWN_SPIN_KEYS)}known fields: axis, seconds (one full turn per "seconds" about "axis"; for a turn rate, seconds = 60 / rpm)`,
+          );
+        }
+      }
       // Each field reports for itself — a bad axis and a bad seconds value
       // are two separate mistakes, and a combined message left the author
       // unsure which of the two they actually got wrong.
@@ -596,6 +610,16 @@ function validatePart(
     } else {
       const b = part.bob as Record<string, unknown>;
       const bobBefore = errors.length;
+      // The same unknown-key gate spin carries, for the same reason.
+      const KNOWN_BOB_KEYS = new Set(["amplitude", "seconds"]);
+      for (const key of Object.keys(b)) {
+        if (isCommentKey(key)) continue;
+        if (!KNOWN_BOB_KEYS.has(key)) {
+          errors.push(
+            `${at}.bob.${key} is not a bob field — ${didYouMean(key, KNOWN_BOB_KEYS)}known fields: amplitude, seconds (a vertical sine of "amplitude" metres per "seconds")`,
+          );
+        }
+      }
       if (!(typeof b.amplitude === "number" && Number.isFinite(b.amplitude) && b.amplitude > 0)) {
         errors.push(`${at}.bob.amplitude must be a positive number`);
       }
@@ -1305,6 +1329,44 @@ function validateClaims(value: unknown, errors: string[]): ClaimsSpec | undefine
       errors.push("claims.footprint must be [x, y] with positive numbers");
     }
   }
+  // The FLOOR claims, mirrors of the two ceilings. A uniformly wrong scene
+  // has no intra-scene outliers, so a 100× unit slip downward sails past
+  // every relative check — these are the author's one-line way to sign the
+  // scene's real-world magnitude. Both directions declared together bound
+  // the scene's scale outright.
+  if (claims.minHeight !== undefined) {
+    if (typeof claims.minHeight === "number" && claims.minHeight > 0) out.minHeight = claims.minHeight;
+    else errors.push("claims.minHeight must be a positive number");
+  }
+  if (
+    out.minHeight !== undefined &&
+    out.maxHeight !== undefined &&
+    out.minHeight > out.maxHeight
+  ) {
+    errors.push(
+      `claims.minHeight (${out.minHeight}) exceeds claims.maxHeight (${out.maxHeight}) — no scene can hold both`,
+    );
+  }
+  if (claims.minFootprint !== undefined) {
+    if (
+      Array.isArray(claims.minFootprint) &&
+      claims.minFootprint.length === 2 &&
+      claims.minFootprint.every((v) => typeof v === "number" && v > 0)
+    ) {
+      out.minFootprint = claims.minFootprint as [number, number];
+    } else {
+      errors.push("claims.minFootprint must be [x, y] with positive numbers");
+    }
+  }
+  if (
+    out.minFootprint !== undefined &&
+    out.footprint !== undefined &&
+    (out.minFootprint[0] > out.footprint[0] || out.minFootprint[1] > out.footprint[1])
+  ) {
+    errors.push(
+      `claims.minFootprint [${out.minFootprint.join(", ")}] exceeds claims.footprint [${out.footprint.join(", ")}] — no scene can hold both`,
+    );
+  }
   if (claims.watertight !== undefined) {
     if (typeof claims.watertight === "boolean") out.watertight = claims.watertight;
     else errors.push("claims.watertight must be a boolean");
@@ -1321,7 +1383,8 @@ function validateClaims(value: unknown, errors: string[]): ClaimsSpec | undefine
   // the author believed they had signed a door and had signed air. The error
   // names every claim that DOES adjudicate so the refusal teaches.
   const KNOWN_CLAIM_KEYS = new Set([
-    "parts", "maxTriangles", "grounded", "maxHeight", "footprint", "watertight", "materialsUsed",
+    "parts", "maxTriangles", "grounded", "maxHeight", "minHeight",
+    "footprint", "minFootprint", "watertight", "materialsUsed",
   ]);
   for (const key of Object.keys(claims)) {
     if (isCommentKey(key)) continue;

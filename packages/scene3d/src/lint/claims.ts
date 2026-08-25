@@ -281,7 +281,11 @@ export function lintClaims(
       );
       for (const mover of motionSwept.exactParts) {
         if (failedAlready.has(mover.id)) continue;
-        if (isExempt(mover.id, exempt) || isExempt(mover.id, floats)) continue;
+        // A declared float licenses FLOATING (direction two), never
+        // SINKING: a hoverer whose motion provably dips below the floor is
+        // as sunk as anything else. Only the full grounding exemption —
+        // the author's explicit total opt-out — silences this direction.
+        if (isExempt(mover.id, exempt)) continue;
         if (mover.min[2]! < -TOLERANCE) {
           groundedFailed = true;
           fail(
@@ -323,17 +327,55 @@ export function lintClaims(
           `${unsupported.length} part(s) have no traced support and the contact scan did not fully run`,
         );
       } else {
+        /* Attribute the failure to the BREAK, not to every part above it.
+           A chock resting 1mm on an unsupported plinth used to read
+           "'prp_chock' floats with nothing supporting it — nearest surface
+           below is 'prp_plinth', 0.0010m clear": the sentence contradicts
+           itself, and an agent who fixes the named part fixes nothing. A
+           part standing on another UNSUPPORTED part is a chain member; the
+           chain's lowest member — the one whose own underside really has no
+           support — is the root, and it carries the failure with its
+           riders named. */
+        const unsupportedSet = new Set(unsupported.map((m) => m.object));
+        const touch = 0.001 + TOLERANCE;
+        const restsOnUnsupported = new Map<string, string>();
         for (const mesh of unsupported) {
+          const below = nearestSupportBelow(census, mesh.object);
+          if (below && unsupportedSet.has(below.name) && below.gap <= touch) {
+            restsOnUnsupported.set(mesh.object, below.name);
+          }
+        }
+        const ridersOf = new Map<string, string[]>();
+        for (const [rider, root] of restsOnUnsupported) {
+          // Follow the chain to its lowest unsupported member.
+          let base = root;
+          const seen = new Set([rider]);
+          while (restsOnUnsupported.has(base) && !seen.has(base)) {
+            seen.add(base);
+            base = restsOnUnsupported.get(base)!;
+          }
+          (ridersOf.get(base) ?? ridersOf.set(base, []).get(base)!).push(rider);
+        }
+        for (const mesh of unsupported) {
+          if (restsOnUnsupported.has(mesh.object)) continue; // a rider, named on its root
           groundedFailed = true;
           const height = mesh.spatial!.groundGap;
           const below = nearestSupportBelow(census, mesh.object);
+          const riders = (ridersOf.get(mesh.object) ?? []).sort();
+          const chain =
+            riders.length > 0
+              ? ` — and ${riders.length} part(s) standing on it inherit the break: ${riders.join(", ")}`
+              : below
+                ? ` — nearest surface below is '${below.name}', ${Math.abs(below.gap).toFixed(4)}m clear`
+                : "";
           fail(
             "grounded",
-            `'${mesh.object}' floats ${height.toFixed(4)}m above the ground plane with nothing supporting it${below ? ` — nearest surface below is '${below.name}', ${Math.abs(below.gap).toFixed(4)}m clear` : ""}`,
+            `'${mesh.object}' floats ${height.toFixed(4)}m above the ground plane with nothing supporting it${chain}`,
             {
               target: mesh.object,
               groundGap: height,
               ...(below ? { supportBelow: below.name, supportGap: below.gap } : {}),
+              ...(riders.length > 0 ? { chainRiders: riders } : {}),
             },
             "rest it on something, place it with an 'above' relation (a declared float), or exempt it via conventions.grounding.exempt",
           );
@@ -341,6 +383,41 @@ export function lintClaims(
       }
     }
     if (!groundedFailed && timeCaveat) caveat("grounded", `claim grounded held at every sampled frame — ${timeCaveat}`);
+  }
+
+  if (claims.minHeight !== undefined || claims.minFootprint !== undefined) {
+    /* The FLOOR claims — the author's signature of real-world magnitude.
+       A uniform unit slip has no intra-scene outliers, so no relative
+       check can see it; a declared minimum can. Judged against the
+       measured envelope (rest ∪ sampled frames): that union is the
+       LARGEST the scene ever measurably is, so a floor even the union
+       misses is a definite failure, and no conservative swept bound is
+       consulted — an over-reserving bound could only fake a pass. */
+    if (!envelope) {
+      if (claims.minHeight !== undefined) unchecked("minHeight", "no spatial measurements in the census");
+      if (claims.minFootprint !== undefined) unchecked("minFootprint", "no spatial measurements in the census");
+    } else {
+      const { min, max } = envelope;
+      if (claims.minHeight !== undefined && max[2]! < claims.minHeight - EPS) {
+        fail(
+          "minHeight",
+          `the built scene only reaches ${max[2]!.toFixed(4)}m, under the claimed minimum of ${claims.minHeight}m — a scene this much smaller than its own claim usually means a unit slip (millimetres authored as metres)`,
+          { expected: claims.minHeight, actual: max[2] },
+        );
+      }
+      if (claims.minFootprint !== undefined) {
+        const extent: [number, number] = [max[0]! - min[0]!, max[1]! - min[1]!];
+        for (const [i, axisName] of (["x", "y"] as const).entries()) {
+          if (extent[i]! < claims.minFootprint[i]! - EPS) {
+            fail(
+              "minFootprint",
+              `the built scene only spans ${extent[i]!.toFixed(4)}m on ${axisName}, under the claimed minimum of ${claims.minFootprint[i]}m`,
+              { axis: axisName, expected: claims.minFootprint[i], actual: extent[i] },
+            );
+          }
+        }
+      }
+    }
   }
 
   if (claims.maxHeight !== undefined || claims.footprint !== undefined) {
@@ -569,6 +646,30 @@ export function claimMargins(
     if (claims.footprint !== undefined) {
       push("footprint.x", Math.max(max[0]! - min[0]!, exactSpan(0)), claims.footprint[0]!);
       push("footprint.y", Math.max(max[1]! - min[1]!, exactSpan(1)), claims.footprint[1]!);
+    }
+    // Floor claims invert the ratio: `used` is how much of the measured
+    // extent the floor consumes, so 96% again means "close to the bound"
+    // and the tightest-first sort keeps one meaning across both kinds.
+    if (claims.minHeight !== undefined && max[2]! > 0) {
+      margins.push({
+        claim: "minHeight",
+        measured: r6(max[2]!),
+        limit: claims.minHeight,
+        used: r6(claims.minHeight / max[2]!),
+      });
+    }
+    if (claims.minFootprint !== undefined) {
+      for (const [i, axis] of (["x", "y"] as const).entries()) {
+        const span = max[i]! - min[i]!;
+        if (span > 0) {
+          margins.push({
+            claim: `minFootprint.${axis}`,
+            measured: r6(span),
+            limit: claims.minFootprint[i]!,
+            used: r6(claims.minFootprint[i]! / span),
+          });
+        }
+      }
     }
   }
 

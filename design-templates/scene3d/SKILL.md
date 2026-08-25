@@ -305,9 +305,14 @@ Fill the box another way:
   bottom-rest). Omit `material` to keep the asset's own surfaces; set
   `material` to reskin it.
 - `"script": "hull.py"`: `def build(ctx):` with `ctx.size` the declared
-  box and `ctx.material(name)` to bind (item access, `ctx["size"]`, also
-  works). Create **exactly one mesh**. The compiler fits it into the box;
-  placement stays the relations' job.
+  box (a metres tuple) and `ctx.material(name)` to bind a declared
+  material to the active object (item access, `ctx["size"]`, also
+  works). Create **exactly one mesh** — full `bpy` is yours inside that
+  contract. The compiler fits the mesh into the box exactly like a
+  `file:` asset (uniform scale, centred, bottom-rest, pivot at the box
+  centre); placement stays the relations' job. A script that raises
+  reports its own line number with this contract restated, and a
+  missing script file is a parse error before Blender ever runs.
 
 **Roles.** `role` on a part names its job — `hero`, `character`, `prop`,
 `background`, or `decor` — and the intent judge budgets triangle share
@@ -375,9 +380,14 @@ auto-fit, and the useful range for a tighter or wider shot is roughly
 the one mistake this knob invites — the default already fits.
 
 **Claims** are your signature on the work, checked against the *built*
-artifact: `parts`, `maxTriangles`, `grounded`, `maxHeight`, `footprint`
-`[x,y]`, `watertight`, `materialsUsed`. Numerics are upper bounds except
-`parts`, which is exact. `materialsUsed` is an ARRAY OF NAMES, not a
+artifact: `parts`, `maxTriangles`, `grounded`, `maxHeight`, `minHeight`,
+`footprint` `[x,y]`, `minFootprint` `[x,y]`, `watertight`,
+`materialsUsed`. Numerics are upper bounds except `parts` (exact) and
+the two `min*` floors — the floors exist for scale honesty: a scene
+uniformly wrong by 100× has no internal outliers for any relative check
+to catch, so `minHeight`/`minFootprint` are your one-line signature of
+real-world magnitude (declare a floor and a ceiling together and the
+scene's scale is bounded outright). `materialsUsed` is an ARRAY OF NAMES, not a
 count: every listed material must be bound to some part in the built
 scene. It is a subset check — a bound material you did not list passes
 silently, so it guards against losing a material, not against gaining

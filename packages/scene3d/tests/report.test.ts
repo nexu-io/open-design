@@ -313,6 +313,28 @@ describe("renderAgentReport", () => {
     expect(text).toContain("residual: prp_slat now rests on prp_b (was prp_a) — no authored cause");
   });
 
+  it("says 'no build to compare' when the compile measured nothing, keeping the issue delta", () => {
+    // The delta an agent leans on hardest in an iterative loop must not
+    // fabricate a catastrophe entering a failure or claim 'unchanged'
+    // inside one — a census-less compile has exactly one honest diff: the
+    // issues that stopped it.
+    const noBuild = {
+      partsAdded: [], partsRemoved: [], partsMoved: [], partsResized: [],
+      issuesAppeared: [{ code: "S3D-E-105", target: "prp_a" }],
+      issuesResolved: [],
+      contactsMade: [], contactsBroken: [],
+      materialsChanged: [], animationChanged: [],
+      unchanged: false, noBuild: true,
+    };
+    const text = renderAgentReport(result({ impact: noBuild }));
+    expect(text).toContain(
+      "delta: no build to compare — this compile produced no measurements; baseline kept from the last successful build",
+    );
+    expect(text).toContain("issue APPEARED: S3D-E-105 on prp_a");
+    expect(text).not.toContain("contact BROKEN");
+    expect(text).not.toContain("unchanged since previous compile");
+  });
+
   it("summarises artifacts without dumping every proof frame path", () => {
     const text = renderAgentReport(
       result({

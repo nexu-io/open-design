@@ -435,6 +435,14 @@ export interface CompileResult {
    *  the runner measures the names; a bare count could not distinguish a
    *  cap from a bake failure. Present only when non-empty. */
   materialBallsSkippedNames?: string[];
+  /**
+   * Per-ball clipped fraction, measured on the lit-sphere previews — the
+   * one number that answers "does my emission read as the colour I
+   * authored". A ball that blows out is a material whose product exceeds
+   * display range under the shot's own lighting. Present only when
+   * measured.
+   */
+  materialBallStats?: Array<{ material: string; clipped: number }>;
   /** Project-relative paths of exported assets. */
   exportedAssets: string[];
   summary: IssueSummary;
@@ -1299,6 +1307,11 @@ export interface Scene3dManifest {
      *  a claim at 0.96 and one at 0.12 are different facts for an author
      *  about to add a part. */
     margins?: Array<{ claim: string; measured: number; limit: number; used: number }>;
+    /** Parts a held grounded claim licensed as declared floats (`above`
+     *  relations): "held" with entries here means "the hovering parts were
+     *  declared as hovering on purpose", not "everything reaches the
+     *  ground". Mirrored in the contracts wire type. */
+    licensedFloats?: string[];
   };
   /**
    * Scale sanity readout. Authors derive dimensions by arithmetic and the

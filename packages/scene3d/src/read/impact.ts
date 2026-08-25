@@ -61,6 +61,16 @@ export interface ImpactReport {
   /** True when nothing at all changed — worth stating rather than inferring
    *  from the empty arrays. */
   unchanged: boolean;
+  /**
+   * True when THIS compile produced no measured world (the build never ran
+   * or failed), so no geometric or contact diff can honestly exist. Only
+   * the issue lists carry information in that state. Without this flag, a
+   * failed parse used to diff as an EMPTY WORLD: entering a failure
+   * reported every contact broken and every part removed, being inside
+   * one reported "unchanged" while real edits accumulated, and the first
+   * success afterwards re-announced the entire scene as appeared.
+   */
+  noBuild?: boolean;
 }
 
 /**
@@ -123,6 +133,37 @@ export function changeImpact(
   previousIssues: Issue[] = [],
   nextIssues: Issue[] = [],
 ): ImpactReport {
+  // A compile with no census measured nothing: diffing it as an empty
+  // world fabricates a catastrophe (everything removed, every contact
+  // broken) that no edit caused. The ISSUE diff still carries truth —
+  // the parse error that stopped the build is exactly the change worth
+  // reporting — so it is kept while every geometric section is refused.
+  if (!next) {
+    const beforeIssues = new Map(previousIssues.map((i) => [issueKey(i), i]));
+    const afterIssues = new Map(nextIssues.map((i) => [issueKey(i), i]));
+    const issuesAppeared = [...afterIssues.values()]
+      .filter((i) => !beforeIssues.has(issueKey(i)))
+      .map((i) => ({ code: i.code, target: i.target }));
+    const issuesResolved = [...beforeIssues.values()]
+      .filter((i) => !afterIssues.has(issueKey(i)))
+      .map((i) => ({ code: i.code, target: i.target }));
+    const order = (l: Array<{ code: string; target?: string }>) =>
+      l.sort(
+        (a, b) =>
+          (a.code < b.code ? -1 : a.code > b.code ? 1 : 0) ||
+          ((a.target ?? "") < (b.target ?? "") ? -1 : (a.target ?? "") > (b.target ?? "") ? 1 : 0),
+      );
+    order(issuesAppeared);
+    order(issuesResolved);
+    return {
+      partsAdded: [], partsRemoved: [], partsMoved: [], partsResized: [],
+      issuesAppeared, issuesResolved,
+      contactsMade: [], contactsBroken: [],
+      materialsChanged: [], animationChanged: [],
+      unchanged: false,
+      noBuild: true,
+    };
+  }
   const before = boxes(previous);
   const after = boxes(next);
 
