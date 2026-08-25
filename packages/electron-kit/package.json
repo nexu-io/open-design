@@ -1,0 +1,63 @@
+{
+  "name": "@open-design/electron-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./runtime": {
+      "types": "./dist/runtime-api.d.ts",
+      "default": "./dist/runtime-api.mjs"
+    },
+    "./contracts": {
+      "types": "./dist/boundary/index.d.ts",
+      "default": "./dist/boundary/index.mjs"
+    },
+    "./lifecycle": {
+      "types": "./dist/lifecycle/fixture-port.d.ts",
+      "default": "./dist/lifecycle/fixture-port.mjs"
+    },
+    "./updater": {
+      "types": "./dist/updater/fixture-provider.d.ts",
+      "default": "./dist/updater/fixture-provider.mjs"
+    },
+    "./build": {
+      "types": "./dist/build/index.d.ts",
+      "default": "./dist/build/index.mjs"
+    },
+    "./dev": {
+      "types": "./dist/commands/dev.d.ts",
+      "default": "./dist/commands/dev.mjs"
+    },
+    "./pack": {
+      "types": "./dist/commands/pack.d.ts",
+      "default": "./dist/commands/pack.mjs"
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/standalone": "workspace:*",
+    "electron-builder": "26.8.1",
+    "esbuild": "0.28.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "electron": "41.3.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "peerDependencies": {
+    "electron": "41.3.0"
+  },
+  "engines": {"node": "~24"}
+}

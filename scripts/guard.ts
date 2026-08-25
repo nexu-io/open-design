@@ -67,6 +67,7 @@ const residualAllowedExactPaths = new Set([
   "packages/contracts/esbuild.config.mjs",
   "packages/diagnostics/esbuild.config.mjs",
   "packages/download/esbuild.config.mjs",
+  "packages/electron-kit/esbuild.config.mjs",
   "packages/host/esbuild.config.mjs",
   "packages/launcher-proto/esbuild.config.mjs",
   "packages/metatool/esbuild.config.mjs",
@@ -133,6 +134,10 @@ const residualAllowedExactPaths = new Set([
   "tools/release/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
+  // Electron Shell owns these deliberately tiny Node entrypoints. They only
+  // translate pnpm's exact dev/pack commands into electron-kit library calls.
+  "shells/electron/scripts/dev.mjs",
+  "shells/electron/scripts/pack.mjs",
   // Terminal distributions execute these native runtime entrypoints with the
   // verified embedded Node after leaving the pnpm/TypeScript workspace.
   "shells/terminal/runtime/fixture-lifecycle.mjs",

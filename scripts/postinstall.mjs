@@ -12,6 +12,7 @@ const buildTargets = [
   "packages/release",
   "packages/contracts",
   "packages/standalone",
+  "packages/electron-kit",
   "packages/components",
   "packages/platform",
   "packages/download",

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "appId": "io.nexu.electron-foundation",
+  "productName": "Open Design Electron Foundation",
+  "executableName": "open-design-electron-foundation",
+  "version": "0.1.0",
+  "channel": "dev",
+  "namespace": "electron-foundation",
+  "protocol": "od",
+  "window": {
+    "width": 1040,
+    "height": 700,
+    "title": "Open Design Electron Foundation"
+  },
+  "shell": {
+    "type": "electron",
+    "version": "0.1.0",
+    "buildHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

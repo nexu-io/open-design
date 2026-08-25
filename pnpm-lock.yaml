@@ -607,6 +607,31 @@ importers:
         specifier: 4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
 
+  packages/electron-kit:
+    dependencies:
+      '@open-design/standalone':
+        specifier: workspace:*
+        version: link:../standalone
+      electron-builder:
+        specifier: 26.8.1
+        version: 26.8.1(electron-builder-squirrel-windows@26.8.1)
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      electron:
+        specifier: 41.3.0
+        version: 41.3.0
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
+
   packages/host:
     dependencies:
       '@open-design/release':
@@ -794,6 +819,25 @@ importers:
       tsx:
         specifier: 4.22.3
         version: 4.22.3
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
+
+  shells/electron:
+    dependencies:
+      '@open-design/electron-kit':
+        specifier: workspace:*
+        version: link:../../packages/electron-kit
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      electron:
+        specifier: 41.3.0
+        version: 41.3.0
       typescript:
         specifier: 6.0.3
         version: 6.0.3

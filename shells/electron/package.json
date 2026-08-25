@@ -1,0 +1,34 @@
+{
+  "name": "@open-design/shell-electron",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "README.md",
+    "electron-shell.json",
+    "node-lock.json",
+    "scripts",
+    "src",
+    "tests",
+    "tsconfig.json",
+    "tsconfig.tests.json",
+    "vitest.config.ts"
+  ],
+  "scripts": {
+    "dev": "node ./scripts/dev.mjs",
+    "prepack": "node ./scripts/pack.mjs",
+    "pack": "node ./scripts/pack.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/electron-kit": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "electron": "41.3.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {"node": "~24"}
+}
