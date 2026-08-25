@@ -32,7 +32,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
       electronVersion: electronPackage.version,
       asar: true,
       directories: { output: input.outputRoot },
-      files: ["main.cjs", "electron-shell.json", "node-lock.json", "package.json", "scene-receipt.json"],
+      files: ["main.cjs", "electron-shell.json", "warmup.json", "node-lock.json", "package.json", "scene-receipt.json"],
       extraResources: [{ from: input.scene.sidecarPath, to: "fixture-sidecar.cjs" }],
       npmRebuild: false,
       nodeGypRebuild: false,

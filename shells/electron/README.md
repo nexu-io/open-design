@@ -1,7 +1,9 @@
 # Electron Shell foundation
 
 The product layer is deliberately thin. It declares identity, window policy,
-the `od://` handler, and adapters supplied by `@open-design/electron-kit`.
+the `od://` handler, concrete warmup topology, and adapters supplied to
+`@open-design/electron-kit`. `warmup.json` owns the ordered product declaration;
+electron-kit owns only graph lifecycle and its public carrier/Standalone atoms.
 
 ```sh
 pnpm -C shells/electron dev

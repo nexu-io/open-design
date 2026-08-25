@@ -31,6 +31,10 @@
       "types": "./dist/installer/index.d.ts",
       "default": "./dist/installer/index.mjs"
     },
+    "./warmup": {
+      "types": "./dist/warmup/index.d.ts",
+      "default": "./dist/warmup/index.mjs"
+    },
     "./lifecycle": {
       "types": "./dist/lifecycle/fixture-port.d.ts",
       "default": "./dist/lifecycle/fixture-port.mjs"

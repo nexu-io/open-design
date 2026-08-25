@@ -5,6 +5,7 @@ export type ElectronSceneReceipt = Readonly<{
   manifestPath: string;
   nodeCarrierLockPath: string;
   sidecarPath: string;
+  warmupPath: string;
 }>;
 
 export type ElectronDistributionReceipt = Readonly<{

@@ -18,6 +18,7 @@ export async function devElectronShell(input: Readonly<{
   manifestPath: string;
   fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
+  warmupPath: string;
   argv?: readonly string[];
 }>): Promise<number> {
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
@@ -27,6 +28,7 @@ export async function devElectronShell(input: Readonly<{
     outputRoot: join(dirname(input.manifestPath), ".tmp", "electron-kit", manifest.namespace, "scene"),
     fixtureSidecarPath: input.fixtureSidecarPath,
     nodeCarrierLockPath: input.nodeCarrierLockPath,
+    warmupPath: input.warmupPath,
   });
   const child = spawn(electronPath as unknown as string, [scene.sceneRoot, ...normalizeElectronDevArgv(input.argv ?? [])], { env: process.env, stdio: "inherit" });
   return await new Promise<number>((resolveCode, reject) => {

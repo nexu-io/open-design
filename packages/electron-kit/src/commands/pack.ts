@@ -9,6 +9,7 @@ export async function packElectronShell(input: Readonly<{
   manifestPath: string;
   fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
+  warmupPath: string;
   outputRoot: string;
 }>): Promise<ElectronDistributionReceipt> {
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
@@ -18,6 +19,7 @@ export async function packElectronShell(input: Readonly<{
     outputRoot: join(dirname(input.manifestPath), ".tmp", "electron-kit", manifest.namespace, "scene"),
     fixtureSidecarPath: input.fixtureSidecarPath,
     nodeCarrierLockPath: input.nodeCarrierLockPath,
+    warmupPath: input.warmupPath,
   });
   return await buildElectronDistribution({ scene, manifest, outputRoot: input.outputRoot });
 }

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { build as bundle } from "esbuild";
 
 import { validateElectronShellManifest, type ElectronShellManifest } from "../boundary/index.js";
+import { validateElectronRuntimeWarmupTopology, type ElectronWarmupTopology } from "../warmup/index.js";
 import type { ElectronSceneReceipt } from "./contracts.js";
 
 export type AssembleElectronSceneInput = Readonly<{
@@ -12,10 +13,14 @@ export type AssembleElectronSceneInput = Readonly<{
   outputRoot: string;
   fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
+  warmupPath: string;
 }>;
 
 export async function assembleElectronScene(input: AssembleElectronSceneInput): Promise<ElectronSceneReceipt> {
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
+  validateElectronRuntimeWarmupTopology(
+    JSON.parse(await readFile(input.warmupPath, "utf8")) as ElectronWarmupTopology,
+  );
   const nodeCarrierLock = JSON.parse(await readFile(input.nodeCarrierLockPath, "utf8")) as {
     schemaVersion?: number;
     targets?: unknown;
@@ -30,6 +35,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   const mainPath = join(input.outputRoot, "main.cjs");
   const sidecarPath = join(input.outputRoot, "fixture-sidecar.cjs");
   const nodeCarrierLockPath = join(input.outputRoot, "node-lock.json");
+  const warmupPath = join(input.outputRoot, "warmup.json");
   await bundle({
     bundle: true,
     entryPoints: [input.entryPath],
@@ -41,6 +47,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   });
   await copyFile(input.fixtureSidecarPath, sidecarPath);
   await copyFile(input.nodeCarrierLockPath, nodeCarrierLockPath);
+  await copyFile(input.warmupPath, warmupPath);
 
   const packagedManifestPath = join(input.outputRoot, "electron-shell.json");
   await writeFile(packagedManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
@@ -60,6 +67,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     manifestPath: packagedManifestPath,
     nodeCarrierLockPath,
     sidecarPath,
+    warmupPath,
   };
   await writeFile(join(input.outputRoot, "scene-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   return receipt;

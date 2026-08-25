@@ -4,8 +4,10 @@ import type {
   StandaloneShellIdentity,
   StandaloneShellUpdaterPort,
 } from "@open-design/standalone";
+import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
 import type { ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest } from "../installer/contracts.js";
 import type { ElectronBootstrapPort } from "../bootstrap/contracts.js";
+import type { ElectronWarmupExecutor, ElectronWarmupTopology } from "../warmup/index.js";
 
 export const ELECTRON_KIT_CONTRACT_VERSION = 1 as const;
 
@@ -40,9 +42,35 @@ export type ElectronShellManifest = Readonly<{
   shell: StandaloneShellIdentity;
 }>;
 
-export type ElectronShellHandlers = Readonly<{
+export type ElectronShellActions = Readonly<{
   openDeepLink?(url: string): void | Promise<void>;
   installUpdate?(request: ElectronInstallerHandoffRequest): ElectronInstallerHandoffReceipt | Promise<ElectronInstallerHandoffReceipt>;
+}>;
+
+export type ElectronRendererWindow = Readonly<{
+  isDestroyed(): boolean;
+  isMinimized(): boolean;
+  restore(): void;
+  show(): void;
+  focus(): void;
+}>;
+
+export type ElectronRendererLease = Readonly<{
+  window: ElectronRendererWindow;
+  releaseIntegration(): void | Promise<void>;
+  destroy(): void;
+}>;
+
+export type ElectronShellRenderer = Readonly<{
+  windowOptions?(input: Readonly<{
+    manifest: ElectronShellManifest;
+    presentation: "headless" | "interactive";
+  }>): Readonly<BrowserWindowConstructorOptions>;
+  mount(input: Readonly<{
+    manifest: ElectronShellManifest;
+    presentation: "headless" | "interactive";
+    window: BrowserWindow;
+  }>): Readonly<{ dispose(): void | Promise<void> }> | Promise<Readonly<{ dispose(): void | Promise<void> }>>;
 }>;
 
 export type ElectronClosurePorts = Readonly<{
@@ -54,8 +82,11 @@ export type ElectronClosurePorts = Readonly<{
 
 export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
+  warmup: ElectronWarmupTopology;
   headless?: boolean;
-  handlers?: ElectronShellHandlers;
+  actions?: ElectronShellActions;
+  renderer: ElectronShellRenderer;
+  warmupExecutors?: Readonly<Record<string, ElectronWarmupExecutor>>;
   createPorts(input: Readonly<{ runtimeRoot: string; sidecarEntryPath: string; nodeExecutablePath: string }>): ElectronClosurePorts;
 }>;
 

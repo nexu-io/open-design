@@ -1,4 +1,5 @@
 import manifest from "../electron-shell.json" with { type: "json" };
+import warmup from "../warmup.json" with { type: "json" };
 
 import {
   ElectronFixtureLifecyclePort,
@@ -7,11 +8,16 @@ import {
   runElectronShell,
   scheduleElectronInstallerHandoff,
   type ElectronShellManifest,
+  type ElectronWarmupTopology,
 } from "@open-design/electron-kit/runtime";
+
+import { placeholderRenderer } from "./renderer/placeholder.js";
 
 void runElectronShell({
   manifest: manifest as ElectronShellManifest,
-  handlers: {
+  warmup: warmup as ElectronWarmupTopology,
+  renderer: placeholderRenderer,
+  actions: {
     openDeepLink(url) {
       console.info("[shell/electron] deep link", { url });
     },
