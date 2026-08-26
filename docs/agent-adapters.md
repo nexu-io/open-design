@@ -436,6 +436,46 @@ At run completion, the daemon scans the captured plain stdout for `<artifact>` b
 
 The identifier is slugged before use, collisions receive `-2`, `-3`, etc., and outputs without a supported `<artifact>` block are left unchanged. This daemon-side extraction keeps headless runs and web-attached runs aligned: the project file exists even when no browser is present to parse the chat stream.
 
+### 5.14 Antigravity
+
+- Invocation is `agy [--log-file <path>] -p <prompt>` — non-interactive print
+  mode. Older builds spawned `agy -p -` and wrote the prompt on stdin, but
+  agy 1.1.13+ treats a bare `-` as the literal prompt string and ignores
+  stdin (upstream #7161), so the prompt is now passed directly as the `-p`
+  argument.
+- Streaming: `plain`, stateless, no `-c`/resume flag. Tested resuming via
+  `-c`: it activates agy's own internal agentic loop (multi-step model
+  retries, tool calls, fallback-to-cached-response on tool errors), which
+  produced an identical byte-for-byte form re-emission on turn 2 when turn
+  1's tool-call retry path returned the cached response — not steerable from
+  OD's system-prompt OVERRIDE. Every spawn instead gets the full
+  OD-rendered transcript, matching the qwen / deepseek plain adapters.
+- Model selection: agy 1.1.21 still has no `--model` flag. The TUI's
+  Switch-Model picker persists the choice to
+  `~/.gemini/antigravity-cli/settings.json`, and every `agy -p` invocation
+  re-reads that file on startup, so the daemon writes the picked label into
+  `settings.json` immediately before spawn. Because that file is
+  process-global, concurrent non-default-model runs are serialized through
+  `acquireAntigravityModelLock` / `waitForAgyToReadModel` in
+  `apps/daemon/src/runtimes/defs/antigravity.ts`: each spawn holds the lock
+  until agy's own `--log-file` output shows
+  `Propagating selected model override to backend: label="<X>"` (confirming
+  the settings write was actually read) or the child exits, whichever comes
+  first.
+- Model discovery: `agy --output-format json models` returns a live catalog
+  as `{ command: { data: { models: [{ id, label }] } } }` — the flag has to
+  come *before* the subcommand; `agy models --output-format json` only
+  prints Usage. **Gotcha:** this subcommand does not print or exit until
+  stdin reaches EOF. Spawned with a held-open pipe (`execFile`'s default,
+  and the shape any daemon integration gets without an explicit stdin
+  strategy), the process idles indefinitely — `execFile`'s `timeout` option
+  only *signals* the child and the promise settles on actual exit, which
+  never happens on its own here. The adapter's `fetchModels` closes stdin
+  immediately after spawn (before awaiting the result) to avoid this; a
+  declarative `listModels: { args, parse }` entry would spawn through the
+  same path with no hook to do so and hang identically. `fallbackModels` is
+  the offline-only floor for when the live probe fails.
+
 ## 6. Runtime metadata and UI
 
 There is no public `agents.capabilities()` method and no generalized

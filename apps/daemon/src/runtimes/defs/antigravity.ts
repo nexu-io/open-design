@@ -8,9 +8,9 @@ import { readFile as fsReadFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { DEFAULT_MODEL_OPTION, execAgentFile } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeEnv, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
@@ -37,10 +37,13 @@ const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 // `availableModels` cache miss + empty print-mode output, which surfaces
 // to the user as a generic "empty response" error.
 //
-// The 8 model labels mirror what `Switch Model` in agy's TUI lists for
-// consumer-tier accounts as of 2026-05-28. The set is small and stable
-// enough to ship statically until upstream adds a programmatic
-// `agy models` subcommand (also tracked under issue #35).
+// `fallbackModels` below is the offline-only floor: agy 1.1.21 does ship a
+// programmatic `agy --output-format json models` (the flag has to come
+// *before* the subcommand — `agy models --output-format json` only prints
+// Usage), so `fetchAntigravityModels` below queries it live and this static
+// list is used only when that probe fails (CLI too old, no network, etc).
+// Keep it reasonably current anyway so a fresh install with a stale/offline
+// agy still gets a workable picker.
 const ANTIGRAVITY_SETTINGS_PATH = join(
   homedir(),
   '.gemini',
@@ -169,6 +172,69 @@ export async function waitForAgyToReadModel(
   return false;
 }
 
+// Parses the single-line JSON envelope from `agy --output-format json
+// models` (verified against agy 1.1.21):
+//   { command: { data: { models: [{ id, label }, ...] } }, response: "..." }
+// The top-level `response` field is a tab-separated string meant for a human
+// reading the CLI directly — more brittle to parse and unused here.
+//
+// agy's own `id` in that array is an internal slug (e.g.
+// "gemini-3-pro-high"); `writeAntigravityModelSelection` above persists the
+// display `label` instead, because that's what `settings.json` +
+// `waitForAgyToReadModel`'s log grep both expect. So — matching this file's
+// existing id-equals-label `fallbackModels` convention — every parsed
+// entry's `id` here is set to its `label`, discarding agy's slug entirely;
+// nothing downstream reads it.
+// Exported for tests; not part of `RuntimeAgentDef`.
+export function parseAntigravityModelsJson(stdout: string): RuntimeModelOption[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  const models = (parsed as { command?: { data?: { models?: unknown } } })
+    ?.command?.data?.models;
+  if (!Array.isArray(models)) return null;
+  const out: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  for (const entry of models) {
+    const label = (entry as { label?: unknown } | null)?.label;
+    if (typeof label !== 'string' || label.length === 0) continue;
+    out.push({ id: label, label });
+  }
+  return out.length > 1 ? out : null;
+}
+
+// `agy models` — like some of agy's other non-interactive subcommands —
+// does not print or exit until stdin reaches EOF. Verified with an
+// execFile-shaped piped, non-tty stdin (the same shape `execAgentFile`
+// spawns with, and the shape any daemon integration using
+// child_process.execFile/spawn gets by default): held open, the process
+// idles past any `timeout` — execFile's `timeout` option only *signals* the
+// child, and the promise settles on the child actually exiting, which never
+// happens here on its own. Closed immediately after spawn, the same command
+// answers in 6-21s (cold start includes a Google login / quota-refresh
+// round trip). This is why model discovery is a `fetchModels` — imperative,
+// gets a handle on the spawned child — rather than a declarative
+// `listModels: { args, parse }` entry: a declarative entry spawns through
+// this same `execAgentFile` path with no hook to close stdin first, and
+// would hang identically.
+// Exported for tests; referenced through `antigravityAgentDef.fetchModels`
+// in production.
+export async function fetchAntigravityModels(
+  resolvedBin: string,
+  env: RuntimeEnv,
+): Promise<RuntimeModelOption[] | null> {
+  const pending = execAgentFile(
+    resolvedBin,
+    ['--output-format', 'json', 'models'],
+    { env, timeout: 30_000 },
+  );
+  pending.child?.stdin?.end();
+  const { stdout } = await pending;
+  return parseAntigravityModelsJson(String(stdout));
+}
+
 export const antigravityAgentDef = {
   id: 'antigravity',
   name: 'Antigravity',
@@ -180,11 +246,17 @@ export const antigravityAgentDef = {
   },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
-    { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
-    { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
+    { id: 'Gemini 3.7 Flash (High)', label: 'Gemini 3.7 Flash (High)' },
+    { id: 'Gemini 3.7 Flash (Medium)', label: 'Gemini 3.7 Flash (Medium)' },
+    { id: 'Gemini 3.7 Flash (Low)', label: 'Gemini 3.7 Flash (Low)' },
+    { id: 'Gemini 3.6 Flash (High)', label: 'Gemini 3.6 Flash (High)' },
+    { id: 'Gemini 3.6 Flash (Medium)', label: 'Gemini 3.6 Flash (Medium)' },
+    { id: 'Gemini 3.6 Flash (Low)', label: 'Gemini 3.6 Flash (Low)' },
     { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
     { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
     { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
+    { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
+    { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
     {
       id: 'Claude Sonnet 4.6 (Thinking)',
       label: 'Claude Sonnet 4.6 (Thinking)',
@@ -192,6 +264,7 @@ export const antigravityAgentDef = {
     { id: 'Claude Opus 4.6 (Thinking)', label: 'Claude Opus 4.6 (Thinking)' },
     { id: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B (Medium)' },
   ],
+  fetchModels: fetchAntigravityModels,
   supportsCustomModel: false,
   // We deliberately do NOT opt into `resumesSessionViaCli` / agy's `-c`
   // resume flag on follow-up turns. Tested both shapes; `-c` activates
