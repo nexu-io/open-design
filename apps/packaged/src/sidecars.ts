@@ -839,16 +839,36 @@ export async function closeManagedChild(child: ManagedSidecarChild): Promise<voi
  * ready therefore left its log ending on the last ordinary line, so nothing
  * in it distinguished "still running" from "died silently".
  *
- * The child is typed structurally (as in `waitForStatus`) so lifecycle races
- * can be exercised without spawning a real child. `dispose()` mutes the
- * listener for an intentional shutdown, where `closeManagedChild` already
- * writes the shutdown/exited pair. `logged` resolves once the line has been
- * written; it stays pending for a child that never exits.
+ * Arming is register-plus-recheck, not a bare `once("exit")`. `waitForStatus`
+ * drops its own exit listener in `finally` as soon as a ready status comes
+ * back, and it does not re-check `childExited` after a ready IPC response, so
+ * a daemon that answers ready and dies in the same breath has already fired
+ * `exit` by the time the caller reaches this function one await later. The
+ * synchronous `exitCode` / `signalCode` fields survive that event, so they are
+ * re-read after the listener is installed; `reported` keeps the two paths from
+ * both recording the same death. The child is typed structurally (as in
+ * `waitForStatus`) so lifecycle races can be exercised without spawning a real
+ * child.
+ *
+ * `dispose()` mutes the watcher for an intentional shutdown, where
+ * `closeManagedChild` already writes the shutdown/exited pair. `logged`
+ * resolves once the write has been attempted; it stays pending for a child
+ * that never exits.
+ *
+ * The write itself is best-effort and must stay that way: this runs while the
+ * app is already handling a dead daemon, and `appendSidecarLifecycleLog` can
+ * reject from its `mkdir` (permissions, ENOSPC, a non-directory in the way) —
+ * only its `appendFile` is guarded. The packaged main process rethrows
+ * non-harmless unhandled rejections (see `createFatalUnhandledRejectionHandler`
+ * in `logging.ts`), so an unguarded floating promise here would turn a failed
+ * diagnostic line into a process crash. Hence the `catch` on the whole chain.
  */
 export function watchUnexpectedManagedChildExit(child: {
   app: AppKey;
   child: {
+    exitCode: number | null;
     pid?: number | undefined;
+    signalCode: NodeJS.Signals | null;
     once: (
       event: "exit",
       listener: (code: number | null, signal: NodeJS.Signals | null) => void,
@@ -857,21 +877,36 @@ export function watchUnexpectedManagedChildExit(child: {
   logPath: string;
 }): { dispose: () => void; logged: Promise<void> } {
   let disposed = false;
+  let reported = false;
   let settle: () => void = () => undefined;
   const logged = new Promise<void>((resolve) => {
     settle = resolve;
   });
 
-  child.child.once("exit", (code, signal) => {
+  const report = (code: number | null, signal: NodeJS.Signals | null): void => {
+    if (reported) return;
+    reported = true;
     if (disposed) {
       settle();
       return;
     }
+    // `code ?? "null"`, not `?? "unknown"`: Node reports code === null for a
+    // signal termination, and that null is the standard, meaningful value.
     void appendSidecarLifecycleLog(
       child.logPath,
-      `[open-design packaged] unexpected exit app=${child.app} pid=${child.child.pid ?? "unknown"} code=${code ?? "unknown"} signal=${signal ?? "none"}`,
-    ).finally(settle);
-  });
+      `[open-design packaged] unexpected exit app=${child.app} pid=${child.child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "none"}`,
+    )
+      .catch(() => undefined)
+      .finally(settle);
+  };
+
+  child.child.once("exit", report);
+
+  // The exit may already have fired between the ready handoff and this call,
+  // in which case the listener above will never run.
+  if (child.child.exitCode !== null || child.child.signalCode !== null) {
+    report(child.child.exitCode, child.child.signalCode);
+  }
 
   return {
     dispose: () => {
