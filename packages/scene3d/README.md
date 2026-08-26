@@ -720,8 +720,14 @@ tolerance), so `mirror` shares its seam and `predictCensus` can assert
 watertightness. Because the kernel mints the geometry exactly, it PREDICTS
 the built census (V/E/F/triangles/watertight/genus, with real orientation
 and homology backing) and that prediction is adjudicated against Blender's
-measurement (`S3D-E-702`) — the compiler checking its own author. The trace
-hashes into the content cache like a build script's bytes. Per-vertex
+measurement (`S3D-E-702`) — the compiler checking its own author. The
+subdivision is proved CONTRACTIVE, not assumed: the exact local subdivision
+matrix at valence 3/4/5 is extracted from the kernel and shown to have a
+simple dominant eigenvalue 1 (Perron-Frobenius, verified by exact rank) with
+every other eigenvalue strictly below (subdominant exactly 1/2 at the regular
+vertex, (9+√17)/32 at valence 3) — the 1-vs-1−ε distinction floats cannot
+make (`tests/kernel-spectrum.test.ts`). The trace hashes into the content
+cache like a build script's bytes. Per-vertex
 blendshapes and skin weights are future opcodes in the same union, not a new
 architecture. Lineage and the full design bet: `KILN.md`.
 
