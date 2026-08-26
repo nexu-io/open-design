@@ -13,5 +13,6 @@ Follow the root and `packages/AGENTS.md` guidance first.
 - Keep every Closure-facing connection in `ELECTRON_CLOSURE_ENDPOINTS`; reject unregistered messages instead of adding a generic invoke bridge.
 - Import only public `@open-design/standalone` contracts. Never import `apps/closure`, another Shell, or product Web/daemon implementation.
 - Keep the phase-one fixture replaceable through the same lifecycle and updater ports used by a real adapter.
-- Keep source responsibilities layered under `contracts/`, `runtime/`, `integrations/`, `update/`, `distribution/`, `fixtures/`, and `commands/`; mirror semantic test ownership below `tests/`.
+- Keep source responsibilities layered under `contracts/`, `runtime/`, `integrations/`, `platform/`, `update/`, `distribution/`, `fixtures/`, and `commands/`; mirror semantic test ownership below `tests/`. Platform trees own reusable OS atoms and must not absorb installer workflow or product identity values.
+- Derive Windows uninstall, App Paths, protocol, shortcut, and executable endpoints from one validated Shell manifest plus the finite Shell lifecycle policy. Treat registry entries as a projection after install-tree commit: runtime reconciliation may update an existing deterministic owner key, but must never create a missing uninstall identity. Cleanup must compare normalized owned paths and commands before deleting shared registry locations.
 - Package tests use the `@/*` alias for `src/*` imports.

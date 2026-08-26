@@ -1,5 +1,6 @@
 import runtime from "../config/runtime.json" with { type: "json" };
 import manifest from "../config/shell.json" with { type: "json" };
+import windowsLifecycle from "../config/platforms/windows.json" with { type: "json" };
 
 import {
   ElectronFixtureLifecyclePort,
@@ -10,6 +11,12 @@ import {
   type ElectronShellManifest,
   type ElectronRuntimeConfig,
 } from "@open-design/electron-kit/runtime";
+import {
+  createElectronWindowsRegExePort,
+  reconcileElectronWindowsDisplayVersion,
+  resolveElectronWindowsInstallIdentity,
+  type ElectronWindowsLifecyclePolicy,
+} from "@open-design/electron-kit/windows";
 
 import { placeholderRenderer } from "./renderer/placeholder.js";
 
@@ -19,6 +26,20 @@ void runElectronShell({
   warmup: (runtime as ElectronRuntimeConfig).warmup,
   renderer: placeholderRenderer,
   actions: {
+    async observeCommitted() {
+      const identity = resolveElectronWindowsInstallIdentity({
+        manifest: manifest as ElectronShellManifest,
+        policy: windowsLifecycle as ElectronWindowsLifecyclePolicy,
+      });
+      const receipt = await reconcileElectronWindowsDisplayVersion({
+        identity,
+        registry: createElectronWindowsRegExePort(),
+        version: manifest.version,
+      });
+      if (receipt.status !== "ignored-platform" && receipt.status !== "unchanged") {
+        console.info("[shell/electron] Windows DisplayVersion reconciliation", receipt);
+      }
+    },
     openDeepLink(url) {
       console.info("[shell/electron] deep link", { url });
     },

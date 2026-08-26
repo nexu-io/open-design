@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { Arch, build as electronBuild, Platform } from "electron-builder";
 
 import type { ElectronShellManifest } from "../contracts/index.js";
+import { validateElectronWindowsLifecyclePolicy, type ElectronWindowsLifecyclePolicy } from "../platform/windows/index.js";
 import type { ElectronDistributionReceipt, ElectronSceneReceipt } from "./contracts.js";
 import {
   resolveElectronDistributionConfiguration,
@@ -17,11 +18,13 @@ export type BuildElectronDistributionInput = Readonly<{
   scene: ElectronSceneReceipt;
   manifest: ElectronShellManifest;
   policy: ElectronDistributionPolicy;
+  windowsLifecycle: ElectronWindowsLifecyclePolicy;
   outputRoot: string;
 }>;
 
 export async function buildElectronDistribution(input: BuildElectronDistributionInput): Promise<ElectronDistributionReceipt> {
   const policy = validateElectronDistributionPolicy(input.policy);
+  const windowsLifecycle = validateElectronWindowsLifecyclePolicy(input.windowsLifecycle);
   const platform: ElectronDistributionReceipt["platform"] = resolveElectronDistributionPlatform(process.platform);
   await rm(input.outputRoot, { force: true, recursive: true });
   await mkdir(input.outputRoot, { recursive: true });
@@ -39,6 +42,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
         policy,
         electronVersion: electronPackage.version,
         outputRoot: input.outputRoot,
+        windowsLifecycle,
       }),
       extraResources: [{ from: input.scene.sidecarPath, to: "fixture-sidecar.cjs" }],
     },

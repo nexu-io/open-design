@@ -24,13 +24,11 @@ const policy: ElectronDistributionPolicy = {
       allowToChangeInstallationDirectory: true,
       createDesktopShortcut: true,
       createStartMenuShortcut: true,
-      deleteAppDataOnUninstall: false,
       displayLanguageSelector: false,
       installerLanguages: ["en_US", "zh_CN"],
       language: "1033",
       multiLanguageInstaller: true,
       oneClick: false,
-      perMachine: false,
       warningsAsErrors: false,
     },
   },
@@ -61,6 +59,11 @@ describe("Electron distribution policy", () => {
       policy,
       electronVersion: "41.3.0",
       outputRoot: "/tmp/example-output",
+      windowsLifecycle: {
+        schemaVersion: 1,
+        install: { scope: "current-user", publisher: "Example Company" },
+        uninstall: { productData: "retain" },
+      },
     });
 
     expect(configuration.mac).toEqual({ category: "public.app-category.developer-tools", target: ["dir", "dmg"] });
@@ -88,6 +91,21 @@ describe("Electron distribution policy", () => {
     expect(resolveElectronDistributionPlatform("darwin")).toBe("mac");
     expect(resolveElectronDistributionPlatform("win32")).toBe("win");
     expect(() => resolveElectronDistributionPlatform("linux")).toThrow(/unsupported Electron distribution platform/u);
+  });
+
+  it("derives NSIS ownership choices from the Windows lifecycle policy", () => {
+    const configuration = resolveElectronDistributionConfiguration({
+      manifest,
+      policy,
+      electronVersion: "41.3.0",
+      outputRoot: "/tmp/example-output",
+      windowsLifecycle: {
+        schemaVersion: 1,
+        install: { scope: "per-machine", publisher: "Example Company" },
+        uninstall: { productData: "remove" },
+      },
+    });
+    expect(configuration.nsis).toMatchObject({ perMachine: true, deleteAppDataOnUninstall: true });
   });
 
   it("rejects target drift and invalid NSIS locale declarations", () => {

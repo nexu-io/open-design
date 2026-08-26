@@ -46,6 +46,7 @@ export type ElectronShellManifest = Readonly<{
 export type ElectronShellActions = Readonly<{
   openDeepLink?(url: string): void | Promise<void>;
   installUpdate?(request: ElectronInstallerHandoffRequest): ElectronInstallerHandoffReceipt | Promise<ElectronInstallerHandoffReceipt>;
+  observeCommitted?(): void | Promise<void>;
 }>;
 
 export type ElectronRendererWindow = Readonly<{

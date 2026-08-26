@@ -27,6 +27,7 @@ const publicEntries = {
   "integrations/sidecar/index": "integrations/sidecar/index",
   "integrations/shortcuts/index": "integrations/shortcuts/index",
   "distribution/index": "distribution/index",
+  "platform/windows/index": "platform/windows/index",
   "commands/dev": "commands/dev",
   "commands/pack": "commands/pack",
 };

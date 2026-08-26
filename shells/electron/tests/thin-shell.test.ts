@@ -14,12 +14,21 @@ describe("Electron product shell", () => {
     ]);
     expect(dev).not.toContain("distribution.json");
     expect(pack).toContain('new URL("../config/distribution.json"');
+    expect(pack).toContain('new URL("../config/platforms/windows.json"');
   });
 
   it("owns finite macOS and Windows distribution policy", async () => {
-    const policy = JSON.parse(await readFile(new URL("../config/distribution.json", import.meta.url), "utf8")) as {
+    const [policySource, windowsLifecycleSource] = await Promise.all([
+      readFile(new URL("../config/distribution.json", import.meta.url), "utf8"),
+      readFile(new URL("../config/platforms/windows.json", import.meta.url), "utf8"),
+    ]);
+    const policy = JSON.parse(policySource) as {
       mac: { targets: string[] };
       windows: { targets: string[]; nsis: Record<string, unknown> };
+    };
+    const windowsLifecycle = JSON.parse(windowsLifecycleSource) as {
+      install: { scope: string; publisher: string };
+      uninstall: { productData: string };
     };
     expect(policy.mac.targets).toEqual(["dir", "dmg"]);
     expect(policy.windows.targets).toEqual(["dir", "nsis"]);
@@ -28,11 +37,14 @@ describe("Electron product shell", () => {
       allowToChangeInstallationDirectory: true,
       createDesktopShortcut: true,
       createStartMenuShortcut: true,
-      deleteAppDataOnUninstall: false,
       multiLanguageInstaller: true,
       oneClick: false,
-      perMachine: false,
       warningsAsErrors: false,
+    });
+    expect(windowsLifecycle).toEqual({
+      schemaVersion: 1,
+      install: { scope: "current-user", publisher: "Open Design" },
+      uninstall: { productData: "retain" },
     });
   });
 

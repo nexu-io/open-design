@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "install": {
+    "scope": "current-user",
+    "publisher": "Open Design"
+  },
+  "uninstall": {
+    "productData": "retain"
+  }
+}

@@ -31,6 +31,10 @@
       "types": "./dist/distribution/index.d.ts",
       "default": "./dist/distribution/index.mjs"
     },
+    "./windows": {
+      "types": "./dist/platform/windows/index.d.ts",
+      "default": "./dist/platform/windows/index.mjs"
+    },
     "./dev": {
       "types": "./dist/commands/dev.d.ts",
       "default": "./dist/commands/dev.mjs"

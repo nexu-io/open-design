@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { validateElectronShellManifest, type ElectronShellManifest } from "../contracts/index.js";
 import { assembleElectronScene, buildElectronDistribution, type ElectronDistributionReceipt } from "../distribution/index.js";
 import { validateElectronDistributionPolicy, type ElectronDistributionPolicy } from "../distribution/distribution-policy.js";
+import { validateElectronWindowsLifecyclePolicy, type ElectronWindowsLifecyclePolicy } from "../platform/windows/index.js";
 
 export async function packElectronShell(input: Readonly<{
   entryPath: string;
@@ -12,12 +13,16 @@ export async function packElectronShell(input: Readonly<{
   nodeCarrierLockPath: string;
   distributionPath: string;
   runtimeConfigPath: string;
+  windowsLifecyclePath: string;
   outputRoot: string;
   projectRoot: string;
 }>): Promise<ElectronDistributionReceipt> {
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
   const policy = validateElectronDistributionPolicy(
     JSON.parse(await readFile(input.distributionPath, "utf8")) as ElectronDistributionPolicy,
+  );
+  const windowsLifecycle = validateElectronWindowsLifecyclePolicy(
+    JSON.parse(await readFile(input.windowsLifecyclePath, "utf8")) as ElectronWindowsLifecyclePolicy,
   );
   const scene = await assembleElectronScene({
     entryPath: input.entryPath,
@@ -27,5 +32,5 @@ export async function packElectronShell(input: Readonly<{
     nodeCarrierLockPath: input.nodeCarrierLockPath,
     runtimeConfigPath: input.runtimeConfigPath,
   });
-  return await buildElectronDistribution({ scene, manifest, policy, outputRoot: input.outputRoot });
+  return await buildElectronDistribution({ scene, manifest, policy, windowsLifecycle, outputRoot: input.outputRoot });
 }

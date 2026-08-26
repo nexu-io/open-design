@@ -16,13 +16,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": false,
       "displayLanguageSelector": false,
       "installerLanguages": ["en_US", "fa_IR", "pt_BR", "ru_RU", "zh_CN", "zh_TW"],
       "language": "1033",
       "multiLanguageInstaller": true,
       "oneClick": false,
-      "perMachine": false,
       "warningsAsErrors": false
     }
   }

@@ -6,9 +6,11 @@ the `od://` handler, ready-before preflight policy, concrete warmup topology, an
 declaration and finite locale/connection preflight selection; electron-kit owns
 only graph lifecycle, validation, and its public carrier/Standalone atoms.
 Concrete host exemptions remain in that Shell config and are applied before app
-readiness. `config/distribution.json` separately owns the finite macOS/Windows artifact and installer
-policy. It is consumed only by `pack`; the assembled scene remains independent
-of distribution and release policy.
+readiness. `config/distribution.json` separately owns the finite macOS/Windows artifact and NSIS
+presentation policy. `config/platforms/windows.json` owns install scope, publisher, and uninstall
+data retention; electron-kit derives registry endpoints from it plus `shell.json`, while this Shell
+schedules post-ready registry reconciliation. These policies are consumed only by the relevant
+runtime or pack projection; the assembled scene remains independent of distribution and release policy.
 Desktop handlers will follow the same declaration pattern after the real
 Sidecar readiness adapter lands: Shell JSON and Shell code own the finite
 message topology, normalizer, and executors, while electron-kit only owns the

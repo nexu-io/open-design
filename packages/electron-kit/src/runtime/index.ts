@@ -251,6 +251,9 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   if (splash != null && !splash.isDestroyed()) splash.destroy();
   await context.activation.commit();
   context.log.write("startup.committed", { generationId: runtimeGeneration.id, presentation });
+  void Promise.resolve().then(() => definition.actions?.observeCommitted?.()).catch((error: unknown) => {
+    context.log?.write("shell.commit-observer.failed", { error });
+  });
   for (const link of pendingHandoffs.deepLinks) dispatch(link);
 
   let heartbeatInFlight = Promise.resolve();

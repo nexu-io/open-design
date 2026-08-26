@@ -9,6 +9,7 @@ const receipt = await packElectronShell({
   fixtureSidecarPath: fileURLToPath(new URL("../../../packages/electron-kit/dist/fixtures/lifecycle/sidecar.cjs", import.meta.url)),
   nodeCarrierLockPath: fileURLToPath(new URL("../config/carriers/node-lock.json", import.meta.url)),
   runtimeConfigPath: fileURLToPath(new URL("../config/runtime.json", import.meta.url)),
+  windowsLifecyclePath: fileURLToPath(new URL("../config/platforms/windows.json", import.meta.url)),
   outputRoot: fileURLToPath(new URL("../dist", import.meta.url)),
   projectRoot: fileURLToPath(new URL("..", import.meta.url)),
 });

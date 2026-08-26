@@ -1,6 +1,7 @@
 import type { Configuration } from "electron-builder";
 
 import type { ElectronShellManifest } from "../contracts/index.js";
+import { validateElectronWindowsLifecyclePolicy, type ElectronWindowsLifecyclePolicy } from "../platform/windows/index.js";
 
 export const ELECTRON_DISTRIBUTION_POLICY_SCHEMA_VERSION = 1 as const;
 
@@ -20,13 +21,11 @@ export type ElectronDistributionPolicy = Readonly<{
       allowToChangeInstallationDirectory: boolean;
       createDesktopShortcut: boolean;
       createStartMenuShortcut: boolean;
-      deleteAppDataOnUninstall: boolean;
       displayLanguageSelector: boolean;
       installerLanguages: readonly string[];
       language: string;
       multiLanguageInstaller: boolean;
       oneClick: boolean;
-      perMachine: boolean;
       warningsAsErrors: boolean;
     }>;
   }>;
@@ -54,11 +53,9 @@ export function validateElectronDistributionPolicy(value: ElectronDistributionPo
     allowToChangeInstallationDirectory: nsis.allowToChangeInstallationDirectory,
     createDesktopShortcut: nsis.createDesktopShortcut,
     createStartMenuShortcut: nsis.createStartMenuShortcut,
-    deleteAppDataOnUninstall: nsis.deleteAppDataOnUninstall,
     displayLanguageSelector: nsis.displayLanguageSelector,
     multiLanguageInstaller: nsis.multiLanguageInstaller,
     oneClick: nsis.oneClick,
-    perMachine: nsis.perMachine,
     warningsAsErrors: nsis.warningsAsErrors,
   })) {
     if (typeof candidate !== "boolean") throw new Error(`invalid Electron NSIS ${name} policy`);
@@ -82,8 +79,10 @@ export function resolveElectronDistributionConfiguration(input: Readonly<{
   policy: ElectronDistributionPolicy;
   electronVersion: string;
   outputRoot: string;
+  windowsLifecycle: ElectronWindowsLifecyclePolicy;
 }>): Configuration {
   const policy = validateElectronDistributionPolicy(input.policy);
+  const windowsLifecycle = validateElectronWindowsLifecyclePolicy(input.windowsLifecycle);
   return {
     appId: input.manifest.appId,
     productName: input.manifest.productName,
@@ -101,6 +100,8 @@ export function resolveElectronDistributionConfiguration(input: Readonly<{
     nsis: {
       ...policy.windows.nsis,
       installerLanguages: [...policy.windows.nsis.installerLanguages],
+      deleteAppDataOnUninstall: windowsLifecycle.uninstall.productData === "remove",
+      perMachine: windowsLifecycle.install.scope === "per-machine",
       shortcutName: input.manifest.productName,
     },
   };
