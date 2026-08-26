@@ -18,6 +18,7 @@ import {
 } from "../contracts/index.js";
 import { ElectronActivationAttempt } from "./session/activation.js";
 import { ElectronRuntimeLog } from "./session/logging.js";
+import { attachElectronProcessErrorHandlers } from "./session/process-errors.js";
 import { completeElectronShutdown } from "./session/shutdown.js";
 import { claimElectronSingleInstanceLock, ElectronLaunchHandoffQueue } from "./session/single-instance.js";
 import { observeElectronInstallerHandoff } from "./session/update-handoff.js";
@@ -32,6 +33,7 @@ import { applyElectronPreflight } from "./startup/preflight/index.js";
 import { focusElectronWindow, resolveElectronPresentationMode } from "./window/presentation.js";
 
 export * from "./session/logging.js";
+export * from "./session/process-errors.js";
 export * from "./session/shutdown.js";
 export * from "./session/single-instance.js";
 export * from "./session/update-handoff.js";
@@ -101,6 +103,9 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   if (!await claimElectronSingleInstanceLock(app)) { app.quit(); return; }
   const runtimeRoot = join(app.getPath("userData"), "electron-kit", manifest.namespace);
   context.log = new ElectronRuntimeLog(runtimeRoot);
+  const processErrors = attachElectronProcessErrorHandlers((event) => {
+    context.log?.write(`process.${event.source}.${event.classification}`, { error: event.error });
+  });
   context.log.write("preflight.complete", {
     namespace: manifest.namespace,
     pid: process.pid,
@@ -271,23 +276,27 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     if (closing) return;
     closing = true;
     clearInterval(heartbeat);
-    await completeElectronShutdown({
-      async waitForHeartbeat() { await heartbeatInFlight; },
-      async releaseRendererIntegration() { await runtimeRendererLease.releaseIntegration(); },
-      async disposeWarmup() { await warmup.dispose(); },
-      async releaseStandalone() {
-        const current = await runtimePorts.lifecycle.status(scope);
-        const ownsAttachment = current.occupants.some((occupant) => occupant.attachmentId === attachment.id);
-        const released = ownsAttachment ? await runtimePorts.lifecycle.release(scope, attachment.id) : current;
-        if (released.references === 0 && released.state === "running") await runtimePorts.lifecycle.stop(scope, released.fence);
-      },
-      async stopActivation() { await context.activation?.stop(); },
-      observe(failures) {
-        context.log?.write(failures.length === 0 ? "shutdown.complete" : "shutdown.failed", { failures });
-      },
-      async flushObservation() { await context.log?.flush(); },
-      destroyWindow() { runtimeRendererLease.destroy(); },
-    });
+    try {
+      await completeElectronShutdown({
+        async waitForHeartbeat() { await heartbeatInFlight; },
+        async releaseRendererIntegration() { await runtimeRendererLease.releaseIntegration(); },
+        async disposeWarmup() { await warmup.dispose(); },
+        async releaseStandalone() {
+          const current = await runtimePorts.lifecycle.status(scope);
+          const ownsAttachment = current.occupants.some((occupant) => occupant.attachmentId === attachment.id);
+          const released = ownsAttachment ? await runtimePorts.lifecycle.release(scope, attachment.id) : current;
+          if (released.references === 0 && released.state === "running") await runtimePorts.lifecycle.stop(scope, released.fence);
+        },
+        async stopActivation() { await context.activation?.stop(); },
+        observe(failures) {
+          context.log?.write(failures.length === 0 ? "shutdown.complete" : "shutdown.failed", { failures });
+        },
+        async flushObservation() { await context.log?.flush(); },
+        destroyWindow() { runtimeRendererLease.destroy(); },
+      });
+    } finally {
+      processErrors.dispose();
+    }
   };
   app.on("before-quit", (event) => {
     if (closing) return;
