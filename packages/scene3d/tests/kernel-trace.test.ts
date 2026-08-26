@@ -4,6 +4,7 @@ import { meshOf, mirror, predictCensus, subdivide, KernelMesh, RVec3 } from "../
 import {
   canonicalize,
   evalTrace,
+  evalTraceShapes,
   evalTraceWithCensus,
   Recorder,
   Trace,
@@ -203,6 +204,56 @@ describe("kernel trace: extrude grows a closed, watertight bump", () => {
     expect(c.watertight).toBe(true);
     expect(c.orientable).toBe(true);
     expect(c.genus).toBe(0);
+  });
+});
+
+describe("kernel trace: morph targets propagate through subdivision exactly", () => {
+  const stretch = (d: string) =>
+    new Recorder().box().shape("stretch").move({ z: ["1", "1"] }, [0, 0, d]).endShape().subdivide(2).trace();
+
+  it("a morph target stays in topological lockstep with the base", () => {
+    const { base, shapes } = evalTraceShapes(stretch("1"));
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]!.name).toBe("stretch");
+    expect(shapes[0]!.mesh.verts.length).toBe(base.verts.length); // same vertex count
+    expect(shapes[0]!.mesh.faces).toEqual(base.faces); // identical topology
+    const moved = shapes[0]!.mesh.verts.some((v, i) => !v[2].eq(base.verts[i]![2]));
+    expect(moved).toBe(true); // the stretch actually deformed geometry
+  });
+
+  it("a cage delta scales linearly to the limit surface — S·Δ, exact", () => {
+    // Doubling the authored cage delta doubles the propagated limit-surface
+    // delta to the last bit. That linearity is what lets a blendshape be
+    // authored as tens of numbers on the cage and land exactly on the
+    // 98-vertex subdivided surface.
+    const one = evalTraceShapes(stretch("1"));
+    const two = evalTraceShapes(stretch("2"));
+    const b = one.base.verts;
+    for (let i = 0; i < b.length; i++) {
+      for (let k = 0; k < 3; k++) {
+        const d1 = one.shapes[0]!.mesh.verts[i]![k]!.sub(b[i]![k]!);
+        const d2 = two.shapes[0]!.mesh.verts[i]![k]!.sub(two.base.verts[i]![k]!);
+        expect(d2.eq(d1.mul(Rational.of(2)))).toBe(true);
+      }
+    }
+  });
+
+  it("rejects malformed shape brackets", () => {
+    expect(() => evalTraceShapes(new Recorder().box().shape("a").shape("b").trace())).toThrow(/inside shape/);
+    expect(() => evalTraceShapes(new Recorder().box().endShape().trace())).toThrow(/without an open shape/);
+    expect(() => evalTraceShapes(new Recorder().box().shape("a").subdivide(1).trace())).toThrow(
+      /only move\/scale/,
+    );
+    expect(() => evalTraceShapes(new Recorder().box().shape("a").move({}, [0, 0, 1]).trace())).toThrow(
+      /never closed/,
+    );
+    expect(() =>
+      evalTraceShapes(new Recorder().box().shape("a").endShape().shape("a").endShape().trace()),
+    ).toThrow(/duplicate shape/);
+  });
+
+  it("evalTrace refuses shape ops — those need evalTraceShapes", () => {
+    expect(() => evalTrace(new Recorder().box().shape("a").endShape().trace())).toThrow(/evalTraceShapes/);
   });
 });
 

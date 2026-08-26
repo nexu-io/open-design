@@ -330,6 +330,12 @@ Fill the box another way:
   is a dict of axis → `[min, max]` inclusive bounds (`{"z": ["1", "1"]}` is
   exactly the plane z=1; `{}` is everything); `move`/`scale`/`crease` are
   topology-preserving, while `extrude`/`inset` add geometry — all exact.
+  MORPH TARGETS (blendshapes): `ctx.shape("name")` … `ctx.end_shape()` records
+  a named variant — deform the base with `move`/`scale` only inside the
+  bracket, and it becomes a Blender shape key; because subdivision is linear a
+  delta authored on the cage lands on the subdivided surface exactly. Author
+  the shape BEFORE the `subdivide` to move tens of cage vertices instead of
+  thousands.
   Coordinates are ints, rational strings (`"1/2"`) or `fractions.Fraction`
   — never floats. It runs in plain CPython (no `bpy`), so ordinary loops
   and helpers are fine; the compiler evaluates the trace in exact rationals,

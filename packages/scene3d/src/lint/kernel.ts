@@ -28,12 +28,16 @@ export interface MeasuredMesh {
   triangles?: number;
   watertight?: boolean;
   genus?: number | null;
+  /** Morph-target (shape-key) names Blender built, excluding the Basis. */
+  shapeKeys?: string[];
 }
 
 export function adjudicateKernelPrediction(
   partId: string,
   predicted: PredictedCensus,
   measured: MeasuredMesh | undefined,
+  /** Morph-target names the kernel predicted (empty when the recipe has none). */
+  predictedShapeNames: readonly string[] = [],
 ): Issue[] {
   const issues: Issue[] = [];
   if (measured === undefined) {
@@ -49,7 +53,8 @@ export function adjudicateKernelPrediction(
 
   // Each field: compared when measured, reported as unchecked when the census
   // did not carry it — never silently assumed to agree.
-  const checks: Array<{ field: keyof MeasuredMesh; predicted: number | boolean | null; kind: string }> = [
+  type CountField = "vertices" | "faces" | "triangles" | "watertight" | "genus";
+  const checks: Array<{ field: CountField; predicted: number | boolean | null; kind: string }> = [
     { field: "vertices", predicted: predicted.vertices, kind: "vertex count" },
     { field: "faces", predicted: predicted.faces, kind: "face count" },
     { field: "triangles", predicted: predicted.triangles, kind: "triangle count" },
@@ -74,6 +79,21 @@ export function adjudicateKernelPrediction(
         detail: { field: check.field, predicted: check.predicted, measured: got },
       });
     }
+  }
+
+  // Morph targets: the census sees every shape key by name (absence = none
+  // built), so this is a direct equality, not an unchecked field.
+  const predictedShapes = [...predictedShapeNames].sort();
+  const measuredShapes = (measured.shapeKeys ?? []).slice().sort();
+  if (predictedShapes.length !== measuredShapes.length || predictedShapes.some((s, i) => s !== measuredShapes[i])) {
+    issues.push({
+      code: ISSUE_CODES.KERNEL_PREDICTION_MISMATCH,
+      severity: "error",
+      message: `kernel part '${partId}': predicted morph targets [${predictedShapes.join(", ")}] but the build has [${measuredShapes.join(", ")}] — the shape-key emit did not reach Blender intact`,
+      hint: "a morph-target delta means the recipe's shape() brackets did not survive the emit",
+      target: partId,
+      detail: { field: "shapeKeys", predicted: predictedShapes, measured: measuredShapes },
+    });
   }
 
   if (unchecked.length > 0) {

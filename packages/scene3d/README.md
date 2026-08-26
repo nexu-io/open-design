@@ -721,8 +721,12 @@ tolerance), so `mirror` shares its seam and `predictCensus` can assert
 watertightness. Because the kernel mints the geometry exactly, it PREDICTS
 the built census (V/E/F/triangles/watertight/genus, with real orientation
 and homology backing) and that prediction is adjudicated against Blender's
-measurement (`S3D-E-702`) — the compiler checking its own author. The
-subdivision is proved CONTRACTIVE, not assumed: the exact local subdivision
+measurement (`S3D-E-702`) — the compiler checking its own author, including
+morph-target (blendshape) names: a `shape(name)`…`endShape` bracket authors a
+delta on the cage that propagates to the limit surface EXACTLY (S·Δ, since
+subdivision is linear) and lands as a Blender shape key, the KILN "author tens
+of numbers per shape, not thousands". The subdivision is proved CONTRACTIVE,
+not assumed: the exact local subdivision
 matrix at valence 3/4/5 is extracted from the kernel and shown to have a
 simple dominant eigenvalue 1 (Perron-Frobenius, verified by exact rank) with
 every other eigenvalue strictly below (subdominant exactly 1/2 at the regular

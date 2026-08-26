@@ -66,7 +66,7 @@ export interface LintInput {
    * adjudicated against the mesh Blender actually built. The compiler checking
    * its own author — a mismatch is a theorem-grade bug (S3D-E-702).
    */
-  kernelPredictions?: ReadonlyArray<{ partId: string; census: PredictedCensus }>;
+  kernelPredictions?: ReadonlyArray<{ partId: string; census: PredictedCensus; shapeNames: string[] }>;
 }
 
 /**
@@ -169,7 +169,7 @@ export function runLint(input: LintInput): Issue[] {
   // formed from the census edge count when the prediction offered one.
   if (input.kernelPredictions && input.kernelPredictions.length > 0) {
     const measuredByName = new Map((input.census?.meshes ?? []).map((m) => [m.object, m]));
-    for (const { partId, census } of input.kernelPredictions) {
+    for (const { partId, census, shapeNames } of input.kernelPredictions) {
       const m = measuredByName.get(partId);
       const measured: MeasuredMesh | undefined = m
         ? {
@@ -180,9 +180,10 @@ export function runLint(input: LintInput): Issue[] {
             ...(census.genus !== null && m.edges !== undefined && m.nonManifoldEdges === 0
               ? { genus: (2 - (m.verts - m.edges + m.faces)) / 2 }
               : {}),
+            shapeKeys: m.shapeKeys ?? [],
           }
         : undefined;
-      issues.push(...adjudicateKernelPrediction(partId, census, measured));
+      issues.push(...adjudicateKernelPrediction(partId, census, measured, shapeNames));
     }
   }
   if (input.exportedUsda) {

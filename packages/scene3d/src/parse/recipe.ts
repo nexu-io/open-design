@@ -153,6 +153,13 @@ function validateTraceShape(value: unknown): string | null {
         }
         break;
       }
+      case "shape":
+        if (typeof op.name !== "string" || op.name.length === 0) {
+          return `trace.ops[${i}] shape needs a non-empty name`;
+        }
+        break;
+      case "endShape":
+        break;
       default:
         return `trace.ops[${i}] has unknown op '${String(op.op)}'`;
     }

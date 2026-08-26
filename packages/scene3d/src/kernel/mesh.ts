@@ -430,6 +430,46 @@ export function toEmitMesh(mesh: KernelMesh): EmitMesh {
   };
 }
 
+/**
+ * Fit a base mesh (and every morph target that shares its vertex order) INTO a
+ * declared box: uniform scale to the largest that fits, centred on x/y, resting
+ * on the box bottom, origin at the box centre — the same envelope `file:` and
+ * `script:` parts get. Done in TS rather than Blender precisely because Blender
+ * refuses `transform_apply` on a mesh with shape keys; the ONE transform is
+ * derived from the BASE and applied to the base and every shape identically, so
+ * a blendshape stays a blendshape. The result is local geometry the emitter
+ * drops at the part's solved centre.
+ */
+export function fitToBox(
+  base: EmitMesh,
+  shapes: Array<{ name: string; mesh: EmitMesh }>,
+  size: readonly [number, number, number],
+): { base: EmitMesh; shapes: Array<{ name: string; verts: Array<[number, number, number]> }> } {
+  const min: [number, number, number] = [Infinity, Infinity, Infinity];
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  for (const v of base.verts) {
+    for (let i = 0; i < 3; i++) {
+      if (v[i]! < min[i]!) min[i] = v[i]!;
+      if (v[i]! > max[i]!) max[i] = v[i]!;
+    }
+  }
+  const dim = [0, 1, 2].map((i) => Math.max(max[i]! - min[i]!, 1e-9));
+  const s = Math.min(size[0] / dim[0]!, size[1] / dim[1]!, size[2] / dim[2]!);
+  const c = [0, 1, 2].map((i) => (min[i]! + max[i]!) / 2);
+  // Bottom-rest on z: after centring+scaling the bottom sits at −dim_z·s/2;
+  // shift it to −size_z/2. x/y stay centred at the origin.
+  const dz = -size[2] / 2 + (dim[2]! * s) / 2;
+  const xf = (v: readonly number[]): [number, number, number] => [
+    (v[0]! - c[0]!) * s,
+    (v[1]! - c[1]!) * s,
+    (v[2]! - c[2]!) * s + dz,
+  ];
+  return {
+    base: { verts: base.verts.map(xf), faces: base.faces.map((f) => [...f]) },
+    shapes: shapes.map((sh) => ({ name: sh.name, verts: sh.mesh.verts.map(xf) })),
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Extrude — grow geometry from a face region                          */
 /* ------------------------------------------------------------------ */

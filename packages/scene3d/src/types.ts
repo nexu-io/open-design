@@ -566,6 +566,10 @@ export interface CensusMesh {
   edges?: number;
   /** Triangle count after triangulation — the unit budgets are stated in. */
   tris?: number;
+  /** Morph-target (shape-key) names bound to this mesh, excluding the Basis.
+   *  A kernel recipe predicts these and the claim adjudicates them; absent on
+   *  a mesh with no shape keys (older censuses read as "none"). */
+  shapeKeys?: string[];
   ngons: number;
   nonManifoldEdges: number;
   zeroAreaFaces: number;

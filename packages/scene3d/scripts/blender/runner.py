@@ -1481,6 +1481,10 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
             # looseVerts and nonManifoldEdges then name.
             "edges": len(o.data.edges),
             "tris": tris,
+            # Morph-target (shape-key) names, excluding the Basis — a kernel
+            # recipe part predicts these and the claim adjudicates them. Absent
+            # key when the mesh has none, so an older census reads as "no keys".
+            **({"shapeKeys": [k.name for k in o.data.shape_keys.key_blocks[1:]]} if o.data.shape_keys else {}),
             "ngons": ngons, "nonManifoldEdges": non_manifold, "zeroAreaFaces": zero_area,
             "nan": nan_verts or not all(math.isfinite(v) for row in o.matrix_world for v in row),
             "uvLayers": [l.name for l in o.data.uv_layers],

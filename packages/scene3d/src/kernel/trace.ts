@@ -122,7 +122,21 @@ export type TraceOp =
       op: "inset";
       region: Region;
       factor: string;
-    };
+    }
+  | {
+      /**
+       * Begin recording a named morph target (blendshape). Everything up to
+       * the matching `endShape` deforms a COPY of the current base with
+       * `move`/`scale` only; the difference is the shape. Because subdivision
+       * is linear, a delta authored on the cage here propagates to the limit
+       * surface EXACTLY (the KILN S·Δ property) — author tens of numbers per
+       * shape, not tens of thousands. Only meaningful through
+       * `evalTraceShapes`.
+       */
+      op: "shape";
+      name: string;
+    }
+  | { op: "endShape" };
 
 export interface Trace {
   version: 1;
@@ -145,96 +159,145 @@ export function evalTrace(trace: Trace): KernelMesh {
   }
   let mesh: KernelMesh | null = null;
   trace.ops.forEach((op, i) => {
-    switch (op.op) {
-      case "cage": {
-        const points: RVec3[] = op.points.map((p) => [
-          Rational.parse(p[0]),
-          Rational.parse(p[1]),
-          Rational.parse(p[2]),
-        ]);
-        mesh = meshOf(points, op.faces, op.ids);
-        break;
-      }
-      case "subdivide":
-        if (!mesh) throw new Error(`evalTrace: op ${i} 'subdivide' before any geometry`);
-        if (!Number.isInteger(op.levels) || op.levels < 0) {
-          throw new Error(`evalTrace: op ${i} 'subdivide' levels must be a non-negative integer`);
-        }
-        mesh = subdivide(mesh, op.levels);
-        break;
-      case "mirror":
-        if (!mesh) throw new Error(`evalTrace: op ${i} 'mirror' before any geometry`);
-        mesh = mirror(mesh, op.axis);
-        break;
-      case "move": {
-        if (!mesh) throw new Error(`evalTrace: op ${i} 'move' before any geometry`);
-        const region = parseRegion(op.region);
-        const dx = Rational.parse(op.offset[0]);
-        const dy = Rational.parse(op.offset[1]);
-        const dz = Rational.parse(op.offset[2]);
-        // A pure translation of the selected vertices — topology and ids ride
-        // through untouched. Not re-welded: moving a vertex onto another is
-        // the author's deformation, not a merge, so identity is preserved.
-        const verts: RVec3[] = mesh.verts.map((v) =>
-          inRegion(v, region) ? [v[0].add(dx), v[1].add(dy), v[2].add(dz)] : v,
-        );
-        mesh = { ...mesh, verts };
-        break;
-      }
-      case "crease": {
-        if (!mesh) throw new Error(`evalTrace: op ${i} 'crease' before any geometry`);
-        const region = parseRegion(op.region);
-        const marked = new Set<string>(mesh.creases ?? []);
-        for (const e of edgesOf(mesh).values()) {
-          if (inRegion(mesh.verts[e.a]!, region) && inRegion(mesh.verts[e.b]!, region)) {
-            marked.add(edgeKey(e.a, e.b));
-          }
-        }
-        mesh = { ...mesh, creases: marked };
-        break;
-      }
-      case "extrude": {
-        if (!mesh) throw new Error(`evalTrace: op ${i} 'extrude' before any geometry`);
-        const region = parseRegion(op.region);
-        const off: RVec3 = [Rational.parse(op.offset[0]), Rational.parse(op.offset[1]), Rational.parse(op.offset[2])];
-        mesh = extrude(mesh, (v) => inRegion(v, region), off);
-        break;
-      }
-      case "inset": {
-        if (!mesh) throw new Error(`evalTrace: op ${i} 'inset' before any geometry`);
-        const region = parseRegion(op.region);
-        const factor = Rational.parse(op.factor);
-        if (factor.cmp(Rational.ZERO) <= 0) {
-          throw new Error(`evalTrace: op ${i} 'inset' factor must be positive`);
-        }
-        mesh = inset(mesh, (v) => inRegion(v, region), factor);
-        break;
-      }
-      case "scale": {
-        if (!mesh) throw new Error(`evalTrace: op ${i} 'scale' before any geometry`);
-        const region = parseRegion(op.region);
-        const f: RVec3 = [Rational.parse(op.factor[0]), Rational.parse(op.factor[1]), Rational.parse(op.factor[2])];
-        const p: RVec3 = [Rational.parse(op.pivot[0]), Rational.parse(op.pivot[1]), Rational.parse(op.pivot[2])];
-        const verts: RVec3[] = mesh.verts.map((v) =>
-          inRegion(v, region)
-            ? [
-                p[0].add(f[0].mul(v[0].sub(p[0]))),
-                p[1].add(f[1].mul(v[1].sub(p[1]))),
-                p[2].add(f[2].mul(v[2].sub(p[2]))),
-              ]
-            : v,
-        );
-        mesh = { ...mesh, verts };
-        break;
-      }
-      default: {
-        const bad = op as { op: string };
-        throw new Error(`evalTrace: unknown op '${bad.op}'`);
-      }
+    if (op.op === "shape" || op.op === "endShape") {
+      throw new Error(`evalTrace: op ${i} '${op.op}' — morph targets need evalTraceShapes`);
     }
+    mesh = applyOp(op, mesh, i);
   });
   if (!mesh) throw new Error("evalTrace: empty trace produced no geometry");
   return mesh;
+}
+
+/** Apply one geometry op to the current mesh (null only before the seeding
+ *  `cage`). The single place every op's exact semantics live, shared by
+ *  `evalTrace` and `evalTraceShapes`. */
+function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number): KernelMesh {
+  const need = (): KernelMesh => {
+    if (!mesh) throw new Error(`evalTrace: op ${i} '${op.op}' before any geometry`);
+    return mesh;
+  };
+  switch (op.op) {
+    case "cage": {
+      const points: RVec3[] = op.points.map((p) => [Rational.parse(p[0]), Rational.parse(p[1]), Rational.parse(p[2])]);
+      return meshOf(points, op.faces, op.ids);
+    }
+    case "subdivide": {
+      const m = need();
+      if (!Number.isInteger(op.levels) || op.levels < 0) {
+        throw new Error(`evalTrace: op ${i} 'subdivide' levels must be a non-negative integer`);
+      }
+      return subdivide(m, op.levels);
+    }
+    case "mirror":
+      return mirror(need(), op.axis);
+    case "move": {
+      const m = need();
+      const region = parseRegion(op.region);
+      const dx = Rational.parse(op.offset[0]);
+      const dy = Rational.parse(op.offset[1]);
+      const dz = Rational.parse(op.offset[2]);
+      const verts: RVec3[] = m.verts.map((v) =>
+        inRegion(v, region) ? [v[0].add(dx), v[1].add(dy), v[2].add(dz)] : v,
+      );
+      return { ...m, verts };
+    }
+    case "crease": {
+      const m = need();
+      const region = parseRegion(op.region);
+      const marked = new Set<string>(m.creases ?? []);
+      for (const e of edgesOf(m).values()) {
+        if (inRegion(m.verts[e.a]!, region) && inRegion(m.verts[e.b]!, region)) marked.add(edgeKey(e.a, e.b));
+      }
+      return { ...m, creases: marked };
+    }
+    case "extrude": {
+      const m = need();
+      const region = parseRegion(op.region);
+      const off: RVec3 = [Rational.parse(op.offset[0]), Rational.parse(op.offset[1]), Rational.parse(op.offset[2])];
+      return extrude(m, (v) => inRegion(v, region), off);
+    }
+    case "inset": {
+      const m = need();
+      const region = parseRegion(op.region);
+      const factor = Rational.parse(op.factor);
+      if (factor.cmp(Rational.ZERO) <= 0) throw new Error(`evalTrace: op ${i} 'inset' factor must be positive`);
+      return inset(m, (v) => inRegion(v, region), factor);
+    }
+    case "scale": {
+      const m = need();
+      const region = parseRegion(op.region);
+      const f: RVec3 = [Rational.parse(op.factor[0]), Rational.parse(op.factor[1]), Rational.parse(op.factor[2])];
+      const p: RVec3 = [Rational.parse(op.pivot[0]), Rational.parse(op.pivot[1]), Rational.parse(op.pivot[2])];
+      const verts: RVec3[] = m.verts.map((v) =>
+        inRegion(v, region)
+          ? [p[0].add(f[0].mul(v[0].sub(p[0]))), p[1].add(f[1].mul(v[1].sub(p[1]))), p[2].add(f[2].mul(v[2].sub(p[2])))]
+          : v,
+      );
+      return { ...m, verts };
+    }
+    default: {
+      const bad = op as { op: string };
+      throw new Error(`evalTrace: op ${i} unknown op '${bad.op}'`);
+    }
+  }
+}
+
+export interface ShapeResult {
+  name: string;
+  mesh: KernelMesh;
+}
+
+/**
+ * Evaluate a trace WITH morph targets: a base mesh plus every named shape.
+ *
+ * A `shape(name)` ... `endShape` bracket deforms a COPY of the current base
+ * with `move`/`scale` only (a morph may reposition vertices, never change
+ * topology), and every GLOBAL op outside a bracket applies to the base AND
+ * each shape alike — so they stay in lockstep topology, and a delta authored
+ * before a `subdivide` propagates to the limit surface exactly. Each shape's
+ * mesh therefore shares the base's vertex order, and the blendshape is the
+ * per-vertex difference.
+ */
+export function evalTraceShapes(trace: Trace): { base: KernelMesh; shapes: ShapeResult[] } {
+  if (trace.version !== 1) {
+    throw new Error(`evalTraceShapes: unsupported trace version ${trace.version}`);
+  }
+  let base: KernelMesh | null = null;
+  const shapes: ShapeResult[] = [];
+  let recording: string | null = null;
+  let variant: KernelMesh | null = null;
+  trace.ops.forEach((op, i) => {
+    if (op.op === "shape") {
+      if (recording !== null) throw new Error(`evalTraceShapes: op ${i} shape '${op.name}' inside shape '${recording}'`);
+      if (!base) throw new Error(`evalTraceShapes: op ${i} shape before any geometry`);
+      if (typeof op.name !== "string" || op.name.length === 0) throw new Error(`evalTraceShapes: op ${i} shape needs a name`);
+      if (shapes.some((s) => s.name === op.name)) throw new Error(`evalTraceShapes: op ${i} duplicate shape '${op.name}'`);
+      recording = op.name;
+      variant = base;
+      return;
+    }
+    if (op.op === "endShape") {
+      if (recording === null) throw new Error(`evalTraceShapes: op ${i} endShape without an open shape`);
+      shapes.push({ name: recording, mesh: variant! });
+      recording = null;
+      variant = null;
+      return;
+    }
+    if (recording !== null) {
+      if (op.op !== "move" && op.op !== "scale") {
+        throw new Error(
+          `evalTraceShapes: op ${i} only move/scale are allowed inside shape '${recording}' (got '${op.op}') — a morph target repositions vertices, it cannot change topology`,
+        );
+      }
+      variant = applyOp(op, variant, i);
+    } else {
+      base = applyOp(op, base, i);
+      for (const s of shapes) s.mesh = applyOp(op, s.mesh, i);
+    }
+  });
+  if (recording !== null) throw new Error(`evalTraceShapes: shape '${recording}' was never closed with endShape`);
+  if (!base) throw new Error("evalTraceShapes: empty trace produced no geometry");
+  return { base, shapes };
 }
 
 interface ParsedRegion {
@@ -494,6 +557,19 @@ export class Recorder {
       factor: [coordStr(factor[0]), coordStr(factor[1]), coordStr(factor[2])],
       pivot: [coordStr(pivot[0]), coordStr(pivot[1]), coordStr(pivot[2])],
     });
+    return this;
+  }
+
+  /** Begin a named morph target — deform the base with move/scale, then
+   *  `endShape()`. The delta propagates through a later subdivide exactly. */
+  shape(name: string): this {
+    this.ops.push({ op: "shape", name });
+    return this;
+  }
+
+  /** Close the current morph target. */
+  endShape(): this {
+    this.ops.push({ op: "endShape" });
     return this;
   }
 

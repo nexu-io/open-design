@@ -11,4 +11,10 @@ def build(ctx):
     # A rounded hull with a flat, crisp base: the bottom edges are creased so
     # the base stays sharp while the rest smooths. Crease is topology-preserving,
     # so the census is still exactly V=98, F=96, 192 triangles.
-    ctx.box().crease({"z": ["-1", "-1"]}).subdivide(2)
+    #
+    # A "bulge" MORPH TARGET is authored on the cage (scale the whole box 2x)
+    # and propagates through the two subdivisions exactly (S*delta), landing as
+    # a Blender shape key on the 98-vertex surface.
+    ctx.box().crease({"z": ["-1", "-1"]})
+    ctx.shape("bulge").scale({}, [2, 2, 2], [0, 0, 0]).end_shape()
+    ctx.subdivide(2)

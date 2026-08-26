@@ -209,6 +209,17 @@ class RecipeCtx:
         })
         return self
 
+    def shape(self, name):
+        """Begin a named morph target: deform the base with move/scale, then
+        end_shape(). The delta propagates through a later subdivide exactly."""
+        self._ops.append({"op": "shape", "name": str(name)})
+        return self
+
+    def end_shape(self):
+        """Close the current morph target."""
+        self._ops.append({"op": "endShape"})
+        return self
+
     def trace(self):
         return {"version": 1, "ops": self._ops}
 

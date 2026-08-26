@@ -33,8 +33,10 @@ import {
   writeCache,
 } from "./build/blender.js";
 import { runRecipe } from "./parse/recipe.js";
-import { evalTrace } from "./kernel/trace.js";
-import { toEmitMesh, predictCensus, type EmitMesh, type PredictedCensus } from "./kernel/mesh.js";
+import { evalTraceShapes } from "./kernel/trace.js";
+import { toEmitMesh, fitToBox, predictCensus, type EmitMesh, type PredictedCensus } from "./kernel/mesh.js";
+
+type KernelShape = { name: string; verts: Array<[number, number, number]> };
 import { validateCensus } from "./build/census.js";
 import { runLint } from "./lint/rules.js";
 import { validateGltf } from "./lint/gltf-oracle.js";
@@ -218,11 +220,13 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   /** This solve frozen as the NEXT compile's prediction frame. */
   let solveSnapshot: SolveSnapshot | undefined;
   let specScript: string | undefined;
-  /** Evaluated kernel meshes for `recipe:` parts, handed to the emitter. */
+  /** Evaluated, box-fitted kernel meshes for `recipe:` parts, for the emitter. */
   const kernelMeshes: Record<string, EmitMesh> = {};
-  /** Each recipe part's exact predicted census, adjudicated in lint against
-   *  the census Blender measures (S3D-E-702). */
-  const kernelPredictions: Array<{ partId: string; census: PredictedCensus }> = [];
+  /** Morph targets (blendshapes) per recipe part, box-fitted, for the emitter. */
+  const kernelShapes: Record<string, KernelShape[]> = {};
+  /** Each recipe part's exact predicted census + morph-target names,
+   *  adjudicated in lint against what Blender measured (S3D-E-702). */
+  const kernelPredictions: Array<{ partId: string; census: PredictedCensus; shapeNames: string[] }> = [];
   let specLines: Record<string, number> = {};
   /* ---- Minecraft model import (.bbmodel / Java model.json) --------- */
   /* Convert the model to a scene.json spec IN MEMORY, then run the normal
@@ -507,9 +511,22 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             continue;
           }
           try {
-            const mesh = evalTrace(result.trace);
-            kernelMeshes[part.id] = toEmitMesh(mesh);
-            kernelPredictions.push({ partId: part.id, census: predictCensus(mesh) });
+            const { base, shapes } = evalTraceShapes(result.trace);
+            const box = part.localSize ?? part.size;
+            const fitted = fitToBox(
+              toEmitMesh(base),
+              shapes.map((s) => ({ name: s.name, mesh: toEmitMesh(s.mesh) })),
+              box,
+            );
+            kernelMeshes[part.id] = fitted.base;
+            if (fitted.shapes.length > 0) kernelShapes[part.id] = fitted.shapes;
+            // The census counts are fit-invariant, so the exact prediction is
+            // taken from the unfitted base; morph-target NAMES ride alongside.
+            kernelPredictions.push({
+              partId: part.id,
+              census: predictCensus(base),
+              shapeNames: shapes.map((s) => s.name),
+            });
           } catch (e) {
             recipeFailed = true;
             issues.push({
@@ -529,6 +546,7 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
           ...(spec.light ? { light: spec.light } : {}),
           tessellation: normalized.tessellation,
           kernelMeshes,
+          kernelShapes,
         });
         const generatedDir = path.join(request.projectDir, ".scene3d");
         fs.mkdirSync(generatedDir, { recursive: true });

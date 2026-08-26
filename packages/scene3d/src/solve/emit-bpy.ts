@@ -55,6 +55,12 @@ export interface EmitOptions {
    * presence for each recipe part is a pipeline invariant the emitter asserts.
    */
   kernelMeshes?: Record<string, EmitMesh>;
+  /**
+   * Morph targets per recipe part, each already fitted into the box in the
+   * same transform as the base (so it stays a blendshape). Emitted as Blender
+   * shape keys.
+   */
+  kernelShapes?: Record<string, Array<{ name: string; verts: Array<[number, number, number]> }>>;
 }
 
 /**
@@ -837,8 +843,18 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
       }
       const verts = `[${mesh.verts.map((v) => `(${v.map(num).join(", ")})`).join(", ")}]`;
       const faces = `[${mesh.faces.map((f) => `(${f.join(", ")})`).join(", ")}]`;
+      // The geometry is already fitted into the box in TS (Blender refuses
+      // transform_apply on a mesh with shape keys), so _kernel_part just
+      // builds it at the solved centre and attaches morph targets as keys.
+      const shapeDefs = options.kernelShapes?.[part.id];
+      const shapesArg =
+        shapeDefs && shapeDefs.length > 0
+          ? `, shapes=[${shapeDefs
+              .map((sh) => `{"name": ${py(sh.name)}, "verts": [${sh.verts.map((v) => `(${v.map(num).join(", ")})`).join(", ")}]}`)
+              .join(", ")}]`
+          : "";
       lines.push(
-        `${open}_kernel_part(${py(part.id)}, ${verts}, ${faces}, ${size}, ${center}${material})${close}`,
+        `${open}_kernel_part(${py(part.id)}, ${verts}, ${faces}, ${center}${material}${shapesArg})${close}`,
       );
     } else {
       // Shape parameters ride as KEYWORDS, and only when the author set
@@ -1085,40 +1101,25 @@ export function frameScene(
  * measures be adjudicated against the kernel's exact prediction.
  */
 const KERNEL_PART_HELPER: readonly string[] = [
-  "def _kernel_part(name, verts, faces, size, center, material=None):",
-  '    """Fill a solved box with an exact kernel mesh: from_pydata for the',
-  "    topology, then the same uniform-scale, x/y-centred, bottom-rest fit as",
-  '    an imported asset, so relations, contacts and claims behave identically."""',
-  "    from mathutils import Vector, Matrix",
-  "    obj = _mesh_object(name, verts, faces, (0.0, 0.0, 0.0))",
+  "def _kernel_part(name, verts, faces, center, material=None, shapes=None):",
+  '    """Build an exact kernel mesh from explicit vertices — already fitted',
+  "    into its box in TS — place it at its solved centre, and attach any morph",
+  "    targets as shape keys. No transform_apply: Blender refuses it on a mesh",
+  '    with shape keys, which is exactly why the fit happened in TS."""',
+  "    obj = _mesh_object(name, verts, faces, center)",
   "    obj.name = name",
-  "    bpy.context.view_layer.update()",
-  "    corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]",
-  "    lo = [min(c[i] for c in corners) for i in range(3)]",
-  "    hi = [max(c[i] for c in corners) for i in range(3)]",
-  "    dim = [max(hi[i] - lo[i], 1e-9) for i in range(3)]",
-  "    s = min(size[i] / dim[i] for i in range(3))",
-  "    obj.scale = (obj.scale[0] * s, obj.scale[1] * s, obj.scale[2] * s)",
-  "    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)",
-  "    bpy.context.view_layer.update()",
-  "    corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]",
-  "    lo = [min(c[i] for c in corners) for i in range(3)]",
-  "    hi = [max(c[i] for c in corners) for i in range(3)]",
-  "    obj.location = (",
-  "        obj.location[0] + center[0] - (lo[0] + hi[0]) / 2.0,",
-  "        obj.location[1] + center[1] - (lo[1] + hi[1]) / 2.0,",
-  "        obj.location[2] + (center[2] - size[2] / 2.0) - lo[2],",
-  "    )",
-  "    bpy.context.view_layer.update()",
-  "    # Origin to the box centre, like _import_part: rotation (spin/screw/",
-  "    # rotate) must orbit the box centre the language means, not a stray pivot.",
-  "    delta = Vector(center) - obj.location",
-  "    obj.data.transform(Matrix.Translation(-delta))",
-  "    obj.location = (center[0], center[1], center[2])",
-  "    bpy.context.view_layer.update()",
+  "    if shapes:",
+  "        # The Basis key is the built geometry; each named key carries a",
+  "        # morph target's absolute positions (same vertex order as the base).",
+  '        obj.shape_key_add(name="Basis")',
+  "        for shp in shapes:",
+  '            key = obj.shape_key_add(name=shp["name"])',
+  '            data = shp["verts"]',
+  "            for idx in range(len(data)):",
+  "                key.data[idx].co = data[idx]",
   "    if material:",
-  "        obj.data.materials.clear()",
   "        obj.data.materials.append(_material(material))",
+  "    bpy.context.view_layer.update()",
   "    return obj",
 ];
 

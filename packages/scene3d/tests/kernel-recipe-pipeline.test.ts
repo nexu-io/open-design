@@ -53,6 +53,9 @@ describe.skipIf(!hasBlender)("kernel recipe pipeline (real Blender)", () => {
     expect(hull!.tris).toBe(192);
     expect(hull!.nonManifoldEdges).toBe(0); // watertight, as predicted
     expect(hull!.ngons).toBe(0); // Catmull-Clark output is all quads
+    // The morph target authored on the cage landed as a Blender shape key on
+    // the subdivided surface — and its name was adjudicated (no E-702).
+    expect(hull!.shapeKeys).toEqual(["bulge"]);
 
     // The authored claims (parts:1, watertight:true) held too.
     expect(result.manifest.claims?.failed ?? 0).toBe(0);
