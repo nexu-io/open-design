@@ -126,6 +126,64 @@ flipbooks: static kernels fail W-601, blank cells fail E-609, the grid and
 POT rules apply. This is the bridge into the 2D/VFX asset pipeline: same
 kernels, same stdlib, same diagnostics.
 
+## The deterministic geometry kernel (`recipe:` parts)
+
+A `recipe:` part fills its box with geometry the compiler MINTS, exactly, and
+then adjudicates against the build. It is `src/kernel/`, and its shape is a
+single architectural bet (fable's "(D)"): **the unit of exchange is a
+language-neutral operator TRACE, evaluated by ONE evaluator in the compiler.**
+A front-end — the raw-path Python recorder today, a declarative shape later —
+only PRODUCES a trace; it never runs the kernel. That is what lets the author
+stay imperative (ordinary Python, loops and helpers, in plain CPython with no
+`bpy`) while the compiler still owns the geometry, predicts its census, and
+checks its own work.
+
+- **Exact rationals, no float, no trig.** `rational.ts` is BigInt rationals;
+  every operator is rational averaging, so a mesh is exact through any number
+  of subdivision levels and IDENTICAL on every machine — the first raw-path
+  geometry that is deterministic across platforms, not merely per-build. The
+  one rounding is `toEmitMesh`, at the boundary to Blender.
+- **The op set** (`trace.ts` + `mesh.ts`): seed (`cage`/`box`/`grid`),
+  `subdivide` (Catmull-Clark), `crease` (boundary and crease unified as one
+  "sharp" predicate; dart/crease/corner rules; propagated through subdivision
+  and mirror), `move`/`scale` (region deformation), `extrude`/`inset` (add
+  topology), `mirror` (exact-coordinate weld, an integer permutation), and
+  `shape`/`endShape` (morph targets). One coordinate-region selector drives
+  the region ops. Subdivision is topology-REFINING: it assigns indices
+  directly (`V'=V+E+F` always) rather than welding, so a prior deformation
+  that coincided two vertices cannot make it tear the surface (the property
+  fuzz found that; the fix is the principle).
+- **Subdivision is proved CONTRACTIVE.** The exact local subdivision matrix at
+  valence 3/4/5 is extracted FROM the kernel (the unit-vector trick on a
+  wheel) and shown primitive with a simple dominant eigenvalue 1 and everything
+  else strictly below — so the limit surface converges rather than creeps, the
+  1-vs-1−ε distinction floats cannot make (`kernel-spectrum.test.ts`, with the
+  exact subdominant — 1/2 at the regular vertex, (9+√17)/32 at valence 3 — from
+  the engine's exact eigensolver).
+- **Blendshapes propagate exactly.** A `shape(name)…endShape` bracket deforms a
+  COPY of the base with `move`/`scale`; every global op outside a bracket
+  applies to the base AND each shape, so a delta authored on the cage lands on
+  the limit surface EXACTLY (`S·Δ`, subdivision being linear — doubling the
+  cage delta doubles the propagated 98-vertex delta to the last bit). The
+  box-fit is in TS (`fitToBox`), derived from the base and applied to every
+  shape identically, because Blender refuses `transform_apply` on a mesh with
+  shape keys; `_kernel_part` is then a pure `from_pydata` + `shape_key_add`
+  builder.
+- **The predicted census is the debut consumer** (the doctrine's purest form:
+  the compiler is not the authority on its own success). `predictCensus`
+  computes V/E/F/triangles/watertight/genus (real orientation + homology
+  backing) and morph-target names from the exact mesh; `lint/kernel.ts`
+  adjudicates them against what Blender measured (`S3D-E-702` mismatch,
+  `S3D-W-702` unchecked). Because the fit is affine, the counts are invariant,
+  so a mismatch is a theorem-grade bug that localises which stage lied.
+- **Verified three ways.** Exact known answers (a fully-creased box stays an
+  exact cube; a box-face boss is exactly V12 E20 F10), a seeded property fuzz
+  (250 random operator sequences never tear a closed genus-0 solid), an
+  adversarial red-team (which found and forced the topology-exact subdivision
+  fix), and scryer as the exact eigenvalue/SNF authority. The end-to-end KAT
+  builds a creased rounded hull with a `bulge` morph and confirms the census
+  matches the exact prediction, shape key included. Lineage: `KILN.md`.
+
 ## Real-asset ingestion
 
 - Bare files in a scene dir = `mesh` source kind: native import, derived
