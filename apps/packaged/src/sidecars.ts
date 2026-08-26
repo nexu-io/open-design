@@ -828,6 +828,59 @@ export async function closeManagedChild(child: ManagedSidecarChild): Promise<voi
   }
 }
 
+/**
+ * Notes an unexpected post-startup exit of a managed sidecar child in that
+ * sidecar's own `latest.log`.
+ *
+ * Issue #7416: `closeManagedChild` writes lifecycle lines only when the
+ * packaged app asks a sidecar to stop, and only the web child had a
+ * post-startup exit hook (`createWebSidecarSupervisor`'s `onExit`, which both
+ * notices the death and respawns). A daemon that vanished after reporting
+ * ready therefore left its log ending on the last ordinary line, so nothing
+ * in it distinguished "still running" from "died silently".
+ *
+ * The child is typed structurally (as in `waitForStatus`) so lifecycle races
+ * can be exercised without spawning a real child. `dispose()` mutes the
+ * listener for an intentional shutdown, where `closeManagedChild` already
+ * writes the shutdown/exited pair. `logged` resolves once the line has been
+ * written; it stays pending for a child that never exits.
+ */
+export function watchUnexpectedManagedChildExit(child: {
+  app: AppKey;
+  child: {
+    pid?: number | undefined;
+    once: (
+      event: "exit",
+      listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+    ) => void;
+  };
+  logPath: string;
+}): { dispose: () => void; logged: Promise<void> } {
+  let disposed = false;
+  let settle: () => void = () => undefined;
+  const logged = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+
+  child.child.once("exit", (code, signal) => {
+    if (disposed) {
+      settle();
+      return;
+    }
+    void appendSidecarLifecycleLog(
+      child.logPath,
+      `[open-design packaged] unexpected exit app=${child.app} pid=${child.child.pid ?? "unknown"} code=${code ?? "unknown"} signal=${signal ?? "none"}`,
+    ).finally(settle);
+  });
+
+  return {
+    dispose: () => {
+      disposed = true;
+    },
+    logged,
+  };
+}
+
 export async function registerPackagedWebUrl(
   daemonStamp: SidecarStamp,
   webUrl: string,
@@ -899,6 +952,7 @@ export async function startPackagedSidecars(
   await mkdir(paths.electronSessionDataRoot, { recursive: true });
 
   const children: ManagedSidecarChild[] = [];
+  let daemonExitWatch: { dispose: () => void } | null = null;
   let webSupervisor: { close(): Promise<void> } | null = null;
 
   const daemonSidecarEntry =
@@ -981,6 +1035,9 @@ export async function startPackagedSidecars(
       { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
     );
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
+    // Only from here on: before ready, waitForStatus above already owns the
+    // daemon's exit event and turns it into a startup error.
+    daemonExitWatch = watchUnexpectedManagedChildExit(daemon);
     options.onPhase?.("daemon-ready");
 
     // The web payload must be in the page cache before the web sidecar
@@ -1043,6 +1100,7 @@ export async function startPackagedSidecars(
       web: webStatus,
       currentWebUrl: supervisor.currentUrl,
       async close() {
+        daemonExitWatch?.dispose();
         const closeErrors: unknown[] = [];
         await supervisor.close().catch((error: unknown) => {
           closeErrors.push(error);
@@ -1060,6 +1118,7 @@ export async function startPackagedSidecars(
       },
     };
   } catch (error) {
+    daemonExitWatch?.dispose();
     await webSupervisor?.close().catch(() => undefined);
     for (const child of [...children].reverse()) {
       await closeManagedChild(child).catch(() => undefined);

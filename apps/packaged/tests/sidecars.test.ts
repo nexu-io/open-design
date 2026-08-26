@@ -16,7 +16,7 @@
  * @see https://github.com/nexu-io/open-design/issues/710
  */
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -39,6 +39,7 @@ import {
   resolvePackagedElectronNodeCommand,
   resolvePackagedPathEnv,
   waitForStatus,
+  watchUnexpectedManagedChildExit,
 } from '../src/sidecars.js';
 import type { PackagedNamespacePaths } from '../src/paths.js';
 
@@ -1241,6 +1242,206 @@ describe('packaged sidecar log rotation', () => {
       expect(merged).toContain('incident line that must survive');
       expect(merged).toContain('post-rotation-failure line');
     } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Issue #7416: `closeManagedChild` only writes a lifecycle line when the
+ * packaged app asks a sidecar to stop. The web sidecar additionally gets
+ * `createWebSidecarSupervisor`'s `onExit` hook, so a web child that dies on
+ * its own is both noticed and respawned — but the daemon child had no
+ * post-startup exit listener at all. A daemon that vanished after reporting
+ * ready left its `latest.log` ending on the last normal line, with nothing
+ * saying the process is gone, so the log could not distinguish "still
+ * running" from "died silently".
+ *
+ * @see apps/packaged/src/sidecars.ts
+ * @see https://github.com/nexu-io/open-design/issues/7416
+ */
+describe('unexpected post-startup sidecar exit', () => {
+  function tempLogPath(): { logPath: string; root: string } {
+    const root = mkdtempSync(join(tmpdir(), 'od-unexpected-exit-'));
+    return { logPath: join(root, 'daemon', 'latest.log'), root };
+  }
+
+  // Fail fast and legibly instead of hanging until the suite timeout when a
+  // watcher never records the exit it was armed for.
+  async function expectLogged(logged: Promise<void>, what: string): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        logged,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error(`watcher never logged ${what}`)), 2_000);
+        }),
+      ]);
+    } finally {
+      if (timer != null) clearTimeout(timer);
+    }
+  }
+
+  it('records a signal termination with the null exit code Node reports', async () => {
+    const { logPath, root } = tempLogPath();
+    const child = fakeChild();
+    try {
+      const watch = watchUnexpectedManagedChildExit({
+        app: APP_KEYS.DAEMON,
+        child,
+        logPath,
+      });
+
+      // Node hands the listener code === null when the child dies by signal.
+      child.fireExit(null, 'SIGKILL');
+      await expectLogged(watch.logged, 'a signal termination');
+
+      const contents = readFileSync(logPath, 'utf8');
+      expect(contents).toContain('unexpected exit');
+      expect(contents).toContain(`app=${APP_KEYS.DAEMON}`);
+      expect(contents).toContain(`pid=${child.pid}`);
+      // The exact line this PR documents; `unknown` would lose the standard
+      // null and break the stated contract.
+      expect(contents).toContain('code=null signal=SIGKILL');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a signal-less exit as signal=none', async () => {
+    const { logPath, root } = tempLogPath();
+    const child = fakeChild();
+    try {
+      const watch = watchUnexpectedManagedChildExit({
+        app: APP_KEYS.DAEMON,
+        child,
+        logPath,
+      });
+
+      child.fireExit(1, null);
+      await expectLogged(watch.logged, 'a signal-less exit');
+
+      expect(readFileSync(logPath, 'utf8')).toContain('code=1 signal=none');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('stays quiet when the exit follows an intentional shutdown', async () => {
+    const { logPath, root } = tempLogPath();
+    const child = fakeChild();
+    try {
+      const watch = watchUnexpectedManagedChildExit({
+        app: APP_KEYS.DAEMON,
+        child,
+        logPath,
+      });
+
+      // The packaged app is tearing the sidecar down on purpose;
+      // closeManagedChild already writes the shutdown/exited lines.
+      watch.dispose();
+      child.fireExit(0, null);
+      await expectLogged(watch.logged, 'the disposed shutdown exit');
+
+      expect(existsSync(logPath)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // nettee review on #7425, blocking #1: waitForStatus drops its own exit
+  // listener in `finally` the moment a ready status comes back, and it never
+  // re-checks childExited after a ready IPC response. A daemon that answers
+  // "ready" and dies in the same breath therefore fires its exit event before
+  // startPackagedSidecars can arm this watcher one await later -- so a plain
+  // `once("exit")` never runs and latest.log stays silent for exactly the
+  // failure this PR exists to record.
+  it('records an exit that fired while the final readiness request was in flight', async () => {
+    const { logPath, root } = tempLogPath();
+    const child = fakeChild();
+
+    try {
+      const status = await waitForStatus<{ pid?: number | null; url: string | null }>(
+        {
+          label: APP_KEYS.DAEMON,
+          read: async () => {
+            // Ready and gone in the same breath, while waitForStatus still
+            // owns the exit listener.
+            child.fireExit(null, 'SIGTERM');
+            return {
+              pid: child.pid,
+              state: 'running',
+              updatedAt: new Date().toISOString(),
+              url: 'http://127.0.0.1:9999',
+            };
+          },
+        },
+        (candidate) => candidate.url != null,
+        5_000,
+        { child, logPath },
+      );
+      // waitForStatus still promotes the ready status: it does not re-check
+      // childExited after the response. This is the state startPackagedSidecars
+      // is in when it arms the watcher.
+      expect(status.url).not.toBeNull();
+      expect(child.exitCode === null && child.signalCode === null).toBe(false);
+
+      const watch = watchUnexpectedManagedChildExit({
+        app: APP_KEYS.DAEMON,
+        child,
+        logPath,
+      });
+      await expectLogged(watch.logged, 'an exit that fired before the watcher was armed');
+
+      const contents = readFileSync(logPath, 'utf8');
+      expect(contents).toContain('unexpected exit');
+      expect(contents).toContain('code=null signal=SIGTERM');
+      // Exactly once -- the late listener and the state re-check must not
+      // both report the same death.
+      expect(contents.split('unexpected exit').length - 1).toBe(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // nettee review on #7425, blocking #2: appendSidecarLifecycleLog catches
+  // appendFile but not its initial mkdir, and the promise here is floating.
+  // A log-directory failure (permissions, ENOSPC, or a non-directory in the
+  // way) would surface as an unhandled rejection, which the packaged main
+  // process deliberately rethrows -- crashing the app while it handles a
+  // daemon exit, on a path that is meant to be best-effort diagnostics.
+  it('survives a diagnostic write that fails outright', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-unexpected-exit-fail-'));
+    // Put a regular file where the log directory needs to be, so the
+    // recursive mkdir inside appendSidecarLifecycleLog rejects.
+    const blocked = join(root, 'daemon');
+    writeFileSync(blocked, 'not a directory', 'utf8');
+    const logPath = join(blocked, 'latest.log');
+    const child = fakeChild();
+
+    const rejections: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const watch = watchUnexpectedManagedChildExit({
+        app: APP_KEYS.DAEMON,
+        child,
+        logPath,
+      });
+
+      child.fireExit(null, 'SIGKILL');
+      // The watcher must still settle: callers await this handle.
+      await expectLogged(watch.logged, 'a failed diagnostic write');
+
+      // Give Node a macrotask turn to surface any unhandled rejection.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(rejections).toEqual([]);
+      expect(existsSync(logPath)).toBe(false);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
       rmSync(root, { recursive: true, force: true });
     }
   });
