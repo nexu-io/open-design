@@ -3557,6 +3557,7 @@ export const uk: Dict = {
   'assistant.thinking': 'Мислення',
   'assistant.thought': 'Подумав',
   'assistant.thoughtFor': 'Думав {s}с',
+  'assistant.retryAttemptSummary': 'Спроба {n} · загалом {total}',
   'assistant.systemReminder': 'Системне нагадування',
   'assistant.possiblePromptInjection': 'Можлива ін’єкція промпту',
   'assistant.waitingFirstOutput': 'Очікування першого виходу',

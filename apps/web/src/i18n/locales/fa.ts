@@ -3557,6 +3557,7 @@ export const fa: Dict = {
   'assistant.thinking': 'در حال فکر کردن',
   'assistant.thought': 'فکر کرد',
   'assistant.thoughtFor': 'تفکر برای {s} ثانیه',
+  'assistant.retryAttemptSummary': 'تلاش {n} · مجموع {total}',
   'assistant.systemReminder': 'یادآور سیستم',
   'assistant.possiblePromptInjection': 'احتمال تزریق دستور',
   'assistant.waitingFirstOutput': 'در انتظار اولین خروجی',

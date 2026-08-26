@@ -226,6 +226,11 @@ function migrate(db: SqliteDb): void {
       applied_plugin_snapshot_json TEXT,
       telemetry_finalized_at INTEGER,
       started_at INTEGER,
+      -- Per-attempt clock anchor. started_at is pinned to the run's FIRST
+      -- attempt, so a same-run retry (which reuses the run object) would make
+      -- an elapsed clock count cumulative time no attempt ever spent (#7300).
+      attempt_started_at INTEGER,
+      attempt_index INTEGER,
       ended_at INTEGER,
       position INTEGER NOT NULL,
       created_at INTEGER NOT NULL,
@@ -447,6 +452,12 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'telemetry_finalized_at')) {
     db.exec(`ALTER TABLE messages ADD COLUMN telemetry_finalized_at INTEGER`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'attempt_started_at')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN attempt_started_at INTEGER`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'attempt_index')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN attempt_index INTEGER`);
   }
   const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
   if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
@@ -2677,6 +2688,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
+              attempt_started_at AS attemptStartedAt, attempt_index AS attemptIndex,
               position
          FROM messages
         WHERE conversation_id = ?
@@ -2709,6 +2721,7 @@ export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
               run_context_json AS runContextJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
+              attempt_started_at AS attemptStartedAt, attempt_index AS attemptIndex,
               position
          FROM messages
         WHERE id = ?${conversationId ? ' AND conversation_id = ?' : ''}`,
@@ -2797,7 +2810,13 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
                 WHEN ? THEN COALESCE(telemetry_finalized_at, ?)
                 ELSE telemetry_finalized_at
               END,
-              started_at = ?, ended_at = ?
+              started_at = ?, ended_at = ?,
+              -- Non-regressing: the daemon stamps the attempt anchor when it
+              -- claims the row for an attempt, and a stale client snapshot that
+              -- omits the pair must not null it back out. A snapshot that
+              -- genuinely carries a newer attempt still lands (#7300).
+              attempt_started_at = COALESCE(?, attempt_started_at),
+              attempt_index = COALESCE(?, attempt_index)
         WHERE id = ?`,
     ).run(
       m.role,
@@ -2823,6 +2842,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       now,
       m.startedAt ?? null,
       m.endedAt ?? null,
+      m.attemptStartedAt ?? null,
+      m.attemptIndex ?? null,
       m.id,
     );
   } else {
@@ -2835,12 +2856,13 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const createdAt = typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
       ? m.createdAt
       : now;
-    // 25 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 28 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, result_delivery_state, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, trace_object_files_json,
     // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
     // task_analytics_json, applied_plugin_snapshot_json,
-    // telemetry_finalized_at, started_at, ended_at, position, created_at.
+    // telemetry_finalized_at, started_at, attempt_started_at, attempt_index,
+    // ended_at, position, created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
@@ -2849,8 +2871,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           trace_object_files_json, feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, task_analytics_json,
           applied_plugin_snapshot_json,
-          telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          telemetry_finalized_at, started_at, attempt_started_at, attempt_index,
+          ended_at, position, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -2875,6 +2898,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       m.telemetryFinalized === true ? now : null,
       m.startedAt ?? null,
+      m.attemptStartedAt ?? null,
+      m.attemptIndex ?? null,
       m.endedAt ?? null,
       position,
       createdAt,
@@ -2903,6 +2928,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
+              attempt_started_at AS attemptStartedAt, attempt_index AS attemptIndex,
               position
          FROM messages WHERE id = ?`,
     )
@@ -4220,6 +4246,11 @@ function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
     appliedPluginSnapshot: parseJsonOrUndef(row.appliedPluginSnapshotJson),
     createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,
+    // Anchor for the CURRENT attempt. `startedAt` stays pinned to attempt 0, so
+    // only this pair lets a reloaded client show elapsed time for the attempt
+    // that is actually running (#7300).
+    attemptStartedAt: row.attemptStartedAt ?? undefined,
+    attemptIndex: row.attemptIndex ?? undefined,
     endedAt: row.endedAt ?? undefined,
   };
 }

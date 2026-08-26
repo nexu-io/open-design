@@ -174,6 +174,7 @@ export function buildRunCreatedV4Aliases(
 
 function timingFromLegacy(legacy: JsonRecord): RunTimingProps {
   const queueDuration = numberValue(legacy.queue_duration_ms);
+  const retryWaitDuration = numberValue(legacy.retry_wait_duration_ms);
   const processSpawnDuration = numberValue(legacy.process_spawn_duration_ms);
   const firstModelEventDuration = numberValue(legacy.time_to_first_model_event_ms);
   const firstTokenDuration = numberValue(legacy.time_to_first_token_ms);
@@ -188,6 +189,9 @@ function timingFromLegacy(legacy: JsonRecord): RunTimingProps {
     total_duration_ms: numberValue(legacy.total_duration_ms) ?? 0,
     ...(queueDuration !== undefined
       ? { queue_duration_ms: queueDuration }
+      : {}),
+    ...(retryWaitDuration !== undefined
+      ? { retry_wait_duration_ms: retryWaitDuration }
       : {}),
     ...(processSpawnDuration !== undefined
       ? { process_spawn_duration_ms: processSpawnDuration }

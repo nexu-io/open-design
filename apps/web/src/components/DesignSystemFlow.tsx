@@ -2540,6 +2540,19 @@ export function DesignSystemDetailView({
             origin: 'manual_create',
           },
         },
+        // Re-anchor the elapsed clock on every attempt. A daemon-side automatic
+        // retry reuses this run and this message, so without this the activity
+        // card keeps counting from the first attempt and a healthy retry reads
+        // as a task stuck for hours. The daemon stamps the same anchor on the
+        // persisted row at the `start` frame, so a later reload agrees without
+        // this surface having to write it back.
+        onAttemptStarted: ({ startedAt, index }) => {
+          updateAssistant((message) => ({
+            ...message,
+            attemptStartedAt: startedAt,
+            attemptIndex: index,
+          }));
+        },
         handlers: {
           onDelta: (delta) => {
             updateAssistant((message) => ({

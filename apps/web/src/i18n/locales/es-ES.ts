@@ -3557,6 +3557,7 @@ export const esES: Dict = {
   'assistant.thinking': 'Pensando',
   'assistant.thought': 'Pensó',
   'assistant.thoughtFor': 'Pensó durante {s}s',
+  'assistant.retryAttemptSummary': 'Intento {n} · {total} en total',
   'assistant.systemReminder': 'Recordatorio del sistema',
   'assistant.possiblePromptInjection': 'Posible inyección de prompt',
   'assistant.waitingFirstOutput': 'Esperando la primera salida',

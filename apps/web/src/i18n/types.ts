@@ -4426,6 +4426,10 @@ export interface Dict {
   'assistant.thinking': string;
   'assistant.thought': string;
   'assistant.thoughtFor': string;
+  /** Secondary line on the task activity card once a run has been automatically
+   *  retried: names the attempt number and the cumulative time, so the primary
+   *  clock can show only the current attempt. */
+  'assistant.retryAttemptSummary': string;
   'assistant.systemReminder': string;
   'assistant.possiblePromptInjection': string;
   'assistant.waitingFirstOutput': string;

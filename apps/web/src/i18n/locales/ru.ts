@@ -3557,6 +3557,7 @@ export const ru: Dict = {
   'assistant.thinking': 'Думает',
   'assistant.thought': 'Подумал',
   'assistant.thoughtFor': 'Думал {s}с',
+  'assistant.retryAttemptSummary': 'Попытка {n} · всего {total}',
   'assistant.systemReminder': 'Системное напоминание',
   'assistant.possiblePromptInjection': 'Возможная инъекция промпта',
   'assistant.waitingFirstOutput': 'Ожидание первого ответа',

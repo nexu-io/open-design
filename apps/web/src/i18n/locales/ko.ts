@@ -3557,6 +3557,7 @@ export const ko: Dict = {
   'assistant.thinking': '생각 중 (Thinking)',
   'assistant.thought': '생각 완료',
   'assistant.thoughtFor': '{s}초 동안 생각함',
+  'assistant.retryAttemptSummary': '{n}번째 시도 · 총 {total}',
   'assistant.systemReminder': '시스템 알림',
   'assistant.possiblePromptInjection': '프롬프트 인젝션 가능성',
   'assistant.waitingFirstOutput': '첫 번째 출력 대기 중',

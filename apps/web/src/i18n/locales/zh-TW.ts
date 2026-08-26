@@ -3753,6 +3753,7 @@ export const zhTW: Dict = {
   "assistant.thinking": "思考中",
   "assistant.thought": "思考完畢",
   "assistant.thoughtFor": "已深度思考（用時 {s} 秒）",
+  "assistant.retryAttemptSummary": "第 {n} 次嘗試 · 累計 {total}",
   "assistant.systemReminder": "系統提示",
   "assistant.possiblePromptInjection": "可能的提示詞注入",
   "assistant.waitingFirstOutput": "等待首批輸出中",

@@ -151,6 +151,7 @@ import {
   persistRunEventToAssistantMessage,
   flushRunMessageEvents,
   finalizeRunMessageEvents,
+  persistRunAttemptAnchor,
   persistRunFailureClassification,
   pinAssistantMessageOnRunCreate,
 } from './runtimes/chat-run-messages.js';
@@ -533,6 +534,7 @@ import { odNextExampleReferenceFact } from './strategies/od-next/example-skill-s
 import { runtimeResumesSessionById } from './runtimes/types.js';
 import {
   createRunLifecycleTracer,
+  runAttemptAnchor,
   runLifecycleMarkersForStreamEvent,
   type RunLifecycleStreamEventMarkers,
 } from './run-lifecycle-tracer.js';
@@ -10225,6 +10227,11 @@ export async function startServer({
   const startChatRun = async (chatBody, run) => {
     const lifecycle = createRunLifecycleTracer(run);
     lifecycle.mark('chat_run_started');
+    // Stamp the attempt boundary for attempt 0 too. Retries/resumes get theirs
+    // from resetForAttempt at teardown; without this the first attempt has no
+    // attempt anchor and clients fall back to run.createdAt, which is exactly
+    // the cumulative clock this fix removes.
+    lifecycle.markAttemptStart(run.retryAttemptCount ?? 0);
     const pendingNativeSessionContinue =
       run.nativeSessionContinuePending &&
       typeof run.nativeSessionContinuePending.sessionId === 'string'
@@ -11808,6 +11815,26 @@ export async function startServer({
       // attempt 2, classifying the run 'succeeded' off a stale flag.
       run.turnCompletedCleanly = false;
       run.terminalTrigger = null;
+    };
+    // Open the next attempt's boundary at the moment it is actually respawned,
+    // not when the failed one was torn down.
+    //
+    // The two are separated by the policy backoff (250-1000ms), and anchoring
+    // at teardown put that gap on the wrong side of the boundary in both places
+    // that read it:
+    //   - `/api/runs/:id` advertised the next attempt for the whole backoff
+    //     while the transcript row still held the attempt that had just ended,
+    //     so a refresh in that window read one anchor and the live stream then
+    //     reported another.
+    //   - `queue_duration_ms` is measured from the boundary, so the backoff was
+    //     booked as the next attempt's queueing and left out of
+    //     `retry_wait_duration_ms`, which the contract defines as earlier
+    //     attempts' execution PLUS backoff.
+    // Persisting here (rather than waiting for the `start` frame, which lands
+    // only once the child is up) keeps the run object and the transcript on the
+    // same attempt at every instant; the `start` write then stores the same
+    // pair again and is a no-op.
+    const openRetryAttemptBoundary = () => {
       lifecycle.resetForAttempt(run.retryAttemptCount ?? 0);
       // Spread, not replace: `resetForAttempt` has just stamped this attempt's
       // `attemptStartedAt`/`attemptIndex`, and replacing the object wholesale
@@ -11818,8 +11845,24 @@ export async function startServer({
         ...run.analyticsTelemetry,
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
+      persistRunAttemptAnchor(db, run);
+      // Checkpoint the run itself, not just the transcript row. `emit` only
+      // persists `state.json` on `start`, `error`, and `end`, and neither
+      // `run_retry_attempted` nor the queued backoff crosses one of those — so
+      // a daemon that dies anywhere in the 250-1000ms backoff would restart
+      // from the PREVIOUS attempt's snapshot while the transcript already names
+      // this one, and `/api/runs/:id`, reattach, and the message clock would
+      // disagree after recovery. The manual-resume boundary
+      // (`resumeForRecharge`) already checkpoints for the same reason; the
+      // automatic retry boundary did not.
+      //
+      // Written after the row on purpose: SQLite and a JSON file cannot be made
+      // atomic, so if the process dies between the two the surviving write is
+      // the one the message clock actually renders.
+      design.runs.persistState(run);
     };
     const spawnRetryAttempt = (retryChatBody = chatBody) => {
+      openRetryAttemptBoundary();
       void startChatRun(retryChatBody, run).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
@@ -13208,6 +13251,7 @@ export async function startServer({
 
     run.status = 'running';
     run.updatedAt = Date.now();
+    const startAttemptAnchor = runAttemptAnchor(run);
     send('start', {
       runId,
       agentId,
@@ -13219,6 +13263,13 @@ export async function startServer({
       reasoning: safeReasoning,
       serviceTier: safeServiceTier,
       toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
+      // Emitted once per attempt, so a same-run retry re-sends `start` with a
+      // later timestamp. That is the signal a live client uses to re-anchor its
+      // elapsed clock to the attempt actually running. Read as one pair so the
+      // frame can never carry an index from a different attempt than its
+      // timestamp.
+      attemptStartedAt: startAttemptAnchor?.attemptStartedAt ?? run.createdAt,
+      attemptIndex: startAttemptAnchor?.attemptIndex ?? 0,
     });
     noteAgentActivity();
 

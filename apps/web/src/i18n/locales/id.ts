@@ -3557,6 +3557,7 @@ export const id: Dict = {
   'assistant.thinking': 'Berpikir...',
   'assistant.thought': 'Berpikir',
   'assistant.thoughtFor': 'Berpikir {s}d',
+  'assistant.retryAttemptSummary': 'Percobaan {n} · total {total}',
   'assistant.systemReminder': 'Pengingat sistem',
   'assistant.possiblePromptInjection': 'Kemungkinan injeksi prompt',
   'assistant.waitingFirstOutput': 'Menunggu output pertama...',

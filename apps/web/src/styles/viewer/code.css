@@ -1606,6 +1606,14 @@
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+/* Secondary to the elapsed clock: attempt number + cumulative time, shown only
+   once a run has been automatically retried. */
+.task-activity-attempt {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
 .task-activity .action-card-body {
   position: relative;
   padding: 8px 0;

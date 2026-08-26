@@ -53,6 +53,8 @@ const mocks = vi.hoisted(() => ({
   streamViaDaemon: vi.fn(),
   uploadProjectFile: vi.fn(),
   writeProjectTextFile: vi.fn(),
+  /** Every `messages` array the mocked ChatPane received, in render order. */
+  chatPaneRenders: [] as ChatMessage[][],
 }));
 
 const workspaceContextState = vi.hoisted(() => ({
@@ -89,6 +91,11 @@ vi.mock('../../src/components/ChatPane', () => ({
     sendDisabled?: boolean;
   }) => (
     <>
+      {/* Record every messages array ChatPane is handed. Live-only state (an
+          elapsed-clock anchor that a later authoritative reload replaces) is
+          invisible to a final-DOM assertion, so tests that care about what the
+          chat showed WHILE a run was streaming read this history. */}
+      {mocks.chatPaneRenders.push(messages ?? []) ? null : null}
       {error ? <div role="alert">{error}</div> : null}
       {initialDraft ? <div data-testid="chat-initial-draft">{initialDraft}</div> : null}
       <div
@@ -242,6 +249,7 @@ beforeEach(() => {
   mocks.saveMessage.mockResolvedValue(null);
   mocks.saveTabs.mockResolvedValue(null);
   mocks.streamViaDaemon.mockImplementation(async () => {});
+  mocks.chatPaneRenders.length = 0;
   mocks.openFolderDialog.mockResolvedValue(null);
   mocks.uploadProjectFile.mockImplementation(async (_projectId: string, file: File, desiredName?: string) => ({
     name: desiredName ?? file.name,
@@ -3787,5 +3795,169 @@ describe('DesignSystemDetailView', () => {
         locale: 'zh-CN',
       }),
     );
+  });
+
+  // Red spec for the per-attempt clock on the design-system chat surface.
+  //
+  // This chat renders through the same `ChatPane` -> `AssistantMessage` ->
+  // `TaskActivityCard` stack as the primary project chat, so it shows the same
+  // live elapsed clock. A daemon-side automatic same-run retry reuses one run
+  // and one assistant message and re-sends `start` with the new attempt's
+  // anchor; a caller that does not thread `onAttemptStarted` leaves its message
+  // pinned to `startedAt` and keeps rendering cumulative time -- the "running
+  // for 171 minutes" symptom -- until a reload rehydrates the row.
+  //
+  // Drives the REAL `streamViaDaemon` over a stubbed SSE body so the whole
+  // chain is exercised: transport frame -> provider callback -> component state
+  // -> the props ChatPane receives.
+  it('re-anchors the design-system chat clock when the run retries mid-stream', async () => {
+    const FIRST_ATTEMPT_STARTED_AT = 1_000;
+    const RETRY_ATTEMPT_STARTED_AT = 601_000;
+    const startFrame = (attemptStartedAt: number, attemptIndex: number) =>
+      `event: start\ndata: ${JSON.stringify({
+        runId: 'run-ds-retry',
+        agentId: 'agent-1',
+        bin: 'opencode',
+        streamFormat: 'plain',
+        attemptStartedAt,
+        attemptIndex,
+      })}\n\n`;
+    // Delivered as two chunks a macrotask apart: a retry arrives seconds after
+    // the first attempt, so the card really does render the first anchor and
+    // then move to the second, rather than both landing in one React batch.
+    const firstChunk = startFrame(FIRST_ATTEMPT_STARTED_AT, 0);
+    const retryChunk = [
+      startFrame(RETRY_ATTEMPT_STARTED_AT, 1),
+      'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+    ].join('');
+
+    const system: DesignSystemDetail = {
+      id: 'user:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-acme-design-system',
+    };
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const config: AppConfig = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      agentId: 'agent-1',
+      agentModels: {},
+      skillId: null,
+      designSystemId: null,
+    };
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [] });
+    mocks.listConversations.mockResolvedValue([
+      { id: 'conv-design-system', projectId: project.id, title: 'Design system', createdAt: 1, updatedAt: 1 },
+    ]);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={config}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('design-system-chat-send')).toBeTruthy());
+
+    // Swap in the real transport only once the surface has settled: the stub
+    // below answers 404 for anything it does not model, which would otherwise
+    // perturb the detail view's own load.
+    const actualDaemon = await vi.importActual<typeof import('../../src/providers/daemon')>(
+      '../../src/providers/daemon',
+    );
+    mocks.streamViaDaemon.mockImplementation(actualDaemon.streamViaDaemon);
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/runs') {
+          return new Response(JSON.stringify({ runId: 'run-ds-retry' }), {
+            status: 202,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.startsWith('/api/runs/run-ds-retry/events')) {
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(encoder.encode(firstChunk));
+                setTimeout(() => {
+                  controller.enqueue(encoder.encode(retryChunk));
+                  controller.close();
+                }, 0);
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'text/event-stream' } },
+          );
+        }
+        // Anything else this surface probes is irrelevant to the clock. Answer
+        // "not found" rather than an empty 200: a 200 with no payload makes the
+        // real registry helpers hand the component undefined fields and crash
+        // the render, which would mask what this test is measuring.
+        return new Response('{}', {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+
+    fireEvent.click(screen.getByTestId('design-system-chat-send'));
+
+    await waitFor(() => expect(mocks.streamViaDaemon).toHaveBeenCalledTimes(1));
+    // The chat re-reads its authoritative transcript once the run settles, so
+    // assert against what ChatPane was handed WHILE the run was live -- that is
+    // the state the elapsed clock renders from.
+    const streamedAnchors = () => {
+      const seen: Array<{ startedAt: number | undefined; index: number | undefined }> = [];
+      for (const messages of mocks.chatPaneRenders) {
+        for (const message of messages) {
+          if (message.role !== 'assistant') continue;
+          if (message.attemptStartedAt === undefined) continue;
+          const last = seen[seen.length - 1];
+          if (last && last.startedAt === message.attemptStartedAt) continue;
+          seen.push({ startedAt: message.attemptStartedAt, index: message.attemptIndex });
+        }
+      }
+      return seen;
+    };
+
+    await waitFor(() => expect(streamedAnchors()).toHaveLength(2));
+
+    // Both attempts must land, in order: the card re-anchors on the retry
+    // instead of staying pinned to the run's first attempt.
+    expect(streamedAnchors()).toEqual([
+      { startedAt: FIRST_ATTEMPT_STARTED_AT, index: 0 },
+      { startedAt: RETRY_ATTEMPT_STARTED_AT, index: 1 },
+    ]);
   });
 });

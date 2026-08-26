@@ -3571,6 +3571,7 @@ export const en: Dict = {
   'assistant.thinking': 'Thinking',
   'assistant.thought': 'Thought',
   'assistant.thoughtFor': 'Thought for {s}s',
+  'assistant.retryAttemptSummary': 'Attempt {n} · {total} total',
   'assistant.systemReminder': 'System reminder',
   'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'Waiting for first output',

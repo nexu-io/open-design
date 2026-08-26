@@ -915,6 +915,8 @@ function AssistantMessageImpl({
                 hasResultDeliveryFailure)
             }
             startedAt={message.startedAt}
+            attemptStartedAt={message.attemptStartedAt}
+            attemptIndex={message.attemptIndex}
             endedAt={message.endedAt}
             durationMs={usage?.durationMs}
             projectFileNames={projectFileNames}
@@ -3739,6 +3741,8 @@ function TaskActivityCard({
   runCanceled,
   runFailed,
   startedAt,
+  attemptStartedAt,
+  attemptIndex,
   endedAt,
   durationMs,
   projectFileNames,
@@ -3754,6 +3758,8 @@ function TaskActivityCard({
   runCanceled: boolean;
   runFailed: boolean;
   startedAt: number | undefined;
+  attemptStartedAt: number | undefined;
+  attemptIndex: number | undefined;
   endedAt: number | undefined;
   durationMs: number | undefined;
   projectFileNames?: Set<string>;
@@ -3798,7 +3804,39 @@ function TaskActivityCard({
       : hasError
         ? "error"
         : "completed";
-  const elapsed = useLiveElapsed(runStreaming, startedAt, endedAt, durationMs);
+  // The clock measures the CURRENT ATTEMPT. A daemon-side automatic retry
+  // reuses one run and one message, so `startedAt` keeps pointing at the first
+  // attempt: anchoring there renders the cumulative time since the user asked,
+  // which on a retried run is a number no attempt ever spent and reads as a
+  // wedged task. `attemptStartedAt` is absent for runs that were never retried
+  // (and for daemons older than the per-attempt clock), where the two anchors
+  // are the same thing anyway.
+  //
+  // Both anchors are absolute persisted timestamps, never mount-time refs, so
+  // the clock still survives a remount / project-tab switch unchanged.
+  const now = useNowWhileStreaming(runStreaming);
+  const attemptAnchor = attemptStartedAt ?? startedAt;
+  const elapsed = elapsedLabel(now, runStreaming, attemptAnchor, endedAt, durationMs);
+  // Secondary line: nothing is hidden, the cumulative time is just no longer
+  // presented as this attempt's. Shown only when a retry really moved the
+  // anchor, so the two numbers carry different information -- an agent-reported
+  // `durationMs` with no `endedAt` would otherwise make both read the same.
+  const retried =
+    typeof attemptIndex === "number" &&
+    attemptIndex > 0 &&
+    attemptStartedAt !== undefined &&
+    startedAt !== undefined &&
+    attemptStartedAt > startedAt;
+  const cumulativeElapsed = retried
+    ? elapsedLabel(now, runStreaming, startedAt, endedAt, undefined)
+    : "";
+  const attemptSummary =
+    retried && cumulativeElapsed
+      ? t("assistant.retryAttemptSummary", {
+          n: (attemptIndex as number) + 1,
+          total: cumulativeElapsed,
+        })
+      : "";
 
   if (running && !hasConclusion && currentEntry) {
     return (
@@ -3839,6 +3877,9 @@ function TaskActivityCard({
       >
         <span className={`summary${running ? " shimmer-text" : ""}`}>{stateLabel}</span>
         {elapsed ? <span className="task-activity-elapsed">{elapsed}</span> : null}
+        {attemptSummary ? (
+          <span className="task-activity-attempt">{attemptSummary}</span>
+        ) : null}
         <span className="chev" aria-hidden>
           <Icon name="chevron-down" size={13} />
         </span>
@@ -4254,18 +4295,26 @@ function splitSystemReminders(input: string): ProseSegment[] {
     .filter((seg) => seg.kind === "reminder" || seg.text.trim().length > 0);
 }
 
-function useLiveElapsed(
-  streaming: boolean,
-  startedAt: number | undefined,
-  endedAt: number | undefined,
-  fixedDurationMs: number | undefined,
-): string {
+// One ticking clock source per card. The elapsed label is derived from it by a
+// pure function so a card can render more than one span (this attempt vs the
+// cumulative run) off a single interval rather than one timer per number.
+function useNowWhileStreaming(streaming: boolean): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!streaming) return;
     const id = window.setInterval(() => setNow(Date.now()), 200);
     return () => window.clearInterval(id);
   }, [streaming]);
+  return now;
+}
+
+function elapsedLabel(
+  now: number,
+  streaming: boolean,
+  startedAt: number | undefined,
+  endedAt: number | undefined,
+  fixedDurationMs: number | undefined,
+): string {
   if (!streaming && endedAt === undefined && typeof fixedDurationMs === "number") {
     return formatElapsedMs(fixedDurationMs);
   }

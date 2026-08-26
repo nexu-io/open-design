@@ -19,6 +19,8 @@ function createDb(): Database.Database {
       session_mode TEXT,
       run_context_json TEXT,
       started_at INTEGER,
+      attempt_started_at INTEGER,
+      attempt_index INTEGER,
       ended_at INTEGER,
       position INTEGER NOT NULL,
       created_at INTEGER NOT NULL,

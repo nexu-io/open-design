@@ -8,7 +8,7 @@ import {
   normalizeRunToolBundleForRun,
   summarizeRunToolBundle,
 } from '../run-tool-bundle.js';
-import { createRunLifecycleTracer } from '../run-lifecycle-tracer.js';
+import { createRunLifecycleTracer, runAttemptAnchor } from '../run-lifecycle-tracer.js';
 import { projectWorkspaceProvenance } from '../workspace-contract.js';
 import { OPEN_DESIGN_PLUGIN_ID } from '../mcp-observability.js';
 import {
@@ -403,7 +403,8 @@ function buildExecutionDiagnostics(run) {
     collectedAt: run.updatedAt,
     eventStreamCompleteness: eventStreamComplete ? 'complete' : 'partial',
     timing: {
-      queueDurationMs: optionalDiagnostic(timing.queue_duration_ms, 'run accepted to execution start'),
+      queueDurationMs: optionalDiagnostic(timing.queue_duration_ms, 'current attempt accepted to execution start'),
+      retryWaitDurationMs: optionalDiagnostic(timing.retry_wait_duration_ms, 'run accepted to current attempt scheduled (earlier attempts + backoff)'),
       promptBuildDurationMs: optionalDiagnostic(timing.prompt_build_duration_ms, 'prompt build start to end'),
       launchPreflightDurationMs: optionalDiagnostic(timing.launch_preflight_duration_ms, 'runtime preflight start to end'),
       processSpawnDurationMs: optionalDiagnostic(timing.process_spawn_duration_ms, 'process spawn start to child ready'),
@@ -564,6 +565,11 @@ function durableRunState(run) {
       : {}),
     ...(typeof run.manualResumeAttemptCount === 'number'
       ? { manualResumeAttemptCount: run.manualResumeAttemptCount }
+      : {}),
+    // Persisted alongside analyticsTelemetry.attemptStartedAt so a hydrated
+    // terminal run still reports which attempt the stored anchor belongs to.
+    ...(typeof run.retryAttemptCount === 'number'
+      ? { retryAttemptCount: run.retryAttemptCount }
       : {}),
     ...(typeof run.rechargeWaitDurationMs === 'number'
       ? { rechargeWaitDurationMs: run.rechargeWaitDurationMs }
@@ -1208,6 +1214,17 @@ export function createChatRunService({
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    // Per-attempt clock anchor. `createdAt` is the logical run start and never
+    // moves, so on a run that has been automatically retried it is the wrong
+    // number to render as elapsed time. `analyticsTelemetry` is part of the
+    // durable run state, so this survives a daemon restart and a page refresh
+    // reads back the same anchor the live stream reported.
+    //
+    // Taken as one pair (see runAttemptAnchor): `retryAttemptCount` advances
+    // when a retry is DECIDED, so reading the index from it would advertise the
+    // next attempt while this anchor still belongs to the one that just ended.
+    attemptStartedAt: runAttemptAnchor(run)?.attemptStartedAt ?? null,
+    attemptIndex: runAttemptAnchor(run)?.attemptIndex ?? run.retryAttemptCount ?? 0,
     cancelRequested: !!run.cancelRequested,
     cancelOrigin: run.cancelOrigin ?? null,
     terminalTrigger: run.terminalTrigger ?? null,

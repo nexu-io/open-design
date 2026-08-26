@@ -362,6 +362,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         lastRunEventId: stored.lastRunEventId,
         startedAt: stored.startedAt,
         endedAt: stored.endedAt,
+        ...mergeAttemptAnchor(stored, incoming),
       };
     }
     const incomingEvents = Array.isArray(incoming.events) ? incoming.events : [];
@@ -430,6 +431,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
             (storedEndedAt === null || incomingEndedAt >= storedEndedAt)
               ? incomingEndedAt
               : stored.endedAt,
+          ...mergeAttemptAnchor(stored, incoming),
         };
       }
       if (
@@ -446,6 +448,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           lastRunEventId: stored.lastRunEventId,
           startedAt: stored.startedAt,
           endedAt: stored.endedAt,
+          ...mergeAttemptAnchor(stored, incoming),
         };
       }
     }
@@ -502,6 +505,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           (typeof stored.endedAt !== 'number' || incoming.endedAt >= stored.endedAt)
             ? incoming.endedAt
             : stored.endedAt,
+        ...mergeAttemptAnchor(stored, incoming),
       };
     }
     // Daemon-written lifecycle timestamps. startedAt is the daemon's first
@@ -532,6 +536,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         (storedEndedAt === null || incomingEndedAt >= storedEndedAt)
           ? incomingEndedAt
           : stored.endedAt,
+      ...mergeAttemptAnchor(stored, incoming),
     };
   };
 
@@ -553,6 +558,43 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       return incomingCursor >= storedCursor ? incoming : stored;
     }
     return stored;
+  };
+
+  // The per-attempt clock anchor (#7300). `startedAt` is pinned to the run's
+  // FIRST attempt, so it is always taken from the stored row; this pair is the
+  // opposite — the daemon re-stamps it on the `start` frame of every attempt,
+  // including the automatic same-run retry that reuses the run object.
+  //
+  // So it cannot be "keep stored unconditionally" (a retried attempt's anchor
+  // would never reach a client that reloads) and it cannot be "take incoming"
+  // (a PUT captured before the retry, or one that omits the pair entirely,
+  // would drag the row back to the previous attempt and resurrect the
+  // cumulative clock). It is a watermark, like endedAt: the stored value wins
+  // unless the snapshot carries a strictly later attempt start.
+  //
+  // The two fields move together — an index without its timestamp describes an
+  // attempt the row has no start time for — so both come from whichever side
+  // wins.
+  const mergeAttemptAnchor = (
+    stored: { attemptStartedAt?: unknown; attemptIndex?: unknown } | null | undefined,
+    incoming: Record<string, unknown>,
+  ): { attemptStartedAt: number | undefined; attemptIndex: number | undefined } => {
+    const finiteNumber = (value: unknown): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    const storedStartedAt = finiteNumber(stored?.attemptStartedAt);
+    const incomingStartedAt = finiteNumber(incoming.attemptStartedAt);
+    const incomingIsNewer =
+      incomingStartedAt !== undefined &&
+      (storedStartedAt === undefined || incomingStartedAt > storedStartedAt);
+    return incomingIsNewer
+      ? {
+          attemptStartedAt: incomingStartedAt,
+          attemptIndex: finiteNumber(incoming.attemptIndex),
+        }
+      : {
+          attemptStartedAt: storedStartedAt,
+          attemptIndex: finiteNumber(stored?.attemptIndex),
+        };
   };
 
   app.put('/api/projects/:id/conversations/:cid/messages/:mid', async (req, res) => {

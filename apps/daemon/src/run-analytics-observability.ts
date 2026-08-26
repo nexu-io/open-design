@@ -165,7 +165,13 @@ export interface RunToolAnalyticsSummary {
 }
 
 export interface RunTimingAnalytics {
+  // Wait endured by the current attempt before it began executing. Attempt-
+  // scoped: on a retried run this is the policy backoff, not the whole history.
   queue_duration_ms?: number;
+  // Time earlier attempts consumed (execution + backoff) before the current
+  // attempt was scheduled. Retried runs only.
+  // `queue_duration_ms + retry_wait_duration_ms` === the pre-fix value.
+  retry_wait_duration_ms?: number;
   pre_spawn_duration_ms?: number;
   prompt_build_duration_ms?: number;
   launch_preflight_duration_ms?: number;
@@ -340,7 +346,12 @@ function toolOccupancyWithin(
 //   v2: `runtime_init` and `stream_output` re-anchored from the first text
 //       token to the first model event, and `stream_output` made mutually
 //       exclusive with `tool_execution`.
-const RUN_PHASE_SCHEMA_VERSION = 2;
+//   v3: `queued` re-anchored from run creation to the current attempt's
+//       boundary, so a retried run no longer books earlier attempts as queue
+//       time (and no longer wins `bottleneck_phase` with it). The displaced
+//       span moved to the new non-phase `retry_wait_duration_ms`; v2 rows can
+//       be reconstructed as queue + retry_wait.
+const RUN_PHASE_SCHEMA_VERSION = 3;
 
 function setMeasuredDuration(
   result: Partial<RunTimingAnalytics>,
@@ -1224,7 +1235,41 @@ export function summarizeRunTimingAnalytics(args: {
     tool_call_count: toolCallCount,
     total_duration_ms: Math.round(totalDurationMs),
   };
-  setMeasuredDuration(result, 'queue_duration_ms', phaseDurations, 'queued', args.runCreatedAt, startAt);
+  // Queueing is measured from THIS attempt's boundary, not from run creation.
+  //
+  // The daemon has no queue -- `design.runs.start()` executes synchronously --
+  // so `queue_duration_ms` was only ever "time between the user asking and the
+  // run starting". On a retried run `startAt` is the CURRENT attempt's
+  // `startChatRunStartedAt` (the telemetry bag is replaced per attempt) while
+  // `runCreatedAt` never moves, so the difference swallowed every earlier
+  // attempt's full execution plus its backoff and reported it as queueing.
+  // Being the largest span by far, it then won `bottleneck_phase` too, which is
+  // why long-"queued" runs were ~always retried runs.
+  //
+  // Split into the two things that were being conflated:
+  //   queue_duration_ms      -- the wait THIS attempt endured before executing
+  //   retry_wait_duration_ms -- everything earlier attempts consumed, i.e.
+  //                             their execution plus the policy backoff
+  // Their sum reconstructs the pre-fix value, so old dashboards remain
+  // auditable against new rows.
+  //
+  // The boundary is stamped when an attempt is actually opened (respawn for a
+  // retry, `startChatRun` for attempt 0), so the backoff falls BEFORE it and
+  // lands in retry wait. Stamping it at teardown instead would leave the
+  // backoff on this side of the boundary and re-label it as queueing — the
+  // daemon has no queue, so that number would be fiction again.
+  const attemptBoundaryAt =
+    (telemetry.attemptIndex ?? 0) > 0 && telemetry.attemptStartedAt !== undefined
+      ? telemetry.attemptStartedAt
+      : args.runCreatedAt;
+  setMeasuredDuration(result, 'queue_duration_ms', phaseDurations, 'queued', attemptBoundaryAt, startAt);
+  if (attemptBoundaryAt !== args.runCreatedAt) {
+    // Deliberately not a phase: this is elapsed wall-clock belonging to earlier
+    // attempts, and letting it compete for `bottleneck_phase` would recreate
+    // the exact misattribution this fix removes.
+    const retryWait = durationBetween(args.runCreatedAt, attemptBoundaryAt);
+    if (retryWait !== undefined) result.retry_wait_duration_ms = retryWait;
+  }
   setMeasuredDuration(result, 'prompt_build_duration_ms', phaseDurations, 'prompt_build', telemetry.promptBuildStartAt, telemetry.promptBuildEndAt);
   setMeasuredDuration(result, 'launch_preflight_duration_ms', phaseDurations, 'launch_preflight', telemetry.launchPreflightStartAt, telemetry.launchPreflightEndAt);
   const preSpawnDuration = durationBetween(startAt, telemetry.processSpawnStartedAt);
@@ -1323,7 +1368,7 @@ export function summarizeRunTimingAnalytics(args: {
   else if (laterThan(telemetry.processSpawnStartedAt, telemetry.launchPreflightEndAt ?? telemetry.launchPreflightStartAt)) result.last_observed_phase = 'process_spawn';
   else if (laterThan(telemetry.launchPreflightEndAt, telemetry.launchPreflightStartAt)) result.last_observed_phase = 'launch_preflight';
   else if (laterThan(telemetry.promptBuildEndAt, telemetry.promptBuildStartAt)) result.last_observed_phase = 'prompt_build';
-  else if (laterThan(startAt, args.runCreatedAt)) result.last_observed_phase = 'queued';
+  else if (laterThan(startAt, attemptBoundaryAt)) result.last_observed_phase = 'queued';
   else if (laterThan(runEndAt, telemetry.finalizeStartAt)) result.last_observed_phase = 'finalize';
   else if (lastObservedAt !== undefined) result.last_observed_phase = 'unknown';
 

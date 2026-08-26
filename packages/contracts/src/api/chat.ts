@@ -568,6 +568,9 @@ export interface ChatRunExecutionDiagnostics {
   eventStreamCompleteness: 'complete' | 'partial';
   timing: {
     queueDurationMs: ChatRunDiagnosticValue<number>;
+    /** Time earlier attempts consumed before the current one was scheduled.
+     *  Retried runs only; absent on daemons older than the per-attempt clock. */
+    retryWaitDurationMs?: ChatRunDiagnosticValue<number>;
     promptBuildDurationMs: ChatRunDiagnosticValue<number>;
     launchPreflightDurationMs: ChatRunDiagnosticValue<number>;
     processSpawnDurationMs: ChatRunDiagnosticValue<number>;
@@ -668,6 +671,21 @@ export interface ChatRunStatusResponse {
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
+  /**
+   * When the CURRENT attempt began. A same-run automatic retry reuses this run
+   * object, so `createdAt` stays pinned to the first attempt and is the wrong
+   * anchor for "how long has this been going". Clients that render a live
+   * elapsed clock must measure from here; `createdAt` remains the logical run
+   * start and the two together give the cumulative time. Omitted by daemons
+   * older than the per-attempt clock, in which case `createdAt` is the only
+   * anchor available.
+   */
+  attemptStartedAt?: number | null;
+  /**
+   * Zero-based index of the attempt `attemptStartedAt` describes: 0 is the
+   * first attempt, 1 the first automatic retry. Absent on older daemons.
+   */
+  attemptIndex?: number;
   cancelRequested?: boolean;
   /**
    * Actor or lifecycle path that requested cancellation. Only `user_stop`
@@ -910,6 +928,14 @@ export interface ChatMessage {
   lastRunEventId?: string;
   startedAt?: number;
   endedAt?: number;
+  /** Start of the run's current attempt; mirrors
+   *  ChatRunStatusResponse.attemptStartedAt. `startedAt` stays the logical turn
+   *  start (it survives automatic retries), so the elapsed clock reads this and
+   *  falls back to `startedAt` when the run was never retried. */
+  attemptStartedAt?: number;
+  /** Zero-based attempt index; mirrors ChatRunStatusResponse.attemptIndex.
+   *  Present only once at least one automatic retry has occurred. */
+  attemptIndex?: number;
   sessionMode?: ChatSessionMode;
   runContext?: RunContextSelection;
   /**

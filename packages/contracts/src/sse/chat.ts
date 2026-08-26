@@ -73,6 +73,15 @@ export interface ChatSseStartPayload {
   model?: string | null;
   reasoning?: string | null;
   serviceTier?: string | null;
+  /**
+   * When this attempt began. A `start` frame is emitted once per attempt, so a
+   * same-run automatic retry re-sends it with a later timestamp — that is the
+   * signal a live client uses to re-anchor its elapsed clock without polling
+   * the run status. Omitted by daemons older than the per-attempt clock.
+   */
+  attemptStartedAt?: number;
+  /** Zero-based index of this attempt: 0 is the first, 1 the first retry. */
+  attemptIndex?: number;
 }
 
 export interface ChatSseChunkPayload {

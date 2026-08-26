@@ -473,6 +473,46 @@ export async function listConversationsWithRetry(
 }
 
 /**
+ * Resolve the per-attempt clock anchor between a server snapshot and the live
+ * local message. The winner is whichever side describes the LATER attempt.
+ *
+ * Unlike `startedAt` — pinned to the run's first attempt, so "keep whatever is
+ * defined" is safe there — this pair moves forward on every attempt. Both
+ * directions therefore have to be handled:
+ *
+ *  - The refresh reads the transcript at request time and applies it after the
+ *    await. An automatic same-run retry can land its `start` frame inside that
+ *    window, leaving the resolved snapshot holding the PREVIOUS attempt while
+ *    `local` already holds the current one. Taking the snapshot there drags the
+ *    clock backwards onto a longer, cumulative-looking number no attempt spent.
+ *  - A reload that observes a retry the live stream never delivered (dropped
+ *    SSE, reattach gap) must still be able to move the anchor forward.
+ *
+ * This is the same watermark the daemon applies to the persisted row
+ * (`mergeAttemptAnchor` in routes/project/conversations.ts, plus the
+ * `attempt_started_at <= ?` guard on the UPDATE), so both sides of the wire
+ * agree on which anchor is current.
+ *
+ * The two fields move together: an index without its own timestamp describes an
+ * attempt the message has no start time for.
+ */
+function mergeAttemptAnchor(
+  server: Pick<ChatMessage, 'attemptStartedAt' | 'attemptIndex'>,
+  local: Pick<ChatMessage, 'attemptStartedAt' | 'attemptIndex'>,
+): Pick<ChatMessage, 'attemptStartedAt' | 'attemptIndex'> {
+  const finite = (value: number | undefined): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  const serverStartedAt = finite(server.attemptStartedAt);
+  const localStartedAt = finite(local.attemptStartedAt);
+  const serverIsNewer =
+    serverStartedAt !== undefined
+    && (localStartedAt === undefined || serverStartedAt >= localStartedAt);
+  return serverIsNewer
+    ? { attemptStartedAt: serverStartedAt, attemptIndex: server.attemptIndex }
+    : { attemptStartedAt: localStartedAt, attemptIndex: local.attemptIndex };
+}
+
+/**
  * Server messages whose local copy is longer only because the live stream
  * folded a LATER Run of the same logical task into it.
  *
@@ -536,6 +576,7 @@ function mergeServerMessageWithLocal(
   if (!server.startedAt && local.startedAt) {
     merged.startedAt = local.startedAt;
   }
+  Object.assign(merged, mergeAttemptAnchor(server, local));
   if (!server.endedAt && local.endedAt) {
     merged.endedAt = local.endedAt;
   }
@@ -5833,6 +5874,17 @@ export function ProjectView({
           initialLastEventId:
             needsFullReplay || taskRunAdvanced ? null : message.lastRunEventId ?? null,
           publishRunFinishedEvent: shouldPublishRunFinishedEvent,
+          // Re-anchors the clock when a retry fires during this reattach, and
+          // on a full replay where the `start` frame is redelivered. A reload
+          // that resumes mid-stream gets the anchor from the persisted message
+          // row instead, so no extra run-status probe is needed on this path.
+          onAttemptStarted: ({ startedAt, index }) => {
+            updateMessageById(message.id, (prev) => ({
+              ...prev,
+              attemptStartedAt: startedAt,
+              attemptIndex: index,
+            }));
+          },
           onArtifactPaths: (paths) => {
             authoritativeReattachArtifactPaths = paths;
           },
@@ -8306,6 +8358,17 @@ export function ProjectView({
           onArtifactPaths: (paths) => {
             authoritativeArtifactPaths = paths;
           },
+          // Re-anchor the elapsed clock on every attempt. A daemon-side
+          // automatic retry reuses this run and this message, so without this
+          // the clock keeps counting from the first attempt and a healthy retry
+          // reads as a task stuck for hours.
+          onAttemptStarted: ({ startedAt, index }) => {
+            updateMessageById(
+              assistantId,
+              (prev) => ({ ...prev, attemptStartedAt: startedAt, attemptIndex: index }),
+              true,
+            );
+          },
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             const runMayFinalize =
@@ -8509,6 +8572,17 @@ export function ProjectView({
                 : {}),
               lastRunEventId: undefined,
             }));
+          },
+          // Re-anchor the elapsed clock on every attempt. A daemon-side
+          // automatic retry reuses this run and this message, so without this
+          // the clock keeps counting from the first attempt and a healthy retry
+          // reads as a task stuck for hours.
+          onAttemptStarted: ({ startedAt, index }) => {
+            updateMessageById(
+              assistantId,
+              (prev) => ({ ...prev, attemptStartedAt: startedAt, attemptIndex: index }),
+              true,
+            );
           },
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;

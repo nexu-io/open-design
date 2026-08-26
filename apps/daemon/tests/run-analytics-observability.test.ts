@@ -1137,7 +1137,12 @@ describe('summarizeRunTimingAnalytics', () => {
     });
 
     expect(result).toEqual({
-      queue_duration_ms: 200,
+      // This fixture is attempt 1 (a retry) whose respawn was instant, so the
+      // wait belongs entirely to the earlier attempt: queueing for THIS attempt
+      // is 0 and the 200ms before it is retry wait. The two still sum to the
+      // pre-v3 `queue_duration_ms` of 200.
+      queue_duration_ms: 0,
+      retry_wait_duration_ms: 200,
       pre_spawn_duration_ms: 500,
       prompt_build_duration_ms: 80,
       launch_preflight_duration_ms: 350,
@@ -1164,7 +1169,7 @@ describe('summarizeRunTimingAnalytics', () => {
       finalize_duration_ms: 20,
       total_duration_ms: 7020,
       bottleneck_phase: 'stream_output',
-      phase_schema_version: 2,
+      phase_schema_version: 3,
       last_observed_phase: 'artifact_write',
       phase_timing_status: 'complete',
       attempt_index: 1,
@@ -1266,7 +1271,7 @@ describe('summarizeRunTimingAnalytics', () => {
       total_duration_ms: 2450,
       first_model_event_type: 'text_delta',
       bottleneck_phase: 'stream_output',
-      phase_schema_version: 2,
+      phase_schema_version: 3,
       last_observed_phase: 'stream_output',
       phase_timing_status: 'partial',
       attempt_duration_ms: 2400,
@@ -1573,7 +1578,7 @@ describe('summarizeRunTimingAnalytics phase anchoring', () => {
   it('stamps the phase schema version so old and new rows are separable', () => {
     const result = summarizeRunTimingAnalytics(toolFirstRun);
 
-    expect(result.phase_schema_version).toBe(2);
+    expect(result.phase_schema_version).toBe(3);
   });
 
   it('leaves every first-token metric at its published meaning', () => {
@@ -1684,12 +1689,18 @@ describe('summarizeRunTimingAnalytics tool phase occupancy', () => {
     });
 
     // The model was active for 6s total, so no phase inside that window can
-    // exceed 6s. Summing gives 9s, which would beat the genuine 7s queue wait
-    // and report the wrong bottleneck.
+    // exceed 6s. Summing the two overlapping calls gives 9s -- more wall clock
+    // than the window contains -- so the phase must use occupancy (5.5s).
     expect(result.model_active_duration_ms).toBe(6_000);
-    expect(result.bottleneck_phase).toBe('queued');
     // The published metric keeps summing paired spans.
     expect(result.tool_duration_ms).toBe(9_000);
+
+    // Pre-v3 this fixture reported `queued` as the bottleneck: it is attempt 1,
+    // and the 7s that attempt 0 spent running was booked as queue time. That
+    // span is retry wait, is not a phase, and no longer competes here.
+    expect(result.bottleneck_phase).toBe('tool_execution');
+    expect(result.queue_duration_ms).toBe(0);
+    expect(result.retry_wait_duration_ms).toBe(7_000);
   });
 
   it('ignores a previous attempt\'s tool work when the anchor is from this attempt', () => {
@@ -2140,5 +2151,118 @@ describe('summarizeRunTimingAnalytics with an unattributable tool ledger', () =>
     const result = summarizeRunTimingAnalytics(ambiguousRun);
 
     expect(result.model_active_duration_ms).toBe(9_000);
+  });
+});
+
+// Red spec: `queue_duration_ms` charges a retried run for every earlier attempt.
+//
+// `startAt` is the CURRENT attempt's `startChatRunStartedAt` (the telemetry is
+// wiped per attempt), but the phase is measured from `runCreatedAt` — the
+// logical run start, which never moves. So on a retried run the metric reports
+// "attempt N started this long after the user asked", which sweeps up every
+// prior attempt's full execution plus the policy backoff and calls it queueing.
+// The daemon has no queue at all (`design.runs.start()` executes synchronously),
+// so any large `queue_duration_ms` is this bug — and because the value is huge
+// it also wins `bottleneck_phase`, mislabelling retried runs as queue-bound.
+describe('summarizeRunTimingAnalytics attempt-scoped queueing', () => {
+  // Attempt 0 ran from ~1s to ~300s and failed. The policy waited 400ms, then
+  // attempt 1 was respawned at 300_400 and ran to completion at 400_000.
+  const retriedRun = {
+    runCreatedAt: 1_000,
+    runUpdatedAt: 400_000,
+    analyticsCapturedAt: 400_010,
+    telemetry: {
+      startRequestedAt: 1_000,
+      // Stamped when the retried attempt is actually respawned, i.e. AFTER the
+      // 400ms policy backoff -- so the backoff belongs to the span before this
+      // boundary, not to the new attempt.
+      attemptIndex: 1,
+      attemptStartedAt: 300_400,
+      // The retried attempt entered startChatRun a tick later.
+      startChatRunStartedAt: 300_402,
+      promptBuildStartAt: 300_420,
+      promptBuildEndAt: 300_460,
+      launchPreflightStartAt: 300_460,
+      launchPreflightEndAt: 300_500,
+      processSpawnStartedAt: 300_500,
+      processSpawnedAt: 300_560,
+      modelCallStartAt: 300_600,
+      stdinWriteStartAt: 300_600,
+      stdinWriteEndAt: 300_640,
+      firstModelEventAt: 301_000,
+      firstModelEventType: 'text_delta' as const,
+      firstTokenAt: 301_000,
+      firstVisibleOutputAt: 301_000,
+    },
+    events: [],
+  };
+
+  it('measures queueing from the current attempt, not from run creation', () => {
+    const result = summarizeRunTimingAnalytics(retriedRun);
+
+    // The daemon has no queue, so once the backoff is attributed correctly the
+    // only thing left here is the tick between opening the attempt boundary and
+    // entering startChatRun.
+    expect(result.queue_duration_ms).toBe(2);
+  });
+
+  it('reports the time earlier attempts consumed as its own metric', () => {
+    const result = summarizeRunTimingAnalytics(retriedRun);
+
+    // Everything before this attempt was respawned: attempt 0 executing and
+    // failing (299_000ms) PLUS the 400ms policy backoff. Real elapsed time, but
+    // not queueing.
+    expect(result.retry_wait_duration_ms).toBe(299_400);
+  });
+
+  it('charges a nonzero retry backoff to retry wait rather than to queueing', () => {
+    // Regression pin for the boundary itself: same attempt-0 timeline, a longer
+    // backoff. The extra 600ms must move retry wait, not queueing, or the new
+    // field undercounts retry time by exactly the backoff.
+    const slowerBackoff = summarizeRunTimingAnalytics({
+      ...retriedRun,
+      telemetry: {
+        ...retriedRun.telemetry,
+        attemptStartedAt: 301_000,
+        startChatRunStartedAt: 301_002,
+      },
+    });
+
+    expect(slowerBackoff.retry_wait_duration_ms).toBe(300_000);
+    expect(slowerBackoff.queue_duration_ms).toBe(2);
+  });
+
+  it('keeps the two attempt-scoped spans reconstructible into the legacy value', () => {
+    const result = summarizeRunTimingAnalytics(retriedRun);
+
+    // Auditable identity so dashboards can rebuild the pre-fix number:
+    // queue + retry wait === startChatRunStartedAt - runCreatedAt.
+    expect(
+      (result.queue_duration_ms ?? 0) + (result.retry_wait_duration_ms ?? 0),
+    ).toBe(299_402);
+  });
+
+  it('no longer blames the queue for a retried run’s bottleneck', () => {
+    const result = summarizeRunTimingAnalytics(retriedRun);
+
+    expect(result.bottleneck_phase).not.toBe('queued');
+  });
+
+  it('leaves a first-attempt run measuring queueing from run creation', () => {
+    const result = summarizeRunTimingAnalytics({
+      ...retriedRun,
+      runCreatedAt: 1_000,
+      telemetry: {
+        ...retriedRun.telemetry,
+        attemptIndex: 0,
+        attemptStartedAt: 1_200,
+        startChatRunStartedAt: 1_200,
+      },
+    });
+
+    // Unretried runs keep the original meaning: time from the user's request
+    // to the run actually starting.
+    expect(result.queue_duration_ms).toBe(200);
+    expect(result.retry_wait_duration_ms).toBeUndefined();
   });
 });
