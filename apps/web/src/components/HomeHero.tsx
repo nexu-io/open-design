@@ -2164,7 +2164,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         />
       ) : activePromptExamples.length > 0 ? (
         <div
-          className="home-hero__prompt-examples"
+          className={`home-hero__prompt-examples${activeChipId === 'web-clone' ? ' home-hero__prompt-examples--wide' : ''}`}
           data-testid="home-hero-prompt-examples"
         >
           <div className="home-hero__prompt-examples-title">
