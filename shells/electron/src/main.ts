@@ -18,12 +18,15 @@ import {
   type ElectronWindowsLifecyclePolicy,
 } from "@open-design/electron-kit/windows";
 
-import { placeholderRenderer } from "./renderer/placeholder.js";
+import { placeholderRenderer, prewarmPlaceholderResource } from "./renderer/placeholder.js";
 
 void runElectronShell({
   manifest: manifest as ElectronShellManifest,
   preflight: (runtime as ElectronRuntimeConfig).preflight,
   warmup: (runtime as ElectronRuntimeConfig).warmup,
+  warmupExecutors: {
+    "shell.placeholder-resource": () => prewarmPlaceholderResource(manifest.window.title),
+  },
   renderer: placeholderRenderer,
   actions: {
     async observeCommitted() {

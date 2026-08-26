@@ -237,6 +237,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     await warmup.dispose();
     throw error;
   }
+  context.log.write("warmup.ready", { nodes: warmup.snapshot() });
   const runtimeCarrier = requireWarmupState(carrier as OfficialNodeCarrierReceipt | null, "the official Node carrier");
   const runtimePorts = requireWarmupState(ports as ElectronClosurePorts | null, "Standalone ports");
   const runtimeGeneration = requireWarmupState(generation as GenerationRecord | null, "a Standalone generation");

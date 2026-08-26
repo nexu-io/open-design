@@ -69,8 +69,12 @@ describe("Electron product shell", () => {
       "electron.ensure-carrier",
       "standalone.resolve",
       "standalone.await-ready",
+      "shell.placeholder-resource",
       "electron.mount-renderer",
     ]);
+    expect(runtime.warmup).toMatchObject({ maxConcurrency: 4 });
+    expect(runtimeSource).toContain('"failure": "required"');
+    expect(rendererSource).toContain("prewarmPlaceholderResource");
     expect(rendererSource).toContain("electronShellMounted");
     expect(kitRuntimeSource).not.toMatch(/Electron Shell Foundation|electronShellMounted|electronKitMounted/u);
     expect(runtime.preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);

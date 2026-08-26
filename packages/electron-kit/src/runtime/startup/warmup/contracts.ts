@@ -15,12 +15,14 @@ export type ElectronWarmupNode = Readonly<{
   executor: string;
   dependsOn: readonly string[];
   blocking: boolean;
+  failure?: "best-effort" | "required";
   label?: string;
   timeoutMs?: number;
 }>;
 
 export type ElectronWarmupTopology = Readonly<{
   schemaVersion: typeof ELECTRON_WARMUP_SCHEMA_VERSION;
+  maxConcurrency?: number;
   nodes: readonly ElectronWarmupNode[];
 }>;
 
@@ -33,6 +35,10 @@ export function validateElectronWarmupTopology(value: ElectronWarmupTopology): E
   if (!Array.isArray(value.nodes) || value.nodes.length === 0 || value.nodes.length > 128) {
     throw new Error("Electron warmup topology must declare between 1 and 128 nodes");
   }
+  if (value.maxConcurrency != null
+    && (!Number.isSafeInteger(value.maxConcurrency) || value.maxConcurrency < 1 || value.maxConcurrency > 32)) {
+    throw new Error("Electron warmup topology has invalid concurrency");
+  }
   const ids = new Set<string>();
   for (const node of value.nodes) {
     if (!identifier.test(node.id)) throw new Error(`invalid Electron warmup node id: ${node.id}`);
@@ -44,6 +50,9 @@ export function validateElectronWarmupTopology(value: ElectronWarmupTopology): E
     }
     if (node.label != null && node.label.trim().length === 0) {
       throw new Error(`Electron warmup node has an empty label: ${node.id}`);
+    }
+    if (node.failure != null && node.failure !== "best-effort" && node.failure !== "required") {
+      throw new Error(`Electron warmup node has an invalid failure mode: ${node.id}`);
     }
     if (node.timeoutMs != null && (!Number.isSafeInteger(node.timeoutMs) || node.timeoutMs < 100 || node.timeoutMs > 300_000)) {
       throw new Error(`Electron warmup node has an invalid timeout: ${node.id}`);

@@ -4,7 +4,7 @@ import {
   type ElectronWarmupTopology,
 } from "./contracts.js";
 
-export type ElectronWarmupNodeState = "cancelled" | "completed" | "failed" | "running";
+export type ElectronWarmupNodeState = "cancelled" | "completed" | "failed" | "pending" | "running";
 
 export type ElectronWarmupEvent = Readonly<{
   node: ElectronWarmupNode;
@@ -20,8 +20,46 @@ export type ElectronWarmupExecutor = (context: Readonly<{
 export type ElectronWarmupRun = Readonly<{
   ready: Promise<void>;
   settled: Promise<void>;
+  snapshot(): readonly ElectronWarmupNodeReceipt[];
   dispose(): Promise<void>;
 }>;
+
+export type ElectronWarmupNodeReceipt = Readonly<{
+  durationMs: number | null;
+  error: string | null;
+  id: string;
+  state: ElectronWarmupNodeState;
+}>;
+
+class ElectronWarmupScheduler {
+  readonly #limit: number;
+  #active = 0;
+  readonly #queue: Array<() => void> = [];
+
+  constructor(limit: number) { this.#limit = limit; }
+
+  acquire(): (() => void) | Promise<() => void> {
+    if (this.#active >= this.#limit) {
+      return new Promise<void>((resolve) => this.#queue.push(resolve)).then(() => this.#grant());
+    }
+    return this.#grant();
+  }
+
+  #grant(): () => void {
+    this.#active += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#active -= 1;
+      this.#queue.shift()?.();
+    };
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function executeWithTimeout(
   executor: ElectronWarmupExecutor,
@@ -55,8 +93,17 @@ export function runElectronWarmupTopology(input: Readonly<{
   onEvent?(event: ElectronWarmupEvent): void | Promise<void>;
 }>): ElectronWarmupRun {
   const topology = validateElectronWarmupTopology(input.topology);
+  const unknown = topology.nodes.find((node) => input.executors[node.executor] == null);
+  if (unknown != null) throw new Error(`unknown Electron warmup executor: ${unknown.executor}`);
   const controller = new AbortController();
+  const scheduler = new ElectronWarmupScheduler(topology.maxConcurrency ?? topology.nodes.length);
   const promises = new Map<string, Promise<void>>();
+  const receipts = new Map<string, ElectronWarmupNodeReceipt>(topology.nodes.map((node) => [node.id, {
+    durationMs: null,
+    error: null,
+    id: node.id,
+    state: "pending",
+  }]));
   const emit = (event: ElectronWarmupEvent): void => {
     try { void Promise.resolve(input.onEvent?.(event)).catch(() => undefined); }
     catch { /* Progress observers are non-authoritative. */ }
@@ -64,21 +111,35 @@ export function runElectronWarmupTopology(input: Readonly<{
   const execute = (node: ElectronWarmupNode): Promise<void> => {
     const existing = promises.get(node.id);
     if (existing != null) return existing;
-    const executor = input.executors[node.executor];
+    const executor = input.executors[node.executor]!;
     const promise = Promise.all(node.dependsOn.map((dependency) => {
       const dependencyNode = topology.nodes.find((candidate) => candidate.id === dependency);
       if (dependencyNode == null) throw new Error(`Electron warmup dependency disappeared: ${dependency}`);
       return execute(dependencyNode);
     })).then(async () => {
-      if (executor == null) throw new Error(`unknown Electron warmup executor: ${node.executor}`);
+      const acquired = scheduler.acquire();
+      const release = typeof acquired === "function" ? acquired : await acquired;
+      const startedAt = Date.now();
+      receipts.set(node.id, { durationMs: null, error: null, id: node.id, state: "running" });
       emit({ node, state: "running" });
       try {
         await executeWithTimeout(executor, node, controller.signal);
+        receipts.set(node.id, { durationMs: Date.now() - startedAt, error: null, id: node.id, state: "completed" });
         emit({ node, state: "completed" });
       } catch (error) {
-        emit({ node, state: controller.signal.aborted ? "cancelled" : "failed", error });
-        throw error;
+        const state = controller.signal.aborted ? "cancelled" : "failed";
+        receipts.set(node.id, { durationMs: Date.now() - startedAt, error: errorMessage(error), id: node.id, state });
+        emit({ node, state, error });
+        if (node.failure !== "best-effort") throw error;
+      } finally {
+        release();
       }
+    }).catch((error: unknown) => {
+      if (receipts.get(node.id)?.state === "pending") {
+        receipts.set(node.id, { durationMs: null, error: errorMessage(error), id: node.id, state: "cancelled" });
+        emit({ node, state: "cancelled", error });
+      }
+      throw error;
     });
     promises.set(node.id, promise);
     return promise;
@@ -89,6 +150,9 @@ export function runElectronWarmupTopology(input: Readonly<{
   return Object.freeze({
     ready,
     settled,
+    snapshot() {
+      return topology.nodes.map((node) => structuredClone(receipts.get(node.id)!));
+    },
     async dispose() {
       controller.abort(new Error("Electron warmup lifecycle disposed"));
       await settled;

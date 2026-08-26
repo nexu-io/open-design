@@ -73,4 +73,58 @@ describe("Electron warmup topology", () => {
     await run.settled;
     expect(order.at(-1)).toBe("background:cancelled");
   });
+
+  it("bounds concurrency and records best-effort failures without blocking dependents", async () => {
+    let active = 0;
+    let maximumActive = 0;
+    const execute = async ({ node }: { node: { id: string } }) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      if (node.id === "optional") throw new Error("optional resource unavailable");
+    };
+    const run = runElectronWarmupTopology({
+      topology: {
+        schemaVersion: 1,
+        maxConcurrency: 2,
+        nodes: [
+          { id: "optional", executor: "shell.resource", dependsOn: [], blocking: true, failure: "best-effort" },
+          { id: "parallel", executor: "shell.resource", dependsOn: [], blocking: true },
+          { id: "consumer", executor: "shell.resource", dependsOn: ["optional"], blocking: true },
+        ],
+      },
+      executors: { "shell.resource": execute },
+    });
+    await expect(run.ready).resolves.toBeUndefined();
+    await run.settled;
+    expect(maximumActive).toBe(2);
+    expect(run.snapshot()).toEqual([
+      expect.objectContaining({ error: "optional resource unavailable", id: "optional", state: "failed" }),
+      expect.objectContaining({ error: null, id: "parallel", state: "completed" }),
+      expect.objectContaining({ error: null, id: "consumer", state: "completed" }),
+    ]);
+  });
+
+  it("marks downstream nodes cancelled when a required dependency fails", async () => {
+    const run = runElectronWarmupTopology({
+      topology: {
+        schemaVersion: 1,
+        nodes: [
+          { id: "required", executor: "shell.required", dependsOn: [], blocking: true },
+          { id: "downstream", executor: "shell.downstream", dependsOn: ["required"], blocking: true },
+        ],
+      },
+      executors: {
+        "shell.required": () => { throw new Error("required resource unavailable"); },
+        "shell.downstream": () => undefined,
+      },
+    });
+    await expect(run.ready).rejects.toThrow(/required resource unavailable/u);
+    await run.settled;
+    expect(run.snapshot().map(({ id, state }) => ({ id, state }))).toEqual([
+      { id: "required", state: "failed" },
+      { id: "downstream", state: "cancelled" },
+    ]);
+  });
 });

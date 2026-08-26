@@ -4,7 +4,9 @@ The product layer is deliberately thin. It declares identity, window policy,
 the `od://` handler, ready-before preflight policy, concrete warmup topology, and adapters supplied to
 `@open-design/electron-kit`. `config/runtime.json` owns both the ordered warmup
 declaration and finite locale/connection preflight selection; electron-kit owns
-only graph lifecycle, validation, and its public carrier/Standalone atoms.
+only graph lifecycle, bounded concurrency, required/best-effort failure semantics,
+receipts, validation, and its public carrier/Standalone atoms. The placeholder resource
+prewarm node is a concrete Shell executor and the renderer consumes the warmed value.
 Concrete host exemptions remain in that Shell config and are applied before app
 readiness. `config/distribution.json` separately owns the finite macOS/Windows artifact and NSIS
 presentation policy. `shell.json` owns the single publisher/product identity; `config/platforms/windows.json`

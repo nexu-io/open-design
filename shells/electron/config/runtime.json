@@ -16,6 +16,7 @@
   },
   "warmup": {
     "schemaVersion": 1,
+    "maxConcurrency": 4,
     "nodes": [
       {
         "id": "official-node",
@@ -42,9 +43,18 @@
         "timeoutMs": 30000
       },
       {
+        "id": "placeholder-resource",
+        "executor": "shell.placeholder-resource",
+        "dependsOn": ["standalone-ready"],
+        "blocking": true,
+        "failure": "required",
+        "label": "Preparing Shell resources…",
+        "timeoutMs": 5000
+      },
+      {
         "id": "placeholder-renderer",
         "executor": "electron.mount-renderer",
-        "dependsOn": ["standalone-ready"],
+        "dependsOn": ["placeholder-resource"],
         "blocking": true,
         "label": "Opening the placeholder renderer…",
         "timeoutMs": 20000
