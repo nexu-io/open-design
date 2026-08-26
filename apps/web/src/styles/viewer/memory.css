@@ -1905,7 +1905,7 @@
      actionable even while Settings or any other modal is open. The banner
      uses pointer-events:none on the card itself with opt-in on interactive
      children, so it never intercepts clicks meant for the layer below. */
-  z-index: 110;
+  z-index: 2010;
   width: 380px;
   max-width: calc(100vw - 32px);
   display: flex;
