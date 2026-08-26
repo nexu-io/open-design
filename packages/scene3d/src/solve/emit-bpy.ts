@@ -8,6 +8,7 @@ import {
   SolvedScene,
 } from "./types.js";
 import { sweptBox } from "./sweep.js";
+import type { EmitMesh } from "../kernel/mesh.js";
 
 /**
  * Backend adapter: solved scene → Blender Python.
@@ -47,6 +48,13 @@ export interface EmitOptions {
   materials?: Record<string, MaterialSpec>;
   /** How finely curved primitives are emitted. See TESSELLATION_DEFAULTS. */
   tessellation?: Tessellation;
+  /**
+   * Evaluated kernel meshes, keyed by part id, for every `recipe:` part. The
+   * emitter is pure and cannot run a recipe (that is I/O the pipeline owns), so
+   * the already-evaluated, already-rounded geometry is handed in — its
+   * presence for each recipe part is a pipeline invariant the emitter asserts.
+   */
+  kernelMeshes?: Record<string, EmitMesh>;
 }
 
 /**
@@ -616,6 +624,13 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
     "",
   ];
 
+  /* ---- kernel-backed parts ------------------------------------------ */
+  // Gated on a recipe part existing, so a scene that never uses one emits the
+  // byte-identical script it always did (the cache key is the script bytes).
+  if (scene.parts.some((p) => p.recipe !== undefined)) {
+    lines.push(...KERNEL_PART_HELPER, "");
+  }
+
   /* ---- script-backed parts ------------------------------------------ */
   //
   // Freeform as a shape kind: an agent-authored Python file fills one
@@ -810,6 +825,21 @@ export function emitBlenderScript(scene: SolvedScene, options: EmitOptions = {})
       lines.push(`${open}_import_part(${py(part.id)}, ${py(part.file)}, ${size}, ${center}${material})${close}`);
     } else if (part.script !== undefined) {
       lines.push(`${open}_script_part(${py(part.id)}, ${py(part.script)}, ${size}, ${center}${material})${close}`);
+    } else if (part.recipe !== undefined) {
+      // The recipe already ran (I/O the pipeline owns); its evaluated, once-
+      // rounded mesh is handed in through options. Its absence is a pipeline
+      // bug, not a valid emit — say so rather than shipping an empty box.
+      const mesh = options.kernelMeshes?.[part.id];
+      if (!mesh) {
+        throw new Error(
+          `emit: recipe part '${part.id}' has no evaluated kernel mesh — the pipeline must run the recipe before emit`,
+        );
+      }
+      const verts = `[${mesh.verts.map((v) => `(${v.map(num).join(", ")})`).join(", ")}]`;
+      const faces = `[${mesh.faces.map((f) => `(${f.join(", ")})`).join(", ")}]`;
+      lines.push(
+        `${open}_kernel_part(${py(part.id)}, ${verts}, ${faces}, ${size}, ${center}${material})${close}`,
+      );
     } else {
       // Shape parameters ride as KEYWORDS, and only when the author set
       // them: a part that has no tip and no wall emits exactly the call it
@@ -1046,6 +1076,52 @@ export function frameScene(
  * coexist with a bob, and no part both spins and screws — so the only curve
  * on this index is the one this function just authored.
  */
+/**
+ * Build a recipe part's exact kernel mesh from explicit vertices and fit it
+ * into the declared box, exactly like `_import_part` fits an asset. Authored
+ * into the script only when a scene uses a recipe, so non-recipe scenes stay
+ * byte-identical. No `bpy.ops` builds the geometry — `from_pydata` places the
+ * compiler's exact topology verbatim, which is what lets the census Blender
+ * measures be adjudicated against the kernel's exact prediction.
+ */
+const KERNEL_PART_HELPER: readonly string[] = [
+  "def _kernel_part(name, verts, faces, size, center, material=None):",
+  '    """Fill a solved box with an exact kernel mesh: from_pydata for the',
+  "    topology, then the same uniform-scale, x/y-centred, bottom-rest fit as",
+  '    an imported asset, so relations, contacts and claims behave identically."""',
+  "    from mathutils import Vector, Matrix",
+  "    obj = _mesh_object(name, verts, faces, (0.0, 0.0, 0.0))",
+  "    obj.name = name",
+  "    bpy.context.view_layer.update()",
+  "    corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]",
+  "    lo = [min(c[i] for c in corners) for i in range(3)]",
+  "    hi = [max(c[i] for c in corners) for i in range(3)]",
+  "    dim = [max(hi[i] - lo[i], 1e-9) for i in range(3)]",
+  "    s = min(size[i] / dim[i] for i in range(3))",
+  "    obj.scale = (obj.scale[0] * s, obj.scale[1] * s, obj.scale[2] * s)",
+  "    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)",
+  "    bpy.context.view_layer.update()",
+  "    corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]",
+  "    lo = [min(c[i] for c in corners) for i in range(3)]",
+  "    hi = [max(c[i] for c in corners) for i in range(3)]",
+  "    obj.location = (",
+  "        obj.location[0] + center[0] - (lo[0] + hi[0]) / 2.0,",
+  "        obj.location[1] + center[1] - (lo[1] + hi[1]) / 2.0,",
+  "        obj.location[2] + (center[2] - size[2] / 2.0) - lo[2],",
+  "    )",
+  "    bpy.context.view_layer.update()",
+  "    # Origin to the box centre, like _import_part: rotation (spin/screw/",
+  "    # rotate) must orbit the box centre the language means, not a stray pivot.",
+  "    delta = Vector(center) - obj.location",
+  "    obj.data.transform(Matrix.Translation(-delta))",
+  "    obj.location = (center[0], center[1], center[2])",
+  "    bpy.context.view_layer.update()",
+  "    if material:",
+  "        obj.data.materials.clear()",
+  "        obj.data.materials.append(_material(material))",
+  "    return obj",
+];
+
 const SCREW_HELPER: readonly string[] = [
   "def _animate_screw(name, axis_index, period_frames, rise):",
   '    """One full turn per period about a world axis, composed with a straight',

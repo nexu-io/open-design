@@ -382,6 +382,16 @@ export const ISSUE_CODES = {
   /* A claim the census could not adjudicate. Reported, never silently
      passed — a check that silently did not run is worse than no check. */
   CLAIM_UNCHECKED: "S3D-W-701",
+  /* A KERNEL part's exact prediction (V/F/triangles/watertight/genus,
+     computed by the one evaluator from its operator trace) disagrees with the
+     census Blender measured. Unlike an authored claim this is the COMPILER
+     checking itself: a mismatch can only mean the evaluator, the emit bake, or
+     Blender changed the topology, so it is a hard error that localises the
+     lie (a genus or count delta says which). */
+  KERNEL_PREDICTION_MISMATCH: "S3D-E-702",
+  /* A predicted field the census did not measure (the built census was
+     unavailable or a mesh cap was hit). Reported, never passed. */
+  KERNEL_PREDICTION_UNCHECKED: "S3D-W-702",
 
   /* info */
   STAGE_SKIPPED: "S3D-I-501",

@@ -285,10 +285,14 @@ The sword-assembly field report ("my boxes are flush but the compile says
   the padding. The world extent of a convex shape under rotation R along
   axis e is `h_S(Rᵀe) + h_S(−Rᵀe)` (support function, evaluated in closed
   form per shape in `solve/types.ts:shapeWidthAlong`): exact for box,
-  ellipsoidal sphere, cylinder, tube, cone/frustum (both rims), capsule
-  and torus; the box hull for wedge/file/script. The rotation rides a
-  quaternion sandwich, so compound rotations compose by multiplication
-  when the language grows them — no Euler-order convention to defend.
+  ellipsoidal sphere, cylinder, tube, cone/frustum (both rims), capsule,
+  torus, and wedge (a right triangular prism — the convex hull of six
+  vertices, so its support is the max over them, `flip`-aware; a subset of
+  the box's eight corners, so it is exact yet never exceeds the box hull);
+  the box hull only for file/script, whose geometry the solver cannot see.
+  The rotation rides a quaternion sandwich, so compound rotations compose by
+  multiplication when the language grows them — no Euler-order convention to
+  defend.
 - **`_fit_box` makes "every shape fills its box exactly" literally true.**
   An n-gon's flats sit cos(π/n) inside its circle, so every revolution
   shape shipped up to 0.5% smaller than its box — phantom hairline gaps

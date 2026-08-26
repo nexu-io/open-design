@@ -35,6 +35,7 @@ const BLENDER_FILES = [
   "tests/findings2-real.test.ts",
   "tests/findings3-real.test.ts",
   "tests/formats.test.ts",
+  "tests/kernel-recipe-pipeline.test.ts",
   "tests/kit-viewer-real.test.ts",
   "tests/master-carry.test.ts",
   "tests/master-parity.test.ts",

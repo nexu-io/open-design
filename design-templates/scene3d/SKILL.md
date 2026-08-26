@@ -124,6 +124,7 @@ them.
 | **Scene** | Several props in conversation — `repeat`, `scatter`, stacking | Path-addressed scatter that does not reshuffle when you add a part; derived camera that always contains the subject |
 | **Downloaded asset** | A scene dir of `.glb`/`.gltf`/`.obj`/`.fbx`, *or* a `file:` part inside a declared box | Imports, frames, measures, repackages. `material:` on a `file` part reskins it wholesale |
 | **Freeform shape** | `"script": "hull.py"` with `def build(ctx)` creating exactly one mesh | First-class procedural authoring path; fits that mesh into the declared box like any other part, so relations still work |
+| **Kernel recipe** | `"recipe": "hull.py"` with `def build(ctx)` recording `ctx.box/cage/subdivide/mirror` | Deterministic exact-rational geometry (Catmull-Clark, mirror); the compiler predicts the built census and adjudicates it (`S3D-E-702`). Smooth, count-provable, cross-machine identical |
 | **GPU material** | A `.glsl` kernel `vec4 kernel(vec2 uv)` plus a `shaders` block | Bakes textures (even a height field → normal map), wires them, shows them in the proof and the GLB |
 | **Motion (current subset)** | Per-part `spin` / `bob` / `screw` | Owns the keyframes, loops them, derives an animation asset, keeps clips on imported rigs; richer timelines and deformation systems are future language work |
 | **Sprite / flipbook / VFX / sky** | A sheet file, *or* a kernel with `"frames": 16` | Measures the atlas (grid, bleed, seams, motion). A frames kernel *is* a sheet, so materials do not bind it |
@@ -313,6 +314,20 @@ Fill the box another way:
   centre); placement stays the relations' job. A script that raises
   reports its own line number with this contract restated, and a
   missing script file is a parse error before Blender ever runs.
+- `"recipe": "hull.py"`: `def build(ctx):` that RECORDS a deterministic
+  kernel trace instead of building geometry — `ctx.box(half=1)` or
+  `ctx.cage(points, faces)` to seed, then `ctx.subdivide(levels)` (exact
+  Catmull-Clark) and `ctx.mirror(axis)` (0=x/1=y/2=z), chained fluently.
+  Coordinates are ints, rational strings (`"1/2"`) or `fractions.Fraction`
+  — never floats. It runs in plain CPython (no `bpy`), so ordinary loops
+  and helpers are fine; the compiler evaluates the trace in exact rationals,
+  fits the mesh into the box like `file:`/`script:`, and — because it owns
+  the geometry — PREDICTS the built census and adjudicates it against
+  Blender (`S3D-E-702` if they ever disagree). Reach for `recipe:` over
+  `script:` when you want smooth/organic form that is deterministic across
+  machines and count-provable (a rounded hull, a mirror-exact shell); reach
+  for `script:` when you need arbitrary `bpy`. `mirror` is for OPEN
+  half-shells (build half, mirror to close), not a closed solid.
 
 **Roles.** `role` on a part names its job — `hero`, `character`, `prop`,
 `background`, or `decor` — and the intent judge budgets triangle share

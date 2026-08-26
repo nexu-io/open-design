@@ -1,4 +1,4 @@
-import { MIN_CONTACT, SolvedPart, Vec3 } from "./types.js";
+import { MIN_CONTACT, obbSeparation, SolvedPart, Vec3 } from "./types.js";
 import { Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 
@@ -54,8 +54,29 @@ export function clearanceIssues(
   return issues;
 }
 
-/** Largest per-axis gap between two world boxes; ≤ 0 when they overlap. */
+/**
+ * Box-to-box separation; ≤ 0 when they overlap, > 0 is a proven gap.
+ *
+ * When either part is rotated, the WORLD AABB is a strict over-estimate of
+ * the box (a canted bar's axis-aligned bound spans its diagonal), so two
+ * parts that are cleanly apart can have overlapping AABBs — and the world-
+ * axis gap then reads negative, which the caller treats as a designed touch
+ * and skips. That silently DROPS a real pinch between two canted parts, and
+ * for parts that do read apart it invents pinches the oriented boxes never
+ * had. The exact SAT verdict on the true oriented boxes decides instead —
+ * the same predicate, on the same `localSize ?? size` + `rotate`, that the
+ * solver's intersection report switches to for rotated pairs (contact.ts),
+ * so clearance and contact never disagree about one oriented pair. For an
+ * unrotated pair obbSeparation reduces to this exact per-axis gap, so the
+ * fast path is kept for the common case rather than paying for 15 axes.
+ */
 function boxSeparation(a: SolvedPart, b: SolvedPart): number {
+  if (a.rotate || b.rotate) {
+    return obbSeparation(
+      { center: a.center, size: a.localSize ?? a.size, rotate: a.rotate },
+      { center: b.center, size: b.localSize ?? b.size, rotate: b.rotate },
+    );
+  }
   let widest = -Infinity;
   for (let axis = 0; axis < 3; axis++) {
     const aHalf = a.size[axis]! / 2;

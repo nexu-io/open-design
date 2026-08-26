@@ -15,7 +15,9 @@ import { lintSheets, type SheetLintInput } from "./sheet.js";
 import { lintClaims } from "./claims.js";
 import { lintIntent } from "./judge.js";
 import { applyImportedPosture, importedObjects } from "./provenance.js";
+import { adjudicateKernelPrediction, type MeasuredMesh } from "./kernel.js";
 import type { ClaimsSpec, SolvedScene } from "../solve/types.js";
+import type { PredictedCensus } from "../kernel/mesh.js";
 
 export interface LintInput {
   contract: NormalizedContract;
@@ -59,6 +61,12 @@ export interface LintInput {
    * same block.
    */
   authoredKeys?: ReadonlySet<string>;
+  /**
+   * Each `recipe:` part's exact predicted census (from the kernel evaluator),
+   * adjudicated against the mesh Blender actually built. The compiler checking
+   * its own author — a mismatch is a theorem-grade bug (S3D-E-702).
+   */
+  kernelPredictions?: ReadonlyArray<{ partId: string; census: PredictedCensus }>;
 }
 
 /**
@@ -153,6 +161,30 @@ export function runLint(input: LintInput): Issue[] {
   // to render'.
   lintProof(input.proofFrames, issues, input.contract.proofThresholds, sceneSizeMetres(input.census));
   lintIntent(input.census, input.contract, input.solved, issues);
+
+  // The kernel's exact prediction vs the built census — the compiler
+  // adjudicating its own recipe author, mesh by mesh. Watertightness is
+  // exact (a Blender edge is manifold only when it borders exactly two
+  // faces, so zero non-manifold edges means closed AND manifold); genus is
+  // formed from the census edge count when the prediction offered one.
+  if (input.kernelPredictions && input.kernelPredictions.length > 0) {
+    const measuredByName = new Map((input.census?.meshes ?? []).map((m) => [m.object, m]));
+    for (const { partId, census } of input.kernelPredictions) {
+      const m = measuredByName.get(partId);
+      const measured: MeasuredMesh | undefined = m
+        ? {
+            vertices: m.verts,
+            faces: m.faces,
+            ...(m.tris !== undefined ? { triangles: m.tris } : {}),
+            watertight: m.nonManifoldEdges === 0,
+            ...(census.genus !== null && m.edges !== undefined && m.nonManifoldEdges === 0
+              ? { genus: (2 - (m.verts - m.edges + m.faces)) / 2 }
+              : {}),
+          }
+        : undefined;
+      issues.push(...adjudicateKernelPrediction(partId, census, measured));
+    }
+  }
   if (input.exportedUsda) {
     lintExportedStage(
       {

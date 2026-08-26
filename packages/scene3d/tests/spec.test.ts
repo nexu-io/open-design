@@ -1983,7 +1983,7 @@ describe("did-you-mean on unknown keys", () => {
       relations: [{ type: "at", part: "prp_a", center: [0, 0, 0.5] }],
     }).errors.find((e) => e.includes("materal"))!;
     expect(message).toBe(
-      'parts[0].materal is not a part field — did you mean "material"? known fields: id, size, shape, file, script, axis, flip, tip, thickness, material, role, spin, bob, screw, rotate',
+      'parts[0].materal is not a part field — did you mean "material"? known fields: id, size, shape, file, script, recipe, axis, flip, tip, thickness, material, role, spin, bob, screw, rotate',
     );
   });
 
@@ -2146,6 +2146,153 @@ describe("rotatedShapeSize", () => {
   });
 });
 
+/**
+ * The wedge was the last shape routed to the conservative box hull in
+ * `shapeWidthAlong`, even though a wedge is a right triangular prism — the
+ * convex hull of six known vertices — whose support width is exact. A
+ * ROTATED wedge therefore over-reserved its world box: a part resting on a
+ * tipped ramp floated above the true surface (the sword-assembly phantom-gap
+ * class, for the one shape it was never fixed for). These pin the exact
+ * bound against an INDEPENDENT oracle: the six real vertices the emitter
+ * builds (`_wedge_verts` in emit-bpy.ts), rotated by a from-scratch matrix,
+ * then the true world AABB — sharing none of `shapeWidthAlong`'s arithmetic.
+ */
+describe("wedge support is exact, not the box hull", () => {
+  type M3 = [number, number, number][];
+  const rot = (axis: "x" | "y" | "z", deg: number): M3 => {
+    const r = (deg * Math.PI) / 180;
+    const c = Math.cos(r);
+    const s = Math.sin(r);
+    if (axis === "x") return [[1, 0, 0], [0, c, -s], [0, s, c]];
+    if (axis === "y") return [[c, 0, s], [0, 1, 0], [-s, 0, c]];
+    return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
+  };
+  // The six real wedge vertices, mirroring _wedge_verts: full-rectangle
+  // bottom, two top corners at the high end of the slope. `high = -1` moves
+  // the high end to the axis- face, exactly as `flip` does in the emitter.
+  const wedgeVerts = (
+    size: [number, number, number],
+    axis: "x" | "y",
+    flip: boolean,
+  ): Array<[number, number, number]> => {
+    const a = [size[0] / 2, size[1] / 2, size[2] / 2];
+    const slope = axis === "x" ? 0 : 1;
+    const across = slope === 0 ? 1 : 0;
+    const tall = 2;
+    const high = flip ? -1 : 1;
+    const verts: Array<[number, number, number]> = [];
+    const push = (su: number, sc: number, sz: number): void => {
+      const v: [number, number, number] = [0, 0, 0];
+      v[slope] = su * a[slope]!;
+      v[across] = sc * a[across]!;
+      v[tall] = sz * a[tall]!;
+      verts.push(v);
+    };
+    for (const su of [-1, 1]) for (const sc of [-1, 1]) push(su, sc, -1);
+    for (const sc of [-1, 1]) push(high, sc, 1);
+    return verts;
+  };
+  const trueExtents = (
+    size: [number, number, number],
+    axis: "x" | "y",
+    flip: boolean,
+    rotAxis: "x" | "y" | "z",
+    deg: number,
+  ): [number, number, number] => {
+    const R = rot(rotAxis, deg);
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (const v of wedgeVerts(size, axis, flip)) {
+      for (let i = 0; i < 3; i++) {
+        const w = R[i]![0]! * v[0]! + R[i]![1]! * v[1]! + R[i]![2]! * v[2]!;
+        if (w < lo[i]!) lo[i] = w;
+        if (w > hi[i]!) hi[i] = w;
+      }
+    }
+    return [hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!];
+  };
+
+  it("matches the exact rotated hull of the real wedge vertices, and never exceeds the box hull", () => {
+    const boxes: Array<[number, number, number]> = [
+      [2, 1, 1], [0.4, 0.3, 0.16], [1, 1, 1], [0.5, 2, 0.3],
+    ];
+    let strictlyTighterSeen = 0;
+    for (const size of boxes)
+      for (const axis of ["x", "y"] as const)
+        for (const flip of [false, true])
+          for (const rotAxis of ["x", "y", "z"] as const)
+            for (const deg of [15, 30, 45, 60, 90, 120, -37, 7]) {
+              const got = rotatedShapeSize({ shape: "wedge", axis, flip }, size, { axis: rotAxis, deg });
+              const want = trueExtents(size, axis, flip, rotAxis, deg);
+              const hull = rotatedBoxSize(size, { axis: rotAxis, deg });
+              for (let i = 0; i < 3; i++) {
+                expect(got[i]).toBeCloseTo(want[i]!, 12); // exact vs real geometry
+                expect(got[i]!).toBeLessThanOrEqual(hull[i]! + 1e-12); // never looser
+                if (got[i]! < hull[i]! - 1e-9) strictlyTighterSeen++;
+              }
+            }
+    // The whole point: on tipping rotations the exact bound is measurably
+    // tighter than the hull the old default branch gave.
+    expect(strictlyTighterSeen).toBeGreaterThan(0);
+  });
+
+  it("the √2 anchor: a [2,1,1] wedge tipped 45° reserves exactly √2 in z, not 3√2/2", () => {
+    // Verified independently in exact rationals: the missing top-back corner
+    // is the z-extreme the box hull counts and the wedge does not have.
+    const got = rotatedShapeSize({ shape: "wedge", axis: "x" }, [2, 1, 1], { axis: "y", deg: 45 });
+    expect(got[2]).toBeCloseTo(Math.SQRT2, 12); // exact wedge z-extent
+    expect(got[0]).toBeCloseTo((3 * Math.SQRT2) / 2, 12); // x DOES reach those corners → equals hull
+    expect(got[1]).toBeCloseTo(1, 12); // across axis unchanged by the tip
+    const hull = rotatedBoxSize([2, 1, 1], { axis: "y", deg: 45 });
+    expect(got[2]!).toBeLessThan(hull[2]! - 1e-6); // 354mm of phantom gap removed
+  });
+
+  it("a rotation about z leaves the box-hull bound untouched (the pavilion invariant)", () => {
+    // spec_pavilion's ramp rotates about z; a wedge's z-rotation footprint IS
+    // the full rectangle and its z-extent is unchanged, so the exact bound
+    // must equal the box hull there — the zero-issue control stays byte-stable.
+    const size: [number, number, number] = [0.4, 0.3, 0.16];
+    const got = rotatedShapeSize({ shape: "wedge", axis: "x" }, size, { axis: "z", deg: 15 });
+    const hull = rotatedBoxSize(size, { axis: "z", deg: 15 });
+    for (let i = 0; i < 3; i++) expect(got[i]).toBeCloseTo(hull[i]!, 12);
+  });
+});
+
+describe("recipe parts (the kernel front-end)", () => {
+  const base = (part: Record<string, unknown>) => ({
+    schemaVersion: 1 as const,
+    parts: [part],
+    relations: [{ type: "at", part: "prp_hull", center: [0, 0, 0] }],
+  });
+
+  it("accepts a recipe part and carries the path through", () => {
+    const r = validateSceneSpec(base({ id: "prp_hull", size: [1, 1, 1], recipe: "hull.py" }));
+    expect(r.errors).toEqual([]);
+    expect(r.spec?.parts[0]?.recipe).toBe("hull.py");
+  });
+
+  it("refuses to share a box with another filler", () => {
+    expect(
+      validateSceneSpec(base({ id: "prp_hull", size: [1, 1, 1], recipe: "hull.py", shape: "box" })).errors.join("\n"),
+    ).toContain("recipe and shape are mutually exclusive");
+    expect(
+      validateSceneSpec(base({ id: "prp_hull", size: [1, 1, 1], recipe: "hull.py", script: "s.py" })).errors.join("\n"),
+    ).toContain("recipe and script are mutually exclusive");
+    expect(
+      validateSceneSpec(base({ id: "prp_hull", size: [1, 1, 1], recipe: "hull.py", file: "m.glb" })).errors.join("\n"),
+    ).toContain("recipe and file are mutually exclusive");
+  });
+
+  it("holds the path discipline script parts hold", () => {
+    expect(
+      validateSceneSpec(base({ id: "prp_hull", size: [1, 1, 1], recipe: "hull.txt" })).errors.join("\n"),
+    ).toContain("must be a .py file");
+    expect(
+      validateSceneSpec(base({ id: "prp_hull", size: [1, 1, 1], recipe: "../hull.py" })).errors.join("\n"),
+    ).toContain("no '..'");
+  });
+});
+
 describe("sits_on / above along an authored axis", () => {
   const sword = {
     schemaVersion: 1 as const,
@@ -2217,6 +2364,18 @@ describe("obbSeparation", () => {
     expect(obbSeparation(a, b)).toBeCloseTo(0.25, 12);
     const c = { center: [0.75, 0, 0] as [number, number, number], size: [1, 1, 1] as [number, number, number] };
     expect(obbSeparation(a, c)).toBeCloseTo(-0.25, 12);
+  });
+
+  it("returns the true separation, not the first separating axis's witness", () => {
+    // Red-team repro: a negligibly-tilted box and another 49m away in y. The
+    // first SAT axis (a's local x) gives a tiny positive gap ~0.03m purely
+    // from the 1.02 x-offset; early-exiting there reported that instead of the
+    // ~49m gap on y, a ~1700x under-report that turned every distant rotated
+    // pair into a phantom clearance pinch. The full max over all 15 axes sees
+    // the real gap.
+    const a = { center: [0, 0, 0] as [number, number, number], size: [1, 1, 1] as [number, number, number], rotate: { axis: "z" as const, deg: 0.01 } };
+    const b = { center: [1.02, 50, 0] as [number, number, number], size: [1, 1, 1] as [number, number, number] };
+    expect(obbSeparation(a, b)).toBeGreaterThan(48.9);
   });
 });
 

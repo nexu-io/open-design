@@ -364,10 +364,13 @@ an edited `.bin` used to report `build: cached` and ship the old mesh.
 output.
 
 - **Parts** declare an AABB in metres and what fills it: `box`,
-  `cylinder`, `sphere`, `cone`, `torus`, a `file:` import, or a `script:`
-  Python file that defines `def build(ctx)`. Every fill is fitted inside
-  the declared box (uniform scale, centred on x/y, bottom-rest), so
-  relations, claims, contacts, and provenance behave identically.
+  `cylinder`, `sphere`, `cone`, `torus`, a `file:` import, a `script:`
+  Python file that defines `def build(ctx)`, or a `recipe:` — Python that
+  records a deterministic kernel operator trace (`ctx.box`/`cage`/
+  `subdivide`/`mirror`) the compiler evaluates in exact rationals (see
+  [Kernel](#kernel)). Every fill is fitted inside the declared box (uniform
+  scale, centred on x/y, bottom-rest), so relations, claims, contacts, and
+  provenance behave identically.
 - **Relations** (`at`, `sits_on`, `above`, `align`, `inset_from`, `span`,
   `repeat`, `scatter`) are order-independent. The solver is a fixpoint.
   `repeat` × `scatter` on the same part is a static reject.
@@ -629,6 +632,8 @@ Any UI that shows a bare code must show or tooltip its title via
 | `S3D-W-605` | Additive sheet has a bright border |
 | `S3D-E-701` | Authored claim failed |
 | `S3D-W-701` | Claim could not be checked |
+| `S3D-E-702` | Kernel prediction did not match build |
+| `S3D-W-702` | Kernel prediction could not be checked |
 | `S3D-E-801` | Shader source invalid |
 | `S3D-E-802` | Driver rejected shader |
 | `S3D-E-803` | Shader bake failed |
@@ -673,6 +678,8 @@ packages/scene3d/src/
 ├── manifest.ts          sidecars, kit index, deriveAssetKind
 ├── parse/               source discovery, USDA parser, companion files
 ├── solve/               language, validate, fixpoint, contact, emit-bpy, rng
+├── kernel/              deterministic geometry: exact rationals, Catmull-Clark,
+│                        mirror, homology, predicted census, operator-trace IR
 ├── shade/               kernel validate/emit/stdlib (PCG2D, never fract(sin))
 ├── build/               Blender spawn, runner protocol, census types
 ├── lint/                one module per family; rules.ts is the orchestra
@@ -684,6 +691,8 @@ packages/scene3d/src/
 packages/scene3d/scripts/blender/
 ├── runner.py            build / proof / export / bake_shaders / census
 └── usd_oracle.py        OpenUSD pxr composition/binding check
+packages/scene3d/scripts/kernel/
+└── recipe_runner.py     runs a `recipe:` in plain CPython → operator trace
 ```
 
 ### Solver
@@ -693,6 +702,26 @@ Pure arithmetic over a part graph. Output is a `SolvedScene` of boxes.
 Generated geometry must lint clean by construction (TRIFAN caps, applied
 transforms, authored materials). Provenance remaps repeat/scatter clones
 to the base part's authored line.
+
+### Kernel
+
+The deterministic geometry engine behind `recipe:` parts (`src/kernel/`).
+It is a **language-neutral operator IR with one evaluator**: a front-end
+(the raw-path Python recorder today, a declarative shape later) produces a
+serialized *trace* of exact operators — `cage`, `subdivide` (Catmull-Clark),
+`mirror` — and the compiler alone evaluates it. Everything is exact
+rational arithmetic on BigInt (no float, no trig), so a mesh is exact
+through any number of subdivision levels and identical on every machine;
+the one rounding is `toEmitMesh`, at emit, into `_kernel_part`'s
+`from_pydata`. The weld is by exact coordinate (an integer permutation, no
+tolerance), so `mirror` shares its seam and `predictCensus` can assert
+watertightness. Because the kernel mints the geometry exactly, it PREDICTS
+the built census (V/E/F/triangles/watertight/genus, with real orientation
+and homology backing) and that prediction is adjudicated against Blender's
+measurement (`S3D-E-702`) — the compiler checking its own author. The trace
+hashes into the content cache like a build script's bytes. Blendshapes
+(`delta`), creases, and skin weights are future opcodes in the same union,
+not a new architecture. Lineage and the full design bet: `KILN.md`.
 
 ### Shaders
 

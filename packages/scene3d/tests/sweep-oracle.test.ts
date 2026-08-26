@@ -97,7 +97,7 @@ function inverseApplyBasis(r: Mat3, i: number): Vec3 {
 /* The oracle                                                          */
 /* ------------------------------------------------------------------ */
 
-const factsOf = (p: SolvedPart): ShapeFacts => ({ shape: p.shape, axis: p.axis, tip: p.tip });
+const factsOf = (p: SolvedPart): ShapeFacts => ({ shape: p.shape, axis: p.axis, tip: p.tip, flip: p.flip });
 
 /**
  * World extent of the part along world axis `i` at spin angle `theta`.
@@ -316,12 +316,18 @@ function caseAt(index: number): SolvedPart {
           deg: r.uniform(-360, 360),
         };
 
+  // `flip` feeds the world box, because a wedge's support is not
+  // flip-symmetric (the high end of the slope reaches a different corner) —
+  // so the box must be computed WITH it, exactly as the solver does by
+  // passing the whole part to rotatedShapeSize (solver.ts). Drawing it here
+  // rather than inside the literal keeps the box and the part in agreement.
+  const flip = r.next() < 0.5;
   const part: SolvedPart = {
     id: `prp_fuzz_${index}`,
     shape,
     axis,
-    flip: r.next() < 0.5,
-    size: rotatedShapeSize(facts, localSize, rotate),
+    flip,
+    size: rotatedShapeSize({ ...facts, flip }, localSize, rotate),
     center: [r.uniform(-5, 5), r.uniform(-5, 5), r.uniform(-5, 5)],
   };
   if (facts.tip !== undefined) part.tip = facts.tip;

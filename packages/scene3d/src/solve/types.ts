@@ -107,6 +107,21 @@ export interface PartSpec {
    */
   script?: string;
   /**
+   * A scene-relative Python RECIPE that authors a deterministic operator
+   * trace, which the compiler's kernel evaluates into the box's geometry.
+   *
+   * Unlike `script`, a recipe never touches Blender: it runs in plain CPython
+   * and its `ctx` verbs (box/cage/subdivide/mirror) RECORD exact rational
+   * operators rather than build meshes. The compiler evaluates that trace
+   * itself — one evaluator, exact rationals, no float until emit — so it can
+   * PREDICT the built census (vertices, faces, triangles, watertightness,
+   * genus) and adjudicate the prediction against what Blender measured
+   * (S3D-E-702): the kernel is just another author whose claims are checked.
+   * Fitted into the declared box like `file`/`script`; `material` overrides
+   * wholesale. Mutually exclusive with shape/file/script — one filler per box.
+   */
+  recipe?: string;
+  /**
    * The axis a cylinder/cone/tube/capsule runs along, the axis a torus's
    * hole faces, and the axis a wedge slopes UP along (its low end at the
    * axis- face, its high end at the axis+ face). Default "z" (a standing
@@ -500,6 +515,9 @@ export interface SolvedPart {
   file?: string;
   /** Scene-relative Python script filling the box, when script-backed. */
   script?: string;
+  /** Scene-relative Python recipe authoring the box's geometry via the kernel
+   *  operator trace, when recipe-backed. */
+  recipe?: string;
   material?: string;
   spin?: { axis?: Axis; seconds?: number };
   bob?: { amplitude: number; seconds?: number };
@@ -687,6 +705,14 @@ export interface ShapeFacts {
   shape?: PartShape;
   axis?: Axis;
   tip?: number;
+  /**
+   * Which end of a wedge's slope is the high one — the ONE shape whose
+   * support width is not flip-symmetric (its top face rises to one end, so
+   * a tipping rotation reaches a different corner depending on the end).
+   * Every other shape here is centrally symmetric or a revolution, so flip
+   * cannot change a total width and this is left unread.
+   */
+  flip?: boolean;
 }
 
 /**
@@ -695,10 +721,11 @@ export interface ShapeFacts {
  *
  * Exact for box, sphere (an ellipsoid when the box is not a cube),
  * cylinder, tube (its outer surface governs the bound), cone and frustum
- * (both rims tested), capsule and torus with circular sections;
- * conservative (the box hull) for wedge and for file/script parts, whose
- * geometry the solver cannot see. `flip` never changes a width, so it is
- * not consulted.
+ * (both rims tested), capsule, torus with circular sections, and WEDGE (a
+ * right triangular prism — the convex hull of six known vertices);
+ * conservative (the box hull) only for file/script parts, whose geometry
+ * the solver cannot see. `flip` changes a width for the wedge alone (see
+ * ShapeFacts.flip); no other shape consults it.
  */
 export function shapeWidthAlong(facts: ShapeFacts, size: Vec3, d: Vec3): number {
   const a = [size[0]! / 2, size[1]! / 2, size[2]! / 2] as Vec3;
@@ -736,8 +763,45 @@ export function shapeWidthAlong(facts: ShapeFacts, size: Vec3, d: Vec3): number 
       const major = Math.hypot(Math.max(a[p]! - r, 0) * d[p]!, Math.max(a[q]! - r, 0) * d[q]!);
       return 2 * (major + r);
     }
+    case "wedge": {
+      // A wedge is a right triangular prism: the convex hull of exactly SIX
+      // vertices — the four bottom box corners plus the two top corners at
+      // the HIGH end of the slope. The support width of a polytope is a max
+      // over its vertices, so this is EXACT (max − min of d·v over the six),
+      // and because the six are a strict SUBSET of the box's eight corners
+      // it can never exceed the box hull the default branch gives — the same
+      // "tighter, never looser" safety every support bound in this language
+      // keeps. Mirrors _wedge_verts in emit-bpy.ts: `axis` names the slope
+      // direction (the validator forbids z, so the slope is x or y and the
+      // tall axis is always z), and `flip` moves the high end to the axis−
+      // face. A rotation about z leaves the full-rectangle bottom footprint
+      // and the z-extent untouched, so this returns the box hull there
+      // exactly; only a tipping rotation (about the slope or across axis)
+      // reaches a corner the wedge does not have and tightens the bound.
+      const slope = AXES.indexOf(facts.axis ?? "x");
+      // A wedge's slope is never z (the validator forbids it); if it somehow
+      // is, the tall/slope frame collapses, so fall back to the box hull.
+      if (slope === 2) {
+        return 2 * (a[0]! * Math.abs(d[0]!) + a[1]! * Math.abs(d[1]!) + a[2]! * Math.abs(d[2]!));
+      }
+      const tall = 2;
+      const across = slope === 0 ? 1 : 0;
+      const high = facts.flip ? -1 : 1;
+      let lo = Infinity;
+      let hi = -Infinity;
+      const consider = (su: number, sc: number, sz: number): void => {
+        const proj = su * a[slope]! * d[slope]! + sc * a[across]! * d[across]! + sz * a[tall]! * d[tall]!;
+        if (proj < lo) lo = proj;
+        if (proj > hi) hi = proj;
+      };
+      // Four bottom corners (z−, both slope signs), two top corners (z+, the
+      // high slope end only).
+      for (const su of [-1, 1]) for (const sc of [-1, 1]) consider(su, sc, -1);
+      for (const sc of [-1, 1]) consider(high, sc, 1);
+      return hi - lo;
+    }
     default:
-      // box, wedge, file, script: the box hull.
+      // box, file, script: the box hull.
       return 2 * (a[0]! * Math.abs(d[0]!) + a[1]! * Math.abs(d[1]!) + a[2]! * Math.abs(d[2]!));
   }
 }
@@ -755,9 +819,14 @@ export function shapeWidthAlong(facts: ShapeFacts, size: Vec3, d: Vec3): number 
  * minimum translation distance. Orientations ride the same quaternion the
  * rotated-bounds math uses.
  *
- * Returns a signed separation: any positive value is a PROVEN gap (the
- * search stops at the first separating axis, so it is a witness, not the
- * maximum); negative = minus the exact minimum translation distance.
+ * Returns a signed separation: the MAXIMUM gap over all 15 axes. Positive =
+ * the tightest SAT separation bound (a certified lower bound on the true
+ * distance, exact for face-to-face closest features); negative = minus the
+ * exact minimum translation distance. The search does NOT early-exit on the
+ * first separating axis: that returns an arbitrary witness far below the true
+ * separation (a 0.01°-tilted pair 49 m apart witnessed 0.03 m on its first
+ * axis), which is fine for a "do they intersect" sign test but wrong for any
+ * consumer reading the magnitude as a clearance — so the full max is taken.
  */
 export function obbSeparation(
   a: { center: Vec3; size: Vec3; rotate?: { axis: Axis; deg: number } },
@@ -796,7 +865,10 @@ export function obbSeparation(
     const rb = hb[0]! * Math.abs(dot(L, ub[0]!)) + hb[1]! * Math.abs(dot(L, ub[1]!)) + hb[2]! * Math.abs(dot(L, ub[2]!));
     const gap = Math.abs(dot(L, d)) - (ra + rb);
     if (gap > best) best = gap;
-    if (best > 0) return best; // proven disjoint — no need to finish
+    // No early exit: the first separating axis is only a witness, and its gap
+    // can be orders of magnitude below the true separation. The tightest SAT
+    // bound is the MAX over every axis, so the loop always finishes — 15 axes
+    // is cheap, and the magnitude is now trustworthy as a distance.
   }
   return best;
 }

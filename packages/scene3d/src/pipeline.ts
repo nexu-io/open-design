@@ -28,9 +28,13 @@ import {
   readCache,
   runRunner,
   runnerPath,
+  scriptsDir,
   probeBlender,
   writeCache,
 } from "./build/blender.js";
+import { runRecipe } from "./parse/recipe.js";
+import { evalTrace } from "./kernel/trace.js";
+import { toEmitMesh, predictCensus, type EmitMesh, type PredictedCensus } from "./kernel/mesh.js";
 import { validateCensus } from "./build/census.js";
 import { runLint } from "./lint/rules.js";
 import { validateGltf } from "./lint/gltf-oracle.js";
@@ -214,6 +218,11 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
   /** This solve frozen as the NEXT compile's prediction frame. */
   let solveSnapshot: SolveSnapshot | undefined;
   let specScript: string | undefined;
+  /** Evaluated kernel meshes for `recipe:` parts, handed to the emitter. */
+  const kernelMeshes: Record<string, EmitMesh> = {};
+  /** Each recipe part's exact predicted census, adjudicated in lint against
+   *  the census Blender measures (S3D-E-702). */
+  const kernelPredictions: Array<{ partId: string; census: PredictedCensus }> = [];
   let specLines: Record<string, number> = {};
   /* ---- Minecraft model import (.bbmodel / Java model.json) --------- */
   /* Convert the model to a scene.json spec IN MEMORY, then run the normal
@@ -379,6 +388,23 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
             });
           }
         }
+        // A recipe-backed part's bytes join the content hash the same way, and
+        // must exist. Independent of file/script — one filler per box, and a
+        // typo is a parse error here, not a Python traceback at solve time.
+        if (part.recipe) {
+          if (fs.existsSync(path.join(request.projectDir, part.recipe))) {
+            if (!source.files.includes(part.recipe)) source.files.push(part.recipe);
+          } else {
+            missingAssets = true;
+            issues.push({
+              code: ISSUE_CODES.SPEC_INVALID,
+              severity: "error",
+              message: `part '${part.id}': recipe '${part.recipe}' does not exist in the scene directory`,
+              file: "scene.json",
+              target: part.id,
+            });
+          }
+        }
         // A script-backed part's bytes join the content hash too: editing
         // the script must recompile the scene, exactly like replacing an
         // asset file. Existence is a parse error, not a Blender traceback.
@@ -454,12 +480,55 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       const unresolved = solved.diagnostics.some(
         (d) => d.code !== "SOLVE-EPSILON-FLOOR" && d.code !== "SOLVE-INTERSECTION",
       );
+      // Recipe parts run BEFORE emit: each is ordinary Python executed in
+      // plain CPython (no bpy) that authors an operator trace, which the one
+      // kernel evaluator turns into exact geometry and an exact predicted
+      // census. The geometry is handed to the emitter; the prediction is
+      // adjudicated in lint against what Blender measures. A recipe that fails
+      // its contract is a parse-class error, and blocks the emit that would
+      // otherwise ship an empty box for it.
+      let recipeFailed = false;
       if (!unresolved && !missingAssets) {
+        const recipeRunner = path.join(scriptsDir(), "kernel", "recipe_runner.py");
+        for (const part of solved.parts) {
+          if (!part.recipe) continue;
+          const result = runRecipe(path.join(request.projectDir, part.recipe), {
+            runnerScript: recipeRunner,
+          });
+          if (!result.ok || !result.trace) {
+            recipeFailed = true;
+            issues.push({
+              code: ISSUE_CODES.SPEC_INVALID,
+              severity: "error",
+              message: `part '${part.id}': ${result.error ?? "recipe produced no trace"}`,
+              file: "scene.json",
+              target: part.id,
+            });
+            continue;
+          }
+          try {
+            const mesh = evalTrace(result.trace);
+            kernelMeshes[part.id] = toEmitMesh(mesh);
+            kernelPredictions.push({ partId: part.id, census: predictCensus(mesh) });
+          } catch (e) {
+            recipeFailed = true;
+            issues.push({
+              code: ISSUE_CODES.SPEC_INVALID,
+              severity: "error",
+              message: `part '${part.id}': recipe trace did not evaluate — ${(e as Error).message}`,
+              file: "scene.json",
+              target: part.id,
+            });
+          }
+        }
+      }
+      if (!unresolved && !missingAssets && !recipeFailed) {
         specScript = emitBlenderScript(solved, {
           ...(spec.materials ? { materials: spec.materials } : {}),
           camera: spec.camera ?? true,
           ...(spec.light ? { light: spec.light } : {}),
           tessellation: normalized.tessellation,
+          kernelMeshes,
         });
         const generatedDir = path.join(request.projectDir, ".scene3d");
         fs.mkdirSync(generatedDir, { recursive: true });
@@ -1584,6 +1653,9 @@ export async function compile(request: CompileRequest): Promise<CompileResult> {
       // conventions too, but a preset is a default, not a statement of intent,
       // and must not cancel the relaxation on their behalf.
       authoredKeys,
+      // Each recipe part's exact predicted census, adjudicated against the
+      // census Blender measured — the compiler checking its own author.
+      ...(kernelPredictions.length > 0 ? { kernelPredictions } : {}),
     });
     /* The two animated-claim oracles both live in lint/claims.ts now —
        the sampled census envelope AND the analytic swept envelope

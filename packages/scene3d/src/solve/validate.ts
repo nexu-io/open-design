@@ -501,6 +501,37 @@ function validatePart(
       errors.push(`${at}: flip has no meaning on a script part — flip the geometry in the script`);
     }
   }
+  let recipe: string | undefined;
+  if (part.recipe !== undefined) {
+    if (typeof part.recipe !== "string" || part.recipe.length === 0) {
+      errors.push(`${at}.recipe must be a non-empty string`);
+    } else if (!/\.py$/i.test(part.recipe)) {
+      errors.push(`${at}.recipe '${part.recipe}' must be a .py file`);
+    } else if (/^([a-zA-Z]:|[\\/])/.test(part.recipe) || part.recipe.split(/[\\/]/).includes("..")) {
+      errors.push(`${at}.recipe must be a scene-relative path with no '..'`);
+    } else {
+      recipe = part.recipe.replace(/\\/g, "/");
+    }
+    // One authority per box: a recipe authors the geometry through the kernel,
+    // so it cannot share the box with a primitive, an imported asset, or a
+    // bpy script — a silent winner would make "which geometry shipped"
+    // unanswerable from the source.
+    if (part.shape !== undefined) {
+      errors.push(`${at}: recipe and shape are mutually exclusive — the recipe IS the shape`);
+    }
+    if (file !== undefined || part.file !== undefined) {
+      errors.push(`${at}: recipe and file are mutually exclusive — one filler per box`);
+    }
+    if (script !== undefined || part.script !== undefined) {
+      errors.push(`${at}: recipe and script are mutually exclusive — one filler per box`);
+    }
+    if (part.axis !== undefined) {
+      errors.push(`${at}: axis has no meaning on a recipe part — the recipe owns its own orientation`);
+    }
+    if (part.flip !== undefined) {
+      errors.push(`${at}: flip has no meaning on a recipe part — flip the geometry in the recipe`);
+    }
+  }
   let axis: Axis = "z";
   if (part.axis !== undefined) {
     if (AXES.includes(part.axis as Axis)) axis = part.axis as Axis;
@@ -824,7 +855,7 @@ function validatePart(
   // listed here; anything else refuses loudly with the vocabulary named, so
   // the author learns what exists instead of trusting what does not.
   const KNOWN_PART_KEYS = new Set([
-    "id", "size", "shape", "file", "script", "axis", "flip", "tip", "thickness",
+    "id", "size", "shape", "file", "script", "recipe", "axis", "flip", "tip", "thickness",
     "material", "role", "spin", "bob", "screw", "rotate",
   ]);
   for (const key of Object.keys(part)) {
@@ -842,6 +873,7 @@ function validatePart(
     size,
     ...(file !== undefined ? { file } : {}),
     ...(script !== undefined ? { script } : {}),
+    ...(recipe !== undefined ? { recipe } : {}),
     ...(shape !== "box" ? { shape } : {}),
     ...(axis !== "z" ? { axis } : {}),
     ...(part.flip === true ? { flip: true } : {}),

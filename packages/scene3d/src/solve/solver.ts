@@ -629,6 +629,7 @@ export function solveScene(spec: SceneSpec, opts: { grid?: number } = {}): Solve
       ...(part.thickness !== undefined ? { thickness: part.thickness } : {}),
       ...(part.file !== undefined ? { file: part.file } : {}),
       ...(part.script !== undefined ? { script: part.script } : {}),
+      ...(part.recipe !== undefined ? { recipe: part.recipe } : {}),
       ...(part.material !== undefined ? { material: part.material } : {}),
       ...(part.spin !== undefined ? { spin: part.spin } : {}),
       ...(part.bob !== undefined ? { bob: part.bob } : {}),
