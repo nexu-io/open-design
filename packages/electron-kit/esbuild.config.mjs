@@ -30,6 +30,7 @@ const publicEntries = {
   "warmup/index": "warmup/index",
   "preflight/index": "preflight/index",
   "sidecar/index": "sidecar/index",
+  "shortcuts/index": "shortcuts/index",
   "lifecycle/fixture-port": "lifecycle/fixture-port",
   "updater/fixture-provider": "updater/fixture-provider",
   "build/index": "build/index",

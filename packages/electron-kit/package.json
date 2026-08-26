@@ -43,6 +43,10 @@
       "types": "./dist/sidecar/index.d.ts",
       "default": "./dist/sidecar/index.mjs"
     },
+    "./shortcuts": {
+      "types": "./dist/shortcuts/index.d.ts",
+      "default": "./dist/shortcuts/index.mjs"
+    },
     "./lifecycle": {
       "types": "./dist/lifecycle/fixture-port.d.ts",
       "default": "./dist/lifecycle/fixture-port.mjs"
