@@ -8,7 +8,13 @@ import type {
   WorkspaceDirectoryItem,
 } from '@open-design/contracts';
 import type { Page, Request } from '@playwright/test';
-import { applyStandardMocks, fulfillAgentsRoute, routeSuccessfulRuns, STORAGE_KEY } from '@/playwright/mock-factory';
+import {
+  applyStandardMocks,
+  fulfillAgentsRoute,
+  routeSignedOutVelaStatus,
+  routeSuccessfulRuns,
+  STORAGE_KEY,
+} from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 const LOCAL_CLI_LABEL = /Local CLI|Local coding agent|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
@@ -365,6 +371,7 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
 });
 
 test('[P1] entry top navigation matches the current home tab structure', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await gotoEntryHome(page);
   await ensureRailOpen(page);
 
@@ -1054,7 +1061,8 @@ test('[P2] home topbar overlays close on outside click, Escape, and Settings ope
 // inside the Home composer footer and does not follow the user to secondary
 // entry pages. This spec now pins the rail's surviving destinations plus the
 // pill at its new, Home-only home.
-test('[P1] rail destinations navigate and Home keeps its composer execution pill', async ({ page }) => {
+test('[P0] signed-out Local setup can navigate the surviving rail destinations', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await routeDesignSystems(page);
   await gotoEntryHome(page);
 
@@ -1083,7 +1091,7 @@ test('[P1] rail destinations navigate and Home keeps its composer execution pill
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer routes free-form prompts through the default prototype scenario', async ({ page }) => {
+test('[P0] @critical home composer delegates the default prototype scenario to daemon authority', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
@@ -1103,13 +1111,15 @@ test('[P0] @critical home composer routes free-form prompts through the default 
     conversationMode?: string;
     pluginId?: string | null;
     pluginInputs?: Record<string, unknown>;
+    automaticStrategyTaskProfile?: string;
     metadata?: { kind?: string };
   };
-  expect(body.name).toBe('Web Prototype');
+  expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
   expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('design');
-  expect(body.pluginId).toBe('example-web-prototype');
-  expect(body.pluginInputs).toMatchObject({ artifactKind: 'web prototype' });
+  expect(body.pluginId).toBeUndefined();
+  expect(body.pluginInputs).toBeUndefined();
+  expect(body.automaticStrategyTaskProfile).toBe('prototype');
   expect(body.metadata?.kind).toBe('prototype');
 });
 
@@ -1242,7 +1252,8 @@ test('[P0] @critical home hero input keeps Shift+Enter as a newline and submits 
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] home hero @ mention picker opens and Enter applies the highlighted plugin', async ({ page }) => {
+test('[P0] signed-out Local setup can apply a plugin from the Home composer', async ({ page }) => {
+  await routeSignedOutVelaStatus(page);
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {

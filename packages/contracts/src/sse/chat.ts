@@ -1,5 +1,6 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
 import type { RunFailureCategory, RunFailureDetail } from '../api/chat.js';
+import type { StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
 import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
 
@@ -104,6 +105,7 @@ export interface ChatSseEndPayload {
    *  Mirror ChatRunStatusResponse.failureCategory / failureDetail. */
   failureCategory?: RunFailureCategory | null;
   failureDetail?: RunFailureDetail | null;
+  strategyTask?: StrategyTaskProjectionV2;
 }
 
 export type DaemonAgentPayload =
@@ -152,10 +154,42 @@ export type DaemonAgentPayload =
     }
   | { type: 'raw'; line: string };
 
+/**
+ * Out-of-band run diagnostics. The payload is discriminated by `type` and is
+ * additive: a client ignores the types it does not know.
+ */
+export interface ChatSseDiagnosticPayload {
+  type: string;
+  [key: string]: unknown;
+}
+
+/**
+ * The daemon is continuing the SAME logical task in a new physical Run. A Full
+ * Plan turn spans several Runs (request -> production) that the user asked for
+ * once, and the continuation carries no user prompt of its own.
+ *
+ * Observability only — it marks the hand-off in the source Run's event log so a
+ * multi-Run turn can be reconstructed when diagnosing one. Rendering does NOT
+ * read it: the client keeps the turn whole from each message's
+ * `strategyTaskRunIndex`, folding the task's messages at render time. A client
+ * that instead re-pointed the originating message at `nextRunId` would end up
+ * showing the continuation's answer twice, next to the row the daemon persists
+ * for that Run.
+ */
+export interface StrategyTaskContinuationDiagnostic extends ChatSseDiagnosticPayload {
+  type: 'strategy_task_continuation';
+  taskExecutionId: string | null;
+  sourceRunId: string;
+  nextRunId: string;
+  inputStage: string | null;
+  taskRunIndex: number | null;
+}
+
 export type ChatSseEvent =
   | SseTransportEvent<'start', ChatSseStartPayload>
   | SseTransportEvent<'agent', DaemonAgentPayload>
   | SseTransportEvent<'stdout', ChatSseChunkPayload>
   | SseTransportEvent<'stderr', ChatSseChunkPayload>
+  | SseTransportEvent<'diagnostic', ChatSseDiagnosticPayload>
   | SseTransportEvent<'error', SseErrorPayload>
   | SseTransportEvent<'end', ChatSseEndPayload>;

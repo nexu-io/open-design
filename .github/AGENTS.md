@@ -11,8 +11,9 @@ Before changing GitHub automation, read the current versions of:
 - `.github/workflows/autofix.atom.yml`
 - `.github/workflows/report.atom.yml`
 - `.github/scripts/handoff.py`
-- `.github/config/runners.json`, `.github/config/scopes.json`, and `.github/config/hash.json`
-- `.github/scripts/runners.py`, `.github/scripts/scopes.py`, and `.github/scripts/hash.py`
+- `.github/config/runners.json`, `.github/config/scopes.json`, and `.github/config/convergence.json`
+- `.github/scripts/runners.py`, `.github/scripts/scopes.py`, and `.github/scripts/convergence.py`
+- `.github/workflows/convergence.atom.yml` and `.github/scripts/lib/r2.py` when changing reusable workload results
 - `specs/current/ci.md` when changing scope rules, confidence tiers, or planner invariants
 - `e2e/tests/packaged-smoke-workflow.test.ts`
 - `scripts/approve-fork-pr-workflows.ts` and `e2e/tests/scripts/approve-fork-pr-workflows.test.ts` when touching fork PR approval behavior
@@ -27,7 +28,7 @@ Business layer:
 
 - Business workflows decide what happened and what should be requested next.
 - `ci.yml` is the main low-privilege PR, merge-queue, and manual validation gate (application merge bar only).
-- `ci.yml` should resolve runners, compose scope and hash decisions in its Linux `plan` job, run validation, and produce typed handoff artifacts.
+- `ci.yml` should resolve runners, compose scope and convergence decisions in its Linux `plan` job, run validation, and produce typed handoff artifacts.
 - Packaging checks are standalone and outside the merge gate: `nix.yml` (flake check) and `docker-image.yml` (image validate + publish). Do not re-attach them to `Validate workspace`.
 - Business workflows should not perform trusted writes to PR comments or branches when a capability workflow can do it.
 
@@ -38,7 +39,8 @@ Atomic capability layer:
 - `autofix.atom.yml` consumes `handoff-autofix-*` artifacts and applies same-repository patches.
 - `report.atom.yml` consumes `handoff-report-*` artifacts and handles advanced comments that need trusted materialization, such as dependency install, R2 access, artifact processing, or report generation before upsert.
 - `rerun.atom.yml` watches completed `ci` runs and requests one `gh run rerun --failed` when leaf jobs died to runner/spot cancel. Decision logic lives in `.github/scripts/rerun_infra_cancel.py`; it must not rerun ordinary assertion failures or stale heads.
-- `.github/scripts/handoff.py` owns artifact names, directory layout, discovery, and contract validation for `comment`, `autofix`, and `report` handoffs.
+- `convergence.atom.yml` consumes successful `handoff-convergence-*` artifacts and is the sole trusted publisher of immutable reusable workload results.
+- `.github/scripts/handoff.py` owns artifact names, directory layout, discovery, and contract validation for `comment`, `autofix`, `report`, and `convergence` handoffs.
 
 Default rule: do not add a new domain-specific follow-on workflow such as `foo.comment.atom.yml`, `foo.autofix.atom.yml`, or `foo.report.atom.yml` until the flow has been tested against these existing atomic capabilities.
 
@@ -52,20 +54,18 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
 
 New workflow-owned helpers should usually live under `.github/scripts/`. Prefer TypeScript for project-owned scripts in general, but Python is acceptable for small GitHub runner glue when stdlib portability and low setup cost matter. Keep such exceptions narrow and covered by `pnpm guard` policy.
 
-The CI control plane is deliberately Linux-only and stdlib-only. Runner classes,
-scope rules, and hash declarations live in `.github/config/`; their Python
+The planning control plane is deliberately Linux-only and stdlib-only. Runner classes,
+scope rules, and workload convergence declarations live in `.github/config/`; their Python
 entrypoints initialize metadata before workload runners start. A Windows job
-must never invoke these scripts. Keep the four layers independent: runner
-placement, changed-file scopes, input hashes, and fine-grained commands inside
-a workload.
+must never invoke these scripts. Keep runner placement, changed-file relevance,
+reusable-result convergence, and fine-grained commands inside a workload independent.
 
-`hash.py` is a static comparison register, not a success cache. It reads the
-previous identity-to-hash map restored by Actions cache, computes the current
-map from Git inputs, and replaces the local state immediately. The plan carries
-that pending map to `validate`, which publishes it only after the gate succeeds;
-a failed run therefore cannot authorize identical-input skips on a fresh retry.
-Only a workload's YAML `if` gives the comparison skip semantics; cache loss or
-corruption starts cold.
+`convergence.py` computes workload identities from declared Git inputs, the
+execution class, product mode, and the convergence control contract. Public
+result reads are credential-free and fail open to execution. Only a successful
+gate may produce a `handoff/convergence` candidate; only trusted
+`convergence.atom.yml` code may publish immutable results. `lib/r2.py` knows R2
+transport only and must not interpret workload policy or handoff schemas.
 
 ## Handoff contract
 
@@ -74,10 +74,11 @@ Use `.github/scripts/handoff.py` for all CI follow-on artifact names and paths. 
 - `handoff/comment/<id>/metadata.json` plus `body.md`
 - `handoff/autofix/<id>/metadata.json` plus `patch.diff`
 - `handoff/report/<id>/metadata.json`
+- `handoff/convergence/<id>/metadata.json` plus `candidate.json`
 
 Artifact names must come from `handoff.py artifact-name <kind> <id>`, and download patterns must come from `handoff.py artifact-pattern <kind>`.
 
-`metadata.json` always identifies the target PR, head SHA, base SHA, CI run id, handoff kind, and handoff id. Capability-specific fields belong in that capability's metadata and must be validated by `handoff.py`.
+PR-targeting handoffs identify the target PR, head SHA, base SHA, CI run id, kind, and id. Convergence handoffs instead bind repository, workflow policy, event, run attempt, source SHAs, and the candidate. Capability-specific fields must be validated by `handoff.py`.
 
 Do not hand-roll artifact name prefixes, alternate directory layouts, or one-off metadata parsers in workflows. Extend `handoff.py` first, then use the new contract from producers and consumers.
 
@@ -142,7 +143,7 @@ Keep `.github/workflows/ci.yml` as the only approved workflow path unless a main
    - Rich/generated comment: produce `handoff/report` and let `report.atom.yml` materialize and upsert it.
    - New naming, paths, or metadata: update `.github/scripts/handoff.py`.
 2. Update scope routing in `.github/config/scopes.json`, then run `python3 .github/scripts/scopes.py validate`.
-3. Declare workload input closure in `.github/config/hash.json`; use `"*"` until a narrower set has high-confidence evidence.
+3. Declare workload input closure, execution class, product contract, and explicit reuse opt-in in `.github/config/convergence.json`; use `"*"` until a narrower set has high-confidence evidence.
 4. Update topology coverage in `e2e/tests/packaged-smoke-workflow.test.ts` or the relevant script test.
 5. Run the focused checks:
    - `python3 .github/scripts/handoff.py self-check`

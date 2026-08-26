@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildDaemonTranscript,
+  buildDaemonPriorTranscript,
   DAEMON_RUN_FINISHED_EVENT,
   latestUserPromptFromHistory,
   reattachDaemonRun,
@@ -41,7 +42,7 @@ describe('parseSseFrame', () => {
 describe('streamViaDaemon', () => {
   it('sends the latest user turn separately from the full CLI transcript', async () => {
     const handlers = createDaemonHandlers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
       if (url === '/api/runs/run-1/events') {
@@ -60,6 +61,7 @@ describe('streamViaDaemon', () => {
         { id: '3', role: 'user', content: 'post-consent revision' },
       ],
       systemPrompt: '',
+      skillIds: ['frontend-design', 'imagegen'],
       signal: new AbortController().signal,
       handlers,
     });
@@ -70,6 +72,7 @@ describe('streamViaDaemon', () => {
     expect(body.message).toContain('post-consent revision');
     expect(body.currentPrompt).toBe('post-consent revision');
     expect(body.userMessageId).toBe('3');
+    expect(body.skillIds).toEqual(['frontend-design', 'imagegen']);
   });
 
   it('sends the selected Local BYOK provider only to the local run endpoint', async () => {
@@ -541,6 +544,18 @@ describe('streamViaDaemon', () => {
         { id: '3', role: 'user', content: 'current turn' },
       ]),
     ).toBe('current turn');
+  });
+
+  it('frames prior transcript separately without subtracting the latest user text', () => {
+    const history = [
+      { id: '1', role: 'user' as const, content: 'same text' },
+      { id: '2', role: 'assistant' as const, content: 'answer same text', agentId: 'codex' },
+      { id: '3', role: 'user' as const, content: 'same text' },
+    ];
+    expect(buildDaemonPriorTranscript(history, 'codex')).toBe(
+      '## user\nsame text\n\n## assistant\nanswer same text',
+    );
+    expect(latestUserPromptFromHistory(history)).toBe('same text');
   });
 
   it('truncates oversized prior messages before composing daemon context', () => {
@@ -2023,6 +2038,166 @@ describe('streamViaDaemon', () => {
     expect(onRunEventId).toHaveBeenCalledWith('5');
   });
 
+  it('follows daemon-projected successor Runs until the logical strategy task is terminal', async () => {
+    const handlers = createDaemonHandlers();
+    const strategy = {
+      id: 'od-next-strategy',
+      version: '2.0.0',
+      packageHash: 'a'.repeat(64),
+      snapshotId: 'snapshot-1',
+    };
+    const requestProjection = {
+      taskExecutionId: 'task-1',
+      strategy,
+      inputStage: 'request',
+      outcome: 'running',
+      route: 'full_plan',
+      executionMode: null,
+      activeRunId: 'run-request',
+      terminal: false,
+    };
+    const productionProjection = {
+      ...requestProjection,
+      inputStage: 'production',
+      outcome: 'running',
+      executionMode: 'simple',
+      activeRunId: 'run-production',
+      nextRunId: 'run-production',
+    };
+    const completedProjection = {
+      ...productionProjection,
+      outcome: 'completed',
+      terminal: true,
+      nextRunId: undefined,
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') {
+        return jsonResponse({
+          runId: 'run-request',
+          taskExecutionId: 'task-1',
+          strategyTask: requestProjection,
+        });
+      }
+      if (url === '/api/runs/run-request/events') {
+        return sseResponse(
+          `event: stdout\ndata: {"chunk":"Decision summary.\\n"}\n\nevent: end\ndata: ${JSON.stringify({ code: 0, status: 'succeeded', strategyTask: productionProjection })}\n\n`,
+        );
+      }
+      if (url === '/api/runs/run-production/events') {
+        return sseResponse(
+          `event: stdout\ndata: {"chunk":"Final delivery."}\n\nevent: end\ndata: ${JSON.stringify({ code: 0, status: 'succeeded', strategyTask: completedProjection })}\n\n`,
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const onRunCreated = vi.fn();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'Build the operator UI' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunCreated,
+      onRunStatus,
+    });
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      '/api/runs',
+      '/api/runs/run-request/events',
+      '/api/runs/run-production/events',
+    ]);
+    expect(onRunCreated).toHaveBeenNthCalledWith(1, 'run-request', requestProjection);
+    expect(onRunCreated).toHaveBeenNthCalledWith(2, 'run-production', productionProjection);
+    expect(onRunStatus.mock.calls.filter(([status]) => status === 'succeeded')).toHaveLength(1);
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    expect(handlers.onDone).toHaveBeenCalledWith('Decision summary.\nFinal delivery.');
+  });
+
+  it('posts an explicit strategy task handle only for a daemon-issued continuation', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-clarification' });
+      if (url === '/api/runs/run-clarification/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: 'answer', role: 'user', content: 'Desktop first' }],
+      signal: new AbortController().signal,
+      handlers,
+      taskExecutionId: 'task-clarification',
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]!.body));
+    expect(body.taskExecutionId).toBe('task-clarification');
+  });
+
+  it.each([
+    { outcome: 'blocked', physicalStatus: 'succeeded', expectedStatus: 'failed', expectsError: true },
+    { outcome: 'canceled', physicalStatus: 'failed', expectedStatus: 'canceled', expectsError: false },
+  ])('renders terminal task outcome $outcome instead of the physical Run status', async ({
+    outcome,
+    physicalStatus,
+    expectedStatus,
+    expectsError,
+  }) => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-terminal' });
+      if (url === '/api/runs/run-terminal/events') {
+        return sseResponse(`event: end\ndata: ${JSON.stringify({
+          code: physicalStatus === 'succeeded' ? 0 : 1,
+          status: physicalStatus,
+          strategyTask: {
+            taskExecutionId: 'task-terminal',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'production',
+            outcome,
+            route: 'full_plan',
+            executionMode: 'simple',
+            activeRunId: 'run-terminal',
+            terminal: true,
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'Build it' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(onRunStatus).toHaveBeenLastCalledWith(expectedStatus);
+    if (expectsError) {
+      expect(handlers.onError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'The strategy task could not continue.' }),
+      );
+      expect(handlers.onDone).not.toHaveBeenCalled();
+    } else {
+      expect(handlers.onError).not.toHaveBeenCalled();
+      expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it('reattaches to an existing daemon run after the last stored event id', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn()
@@ -2187,7 +2362,7 @@ describe('streamViaDaemon', () => {
     ]);
   });
 
-  it('sends canonical research query metadata to daemon runs', async () => {
+  it('sends multi-turn research with explicit current and prior transcript framing', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -2200,17 +2375,28 @@ describe('streamViaDaemon', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'Search for: EV market' }],
+      agentId: 'codex',
+      history: [
+        { id: '1', role: 'user', content: 'same query' },
+        { id: '2', role: 'assistant', content: 'prior answer same query', agentId: 'codex' },
+        { id: '3', role: 'user', content: 'same query' },
+      ],
       systemPrompt: '',
       signal: new AbortController().signal,
       handlers,
-      research: { enabled: true, query: 'EV market' },
+      research: { enabled: true },
     });
 
     const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
     const body = JSON.parse(String(createRunInit.body));
-    expect(body.research).toEqual({ enabled: true, query: 'EV market' });
+    expect(body.message).toBe(
+      '## user\nsame query\n\n## assistant\nprior answer same query\n\n## user\nsame query',
+    );
+    expect(body.currentPrompt).toBe('same query');
+    expect(body.priorTranscript).toBe(
+      '## user\nsame query\n\n## assistant\nprior answer same query',
+    );
+    expect(body.research).toEqual({ enabled: true });
   });
 
   it('preserves detail on agent status events', async () => {

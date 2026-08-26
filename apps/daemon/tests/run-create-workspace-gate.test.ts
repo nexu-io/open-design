@@ -33,10 +33,24 @@ import { workspaceContextFromDirectoryItem } from '../src/collab/vela-workspace-
 import { registerRunRoutes } from '../src/routes/runs.js';
 import { connectorService } from '../src/connectors/service.js';
 import { upsertInstalledPlugin } from '../src/plugins/registry.js';
+import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
+import {
+  finalizeStrategyPlanningTurn,
+  prepareStrategyRequest,
+} from '../src/strategies/od-next/coordinator.js';
+import { OdNextMachineProtocolStream } from '../src/strategies/od-next/protocol.js';
+import {
+  createStrategyTaskExecution,
+  getStrategyTaskExecution,
+} from '../src/strategies/task-store.js';
+import { strategyTaskCreateIdentityFixture } from './strategies/strategy-task-test-fixtures.js';
 
 let server: http.Server | null = null;
 let tempDir: string | null = null;
 let createdRunCount = 0;
+let lastCreatedRun: any = null;
+let strategyTaskAtPhysicalCancel: any = null;
+let runsServiceStub: ReturnType<typeof createRunsServiceStub> | null = null;
 
 afterEach(async () => {
   if (server) {
@@ -45,6 +59,7 @@ afterEach(async () => {
     await new Promise<void>((resolve) => toClose.close(() => resolve()));
   }
   closeDatabase();
+  runsServiceStub = null;
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   tempDir = null;
 });
@@ -101,6 +116,114 @@ function snapshotProjectId(snapshotId: string): string | null {
   return typeof row?.projectId === 'string' ? row.projectId : null;
 }
 
+function seedAwaitingClarificationTask() {
+  const db = openDatabase(tempDir!);
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO conversations (id, project_id, title, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run('conversation-strategy', PERSONAL_PROJECT, 'Strategy', now, now);
+  const assetDigests = [
+    { path: './SKILL.md', sha256: 'a'.repeat(64) },
+    { path: './assets/task-profiles/prototype.md', sha256: 'b'.repeat(64) },
+  ];
+  const snapshot = createSnapshot(db, {
+    projectId: PERSONAL_PROJECT,
+    conversationId: 'conversation-strategy',
+    runId: null,
+    pluginId: 'od-next-strategy',
+    pluginVersion: '2.0.0',
+    manifestSourceDigest: 'strategy-manifest',
+    strategy: {
+      schema: 'open-design.applied-strategy/v2',
+      id: 'od-next-strategy',
+      version: '2.0.0',
+      packageHash: strategyPackageHashFromDigests(assetDigests),
+      assetDigests,
+      selectedTaskProfile: {
+        taskType: 'prototype',
+        version: '2.0.0',
+        path: './assets/task-profiles/prototype.md',
+        sha256: 'b'.repeat(64),
+      },
+      taskProfileVersions: ['2.0.0'],
+      promptRecipe: 'od-next-plan-build-v2',
+    },
+    taskKind: 'new-generation',
+    inputs: {},
+    resolvedContext: { items: [] },
+    capabilitiesGranted: ['prompt:inject'],
+    capabilitiesRequired: ['prompt:inject'],
+    assetsStaged: [],
+    connectorsRequired: [],
+    connectorsResolved: [],
+    mcpServers: [],
+  });
+  runsServiceStub?.seed({
+    id: 'run-strategy-request',
+    projectId: PERSONAL_PROJECT,
+    conversationId: 'conversation-strategy',
+    assistantMessageId: 'assistant-strategy-request',
+    agentId: 'codex',
+    pluginId: 'od-next-strategy',
+    appliedPluginSnapshotId: snapshot.snapshotId,
+    odNextTaskInputSnapshot: {
+      taskExecutionId: 'task-strategy-clarification',
+      snapshotDir: path.join(tempDir!, 'strategy-input-fixture'),
+      manifestSha256: 'd'.repeat(64),
+    },
+    status: 'succeeded',
+  });
+  createStrategyTaskExecution(db, {
+    taskExecutionId: 'task-strategy-clarification',
+    projectId: PERSONAL_PROJECT,
+    conversationId: 'conversation-strategy',
+    snapshotId: snapshot.snapshotId,
+    selectedAgentId: 'codex',
+    initialRunId: 'run-strategy-request',
+    ...strategyTaskCreateIdentityFixture(),
+    createdAt: now,
+  });
+  prepareStrategyRequest(db, {
+    taskExecutionId: 'task-strategy-clarification',
+    preference: 'full_plan',
+    directEdit: {
+      editableBaselineExists: false,
+      localAndUnambiguous: false,
+      canonicalDeliverableStable: false,
+      deliverableSetStable: false,
+      dependenciesBounded: false,
+    },
+    intake: {
+      inputRefs: [{ id: 'request', accessible: true }],
+      selectedAgentAvailable: true,
+      nativeContinuation: 'verified',
+      taskProfileAvailable: true,
+      dependencies: [],
+    },
+  });
+  const protocol = new OdNextMachineProtocolStream();
+  protocol.push([
+    '<question-form id="scope">{"questions":[{"id":"surface","label":"Surface?"}]}</question-form>',
+    '<open-design-runtime-state>',
+    JSON.stringify({
+      schema: 'open-design.strategy-state/v2',
+      route: 'full_plan',
+      inputStage: 'request',
+      outcome: 'clarification_required',
+      executionMode: null,
+      reasonCodes: [],
+    }),
+    '</open-design-runtime-state>',
+  ].join('\n'));
+  finalizeStrategyPlanningTurn(db, {
+    taskExecutionId: 'task-strategy-clarification',
+    runId: 'run-strategy-request',
+    protocol,
+  });
+  return snapshot;
+}
+
 // A minimal in-memory ChatRunService stub. It deliberately does not spawn a
 // process, but it does preserve enough run state to exercise the complete
 // create -> status/events -> cancel HTTP lifecycle.
@@ -108,6 +231,22 @@ function createRunsServiceStub() {
   const runs = new Map<string, any>();
   let seq = 0;
   const service = {
+    seed(input: Record<string, unknown>) {
+      const run: Record<string, any> = {
+        clientRequestId: null,
+        requestFingerprint: null,
+        workspaceScope: null,
+        message: null,
+        currentPrompt: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        events: [],
+        clients: new Set(),
+        ...input,
+      };
+      runs.set(String(run.id), run);
+      return run;
+    },
     create(meta: any) {
       createdRunCount += 1;
       const run = {
@@ -120,7 +259,13 @@ function createRunsServiceStub() {
         conversationId: typeof meta.conversationId === 'string' ? meta.conversationId : null,
         assistantMessageId: typeof meta.assistantMessageId === 'string' ? meta.assistantMessageId : null,
         agentId: typeof meta.agentId === 'string' ? meta.agentId : null,
+        message: meta.message,
+        currentPrompt: meta.currentPrompt,
+        appliedPluginSnapshotId: meta.appliedPluginSnapshotId,
+        clientRequestId: meta.clientRequestId,
+        requestFingerprint: meta.requestFingerprint,
         workspaceScope: meta.workspaceScope,
+        odNextTaskInputSnapshot: meta.odNextTaskInputSnapshot ?? null,
         status: 'queued',
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -128,9 +273,25 @@ function createRunsServiceStub() {
         clients: new Set(),
       };
       runs.set(run.id, run);
+      lastCreatedRun = run;
       return run;
     },
     createOrReuse(meta: any) {
+      const existing = typeof meta.clientRequestId === 'string'
+        ? Array.from(runs.values()).find(
+            (candidate) => candidate.clientRequestId === meta.clientRequestId,
+          )
+        : null;
+      if (existing) {
+        if (
+          typeof existing.requestFingerprint === 'string'
+          && typeof meta.requestFingerprint === 'string'
+          && existing.requestFingerprint !== meta.requestFingerprint
+        ) {
+          return { kind: 'conflict' as const, run: existing };
+        }
+        return { kind: 'reused' as const, run: existing };
+      }
       return { kind: 'created' as const, run: service.create(meta) };
     },
     get: (id: string) => runs.get(id) ?? null,
@@ -142,13 +303,27 @@ function createRunsServiceStub() {
       ),
     statusBody: (run: any) => ({ ...run }),
     stream: (run: any, req: any, res: any) => {
-      res.status(req.method === 'GET' ? 200 : 202).json({ runId: run.id });
+      res.status(req.method === 'GET' ? 200 : 202).json({
+        runId: run.id,
+        ...(run.strategyTask
+          ? {
+              taskExecutionId: run.strategyTask.taskExecutionId,
+              strategyTask: run.strategyTask,
+            }
+          : {}),
+      });
     },
     // Intentionally does NOT invoke `starter` — this test only asserts on the
     // HTTP response to POST /api/runs, not on real agent-process spawning.
     start: (run: any) => run,
+    fail: (run: any, code: string, message: string) => {
+      run.status = 'failed';
+      run.errorCode = code;
+      run.error = message;
+    },
     wait: async () => ({ status: 'succeeded' }),
     cancel: async (run: any) => {
+      strategyTaskAtPhysicalCancel = run.strategyTask ?? null;
       run.status = 'canceled';
       run.updatedAt = Date.now();
       return { ...run };
@@ -183,6 +358,9 @@ async function startServer(opts?: {
   loadPluginRegistryView?: () => Promise<any>;
 }) {
   createdRunCount = 0;
+  lastCreatedRun = null;
+  strategyTaskAtPhysicalCancel = null;
+  runsServiceStub = null;
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-run-ws-gate-'));
   const db = openDatabase(tempDir);
   const now = Date.now();
@@ -262,10 +440,11 @@ async function startServer(opts?: {
 
   const app = express();
   app.use(express.json());
+  runsServiceStub = createRunsServiceStub();
   registerRunRoutes(app, {
     db,
     design: {
-      runs: createRunsServiceStub(),
+      runs: runsServiceStub,
       analytics: { capture: () => {} },
       getAppVersion: () => 'test',
     },
@@ -312,7 +491,10 @@ async function startServer(opts?: {
       runRetryEventsForAnalytics: () => [],
     },
     messages: {
-      pinAssistantMessageOnRunCreate: () => ({ ok: true }),
+      pinAssistantMessageOnRunCreate: (_db: any, _run: any, options?: any) => {
+        options?.beforeClaimCommit?.();
+        return { ok: true };
+      },
       reconcileAssistantMessageOnRunEnd: () => {},
     },
     enforceWorkspaceProjectMutation:
@@ -376,6 +558,197 @@ async function startServer(opts?: {
 }
 
 describe('POST /api/runs — workspace mutation gate', () => {
+  it.each(['/api/runs', '/api/chat'])(
+    'atomically binds an explicit clarification handle through %s',
+    async (route) => {
+    const baseUrl = await startServer();
+    const snapshot = seedAwaitingClarificationTask();
+    expect(runsServiceStub?.get('run-strategy-request')).toMatchObject({
+      projectId: PERSONAL_PROJECT,
+      conversationId: 'conversation-strategy',
+      agentId: 'codex',
+      appliedPluginSnapshotId: snapshot.snapshotId,
+      status: 'succeeded',
+    });
+    const response = await fetch(`${baseUrl}${route}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskExecutionId: 'task-strategy-clarification',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        agentId: 'codex',
+        userMessageId: 'user-strategy-answer',
+        assistantMessageId: 'assistant-strategy-answer',
+        clientRequestId: 'client-strategy-answer',
+        message: 'Desktop workspace',
+        currentPrompt: 'Desktop workspace',
+      }),
+    });
+    const responseText = await response.text();
+    expect(response.status, responseText).toBe(202);
+    const body = JSON.parse(responseText) as any;
+    expect(body.strategyTask).toMatchObject({
+      taskExecutionId: 'task-strategy-clarification',
+      inputStage: 'clarification',
+      outcome: 'running',
+      activeRunId: body.runId,
+    });
+    expect(body.taskExecutionId).toBe('task-strategy-clarification');
+    expect(lastCreatedRun).toMatchObject({
+      id: body.runId,
+      agentId: 'codex',
+      appliedPluginSnapshotId: snapshot.snapshotId,
+    });
+    expect(lastCreatedRun.currentPrompt).toContain(
+      'OD Next native continuation — clarification',
+    );
+    const task = getStrategyTaskExecution(
+      openDatabase(tempDir!),
+      'task-strategy-clarification',
+    );
+    expect(task?.runs.map(({ finalText: _finalText, ...run }) => run)).toEqual([
+      { runId: 'run-strategy-request', inputStage: 'request', taskRunIndex: 0 },
+      {
+        runId: body.runId,
+        inputStage: 'clarification',
+        taskRunIndex: 1,
+        sourceRunId: 'run-strategy-request',
+      },
+    ]);
+
+    const repeatedResponse = await fetch(`${baseUrl}${route}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskExecutionId: 'task-strategy-clarification',
+        projectId: PERSONAL_PROJECT,
+        conversationId: 'conversation-strategy',
+        agentId: 'codex',
+        userMessageId: 'user-strategy-answer',
+        assistantMessageId: 'assistant-strategy-answer',
+        clientRequestId: 'client-strategy-answer',
+        message: 'Desktop workspace',
+        currentPrompt: 'Desktop workspace',
+      }),
+    });
+    expect(repeatedResponse.status).toBe(202);
+    await expect(repeatedResponse.json()).resolves.toMatchObject({
+      runId: body.runId,
+      ...(route === '/api/runs' ? { reused: true } : {}),
+      strategyTask: {
+        taskExecutionId: 'task-strategy-clarification',
+        inputStage: 'clarification',
+        activeRunId: body.runId,
+      },
+    });
+    expect(getStrategyTaskExecution(
+      openDatabase(tempDir!),
+      'task-strategy-clarification',
+    )?.runs).toHaveLength(2);
+
+    const cancelResponse = await fetch(
+      `${baseUrl}/api/runs/${encodeURIComponent(body.runId)}/cancel`,
+      { method: 'POST' },
+    );
+    expect(cancelResponse.status).toBe(200);
+    expect(strategyTaskAtPhysicalCancel).toMatchObject({
+      taskExecutionId: 'task-strategy-clarification',
+      outcome: 'canceled',
+      terminal: true,
+    });
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'keeps a handle-less follow-up ordinary through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      seedAwaitingClarificationTask();
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          assistantMessageId: `assistant-ordinary-${route.length}`,
+          clientRequestId: `client-ordinary-${route.length}`,
+          message: 'This is a separate ordinary follow-up',
+          currentPrompt: 'This is a separate ordinary follow-up',
+        }),
+      });
+      expect(response.status).toBe(202);
+      const body = await response.json() as any;
+      expect(body.strategyTask).toBeUndefined();
+      expect(body.taskExecutionId).toBeUndefined();
+      expect(lastCreatedRun).toMatchObject({
+        message: 'This is a separate ordinary follow-up',
+        currentPrompt: 'This is a separate ordinary follow-up',
+      });
+      expect(getStrategyTaskExecution(
+        openDatabase(tempDir!),
+        'task-strategy-clarification',
+      )).toMatchObject({
+        inputStage: 'request',
+        outcome: 'clarification_required',
+        latestRunId: 'run-strategy-request',
+      });
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'fails closed for an unknown explicit clarification handle through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      seedAwaitingClarificationTask();
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-does-not-exist',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'codex',
+          assistantMessageId: `assistant-wrong-${route.length}`,
+          clientRequestId: `client-wrong-${route.length}`,
+          message: 'Wrong handle',
+        }),
+      });
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'STRATEGY_TASK_NOT_FOUND' },
+      });
+      expect(createdRunCount).toBe(0);
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'rejects locked agent drift for an explicit clarification handle through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      seedAwaitingClarificationTask();
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          taskExecutionId: 'task-strategy-clarification',
+          projectId: PERSONAL_PROJECT,
+          conversationId: 'conversation-strategy',
+          agentId: 'claude',
+          assistantMessageId: `assistant-drift-${route.length}`,
+          clientRequestId: `client-drift-${route.length}`,
+          message: 'Wrong agent',
+        }),
+      });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'STRATEGY_TASK_AGENT_MISMATCH' },
+      });
+      expect(createdRunCount).toBe(0);
+    },
+  );
+
   it.each(['/api/runs', '/api/chat'])(
     'keeps project and local plugin gates off the remote Workspace directory through %s',
     async (route) => {

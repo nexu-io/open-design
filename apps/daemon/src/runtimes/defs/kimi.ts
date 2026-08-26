@@ -24,4 +24,10 @@ export const kimiAgentDef = {
     streamFormat: 'acp-json-rpc',
     mcpDiscovery: 'mature-acp',
     externalMcpInjection: 'acp-merge',
+    // 0.37.0 replaced the stdio branch of Kimi's `session/new` MCP handler with
+    // a throw ("does not declare a runtime identity"), and no entry shape
+    // restores it — the code that built stdio servers is gone. Verified against
+    // the published tarballs: 0.35.0/0.36.1 accept, 0.37.0/0.37.1/0.37.2/0.38.0
+    // reject. Above this version the session sends only http/sse MCP servers.
+    acpStdioMcpRemovedInVersion: '0.37.0',
 } satisfies RuntimeAgentDef;

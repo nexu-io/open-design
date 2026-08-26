@@ -56,6 +56,7 @@ import {
   type PublicFilePublicationStore,
 } from '../collab/public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
+import { isAbortedOperationError } from '../integrations/aborted-error.js';
 import { readProjectManifest } from '../project-locations.js';
 import { redactSecrets } from '../redact.js';
 
@@ -702,6 +703,25 @@ export function registerCollabSyncRoutes(
     notifyFilesChanged,
     notifyProjectMetadataChanged,
   } = deps;
+  /**
+   * One seam for "this project's team-share state just changed".
+   *
+   * Both halves belong together: the visibility record is persisted AND the
+   * team-project catalog is dropped. The catalog read behind
+   * `/api/workspace/projects/team` is served from a short-lived SWR entry, so a
+   * GET issued right after a share would otherwise answer with the pre-share
+   * list until the freshness window expired or a hub event happened to arrive.
+   *
+   * Announce through this rather than calling the two deps side by side, so a
+   * future mutation added to this module cannot pick up one and forget the
+   * other.
+   */
+  const announceTeamShareStateChange = (
+    change: Parameters<NonNullable<RegisterCollabSyncRoutesDeps['onTeamShareStateChanged']>>[0],
+  ): void => {
+    deps.onTeamShareStateChanged?.(change);
+    invalidateTeamProjectCatalog?.();
+  };
   const readManifest = deps.readManifest ?? readProjectManifest;
   const publicFilePublicationStore =
     deps.publicFilePublicationStore
@@ -1474,7 +1494,7 @@ export function registerCollabSyncRoutes(
       if (nextPublishedVersion == null) {
         return res.status(502).json({ error: 'TEAM_PROJECT_PUBLISH_UNAVAILABLE' });
       }
-      deps.onTeamShareStateChanged?.({
+      announceTeamShareStateChange({
         projectId,
         principal,
         visibility: 'team',
@@ -1503,7 +1523,7 @@ export function registerCollabSyncRoutes(
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_UNSHARE_DENIED' });
       }
       await requestTeamUnshare(projectId, principal);
-      deps.onTeamShareStateChanged?.({
+      announceTeamShareStateChange({
         projectId,
         principal,
         visibility: 'personal',
@@ -1704,11 +1724,21 @@ export function registerCollabSyncRoutes(
             if (await shouldRetryStaleReceipt(error, authorizedAttempt)) {
               continue;
             }
-            console.warn('[od] authorized proactive team pull failed closed:', {
-              projectId,
-              version: expectedVersion,
-              ...errorLogFields(error),
-            });
+            // A cancelled child is not a fault: the scheduler aborts this pull
+            // on purpose when a higher version supersedes it, or when the
+            // intent is cleared. Logging that as "failed closed" put a
+            // fault-shaped warning in the log on ordinary version churn and
+            // sent an investigation chasing a phantom failure. The scheduler
+            // already handles the cancellation itself (a superseded intent
+            // bumps `revision` and re-loops; a cleared one is gone), so this
+            // only stops mislabelling it.
+            if (!isAbortedOperationError(error)) {
+              console.warn('[od] authorized proactive team pull failed closed:', {
+                projectId,
+                version: expectedVersion,
+                ...errorLogFields(error),
+              });
+            }
             return complete({ status: 'register_failed' });
           }
           // Old CLIs can materialize successfully while returning no version.

@@ -523,13 +523,21 @@ describe('HomeHero intent rail', () => {
     expect(findChip('audio')?.action).toMatchObject({ pluginId: 'od-media-generation', projectKind: 'audio' });
   });
 
-  it('prototype and slide-deck chips route to their specialised bundled scenario plugin', () => {
+  it('marks prototype and slide-deck as daemon-owned automatic scenarios', () => {
     // Prototype now binds to web-prototype's seed template instead of
     // the generic od-new-generation router. Same for Slide deck →
     // simple-deck. See packages/contracts/src/plugins/scenario-defaults.ts
     // for the rationale (battle-tested seed + layouts + checklist).
-    expect(findChip('prototype')?.action).toMatchObject({ pluginId: 'example-web-prototype', projectKind: 'prototype' });
-    expect(findChip('deck')?.action).toMatchObject({ pluginId: 'example-simple-deck', projectKind: 'deck' });
+    expect(findChip('prototype')?.action).toMatchObject({
+      pluginId: 'example-web-prototype',
+      projectKind: 'prototype',
+      automaticDefault: true,
+    });
+    expect(findChip('deck')?.action).toMatchObject({
+      pluginId: 'example-simple-deck',
+      projectKind: 'deck',
+      automaticDefault: true,
+    });
   });
 
   it('specialised category chips route to their bundled scenario plugin', () => {
@@ -540,6 +548,8 @@ describe('HomeHero intent rail', () => {
       kind: 'apply-scenario',
       pluginId: 'example-hyperframes',
       projectKind: 'video',
+      automaticDefault: true,
+      projectMetadata: expect.objectContaining({ intent: 'hyperframes' }),
     });
     expect(findChip('live-artifact')?.action).toMatchObject({
       kind: 'apply-scenario',
@@ -551,5 +561,12 @@ describe('HomeHero intent rail', () => {
         fidelity: 'high-fidelity',
       },
     });
+    expect(findChip('live-artifact')?.action).not.toHaveProperty('automaticDefault');
+  });
+
+  it('keeps ordinary media chips outside automatic OD Next routing', () => {
+    for (const id of ['image', 'video', 'audio']) {
+      expect(findChip(id)?.action).not.toHaveProperty('automaticDefault');
+    }
   });
 });

@@ -35,10 +35,12 @@ type OnboardingConfig = {
 declare global {
   interface Window {
     __amrOnboardingCancelCalls?: number;
+    __amrOnboardingCompleteLogin?: boolean;
     __amrOnboardingDelayNextSignedOutStatus?: boolean;
     __amrOnboardingLoginCalls?: number;
     __amrOnboardingSlowStatusResolved?: boolean;
     __amrOnboardingStatusCalls?: number;
+    __amrOnboardingStatusResponses?: number;
   }
 }
 
@@ -82,7 +84,7 @@ test('[P0] @critical onboarding lets AMR Cloud sign in and complete setup after 
   });
 });
 
-test('[P0] signed-out onboarding requires Cloud authorization before model source selection', async ({ page }) => {
+test('[P0] signed-out onboarding can open Local CLI setup without Cloud authorization', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: false,
@@ -92,15 +94,106 @@ test('[P0] signed-out onboarding requires Cloud authorization before model sourc
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
 
-  // Execution-source selection belongs behind Cloud identity. Signed-out
-  // users see only the login gate; Local Agent and BYOK become available
-  // after authentication resolves.
+  // Local CLI is independent from Cloud identity. The Cloud sign-in remains
+  // the primary action while Local CLI is available as a direct setup path.
   const primary = cloudPrimaryButton(page);
   await expect(primary).toBeVisible();
   await expect(primary).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
-  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toHaveCount(0);
+  await page.getByRole('button', { name: /Local (coding )?agent/i }).click();
+  await expect(page.locator('.onboarding-view__setup-panel')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Local (coding )?agent/i })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
+
+  await page.getByRole('button', { name: /^Back$|返回/i }).click();
+  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+  await expect(page.getByRole('radiogroup')).toHaveCount(0);
+});
+
+test('[P0] signed-out onboarding can open BYOK setup without Cloud authorization', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: false,
+    keepAmrLoginIncomplete: true,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+
+  await page.getByRole('button', { name: /Bring Your Own Key/i }).click();
+  await expect(page.locator('.onboarding-view__setup-panel')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Bring Your Own Key/i })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
+
+  await page.getByRole('button', { name: /^Back$|返回/i }).click();
+  await expect(cloudPrimaryButton(page)).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+  await expect(page.getByRole('radiogroup')).toHaveCount(0);
+});
+
+test('[P0] Cloud status loading does not block signed-out Local CLI or BYOK setup', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: false,
+    keepAmrLoginIncomplete: true,
+    delayAllStatusMs: 5_000,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
+  await expect(connectLandingHeading(page)).toBeVisible();
+
+  await expect(cloudPrimaryButton(page)).toBeDisabled();
+  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toBeEnabled();
+  await expect
+    .poll(() => page.evaluate(() => window.__amrOnboardingSlowStatusResolved ?? false))
+    .toBe(true);
+});
+
+test('[P0] delayed active Cloud login stays out of Local setup and resumes after Back', async ({ page }) => {
+  let releaseInitialStatus!: () => void;
+  const statusGate = new Promise<void>((resolve) => {
+    releaseInitialStatus = resolve;
+  });
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: false,
+    initialLoginInFlight: true,
+    keepAmrLoginIncomplete: true,
+    statusGate,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
+  await expect(connectLandingHeading(page)).toBeVisible();
+
+  await page.getByRole('button', { name: /Local (coding )?agent/i }).click();
+  const localPanel = page.locator('.onboarding-view__setup-panel');
+  const continueButton = page.getByRole('button', { name: /^Continue$|继续/i });
+  await expect(localPanel).toBeVisible();
+  await expect(continueButton).toBeEnabled();
+  await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
+
+  releaseInitialStatus();
+  await expect
+    .poll(() => page.evaluate(() => window.__amrOnboardingStatusResponses ?? 0))
+    .toBeGreaterThanOrEqual(1);
+
+  await expect(localPanel).toBeVisible();
+  await expect(continueButton).toBeEnabled();
+  await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('radiogroup')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toHaveCount(0);
+  await expectStableCount(() => localPanel.count(), 1, {
+    timeout: 2_500,
+    message: 'a resumed Cloud login must not replace the active Local CLI setup',
+  });
+
+  await page.getByRole('button', { name: /^Back$|返回/i }).click();
+  await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toBeVisible();
+  await page.evaluate(() => {
+    window.__amrOnboardingCompleteLogin = true;
+  });
+  await expectModelSourceChooser(page);
 });
 
 test('[P0] @critical onboarding Local CLI card lets the user pick an agent model before continuing', async ({ page }) => {
@@ -139,6 +232,9 @@ test('[P0] @critical onboarding Local CLI card lets the user pick an agent model
     'aria-disabled',
     'true',
   );
+
+  await page.getByRole('button', { name: /^Back$|返回/i }).click();
+  await expectModelSourceChooser(page);
 });
 
 test('[P0] onboarding Local CLI path completes setup with the selected agent model', async ({ page }) => {
@@ -242,7 +338,7 @@ test('[P0] onboarding supports Local CLI when the AMR agent is unavailable', asy
   await expect(page.getByRole('button', { name: /^Continue$/i })).toBeVisible();
 });
 
-test('[P0] onboarding signed-in AMR status failure stays gated instead of bypassing Connect', async ({ page }) => {
+test('[P0] Cloud status failure does not block signed-out Local CLI or BYOK setup', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: true,
@@ -255,15 +351,16 @@ test('[P0] onboarding signed-in AMR status failure stays gated instead of bypass
   await expect
     .poll(() => page.evaluate(() => window.__amrOnboardingStatusCalls ?? 0))
     .toBeGreaterThanOrEqual(1);
-  // The signed-in status never resolves (all polls fail), so the cloud landing
-  // can't show "Continue (signed in)" and falls back to the sign-in CTA. There
-  // is no Skip, no Continue, and no stepper to bypass the gate.
+  // The signed-in status never resolves (all polls fail), so the Cloud action
+  // stays gated. Independent Local CLI and BYOK setup remain available.
   await expect(page.getByRole('button', { name: /Skip for now/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Continue$/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /About you|了解你/i })).toHaveCount(0);
   const primary = cloudPrimaryButton(page);
   await expect(primary).toBeVisible();
   await expect(primary).toHaveText(/Sign in to OpenDesign|登录 OpenDesign/i);
+  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toBeVisible();
   await expect(page.getByText(/Optional details for better defaults/i)).toHaveCount(0);
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -295,6 +392,8 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
 
   const cancelSignIn = page.getByRole('button', { name: /Cancel sign-in/i });
   await expect(cancelSignIn).toBeVisible();
+  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toHaveCount(0);
   await cancelSignIn.click();
 
   const primary = cloudPrimaryButton(page);
@@ -306,6 +405,8 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
     .poll(() => page.evaluate(() => window.__amrOnboardingSlowStatusResolved ?? false))
     .toBe(true);
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toBeVisible();
   await expectStableCount(
     () => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0),
     0,
@@ -314,6 +415,53 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
       message: 'cancelling onboarding should prevent the delayed status continuation from starting login',
     },
   );
+});
+
+test('[P0] onboarding reload restores and cancels an active Cloud login', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: false,
+    initialLoginInFlight: true,
+    keepAmrLoginIncomplete: true,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+  await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toHaveCount(0);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toBeVisible();
+  await page.getByRole('button', { name: /Cancel sign-in/i }).click();
+
+  await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(1);
+  await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Bring Your Own Key/i })).toBeVisible();
+});
+
+test('[P0] onboarding reload resumes an active Cloud login through completion', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: false,
+    initialLoginInFlight: true,
+    keepAmrLoginIncomplete: true,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+  await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toBeVisible();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toBeVisible();
+  await page.evaluate(() => {
+    window.__amrOnboardingCompleteLogin = true;
+  });
+
+  await expectModelSourceChooser(page);
+  await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toHaveCount(0);
 });
 
 // The AMR card + per-runtime model picker on the connect step were removed.
@@ -466,7 +614,7 @@ test('[P0] definitively expired Cloud auth also gates project deep links', async
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
 });
 
-test('[P0] active Cloud sign-out clears execution setup, preserves unrelated preferences, and returns to sign-in', async ({ page }) => {
+test('[P0] active Cloud sign-out preserves BYOK and unrelated preferences while returning to sign-in', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: true,
@@ -498,7 +646,9 @@ test('[P0] active Cloud sign-out clears execution setup, preserves unrelated pre
   await expect(page.getByTestId('home-hero-input')).toHaveCount(0);
   await pollStoredConfig(page).toMatchObject({
     mode: 'daemon',
-    apiKey: '',
+    apiKey: 'private-key',
+    baseUrl: 'https://private.example/v1',
+    model: 'private-model',
     agentId: null,
     designSystemId: 'keep-design-system',
     onboardingCompleted: false,
@@ -879,10 +1029,13 @@ async function wireOnboardingMocks(
   options: {
     amrAvailable: boolean;
     initialLoggedIn: boolean;
+    initialLoginInFlight?: boolean;
     failAllStatusPolls?: boolean;
     keepAmrLoginIncomplete?: boolean;
     sessionState?: 'signed_out' | 'authenticated' | 'reauth_required';
+    delayAllStatusMs?: number;
     delaySignedOutStatusMs?: number;
+    statusGate?: Promise<void>;
     agentsDelayMs?: number;
     codexModels?: Array<{ id: string; label: string }>;
     localAgents?: Array<{
@@ -911,11 +1064,14 @@ async function wireOnboardingMocks(
   };
 
   let loggedIn = options.initialLoggedIn;
-  let loginInFlight = false;
+  let loginInFlight = options.initialLoginInFlight ?? false;
   let statusCalls = 0;
+  let statusResponses = 0;
   let loginCalls = 0;
   let cancelCalls = 0;
-  let authAttemptId: string | null = null;
+  let authAttemptId: string | null = loginInFlight
+    ? '11111111-1111-4111-8111-111111111111'
+    : null;
 
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
@@ -977,27 +1133,44 @@ async function wireOnboardingMocks(
     await page.evaluate((calls) => {
       window.__amrOnboardingStatusCalls = calls;
     }, statusCalls);
+    if (options.statusGate) {
+      await options.statusGate;
+    }
     if (options.failAllStatusPolls) {
       await route.fulfill({
         status: 500,
         contentType: 'application/json',
         body: JSON.stringify({ error: 'status unavailable' }),
       });
+      statusResponses += 1;
+      await page.evaluate((responses) => {
+        window.__amrOnboardingStatusResponses = responses;
+      }, statusResponses);
       return;
     }
+    if (loginInFlight && await page.evaluate(() => (
+      window.__amrOnboardingCompleteLogin === true
+    ))) {
+      loggedIn = true;
+      loginInFlight = false;
+    }
+    const delayAllStatusMs = options.delayAllStatusMs ?? 0;
+    const shouldDelayAllStatuses = delayAllStatusMs > 0;
     const shouldDelaySignedOutStatus =
-      !loggedIn
-      && typeof options.delaySignedOutStatusMs === 'number'
-      && options.delaySignedOutStatusMs > 0
-      && await page.evaluate(() => {
-        if (!window.__amrOnboardingDelayNextSignedOutStatus) return false;
-        window.__amrOnboardingDelayNextSignedOutStatus = false;
-        return true;
-      });
+      shouldDelayAllStatuses ||
+      (!loggedIn &&
+        typeof options.delaySignedOutStatusMs === 'number' &&
+        options.delaySignedOutStatusMs > 0 &&
+        (await page.evaluate(() => {
+          if (!window.__amrOnboardingDelayNextSignedOutStatus) return false;
+          window.__amrOnboardingDelayNextSignedOutStatus = false;
+          return true;
+        })));
     if (shouldDelaySignedOutStatus) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, options.delaySignedOutStatusMs),
-      );
+      const delayMs = shouldDelayAllStatuses
+        ? delayAllStatusMs
+        : options.delaySignedOutStatusMs ?? 0;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
     await route.fulfill({
       json: loggedIn
@@ -1013,6 +1186,7 @@ async function wireOnboardingMocks(
         : {
             loggedIn: false,
             loginInFlight,
+            authAttemptId,
             sessionState: 'signed_out',
             credentialRevision: 'signed-out',
             profile: 'local',
@@ -1020,6 +1194,10 @@ async function wireOnboardingMocks(
             user: null,
           },
     });
+    statusResponses += 1;
+    await page.evaluate((responses) => {
+      window.__amrOnboardingStatusResponses = responses;
+    }, statusResponses);
     if (shouldDelaySignedOutStatus) {
       await page.evaluate(() => {
         window.__amrOnboardingSlowStatusResolved = true;

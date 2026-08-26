@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useI18n, type Locale } from '../i18n';
 import {
   clearAnonymousState,
+  findGoPlanSunsetMessage,
   isAmrLoggedIn,
   markAccountMessageRead,
   pullMessageCenter,
@@ -13,6 +14,7 @@ import {
   type MessageCenterMessage,
   writeAnonymousState,
 } from '../message-center-client';
+import { GoPlanSunsetDialog } from './GoPlanSunsetDialog';
 import { Icon } from './Icon';
 import styles from './MessageCenter.module.css';
 
@@ -41,6 +43,13 @@ interface Props {
   /** Streams the unread count so hosts can render their own badge (e.g. the
    *  rail avatar's red dot). */
   onUnreadCountChange?: (count: number) => void;
+  /** Whether the Home shell currently grants the targeted announcement its
+   *  modal slot. Detection still runs while false, so the notice can wait
+   *  behind higher-priority business dialogs or a non-Home route. */
+  priorityAnnouncementActive?: boolean;
+  onPriorityAnnouncementPendingChange?: (pending: boolean) => void;
+  priorityAnnouncementCurrentPlanId?: string | null;
+  priorityAnnouncementMetricsConsent?: boolean;
 }
 
 type SyncState = 'loading' | 'ready' | 'error';
@@ -52,6 +61,10 @@ export function MessageCenter({
   open: controlledOpen,
   onOpenChange,
   onUnreadCountChange,
+  priorityAnnouncementActive = false,
+  onPriorityAnnouncementPendingChange,
+  priorityAnnouncementCurrentPlanId,
+  priorityAnnouncementMetricsConsent = false,
 }: Props) {
   const { locale, t } = useI18n();
   const titleId = useId();
@@ -70,11 +83,14 @@ export function MessageCenter({
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [loggedIn, setLoggedIn] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>('loading');
+  const [priorityMessage, setPriorityMessage] = useState<MessageCenterMessage | null>(null);
   const loggedInRef = useRef(false);
   const messagesRef = useRef<MessageCenterMessage[]>([]);
   const readIdsRef = useRef<Set<string>>(new Set());
   const pendingReadIdsRef = useRef<Set<string>>(new Set());
   const syncRequestIdRef = useRef(0);
+  const priorityPendingCallbackRef = useRef(onPriorityAnnouncementPendingChange);
+  priorityPendingCallbackRef.current = onPriorityAnnouncementPendingChange;
 
   const commitState = useCallback(
     (nextMessages: MessageCenterMessage[], nextReadIds: Set<string>, options?: { persistAnonymous?: boolean }) => {
@@ -98,6 +114,7 @@ export function MessageCenter({
     if (wasAccount && !account) {
       readIdsRef.current = new Set();
       pendingReadIdsRef.current = new Set();
+      setPriorityMessage(null);
     }
     const pulled = await pullMessageCenter({ locale, loggedIn: account });
     if (requestId !== syncRequestIdRef.current) return;
@@ -118,6 +135,7 @@ export function MessageCenter({
     }));
     if (account) clearAnonymousState(window.localStorage);
     commitState(merged, overlayReadIds, { persistAnonymous: !account });
+    setPriorityMessage(account ? findGoPlanSunsetMessage(merged) : null);
     setSyncState('ready');
   }, [commitState, locale]);
 
@@ -166,6 +184,14 @@ export function MessageCenter({
     onUnreadCountChange?.(unreadCount);
   }, [unreadCount, onUnreadCountChange]);
 
+  useEffect(() => {
+    onPriorityAnnouncementPendingChange?.(priorityMessage != null);
+  }, [onPriorityAnnouncementPendingChange, priorityMessage]);
+
+  useEffect(() => () => {
+    priorityPendingCallbackRef.current?.(false);
+  }, []);
+
   /** The control keyboard focus must land on after the panel closes. Opening
    *  focuses the portaled dialog, so closing always unmounts the focused node —
    *  without a target here focus falls to the document and the user loses their
@@ -197,10 +223,26 @@ export function MessageCenter({
     };
   }, [open]);
 
-  const markRead = async (messageId: string) => {
+  useEffect(() => {
+    if (priorityAnnouncementActive && priorityMessage != null && open) {
+      setOpen(false);
+    }
+  }, [open, priorityAnnouncementActive, priorityMessage, setOpen]);
+
+  const markRead = async (messageId: string, options?: { requireAccount?: boolean }) => {
     const message = messagesRef.current.find((item) => item.id === messageId);
-    if (!message || message.readAt) return;
+    if (!message) {
+      if (options?.requireAccount) throw new Error('Announcement message is no longer available');
+      return;
+    }
+    if (message.readAt) {
+      if (priorityMessage?.id === messageId) setPriorityMessage(null);
+      return;
+    }
     const account = await resolveLoggedInForWrite();
+    if (options?.requireAccount && !account) {
+      throw new Error('A signed-in account is required to acknowledge this announcement');
+    }
     const readAt = new Date().toISOString();
     if (account) await markAccountMessageRead(messageId);
     const nextIds = new Set(readIdsRef.current).add(messageId);
@@ -211,6 +253,7 @@ export function MessageCenter({
     }
     invalidateSyncResponses();
     commitState(nextMessages, nextIds, { persistAnonymous: !account });
+    if (priorityMessage?.id === messageId) setPriorityMessage(null);
   };
 
   const openLabel = unreadCount > 0 ? `${t('messageCenter.openAria')} (${t('messageCenter.unreadCount', { count: unreadCount })})` : t('messageCenter.openAria');
@@ -249,6 +292,16 @@ export function MessageCenter({
       </div>
       <footer className={styles.footer}><p>{t('messageCenter.desktopSettingsHint')}</p>{onOpenNotificationSettings ? <Button variant="ghost" onClick={() => { closePanel(); onOpenNotificationSettings(); }}>{t('messageCenter.desktopSettings')}</Button> : null}</footer>
     </aside></div>, document.body) : null}
+    {priorityMessage != null ? (
+      <GoPlanSunsetDialog
+        active={priorityAnnouncementActive}
+        currentPlanId={priorityAnnouncementCurrentPlanId ?? 'unknown'}
+        metricsConsent={priorityAnnouncementMetricsConsent}
+        onDismiss={async () => {
+          await markRead(priorityMessage.id, { requireAccount: true });
+        }}
+      />
+    ) : null}
   </div>;
 }
 

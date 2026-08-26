@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import { strategyTaskProvesDelivery, todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
 import { normalizeMediaExecutionPolicyForRun } from '../media/policy.js';
 import {
   normalizeRunToolBundleForRun,
@@ -20,6 +20,11 @@ import {
   RESTART_ERROR_CODE,
   RESTART_ERROR_MESSAGE,
 } from './run-restart-recovery.js';
+import {
+  beginRunTelemetryDelivery,
+  finalizeRunTelemetryDelivery,
+  recordRunTelemetryDeliveryAttempt,
+} from '../observability/delivery-state.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -513,6 +518,9 @@ function durableRunState(run) {
     assistantMessageId: run.assistantMessageId,
     clientRequestId: run.clientRequestId,
     requestFingerprint: run.requestFingerprint,
+    ...(run.strategyRolloutDecision
+      ? { strategyRolloutDecision: run.strategyRolloutDecision }
+      : {}),
     agentId: run.agentId,
     status: run.status,
     createdAt: run.createdAt,
@@ -578,9 +586,14 @@ function durableRunState(run) {
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
+    ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
+    ...(run.odNextTaskInputSnapshot
+      ? { odNextTaskInputSnapshot: run.odNextTaskInputSnapshot }
+      : {}),
     ...(typeof run.langfuseCompletedAt === 'number'
       ? { langfuseCompletedAt: run.langfuseCompletedAt }
       : {}),
+    ...(run.telemetryDelivery ? { telemetryDelivery: run.telemetryDelivery } : {}),
   };
 }
 
@@ -650,6 +663,12 @@ export function createChatRunService({
   // outlives buffer truncation. Kept generic here: this service does not
   // interpret event semantics, it just hands each record to the observer.
   onEventEmitted = null,
+  // Optional synchronous hook invoked immediately before the single physical
+  // terminal transition. The daemon uses this to converge durable logical
+  // task state before the `end` event is persisted or published. Keeping the
+  // hook here covers startup failures and daemon shutdown in addition to the
+  // normal child-close path.
+  beforeFinish = null,
 }) {
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
@@ -771,6 +790,12 @@ export function createChatRunService({
         typeof meta.requestFingerprint === 'string' && meta.requestFingerprint
           ? meta.requestFingerprint
           : null,
+      strategyRolloutDecision:
+        meta.strategyRolloutDecision
+        && typeof meta.strategyRolloutDecision === 'object'
+        && !Array.isArray(meta.strategyRolloutDecision)
+          ? meta.strategyRolloutDecision
+          : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
       projectMetadata:
         meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
@@ -882,6 +907,13 @@ export function createChatRunService({
       manualResumeAttemptCount: 0,
       rechargeWaitDurationMs: 0,
     };
+    if (
+      meta.odNextTaskInputSnapshot
+      && typeof meta.odNextTaskInputSnapshot === 'object'
+      && !Array.isArray(meta.odNextTaskInputSnapshot)
+    ) {
+      run.odNextTaskInputSnapshot = meta.odNextTaskInputSnapshot;
+    }
     if (Object.prototype.hasOwnProperty.call(meta, 'workspaceScope')) {
       run.workspaceScope = meta.workspaceScope ?? null;
     }
@@ -947,10 +979,52 @@ export function createChatRunService({
     persistState(run);
   };
 
+  const beginTelemetryDelivery = (run) => {
+    if (!run) return null;
+    run.telemetryDelivery = beginRunTelemetryDelivery(
+      run.telemetryDelivery,
+      run.id,
+    );
+    persistState(run);
+    return run.telemetryDelivery;
+  };
+
+  const finalizeTelemetryDelivery = (run, delivery) => {
+    if (!run || !delivery) return null;
+    run.telemetryDelivery = finalizeRunTelemetryDelivery(
+      run.telemetryDelivery,
+      run.id,
+      delivery,
+    );
+    if (typeof run.telemetryDelivery.finalizedAt === 'number') {
+      run.langfuseCompletedAt = run.telemetryDelivery.finalizedAt;
+    } else {
+      delete run.langfuseCompletedAt;
+    }
+    persistState(run);
+    return run.telemetryDelivery;
+  };
+
+  const recordTelemetryDeliveryAttempt = (run) => {
+    if (!run) return null;
+    run.telemetryDelivery = recordRunTelemetryDeliveryAttempt(
+      run.telemetryDelivery,
+      run.id,
+    );
+    persistState(run);
+    return run.telemetryDelivery;
+  };
+
+  // Compatibility alias for older in-process callers. New delivery paths use
+  // the explicit begin/finalize pair so a daemon crash cannot be confused
+  // with a terminal network failure.
   const markLangfuseCompleted = (run) => {
     if (!run) return;
-    run.langfuseCompletedAt = Date.now();
-    persistState(run);
+    finalizeTelemetryDelivery(run, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+      langfuse_attempt_count: 1,
+    });
   };
 
   const setDeliverableValidation = (run, result) => {
@@ -1130,6 +1204,7 @@ export function createChatRunService({
     designSystemDigest: run.designSystemDigest ?? null,
     appliedPluginSnapshotId: run.appliedPluginSnapshotId ?? null,
     pluginId: run.pluginId ?? null,
+    strategyRolloutDecision: run.strategyRolloutDecision ?? null,
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
@@ -1186,6 +1261,7 @@ export function createChatRunService({
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
+    ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     ...(TERMINAL_RUN_STATUSES.has(run.status)
       ? { executionDiagnostics: buildExecutionDiagnostics(run) }
       : {}),
@@ -1193,6 +1269,7 @@ export function createChatRunService({
 
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (beforeFinish) beforeFinish(run, status, code, signal);
     run.status = status;
     run.exitCode = code;
     run.signal = signal;
@@ -1203,8 +1280,16 @@ export function createChatRunService({
     // (#1247 / #1060). A truncated turn (max_tokens) counts as unfinished even
     // if the last TodoWrite looked done. Absence of any TodoWrite snapshot keeps
     // the flag false, so a text-only answer stays "Completed".
+    //
+    // A settled strategy verdict outranks the TodoWrite narration: the task
+    // reaches `completed` only once the deliverable was verified on disk, and
+    // the agent's own checklist is routinely left with a stale `pending` item.
+    // Truncation stays an independent term — a cut-off generation is unfinished
+    // whatever verdict was recorded.
     run.endedWithUnfinishedWork =
-      Boolean(run.truncatedMidTurn) || todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot);
+      Boolean(run.truncatedMidTurn)
+      || (!strategyTaskProvesDelivery(run.strategyTask)
+        && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
     // Release run-scoped resources the starter registered (e.g. the minted
     // tool-token grant + agent event-sink entries). This runs on EVERY
     // terminal path — including a startup throw that never reached the child
@@ -1225,6 +1310,7 @@ export function createChatRunService({
       ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
+      ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     });
     for (const sse of run.clients) sse.end();
     run.clients.clear();
@@ -1584,6 +1670,9 @@ export function createChatRunService({
     persistState,
     setAnalyticsRecovery,
     markAnalyticsCompleted,
+    beginTelemetryDelivery,
+    recordTelemetryDeliveryAttempt,
+    finalizeTelemetryDelivery,
     markLangfuseCompleted,
     setDeliverableValidation,
     finish,

@@ -25,14 +25,14 @@ test('publishes pinned cross-platform DeepSeek Harness installers', () => {
 
   assert.match(shell, /^#!\/usr\/bin\/env sh\n/);
   assert.match(shell, /NODE_VERSION=['"]?24\.19\.0/);
-  assert.match(shell, /DSH_VERSION=['"]?0\.1\.0-rc\.6/);
+  assert.match(shell, /DSH_VERSION=['"]?0\.1\.1-rc\.2/);
   assert.match(shell, /PNPM_VERSION=['"]?11\.7\.0/);
   assert.match(shell, /SHASUMS256\.txt/);
   assert.match(shell, /--no-launch/);
   assert.doesNotMatch(shell, /npm\s+(?:install|i)\s+-g/);
 
   assert.match(powershell, /NodeVersion\s*=\s*'24\.19\.0'/);
-  assert.match(powershell, /DshVersion\s*=\s*'0\.1\.0-rc\.6'/);
+  assert.match(powershell, /DshVersion\s*=\s*'0\.1\.1-rc\.2'/);
   assert.match(powershell, /PnpmVersion\s*=\s*'11\.7\.0'/);
   assert.match(powershell, /Get-FileHash/);
   assert.match(powershell, /NoLaunch/);
@@ -42,6 +42,39 @@ test('publishes pinned cross-platform DeepSeek Harness installers', () => {
   assert.match(cmd, /powershell\.exe/);
   assert.match(cmd, /https:\/\/open-design\.ai\/install-dsh\.ps1/);
   assert.doesNotMatch(cmd, /DEEPSEEK_API_KEY/);
+});
+
+test('freezes the whole DeepSeek Harness generation, not just its entry package', () => {
+  const shell = readFileSync(posixInstaller, 'utf8');
+  const powershell = readFileSync(powershellInstaller, 'utf8');
+
+  // Pinning only `@deepseek-ai/dsh` is not enough. Its ~190 siblings declare
+  // each other with caret ranges whose floor carries a prerelease tag, which
+  // npm reads as "this prerelease or anything newer" — so the moment a newer
+  // release candidate is published, the transitive tree floats onto it while
+  // the entry package stays pinned. Those generations peer-require their own
+  // siblings, so the mixed tree has no solution and npm backtracks forever:
+  // the install looks like an endless scroll of ERESOLVE warnings and never
+  // finishes. A resolution cutoff is what keeps the tree on one generation.
+  const shellCutoff = /DSH_RESOLUTION_CUTOFF='([^']+)'/u.exec(shell)?.[1];
+  const powershellCutoff = /\$DshResolutionCutoff\s*=\s*'([^']+)'/u.exec(powershell)?.[1];
+  assert.ok(shellCutoff, 'the POSIX installer must declare a resolution cutoff');
+  assert.ok(powershellCutoff, 'the PowerShell installer must declare a resolution cutoff');
+  assert.equal(powershellCutoff, shellCutoff, 'both installers must freeze the same window');
+
+  // The cutoff only takes effect if it is actually handed to npm.
+  assert.match(shell, /--before "\$DSH_RESOLUTION_CUTOFF"/u);
+  assert.match(powershell, /--before \$DshResolutionCutoff/u);
+
+  // A cutoff that predates the pinned version would resolve nothing at all.
+  const shellVersion = /DSH_VERSION='([^']+)'/u.exec(shell)?.[1];
+  const powershellVersion = /\$DshVersion\s*=\s*'([^']+)'/u.exec(powershell)?.[1];
+  assert.ok(shellVersion, 'the POSIX installer must pin a dsh version');
+  assert.equal(powershellVersion, shellVersion, 'both installers must pin the same version');
+  assert.ok(
+    Number.isFinite(Date.parse(shellCutoff as string)),
+    'the resolution cutoff must be a timestamp npm can parse',
+  );
 });
 
 test('POSIX installer performs a checksum-verified isolated install and is idempotent', () => {
@@ -77,7 +110,7 @@ mkdir -p "$prefix/node_modules/@deepseek-ai/dsh/lib" "$prefix/node_modules/.bin"
 : > "$prefix/node_modules/@deepseek-ai/dsh/lib/bin.js"
 cat > "$prefix/node_modules/.bin/dsh" <<'EOF'
 #!/bin/sh
-if [ "$1" = "--version" ]; then printf '%s\\n' '0.1.0-rc.6'; exit 0; fi
+if [ "$1" = "--version" ]; then printf '%s\\n' '0.1.1-rc.2'; exit 0; fi
 if [ "$1" = "plugin" ]; then pnpm --version; exit $?; fi
 printf '%s\\n' "dsh:$*"
 EOF
@@ -118,11 +151,11 @@ printf '%s\\n' '10.33.2'
   try {
     const first = spawnSync('sh', [posixInstaller, '--no-launch'], { encoding: 'utf8', env });
     assert.equal(first.status, 0, first.stderr);
-    assert.match(first.stdout, /DeepSeek Harness 0\.1\.0-rc\.6 is ready/);
+    assert.match(first.stdout, /DeepSeek Harness 0\.1\.1-rc\.2 is ready/);
 
     const version = spawnSync(join(binDir, 'dsh'), ['--version'], { encoding: 'utf8', env });
     assert.equal(version.status, 0, version.stderr);
-    assert.equal(version.stdout.trim(), '0.1.0-rc.6');
+    assert.equal(version.stdout.trim(), '0.1.1-rc.2');
 
     const pluginPnpm = spawnSync(join(binDir, 'dsh'), ['plugin'], { encoding: 'utf8', env });
     assert.equal(pluginPnpm.status, 0, pluginPnpm.stderr);
@@ -145,7 +178,7 @@ test('POSIX installer reuses a complete compatible toolchain without downloading
   mkdirSync(pathDir, { recursive: true });
   for (const [name, version] of [
     ['node', 'v24.19.0'],
-    ['dsh', '0.1.0-rc.6'],
+    ['dsh', '0.1.1-rc.2'],
     ['pnpm', '11.7.0'],
   ] as const) {
     const executable = join(pathDir, name);
@@ -168,7 +201,7 @@ test('POSIX installer reuses a complete compatible toolchain without downloading
     assert.doesNotMatch(result.stdout + result.stderr, /Downloading/);
     const version = spawnSync(join(binDir, 'dsh'), ['--version'], { encoding: 'utf8', env });
     assert.equal(version.status, 0, version.stderr);
-    assert.equal(version.stdout.trim(), '0.1.0-rc.6');
+    assert.equal(version.stdout.trim(), '0.1.1-rc.2');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

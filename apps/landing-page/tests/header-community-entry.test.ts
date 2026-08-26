@@ -18,20 +18,21 @@ const render = (locale: 'zh' | 'zh-tw' | 'en') =>
   renderToStaticMarkup(createElement(Header, { counts, github: { starsLabel: '83K+' }, locale }));
 
 test('header action cluster carries icon-only community + X links, no text pill', () => {
+  // Every locale (zh / zh-tw included) routes the community entry to Discord;
+  // the Feishu group + QR card were retired.
   const zh = render('zh');
-  assert.match(zh, /class="nav-social-link"[^>]*href="https:\/\/od\.kokiai\.net\/community\/website"[^>]*aria-label="加入飞书群"/);
+  assert.match(zh, /class="nav-social-link"[^>]*href="https:\/\/discord\.gg\/[^"]+"[^>]*aria-label="加入 Discord"/);
   assert.match(zh, /class="nav-community-qr-card"/);
-  assert.match(zh, /src="\/launch-week\/feishu-mark\.png"/);
   assert.match(zh, /群内每周发放 Credits/);
-  assert.match(zh, /src="\/community\/feishu-group-qr\.png"/);
+  assert.doesNotMatch(zh, /feishu|kokiai|nav-community-qr-img/);
   assert.match(zh, /aria-label="X"/);
 
   const zhTw = render('zh-tw');
-  assert.match(zhTw, /aria-label="加入飛書群"/);
+  assert.match(zhTw, /aria-label="加入 Discord"/);
+  assert.doesNotMatch(zhTw, /feishu|kokiai/);
 
   const en = render('en');
   assert.match(en, /class="nav-social-link"[^>]*href="https:\/\/discord\.gg\/[^"]+"[^>]*aria-label="Join Discord"/);
-  // Non-Chinese locales get the perk card without the Feishu QR image.
   assert.match(en, /nav-community-qr-card/);
   assert.doesNotMatch(en, /nav-community-qr-img/);
   assert.match(en, /Weekly credit drops inside/);

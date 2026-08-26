@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  backgroundPullMaxCumulativeEntriesFromEnv,
   backgroundPullMaxEntriesFromEnv,
   createBackgroundPullSizeGuard,
   DEFAULT_BACKGROUND_PULL_MAX_ENTRIES,
@@ -61,7 +62,222 @@ describe('createBackgroundPullSizeGuard', () => {
       version: 12,
       entryCount: 7442,
       maxEntries: 2000,
+      reason: 'oversized',
     }));
+  });
+
+  // Measured against a live Team workspace: 12 shared projects of ~2.9 MB each
+  // (12 files apiece — an order of magnitude under the per-project threshold),
+  // and a member who did nothing but open the client pulled 23 MB across 8
+  // projects within 50s. The daemon's own sweep log showed why:
+  //
+  //   catch-up completed ... scanned=25 candidates=25 headChecks=4 suppressed=0
+  //
+  // Every project cleared the gate, because the gate is evaluated per
+  // project/version and each one is individually small. `headChecks=4` is a
+  // per-round batch size, not a ceiling — later rounds keep going. Nothing in
+  // the path expresses "this member has already been given enough for one
+  // session", so onboarding cost grows linearly with team size, unbounded.
+  //
+  // The per-project threshold stays exactly as it is (it solves the #6512
+  // shape: one enormous project). This adds the missing second dimension.
+  it('reads the cumulative budget from env, defaulting to disabled', () => {
+    // Default MUST be off: choosing a real ceiling is a capacity decision that
+    // needs production data on team sizes, and shipping a guessed default
+    // would silently change what every existing client downloads.
+    expect(backgroundPullMaxCumulativeEntriesFromEnv({})).toBe(0);
+    expect(backgroundPullMaxCumulativeEntriesFromEnv({
+      OD_COLLAB_BACKGROUND_PULL_MAX_CUMULATIVE_ENTRIES: '5000',
+    })).toBe(5000);
+    // Anything malformed disables rather than guesses, matching how
+    // `backgroundPullMaxEntriesFromEnv` refuses to be silently misconfigured.
+    for (const bad of ['-1', 'abc', '1.5', '']) {
+      expect(backgroundPullMaxCumulativeEntriesFromEnv({
+        OD_COLLAB_BACKGROUND_PULL_MAX_CUMULATIVE_ENTRIES: bad,
+      })).toBe(0);
+    }
+  });
+
+  it('defers once the cumulative budget for this session is exhausted', async () => {
+    const inspect = vi.fn(async () => countedInspect(12));
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      // Three small projects' worth. Each is far below `maxEntries`, so the
+      // per-project gate alone would clear all of them.
+      maxCumulativeEntries: 36,
+      inspect,
+    });
+
+    const project = (id: string) => ({ ...scope, projectId: id });
+
+    await expect(guard.assess(project('p-1'), 1)).resolves.toBe('pull');
+    await expect(guard.assess(project('p-2'), 1)).resolves.toBe('pull');
+    await expect(guard.assess(project('p-3'), 1)).resolves.toBe('pull');
+    // Budget spent: the fourth is left to the foreground lane, which never
+    // consults this guard, so opening it still materializes on demand.
+    await expect(guard.assess(project('p-4'), 1)).resolves.toBe('defer');
+  });
+
+  it('reports WHY it deferred, so the two ceilings are not confused', async () => {
+    // Observed live: a 12-entry project deferred by the budget logged
+    // "deferred (oversized) ... entries=12 maxEntries=2000" — which reads as a
+    // contradiction and points at the wrong knob. The two ceilings need
+    // different responses (raise the per-project threshold vs. raise the
+    // session budget), so the reason has to travel with the observation.
+    const onDeferred = vi.fn();
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      maxCumulativeEntries: 12,
+      inspect: async () => countedInspect(12),
+      onDeferred,
+    });
+
+    await expect(guard.assess({ ...scope, projectId: 'p-1' }, 1)).resolves.toBe('pull');
+    await expect(guard.assess({ ...scope, projectId: 'p-2' }, 1)).resolves.toBe('defer');
+
+    expect(onDeferred).toHaveBeenCalledTimes(1);
+    expect(onDeferred).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'p-2',
+      entryCount: 12,
+      maxEntries: 2000,
+      reason: 'budget-exhausted',
+    }));
+  });
+
+  it('does not re-probe a project the budget already deferred', async () => {
+    // Review finding on #7403. A deferral is terminal only for the current work
+    // item; later catch-up rounds revisit the still-unmaterialized head. With
+    // the budget branch recording nothing, every round repeated the remote
+    // authorize-only probe and emitted another deferral log for every project
+    // past the budget — unbounded remote calls for a decision that cannot
+    // change until the process restarts.
+    //
+    // Caching it is safe: every map in this guard is process-local already, so
+    // a restart clears the budget and these entries together.
+    const inspect = vi.fn(async () => countedInspect(12));
+    const onDeferred = vi.fn();
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      maxCumulativeEntries: 12,
+      inspect,
+      onDeferred,
+    });
+
+    await expect(guard.assess({ ...scope, projectId: 'p-1' }, 1)).resolves.toBe('pull');
+    await expect(guard.assess({ ...scope, projectId: 'p-2' }, 1)).resolves.toBe('defer');
+    const probesAfterFirstDeferral = inspect.mock.calls.length;
+
+    // Two more sweep rounds hit the same project + version.
+    await expect(guard.assess({ ...scope, projectId: 'p-2' }, 1)).resolves.toBe('defer');
+    await expect(guard.assess({ ...scope, projectId: 'p-2' }, 1)).resolves.toBe('defer');
+
+    expect(inspect.mock.calls.length).toBe(probesAfterFirstDeferral);
+    expect(onDeferred).toHaveBeenCalledTimes(1);
+  });
+
+  it('classifies an oversized project as oversized even when the budget is low', async () => {
+    // Review finding on #7403. Checking the cumulative ceiling first meant a
+    // project that independently exceeds `maxEntries` got labelled
+    // `budget-exhausted` whenever the remaining budget happened to be smaller —
+    // pointing at the wrong knob AND missing the oversized-version cache, so it
+    // was re-probed on every later round. The per-project ceiling is a
+    // permanent property of the version and must be decided first.
+    const inspect = vi.fn(async (s: { projectId: string }) =>
+      countedInspect(s.projectId === 'small' ? 12 : 5000),
+    );
+    const onDeferred = vi.fn();
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      // Budget large enough to admit the small project, then too small to
+      // admit the oversized one — the exact window where ordering decides
+      // which label (and which cache) the oversized project gets.
+      maxCumulativeEntries: 100,
+      inspect,
+      onDeferred,
+    });
+
+    await expect(
+      guard.assess({ ...scope, projectId: 'small' }, 1),
+    ).resolves.toBe('pull');
+    await expect(guard.assess(scope, 4)).resolves.toBe('defer');
+    expect(onDeferred).toHaveBeenCalledWith(expect.objectContaining({
+      entryCount: 5000,
+      reason: 'oversized',
+    }));
+
+    // And it is remembered as oversized, so later rounds cost no probe.
+    const probes = inspect.mock.calls.length;
+    await expect(guard.assess(scope, 4)).resolves.toBe('defer');
+    expect(inspect.mock.calls.length).toBe(probes);
+  });
+
+  it('leaves the cumulative budget disabled by default', async () => {
+    // Absent an explicit budget the guard must behave exactly as before, so
+    // enabling this cannot silently change existing deployments.
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      inspect: async () => countedInspect(12),
+    });
+    for (let i = 0; i < 50; i += 1) {
+      await expect(
+        guard.assess({ ...scope, projectId: `p-${i}` }, 1),
+      ).resolves.toBe('pull');
+    }
+  });
+
+  // Volume reporting. The cumulative ceiling ships disabled (a capacity number
+  // nobody could justify without production data), and the counter that would
+  // have produced that data ran only when the ceiling was already on. Every
+  // default-configured client therefore measured nothing, which is why the
+  // ceiling stayed unset. Counting always — and enforcing only when a ceiling
+  // is set — is what makes it choosable.
+  it('reports the volume it cleared even when the cumulative ceiling is off', async () => {
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      inspect: async () => countedInspect(12),
+    });
+
+    await guard.assess(scope, 1);
+    await guard.assess({ ...scope, projectId: 'proj-2' }, 1);
+
+    expect(guard.volume()).toEqual({
+      entries: 24,
+      countedProjects: 2,
+      uncountedProjects: 0,
+    });
+  });
+
+  it('keeps uncounted allowances apart so a zero is not read as a quiet fleet', async () => {
+    // An old server returns no manifest count, and the guard fails open. If
+    // those allowances vanished from the report, a fleet that pulls plenty
+    // would look idle and the ceiling would be set far too low.
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      inspect: async () => ({ kind: 'uncounted' }) as const,
+    });
+
+    await guard.assess(scope, 1);
+
+    expect(guard.volume()).toEqual({
+      entries: 0,
+      countedProjects: 0,
+      uncountedProjects: 1,
+    });
+  });
+
+  it('does not report a deferred project as materialized volume', async () => {
+    const guard = createBackgroundPullSizeGuard({
+      maxEntries: 2000,
+      inspect: async () => countedInspect(7442),
+    });
+
+    await expect(guard.assess(scope, 1)).resolves.toBe('defer');
+
+    expect(guard.volume()).toEqual({
+      entries: 0,
+      countedProjects: 0,
+      uncountedProjects: 0,
+    });
   });
 
   it('pulls a version at or below the threshold', async () => {
@@ -388,8 +604,30 @@ describe('background size guard composed with the proactive pull lanes', () => {
         return { status: 'pulled', version: expectedVersion ?? null };
       },
     };
-    return { deps, inspect };
+    return { deps, inspect, guard };
   }
+
+  it('reports what the background lane actually materialized, through the real lane', async () => {
+    // Reading `volume()` off a direct `assess()` call proves the counter
+    // increments; it does not prove the counter is fed by the code path that
+    // costs a member their disk. Drive the real lane instead, so a future
+    // change that stops consulting the guard shows up here.
+    const { deps, guard } = makeComposedDeps(async () => countedInspect(12));
+    const pull = createProactiveContentPull(deps);
+
+    await pull.handleContentChanged({
+      projectId: 'proj-1',
+      workspaceId: 'ws-1',
+      version: 12,
+    });
+
+    expect(deps.pullCalls).toEqual([{ projectId: 'proj-1', version: 12 }]);
+    expect(guard.volume()).toEqual({
+      entries: 12,
+      countedProjects: 1,
+      uncountedProjects: 0,
+    });
+  });
 
   it('background lanes probe once, defer, and stay quiet across sweep rounds', async () => {
     const { deps, inspect } = makeComposedDeps(async () =>

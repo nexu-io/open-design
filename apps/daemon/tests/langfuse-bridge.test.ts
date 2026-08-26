@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { reportRunCompletedFromDaemon } from '../src/langfuse-bridge.js';
+import {
+  buildSafeRunQualityProjectionFromDaemon,
+  reportRunCompletedFromDaemon,
+} from '../src/langfuse-bridge.js';
 import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 
 interface FakeMessage {
@@ -118,6 +121,54 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
     delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-bridge-'));
+  });
+
+  it('rebuilds Task quality from the same durable message, tool, and manifest facts', async () => {
+    const run = makeRun({
+      status: 'failed',
+      error: 'token=sk-test-1234567890123456789012 /Users/alice/private',
+      errorCode: 'AGENT_EXIT',
+    });
+    const quality = await buildSafeRunQualityProjectionFromDaemon({
+      db: makeDbWithListMessages({
+        'conv-1': [{
+          id: 'user-1',
+          role: 'user',
+          content: 'request',
+          attachments: [{ path: '/Users/alice/private.png', size: 42 }],
+        }, {
+          id: 'msg-1',
+          role: 'assistant',
+          content:
+            'done token=sk-test-1234567890123456789012 <artifact>private body</artifact>',
+          producedFiles: [{ path: '/Users/alice/result.html', size: 84, kind: 'html' }],
+        }],
+      }),
+      dataDir,
+      run,
+      prefs: { metrics: true, content: true, artifactManifest: true },
+      installationId: 'installation-fixture',
+    });
+
+    expect(quality?.result?.output?.text).toContain('[REDACTED:artifact_content]');
+    expect(quality?.result?.error).toMatchObject({ code: 'AGENT_EXIT' });
+    expect(quality?.tools).toHaveLength(2);
+    expect(quality?.manifests).toMatchObject({
+      completeness: 'complete',
+      attachments: [{ object_class: 'attachment', size_bytes: 42 }],
+      artifacts: [{ object_class: 'artifact', size_bytes: 84, type: 'html' }],
+    });
+    const serialized = JSON.stringify(quality);
+    expect(serialized).not.toContain('/Users/alice');
+    expect(serialized).not.toContain('sk-test-');
+    expect(serialized).not.toContain('private body');
+
+    expect(await buildSafeRunQualityProjectionFromDaemon({
+      db: makeDb(),
+      dataDir,
+      run,
+      prefs: { metrics: true, content: false, artifactManifest: true },
+    })).toBeUndefined();
   });
 
   afterEach(async () => {
@@ -936,6 +987,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(fetchSpy.mock.calls[3]![0]).toBe('https://us.cloud.langfuse.com/api/public/ingestion');
     const registrationBatch = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string).batch as any[];
     const finalBatch = JSON.parse(fetchSpy.mock.calls[3]![1]!.body as string).batch as any[];
+    expect(registrationBatch[0].id).not.toBe(finalBatch[0].id);
     expect(registrationBatch[0].body.metadata.artifact_manifest[0]).toMatchObject({
       object_class: 'artifact',
       storage_ref: expect.stringContaining(

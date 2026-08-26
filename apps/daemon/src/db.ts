@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type {
   CollabCloudComment,
+  OdNextDevicePlatformV1,
   ProjectBrowserWorkspaceTab,
   ProjectTabsState,
 } from '@open-design/contracts';
@@ -25,6 +26,10 @@ import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media/tasks.js';
 import { migrateLibrary } from './library-store.js';
 import { migratePlugins } from './plugins/persistence.js';
+import { migrateProjectScenarioBindings } from './plugins/scenario-binding.js';
+import { emittedRenderableQuestionForm } from './question-form-detect.js';
+import { migrateOdNextRolloutStore } from './strategies/od-next/rollout.js';
+import { migrateStrategyTaskStore } from './strategies/task-store.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -558,6 +563,9 @@ function migrate(db: SqliteDb): void {
   migrateMediaTasks(db);
   migrateLibrary(db);
   migratePlugins(db);
+  migrateProjectScenarioBindings(db);
+  migrateStrategyTaskStore(db);
+  migrateOdNextRolloutStore(db);
   migrateCollabSyncSnapshots(db);
   migrateCommentRelayOutbox(db);
   migratePublicFilePublications(db);
@@ -1737,79 +1745,125 @@ export function listLatestRunStatuses(db: SqliteDb) {
   return latestByRun;
 }
 
+/**
+ * Cheap SQL prefilter for the awaiting-input latch.
+ *
+ * Only a prefilter: every renderable form necessarily contains one of these
+ * substrings, so the predicate is a strict superset of the real answer and
+ * cannot drop a genuine form. `ask-question` is an accepted alias for
+ * `question-form` (UI parser + daemon detector), so an alias-form turn must be
+ * a candidate too. The authoritative test is `emittedRenderableQuestionForm`,
+ * applied to the candidate content in JS.
+ */
+const AWAITING_INPUT_MARKER_PREFILTER = `(
+                LOWER(m.content) LIKE '%<question-form%'
+                OR LOWER(m.content) LIKE '%<ask-question%'
+              )`;
+
+interface AwaitingInputCandidate {
+  partitionKey: string;
+  conversationId: string;
+  createdAt: number;
+  position: number;
+  content: string;
+}
+
+type AwaitingInputWinner = Omit<AwaitingInputCandidate, 'partitionKey' | 'content'>;
+
+/**
+ * Which partitions are still waiting on an answer to a form the user can see?
+ *
+ * The invariant this preserves, unchanged from the single-statement query it
+ * replaces: within each partition take the NEWEST form-bearing assistant
+ * message (`created_at DESC, position DESC`), then report the partition only if
+ * that message's own conversation has no later user message. A partition whose
+ * newest form was already answered is not awaiting input, even when an older
+ * unanswered form exists elsewhere in it.
+ *
+ * The strict check has to run BEFORE the newest-per-partition pick, not after
+ * it. Post-filtering the winning rows would silently change which message is
+ * considered latest: a stray, unrenderable marker emitted after a real
+ * unanswered form would win the partition, fail the check, and drop a project
+ * that is genuinely waiting on the user. So the pick happens here, over rows
+ * already reduced to those that actually render.
+ */
+function listPartitionsAwaitingInput(
+  db: SqliteDb,
+  candidates: Iterable<AwaitingInputCandidate>,
+): Set<string> {
+  // Streamed, and the winner keeps no `content`: this runs on every
+  // `GET /api/projects`, and the candidate set is every form-bearing assistant
+  // message the database has ever stored. Materializing those turns' full text
+  // would grow the cost of listing projects with the length of the history.
+  const winners = new Map<string, AwaitingInputWinner>();
+  for (const candidate of candidates) {
+    if (winners.has(candidate.partitionKey)) continue;
+    if (!emittedRenderableQuestionForm(candidate.content)) continue;
+    winners.set(candidate.partitionKey, {
+      conversationId: candidate.conversationId,
+      createdAt: candidate.createdAt,
+      position: candidate.position,
+    });
+  }
+  // The loop above drains the row iterator before this point, so no statement
+  // executes while it is still open.
+  const laterUserReply = db.prepare(
+    `SELECT 1
+       FROM messages reply
+      WHERE reply.conversation_id = ?
+        AND reply.role = 'user'
+        AND (
+          reply.created_at > ?
+          OR (reply.created_at = ? AND reply.position > ?)
+        )
+      LIMIT 1`,
+  );
+  const awaiting = new Set<string>();
+  for (const [partitionKey, winner] of winners) {
+    const answered = laterUserReply.get(
+      winner.conversationId,
+      winner.createdAt,
+      winner.createdAt,
+      winner.position,
+    );
+    if (!answered) awaiting.add(partitionKey);
+  }
+  return awaiting;
+}
+
 export function listProjectsAwaitingInput(db: SqliteDb) {
   const rows = db
     .prepare(
-      `SELECT latest.projectId
-         FROM (
-           SELECT c.project_id AS projectId,
-                  m.conversation_id AS conversationId,
-                  m.created_at AS createdAt,
-                  m.position AS position,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY c.project_id
-                    ORDER BY m.created_at DESC, m.position DESC
-                  ) AS rowNum
-             FROM messages m
-             JOIN conversations c ON c.id = m.conversation_id
-            WHERE m.role = 'assistant'
-              -- ask-question is an accepted alias for question-form (UI parser
-              -- + daemon open-tag matcher), so an alias-form turn must also
-              -- count as awaiting input.
-              AND (
-                LOWER(m.content) LIKE '%<question-form%'
-                OR LOWER(m.content) LIKE '%<ask-question%'
-              )
-         ) latest
-        WHERE latest.rowNum = 1
-          AND NOT EXISTS (
-            SELECT 1
-              FROM messages reply
-             WHERE reply.conversation_id = latest.conversationId
-               AND reply.role = 'user'
-               AND (
-                 reply.created_at > latest.createdAt
-                 OR (reply.created_at = latest.createdAt AND reply.position > latest.position)
-               )
-          )`,
+      `SELECT c.project_id AS partitionKey,
+              m.conversation_id AS conversationId,
+              m.created_at AS createdAt,
+              m.position AS position,
+              m.content AS content
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.role = 'assistant'
+          AND ${AWAITING_INPUT_MARKER_PREFILTER}
+        ORDER BY m.created_at DESC, m.position DESC`,
     )
-    .all() as DbRow[];
-  return new Set((rows as DbRow[]).map((row: DbRow) => row.projectId));
+    .iterate() as Iterable<AwaitingInputCandidate>;
+  return listPartitionsAwaitingInput(db, rows);
 }
 
 export function listConversationsAwaitingInput(db: SqliteDb) {
   const rows = db
     .prepare(
-      `SELECT latest.conversationId
-         FROM (
-           SELECT m.conversation_id AS conversationId,
-                  m.created_at AS createdAt,
-                  m.position AS position,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY m.conversation_id
-                    ORDER BY m.created_at DESC, m.position DESC
-                  ) AS rowNum
-             FROM messages m
-            WHERE m.role = 'assistant'
-              AND (
-                LOWER(m.content) LIKE '%<question-form%'
-                OR LOWER(m.content) LIKE '%<ask-question%'
-              )
-         ) latest
-        WHERE latest.rowNum = 1
-          AND NOT EXISTS (
-            SELECT 1
-              FROM messages reply
-             WHERE reply.conversation_id = latest.conversationId
-               AND reply.role = 'user'
-               AND (
-                 reply.created_at > latest.createdAt
-                 OR (reply.created_at = latest.createdAt AND reply.position > latest.position)
-               )
-          )`,
+      `SELECT m.conversation_id AS partitionKey,
+              m.conversation_id AS conversationId,
+              m.created_at AS createdAt,
+              m.position AS position,
+              m.content AS content
+         FROM messages m
+        WHERE m.role = 'assistant'
+          AND ${AWAITING_INPUT_MARKER_PREFILTER}
+        ORDER BY m.created_at DESC, m.position DESC`,
     )
-    .all() as DbRow[];
-  return new Set((rows as DbRow[]).map((row: DbRow) => row.conversationId));
+    .iterate() as Iterable<AwaitingInputCandidate>;
+  return listPartitionsAwaitingInput(db, rows);
 }
 
 export function getProject(db: SqliteDb, id: string) {
@@ -2331,13 +2385,25 @@ export interface ConversationIntentSignals {
   deck: boolean;
   media: boolean;
   platform: boolean;
+  /**
+   * Which handheld shell the user's own words asked for (OD Next prototype
+   * tasks). Latches like the booleans: the first resolved platform holds for
+   * the conversation so a later "make the button blue" turn keeps quoting the
+   * same shell and the stable context does not flip.
+   */
+  devicePlatform: OdNextDevicePlatformV1 | null;
 }
 
 const NO_INTENT_SIGNALS: ConversationIntentSignals = {
   deck: false,
   media: false,
   platform: false,
+  devicePlatform: null,
 };
+
+function normalizeDevicePlatform(value: unknown): OdNextDevicePlatformV1 | null {
+  return value === 'ios' || value === 'android' || value === 'mobile-neutral' ? value : null;
+}
 
 /**
  * Read the conversation's latched intent signals. A missing row, NULL
@@ -2362,6 +2428,7 @@ function normalizeIntentSignals(value: unknown): ConversationIntentSignals {
       deck: parsed?.deck === true,
       media: parsed?.media === true,
       platform: parsed?.platform === true,
+      devicePlatform: normalizeDevicePlatform(parsed?.devicePlatform),
     };
   } catch {
     return { ...NO_INTENT_SIGNALS };
@@ -2394,11 +2461,13 @@ export function latchConversationIntentSignals(
       deck: stored.deck || fresh.deck,
       media: stored.media || fresh.media,
       platform: stored.platform || fresh.platform,
+      devicePlatform: stored.devicePlatform ?? fresh.devicePlatform ?? null,
     };
     if (
       effective.deck !== stored.deck ||
       effective.media !== stored.media ||
-      effective.platform !== stored.platform
+      effective.platform !== stored.platform ||
+      effective.devicePlatform !== stored.devicePlatform
     ) {
       db.prepare(`UPDATE conversations SET intent_signals_json = ? WHERE id = ?`).run(
         JSON.stringify(effective),
@@ -2527,12 +2596,26 @@ export function latestCompletedAssistantMessageId(
 ): string | null {
   const row = db
     .prepare(
+      // `excludeMessageId` keeps the caller's in-flight placeholder — which the
+      // stored session has never seen — from counting as advancement. When that
+      // placeholder IS the stored cursor (a daemon-internal restart re-entering
+      // with the same message), the session did produce it, so the exclusion
+      // must not apply: that is what `resumableMessageId` is for, and the
+      // exclusion used to consume the row before the admission could.
+      // Advancement detection is unaffected — any later `succeeded` message
+      // still wins on `position DESC` and still fails the cursor comparison.
       `SELECT id FROM messages
-        WHERE conversation_id = ? AND role = 'assistant' AND id != ?
+        WHERE conversation_id = ? AND role = 'assistant'
+          AND (id != ? OR id = ?)
           AND (run_status = 'succeeded' OR id = ?)
         ORDER BY position DESC LIMIT 1`,
     )
-    .get(conversationId, excludeMessageId, resumableMessageId) as DbRow | undefined;
+    .get(
+      conversationId,
+      excludeMessageId,
+      resumableMessageId,
+      resumableMessageId,
+    ) as DbRow | undefined;
   return row && typeof row.id === 'string' ? row.id : null;
 }
 

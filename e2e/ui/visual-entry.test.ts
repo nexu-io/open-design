@@ -28,8 +28,8 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
-  // Execution-source selection is intentionally gated behind Cloud identity.
-  // The signed-out landing exposes only the authentication action.
+  // Cloud stays primary while identity-independent Local Agent and BYOK setup
+  // remain available directly from the signed-out landing.
   await expect(
     page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
   ).toBeVisible({ timeout: T.medium });
@@ -37,14 +37,56 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
     page.getByRole('button', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Local coding agent|本地 Coding Agent/i }),
-  ).toHaveCount(0);
+    page.getByRole('button', { name: /Local (coding )?agent|本地 (Coding )?Agent/i }),
+  ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Bring your own key|自己的模型 Key/i }),
-  ).toHaveCount(0);
+    page.getByRole('button', { name: /Bring your own key|使用自己的 Key|自己的模型 Key/i }),
+  ).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-onboarding-cloud');
+});
+
+// The step past sign-in had no baseline at all, so the one surface whose whole
+// job is to line up a two-column grid of detected CLIs was invisible to the
+// visual suite. `visual-avatar-local-agent-list` covers the avatar menu's agent
+// list — a different component — and stayed 0px through an alignment change to
+// this one.
+test('[P2] captures the onboarding Local Agent CLI list surface', async ({ page }) => {
+  test.setTimeout(T.xlong);
+
+  await configureVisualPage(page, {
+    projects: [],
+    agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
+    config: {
+      onboardingCompleted: false,
+    },
+  });
+  await mockSignedInVelaAccount(page);
+
+  await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+
+  await page
+    .getByRole('button', { name: /Continue \(signed in\)|继续（已登录）/i })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: /Choose your model source|选择模型来源/i }),
+  ).toBeVisible({ timeout: T.medium });
+  await page.getByRole('radio', { name: /Local Agent|本地 Agent/i }).click();
+  await page.getByRole('button', { name: /^(Continue|继续)$/ }).click();
+
+  const panel = page.locator('.onboarding-view__setup-panel');
+  await expect(panel).toBeVisible({ timeout: T.medium });
+  const chips = page.locator('.onboarding-view__agent-chip');
+  // More than one chip is the point: a single card cannot show whether the
+  // column shares an alignment line.
+  await expect(chips.first()).toBeVisible();
+  expect(await chips.count()).toBeGreaterThan(1);
+  await waitForVisualFonts(page);
+
+  await captureVisual(page, 'visual-onboarding-local-agent');
+  await captureVisualTarget(page, 'visual-onboarding-local-agent-panel', panel);
 });
 
 test('[P2] captures the visual home harness', async ({ page }) => {
@@ -58,7 +100,7 @@ test('[P2] captures the visual home harness', async ({ page }) => {
   await captureVisual(page, 'visual-home');
 });
 
-test('[P2] captures the Go campaign at narrow and short viewport boundaries', async ({ page }) => {
+test('[P2] captures the unpaid DeepSeek campaign at narrow and short viewport boundaries', async ({ page }) => {
   test.setTimeout(T.xlong);
 
   await page.clock.setFixedTime('2026-08-21T00:00:00+08:00');
@@ -68,9 +110,9 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   await gotoVisualHome(page);
   // Functional specs seed campaign dismissals globally so marketing surfaces
   // cannot interrupt unrelated flows. This visual contract deliberately opts
-  // back into the Go modal after establishing the page's same-origin storage.
+  // back into the DeepSeek modal after establishing same-origin storage.
   await page.evaluate(() => {
-    window.localStorage.removeItem('open-design:campaign-seen:go-plan-launch-2026');
+    window.localStorage.removeItem('open-design:campaign-seen:deepseek-v4-dual-unlimited-2026');
   });
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-community').evaluate((element: HTMLButtonElement) => {
@@ -82,15 +124,15 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   });
 
   const dialog = page.getByTestId('deepseek-v4-flash-campaign-dialog');
-  const close = page.getByRole('button', { name: 'Close dialog' });
-  const cta = page.getByRole('button', { name: 'View Go plan' });
+  const close = page.getByRole('button', { name: 'Close' });
+  const cta = page.getByRole('button', { name: 'Upgrade and use' });
   await expect(dialog).toBeVisible();
   await expect(close).toBeVisible();
   await expect(cta).toBeVisible();
   await expectInsideViewport(page, dialog);
   await expectInsideViewport(page, close);
   await expectInsideViewport(page, cta);
-  await captureVisual(page, 'visual-go-campaign-600');
+  await captureVisual(page, 'visual-deepseek-unpaid-campaign-600');
 
   await page.setViewportSize({ width: 760, height: 400 });
   await expect(close).toBeVisible();
@@ -99,7 +141,7 @@ test('[P2] captures the Go campaign at narrow and short viewport boundaries', as
   await expect.poll(async () => dialog.evaluate((element) => (
     element.scrollHeight > element.clientHeight
   ))).toBe(true);
-  await captureVisual(page, 'visual-go-campaign-short-height');
+  await captureVisual(page, 'visual-deepseek-unpaid-campaign-short-height');
   await cta.scrollIntoViewIfNeeded();
   await expect(cta).toBeVisible();
   await expectInsideViewport(page, cta);

@@ -100,13 +100,16 @@ describe("workflow scope planner", () => {
   test("runs planner contract tests for CI control-plane changes", () => {
     const controlPlaneFiles = [
       ".github/config/scopes.json",
-      ".github/config/hash.json",
+      ".github/config/convergence.json",
       ".github/config/runners.json",
       ".github/scripts/scopes.py",
-      ".github/scripts/hash.py",
+      ".github/scripts/convergence.py",
       ".github/scripts/runners.py",
+      ".github/scripts/handoff.py",
       ".github/scripts/lib/config.py",
       ".github/scripts/lib/github.py",
+      ".github/scripts/lib/r2.py",
+      ".github/workflows/convergence.atom.yml",
     ];
     for (const file of controlPlaneFiles) {
       expect(plan("pr", [file]), file).toMatchObject({
@@ -115,6 +118,27 @@ describe("workflow scope planner", () => {
         trace: { escalations: [] },
       });
     }
+  });
+
+  test("routes Terminal exact sources and release orchestration to scene validation", () => {
+    for (const file of [
+      "apps/closure/src/index.ts",
+      "packages/standalone/src/store.ts",
+      "shells/terminal/src/cli.ts",
+      ".github/scripts/pack.py",
+      ".github/scripts/release.py",
+      ".github/workflows/release-exact.yml",
+    ]) {
+      expect(plan("pr", [file]), file).toMatchObject({
+        scopes: { terminal_scene_required: true, workspace_validation_required: true },
+        enabled: { terminal_scene: true, workspace_unit_tests: true },
+        trace: { escalations: [] },
+      });
+    }
+    expect(plan("pr", ["docs/spec.md"])).toMatchObject({
+      scopes: { terminal_scene_required: false },
+      enabled: { terminal_scene: false },
+    });
   });
 
   test("directly owns promoted merge-queue routing", () => {
@@ -160,6 +184,10 @@ describe("workflow scope planner", () => {
     const workflow = readFileSync(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
     expect(workflow).toContain("python3 .github/scripts/scopes.py github-output");
     expect(workflow).not.toContain("scripts/scopes.ts");
-    expect(workflow).not.toMatch(/windows_tools_pack_payload_tests:[\s\S]*?\.github\/scripts\/(?:scopes|hash|runners)\.py/);
+    const windowsPayload = workflow.slice(
+      workflow.indexOf("  windows_tools_pack_payload_tests:"),
+      workflow.indexOf("  web_workspace_tests:"),
+    );
+    expect(windowsPayload).not.toMatch(/\.github\/scripts\/(?:scopes|convergence|runners)\.py/);
   });
 });

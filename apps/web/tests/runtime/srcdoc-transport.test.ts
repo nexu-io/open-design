@@ -21,6 +21,8 @@ function extractShellScript(shellHtml: string): string {
 
 interface RunShellResult {
   parentMessages: unknown[];
+  runScheduledCallbacks: () => void;
+  triggerMessage: (data: unknown) => void;
   triggerActivate: (html: string, generation?: string) => void;
 }
 
@@ -28,6 +30,9 @@ function runShellInSandbox(shellHtml: string): RunShellResult {
   const script = extractShellScript(shellHtml);
   const parentMessages: unknown[] = [];
   const messageListeners: Array<(ev: { data: unknown }) => void> = [];
+  const scheduledCallbacks: Array<() => void> = [];
+  const intervalCallbacks = new Map<number, () => void>();
+  let nextIntervalId = 1;
   const parentMock = {
     postMessage: (data: unknown) => {
       parentMessages.push(data);
@@ -46,12 +51,30 @@ function runShellInSandbox(shellHtml: string): RunShellResult {
   };
   const sandbox: Record<string, unknown> = {
     document: documentMock,
+    setTimeout: (callback: () => void) => {
+      scheduledCallbacks.push(callback);
+    },
+    setInterval: (callback: () => void) => {
+      const intervalId = nextIntervalId++;
+      intervalCallbacks.set(intervalId, callback);
+      return intervalId;
+    },
+    clearInterval: (intervalId: number) => {
+      intervalCallbacks.delete(intervalId);
+    },
     window: win,
   };
   vm.createContext(sandbox);
   vm.runInContext(script, sandbox);
   return {
     parentMessages,
+    runScheduledCallbacks: () => {
+      for (const callback of scheduledCallbacks.splice(0)) callback();
+      for (const callback of intervalCallbacks.values()) callback();
+    },
+    triggerMessage: (data: unknown) => {
+      for (const listener of messageListeners) listener({ data });
+    },
     triggerActivate: (html: string, generation = 'generation-1') => {
       for (const listener of messageListeners) {
         listener({ data: { type: 'od:srcdoc-transport-activate', html, generation } });
@@ -65,6 +88,34 @@ describe('buildLazySrcdocTransport (#2253)', () => {
     const shell = buildLazySrcdocTransport();
     const { parentMessages } = runShellInSandbox(shell);
     expect(parentMessages).toContainEqual({ type: 'od:srcdoc-transport-ready' });
+  });
+
+  it('replies when the host probes after missing the initial ready message', () => {
+    const shell = buildLazySrcdocTransport();
+    const result = runShellInSandbox(shell);
+    result.parentMessages.length = 0;
+
+    result.triggerMessage({ type: 'od:srcdoc-transport-shell-probe' });
+
+    expect(result.parentMessages).toEqual([{ type: 'od:srcdoc-transport-ready' }]);
+  });
+
+  it('reannounces ready until a late host activates the cached bootstrap', () => {
+    const shell = buildLazySrcdocTransport();
+    const result = runShellInSandbox(shell);
+    result.parentMessages.length = 0;
+
+    result.runScheduledCallbacks();
+    expect(result.parentMessages).toContainEqual({ type: 'od:srcdoc-transport-ready' });
+
+    result.parentMessages.length = 0;
+    result.runScheduledCallbacks();
+    expect(result.parentMessages).toContainEqual({ type: 'od:srcdoc-transport-ready' });
+
+    result.triggerActivate('<html><body>activated</body></html>');
+    result.parentMessages.length = 0;
+    result.runScheduledCallbacks();
+    expect(result.parentMessages).toEqual([]);
   });
 
   it('skips the ready post when window.parent equals window (top-level load)', () => {

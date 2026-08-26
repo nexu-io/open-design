@@ -1,3 +1,5 @@
+import { GO_PLAN_SOLD_OUT } from './pricing';
+
 export type PersonalPlanTier = 'go' | 'plus' | 'pro' | 'max';
 export type PersonalBillingInterval = 'monthly' | 'yearly';
 
@@ -26,6 +28,7 @@ export type PersonalPlanActionKind =
   | 'dual_change'
   | 'checkout_unavailable'
   | 'new_checkout'
+  | 'sold_out'
   | 'current'
   | 'upgrade'
   | 'downgrade_unavailable'
@@ -89,6 +92,9 @@ export function resolvePersonalPlanAction(
 ): PersonalPlanAction {
   if (!context.current && !context.checkoutAllowed) {
     return { kind: 'checkout_unavailable', enabled: false };
+  }
+  if (GO_PLAN_SOLD_OUT && target.tier === 'go' && context.current?.tier !== 'go') {
+    return { kind: 'sold_out', enabled: false };
   }
   if (!context.current) {
     return { kind: 'new_checkout', enabled: true };

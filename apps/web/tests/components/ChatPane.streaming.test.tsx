@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { forwardRef, useImperativeHandle } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SkillSummary } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, SkillSummary } from '@open-design/contracts';
 import { ChatPane, buildRunErrorDiagnosticText, retryableAssistantMessage } from '../../src/components/ChatPane';
 import { DESIGN_SYSTEM_WORKSPACE_PROMPT_PREFIX } from '../../src/design-system-auto-prompt';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
@@ -57,6 +57,45 @@ function skillSummary(id: string): SkillSummary {
     examplePrompt: '',
     aggregatesExamples: false,
   };
+}
+
+// An OD Next apply — the daemon binds the internal strategy package and stamps
+// `strategy` on the snapshot. Ordinary plugin applies leave that field unset.
+function odNextStrategySnapshot(): AppliedPluginSnapshot {
+  const digest = 'b'.repeat(64);
+  return {
+    snapshotId: 'snap-od-next',
+    pluginId: 'od-next-strategy',
+    pluginVersion: '2.0.0',
+    manifestSourceDigest: 'a'.repeat(64),
+    inputs: {},
+    resolvedContext: { items: [] },
+    capabilitiesGranted: ['prompt:inject'],
+    capabilitiesRequired: ['prompt:inject'],
+    assetsStaged: [],
+    taskKind: 'new-generation',
+    appliedAt: 1,
+    connectorsRequired: [],
+    connectorsResolved: [],
+    mcpServers: [],
+    status: 'fresh',
+    pluginTitle: 'OD Next Strategy V2',
+    strategy: {
+      schema: 'open-design.applied-strategy/v2',
+      id: 'od-next-strategy',
+      version: '2.0.0',
+      packageHash: digest,
+      assetDigests: [{ path: './assets/task-profiles/prototype.md', sha256: digest }],
+      selectedTaskProfile: {
+        taskType: 'prototype',
+        path: './assets/task-profiles/prototype.md',
+        sha256: digest,
+        version: '2',
+      },
+      taskProfileVersions: ['2'],
+      promptRecipe: 'od-next-plan-build-v2',
+    },
+  } as AppliedPluginSnapshot;
 }
 
 vi.mock('../../src/i18n', () => ({
@@ -814,7 +853,9 @@ describe('ChatPane streaming state', () => {
       />,
     );
 
-    expect(screen.getByTestId('msg-session-mode-chip').textContent).toContain('Design Agent');
+    // Design is the default mode, so it carries no chip — only the opt-outs
+    // (Ask / Plan) are labelled.
+    expect(screen.queryByTestId('msg-session-mode-chip')).toBeNull();
     expect(screen.getByTestId('msg-workspace-context-chip').textContent).toContain('Dribbble');
     const context = screen.getByTestId('msg-applied-context');
     expect(context.textContent).toContain('A Decade of Refinement Glow-Up');
@@ -917,6 +958,163 @@ describe('ChatPane streaming state', () => {
     expect(contexts).toHaveLength(2);
     expect(contexts[0]?.textContent).toContain('visual-explain');
     expect(contexts[1]?.textContent).toContain('imagegen');
+  });
+
+  // OD Next is applied by the daemon, not picked by the user: the strategy
+  // package (and the version in its title) is internal plumbing, and the
+  // "Design Agent" chip only restates what the strategy already is. A
+  // strategy-owned design turn therefore opens with the prompt itself.
+  it('keeps a strategy-owned design turn free of run-context chrome', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'A minimal reading app with adaptive phone and desktop layouts',
+        createdAt: 1,
+        sessionMode: 'design',
+        runContext: { pluginIds: ['od-next-strategy'] },
+        appliedPluginSnapshot: odNextStrategySnapshot(),
+      },
+    ] as ChatMessage[];
+
+    render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    expect(
+      screen.getByText('A minimal reading app with adaptive phone and desktop layouts'),
+    ).toBeTruthy();
+    expect(screen.queryByTestId('msg-run-context-row')).toBeNull();
+    expect(screen.queryByTestId('msg-session-mode-chip')).toBeNull();
+    expect(screen.queryByTestId('msg-applied-context')).toBeNull();
+    expect(screen.queryByText(/OD Next Strategy V2/)).toBeNull();
+    expect(screen.queryByText(/od-next-strategy/)).toBeNull();
+  });
+
+  it('never flashes the mode chip on a design turn awaiting its strategy binding', () => {
+    // The optimistic user message renders before POST /api/runs answers, so it
+    // has no appliedPluginSnapshot yet — the state the acceptance run caught
+    // showing "Design" for a beat and then dropping it.
+    const messages: ChatMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'A minimal reading app',
+        createdAt: 1,
+        sessionMode: 'design',
+      },
+    ] as ChatMessage[];
+
+    render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    expect(screen.queryByTestId('msg-run-context-row')).toBeNull();
+    expect(screen.queryByTestId('msg-session-mode-chip')).toBeNull();
+  });
+
+  it('still lists user-chosen context on a strategy-owned turn', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Same app, softer shelves',
+        createdAt: 1,
+        sessionMode: 'design',
+        runContext: { skillIds: ['visual-explain'] },
+        appliedPluginSnapshot: odNextStrategySnapshot(),
+      },
+    ] as ChatMessage[];
+
+    render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+        skills={[skillSummary('visual-explain')]}
+      />,
+    );
+
+    const context = screen.getByTestId('msg-applied-context');
+    expect(context.textContent).toContain('visual-explain');
+    expect(context.textContent).not.toContain('OD Next Strategy V2');
+    expect(screen.queryByTestId('msg-session-mode-chip')).toBeNull();
+  });
+
+  it('keeps labelling Ask and Plan on a strategy-owned turn', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'What changed in the shelf layout?',
+        createdAt: 1,
+        sessionMode: 'chat',
+        appliedPluginSnapshot: odNextStrategySnapshot(),
+      },
+    ] as ChatMessage[];
+
+    render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    expect(screen.getByTestId('msg-session-mode-chip').textContent).toContain('Ask');
+    expect(screen.queryByTestId('msg-applied-context')).toBeNull();
   });
 
   it('hides internal path ids from comment attachment chips', () => {

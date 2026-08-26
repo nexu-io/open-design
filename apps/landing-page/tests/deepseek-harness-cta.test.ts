@@ -5,7 +5,6 @@ import {
   DEEPSEEK_HARNESS_REPO,
   DOWNLOAD_HREF,
   OPEN_DESIGN_DISCORD,
-  OPEN_DESIGN_FEISHU,
   deepseekHarnessHeroCtas,
 } from '../app/cta-actions.ts';
 import { getInfoPageCopy } from '../app/info-page-i18n.ts';
@@ -18,27 +17,19 @@ test('DeepSeek Harness hero CTAs are complete for every active locale', () => {
     assert.ok(rich, `${code}: missing DeepSeek Harness rich copy`);
 
     const actions = deepseekHarnessHeroCtas(rich.heroCtaActions);
-    assert.equal(actions.length, 3, `${code}: expected exactly three hero actions`);
+    assert.equal(actions.length, 2, `${code}: expected exactly two hero actions`);
     assert.equal(actions[0]?.href, DOWNLOAD_HREF, `${code}: download must be first`);
     assert.equal(actions[0]?.variant, 'primary', `${code}: download must be primary`);
     assert.equal(actions[1]?.href, OPEN_DESIGN_DISCORD, `${code}: Discord must be second`);
-    assert.equal(actions[2]?.href, OPEN_DESIGN_FEISHU, `${code}: Feishu must be third`);
     assert.equal(actions[1]?.variant, 'ghost', `${code}: Discord must be secondary`);
-    assert.equal(actions[2]?.variant, 'ghost', `${code}: Feishu must be secondary`);
     assert.ok(actions[0]?.label.trim(), `${code}: download label is empty`);
     assert.ok(actions[1]?.label.trim(), `${code}: Discord label is empty`);
-    assert.ok(actions[2]?.label.trim(), `${code}: Feishu label is empty`);
 
     if (code !== 'en') {
       assert.notEqual(
         actions[1]?.label,
         'Join OpenDesign Discord',
         `${code}: Discord label fell back to the English sentence`,
-      );
-      assert.notEqual(
-        actions[2]?.label,
-        'Join the Feishu group',
-        `${code}: Feishu label fell back to the English sentence`,
       );
     }
   }

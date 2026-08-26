@@ -12,6 +12,7 @@ import type {
 } from '../public-params.js';
 import type { ReleaseChannel } from '@open-design/release';
 import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api/files.js';
+import type { AgentDiagnosticReason, AgentDiagnosticSeverity } from '../../api/registry.js';
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
 import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingPublishErrorCode, TrackingResult, TrackingRunCancelOrigin, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingRunTerminalTrigger, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
@@ -89,10 +90,49 @@ export interface SpeakerNotesSaveResultProps {
   edit_surface: 'preview' | 'presenter';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
   slide_count?: number;
   has_content?: boolean;
   result: TrackingResult;
   error_code?: string;
+}
+
+export type TrackingArtifactEditAction = 'apply' | 'undo' | 'redo';
+
+export type TrackingArtifactEditKind =
+  | 'text'
+  | 'link'
+  | 'image'
+  | 'element_remove'
+  | 'token'
+  | 'style'
+  | 'attributes'
+  | 'html'
+  | 'source';
+
+// Terminal result for a direct Manual Edit mutation. The toolbar `edit` click
+// measures entry; this event measures whether a concrete file mutation was
+// actually persisted, including undo/redo. Content, selectors and filenames
+// are intentionally excluded.
+export interface ArtifactEditResultProps {
+  page_name: 'artifact';
+  area: 'manual_edit';
+  action: TrackingArtifactEditAction;
+  edit_kind: TrackingArtifactEditKind;
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind;
+  result: TrackingResult;
+  error_code?:
+    | 'edit_busy'
+    | 'source_unavailable'
+    | 'patch_invalid'
+    | 'source_conflict'
+    | 'save_failed'
+    | 'unknown';
+  duration_ms: number;
 }
 
 // Outcome of an actual import attempt from the plugin import modal. Fires
@@ -798,6 +838,7 @@ export interface SketchSaveResultProps {
   result: TrackingExportResult;
   error_code?: string;
   project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 // Fired when the user exports a sketch to a PNG from the sketch editor, which
@@ -811,6 +852,7 @@ export interface SketchExportResultProps {
   result: TrackingExportResult;
   error_code?: string;
   project_id: string;
+  project_kind: TrackingProjectKind;
 }
 
 export type TrackingDeployProvider = 'vercel' | 'cloudflare_pages';
@@ -1001,6 +1043,31 @@ export interface SettingsViewProps {
   area: TrackingSettingsArea;
 }
 
+/**
+ * One diagnostic detection produced for one agent CLI. Answers, fleet-wide, the
+ * question a single bug report can only answer for one machine: how many
+ * installs of an agent someone installed cannot actually be used, and why.
+ *
+ * Carries no `page_name` on purpose. Detection is a daemon fact reported to
+ * whichever surface asked for the agent list; the surface is incidental to the
+ * failure and splitting by it would fragment the only number that matters.
+ *
+ * Carries no resolved path on purpose either — an agent binary path contains
+ * the OS username.
+ */
+export interface AgentDetectDiagnosticProps {
+  area: 'runtime_detection';
+  cli_provider_id: TrackingCliProviderId;
+  reason: AgentDiagnosticReason;
+  severity: AgentDiagnosticSeverity;
+  /** Warnings are not blocking, so availability is what separates them. */
+  agent_available: boolean;
+  /** The version detection read, when it read one. */
+  agent_version?: string;
+  /** A row with no path is hidden entirely — the user sees nothing to fix. */
+  has_path: boolean;
+}
+
 export interface SettingsCliTestResultProps {
   page_name: TrackingSettingsPage;
   area: 'configure_execution_mode';
@@ -1100,6 +1167,16 @@ export interface PackagedRuntimeFailedProps {
   // though the reason was sitting in a log we had already read. Scrubbed and
   // truncated like the other free-form fields.
   daemon_error?: string | null;
+  // The scrubbed, bounded tail of that same log, sent ONLY when the parse above
+  // produced nothing (no error_code, no missing_module, no daemon_error). That
+  // all-null combination is the largest startup-failure bucket in production
+  // (macOS daemon-start, 968 events / 293 people over the 14 days to
+  // 2026-08-22) and was previously undiagnosable: the reason was printed in a
+  // log we had already read and discarded because it matched no known pattern.
+  // Narrow by design — when the cause is already named, the raw tail is bytes
+  // and privacy surface for nothing, so a present value also *means* "this log
+  // defeated the parser".
+  daemon_log_tail?: string | null;
   // Node's system-error triplet read off the THROWN error object, as opposed to
   // `error_code`, which is parsed out of the sidecar log. A failed spawn or
   // socket op carries its real cause here (`UNKNOWN`/-4094/`spawn`,

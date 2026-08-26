@@ -2,6 +2,7 @@
  * @module analytics/events/mappers
  * Enum mapping helpers (code <-> CSV wire format).
  */
+import { HYPERFRAMES_VIDEO_MODEL } from '../../api/projects.js';
 import type { AnalyticsConfigureGlobals, TrackingConfigureAvailability, TrackingConfigureType, TrackingRuntimeType } from '../public-params.js';
 import type { TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingFeedbackProviderId, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
@@ -22,11 +23,10 @@ export function sessionModeToTracking(
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:
 //   'prototype' | 'deck' | 'template' | 'other' | 'brand' | 'image' | 'video' | 'audio'
 // Discriminates HyperFrames from generic AI video. A HyperFrames project is
-// stored as `kind: 'video'` with `metadata.videoModel === 'hyperframes-html'`
+// stored as `kind: 'video'` with `metadata.videoModel === HYPERFRAMES_VIDEO_MODEL`
 // (the local HTML→MP4 renderer); callers pass that videoModel through so the
 // analytics layer can split it out into its own `project_kind`. See the
 // `'hyperframes'` member docblock on `TrackingProjectKind`.
-const HYPERFRAMES_VIDEO_MODEL = 'hyperframes-html';
 
 // Discriminators read off a project's persisted `metadata` to split the coarse
 // product `kind` into the finer analytics `project_kind` (so a created
@@ -80,6 +80,8 @@ export function projectKindToTracking(
       return 'audio';
     case 'brand':
       return 'brand';
+    case 'orbit':
+      return 'orbit';
     case 'live-artifact':
     case 'live_artifact':
       return 'live_artifact';
@@ -114,6 +116,19 @@ export function projectKindFromMetadataToTracking(
     platform: metadata?.platform,
     platformTargets: metadata?.platformTargets,
   });
+}
+
+// Projects created before `metadata.kind` was persisted are prototype projects.
+// Keep that legacy fallback in the shared contract so web and daemon events do
+// not split the same project between `prototype` and a null cohort.
+export function projectKindFromMetadataToTrackingOrLegacyDefault(
+  metadata: Parameters<typeof projectKindFromMetadataToTracking>[0],
+): TrackingProjectKind {
+  const tracked = projectKindFromMetadataToTracking(metadata);
+  if (tracked) return tracked;
+  // Only a genuinely absent kind is a legacy prototype. Persisted but unknown
+  // values are explicit data and must not silently corrupt the prototype cohort.
+  return metadata?.kind == null ? 'prototype' : 'other';
 }
 
 // Code `CreateTab` from apps/web/src/components/NewProjectPanel.tsx:
@@ -194,6 +209,34 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'pi';
     case 'kilo':
       return 'kilo';
+    case 'kiro':
+      return 'kiro';
+    case 'vibe':
+      return 'vibe';
+    case 'amp':
+      return 'amp';
+    case 'aider':
+      return 'aider';
+    case 'trae-cli':
+      return 'trae_cli';
+    case 'grok-build':
+      return 'grok_build';
+    case 'antigravity':
+      return 'antigravity';
+    case 'codebuddy':
+      return 'codebuddy';
+    case 'reasonix':
+      return 'reasonix';
+    case 'mimo':
+      return 'mimo';
+    case 'atomcode':
+      return 'atomcode';
+    case 'byok-opencode':
+      return 'byok_opencode';
+    case 'deepseek':
+      return 'deepseek';
+    case 'deepseek-harness':
+      return 'deepseek_harness';
     case 'amr':
       return 'amr';
     default:

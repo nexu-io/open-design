@@ -25,6 +25,7 @@ WORKLOADS = {
     "playwright_critical",
     "ui_p0",
     "playwright_visual",
+    "terminal_scene",
 }
 
 
@@ -195,6 +196,7 @@ def enabled_workloads(outputs, ci_mode, full_lanes):
         "playwright_critical": outputs["ui_critical_validation_required"] and not ui_p0,
         "ui_p0": ui_p0,
         "playwright_visual": full_lanes or outputs["visual_validation_required"],
+        "terminal_scene": full_lanes or outputs["terminal_scene_required"],
     }
     if set(enabled) != WORKLOADS:
         raise AssertionError("scope workload map drifted")

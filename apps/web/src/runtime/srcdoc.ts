@@ -26,6 +26,19 @@ import {
   buildPreviewBaseHrefBridge,
   buildPreviewObservabilityBridge,
 } from '@open-design/contracts/runtime/preview-observability';
+import {
+  PREVIEW_REDIRECT_GUARD_MAX_HOPS,
+  PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
+  PREVIEW_REDIRECT_GUARD_WINDOW_MS,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '@open-design/contracts/runtime/preview-guards';
+
+export {
+  PREVIEW_REDIRECT_GUARD_MAX_HOPS,
+  PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
+  PREVIEW_REDIRECT_GUARD_WINDOW_MS,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '@open-design/contracts/runtime/preview-guards';
 
 import {
   buildManualEditBridge,
@@ -101,18 +114,6 @@ export type SrcdocOptions = {
 // unforgeable, so a JS `location.reload()` storm can only be halted host-side
 // by swapping the iframe to static content (see FileViewer). The in-iframe half
 // still fully covers the canonical meta-refresh redirect loop on its own.
-
-/** Meta-refresh hops allowed inside one window before the loop is broken. */
-export const PREVIEW_REDIRECT_GUARD_MAX_HOPS = 15;
-/** Sliding window (ms). A refresh landing after this many ms with no prior
- *  refresh restarts the count from zero, so a slow auto-refresh never trips. */
-export const PREVIEW_REDIRECT_GUARD_WINDOW_MS = 4000;
-/** A self-refresh (reload the same document) whose delay is at or under this
- *  threshold is a guaranteed freeze in a static preview and is killed on the
- *  first hop, without waiting for the hop budget. */
-export const PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS = 2000;
-/** postMessage type the injected guard sends the host when it trips. */
-export const PREVIEW_REDIRECT_LOOP_MESSAGE = 'od:redirect-loop-blocked';
 
 export interface RedirectGuardState {
   /** Meta-refresh navigations counted in the current window. */
@@ -496,18 +497,46 @@ export function buildLazySrcdocTransport(): string {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script data-od-lazy-srcdoc-transport>(function(){
+      var readyInterval = null;
+      var readyAttempts = 0;
+      function stopReadyAnnouncements(){
+        if (readyInterval !== null && typeof clearInterval === 'function') {
+          clearInterval(readyInterval);
+        }
+        readyInterval = null;
+      }
+      function announceReady(){
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
+          }
+        } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
+      }
       window.addEventListener('message', function(ev){
         var data = ev && ev.data;
+        if (data && data.type === 'od:srcdoc-transport-shell-probe') {
+          announceReady();
+          return;
+        }
         if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;
+        stopReadyAnnouncements();
         document.open();
         document.write(data.html);
         document.close();
       });
-      try {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
-        }
-      } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
+      announceReady();
+      // A cached app-lifetime Blob can finish long before React attaches the
+      // parent's listener. Keep announcing until activation instead of
+      // guessing a host-mount delay; cap the retries so a broken host cannot
+      // leave a background timer running forever. The host's probe remains a
+      // recovery path after this ten-second window.
+      if (window.parent && window.parent !== window && typeof setInterval === 'function') {
+        readyInterval = setInterval(function(){
+          announceReady();
+          readyAttempts += 1;
+          if (readyAttempts >= 100) stopReadyAnnouncements();
+        }, 100);
+      }
     })();</script>
   </head>
   <body></body>

@@ -1248,7 +1248,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
-  it('surfaces autosave progress, success, and failure states in the modal chrome', async () => {
+  it('surfaces autosave progress, success, and failure states outside the modal chrome', async () => {
     const first = renderSettingsDialog();
 
     fireEvent.change(screen.getByLabelText('API key'), {
@@ -1261,6 +1261,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText('All changes saved')).toBeTruthy();
     });
+    const savedStatus = screen.getByText('All changes saved').closest('[role="status"]');
+    expect(savedStatus?.parentElement).toHaveClass('settings-autosave-layer');
+    expect(savedStatus?.closest('.settings-chrome')).toBeNull();
     expect(first.onPersist).toHaveBeenCalledWith(
       expect.objectContaining({ apiKey: 'sk-ant-saved' }),
       expect.any(Object),
@@ -1281,6 +1284,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Couldn’t save changes/i)).toBeTruthy();
     });
+    const errorStatus = screen.getByText(/Couldn’t save changes/i).closest('[role="status"]');
+    expect(errorStatus?.parentElement).toHaveClass('settings-autosave-layer');
   });
 
   it('closes BYOK via the close button or backdrop', () => {
@@ -5578,6 +5583,7 @@ describe('SettingsDialog about interactions', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('drops a pending autosave when explicit onboarding reset unmounts Settings', () => {
@@ -5626,6 +5632,8 @@ describe('SettingsDialog about interactions', () => {
   });
 
   it('renders app version and runtime details when version info is available', () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       {
@@ -5650,6 +5658,12 @@ describe('SettingsDialog about interactions', () => {
     expect(screen.getByText('darwin')).toBeTruthy();
     expect(screen.getByText('Architecture')).toBeTruthy();
     expect(screen.getByText('arm64')).toBeTruthy();
+    // OD Next routing is product-owned and invisible to end users. About must
+    // not expose the daemon's internal rollout latch/reset control.
+    expect(screen.queryByTestId('od-next-rollout-control')).toBeNull();
+    expect(fetchMock.mock.calls.some(([input]) => (
+      String(input).includes('/api/strategies/od-next/rollout')
+    ))).toBe(false);
   });
 
   it('renders the unavailable fallback when app version info is missing', () => {

@@ -117,6 +117,16 @@ const residualAllowedExactPaths = new Set([
   // integration tests. The Vitest test spawns it via `child_process.spawn`,
   // which needs a directly-executable file (shebang + .mjs).
   "apps/daemon/tests/fixtures/fake-vela.mjs",
+  // Fake ACP agent CLI that answers `initialize` and then rejects
+  // `session/new`, used by the ACP handshake-rejection wiring tests. Same
+  // precedent as `fake-vela.mjs`: Vitest puts it on PATH and the daemon
+  // spawns it, so it must be directly executable (shebang + .mjs).
+  "apps/daemon/tests/fixtures/fake-acp-handshake-cli.mjs",
+  // Fake `kimi acp` ACP stdio stub used by the stdio-MCP wiring test. It
+  // records the `session/new` params the daemon actually sends, and the test
+  // spawns it through a PATH shim, so it must be directly executable by Node
+  // without a transform — same precedent as `fake-vela.mjs` above.
+  "apps/daemon/tests/fixtures/fake-kimi-acp-cli.mjs",
   "tools/dev/bin/tools-dev.mjs",
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
@@ -279,6 +289,7 @@ type DependencySpecViolation = {
 
 type DependencySpecStats = {
   exact: number;
+  externalHostPeer: number;
   manifests: number;
   total: number;
   workspace: number;
@@ -290,6 +301,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isAllowedDependencySpec(spec: string): boolean {
   return spec === "workspace:*" || exactVersionPattern.test(spec) || exactNpmAliasPattern.test(spec);
+}
+
+// Manifests published for an EXTERNAL host to load as a plugin, where
+// `peerDependencies` describes packages the host supplies rather than
+// anything this repository installs or can pin.
+//
+// Exact specs are right everywhere else: they keep our own installs
+// reproducible. A peer range aimed at a third-party host is the opposite
+// case — the host's version is chosen by the user, so an exact peer means
+// any host upgrade leaves the peer unsatisfiable and the plugin refuses to
+// install at all. `@open-design/dsh-runtime` hit exactly that: pinned to a
+// single DeepSeek Harness release candidate, it became uninstallable the
+// moment the upstream shipped the next one.
+//
+// This exemption covers `peerDependencies` only. `dependencies` and
+// `devDependencies` in these manifests are still installed by us and still
+// have to be exact.
+const externalHostPluginManifests = new Set(["packages/dsh-runtime/package.json"]);
+
+function isExternalHostPeerSpec(filePath: string, fieldPath: string): boolean {
+  return (
+    externalHostPluginManifests.has(filePath) &&
+    fieldPath.split(".")[0] === "peerDependencies"
+  );
 }
 
 function dependencySpecReason(spec: string): string {
@@ -374,6 +409,11 @@ function checkDependencySpecRecord(
       continue;
     }
 
+    if (isExternalHostPeerSpec(filePath, fieldPath)) {
+      stats.externalHostPeer += 1;
+      continue;
+    }
+
     violations.push({
       filePath,
       fieldPath,
@@ -389,6 +429,7 @@ async function checkPackageDependencySpecs(): Promise<boolean> {
   const violations: DependencySpecViolation[] = [];
   const stats: DependencySpecStats = {
     exact: 0,
+    externalHostPeer: 0,
     manifests: manifestPaths.length,
     total: 0,
     workspace: 0,
@@ -443,7 +484,7 @@ async function checkPackageDependencySpecs(): Promise<boolean> {
   }
 
   console.log(
-    `Package dependency spec check passed: ${stats.manifests} package.json files, ${stats.exact} exact specs, ${stats.workspace} workspace:* specs.`,
+    `Package dependency spec check passed: ${stats.manifests} package.json files, ${stats.exact} exact specs, ${stats.workspace} workspace:* specs, ${stats.externalHostPeer} external-host peer ranges.`,
   );
   return true;
 }

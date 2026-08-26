@@ -18,16 +18,38 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 
+import {
+  SAFE_RUN_QUALITY_V1_SCHEMA,
+  SafeRunQualityV1Schema,
+  type SafeObservationManifestEntryV1,
+  type SafeObservationStreamTailV1,
+  type SafeObservationTextV1,
+  type SafeRunDiagnosticsV1,
+  type SafeRunProcessOutcomeV1,
+  type SafeRunQualityV1,
+} from '@open-design/contracts';
+
 import type { TelemetryPrefs } from './app-config.js';
 import { normalizeOpenDesignTelemetryRelayUrl } from './integrations/telemetry-relay.js';
 import { readVelaControlApiContext } from './integrations/vela.js';
 import {
+  deriveRunTelemetryExportExpectation,
+  exportRunObservation,
+  type RunObservationExporter,
+} from './observability/run-exporter.js';
+import {
   buildPromptStackFlatMetadata,
   promptStackWithoutContent,
+  redactLocalPaths as redactPromptStackLocalPaths,
   structuredPromptStackInput,
   type PromptTelemetrySection,
   type PromptStackTelemetry,
 } from './prompt-telemetry.js';
+import {
+  STDERR_TAIL_MAX_BYTES,
+  type RunDiagnosticsAnalytics,
+  type StreamTailSummary,
+} from './run-diagnostics.js';
 import {
   canonicalizeToolAnalyticsName,
   type RunTelemetryTimestamps,
@@ -50,7 +72,7 @@ const TOOL_INPUT_MAX_BYTES = 8 * 1024;
 const TOOL_OUTPUT_MAX_BYTES = 8 * 1024;
 const ARTIFACTS_MAX_ITEMS = 50;
 const SESSION_ID_MAX = 200; // Langfuse drops sessionIds longer than this.
-const HARD_BATCH_MAX_BYTES = 1024 * 1024;
+export const HARD_BATCH_MAX_BYTES = 1024 * 1024;
 const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
 const DEFAULT_FETCH_RETRIES = 1;
 const PROMPT_STACK_BLAME_MAX_SECTIONS = 8;
@@ -74,6 +96,9 @@ export type LangfuseDropReason =
   | 'content_consent_off'
   | 'missing_sink_config'
   | 'payload_too_large'
+  | 'payload_build_error'
+  | 'export_mapping_mismatch'
+  | 'task_hierarchy_rollout'
   | 'relay_429'
   | 'relay_413'
   | 'relay_5xx'
@@ -91,6 +116,10 @@ export interface LangfuseDeliveryState {
   langfuse_expected: boolean;
   langfuse_delivery_status: LangfuseDeliveryStatus;
   langfuse_drop_reason?: LangfuseDropReason;
+  /** Actual transport requests made by this exporter invocation. */
+  langfuse_attempt_count?: number;
+  /** Stable, non-secret identity supplied by the daemon delivery owner. */
+  langfuse_idempotency_key?: string;
 }
 
 export type TelemetrySinkConfig =
@@ -340,6 +369,13 @@ export interface ReportContext {
   runtime?: RuntimeInfo;
   /** Redacted section-level prompt diagnostics captured before agent spawn. */
   promptTelemetry?: PromptStackTelemetry;
+  strategyRolloutDecision?: {
+    requestedMode: string;
+    effectiveMode: string;
+    primaryReasonCode: string;
+    syntheticCanary?: boolean;
+    reasonCodes?: readonly string[];
+  };
   extraTags?: string[];
 }
 
@@ -350,6 +386,10 @@ export interface ReportRunOpts {
   configuredEnv?: Record<string, string>;
   /** Emit only the content-free object-authority trace projection. */
   deliveryPurpose?: 'final' | 'object-registration';
+  /** Stable identity persisted before crossing the final delivery boundary. */
+  deliveryIdempotencyKey?: string;
+  /** Persists each concrete transport request before fetch is invoked. */
+  onDeliveryAttempt?: () => void;
 }
 
 export interface ReportFeedbackOpts {
@@ -432,6 +472,18 @@ export function readTelemetrySinkConfig(
   return config == null ? null : { kind: 'langfuse', ...config };
 }
 
+/**
+ * Task hierarchy delivery deliberately excludes Vela until that service
+ * advertises and is verified against the versioned Task observation schema.
+ * Keep this named seam separate from completed-run/feedback resolution so a
+ * Vela control key can never mask a valid relay or direct Task sink.
+ */
+export function readTaskTelemetrySinkConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): TelemetrySinkConfig | null {
+  return readTelemetrySinkConfig(env);
+}
+
 function isVelaTelemetryEnabled(env: NodeJS.ProcessEnv): boolean {
   const raw = env.OPEN_DESIGN_VELA_TELEMETRY?.trim().toLowerCase();
   return raw !== '0' && raw !== 'false' && raw !== 'off' && raw !== 'no';
@@ -483,29 +535,53 @@ export function readFeedbackTelemetrySinkConfig(
   return readRunTelemetrySinkConfig(env, configuredEnv);
 }
 
+export interface EffectiveRunTelemetrySinkDiagnostic {
+  kind: RunTelemetrySinkConfig['kind'] | 'none';
+  host: string | null;
+  protocol: 'http' | 'https' | null;
+}
+
+/**
+ * Allowlisted effective-sink identity for daemon logs and support bundles.
+ * URL credentials, ports, paths, queries, fragments, headers, and keys never
+ * enter the returned object.
+ */
+export function describeRunTelemetrySink(
+  sink: RunTelemetrySinkConfig | null,
+): EffectiveRunTelemetrySinkDiagnostic {
+  if (!sink) return { kind: 'none', host: null, protocol: null };
+  const rawUrl = sink.kind === 'vela'
+    ? sink.apiUrl
+    : sink.kind === 'relay'
+      ? sink.relayUrl
+      : sink.baseUrl;
+  try {
+    const url = new URL(rawUrl);
+    const protocol = url.protocol === 'https:'
+      ? 'https'
+      : url.protocol === 'http:'
+        ? 'http'
+        : null;
+    return {
+      kind: sink.kind,
+      host: url.hostname || null,
+      protocol,
+    };
+  } catch {
+    return { kind: sink.kind, host: null, protocol: null };
+  }
+}
+
 export function deriveLangfuseDeliveryState(
   prefs: TelemetryPrefs,
   sink: RunTelemetrySinkConfig | null,
 ): LangfuseDeliveryState {
-  if (prefs.metrics !== true) {
+  const expectation = deriveRunTelemetryExportExpectation(prefs, sink !== null);
+  if (!expectation.expected) {
     return {
       langfuse_expected: false,
       langfuse_delivery_status: 'not_expected',
-      langfuse_drop_reason: 'metrics_consent_off',
-    };
-  }
-  if (prefs.content !== true) {
-    return {
-      langfuse_expected: false,
-      langfuse_delivery_status: 'not_expected',
-      langfuse_drop_reason: 'content_consent_off',
-    };
-  }
-  if (!sink) {
-    return {
-      langfuse_expected: false,
-      langfuse_delivery_status: 'not_expected',
-      langfuse_drop_reason: 'missing_sink_config',
+      langfuse_drop_reason: expectation.reason,
     };
   }
   return {
@@ -1470,6 +1546,293 @@ function traceSafeToolPayload(
   return redactLocalPaths(redactArtifactBlocks(value));
 }
 
+const SAFE_QUALITY_MANIFEST_KEYS = new Set([
+  'object_class',
+  'storage_ref',
+  'status',
+  'reason',
+  'project_id',
+  'run_id',
+  'workspace_id',
+  'size_bytes',
+  'sha256',
+  'mime_type',
+  'extension',
+  'redacted',
+  'truncated',
+  'stored_in_open_design',
+  'retention_policy',
+  'access_scope',
+  'sensitivity',
+  'source',
+  'expires_at',
+  'approved_by',
+  'attachment_id',
+  'artifact_id',
+  'input_text_snapshot_id',
+  'type',
+  'artifact_kind',
+  'build_status',
+  'preview_status',
+  'export_status',
+  'open_in_open_design_url',
+  'access_policy',
+]);
+
+function safeQualityText(
+  value: string | undefined,
+  maxBytes: number,
+): SafeObservationTextV1 | undefined {
+  if (value === undefined) return undefined;
+  const redacted = redactLocalPaths(redactSecrets(redactArtifactBlocks(value) ?? '')) ?? '';
+  if (redacted.length === 0) return undefined;
+  const truncated = Buffer.byteLength(redacted, 'utf8') > maxBytes;
+  return {
+    text: truncate(redacted, maxBytes) ?? '',
+    redacted: true,
+    truncated,
+  };
+}
+
+/**
+ * Project one already-capped process-stream tail into transport-safe text.
+ *
+ * `collectStreamTailSummary` has already applied `redactSecrets` plus the
+ * 20-line / 4 KiB cap, so this stage only adds the stricter Prompt-stack local
+ * path masking (`redactLocalPaths`, which also covers /tmp, /private/var,
+ * /opt, /Volumes, UNC and file:// forms the trace-level masker misses) before
+ * handing the value to `safeQualityText`. Absolute paths are routine in a
+ * runtime stderr tail, so the wider rule set is the correct one here.
+ *
+ * `includeTail` is the consent gate. When it is false the caller still gets
+ * the structural facts (line count, truncation) with an explicit limitation
+ * instead of silently losing the stream.
+ */
+function safeStreamTail(
+  summary: StreamTailSummary | undefined,
+  options: { includeTail: boolean; omissionLimitation: string },
+): SafeObservationStreamTailV1 | undefined {
+  if (!summary) return undefined;
+  const tail = options.includeTail
+    ? safeQualityText(
+        redactPromptStackLocalPaths(summary.tail),
+        STDERR_TAIL_MAX_BYTES,
+      )
+    : undefined;
+  return {
+    ...(tail ? { tail } : {}),
+    lineCount: summary.lineCount,
+    truncated: summary.truncated || (tail?.truncated ?? false),
+    ...(tail
+      ? {}
+      : {
+          limitations: [
+            options.includeTail
+              ? 'stream_tail_empty_after_redaction'
+              : options.omissionLimitation,
+          ],
+        }),
+  };
+}
+
+/**
+ * Keep only bounded diagnostic facts. Booleans and enum/bucket identifiers
+ * pass through; anything free-form is dropped rather than redacted, because
+ * this record is not a text channel.
+ */
+function safeRunDiagnostics(
+  diagnostics: RunDiagnosticsAnalytics | undefined,
+): SafeRunDiagnosticsV1 | undefined {
+  if (!diagnostics) return undefined;
+  const safe: SafeRunDiagnosticsV1 = {};
+  for (const [key, value] of Object.entries(diagnostics)) {
+    if (Object.keys(safe).length >= 64) break;
+    if (!/^[a-z][a-z0-9_]{0,63}$/.test(key)) continue;
+    if (typeof value === 'boolean') {
+      safe[key] = value;
+      continue;
+    }
+    const identifier = safeQualityIdentifier(value);
+    if (identifier) safe[key] = identifier;
+  }
+  return Object.keys(safe).length > 0 ? safe : undefined;
+}
+
+/**
+ * Terminal process evidence for one Run: exit code, fatal signal, stream tails
+ * and host close diagnostics.
+ *
+ * Failure *classification* answers "what kind of failure"; this answers "what
+ * the process actually did". The single-Run trace always carried both, so any
+ * producer that replaces it must carry both too.
+ */
+function safeRunProcessOutcome(input: {
+  wantsContent: boolean;
+  exitCode?: number | null;
+  signal?: string | null;
+  stderr?: StreamTailSummary;
+  stdout?: StreamTailSummary;
+  diagnostics?: RunDiagnosticsAnalytics;
+}): SafeRunProcessOutcomeV1 | undefined {
+  // stderr is a diagnostic channel and follows the same rule as the run error
+  // message: redacted, capped, and reported whenever telemetry runs at all.
+  // stdout is the agent's own output stream, so it follows the rule for model
+  // output and needs content consent.
+  const stderr = safeStreamTail(input.stderr, {
+    includeTail: true,
+    omissionLimitation: 'stderr_tail_unavailable',
+  });
+  const stdout = safeStreamTail(input.stdout, {
+    includeTail: input.wantsContent,
+    omissionLimitation: 'stdout_tail_requires_content_consent',
+  });
+  const diagnostics = safeRunDiagnostics(input.diagnostics);
+  const exitCode = typeof input.exitCode === 'number' && Number.isInteger(input.exitCode)
+    ? input.exitCode
+    : undefined;
+  const signal = safeQualityIdentifier(input.signal);
+  if (
+    exitCode === undefined &&
+    signal === undefined &&
+    !stderr &&
+    !stdout &&
+    !diagnostics
+  ) {
+    return undefined;
+  }
+  return {
+    ...(exitCode !== undefined ? { exitCode } : {}),
+    ...(signal !== undefined ? { signal } : {}),
+    ...(stderr ? { stderr } : {}),
+    ...(stdout ? { stdout } : {}),
+    ...(diagnostics ? { diagnostics } : {}),
+  };
+}
+
+function safeQualityIdentifier(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(value)
+    ? value
+    : undefined;
+}
+
+function safeQualityManifestEntry(
+  value: TraceSafeObjectManifestBase,
+): SafeObservationManifestEntryV1 {
+  return Object.fromEntries(Object.entries(value).filter(
+    ([key, entry]) => SAFE_QUALITY_MANIFEST_KEYS.has(key) && entry !== undefined,
+  )) as SafeObservationManifestEntryV1;
+}
+
+/**
+ * Versioned, transport-neutral projection shared by single-Run and Task
+ * hierarchy producers. It accepts only facts the existing single-Run bridge
+ * already collected, applies the same content/tool byte caps plus stricter
+ * local-path masking, and never admits raw provider attributes.
+ */
+export function buildSafeRunQualityProjectionV1(input: {
+  prefs: TelemetryPrefs;
+  messageOutput?: string;
+  errorMessage?: string;
+  errorCode?: string;
+  failure?: RunFailureClassification;
+  tools?: readonly ToolCallSummary[];
+  attachmentManifest?: readonly AttachmentManifestEntry[];
+  artifactManifest?: readonly ArtifactManifestEntry[];
+  inputTextSnapshotManifest?: readonly InputTextSnapshotManifestEntry[];
+  manifestCompleteness?: ObjectManifestCompleteness;
+  exitCode?: number | null;
+  signal?: string | null;
+  stderr?: StreamTailSummary;
+  stdout?: StreamTailSummary;
+  diagnostics?: RunDiagnosticsAnalytics;
+}): SafeRunQualityV1 | undefined {
+  const wantsContent = input.prefs.metrics === true && input.prefs.content === true;
+  const output = wantsContent
+    ? safeQualityText(input.messageOutput, OUTPUT_MAX_BYTES)
+    : undefined;
+  const errorMessage = safeQualityText(input.errorMessage, OUTPUT_MAX_BYTES);
+  const error = errorMessage || input.errorCode || input.failure
+    ? {
+        ...(errorMessage ? { message: errorMessage } : {}),
+        ...(safeQualityIdentifier(input.errorCode)
+          ? { code: safeQualityIdentifier(input.errorCode)! }
+          : {}),
+        ...(safeQualityIdentifier(input.failure?.failure_category)
+          ? { category: safeQualityIdentifier(input.failure?.failure_category)! }
+          : {}),
+        ...(safeQualityIdentifier(input.failure?.failure_detail)
+          ? { detail: safeQualityIdentifier(input.failure?.failure_detail)! }
+          : {}),
+        ...(safeQualityIdentifier(input.failure?.failure_stage)
+          ? { stage: safeQualityIdentifier(input.failure?.failure_stage)! }
+          : {}),
+      }
+    : undefined;
+  const tools = wantsContent ? input.tools?.slice(0, 256).map((tool) => {
+    const safeInput = safeQualityText(
+      traceSafeToolPayload(tool.name, 'input',
+        tool.input === undefined ? undefined : redactSecrets(tool.input)),
+      TOOL_INPUT_MAX_BYTES,
+    );
+    const safeOutput = safeQualityText(
+      traceSafeToolPayload(tool.name, 'output',
+        tool.output === undefined ? undefined : redactSecrets(tool.output)),
+      TOOL_OUTPUT_MAX_BYTES,
+    );
+    return {
+      callHash: createHash('sha256').update(tool.id, 'utf8').digest('hex'),
+      name: telemetrySafeToolName(tool.name),
+      ...(safeInput ? { input: safeInput } : {}),
+      ...(safeOutput ? { output: safeOutput } : {}),
+      status: tool.isError === true
+        ? 'failed' as const
+        : tool.endedAt >= tool.startedAt
+          ? 'completed' as const
+          : 'unknown' as const,
+      isError: tool.isError === true,
+      ...(Number.isFinite(tool.startedAt) && tool.startedAt >= 0
+        ? { startedAtMs: tool.startedAt }
+        : {}),
+      ...(Number.isFinite(tool.endedAt) && tool.endedAt >= 0
+        ? { endedAtMs: tool.endedAt }
+        : {}),
+    };
+  }) : undefined;
+  const hasManifests = wantsContent && (
+    input.manifestCompleteness !== undefined ||
+    input.attachmentManifest !== undefined ||
+    input.artifactManifest !== undefined ||
+    input.inputTextSnapshotManifest !== undefined
+  );
+  const processOutcome = safeRunProcessOutcome({
+    wantsContent,
+    ...(input.exitCode !== undefined ? { exitCode: input.exitCode } : {}),
+    ...(input.signal !== undefined ? { signal: input.signal } : {}),
+    ...(input.stderr ? { stderr: input.stderr } : {}),
+    ...(input.stdout ? { stdout: input.stdout } : {}),
+    ...(input.diagnostics ? { diagnostics: input.diagnostics } : {}),
+  });
+  return SafeRunQualityV1Schema.parse({
+    schema: SAFE_RUN_QUALITY_V1_SCHEMA,
+    ...(output || error ? { result: { ...(output ? { output } : {}), ...(error ? { error } : {}) } } : {}),
+    ...(processOutcome ? { process: processOutcome } : {}),
+    ...(tools && tools.length > 0 ? { tools } : {}),
+    ...(hasManifests
+      ? {
+          manifests: {
+            completeness: input.manifestCompleteness ?? 'unavailable',
+            attachments: (input.attachmentManifest ?? []).slice(0, 50)
+              .map(safeQualityManifestEntry),
+            artifacts: (input.artifactManifest ?? []).slice(0, 50)
+              .map(safeQualityManifestEntry),
+            inputTextSnapshots: (input.inputTextSnapshotManifest ?? []).slice(0, 50)
+              .map(safeQualityManifestEntry),
+          },
+        }
+      : {}),
+  });
+}
+
 function shouldCreateGenerationObservation(ctx: ReportContext): boolean {
   if (ctx.run.status === 'succeeded') return true;
   if (usageTotal(ctx.message.usage) > 0) return true;
@@ -1477,11 +1840,64 @@ function shouldCreateGenerationObservation(ctx: ReportContext): boolean {
   return ctx.run.failure?.failure_stage !== 'session_init';
 }
 
-export function buildTracePayload(ctx: ReportContext): unknown[] {
+function stableRunIngestionEventId(
+  event: unknown,
+  deliveryPurpose: 'final' | 'object-registration',
+): string | null {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
+  const item = event as { type?: unknown; body?: unknown };
+  if (typeof item.type !== 'string' || !item.body || typeof item.body !== 'object') {
+    return null;
+  }
+  const bodyId = (item.body as { id?: unknown }).id;
+  if (typeof bodyId !== 'string' || !bodyId) return null;
+  return `od-${createHash('sha256')
+    .update(
+      `open-design/langfuse-event/v1\n${deliveryPurpose}\n${item.type}\n${bodyId}`,
+      'utf8',
+    )
+    .digest('hex')}`;
+}
+
+function stabilizeRunIngestionBatch(
+  batch: unknown[],
+  deliveryPurpose: 'final' | 'object-registration',
+): unknown[] {
+  return batch.map((event) => {
+    const id = stableRunIngestionEventId(event, deliveryPurpose);
+    return id && event && typeof event === 'object' && !Array.isArray(event)
+      ? { ...event, id }
+      : event;
+  });
+}
+
+export function buildTracePayload(
+  ctx: ReportContext,
+  deliveryPurpose: 'final' | 'object-registration' = 'final',
+): unknown[] {
   const wantsContent = ctx.prefs.metrics === true && ctx.prefs.content === true;
   const wantsArtifacts = wantsContent;
-  const safeRunError =
-    ctx.run.error === undefined ? undefined : redactSecrets(ctx.run.error);
+  const safeQuality = buildSafeRunQualityProjectionV1({
+    prefs: ctx.prefs,
+    messageOutput: ctx.message.output,
+    ...(ctx.run.error !== undefined ? { errorMessage: ctx.run.error } : {}),
+    ...(ctx.run.errorCode !== undefined ? { errorCode: ctx.run.errorCode } : {}),
+    ...(ctx.run.failure !== undefined ? { failure: ctx.run.failure } : {}),
+    ...(ctx.tools !== undefined ? { tools: ctx.tools } : {}),
+    ...(ctx.attachmentManifest !== undefined
+      ? { attachmentManifest: ctx.attachmentManifest }
+      : {}),
+    ...(ctx.artifactManifest !== undefined
+      ? { artifactManifest: ctx.artifactManifest }
+      : {}),
+    ...(ctx.inputTextSnapshotManifest !== undefined
+      ? { inputTextSnapshotManifest: ctx.inputTextSnapshotManifest }
+      : {}),
+    ...(ctx.manifestCompleteness !== undefined
+      ? { manifestCompleteness: ctx.manifestCompleteness }
+      : {}),
+  });
+  const safeRunError = safeQuality?.result?.error?.message?.text;
 
   const sessionId =
     ctx.conversationId.length <= SESSION_ID_MAX ? ctx.conversationId : undefined;
@@ -1493,9 +1909,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   const inputText = wantsContent
     ? truncate(ctx.message.prompt, INPUT_MAX_BYTES)
     : undefined;
-  const outputText = wantsContent
-    ? truncate(redactArtifactBlocks(ctx.message.output), OUTPUT_MAX_BYTES)
-    : undefined;
+  const outputText = wantsContent ? safeQuality?.result?.output?.text : undefined;
 
   const artifactsList = wantsArtifacts
     ? ctx.artifacts.slice(0, ARTIFACTS_MAX_ITEMS)
@@ -1578,6 +1992,21 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   const generationInput = promptStack
     ? structuredPromptStackInput(promptStack)
     : inputText;
+  const rolloutReasonCodes = ctx.strategyRolloutDecision?.reasonCodes ?? [];
+  const rolloutCompatibilityBasis = !ctx.strategyRolloutDecision
+    ? undefined
+    : ctx.strategyRolloutDecision.syntheticCanary
+      ? 'local_synthetic_canary'
+      : ctx.strategyRolloutDecision.effectiveMode === 'active'
+        ? 'runtime_adapter_family_fixture_evidence'
+        : rolloutReasonCodes.some((reason) => reason.includes('capability'))
+          || ctx.strategyRolloutDecision.primaryReasonCode.includes('capability')
+          ? 'capability_unverified'
+          : 'not_evaluated';
+  const rolloutFallbackStage = ctx.strategyRolloutDecision?.primaryReasonCode
+    === 'od_next_rollout_prestart_preparation_failed'
+    ? 'activation_preparation'
+    : undefined;
 
   // Trace metadata is the queryable + exportable fact-sheet for each turn.
   // Anything we want to slice on for evals or dataset construction lives
@@ -1636,6 +2065,14 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     os: ctx.runtime?.os,
     osRelease: ctx.runtime?.osRelease,
     arch: ctx.runtime?.arch,
+    strategy_rollout_requested_mode: ctx.strategyRolloutDecision?.requestedMode,
+    strategy_rollout_effective_mode: ctx.strategyRolloutDecision?.effectiveMode,
+    strategy_rollout_primary_reason_code: ctx.strategyRolloutDecision?.primaryReasonCode,
+    strategy_rollout_compatibility_basis: rolloutCompatibilityBasis,
+    strategy_rollout_admission_stage: ctx.strategyRolloutDecision
+      ? 'activation_admission'
+      : undefined,
+    strategy_rollout_fallback_stage: rolloutFallbackStage,
     clientType: ctx.runtime?.clientType,
     agentCliVersion: ctx.runtime?.agentCliVersion,
     runtimeCompanionName: ctx.runtime?.runtimeCompanionName,
@@ -1828,18 +2265,11 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
       // Redaction policy still keys off the producer name (Bash vs content vs
       // unknown); only the labels we emit to Langfuse are allowlisted.
       const safeToolName = telemetrySafeToolName(tool.name);
-      const toolInput = wantsContent
-        ? truncate(
-            traceSafeToolPayload(tool.name, 'input', tool.input),
-            TOOL_INPUT_MAX_BYTES,
-          )
-        : undefined;
-      const toolOutput = wantsContent
-        ? truncate(
-            traceSafeToolPayload(tool.name, 'output', tool.output),
-            TOOL_OUTPUT_MAX_BYTES,
-          )
-        : undefined;
+      const qualityTool = safeQuality?.tools?.find((candidate) => (
+        candidate.callHash === createHash('sha256').update(tool.id, 'utf8').digest('hex')
+      ));
+      const toolInput = wantsContent ? qualityTool?.input?.text : undefined;
+      const toolOutput = wantsContent ? qualityTool?.output?.text : undefined;
       batch.push({
         id: randomUUID(),
         type: 'span-create',
@@ -1923,17 +2353,35 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     });
   }
 
-  return batch;
+  return stabilizeRunIngestionBatch(batch, deliveryPurpose);
 }
 
-async function postLangfuseBatch(
+type TransportAttemptObserver = () => void;
+
+function withDeliveryDiagnostics(
+  state: LangfuseDeliveryState,
+  attemptCount: number,
+  idempotencyKey: string | undefined,
+): LangfuseDeliveryState {
+  return idempotencyKey
+    ? {
+        ...state,
+        langfuse_attempt_count: attemptCount,
+        langfuse_idempotency_key: idempotencyKey,
+      }
+    : state;
+}
+
+export async function postLangfuseBatch(
   config: LangfuseConfig,
   batch: unknown[],
   fetchImpl: typeof fetch,
+  onAttempt?: TransportAttemptObserver,
 ): Promise<LangfuseDeliveryState> {
   const attempts = config.retries + 1;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
+      onAttempt?.();
       const response = await fetchImpl(`${config.baseUrl}/api/public/ingestion`, {
         method: 'POST',
         headers: {
@@ -2005,15 +2453,19 @@ async function postRelayBatch(
   config: Extract<TelemetrySinkConfig, { kind: 'relay' }>,
   body: string,
   fetchImpl: typeof fetch,
+  onAttempt?: TransportAttemptObserver,
+  idempotencyKey?: string,
 ): Promise<LangfuseDeliveryState> {
   const attempts = config.retries + 1;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
+      onAttempt?.();
       const response = await fetchImpl(config.relayUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Open-Design-Telemetry': 'langfuse-ingestion-v1',
+          ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
         },
         signal: AbortSignal.timeout(config.timeoutMs),
         body,
@@ -2163,7 +2615,13 @@ async function postVelaBatch(
   batch: unknown[],
   installationId: string,
   fetchImpl: typeof fetch,
-  opts: { allowAnonymousAuthFallback?: boolean } = {},
+  opts: {
+    allowAnonymousAuthFallback?: boolean;
+    deliveryIdempotencyKey?: string;
+    fallbackConfig?: TelemetrySinkConfig | null;
+    maxTotalAttempts?: number;
+    onAttempt?: TransportAttemptObserver;
+  } = {},
 ): Promise<LangfuseDeliveryState> {
   // Completed-run batches may fall back to the anonymous relay when Vela
   // rejects auth (expired Control Key, etc.). Score-only feedback must not:
@@ -2172,11 +2630,18 @@ async function postVelaBatch(
   const allowAnonymousAuthFallback = opts.allowAnonymousAuthFallback !== false;
   const envelope = buildVelaEnvelope(batch, installationId);
   const body = JSON.stringify(envelope);
-  const idempotencyKey = velaIdempotencyKey(envelope);
-  const attempts = config.retries + 1;
+  const idempotencyKey = opts.deliveryIdempotencyKey ?? velaIdempotencyKey(envelope);
+  const maxTotalAttempts = Math.max(
+    1,
+    opts.maxTotalAttempts ?? Number.MAX_SAFE_INTEGER,
+  );
+  const attempts = Math.min(config.retries + 1, maxTotalAttempts);
+  let attemptCount = 0;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
+      attemptCount += 1;
+      opts.onAttempt?.();
       const response = await fetchImpl(
         `${config.apiUrl}/api/v1/open-design/telemetry`,
         {
@@ -2202,12 +2667,25 @@ async function postVelaBatch(
         allowAnonymousAuthFallback &&
         (response.status === 401 || response.status === 403)
       ) {
-        const fallback = readTelemetrySinkConfig();
-        if (fallback) {
+        const fallback = opts.fallbackConfig === undefined
+          ? readTelemetrySinkConfig()
+          : opts.fallbackConfig;
+        const fallbackAttempts = maxTotalAttempts - attemptCount;
+        if (fallback && fallbackAttempts > 0) {
+          const cappedFallback = {
+            ...fallback,
+            retries: Math.min(fallback.retries, fallbackAttempts - 1),
+          };
           const serialized = JSON.stringify({ batch });
-          return fallback.kind === 'relay'
-            ? postRelayBatch(fallback, serialized, fetchImpl)
-            : postLangfuseBatch(fallback, batch, fetchImpl);
+          return cappedFallback.kind === 'relay'
+            ? postRelayBatch(
+                cappedFallback,
+                serialized,
+                fetchImpl,
+                opts.onAttempt,
+                opts.deliveryIdempotencyKey,
+              )
+            : postLangfuseBatch(cappedFallback, batch, fetchImpl, opts.onAttempt);
         }
       }
       if (
@@ -2247,6 +2725,83 @@ async function postVelaBatch(
     langfuse_delivery_status: 'failed',
     langfuse_drop_reason: 'network_error',
   };
+}
+
+export interface PostLegacyTelemetryBatchOptions {
+  installationId?: string | null;
+  fetchImpl?: typeof fetch;
+  deliveryIdempotencyKey?: string;
+  fallbackConfig?: TelemetrySinkConfig | null;
+  maxTotalAttempts?: number;
+  onAttempt?: () => void;
+}
+
+/**
+ * Deliver an already-sanitized legacy ingestion batch through the same
+ * effective sink priority as the single-Run compatibility exporter.
+ *
+ * Task-level observability owns payload assembly and durable delivery state;
+ * this helper owns only the existing Vela/Relay/direct wire behavior. Keeping
+ * the sink routing here prevents the rollout service from learning credentials
+ * or reimplementing fallback semantics.
+ */
+export async function postLegacyTelemetryBatch(
+  config: RunTelemetrySinkConfig,
+  batch: unknown[],
+  options: PostLegacyTelemetryBatchOptions = {},
+): Promise<LangfuseDeliveryState> {
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  if (config.kind === 'langfuse') {
+    return postLangfuseBatch(config, batch, fetchImpl, options.onAttempt);
+  }
+  if (config.kind === 'relay') {
+    return postRelayBatch(
+      config,
+      JSON.stringify({ batch }),
+      fetchImpl,
+      options.onAttempt,
+      options.deliveryIdempotencyKey,
+    );
+  }
+  const installationId = options.installationId?.trim() ?? '';
+  if (installationId) {
+    return postVelaBatch(config, batch, installationId, fetchImpl, {
+      ...(options.deliveryIdempotencyKey
+        ? { deliveryIdempotencyKey: options.deliveryIdempotencyKey }
+        : {}),
+      ...(options.onAttempt ? { onAttempt: options.onAttempt } : {}),
+      ...(options.fallbackConfig !== undefined
+        ? { fallbackConfig: options.fallbackConfig }
+        : {}),
+      ...(options.maxTotalAttempts !== undefined
+        ? { maxTotalAttempts: options.maxTotalAttempts }
+        : {}),
+    });
+  }
+  const fallback = options.fallbackConfig === undefined
+    ? readTelemetrySinkConfig()
+    : options.fallbackConfig;
+  if (!fallback) {
+    return {
+      langfuse_expected: false,
+      langfuse_delivery_status: 'not_expected',
+      langfuse_drop_reason: 'missing_sink_config',
+    };
+  }
+  const fallbackAttempts = Math.max(1, options.maxTotalAttempts ?? fallback.retries + 1);
+  const cappedFallback = {
+    ...fallback,
+    retries: Math.min(fallback.retries, fallbackAttempts - 1),
+  };
+  return cappedFallback.kind === 'relay'
+    ? postRelayBatch(
+        cappedFallback,
+        JSON.stringify({ batch }),
+        fetchImpl,
+        options.onAttempt,
+        options.deliveryIdempotencyKey,
+      )
+    : postLangfuseBatch(cappedFallback, batch, fetchImpl, options.onAttempt);
 }
 
 function waitBeforeRetry(attempt: number): Promise<void> {
@@ -2398,13 +2953,18 @@ function objectRegistrationBatch(batch: unknown[]): unknown[] {
   ];
 }
 
-export async function reportRunCompleted(
+async function exportLegacyLangfuseRun(
   ctx: ReportContext,
   opts: ReportRunOpts = {},
 ): Promise<LangfuseDeliveryState> {
+  const deliveryIdempotencyKey = opts.deliveryIdempotencyKey;
   const notExpected = deriveLangfuseDeliveryState(ctx.prefs, null);
-  if (ctx.prefs.metrics !== true) return notExpected;
-  if (ctx.prefs.content !== true) return notExpected;
+  if (ctx.prefs.metrics !== true) {
+    return withDeliveryDiagnostics(notExpected, 0, deliveryIdempotencyKey);
+  }
+  if (ctx.prefs.content !== true) {
+    return withDeliveryDiagnostics(notExpected, 0, deliveryIdempotencyKey);
+  }
 
   const config = resolveRunReportConfig(opts);
   const langfuseDelivery = deriveLangfuseDeliveryState(ctx.prefs, config);
@@ -2417,22 +2977,29 @@ export async function reportRunCompleted(
         '[langfuse-trace] Telemetry metrics are enabled but no relay or Langfuse credentials are configured',
       );
     }
-    return langfuseDelivery;
+    return withDeliveryDiagnostics(
+      langfuseDelivery,
+      0,
+      deliveryIdempotencyKey,
+    );
   }
 
   let batch: unknown[];
   try {
-    batch = buildTracePayload({ ...ctx, langfuse: langfuseDelivery });
+    batch = buildTracePayload(
+      { ...ctx, langfuse: langfuseDelivery },
+      opts.deliveryPurpose ?? 'final',
+    );
     if (opts.deliveryPurpose === 'object-registration') {
       batch = objectRegistrationBatch(batch);
     }
   } catch (error) {
     console.warn(`[langfuse-trace] Payload build error: ${String(error)}`);
-    return {
+    return withDeliveryDiagnostics({
       langfuse_expected: true,
       langfuse_delivery_status: 'failed',
       langfuse_drop_reason: 'payload_too_large',
-    };
+    }, 0, deliveryIdempotencyKey);
   }
 
   const serialized = JSON.stringify({ batch });
@@ -2444,14 +3011,20 @@ export async function reportRunCompleted(
     console.warn(
       `[langfuse-trace] Batch too large (${serializedBytes}B > ${HARD_BATCH_MAX_BYTES}B), dropping trace ${ctx.run.runId}`,
     );
-    return {
+    return withDeliveryDiagnostics({
       langfuse_expected: true,
       langfuse_delivery_status: 'failed',
       langfuse_drop_reason: 'payload_too_large',
-    };
+    }, 0, deliveryIdempotencyKey);
   }
 
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+  let attemptCount = 0;
+  const onAttempt = () => {
+    attemptCount += 1;
+    opts.onDeliveryAttempt?.();
+  };
+  let delivery: LangfuseDeliveryState;
   if (config.kind === 'vela') {
     const installationId = ctx.installationId?.trim() ?? '';
     if (!installationId) {
@@ -2464,24 +3037,65 @@ export async function reportRunCompleted(
       }
       const fallback = readTelemetrySinkConfig();
       if (!fallback) {
-        return {
+        return withDeliveryDiagnostics({
           langfuse_expected: false,
           langfuse_delivery_status: 'not_expected',
           langfuse_drop_reason: 'missing_sink_config',
-        };
+        }, 0, deliveryIdempotencyKey);
       }
-      return fallback.kind === 'relay'
-        ? postRelayBatch(fallback, serialized, fetchImpl)
-        : postLangfuseBatch(fallback, batch, fetchImpl);
+      delivery = fallback.kind === 'relay'
+        ? await postRelayBatch(
+            fallback,
+            serialized,
+            fetchImpl,
+            onAttempt,
+            deliveryIdempotencyKey,
+          )
+        : await postLangfuseBatch(fallback, batch, fetchImpl, onAttempt);
+    } else {
+      delivery = await postVelaBatch(config, batch, installationId, fetchImpl, {
+        allowAnonymousAuthFallback: opts.deliveryPurpose !== 'object-registration',
+        ...(deliveryIdempotencyKey ? { deliveryIdempotencyKey } : {}),
+        onAttempt,
+      });
     }
-    return postVelaBatch(config, batch, installationId, fetchImpl, {
-      allowAnonymousAuthFallback: opts.deliveryPurpose !== 'object-registration',
-    });
+  } else if (config.kind === 'relay') {
+    delivery = await postRelayBatch(
+      config,
+      serialized,
+      fetchImpl,
+      onAttempt,
+      deliveryIdempotencyKey,
+    );
+  } else {
+    delivery = await postLangfuseBatch(config, batch, fetchImpl, onAttempt);
   }
-  if (config.kind === 'relay') {
-    return postRelayBatch(config, serialized, fetchImpl);
-  }
-  return postLangfuseBatch(config, batch, fetchImpl);
+  return withDeliveryDiagnostics(
+    delivery,
+    attemptCount,
+    deliveryIdempotencyKey,
+  );
+}
+
+/**
+ * Compatibility exporter for the current single-Run legacy ingestion shape.
+ * All provider event assembly and transport remain owned by this adapter;
+ * callers enter through the protocol-neutral exporter seam above.
+ */
+export const legacyLangfuseRunExporter: RunObservationExporter<
+  ReportContext,
+  ReportRunOpts,
+  LangfuseDeliveryState
+> = {
+  id: 'legacy-langfuse-ingestion-v1',
+  exportRun: exportLegacyLangfuseRun,
+};
+
+export function reportRunCompleted(
+  ctx: ReportContext,
+  opts: ReportRunOpts = {},
+): Promise<LangfuseDeliveryState> {
+  return exportRunObservation(legacyLangfuseRunExporter, ctx, opts);
 }
 
 // Build a Langfuse `score-create` batch for a user-supplied turn rating.

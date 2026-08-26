@@ -65,7 +65,8 @@ import {
 
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
-const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
+const DEFAULT_MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
+const MAX_MCP_STDIO_IDLE_EXIT_MS = 24 * 60 * 60 * 1000;
 export const OPEN_DESIGN_BRIEF_APP_RESOURCE =
   'ui://open-design/artifact-card-v8.html';
 
@@ -210,6 +211,17 @@ interface McpIdleExitControllerOptions {
   onIdle: () => void;
 }
 
+export function _resolveMcpStdioIdleExitMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env.OD_MCP_STDIO_IDLE_EXIT_MS?.trim();
+  const parsed = Number(raw);
+  if (!raw || !Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_MCP_STDIO_IDLE_EXIT_MS;
+  }
+  return Math.min(MAX_MCP_STDIO_IDLE_EXIT_MS, Math.floor(parsed));
+}
+
 export function _createMcpIdleExitController({
   idleMs,
   onIdle,
@@ -226,7 +238,7 @@ export function _createMcpIdleExitController({
   };
 
   const schedule = () => {
-    if (disposed) return;
+    if (disposed || idleMs <= 0) return;
     clear();
     timer = setTimeout(() => {
       timer = null;
@@ -1781,7 +1793,7 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
   let observabilityPromise: Promise<McpObservabilitySession> | null = null;
   let closeTransportForIdle: (() => void) | null = null;
   const idleExit = _createMcpIdleExitController({
-    idleMs: MCP_STDIO_IDLE_EXIT_MS,
+    idleMs: _resolveMcpStdioIdleExitMs(),
     onIdle: () => closeTransportForIdle?.(),
   });
   const withMcpActivity =

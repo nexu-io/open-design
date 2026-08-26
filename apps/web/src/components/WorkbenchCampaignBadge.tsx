@@ -10,55 +10,48 @@ import {
 } from '../analytics/amr-attribution';
 import { getResolvedDeviceId } from '../analytics/client';
 import { useAnalytics } from '../analytics/provider';
+import type { DeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { goPlanPricingUrl } from '../campaigns/go-plan';
-import { getGoPlanCampaignCopy } from '../campaigns/go-plan-content';
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
 
-export type WorkbenchCampaignKind = 'go' | 'deepseek';
-
 export function WorkbenchCampaignBadge({
-  kind,
+  audience,
   page,
   metricsConsent,
   installationId,
 }: {
-  kind: WorkbenchCampaignKind;
+  audience: Exclude<DeepSeekV4FlashCampaignAudience, 'unknown'>;
   page: 'home' | 'project';
   metricsConsent: boolean;
   installationId?: string | null;
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
-  const goPlanCopy = getGoPlanCampaignCopy(locale);
 
   useEffect(() => {
     // The current campaign analytics contract scopes badge impressions to
     // Home. Project-detail visibility is intentionally UI-only until that
     // contract gains a project page variant.
-    if (kind !== 'deepseek' || page !== 'home') return;
+    if (page !== 'home') return;
     trackDeepSeekCampaignBadgeSurfaceView(analytics.track, {
       page_name: 'home',
       area: 'campaign_badge',
       element: 'deepseek_v4_pro',
       campaign_id: 'deepseek_v4_pro',
-      user_state: 'paid',
+      user_state: audience,
     });
-  }, [analytics.track, kind, page]);
+  }, [analytics.track, audience, page]);
 
   const openCampaignPricing = useCallback(() => {
     const pricingUrl = goPlanPricingUrl(locale);
-    if (kind === 'go') {
-      window.open(pricingUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
     if (page === 'home') {
       trackDeepSeekCampaignBadgeClick(analytics.track, {
         page_name: 'home',
         area: 'campaign_badge',
         element: 'open_pricing',
         campaign_id: 'deepseek_v4_pro',
-        user_state: 'paid',
+        user_state: audience,
       });
     }
     const attribution = recordAmrEntry(
@@ -81,21 +74,17 @@ export function WorkbenchCampaignBadge({
       '_blank',
       'noopener,noreferrer',
     );
-  }, [analytics.track, installationId, kind, locale, metricsConsent, page]);
+  }, [analytics.track, audience, installationId, locale, metricsConsent, page]);
 
   return (
     <button
       type="button"
       className="entry-deepseek-campaign-badge"
       onClick={openCampaignPricing}
-      aria-label={kind === 'go'
-        ? goPlanCopy.workbenchBadgeAria
-        : t('campaign.deepseekV4Flash.workbenchBadgeAria')}
+      aria-label={t('campaign.deepseekV4Flash.workbenchBadgeAria')}
       data-testid="deepseek-campaign-pricing-badge"
     >
-      <span>{kind === 'go'
-        ? goPlanCopy.workbenchBadge
-        : t('campaign.deepseekV4Flash.workbenchBadge')}</span>
+      <span>{t('campaign.deepseekV4Flash.workbenchBadge')}</span>
       <Icon name="arrow-right" size={13} />
     </button>
   );

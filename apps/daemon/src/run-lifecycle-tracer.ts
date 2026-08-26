@@ -51,6 +51,11 @@ export interface RunLifecycleStreamEventMarkers {
   // Stamping the anchor from arrival would measure a tool-only ACP turn as
   // runtime init, which is the case this whole boundary change exists for.
   firstModelEventAt?: number;
+  // True when THIS event is user-visible model output leaving the daemon.
+  // Callers mark `first_visible_output` from it at the single emission choke
+  // point, so the mark lands after every filter that can withhold bytes
+  // (`<od-title>` stripping, the fabricated-role-marker guard, close-time
+  // buffering) rather than when the daemon first recognised a token.
   firstVisibleOutput: boolean;
   firstArtifactWrite: boolean;
 }
@@ -96,7 +101,15 @@ export function runLifecycleMarkersForStreamEvent(
     };
   }
   return {
-    firstVisibleOutput: false,
+    // The plain / BYOK / antigravity family has no structured `agent` stream —
+    // its reply reaches the user as `stdout` chunks, already control-stripped,
+    // title-stripped and role-guarded by the time they are sent. Without this,
+    // those runs would report no visible output at all and fall back to the
+    // first token, which is exactly wrong for antigravity: it buffers stdout
+    // until close, so its first token and its first visible byte can be a whole
+    // run apart. `stderr` stays out — it is a diagnostic channel, not the
+    // model's answer.
+    firstVisibleOutput: event === 'stdout',
     firstArtifactWrite: event === 'live_artifact',
   };
 }

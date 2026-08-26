@@ -7,6 +7,8 @@
  * stable workspace id used for PostHog group analytics.
  */
 
+import type { TrackingProjectKind } from './shared-enums.js';
+
 export type TrackingWorkspaceType = 'personal' | 'team';
 export type TrackingWorkspaceRole = 'owner' | 'admin' | 'member';
 export type TrackingWorkspaceScope = 'official' | 'personal' | 'team' | 'unknown';
@@ -61,9 +63,6 @@ export interface AccountMenuClickProps extends TrackingWorkspaceDimensions {
     | 'feature_request'
     | 'github'
     | 'discord'
-    // Chinese locales swap the Discord link for the Feishu group invite; the
-    // slot is the same social entry, so it stays in this union.
-    | 'feishu'
     | 'twitter'
     | 'email'
     | 'logout';
@@ -222,4 +221,6 @@ export interface ProjectCommentCreateResultProps extends TrackingWorkspaceDimens
   result: 'success';
   target_project_relation: TrackingProjectRelation;
   comment_level: 'top_level' | 'reply';
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
 }

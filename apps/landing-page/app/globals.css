@@ -1226,21 +1226,8 @@ a.nav-mega-col-head.is-active {
 .nav-social-link:hover,
 .nav-social-item:focus-within .nav-social-link { color: var(--ink); transform: translateY(-1px); }
 .nav-social-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
-/* Brand marks sit monochrome at rest and light up in brand colour on
-   hover / focus (Feishu via filter on the PNG, Discord via currentColor). */
-.nav-social-icon-feishu {
-  display: block;
-  width: 22px;
-  height: auto;
-  filter: grayscale(1) brightness(0.55) contrast(1.1);
-  opacity: 0.85;
-  transition: filter 160ms ease, opacity 160ms ease;
-}
-.nav-social-link:hover .nav-social-icon-feishu,
-.nav-social-item:focus-within .nav-social-icon-feishu {
-  filter: none;
-  opacity: 1;
-}
+/* Brand mark sits monochrome at rest and lights up in brand colour on
+   hover / focus (Discord via currentColor). */
 .nav-social-link[data-community-platform='discord']:hover,
 .nav-social-item:focus-within .nav-social-link[data-community-platform='discord'] {
   color: #5865f2;
@@ -1306,7 +1293,7 @@ a.nav-mega-col-head.is-active {
   background: var(--coral);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--coral) 22%, transparent);
 }
-/* Feishu group QR — hover / focus card under the icon. */
+/* Community perk card — hover / focus card under the icon. */
 .nav-community-qr-card {
   position: absolute;
   z-index: 60;
@@ -1343,7 +1330,6 @@ a.nav-mega-col-head.is-active {
   transform: translate(-50%, 0);
   pointer-events: auto;
 }
-.nav-community-qr-img { display: block; width: 168px; height: 168px; margin-bottom: 6px; border-radius: 8px; }
 .nav-cta {
   display: inline-flex;
   align-items: center;
@@ -1978,7 +1964,7 @@ a.nav-mega-col-head.is-active {
   margin-bottom: 0;
 }
 /* Community entry beside the hero download CTA — outlined pill, same 64px
-   height as .hm-dl. zh / zh-tw hover / focus reveals the Feishu group QR. */
+   height as .hm-dl. */
 .hero-community {
   position: relative;
   display: inline-flex;
@@ -2019,7 +2005,6 @@ a.nav-mega-col-head.is-active {
   stroke-linejoin: round;
 }
 .hero-community-icon path:last-child { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-.hero-community-icon-feishu { width: 20px; height: auto; flex-basis: 20px; }
 .hero-community-perk {
   margin-left: 2px;
   padding: 3px 8px;
@@ -2067,41 +2052,6 @@ a.nav-mega-col-head.is-active {
 .hero-actions .hm-dl-hero .hm-di { width: 30px; height: 30px; font-size: 15px; }
 
 .hero-community-icon-discord path { fill: currentColor; stroke: none; }
-.hero-community-qr-card {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 12px);
-  left: 50%;
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  width: 200px;
-  padding: 14px 14px 12px;
-  border: 1px solid rgba(26, 26, 26, 0.11);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgba(17, 17, 26, 0.1), 0 2px 5px rgba(17, 17, 26, 0.04);
-  color: var(--ink-soft);
-  font-family: var(--sans);
-  font-size: 11.5px;
-  font-weight: 500;
-  line-height: 1.35;
-  text-align: center;
-  opacity: 0;
-  visibility: hidden;
-  transform: translate(-50%, -4px);
-  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
-  pointer-events: none;
-}
-.hero-community-qr-card::before { content: ''; position: absolute; top: -14px; left: 0; right: 0; height: 14px; }
-.hero-community:hover .hero-community-qr-card,
-.hero-community:focus-within .hero-community-qr-card {
-  opacity: 1;
-  visibility: visible;
-  transform: translate(-50%, 0);
-  pointer-events: auto;
-}
-.hero-community-qr-img { display: block; width: 168px; height: 168px; border-radius: 8px; }
 @media (max-width: 640px) {
   .hero-actions { flex-wrap: wrap; }
   .hero-community-cta { height: 42px; padding: 0 14px; font-size: 13px; }

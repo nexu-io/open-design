@@ -363,7 +363,7 @@
 .entry-nav-rail__footer .entry-rail-actions:empty {
   display: none;
 }
-/* Community/contact links (Discord-or-Feishu / X / mail), the footer's last
+/* Community/contact links (Discord / X / mail), the footer's last
    row. They moved here out of the account menu so the rail's bottom strip
    carries something instead of reading as a dead white band. */
 .entry-nav-rail__social {
@@ -423,7 +423,7 @@
      (position: absolute; bottom: 3px; z-index: 2), which was harmless while
      the footer had nothing else in it. The footer now ends with the social
      row, and an opaque card pinned over that same bottom strip hid the
-     Discord/Feishu, X and mail links from exactly the signed-out users this
+     Discord, X and mail links from exactly the signed-out users this
      card is shown to. Sitting in flow (order 2, above the social row's 3)
      keeps both reachable and lets the footer size itself. */
   order: 2;
@@ -3526,6 +3526,10 @@
 .onboarding-view__agent-chip {
   display: flex;
   align-items: center;
+  /* The global `button` primitive centers its flex line. These chips are
+     fixed-width grid cells, so a centered line offsets each icon+name group
+     by a different amount and the two columns read ragged. */
+  justify-content: flex-start;
   gap: 9px;
   min-width: 0;
   min-height: 48px;

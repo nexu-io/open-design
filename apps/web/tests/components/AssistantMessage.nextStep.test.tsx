@@ -336,6 +336,25 @@ describe('AssistantMessage next-step affordance during the question phase', () =
     expect(screen.queryByTestId('next-step-actions')).toBeNull();
   });
 
+  it('renders on a settled turn whose only open tag has a prose body', () => {
+    // Production repro: a turn that needed no clarification narrated its
+    // decision into an open <question-form> tag. The tail can never become a
+    // form body, so there is nothing for the user to answer — the turn is
+    // settled and its next-step affordance must not be suppressed.
+    const content =
+      '策略判断信息充足，将直接进入生产。\n\n<question-form> 无需提出';
+    render(
+      <AssistantMessage
+        message={questionFormMessage(content)}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        {...handlers()}
+      />,
+    );
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+  });
+
   it('renders once the next user message submits the form answers', () => {
     render(
       <AssistantMessage

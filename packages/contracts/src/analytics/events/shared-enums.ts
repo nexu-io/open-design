@@ -39,6 +39,9 @@ export type TrackingProjectKind =
   | 'hyperframes'
   | 'audio'
   | 'brand'
+  // Orbit runs create dedicated projects (`metadata.kind === 'orbit'`) so
+  // their editing and artifact funnels must not be folded into prototypes.
+  | 'orbit'
   // `design_system` covers DS-as-project runs (creation + regeneration).
   // The dashboard reads it on run_created / run_finished to split the
   // DS generation funnel from regular artifact runs.
@@ -83,6 +86,7 @@ export type TrackingAmrEntrySource =
   | 'generation_preview_switch_retry_card'
   | 'settings_amr_upgrade'
   | 'inline_amr_upgrade'
+  | 'go_plan_sunset_modal'
   | 'deepseek_unpaid_modal'
   | 'deepseek_workbench_badge'
   | 'deepseek_model_switcher_upgrade'
@@ -94,9 +98,14 @@ export type TrackingAmrEntrySource =
 // `deepseek_v4_flash` is the finished 8/6-8/13 free week; `deepseek_v4_pro`
 // is the 8/13-8/27 two-model window that follows it. Both stay declared so
 // the finished campaign's rows keep a valid id in the warehouse.
-export type TrackingCampaignId = 'deepseek_v4_flash' | 'deepseek_v4_pro';
+export type TrackingCampaignId =
+  | 'deepseek_v4_flash'
+  | 'deepseek_v4_pro'
+  | 'go_plan_sunset_202608';
 export type TrackingCampaignUserState = 'paid' | 'unpaid';
+export type TrackingCampaignDeliveryMode = 'demo' | 'targeted';
 export type TrackingCampaignConversionSource =
+  | 'go_plan_sunset_modal'
   | 'deepseek_unpaid_modal'
   | 'deepseek_workbench_badge'
   | 'deepseek_model_switcher_upgrade'
@@ -170,12 +179,17 @@ export type TrackingByokProviderId =
 // v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
 // `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer
 // fold into the `other` catch-all bucket.
+// Every agent the daemon can detect needs its own id here. An agent that falls
+// through to `other` is invisible to any breakdown or alert that asks *which*
+// CLI failed — which is the only question worth asking when an install someone
+// followed our own instructions for cannot be used.
 export type TrackingCliProviderId =
   | 'claude_code'
   | 'codex_cli'
   | 'devin_for_terminal'
   | 'gemini_cli'
   | 'opencode'
+  | 'byok_opencode'
   | 'hermes'
   | 'kimi_cli'
   | 'cursor_agent'
@@ -184,6 +198,19 @@ export type TrackingCliProviderId =
   | 'github_copilot_cli'
   | 'pi'
   | 'kilo'
+  | 'kiro'
+  | 'vibe'
+  | 'amp'
+  | 'aider'
+  | 'trae_cli'
+  | 'grok_build'
+  | 'antigravity'
+  | 'codebuddy'
+  | 'reasonix'
+  | 'mimo'
+  | 'atomcode'
+  | 'deepseek'
+  | 'deepseek_harness'
   | 'amr'
   | 'other';
 
@@ -226,6 +253,13 @@ export type TrackingRunTerminalTrigger =
   | TrackingRunCancelOrigin
   | 'first_output_deadline'
   | 'inactivity_watchdog'
+  // The ACP bridge's own per-stage watchdog gave up waiting for the agent's
+  // next JSON-RPC line. Distinct from `inactivity_watchdog` (the outer
+  // chat-run clock) because the two have different budgets and different
+  // blind spots, and because the ACP path ends the child itself — the run
+  // then carries the CHILD's exit code (typically AGENT_EXIT_130), which
+  // reads like a user interrupt unless this trigger says otherwise.
+  | 'acp_stage_timeout'
   | 'daemon_restart';
 export type TrackingExportResult = 'success' | 'failed' | 'cancelled';
 // Stable codes for artifact_publish_result.error_code. Deliberately a CLOSED
@@ -448,6 +482,7 @@ export type TrackingLangfuseDropReason =
   | 'content_consent_off'
   | 'missing_sink_config'
   | 'payload_too_large'
+  | 'task_hierarchy_rollout'
   | 'relay_429'
   | 'relay_413'
   | 'relay_5xx'

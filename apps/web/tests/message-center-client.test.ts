@@ -1,9 +1,45 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { clearAnonymousState, pullMessageCenter } from '../src/message-center-client';
+import {
+  clearAnonymousState,
+  findGoPlanSunsetMessage,
+  GO_PLAN_SUNSET_MESSAGE_KEY,
+  pullMessageCenter,
+  type MessageCenterMessage,
+} from '../src/message-center-client';
 
 describe('message center client', () => {
   beforeEach(() => vi.restoreAllMocks());
+
+  const message = (
+    overrides: Partial<MessageCenterMessage> = {},
+  ): MessageCenterMessage => ({
+    id: 'message-1',
+    audienceType: 'targeted',
+    typeName: 'Announcement',
+    title: 'Title',
+    body: 'Body',
+    ctaLabel: null,
+    ctaUrl: null,
+    publishedAt: '2026-08-26T00:00:00.000Z',
+    readAt: null,
+    ...overrides,
+  });
+
+  it('selects only the unread targeted message with the allowlisted slug', () => {
+    const expected = message({ messageKey: GO_PLAN_SUNSET_MESSAGE_KEY });
+    expect(findGoPlanSunsetMessage([
+      message({ id: 'missing-key' }),
+      message({ id: 'unknown-key', messageKey: 'another-announcement' }),
+      message({ id: 'global', audienceType: 'global', messageKey: GO_PLAN_SUNSET_MESSAGE_KEY }),
+      message({ id: 'read', messageKey: GO_PLAN_SUNSET_MESSAGE_KEY, readAt: '2026-08-26T01:00:00.000Z' }),
+      expected,
+    ])).toBe(expected);
+  });
+
+  it('leaves ordinary messages without a message key untouched', () => {
+    expect(findGoPlanSunsetMessage([message({ messageKey: null })])).toBeNull();
+  });
 
   it('clears legacy anonymous window keys with anonymous state', () => {
     const storage = new Map<string, string>();

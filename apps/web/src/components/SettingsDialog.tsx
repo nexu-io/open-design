@@ -60,7 +60,11 @@ import {
 } from '../providers/daemon';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
 import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
-import { deepSeekHarnessNeedsSetup, isVisibleLocalCliAgent } from '../utils/visibleAgents';
+import {
+  availableVisibleAgentCount,
+  deepSeekHarnessNeedsSetup,
+  isVisibleLocalCliAgent,
+} from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
@@ -2326,7 +2330,7 @@ export function SettingsDialog({
       const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
       setAgentRescanNotice({
         kind: 'success',
-        count: nextAgents.filter((a) => a.available).length,
+        count: availableVisibleAgentCount(nextAgents),
       });
     } catch {
       setAgentRescanNotice({ kind: 'error' });
@@ -4186,22 +4190,11 @@ export function SettingsDialog({
         aria-labelledby="settings-dialog-title"
         onClick={pageMode ? undefined : (e) => e.stopPropagation()}
       >
-        {/* Top-right chrome strip — anchored to the modal corner so the
-            autosave indicator and the close button float above the
-            sidebar/content rhythm without competing with the title.
-            We use `position: absolute` instead of putting these inside
-            `.modal-head` so the welcome variant's tall hero (kicker /
-            title / subtitle / pet teaser) keeps its centred reading
-            measure, and the close button always lands at the same
-            optical location regardless of how much copy the header
-            renders. */}
-        <div className="settings-chrome" aria-hidden={false}>
-          {/* Autosave status pill. Only renders something while a save
-              is in flight or has just completed — idle = invisible so
-              first-open feels calm. The chrome strip itself stays
-              mounted so the close button never shifts when the pill
-              appears, and the pill is announced via aria-live for
-              assistive tech. */}
+        {/* Autosave feedback is viewport-level rather than part of the
+            top-right dialog chrome. Local CLI pickers and the page-mode
+            content both occupy that upper band, so keeping this passive
+            status at the bottom avoids obscuring the active controls. */}
+        <div className="settings-autosave-layer">
           <div
             className={`settings-autosave is-${autosaveStatus}`}
             role="status"
@@ -4224,6 +4217,11 @@ export function SettingsDialog({
               </>
             ) : null}
           </div>
+        </div>
+        {/* Top-right chrome strip — anchored to the modal corner so the
+            close and fullscreen controls stay at a stable optical location
+            regardless of the header copy. */}
+        <div className="settings-chrome" aria-hidden={false}>
           {pageMode ? null : (
             <button
               type="button"

@@ -148,6 +148,64 @@ describe('resolveAgentResumeContext', () => {
     expect(ctx.invalidationReason).toBe('cwd_changed');
   });
 
+  it('resumes the stored session when the same turn is re-run', () => {
+    // A daemon-internal restart can re-enter startChatRun with the SAME
+    // assistant placeholder after that placeholder was already persisted as the
+    // session cursor (post-tool recovery writes it, and
+    // `nativeSessionContinuePending` is consumed once — a later safe-retry
+    // restart arrives without it). The cursor filter already means to admit the
+    // stored cursor itself, but the `id != <current>` clause excludes it first,
+    // so a live session was abandoned and the transcript re-seeded even though
+    // nothing had advanced. For an OD Next continuation this is worse than a
+    // cold turn: the non-request stage refuses to re-seed and blocks the task.
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant', 'failed');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      stablePromptHash: null,
+    });
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      currentAssistantMessageId: 'asst-1',
+    });
+    expect(ctx.invalidationReason).toBeNull();
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.resumeSessionId).toBe('sess-A');
+  });
+
+  it('still reseeds when the same turn is re-run but the conversation advanced', () => {
+    // Guards the fix above against being "simplified" into an unconditional
+    // cursor match: if another agent completed a turn while this run was
+    // suspended, the stored session never saw it and must NOT be reused.
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant', 'failed');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      stablePromptHash: null,
+    });
+    // A different agent finished a later turn in the meantime.
+    seedMessage(db, 'user-2', 'user');
+    seedMessage(db, 'asst-later', 'assistant');
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      currentAssistantMessageId: 'asst-1',
+    });
+    expect(ctx.invalidationReason).toBe('conversation_advanced');
+    expect(ctx.isResuming).toBe(false);
+  });
+
   it('reseeds (conversation_advanced) when another agent completed a turn in between', () => {
     const db = seed();
     seedMessage(db, 'asst-1', 'assistant');

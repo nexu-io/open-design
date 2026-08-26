@@ -2,9 +2,8 @@ import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal } from '@/playwright/rail';
 import type { Locator, Page } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
-import { openSettingsDialog } from '../lib/playwright/amr.js';
 
-// Red spec for issue #548 (Plane): the split resize handle's extended hitbox
+// Red spec for OPEND-321 (duplicated by OPEND-548): the split resize handle's extended hitbox
 // (`.split-resize-handle::before`) must never cross the handle's inline-start
 // edge, because the chat panel's scrollbar gutter sits flush against it. When
 // it does, clicks aimed at the scrollbar start a panel resize instead, and
@@ -19,7 +18,6 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('[P1] chat scrollbar gutter edge belongs to the chat panel, not the resize handle', async ({ page }) => {
-  test.fail(true, 'Known #548 regression: the resize handle still overlaps the chat scrollbar gutter.');
   await gotoEntryHome(page);
   await createProject(page, 'Scrollbar hitbox LTR');
   await expectWorkspaceReady(page);
@@ -29,23 +27,21 @@ test('[P1] chat scrollbar gutter edge belongs to the chat panel, not the resize 
   const y = box.y + box.height / 2;
 
   // Red probe: 1px inside the chat-log edge that faces the handle. On main
-  // the handle's ::before overhangs 2px into the scrollbar gutter, so this
+  // the handle's ::before overhangs 10px into the scroll edge, so this
   // point hit-tests to the handle (red); after the fix it belongs to the
   // chat panel (green).
   const redProbe = await probeHit(page, box.x + box.width - 1, y);
   expect(redProbe.hitHandle, `expected chat panel at 1px probe, hit <${redProbe.tag} class="${redProbe.className}">`).toBe(false);
   expect(redProbe.insideChatLog).toBe(true);
 
-  // Control probe: 3px inside — beyond main's 2px overhang, so it must hit
-  // the chat panel before AND after the fix. Guards against over-shrinking
-  // the handle or introducing a new overlay on the gutter.
+  // A second probe farther into the scroll edge guards the rest of the
+  // interaction lane against another overlay.
   const controlProbe = await probeHit(page, box.x + box.width - 3, y);
   expect(controlProbe.hitHandle).toBe(false);
   expect(controlProbe.insideChatLog).toBe(true);
 });
 
 test('[P1] hovering and dragging on the scrollbar gutter does not enter resize posture', async ({ page }) => {
-  test.fail(true, 'Known #548 regression: the resize handle still overlaps the chat scrollbar gutter.');
   await gotoEntryHome(page);
   await createProject(page, 'Scrollbar hover posture');
   await expectWorkspaceReady(page);
@@ -99,16 +95,12 @@ test('[P1] resize handle body still drags the chat panel width', async ({ page }
 });
 
 test('[P1] RTL: chat scrollbar gutter is not covered by the resize handle', async ({ page }) => {
-  test.fail(true, 'Known #548 regression: the resize handle still overlaps the RTL chat scrollbar gutter.');
   await gotoEntryHome(page);
   await createProject(page, 'Scrollbar hitbox RTL');
   await expectWorkspaceReady(page);
-  // Switch to Arabic through the in-project settings UI. Seeding the locale
-  // via localStorage before navigation is unreliable here: the initial-locale
-  // detection can transiently lose a persisted manual locale during the hard
-  // navigation that project creation performs (adjacent issue, not part of
-  // this fix). setLocale from the settings dialog applies synchronously.
-  await switchLocaleToArabic(page);
+  // Directionality is the precondition under test; setting the document's
+  // public dir attribute keeps this spec independent from settings routing.
+  await page.locator('html').evaluate((element) => element.setAttribute('dir', 'rtl'));
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 
   const chatLog = page.locator('.chat-log');
@@ -160,20 +152,6 @@ async function readChatPanelWidth(handle: Locator): Promise<number> {
   const parsed = Number.parseInt(raw ?? '', 10);
   expect(Number.isFinite(parsed)).toBeTruthy();
   return parsed;
-}
-
-// Switch the app language to Arabic from inside the project view: avatar
-// menu → full settings → General → the language select. #5517 folded Language
-// into General and replaced the locale tile grid with one compact <select>, so
-// this drives the select. All selectors are class/testid based so they survive
-// the locale change.
-async function switchLocaleToArabic(page: Page) {
-  const dialog = await openSettingsDialog(page);
-  await dialog.locator('.settings-nav-item', { hasText: 'General' }).click();
-  await dialog.locator('.settings-general-select select').selectOption('ar');
-  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-  await dialog.getByRole('button', { name: 'Back to home', exact: true }).click();
-  await expect(dialog).toBeHidden();
 }
 
 async function gotoEntryHome(page: Page) {

@@ -71,7 +71,11 @@ export type AgentDiagnosticReason =
   | 'not-on-path'
   /** A file matched but is not executable (missing +x / wrong PATHEXT). */
   | 'not-executable'
-  /** A wrapper/shim was found but its target is gone (exit 126/127). */
+  /**
+   * A wrapper/shim was found but its target is gone. POSIX says so with exit
+   * 127; a Windows `.cmd` wrapper starts an interpreter successfully and only
+   * then reports it in stderr, so the launcher's own words count too.
+   */
   | 'shim-broken'
   /** A user-set `*_BIN` override points at a missing/invalid file. */
   | 'configured-bin-invalid'
