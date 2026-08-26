@@ -802,6 +802,14 @@ export interface CensusContact {
 export interface CensusMaterial {
   name: string;
   usedByObjectCount: number;
+  /** Whether this material was brought in by an asset importer (a `file:` part
+   *  or a bare-mesh source), MEASURED at the importer boundary — the runner
+   *  records the materials each import creates in-process and reports them here,
+   *  so provenance is neither reconstructed from name shapes nor read off a
+   *  datablock a source file could carry. Absent on a census taken before this
+   *  field existed; treat absent as false (authored → enforced), the safe
+   *  default, since only imported geometry earns the relaxed posture. */
+  imported?: boolean;
   /** Image names bound in this material's node tree, sorted. */
   textureNames?: string[];
   /** Structural fingerprint of the material's whole node graph — types,

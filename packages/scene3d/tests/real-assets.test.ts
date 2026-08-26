@@ -279,6 +279,14 @@ describe.skipIf(!hasBlender)("real assets (Khronos corpus, real Blender)", () =>
     expect(helmet.materials).toEqual(["Material_MR"]);
     // Provenance points at the scene.json the author wrote.
     expect(result.census!.provenance!.prp_helmet!.file).toBe("scene.json");
+    // Material provenance is MEASURED at the import site: the helmet's own
+    // material is tagged imported, the author's declared plinth material is not.
+    // This is the ground truth the lint posture reads instead of guessing from
+    // material names — proven here against a real GLB, not a hand-built census.
+    const importedMat = result.census!.materials.find((m) => m.name === "Material_MR")!;
+    const authoredMat = result.census!.materials.find((m) => m.name === "mtl_plinth")!;
+    expect(importedMat.imported).toBe(true);
+    expect(authoredMat.imported ?? false).toBe(false);
   }, 400_000);
 
   it("rejects a file part whose asset does not exist, at parse time", async () => {

@@ -1027,6 +1027,28 @@ the fix, so the author (or the agent) repairs the source. A silent grey
 import is the worst outcome; a named missing .mtl is a one-line fix."""
 IMPORT_NOTES = []
 
+# The names of materials an asset importer brought in THIS build. Provenance is
+# MEASURED at the importer boundary and lives only in this process: the census
+# (same process) reads it to set CensusMaterial.imported, and it never touches a
+# datablock, so it cannot ride into a shipped deliverable or be spoofed by a
+# material a source file happened to carry. Populated by import_mesh_file (bare
+# meshes) and the generated `_import_part` (file parts, via `_od_note_imported`
+# in its globals); cleared at the top of each load so only this build counts.
+IMPORTED_MATERIALS = set()
+
+
+def note_imported_materials(names):
+    """Record materials an importer just created as imported.
+
+    By NAME, deliberately: Blender keeps material names unique, so a name is an
+    exact key within a build, and — unlike a stored datablock reference, which
+    can go stale (`StructRNA removed`) across the imports, joins and tweaks that
+    run before the census — a name stays valid for the whole build. Imports do
+    not rename existing materials and tweaks copy under new names, so a recorded
+    name still identifies the same material when the census reads it."""
+    IMPORTED_MATERIALS.update(names)
+
+
 # Viewer edits that could not be replayed. The bare `except: pass` around
 # each channel below is right — a stale part name or a value this Blender
 # will not take must never wedge a compile — but silence is not: the same
@@ -1083,6 +1105,10 @@ def import_mesh_file(path):
             pass
 
     before = {o.name for o in bpy.data.objects}
+    # Material provenance is MEASURED here, at the importer boundary: every
+    # material this bare-asset import brings in is recorded (by the datablocks
+    # that did not exist before the import) so the census reports it imported.
+    mats_before = set(bpy.data.materials)
     try:
         if ext in ("glb", "gltf"):
             bpy.ops.import_scene.gltf(filepath=path)
@@ -1097,6 +1123,8 @@ def import_mesh_file(path):
         # A truncated or corrupt download must be a clean, named failure —
         # the importer's own reason, not a traceback soup.
         fail("S3D-E-202", "failed to import %s: %s" % (base, str(e).strip() or type(e).__name__))
+
+    note_imported_materials(m.name for m in set(bpy.data.materials) - mats_before)
 
     imported = [o for o in bpy.data.objects if o.name not in before]
 
@@ -1187,6 +1215,10 @@ def load_scene(job):
     usda_files = job.get("usdaFiles") or []
     blend_file = job.get("blendFile")
     mesh_files = job.get("meshFiles") or []
+    # Only THIS load's imports count as imported provenance. A .blend/.usda
+    # source loads its own materials below and takes no importer path, so they
+    # stay unrecorded = the author's stage, judged as authored.
+    IMPORTED_MATERIALS.clear()
     # GPU gate: warm up on the still-empty scene (milliseconds) so the
     # shader bakes after the build have a live backend to compile against.
     if job.get("shaders"):
@@ -1196,8 +1228,14 @@ def load_scene(job):
         if not os.path.exists(path):
             fail("S3D-E-202", "build script not found: %s" % path)
         source = open(path, "r", encoding="utf-8").read()
+        # `_od_note_imported` lets the generated `_import_part` record the
+        # materials it imports as imported provenance (see IMPORTED_MATERIALS).
+        # A hand-written build.py has it too but need not call it: its own
+        # imports then read as authored, which is the documented escape-hatch
+        # posture (strict, not lax).
         g = {"bpy": bpy, "bmesh": __import__("bmesh"), "mathutils": __import__("mathutils"),
-             "math": math, "os": os, "json": json}
+             "math": math, "os": os, "json": json,
+             "_od_note_imported": note_imported_materials}
         # The one place the project directory has to BE the cwd, and only for
         # as long as the author's script is running — see this function's docs.
         previous_cwd = os.getcwd()
@@ -1569,6 +1607,11 @@ def census(scene, measure_thickness=False, voxel_grid=0.0, zf_pair_budget=0):
             "blendMethod": blend,
             "alphaCutoff": alpha_clip_threshold(m),
             "graph": material_graph_signature(m),
+            # Provenance MEASURED at the importer boundary: this material was
+            # created by an asset import in THIS build (import_mesh_file /
+            # _import_part), recorded in-process — never reconstructed from the
+            # name, never read off a datablock a source file could carry.
+            "imported": m.name in IMPORTED_MATERIALS,
         })
 
     tex_rows = []

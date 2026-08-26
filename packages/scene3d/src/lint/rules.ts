@@ -108,8 +108,10 @@ export function runLint(input: LintInput): Issue[] {
   // the whole source IS an imported asset — every mesh in the scene. The rules
   // still RUN over it; `applyImportedPosture` below reclassifies what they find
   // rather than suppressing it, so the report can always explain itself.
-  const imported = importedObjects(input);
-  const ctx = { ...input, imported };
+  const provenance = importedObjects(input);
+  // ctx.imported is the OBJECT set: the lint modules that read it (uv.ts) ask
+  // whether a mesh's OBJECT is imported, never a material.
+  const ctx = { ...input, imported: provenance.objects };
   lintNaming(ctx, issues);
   lintTopology(ctx, issues);
   if (input.census) lintEmptyMeshes(input.census, issues);
@@ -200,19 +202,11 @@ export function runLint(input: LintInput): Issue[] {
 
   // Last, over the finished set: a finding about somebody else's asset is a
   // note, not a defect its new owner must fix — but it is still SAID. Runs
-  // after every rule so no module has to know about provenance.
-  // Which objects wear each material, so a material-scoped relaxation can
-  // ask whether everything using it is imported. Built from the census the
-  // rules already read, not from a second source of truth.
-  const materialUsers = new Map<string, Set<string>>();
-  for (const mesh of input.census?.meshes ?? []) {
-    for (const material of mesh.materials ?? []) {
-      const users = materialUsers.get(material) ?? new Set<string>();
-      users.add(mesh.object);
-      materialUsers.set(material, users);
-    }
-  }
-  applyImportedPosture(issues, imported, input.authoredKeys ?? new Set(), materialUsers);
+  // after every rule so no module has to know about provenance. Material
+  // provenance is decided by importedObjects (separate object/material sets,
+  // materials withholding authored/override names), so the posture needs no
+  // separate wearer map — each rule reads the set its subject names.
+  applyImportedPosture(issues, provenance, input.authoredKeys ?? new Set());
 
   // A `material:` override on a `file:` part is DOCUMENTED wholesale
   // replacement — the import's own materials are orphaned by design, and
@@ -223,26 +217,28 @@ export function runLint(input: LintInput): Issue[] {
   {
     const overrideParts = (input.solved?.parts ?? []).filter((p) => p.file && p.material);
     if (overrideParts.length > 0) {
-      const authored = new Set(
-        (input.solved?.parts ?? []).map((p) => p.material).filter((m): m is string => Boolean(m)),
-      );
+      // Whether a material is the import's own is the MEASURED provenance fact
+      // (CensusMaterial.imported, via importedObjects) — not a guess from the
+      // material's name. An author's own material (declared, or the override
+      // itself) is never tagged imported, so it keeps its real warning; only a
+      // material the importer brought in is demoted.
+      const imported = provenance.materials;
       // Attribution is honest, not guessed: the census cannot say WHICH
       // import an orphaned material came from, so the message only names a
       // part when every file part carries an override (then the source set
       // is unambiguous). With a mix of overridden and plain file parts the
       // orphan may equally be an unused material the plain import shipped;
-      // the demotion still holds (a non-authored material on the spec path
-      // can only come from an import — somebody else's asset either way)
-      // but the blame is left open instead of pinned on the wrong part.
+      // the demotion still holds (an imported material bound nowhere is
+      // somebody else's asset either way) but the blame is left open instead
+      // of pinned on the wrong part.
       const fileParts = (input.solved?.parts ?? []).filter((p) => p.file);
       const unambiguous = overrideParts.length === fileParts.length;
       const overrideIds = overrideParts.map((p) => `'${p.id}'`).join(", ");
       for (const issue of issues) {
         if (issue.code !== ISSUE_CODES.MATERIAL_UNUSED || issue.severity === "info") continue;
         const name = issue.target ?? "";
-        const isAuthored =
-          authored.has(name) || [...authored].some((a) => name.startsWith(`${a}__`));
-        if (isAuthored) continue;
+        // Only the import's own materials are demoted; the author's keep W-344.
+        if (!imported.has(name)) continue;
         issue.severity = "info";
         issue.message += unambiguous
           ? ` — orphaned by the material override on ${overrideIds}: wholesale replacement is the documented behaviour for a file part's material`

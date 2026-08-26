@@ -67,6 +67,13 @@ describe.skipIf(!hasBlender)("format breadth (real Blender)", () => {
     expect(gltf.skins?.length).toBeGreaterThan(0);
     expect(gltf.skins[0].joints.length).toBeGreaterThanOrEqual(15);
     expect(gltf.animations?.length).toBeGreaterThan(0);
+    // The `od_imported` provenance tag is INTERNAL lint bookkeeping measured at
+    // the import site; it must never ride into a shipped deliverable. The USD
+    // exporter authors custom properties by default, so the tag is stripped
+    // before export — the master stage the user downloads carries none of it.
+    const usda = result.exportedAssets.find((a) => a.endsWith(".usda"))!;
+    expect(usda).toBeTruthy();
+    expect(fs.readFileSync(path.join(dir, usda), "utf8").includes("od_imported")).toBe(false);
   }, 400_000);
 
   it("compiles OBJ+MTL with its materials", async () => {

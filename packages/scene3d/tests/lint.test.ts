@@ -199,41 +199,278 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(imported.some((i) => i.severity === "error" && i.code === ISSUE_CODES.NON_MANIFOLD)).toBe(false);
   });
 
-  it("relaxes findings about an imported asset's MATERIALS, not just its objects", () => {
-    // Calibration against the Khronos corpus found this: OrientationTest, a
-    // model whose entire purpose is to be correct, failed with six metallic
-    // errors. The posture held OBJECT names, and metallic is reported against
-    // a MATERIAL — so a material-level finding could never match, and the
-    // relaxation silently covered half the surface it claimed to.
-    const census2 = census({
-      objects: [
-        { name: "Mesh", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
-      ],
-      meshes: [{ object: "Mesh", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["MatX1"] }],
-      materials: [
-        {
-          name: "MatX1",
-          usedByObjectCount: 1,
-          textureNames: [],
-          principled: {
-            present: true,
-            metallic: 0.4, // the value OrientationTest ships, and is correct with
-            roughness: 0.5,
-            ior: 1.45,
-            baseColor: [0.5, 0.5, 0.5],
-            hasTexture: false,
-            untouchedDefault: false,
-          },
-        },
-      ] as never,
+  it("relaxes a material finding by its MEASURED provenance, enforces it without", () => {
+    // Calibration against the Khronos corpus found the original of this:
+    // OrientationTest, a model whose entire purpose is to be correct, failed
+    // with six metallic errors. metallic is reported against a MATERIAL, and
+    // whether that material is the import's is now a MEASURED fact on the census
+    // row (imported), tagged at the import site — not a guess from its name.
+    const matRow = (imported?: boolean) => ({
+      name: "MatX1",
+      usedByObjectCount: 1,
+      ...(imported ? { imported: true } : {}),
+      textureNames: [],
+      principled: { present: true, metallic: 0.4, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false },
     });
-    const authored = runLint({ contract: contract(), census: census2 });
-    expect(authored.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE)!.severity).toBe("error");
-
-    const imported = runLint({ contract: contract(), census: census2, sourceKind: "mesh" });
+    const sceneWith = (imported?: boolean) =>
+      census({
+        objects: [{ name: "Mesh", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true }],
+        meshes: [{ object: "Mesh", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["MatX1"] }],
+        materials: [matRow(imported)] as never,
+      });
+    // Untagged: the author authored it — enforced.
+    expect(runLint({ contract: contract(), census: sceneWith(false) }).find((i) => i.code === ISSUE_CODES.METALLIC_VALUE)!.severity).toBe("error");
+    // Import-tagged, and the whole scene is a bare mesh (sourceKind), so its
+    // object is imported too — the asset's own material, relaxed.
+    const imported = runLint({ contract: contract(), census: sceneWith(true), sourceKind: "mesh" });
     const metallic = imported.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE)!;
     expect(metallic.severity).toBe("info");
     expect(metallic.detail?.provenance).toBe("imported");
+  });
+
+  it("relaxes an imported file: part's material verdict inside an AUTHORED scene", () => {
+    // The whole-scene mesh path is covered above; this is the other arrival of
+    // imported geometry — a `file:` part fitted into an authored scene, which
+    // keeps the strict [0,1] metallic discipline (NOT the inspection preset's
+    // empty allowlist). A downloaded helmet's own fractional metallic must not
+    // hard-fail that compile: the material is worn only by the imported part,
+    // so the finding is measured and reclassified, never enforced.
+    const helmCensus = census({
+      objects: [
+        { name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [{ object: "prp_helm", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["helm_metal"] }],
+      materials: [
+        {
+          name: "helm_metal",
+          usedByObjectCount: 1,
+          imported: true, // the import's own material, tagged at the import site
+          textureNames: [],
+          principled: { present: true, metallic: 0.4, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false },
+        },
+      ] as never,
+    });
+    // A census where the same material is NOT import-tagged (the author authored
+    // it): the strict discipline holds — a real error.
+    const authoredCensus = census({
+      objects: [{ name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true }],
+      meshes: [{ object: "prp_helm", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["helm_metal"] }],
+      materials: [{ name: "helm_metal", usedByObjectCount: 1, textureNames: [], principled: { present: true, metallic: 0.4, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false } }] as never,
+    });
+    expect(runLint({ contract: contract(), census: authoredCensus }).find((i) => i.code === ISSUE_CODES.METALLIC_VALUE)!.severity).toBe("error");
+    // The import-tagged census, arriving as a `file:` part: reclassified.
+    const imported = runLint({
+      contract: contract(),
+      census: helmCensus,
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
+    });
+    const metallic = imported.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE)!;
+    expect(metallic.severity).toBe("info");
+    expect(metallic.detail?.provenance).toBe("imported");
+  });
+
+  it("ENFORCES policy on a material: override the author chose for a file part", () => {
+    // A `material:` override on a file part is the author picking one of THEIR
+    // materials for imported geometry — an explicit choice, not the asset's own
+    // shading. So an out-of-policy metallic on that override is the author's to
+    // fix and must stay an error, even though it is worn only by the imported
+    // mesh. The module comment already promises this ("a `material:` override
+    // on a `file:` part is exactly [the author's]"); this pins it.
+    const overrideCensus = census({
+      objects: [
+        { name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [{ object: "prp_helm", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["project_gold"] }],
+      materials: [
+        {
+          name: "project_gold",
+          usedByObjectCount: 1,
+          textureNames: [],
+          principled: { present: true, metallic: 0.4, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false },
+        },
+      ] as never,
+    });
+    const issues = runLint({
+      contract: contract(),
+      census: overrideCensus,
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb", material: "project_gold" }] } as never,
+    });
+    // The author selected project_gold, so its metallic verdict is theirs.
+    expect(issues.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE)!.severity).toBe("error");
+  });
+
+  it("RELAXES an out-of-policy metallic on a material an override ORPHANED", () => {
+    // A `material:` override wholesale-replaces a file part's materials, leaving
+    // the asset's ORIGINAL material orphaned (bound to nothing). The author
+    // cannot fix somebody else's source file, so an out-of-policy metallic on
+    // that orphan must relax — even though it hangs on no imported mesh and so
+    // is invisible to a bound-mesh-only scan.
+    const orphanCensus = census({
+      objects: [
+        { name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [{ object: "prp_helm", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["project_gold"] }],
+      materials: [
+        { name: "project_gold", usedByObjectCount: 1, textureNames: [], principled: { present: true, metallic: 0, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false } },
+        // helm.glb's OWN material, orphaned by the override — import-tagged at
+        // the import site, fractional metallic.
+        { name: "helm_original", usedByObjectCount: 0, imported: true, textureNames: [], principled: { present: true, metallic: 0.4, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false } },
+      ] as never,
+    });
+    const issues = runLint({
+      contract: contract(),
+      census: orphanCensus,
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb", material: "project_gold" }] } as never,
+    });
+    const orphanMetallic = issues.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE && i.target === "helm_original")!;
+    expect(orphanMetallic.severity).toBe("info"); // the import's own, relaxed
+    expect(orphanMetallic.detail?.provenance).toBe("imported");
+  });
+
+  it("holds an author's OWN unused declared material's verdict (not an import)", () => {
+    // The mirror of the orphan case: a material the author DECLARED but left
+    // bound to nothing is theirs to answer for, so its out-of-policy metallic
+    // stays an error even though the scene also carries a file-part import.
+    const authoredOrphan = census({
+      objects: [
+        { name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [{ object: "prp_helm", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: [] }],
+      materials: [
+        { name: "my_brass", usedByObjectCount: 0, textureNames: [], principled: { present: true, metallic: 0.4, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false } },
+      ] as never,
+    });
+    const issues = runLint({
+      contract: contract(),
+      census: authoredOrphan,
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
+    });
+    // my_brass carries no import tag, so it is the author's — enforced.
+    expect(issues.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE && i.target === "my_brass")!.severity).toBe("error");
+  });
+
+  it("keeps an author's declared-unused material's WARNING even beside an override part", () => {
+    // The orphan-attribution pass demotes a file part's own orphaned material to
+    // info, but an author's separately DECLARED unused material is not that — it
+    // is theirs to bind or delete. With an override part in the scene (which
+    // arms the demotion), the declared material's W-344 must survive as a
+    // warning, not be reclassified into an "imported asset" note.
+    const mixed = census({
+      objects: [
+        { name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [{ object: "prp_helm", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["project_gold"] }],
+      materials: [
+        { name: "project_gold", usedByObjectCount: 1, textureNames: [], principled: { present: true, metallic: 0, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false } },
+        // The import's OWN orphaned material (import-tagged) — should demote.
+        { name: "helm_original", usedByObjectCount: 0, imported: true, textureNames: [], principled: { present: false } },
+        // The AUTHOR's declared, unused material (untagged) — should stay a warning.
+        { name: "my_brass", usedByObjectCount: 0, textureNames: [], principled: { present: false } },
+      ] as never,
+    });
+    const issues = runLint({
+      contract: contract(),
+      census: mixed,
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb", material: "project_gold" }] } as never,
+    });
+    expect(issues.find((i) => i.code === ISSUE_CODES.MATERIAL_UNUSED && i.target === "helm_original")!.severity).toBe("info");
+    expect(issues.find((i) => i.code === ISSUE_CODES.MATERIAL_UNUSED && i.target === "my_brass")!.severity).toBe("warning");
+  });
+
+  it("judges by the measured tag, not the name, when an import COLLIDES with an authored name", () => {
+    // The killer case for name matching: the author declares 'gold', and a file
+    // part imports an asset whose own material is also 'gold'. Blender enforces
+    // unique datablock names, so ONE of them becomes 'gold.001' — and which one
+    // depends on import order, not authorship. Name matching can misjudge both.
+    // The import tag rides the DATABLOCK, so provenance is exact regardless of
+    // which kept the bare name: the author's 'gold' is enforced, the import's
+    // (here 'gold.001') is relaxed.
+    const collide = census({
+      objects: [
+        { name: "prp_box", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+        { name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [
+        { object: "prp_box", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["gold"] },
+        { object: "prp_helm", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["gold.001"] },
+      ],
+      materials: [
+        // The author's declared 'gold' kept the bare name — untagged, enforced.
+        { name: "gold", usedByObjectCount: 1, textureNames: [], principled: { present: true, metallic: 0.4, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false } },
+        // The import's own, uniquified to 'gold.001' — import-tagged, relaxed.
+        { name: "gold.001", usedByObjectCount: 1, imported: true, textureNames: [], principled: { present: true, metallic: 0.4, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false } },
+      ] as never,
+    });
+    const issues = runLint({
+      contract: contract(),
+      census: collide,
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
+    });
+    expect(issues.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE && i.target === "gold")!.severity).toBe("error");
+    expect(issues.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE && i.target === "gold.001")!.severity).toBe("info");
+  });
+
+  it("keeps an imported material RELAXED even when the author reuses it on their own mesh", () => {
+    // Provenance is about ORIGIN, not usage: a material the importer brought in
+    // carries the third party's shading values, and the author cannot change a
+    // baked `metallic 0.4` just by binding it to their own primitive. Importing
+    // an asset FOR its materials (a material pack) is a legitimate pattern, so a
+    // reused import material stays relaxed — enforcing it would demand the author
+    // abandon a look they deliberately chose and cannot edit.
+    const sharedCensus = census({
+      objects: [
+        { name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+        { name: "prp_authored", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [
+        { object: "prp_helm", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["shared_metal"] },
+        // An authored primitive also wears the imported material (material pack).
+        { object: "prp_authored", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["shared_metal"] },
+      ],
+      materials: [
+        {
+          name: "shared_metal",
+          usedByObjectCount: 2,
+          imported: true, // the import's own — its values are the third party's
+          textureNames: [],
+          principled: { present: true, metallic: 0.4, roughness: 0.5, ior: 1.45, baseColor: [0.5, 0.5, 0.5], hasTexture: false, untouchedDefault: false },
+        },
+      ] as never,
+    });
+    const issues = runLint({
+      contract: contract(),
+      census: sharedCensus,
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
+    });
+    expect(issues.find((i) => i.code === ISSUE_CODES.METALLIC_VALUE)!.severity).toBe("info");
+  });
+
+  it("keeps an authored object's naming error even when an imported MATERIAL shares its name", () => {
+    // Object and material names share a namespace. An authored object named
+    // 'Cube' with an imported asset that happens to ship a material also named
+    // 'Cube' must NOT have its naming finding relaxed: the object is the
+    // author's, the material is the import's, and the two provenance sets are
+    // kept apart precisely so the object rule cannot read the material's set.
+    const collide = census({
+      objects: [
+        { name: "prp_helm", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+        { name: "Cube", type: "MESH", parent: null, location: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], dimensions: [1, 1, 1], visible: true, hasMeshData: true },
+      ],
+      meshes: [
+        { object: "prp_helm", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: ["Cube"] },
+        { object: "Cube", verts: 8, faces: 6, ngons: 0, nonManifoldEdges: 0, zeroAreaFaces: 0, nan: false, uvLayers: ["UVMap"], materials: [] },
+      ],
+      materials: [{ name: "Cube", usedByObjectCount: 1, imported: true, textureNames: [], principled: { present: false } }] as never,
+    });
+    // 'Cube' the material rides the imported helmet; 'Cube' the object is authored.
+    const issues = runLint({
+      contract: normalizeContract({ schemaVersion: 1, conventions: { naming: { forbidDefaultNames: true } } }),
+      census: collide,
+      solved: { parts: [{ id: "prp_helm", file: "helm.glb" }] } as never,
+    });
+    const naming = issues.find((i) => i.code === ISSUE_CODES.NAME_DEFAULT && i.target === "Cube");
+    expect(naming).toBeDefined();
+    expect(naming!.severity).toBe("error"); // authored object, not relaxed by the material
   });
 
   it("relaxes a z-fight only when BOTH sides are imported", () => {
@@ -798,6 +1035,7 @@ describe("lint: pbr/topology/integrity over census", () => {
           {
             name: "fox_material",
             usedByObjectCount: 0,
+            imported: true, // fox.glb's own, orphaned by the gold override
             textureNames: [],
             principled: { present: false },
           },
@@ -826,6 +1064,7 @@ describe("lint: pbr/topology/integrity over census", () => {
           {
             name: "helmet_glass",
             usedByObjectCount: 0,
+            imported: true, // an import's own, orphaned; which import is ambiguous
             textureNames: [],
             principled: { present: false },
           },

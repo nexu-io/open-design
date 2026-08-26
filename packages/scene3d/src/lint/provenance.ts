@@ -47,7 +47,21 @@ import { ISSUE_CODES } from "../errors.js";
 export type Provenance = "authored" | "imported";
 
 /**
- * The objects in a scene the author did not build.
+ * Provenance sets kept SEPARATE by kind. Object names and material names share
+ * a namespace in Blender — a scene can legitimately hold an authored object
+ * "Cube" and an imported material "Cube" at once — so collapsing both into one
+ * set let an object-scoped relaxation match a material name and quietly relax a
+ * finding about authored geometry. Each rule consults the set its subject names.
+ */
+export interface ImportedProvenance {
+  /** Object names the author did not build. */
+  objects: Set<string>;
+  /** Material names the author did not author (imports' own, never overrides). */
+  materials: Set<string>;
+}
+
+/**
+ * The objects and materials in a scene the author did not build.
  *
  * Both ways geometry arrives are the same statement about provenance, so they
  * are decided in one place: a spec part carrying `file:` is an imported asset
@@ -61,45 +75,33 @@ export function importedObjects(input: {
   solved?: { parts: ReadonlyArray<{ id: string; file?: string }> };
   census?: {
     objects: ReadonlyArray<{ name: string }>;
-    materials?: ReadonlyArray<{ name: string }>;
-    meshes?: ReadonlyArray<{ object: string; materials?: readonly string[] }>;
+    materials?: ReadonlyArray<{ name: string; imported?: boolean }>;
   };
-}): Set<string> {
-  const imported = new Set<string>();
+}): ImportedProvenance {
+  const objects = new Set<string>();
+  const materials = new Set<string>();
   const whole = input.sourceKind === "mesh";
   // A whole-project mesh source: every object came from somebody's exporter.
-  if (whole) for (const object of input.census?.objects ?? []) imported.add(object.name);
+  if (whole) for (const object of input.census?.objects ?? []) objects.add(object.name);
   for (const part of input.solved?.parts ?? []) {
-    if (part.file !== undefined) imported.add(part.id);
+    if (part.file !== undefined) objects.add(part.id);
   }
 
-  // MATERIALS travel with the geometry that binds them, and rules name them as
-  // their subject. Holding object names alone meant a material-level finding
-  // could never match — the Khronos OrientationTest, whose whole purpose is to
-  // be correct, failed with six metallic errors against materials nobody in
-  // this project authored.
-  //
-  // A material bound to any AUTHORED mesh is the author's, even if an imported
-  // part also uses it (a `material:` override on a `file:` part is exactly
-  // that), so those are excluded rather than assumed.
-  const authoredMaterials = new Set<string>();
-  for (const mesh of input.census?.meshes ?? []) {
-    if (imported.has(mesh.object)) continue;
-    for (const name of mesh.materials ?? []) authoredMaterials.add(name);
+  // Material provenance is WHERE A MATERIAL CAME FROM, measured at the importer
+  // boundary (the runner records every importer-created material in-process; the
+  // census reports it as `CensusMaterial.imported`) — not who uses it, and not
+  // guessed from its name. A material relaxes exactly when it arrived through an
+  // importer: its shading values are the third party's and the author cannot
+  // edit them, even after reusing it on their own mesh. Everything authored
+  // stays enforced (declared materials, a `material:` override, a hand-written
+  // build.py, an authored .usda). Measuring at creation, by identity rather than
+  // name shape, is what makes it exact where name matching failed: an override
+  // that ORPHANS the import's material, and a name collision that Blender
+  // uniquifies to `.001`, are judged by the material the importer created.
+  for (const mat of input.census?.materials ?? []) {
+    if (mat.imported) materials.add(mat.name);
   }
-  if (whole) {
-    for (const material of input.census?.materials ?? []) {
-      if (!authoredMaterials.has(material.name)) imported.add(material.name);
-    }
-  } else {
-    for (const mesh of input.census?.meshes ?? []) {
-      if (!imported.has(mesh.object)) continue;
-      for (const name of mesh.materials ?? []) {
-        if (!authoredMaterials.has(name)) imported.add(name);
-      }
-    }
-  }
-  return imported;
+  return { objects, materials };
 }
 
 /**
@@ -136,11 +138,14 @@ export const IMPORTED_RELAXATIONS: ReadonlyArray<{
   key?: string;
   why: string;
   /**
-   * What the finding's `target` NAMES. Object by default; a rule that reports
-   * a material has to be resolved through the meshes using it, because the
-   * imported set is a set of objects and a material name is never in it.
-   * Without this the posture silently skipped every material-scoped rule —
-   * not by deciding they should be enforced, but by never matching them.
+   * Which provenance set governs this rule — chosen by what its `target` NAMES.
+   * `"object"` (the default) consults imported OBJECTS; `"material"` consults
+   * imported MATERIALS. The two are separate because object and material names
+   * share a namespace, so a rule must say which it means or an imported material
+   * named like an authored object would relax that object's finding. This is a
+   * SET SELECTOR only: material provenance itself (including override exclusion)
+   * is decided in importedObjects, never by resolving a material through its
+   * wearers — an override rides an imported mesh yet is the author's.
    */
   subject?: "object" | "material";
 }> = [
@@ -322,6 +327,8 @@ export const IMPORTED_RELAXATIONS: ReadonlyArray<{
     code: ISSUE_CODES.METALLIC_VALUE,
     block: "pbr",
     key: "pbr.metallicValues", // lint/pbr.ts:34-35 `ctx.contract.metallicValues.length > 0 && !ctx.contract.metallicValues.includes(...)`
+    // Targets a MATERIAL (`target: mat.name`), like DUPLICATE_MATERIALS.
+    subject: "material",
     why: "real kits ship fractional metallic",
   },
 ];
@@ -331,7 +338,12 @@ const BY_CODE = new Map(IMPORTED_RELAXATIONS.map((r) => [r.code, r]));
 /**
  * Reclassify findings against imported geometry, in place.
  *
- * @param imported  Object names whose geometry the author did not build.
+ * @param provenance  The imported objects and materials (kept separate; see
+ *   {@link ImportedProvenance}). Each rule reads the set its `subject` names,
+ *   so an imported material named like an authored object cannot relax that
+ *   object's finding. importedObjects is the single authority on which
+ *   materials count as imported — an authored `material:` override rides an
+ *   imported mesh yet is withheld from the material set, so it stays enforced.
  * @param authoredKeys  Contract leaf paths (dot-notation under `conventions`,
  *   e.g. `"geometry.allowOpenMeshes"`) the author wrote explicitly (from the
  *   raw contract, NOT target presets — a preset is a default, not intent).
@@ -342,12 +354,10 @@ const BY_CODE = new Map(IMPORTED_RELAXATIONS.map((r) => [r.code, r]));
  */
 export function applyImportedPosture(
   issues: Issue[],
-  imported: ReadonlySet<string>,
+  provenance: ImportedProvenance,
   authoredKeys: ReadonlySet<string>,
-  /** Material name -> the objects wearing it, for material-scoped rules. */
-  materialUsers: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
 ): void {
-  if (imported.size === 0) return;
+  if (provenance.objects.size === 0 && provenance.materials.size === 0) return;
   for (let i = 0; i < issues.length; i++) {
     const issue = issues[i]!;
     if (issue.severity === "info") continue;
@@ -355,16 +365,14 @@ export function applyImportedPosture(
     if (!rule) continue;
     if (rule.key !== undefined && authoredKeys.has(rule.key)) continue;
     if (issue.target === undefined) continue;
+    // The rule's subject picks WHICH provenance set governs it: a material rule
+    // reads imported materials, everything else reads imported objects. Object
+    // and material names share a namespace, so consulting the wrong set would
+    // let an imported material named like an authored object relax that object.
+    const scope = rule.subject === "material" ? provenance.materials : provenance.objects;
     const named = subjectsOf(issue.target);
-    // A material is imported when everything WEARING it is. A material shared
-    // between an imported mesh and an authored one is the author's to fix —
-    // they chose to reuse it — so it stays a warning.
-    const subjects =
-      rule.subject === "material"
-        ? named.flatMap((m) => [...(materialUsers.get(m) ?? new Set<string>())])
-        : named;
-    if (subjects.length === 0) continue;
-    if (!subjects.every((name) => imported.has(name))) continue;
+    if (named.length === 0) continue;
+    if (!named.every((name) => scope.has(name))) continue;
     const subject = named.length > 1 ? named.join(" and ") : named[0]!;
     const setHint = rule.key !== undefined ? `conventions.${rule.key}` : `conventions.${rule.block}`;
     issues[i] = {
