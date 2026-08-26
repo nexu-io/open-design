@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { importJavaModel } from "../src/mc/import-java.js";
+import { rotationToMc } from "../src/mc/common.js";
 import { encodePng } from "../src/sheet/png.js";
 
 /**
  * The Java-model import in isolation — pure JSON → scene-spec, no Blender. The
- * coordinate map is the exact inverse of the exporter's (validated end-to-end
- * by the round-trip pipeline test); this pins the conversion, material
- * resolution, and the skip semantics for what scene.json cannot represent.
+ * POSITION half of the coordinate map is the exact inverse of the exporter's,
+ * validated end-to-end (from/to byte-for-byte) by the round-trip pipeline test;
+ * that fixture carries no rotated element, so the ROTATION half of the inverse
+ * is closed here instead (`import ∘ export` on every MC axis). This also pins
+ * material resolution and the skip semantics for what scene.json cannot express.
  */
 
 function solidPng(r: number, g: number, b: number): Uint8Array {
@@ -105,6 +108,38 @@ describe("importJavaModel", () => {
     expect(skipped).toHaveLength(2);
     expect(skipped[0]!.reason).toContain("rescale");
     expect(skipped[1]!.reason).toContain("more than one axis");
+  });
+
+  it("round-trips a rotation through import ∘ export on every MC axis", () => {
+    // The golem fixture (the byte-for-byte pipeline round-trip) carries NO
+    // rotated element, so this is the only place the rotation half of
+    // `import(export(x))` is closed: import an element rotated about its OWN
+    // centre (so from/to is stable under the round-trip), read the Blender-axis
+    // rotate the language emits, then send it back through the exporter's
+    // rotationToMc — the composition must land on the original MC axis+angle.
+    // A sign flip on any single axis would break here and nowhere else in the
+    // fast suite.
+    for (const mc of [
+      { axis: "x", angle: 45 },
+      { axis: "y", angle: 22.5 },
+      { axis: "z", angle: -22.5 },
+    ] as const) {
+      // A 4×4×4 box centred at the block centre [8,8,8], rotated about that
+      // same point — origin == centre keeps the placement fixed, isolating the
+      // axis/angle map from the pivot translation.
+      const { spec, skipped } = importJavaModel({
+        elements: [
+          { name: `r_${mc.axis}`, from: [6, 6, 6], to: [10, 10, 10], rotation: { angle: mc.angle, axis: mc.axis, origin: [8, 8, 8] }, faces: {} },
+        ],
+      });
+      expect(skipped).toHaveLength(0);
+      const part = spec!.parts[0]!;
+      expect(part.rotate).toBeDefined();
+      // The exporter maps the Blender-axis rotate back to MC; it must be the
+      // element we started from.
+      const back = rotationToMc(part.rotate!.axis, part.rotate!.deg);
+      expect(back).toEqual({ axis: mc.axis, angle: mc.angle });
+    }
   });
 
   it("skips a degenerate (zero-extent) element", () => {
