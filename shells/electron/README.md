@@ -7,6 +7,10 @@ declaration and finite locale/connection preflight selection; electron-kit owns
 only graph lifecycle, bounded concurrency, required/best-effort failure semantics,
 receipts, validation, and its public carrier/Standalone atoms. The placeholder resource
 prewarm node is a concrete Shell executor and the renderer consumes the warmed value.
+`src/main.ts` is only the process entry, `src/composition/definition.ts` is the
+single composition root, and `src/adapters/` contains concrete renderer, updater,
+installer, and platform bindings. This is an internal observation boundary for a
+possible later Desktop extraction, not a Desktop framework or public protocol.
 Concrete host exemptions remain in that Shell config and are applied before app
 readiness. `config/distribution.json` separately owns the finite macOS/Windows artifact and NSIS
 presentation policy. `shell.json` owns the single publisher/product identity; `config/platforms/windows.json`

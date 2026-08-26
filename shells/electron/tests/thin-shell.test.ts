@@ -1,6 +1,14 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
+
+import { assertShellWarmupBindings } from "@/composition/warmup-bindings.js";
+
+async function shellSources(): Promise<Array<Readonly<{ name: string; source: string }>>> {
+  const root = new URL("../src/", import.meta.url);
+  const names = (await readdir(root, { recursive: true })).filter((name) => name.endsWith(".ts")).sort();
+  return Promise.all(names.map(async (name) => ({ name, source: await readFile(new URL(name, root), "utf8") })));
+}
 
 describe("Electron product shell", () => {
   it("keeps dev and pack as thin electron-kit entrypoints", async () => {
@@ -48,16 +56,26 @@ describe("Electron product shell", () => {
     });
   });
 
-  it("does not import Closure or product app internals", async () => {
-    const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
-    expect(source).not.toMatch(/apps\/closure|apps\/web|apps\/daemon/u);
-    expect(source).not.toMatch(/@open-design\/standalone/u);
+  it("keeps one thin composition entry and explicit Electron adapter boundary", async () => {
+    const sources = await shellSources();
+    const main = sources.find(({ name }) => name === "main.ts")!.source;
+    const composition = sources.filter(({ name }) => name.startsWith("composition/"));
+    expect(main).toContain('from "./composition/definition.js"');
+    expect(main).not.toMatch(/config\/|adapters\/|ElectronFixture|scheduleElectronInstallerHandoff/u);
+    for (const file of composition) expect(file.source).not.toMatch(/from "electron"/u);
+    for (const file of sources.filter(({ name }) => !name.startsWith("adapters/"))) {
+      expect(file.source, file.name).not.toMatch(/from "electron"/u);
+    }
+    for (const file of sources) {
+      expect(file.source, file.name).not.toMatch(/apps\/closure|apps\/web|apps\/daemon/u);
+      expect(file.source, file.name).not.toMatch(/@open-design\/standalone/u);
+    }
   });
 
   it("owns concrete preflight, warmup topology and placeholder readiness outside electron-kit", async () => {
     const [runtimeSource, rendererSource, kitRuntimeSource, kitPreflightSource] = await Promise.all([
       readFile(new URL("../config/runtime.json", import.meta.url), "utf8"),
-      readFile(new URL("../src/renderer/placeholder.ts", import.meta.url), "utf8"),
+      readFile(new URL("../src/adapters/renderer/placeholder.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/index.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/startup/preflight/apply.ts", import.meta.url), "utf8"),
     ]);
@@ -74,11 +92,27 @@ describe("Electron product shell", () => {
     ]);
     expect(runtime.warmup).toMatchObject({ maxConcurrency: 4 });
     expect(runtimeSource).toContain('"failure": "required"');
-    expect(rendererSource).toContain("prewarmPlaceholderResource");
+    expect(rendererSource).toContain("createPlaceholderRendererAdapter");
+    expect(rendererSource).toContain("let warmedHtml");
+    expect(rendererSource).not.toContain("let warmedPlaceholder");
     expect(rendererSource).toContain("electronShellMounted");
     expect(kitRuntimeSource).not.toMatch(/Electron Shell Foundation|electronShellMounted|electronKitMounted/u);
     expect(runtime.preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);
     expect(kitPreflightSource).not.toMatch(/127\.0\.0\.1|localhost/u);
+  });
+
+  it("requires exact Shell warmup topology and adapter bindings", async () => {
+    const runtime = JSON.parse(await readFile(new URL("../config/runtime.json", import.meta.url), "utf8")) as {
+      warmup: Parameters<typeof assertShellWarmupBindings>[0];
+    };
+    const bindings = { "shell.placeholder-resource": () => undefined };
+    expect(assertShellWarmupBindings(runtime.warmup, bindings)).toBe(bindings);
+    expect(() => assertShellWarmupBindings(runtime.warmup, {}))
+      .toThrow(/declared=shell\.placeholder-resource bound=/u);
+    expect(() => assertShellWarmupBindings(runtime.warmup, {
+      ...bindings,
+      "shell.unused": () => undefined,
+    })).toThrow(/bound=shell\.placeholder-resource,shell\.unused/u);
   });
 
   it("keeps a Shell-local copy of the same official Node lock", async () => {
