@@ -89,6 +89,14 @@ describe.skipIf(!present)("kernel recipe: Python front-end produces the same IR 
     expect(traceHash(result.trace!)).toBe(traceHash(reference));
   });
 
+  it("a recipe using inset hashes identically and stays closed", () => {
+    const recipe = writeRecipe("def build(ctx):\n    ctx.box().inset({}, '1/2').subdivide(1)\n");
+    const result = runRecipe(recipe, { runnerScript: RUNNER, pythonBin: PYTHON });
+    expect(result.ok).toBe(true);
+    expect(traceHash(result.trace!)).toBe(traceHash(new Recorder().box().inset({}, "1/2").subdivide(1).trace()));
+    expect(predictCensus(evalTrace(result.trace!)).watertight).toBe(true);
+  });
+
   it("a grid recipe hashes identically to the TS recorder", () => {
     const recipe = writeRecipe("def build(ctx):\n    ctx.grid(3, 2, 4)\n");
     const result = runRecipe(recipe, { runnerScript: RUNNER, pythonBin: PYTHON });

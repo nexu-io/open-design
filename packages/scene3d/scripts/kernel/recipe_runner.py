@@ -171,6 +171,22 @@ class RecipeCtx:
         })
         return self
 
+    def inset(self, region, factor):
+        """Inset the faces in a region by a factor -- a panel, frame, recessed
+        detail. factor in (0,1) insets; > 1 outsets."""
+        if not isinstance(region, dict):
+            raise ValueError("inset(region, factor): region must be a dict of axis -> [min, max]")
+        r = {}
+        for key in ("x", "y", "z"):
+            b = region.get(key)
+            if b is None:
+                continue
+            if len(b) != 2:
+                raise ValueError("inset(...): region['%s'] must be [min, max]" % key)
+            r[key] = [_coord(b[0]), _coord(b[1])]
+        self._ops.append({"op": "inset", "region": r, "factor": _coord(factor)})
+        return self
+
     def scale(self, region, factor, pivot=(0, 0, 0)):
         """Scale the vertices in a region about a pivot by a per-axis factor."""
         if not isinstance(region, dict):

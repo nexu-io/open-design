@@ -3,6 +3,7 @@ import {
   edgeKey,
   edgesOf,
   extrude,
+  inset,
   KernelMesh,
   meshOf,
   mirror,
@@ -110,6 +111,17 @@ export type TraceOp =
       op: "extrude";
       region: Region;
       offset: [string, string, string];
+    }
+  | {
+      /**
+       * Inset the faces in `region` by `factor` (a rational): a shrunk inner
+       * copy of each face ringed back to its border — a panel, a frame, a
+       * recessed detail. The complement of extrude; `factor` in (0,1) insets,
+       * > 1 outsets.
+       */
+      op: "inset";
+      region: Region;
+      factor: string;
     };
 
 export interface Trace {
@@ -186,6 +198,16 @@ export function evalTrace(trace: Trace): KernelMesh {
         const region = parseRegion(op.region);
         const off: RVec3 = [Rational.parse(op.offset[0]), Rational.parse(op.offset[1]), Rational.parse(op.offset[2])];
         mesh = extrude(mesh, (v) => inRegion(v, region), off);
+        break;
+      }
+      case "inset": {
+        if (!mesh) throw new Error(`evalTrace: op ${i} 'inset' before any geometry`);
+        const region = parseRegion(op.region);
+        const factor = Rational.parse(op.factor);
+        if (factor.cmp(Rational.ZERO) <= 0) {
+          throw new Error(`evalTrace: op ${i} 'inset' factor must be positive`);
+        }
+        mesh = inset(mesh, (v) => inRegion(v, region), factor);
         break;
       }
       case "scale": {
@@ -432,6 +454,22 @@ export class Recorder {
       region: r,
       offset: [coordStr(offset[0]), coordStr(offset[1]), coordStr(offset[2])],
     });
+    return this;
+  }
+
+  /** Inset the faces in a region by a factor — a panel, frame, recessed
+   *  detail. factor in (0,1) insets; > 1 outsets. */
+  inset(region: { x?: [Coord, Coord]; y?: [Coord, Coord]; z?: [Coord, Coord] }, factor: Coord): this {
+    const bound = (b: [Coord, Coord] | undefined): [string, string] | undefined =>
+      b ? [coordStr(b[0]), coordStr(b[1])] : undefined;
+    const r: Region = {};
+    const x = bound(region.x);
+    const y = bound(region.y);
+    const z = bound(region.z);
+    if (x) r.x = x;
+    if (y) r.y = y;
+    if (z) r.z = z;
+    this.ops.push({ op: "inset", region: r, factor: coordStr(factor) });
     return this;
   }
 

@@ -505,6 +505,54 @@ export function extrude(
   return compact({ verts, faces, vertId, ...(mesh.creases ? { creases: mesh.creases } : {}) });
 }
 
+/**
+ * Inset each selected face (every vertex in `inRegion`) by `factor`: a smaller
+ * inner copy of the face, ringed by quads back to the original border. The
+ * complement of extrude — a panel, a frame, a recessed detail. `factor` in
+ * (0,1) shrinks toward the face centroid; > 1 grows an outset. Exact: the
+ * centroid is a rational mean and each inner vertex is `c + factor·(v − c)`.
+ * Per-face, so adjacent selected faces share their border vertices and the
+ * result stays a consistently oriented closed manifold for a well-formed
+ * region (the ring quads traverse each border edge opposite its neighbour).
+ */
+export function inset(mesh: KernelMesh, inRegion: (v: RVec3) => boolean, factor: Rational): KernelMesh {
+  const selected: number[] = [];
+  mesh.faces.forEach((f, fi) => {
+    if (f.every((i) => inRegion(mesh.verts[i]!))) selected.push(fi);
+  });
+  if (selected.length === 0) return mesh;
+  const selSet = new Set(selected);
+
+  const verts: RVec3[] = [...mesh.verts];
+  const vertId: string[] = [...mesh.vertId];
+  const faces: number[][] = [];
+  mesh.faces.forEach((f, fi) => {
+    if (!selSet.has(fi)) faces.push([...f]);
+  });
+  for (const fi of selected) {
+    const f = mesh.faces[fi]!;
+    const c = meanV(f.map((i) => mesh.verts[i]!));
+    const inner = f.map((i) => {
+      const p = mesh.verts[i]!;
+      const np: RVec3 = [
+        c[0].add(factor.mul(p[0].sub(c[0]))),
+        c[1].add(factor.mul(p[1].sub(c[1]))),
+        c[2].add(factor.mul(p[2].sub(c[2]))),
+      ];
+      const idx = verts.length;
+      verts.push(np);
+      vertId.push(`inset(${mesh.vertId[i]})`);
+      return idx;
+    });
+    faces.push([...inner]); // the shrunk inner face
+    for (let k = 0; k < f.length; k++) {
+      // ring quad: border edge a->b, up to the inner ring, back.
+      faces.push([f[k]!, f[(k + 1) % f.length]!, inner[(k + 1) % f.length]!, inner[k]!]);
+    }
+  }
+  return { verts, faces, vertId };
+}
+
 /** Drop vertices no face references and renumber, so an extrude (or any op
  *  that can strand a vertex) never leaves an orphan behind. Creases are
  *  dropped: their edge keys are indices into the pre-compaction mesh, and

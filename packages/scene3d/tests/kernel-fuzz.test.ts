@@ -83,10 +83,13 @@ describe("kernel fuzz: closed genus-0 is preserved by every operator sequence", 
       const steps = 2 + Math.floor(r.uniform(0, 5));
       for (let s = 0; s < steps; s++) {
         const roll = r.next();
-        if (roll < 0.4) rec.subdivide(1);
-        else if (roll < 0.6) rec.move(region(r), [intStr(r, -2, 2), intStr(r, -2, 2), intStr(r, -2, 2)]);
-        else if (roll < 0.8) rec.scale(region(r), [intStr(r, 1, 3), intStr(r, 1, 3), intStr(r, 1, 3)], [0, 0, 0]);
-        else rec.crease(region(r));
+        if (roll < 0.35) rec.subdivide(1);
+        else if (roll < 0.5) rec.move(region(r), [intStr(r, -2, 2), intStr(r, -2, 2), intStr(r, -2, 2)]);
+        else if (roll < 0.65) rec.scale(region(r), [intStr(r, 1, 3), intStr(r, 1, 3), intStr(r, 1, 3)], [0, 0, 0]);
+        else if (roll < 0.8) rec.crease(region(r));
+        // inset is per-face and topology-safe, so it belongs in the strong
+        // closed-genus-0 property (unlike extrude, which needs a simple region).
+        else rec.inset(region(r), r.next() < 0.5 ? "1/2" : "1/3");
         ops++;
       }
       // The whole sequence evaluates to a mesh that is STILL a closed,

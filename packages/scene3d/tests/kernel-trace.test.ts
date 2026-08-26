@@ -193,6 +193,17 @@ describe("kernel trace: extrude grows a closed, watertight bump", () => {
     const m = predictCensus(evalTrace(new Recorder().box().extrude({ z: ["0", "0"] }, [0, 0, 1]).trace()));
     expect([m.vertices, m.faces]).toEqual([8, 6]);
   });
+
+  it("insetting every box face adds panels and stays a closed solid", () => {
+    // Each of the 6 faces becomes a shrunk inner face plus 4 ring quads: V =
+    // 8 + 6·4 = 32, F = 6·5 = 30, and Euler stays 2 (still a genus-0 sphere).
+    const c = predictCensus(evalTrace(new Recorder().box().inset({}, "1/2").trace()));
+    expect([c.vertices, c.edges, c.faces]).toEqual([32, 60, 30]);
+    expect(c.euler).toBe(2);
+    expect(c.watertight).toBe(true);
+    expect(c.orientable).toBe(true);
+    expect(c.genus).toBe(0);
+  });
 });
 
 describe("kernel trace: malformed recipes fail loudly", () => {

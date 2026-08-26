@@ -136,6 +136,12 @@ function validateTraceShape(value: unknown): string | null {
         }
         break;
       }
+      case "inset": {
+        const bad = regionProblem(op.region, i, "inset");
+        if (bad) return bad;
+        if (typeof op.factor !== "string") return `trace.ops[${i}] inset.factor must be a rational string`;
+        break;
+      }
       case "scale": {
         const bad = regionProblem(op.region, i, "scale");
         if (bad) return bad;

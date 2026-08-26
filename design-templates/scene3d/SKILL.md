@@ -324,10 +324,12 @@ Fill the box another way:
   pivot)` (taper/bulge a region about a pivot), and `ctx.extrude(region,
   offset)` (grow the faces inside a region outward by an offset vector — a
   bump, boss or socket; the offset is a rational vector, not a normal
-  distance, so it stays exact), chained fluently. A `region`
+  distance, so it stays exact), and `ctx.inset(region, factor)` (shrink each
+  face in a region to an inner panel ringed to its border — a frame, a recess;
+  factor in (0,1)), chained fluently. A `region`
   is a dict of axis → `[min, max]` inclusive bounds (`{"z": ["1", "1"]}` is
   exactly the plane z=1; `{}` is everything); `move`/`scale`/`crease` are
-  topology-preserving, while `extrude` adds a boss and its walls — all exact.
+  topology-preserving, while `extrude`/`inset` add geometry — all exact.
   Coordinates are ints, rational strings (`"1/2"`) or `fractions.Fraction`
   — never floats. It runs in plain CPython (no `bpy`), so ordinary loops
   and helpers are fine; the compiler evaluates the trace in exact rationals,
