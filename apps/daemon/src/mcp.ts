@@ -14,6 +14,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
@@ -1929,6 +1930,10 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
     const uri = String(req.params?.uri ?? '');
     return await _readMcpResource(daemonTarget, uri);
   }));
+
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, withMcpActivity(async () => ({
+    resourceTemplates: [],
+  })));
 
   server.setRequestHandler(CallToolRequestSchema, withMcpActivity(async (req) => {
     const name = req.params?.name;
