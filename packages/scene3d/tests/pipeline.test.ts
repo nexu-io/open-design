@@ -426,6 +426,38 @@ expect(result.ok).toBe(false);
     fs.rmSync(path.join(dir, "tweaks.json"), { force: true });
   }, LONG);
 
+  it("forks a tweak instance without rebinding a collision-named source material", async () => {
+    // The per-part instance name `<mat>__<part>` can collide: a source file may
+    // ship a material literally named that, or two long (mat, part) pairs may
+    // share a 63-char prefix. Reusing an existing datablock of that name would
+    // apply the tweak — which UNLINKS texture maps — to an UNRELATED material,
+    // restyling geometry the author never touched (a direct breach of the
+    // per-part-instance guarantee). This kit ships `shared_metal` (shared by
+    // crate_a + crate_b) AND a distinct GREEN `shared_metal__crate_a` worn only
+    // by crate_c. Tweaking crate_a's colour must fork a FRESH instance and leave
+    // crate_c's green material untouched.
+    const dir = workDir("collision-kit");
+    const before = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: LONG, noCache: true });
+    const greenBefore = before.census!.materials.find((m) => m.name === "shared_metal__crate_a")!;
+    expect(greenBefore.principled.baseColor![1]).toBeCloseTo(1, 2); // green
+
+    fs.writeFileSync(
+      path.join(dir, "tweaks.json"),
+      JSON.stringify({ crate_a: { material: { baseColor: [1, 0, 0] } } }), // tint crate_a RED
+    );
+    const tweaked = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: LONG, noCache: true });
+    // crate_c still wears the ORIGINAL green material — the tweak did not rebind it.
+    const crateC = tweaked.census!.meshes.find((m) => m.object === "crate_c")!;
+    expect(crateC.materials).toEqual(["shared_metal__crate_a"]);
+    const greenAfter = tweaked.census!.materials.find((m) => m.name === "shared_metal__crate_a")!;
+    expect(greenAfter.principled.baseColor![1]).toBeCloseTo(1, 2); // still green
+    expect(greenAfter.principled.baseColor![0]).toBeLessThan(0.5); // NOT tinted red
+    // crate_a forked a fresh, uniquified instance instead.
+    const crateA = tweaked.census!.meshes.find((m) => m.object === "crate_a")!;
+    expect(crateA.materials![0]).not.toBe("shared_metal__crate_a");
+    fs.rmSync(path.join(dir, "tweaks.json"), { force: true });
+  }, LONG);
+
   it("tints a textured material without losing its map", async () => {
     // A colour tweak on a textured material is a TINT: the runner injects
     // the same MULTIPLY-mix topology the glTF importer authors for

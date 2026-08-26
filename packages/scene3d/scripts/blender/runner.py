@@ -259,17 +259,21 @@ def apply_material_tweak(obj, mt):
                 and not any(s.material == target for s in obj.material_slots)
             )
             if shared_elsewhere:
-                inst_name = ("%s__%s" % (target.name, obj.name))[:63]
-                # Provenance flows through the copy the way it flows through
-                # _import_part's join: a per-part instance of an IMPORTED
-                # material is still the third party's shading for every channel
-                # this tweak does not touch, so it stays imported. Captured
-                # before the copy in case Blender uniquifies the instance name.
                 base_imported = target.name in IMPORTED_MATERIALS
-                inst = bpy.data.materials.get(inst_name)
-                if inst is None:
-                    inst = target.copy()
-                    inst.name = inst_name
+                # ALWAYS a fresh copy, never reuse an existing datablock of the
+                # instance name. Within a build each part is tweaked at most once
+                # and materials are rebuilt per process, so a `get()` hit could
+                # only be a COLLISION — a source material coincidentally named
+                # `<mat>__<part>`, or two long (mat, part) pairs sharing a 63-char
+                # prefix. Reusing it would apply this tweak (which UNLINKS texture
+                # maps) to an UNRELATED material, restyling geometry the author
+                # never touched. Blender uniquifies the name if it is taken.
+                inst = target.copy()
+                inst.name = ("%s__%s" % (target.name, obj.name))[:63]
+                # Provenance flows through the copy the way it flows through
+                # _import_part's join: a per-part instance of an IMPORTED material
+                # is still the third party's shading for every channel this tweak
+                # does not touch. Recorded by the ACTUAL (possibly uniquified) name.
                 if base_imported:
                     note_imported_materials([inst.name])
                 target = inst
