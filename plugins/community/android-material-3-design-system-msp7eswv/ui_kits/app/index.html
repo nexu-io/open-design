@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Responsive Material 3 list-detail inbox UI kit">
+  <title>Material Inbox UI Kit</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236750a4'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='sans-serif' font-size='25' fill='white'%3EM3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../../colors_and_type.css">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    html, body, #root { min-height: 100%; }
+    body { margin: 0; background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); }
+    .noscript { max-width: 720px; margin: 48px auto; padding: 24px; border-radius: 16px; background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
+    .loading-shell { min-height: 100vh; display: grid; place-items: center; color: var(--md-sys-color-on-surface-variant); }
+  </style>
+</head>
+<body>
+  <noscript><p class="noscript">This applied UI kit needs JavaScript to mount its interactive React components.</p></noscript>
+  <div id="root"><div class="loading-shell">Loading Material Inbox…</div></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+  <script type="text/babel" src="components/NavigationRail.jsx"></script>
+  <script type="text/babel" src="components/MailList.jsx"></script>
+  <script type="text/babel" src="components/MessageDetail.jsx"></script>
+  <script type="text/babel" src="components/ComposerDialog.jsx"></script>
+  <script type="text/babel" src="components/Snackbar.jsx"></script>
+  <script type="text/babel" src="components/App.jsx"></script>
+  <script type="text/babel">
+    const { NavigationRail, MailList, MessageDetail, ComposerDialog, Snackbar, App } = window;
+    if (!NavigationRail || !MailList || !MessageDetail || !ComposerDialog || !Snackbar || !App) {
+      throw new Error('Material Inbox component bundle did not load completely.');
+    }
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
