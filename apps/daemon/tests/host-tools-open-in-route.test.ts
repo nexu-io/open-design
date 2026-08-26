@@ -138,7 +138,9 @@ describe('POST /api/projects/:id/open-in launch reporting (#3871, #6610)', () =>
     const resp = await postOpenIn('p1');
 
     expect(resp.status).toBe(200);
-    expect(spawnState.options?.env?.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    expect(spawnState.options?.env).toBeDefined();
+    expect(spawnState.options?.env).not.toHaveProperty('ELECTRON_RUN_AS_NODE');
+    expect(spawnState.options?.env?.PATH).toBe(process.env.PATH);
     expect(process.env.ELECTRON_RUN_AS_NODE).toBe('1');
   });
 
