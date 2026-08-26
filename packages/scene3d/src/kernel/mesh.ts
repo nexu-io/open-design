@@ -299,22 +299,34 @@ export function subdivideCatmullClark(mesh: KernelMesh): KernelMesh {
     return scaleV(num, Rational.ONE.div(nR));
   });
 
-  // Rebuild through the welding builder so coincident new points collapse.
-  const b = new MeshBuilder();
-  const vpIdx = vertexPoint.map((v, i) => b.vertex(v, vertId[i]!));
-  const fpIdx = facePoint.map((v, i) => b.vertex(v, faceId[i]!));
+  // Assign indices DIRECTLY, without welding. Subdivision is topology-
+  // refining, so V' = V + F + E must hold exactly: the vertex, face and edge
+  // points are distinct by construction, and welding by coordinate would only
+  // MERGE points that a prior deformation had coincided — tearing the surface
+  // instead of refining it. Geometric degeneracy is the census's concern
+  // (zero-area faces); the operator keeps the topology exact.
+  const newVerts: RVec3[] = [];
+  const newIds: string[] = [];
+  const push = (v: RVec3, id: string): number => {
+    newVerts.push(v);
+    newIds.push(id);
+    return newVerts.length - 1;
+  };
+  const vpIdx = vertexPoint.map((v, i) => push(v, vertId[i]!));
+  const fpIdx = facePoint.map((v, i) => push(v, faceId[i]!));
   const epIdx = new Map<string, number>();
   for (const [key, e] of edges) {
-    epIdx.set(key, b.vertex(edgePoint.get(key)!, `e(${vertId[e.a]}|${vertId[e.b]})`));
+    epIdx.set(key, push(edgePoint.get(key)!, `e(${vertId[e.a]}|${vertId[e.b]})`));
   }
 
+  const newFaces: number[][] = [];
   faces.forEach((f, fi) => {
     const k = f.length;
     for (let i = 0; i < k; i++) {
       const vPrev = f[(i - 1 + k) % k]!;
       const v = f[i]!;
       const vNext = f[(i + 1) % k]!;
-      b.face([
+      newFaces.push([
         vpIdx[v]!,
         epIdx.get(edgeKey(v, vNext))!,
         fpIdx[fi]!,
@@ -322,7 +334,7 @@ export function subdivideCatmullClark(mesh: KernelMesh): KernelMesh {
       ]);
     }
   });
-  const out = b.build();
+  const out: KernelMesh = { verts: newVerts, faces: newFaces, vertId: newIds };
   // Propagate creases: a sharp edge (a,b) splits at its edge point into two
   // child edges, both sharp. Boundary sharpness needs no propagation — it is
   // rediscovered from the new face counts — so only authored creases carry.
