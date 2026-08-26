@@ -1177,7 +1177,12 @@ export function attachAcpSession({
     }
   });
 
-  stdout.on('data', (chunk: string) => parser.feed(chunk));
+  // `stdout` is never put into utf8-string mode (no `setEncoding` call in
+  // this function) -- `chunk` is actually a raw Buffer here. `feed` decodes
+  // it itself with a stateful stream decoder (see json-line-stream.ts) so a
+  // multi-byte UTF-8 character split across a chunk boundary comes through
+  // intact.
+  stdout.on('data', (chunk: Buffer | string) => parser.feed(chunk));
   child.stderr?.setEncoding('utf8');
   child.stderr?.on('data', (chunk: string) => {
     if (!modelUnavailableErrorCode || finished) return;
