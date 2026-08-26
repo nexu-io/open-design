@@ -271,8 +271,14 @@ export function launchHostTool(
     // cmd.exe with CommandLineToArgvW-safe verbatim args and everything else
     // directly — no shell, no metacharacter interpretation.
     const invocation = createCommandInvocation({ command, args });
+    // The packaged daemon needs this flag to run under Electron as Node, but
+    // external Electron-based GUI apps inherit it and may then exit immediately.
+    // Strip it only from this child process; leave the daemon environment intact.
+    const childEnv = { ...process.env };
+    delete childEnv.ELECTRON_RUN_AS_NODE;
     const child = spawn(invocation.command, invocation.args, {
       detached: true,
+      env: childEnv,
       stdio: 'ignore',
       windowsHide: process.platform === 'win32',
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
