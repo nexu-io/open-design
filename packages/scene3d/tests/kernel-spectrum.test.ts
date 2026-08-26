@@ -71,6 +71,26 @@ function subdivisionMatrix(n: number): { M: number[][]; denom: bigint } {
 const shifted = (M: number[][], k: number): number[][] =>
   M.map((row, i) => row.map((x, j) => (i === j ? x - k : x)));
 
+/** Is the non-negative matrix IRREDUCIBLE — its edge graph (i→j iff M[i][j]>0)
+ *  strongly connected? Irreducible + positive-diagonal ⇒ PRIMITIVE, which is
+ *  what upgrades "spectral radius = denom" to "denom is the UNIQUE eigenvalue
+ *  of maximum modulus" (no complex eigenvalue ties it). */
+function stronglyConnected(M: number[][]): boolean {
+  const m = M.length;
+  const reach = (adj: (i: number, j: number) => boolean): Set<number> => {
+    const seen = new Set<number>([0]);
+    const stack = [0];
+    while (stack.length) {
+      const u = stack.pop()!;
+      for (let v = 0; v < m; v++) if (adj(u, v) && !seen.has(v)) { seen.add(v); stack.push(v); }
+    }
+    return seen;
+  };
+  const fwd = reach((i, j) => M[i]![j]! > 0);
+  const back = reach((i, j) => M[j]![i]! > 0);
+  return fwd.size === m && back.size === m;
+}
+
 describe("kernel: Catmull-Clark is provably contractive (spectrum)", () => {
   for (const n of [3, 4, 5]) {
     it(`valence ${n}: dominant eigenvalue is exactly 1, simple, strictly dominant`, () => {
@@ -85,9 +105,12 @@ describe("kernel: Catmull-Clark is provably contractive (spectrum)", () => {
       // Every row sums to the denominator ⇒ S row-sums = 1 ⇒ the all-ones
       // vector is an eigenvector with eigenvalue denom (S = 1).
       for (const row of M) expect(row.reduce((a, b) => a + b, 0)).toBe(d);
-      // Perron-Frobenius on a primitive matrix: denom is SIMPLE (nullity of
-      // M − denom·I is exactly 1) and, by primitivity (non-negative, positive
-      // diagonal, irreducible), strictly dominates every other eigenvalue.
+      // Irreducible (edge graph strongly connected) + positive diagonal ⇒
+      // PRIMITIVE. With a constant row sum the spectral radius is exactly
+      // denom, and primitivity makes it the UNIQUE maximum-modulus eigenvalue —
+      // so NO eigenvalue, real or complex, ties or exceeds it.
+      expect(stronglyConnected(M), "irreducible").toBe(true);
+      // And denom is SIMPLE: the nullity of M − denom·I is exactly 1.
       expect(rankQ(shifted(M, d)), "dominant simple").toBe(m - 1);
     });
   }
