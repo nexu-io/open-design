@@ -38,6 +38,7 @@ const manifest: ElectronShellManifest = {
   schemaVersion: 1,
   appId: "io.example.desktop",
   productName: "Example Desktop",
+  publisher: "Example Company",
   executableName: "example-desktop",
   version: "1.2.3",
   channel: "stable",
@@ -61,9 +62,10 @@ describe("Electron distribution policy", () => {
       outputRoot: "/tmp/example-output",
       windowsLifecycle: {
         schemaVersion: 1,
-        install: { scope: "current-user", publisher: "Example Company" },
+        install: { scope: "current-user" },
         uninstall: { productData: "retain" },
       },
+      windowsNsisIncludePath: "/tmp/electron-kit-installer.nsh",
     });
 
     expect(configuration.mac).toEqual({ category: "public.app-category.developer-tools", target: ["dir", "dmg"] });
@@ -81,6 +83,8 @@ describe("Electron distribution policy", () => {
       perMachine: false,
       warningsAsErrors: false,
       shortcutName: "Example Desktop",
+      guid: "io.example.desktop",
+      include: "/tmp/electron-kit-installer.nsh",
     });
     expect(configuration.files).not.toContain("distribution.json");
     expect(configuration.files).toContain("scene.json");
@@ -101,7 +105,7 @@ describe("Electron distribution policy", () => {
       outputRoot: "/tmp/example-output",
       windowsLifecycle: {
         schemaVersion: 1,
-        install: { scope: "per-machine", publisher: "Example Company" },
+        install: { scope: "per-machine" },
         uninstall: { productData: "remove" },
       },
     });

@@ -6,7 +6,6 @@ export type ElectronWindowsLifecyclePolicy = Readonly<{
   schemaVersion: typeof ELECTRON_WINDOWS_LIFECYCLE_SCHEMA_VERSION;
   install: Readonly<{
     scope: "current-user" | "per-machine";
-    publisher: string;
   }>;
   uninstall: Readonly<{
     productData: "retain" | "remove";
@@ -21,6 +20,7 @@ export type ElectronWindowsInstallIdentity = Readonly<{
   displayName: string;
   executableName: `${string}.exe`;
   hive: ElectronWindowsRegistryHive;
+  installLocatorKey: string;
   protocolKey: string;
   publisher: string;
   shortcutName: `${string}.lnk`;

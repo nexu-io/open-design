@@ -9,6 +9,7 @@ import {
   type ElectronWindowsInstallIdentity,
   type ElectronWindowsRegistryPort,
 } from "@/platform/windows/index.js";
+import { createElectronWindowsNsisInclude } from "@/platform/windows/installer/nsis-include.js";
 
 const identity: ElectronWindowsInstallIdentity = {
   appId: "io.example.desktop",
@@ -16,6 +17,7 @@ const identity: ElectronWindowsInstallIdentity = {
   displayName: "Example Desktop",
   executableName: "example.exe",
   hive: "HKCU",
+  installLocatorKey: "Software\\io.example.desktop",
   protocolKey: "Software\\Classes\\example",
   publisher: "Example Company",
   shortcutName: "Example Desktop.lnk",
@@ -30,7 +32,7 @@ describe("Electron Windows registry lifecycle", () => {
       installDirectory: "C:\\Users\\Ada\\App Data\\Example Desktop",
       version: "1.2.3",
     });
-    expect(projection.values).toHaveLength(12);
+    expect(projection.values).toHaveLength(13);
     expect(projection.values).toContainEqual({
       hive: "HKCU",
       key: identity.uninstallKey,
@@ -43,6 +45,15 @@ describe("Electron Windows registry lifecycle", () => {
       name: "",
       value: '"C:\\Users\\Ada\\App Data\\Example Desktop\\example.exe" "%1"',
     });
+  });
+
+  it("renders the package-owned NSIS include with owner-safe cleanup", async () => {
+    const include = await createElectronWindowsNsisInclude({ ...identity, publisher: "Example $Company" });
+    expect(include).toContain(`WriteRegStr SHELL_CONTEXT "${identity.uninstallKey}" "InstallLocation" "$INSTDIR"`);
+    expect(include).toContain('"Publisher" "Example $$Company"');
+    expect(include).toContain("${APP_EXECUTABLE_FILENAME}");
+    expect(include).toContain("StrCmp $3 $1 electron_kit_remove_protocol electron_kit_preserve_protocol");
+    expect(include).not.toContain("{{");
   });
 
   it("extracts a quoted executable and refuses prefix or malformed ownership matches", () => {

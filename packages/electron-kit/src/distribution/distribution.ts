@@ -1,11 +1,17 @@
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { Arch, build as electronBuild, Platform } from "electron-builder";
 
 import type { ElectronShellManifest } from "../contracts/index.js";
-import { validateElectronWindowsLifecyclePolicy, type ElectronWindowsLifecyclePolicy } from "../platform/windows/index.js";
+import {
+  resolveElectronWindowsInstallIdentity,
+  validateElectronWindowsLifecyclePolicy,
+  type ElectronWindowsLifecyclePolicy,
+} from "../platform/windows/index.js";
+import { writeElectronWindowsNsisInclude } from "../platform/windows/installer/nsis-include.js";
 import type { ElectronDistributionReceipt, ElectronSceneReceipt } from "./contracts.js";
 import {
   resolveElectronDistributionConfiguration,
@@ -33,20 +39,34 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
     : Platform.MAC.createTarget([...policy.mac.targets], process.arch === "arm64" ? Arch.arm64 : Arch.x64);
   const require = createRequire(import.meta.url);
   const electronPackage = JSON.parse(await readFile(require.resolve("electron/package.json"), "utf8")) as { version: string };
-  const built = await electronBuild({
-    projectDir: input.scene.sceneRoot,
-    targets,
-    config: {
-      ...resolveElectronDistributionConfiguration({
-        manifest: input.manifest,
-        policy,
-        electronVersion: electronPackage.version,
-        outputRoot: input.outputRoot,
-        windowsLifecycle,
-      }),
-      extraResources: [{ from: input.scene.sidecarPath, to: "fixture-sidecar.cjs" }],
-    },
-  });
+  const scratchRoot = platform === "win" ? await mkdtemp(join(tmpdir(), "electron-kit-nsis-")) : null;
+  const windowsNsisIncludePath = scratchRoot == null ? undefined : join(scratchRoot, "installer.nsh");
+  let built: string[];
+  try {
+    if (windowsNsisIncludePath != null) {
+      await writeElectronWindowsNsisInclude({
+        identity: resolveElectronWindowsInstallIdentity({ manifest: input.manifest, policy: windowsLifecycle }),
+        path: windowsNsisIncludePath,
+      });
+    }
+    built = await electronBuild({
+      projectDir: input.scene.sceneRoot,
+      targets,
+      config: {
+        ...resolveElectronDistributionConfiguration({
+          manifest: input.manifest,
+          policy,
+          electronVersion: electronPackage.version,
+          outputRoot: input.outputRoot,
+          windowsLifecycle,
+          windowsNsisIncludePath,
+        }),
+        extraResources: [{ from: input.scene.sidecarPath, to: "fixture-sidecar.cjs" }],
+      },
+    });
+  } finally {
+    if (scratchRoot != null) await rm(scratchRoot, { force: true, recursive: true });
+  }
   const appPath = platform === "mac"
     ? join(input.outputRoot, `mac-${process.arch}`, `${input.manifest.executableName}.app`)
     : join(input.outputRoot, "win-unpacked", `${input.manifest.executableName}.exe`);

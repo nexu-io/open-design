@@ -10,6 +10,7 @@ const manifest: ElectronShellManifest = {
   schemaVersion: 1,
   appId: "io.example.desktop",
   productName: "Example Desktop",
+  publisher: "Example Company",
   executableName: "example-desktop",
   version: "1.2.3",
   channel: "stable",
@@ -25,7 +26,7 @@ describe("Electron Windows install identity", () => {
       manifest,
       policy: {
         schemaVersion: 1,
-        install: { scope: "current-user", publisher: "Example Company" },
+        install: { scope: "current-user" },
         uninstall: { productData: "retain" },
       },
     })).toEqual({
@@ -34,6 +35,7 @@ describe("Electron Windows install identity", () => {
       displayName: "Example Desktop",
       executableName: "example-desktop.exe",
       hive: "HKCU",
+      installLocatorKey: "Software\\io.example.desktop",
       protocolKey: "Software\\Classes\\example",
       publisher: "Example Company",
       shortcutName: "Example Desktop.lnk",
@@ -47,20 +49,20 @@ describe("Electron Windows install identity", () => {
       manifest,
       policy: {
         schemaVersion: 1,
-        install: { scope: "per-machine", publisher: "Example Company" },
+        install: { scope: "per-machine" },
         uninstall: { productData: "remove" },
       },
     }).hive).toBe("HKLM");
     expect(() => validateElectronWindowsLifecyclePolicy({
       schemaVersion: 1,
-      install: { scope: "portable" as never, publisher: "Example Company" },
+      install: { scope: "portable" as never },
       uninstall: { productData: "retain" },
     })).toThrow(/install scope/u);
     expect(() => resolveElectronWindowsInstallIdentity({
       manifest: { ...manifest, productName: "Example/Unsafe" },
       policy: {
         schemaVersion: 1,
-        install: { scope: "current-user", publisher: "Example Company" },
+        install: { scope: "current-user" },
         uninstall: { productData: "retain" },
       },
     })).toThrow(/safe Windows file segment/u);

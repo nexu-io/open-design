@@ -71,7 +71,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     version: manifest.version,
     private: true,
     description: `${manifest.productName} Electron Shell`,
-    author: "Open Design",
+    author: manifest.publisher,
     main: "main.cjs",
   }, null, 2)}\n`, "utf8");
 

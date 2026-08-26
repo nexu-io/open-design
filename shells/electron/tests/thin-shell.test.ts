@@ -27,7 +27,7 @@ describe("Electron product shell", () => {
       windows: { targets: string[]; nsis: Record<string, unknown> };
     };
     const windowsLifecycle = JSON.parse(windowsLifecycleSource) as {
-      install: { scope: string; publisher: string };
+      install: { scope: string };
       uninstall: { productData: string };
     };
     expect(policy.mac.targets).toEqual(["dir", "dmg"]);
@@ -43,7 +43,7 @@ describe("Electron product shell", () => {
     });
     expect(windowsLifecycle).toEqual({
       schemaVersion: 1,
-      install: { scope: "current-user", publisher: "Open Design" },
+      install: { scope: "current-user" },
       uninstall: { productData: "retain" },
     });
   });

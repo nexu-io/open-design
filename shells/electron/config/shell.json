@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "appId": "io.nexu.electron-foundation",
   "productName": "Open Design Electron Foundation",
+  "publisher": "Open Design",
   "executableName": "open-design-electron-foundation",
   "version": "0.1.0",
   "channel": "dev",

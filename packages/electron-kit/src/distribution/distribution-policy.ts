@@ -80,6 +80,7 @@ export function resolveElectronDistributionConfiguration(input: Readonly<{
   electronVersion: string;
   outputRoot: string;
   windowsLifecycle: ElectronWindowsLifecyclePolicy;
+  windowsNsisIncludePath?: string;
 }>): Configuration {
   const policy = validateElectronDistributionPolicy(input.policy);
   const windowsLifecycle = validateElectronWindowsLifecyclePolicy(input.windowsLifecycle);
@@ -101,6 +102,8 @@ export function resolveElectronDistributionConfiguration(input: Readonly<{
       ...policy.windows.nsis,
       installerLanguages: [...policy.windows.nsis.installerLanguages],
       deleteAppDataOnUninstall: windowsLifecycle.uninstall.productData === "remove",
+      guid: input.manifest.appId,
+      ...(input.windowsNsisIncludePath == null ? {} : { include: input.windowsNsisIncludePath }),
       perMachine: windowsLifecycle.install.scope === "per-machine",
       shortcutName: input.manifest.productName,
     },

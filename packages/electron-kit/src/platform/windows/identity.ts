@@ -5,7 +5,6 @@ import {
   type ElectronWindowsLifecyclePolicy,
 } from "./contracts.js";
 
-const publisher = /^\S(?:.{0,126}\S)?$/u;
 const windowsFileSegment = /^(?!.*[. ]$)[^<>:"/\\|?*\u0000-\u001f]+$/u;
 
 export function validateElectronWindowsLifecyclePolicy(
@@ -17,7 +16,6 @@ export function validateElectronWindowsLifecyclePolicy(
   if (value.install.scope !== "current-user" && value.install.scope !== "per-machine") {
     throw new Error("invalid Electron Windows install scope");
   }
-  if (!publisher.test(value.install.publisher)) throw new Error("invalid Electron Windows publisher");
   if (value.uninstall.productData !== "retain" && value.uninstall.productData !== "remove") {
     throw new Error("invalid Electron Windows product-data policy");
   }
@@ -40,8 +38,9 @@ export function resolveElectronWindowsInstallIdentity(input: Readonly<{
     displayName: input.manifest.productName,
     executableName,
     hive,
+    installLocatorKey: `Software\\${input.manifest.appId}`,
     protocolKey: `Software\\Classes\\${input.manifest.protocol}`,
-    publisher: policy.install.publisher,
+    publisher: input.manifest.publisher,
     shortcutName: `${input.manifest.productName}.lnk`,
     uninstallKey: `Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${input.manifest.appId}`,
     uninstallerName: `Uninstall ${input.manifest.productName}.exe`,

@@ -34,6 +34,7 @@ export type ElectronShellManifest = Readonly<{
   schemaVersion: typeof ELECTRON_KIT_CONTRACT_VERSION;
   appId: string;
   productName: string;
+  publisher: string;
   executableName: string;
   version: string;
   channel: string;
@@ -109,7 +110,8 @@ export function validateElectronShellManifest(value: ElectronShellManifest): Ele
   })) {
     if (!token.test(candidate)) throw new Error(`invalid Electron Shell ${name}`);
   }
-  if (value.productName.trim().length === 0 || value.window.title.trim().length === 0) throw new Error("Electron Shell display identity is required");
+  if (value.productName.trim().length === 0 || value.publisher.trim().length === 0 || value.publisher.length > 128
+    || value.window.title.trim().length === 0) throw new Error("Electron Shell display identity is required");
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(value.version)) throw new Error("invalid Electron Shell version");
   if (!Number.isSafeInteger(value.window.width) || !Number.isSafeInteger(value.window.height) || value.window.width < 320 || value.window.height < 240) {
     throw new Error("invalid Electron Shell window dimensions");

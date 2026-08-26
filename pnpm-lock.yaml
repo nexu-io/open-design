@@ -621,7 +621,13 @@ importers:
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
+      mustache:
+        specifier: 4.2.0
+        version: 4.2.0
     devDependencies:
+      '@types/mustache':
+        specifier: 4.2.6
+        version: 4.2.6
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2
@@ -3466,6 +3472,8 @@ packages:
   '@types/multer@2.1.0':
     resolution: {integrity: sha512-zYZb0+nJhOHtPpGDb3vqPjwpdeGlGC157VpkqNQL+UU2qwoacoQ7MpsAmUptI/0Oa127X32JzWDqQVEXp2RcIA==}
 
+  '@types/mustache@4.2.6':
+    resolution: {integrity: sha512-t+8/QWTAhOFlrF1IVZqKnMRJi84EgkIK5Kh0p2JV4OLywUvCwJPFxbJAl7XAow7DVIHsF+xW9f1MVzg0L6Szjw==}
   '@types/node-fetch@2.6.13':
     resolution: {integrity: sha512-QGpRVpzSaUs30JBSGPjOg4Uveu384erbHBoT1zeONvyCfwQxIkUshLAOqN/k9EjGviPRmWTTe6aH2qySWKTVSw==}
 
@@ -5436,6 +5444,10 @@ packages:
 
   multimath@2.0.0:
     resolution: {integrity: sha512-toRx66cAMJ+Ccz7pMIg38xSIrtnbozk0dchXezwQDMgQmbGpfxjtv68H+L00iFL8hxDaVjrmwAFSb3I6bg8Q2g==}
+
+  mustache@4.2.0:
+    resolution: {integrity: sha512-71ippSywq5Yb7/tVYyGbkBggbU8H3u5Rz56fH60jGFgr8uHwxs+aSKeqmluIVzM0m0kB7xQjKS6qPfd0b2ZoqQ==}
+    hasBin: true
 
   nanoid@3.3.12:
     resolution: {integrity: sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==}
@@ -9146,6 +9158,7 @@ snapshots:
     dependencies:
       '@types/express': 5.0.6
 
+  '@types/mustache@4.2.6': {}
   '@types/node-fetch@2.6.13':
     dependencies:
       '@types/node': 24.12.2
@@ -11476,6 +11489,8 @@ snapshots:
     dependencies:
       glur: 1.1.2
       object-assign: 4.1.1
+
+  mustache@4.2.0: {}
 
   nanoid@3.3.12: {}
 

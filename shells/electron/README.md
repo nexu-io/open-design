@@ -7,8 +7,8 @@ declaration and finite locale/connection preflight selection; electron-kit owns
 only graph lifecycle, validation, and its public carrier/Standalone atoms.
 Concrete host exemptions remain in that Shell config and are applied before app
 readiness. `config/distribution.json` separately owns the finite macOS/Windows artifact and NSIS
-presentation policy. `config/platforms/windows.json` owns install scope, publisher, and uninstall
-data retention; electron-kit derives registry endpoints from it plus `shell.json`, while this Shell
+presentation policy. `shell.json` owns the single publisher/product identity; `config/platforms/windows.json`
+owns install scope and uninstall data retention. electron-kit derives registry endpoints from those declarations, while this Shell
 schedules post-ready registry reconciliation. These policies are consumed only by the relevant
 runtime or pack projection; the assembled scene remains independent of distribution and release policy.
 Desktop handlers will follow the same declaration pattern after the real
@@ -37,7 +37,10 @@ re-verifying the artifact and writing the detached-helper receipt without
 opening it.
 
 `pack` emits a macOS `.app` and `.dmg` under `dist/` on macOS. Windows emits a
-directory build and NSIS installer on a Windows host. The current lifecycle is
+directory build and NSIS installer on a Windows host. Its ephemeral NSIS include
+projects the shared Shell identity into App Paths and protocol registration, with
+owner-checked cleanup; it is loaded from electron-kit's packaged resources and never
+enters the release-neutral scene. The current lifecycle is
 the replaceable phase-one fixture; it does not import Closure implementation.
 The standard `prepack` lifecycle intentionally points at the same Shell-owned
 `scripts/pack.mjs` shim, because pnpm reserves `pack` as a built-in command.

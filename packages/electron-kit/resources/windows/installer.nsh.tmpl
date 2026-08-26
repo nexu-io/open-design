@@ -1,0 +1,26 @@
+!macro customInstall
+  WriteRegStr SHELL_CONTEXT "{{&UNINSTALL_KEY}}" "InstallLocation" "$INSTDIR"
+  WriteRegStr SHELL_CONTEXT "{{&UNINSTALL_KEY}}" "Publisher" "{{&PUBLISHER}}"
+  WriteRegStr SHELL_CONTEXT "{{&APP_PATHS_KEY}}" "" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+  WriteRegStr SHELL_CONTEXT "{{&PROTOCOL_KEY}}" "" "URL:{{&PROTOCOL_LABEL}} Protocol"
+  WriteRegStr SHELL_CONTEXT "{{&PROTOCOL_KEY}}" "URL Protocol" ""
+  WriteRegStr SHELL_CONTEXT "{{&PROTOCOL_KEY}}\DefaultIcon" "" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr SHELL_CONTEXT "{{&PROTOCOL_KEY}}\shell\open\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
+!macroend
+
+!macro customUnInstall
+  ReadRegStr $0 SHELL_CONTEXT "{{&APP_PATHS_KEY}}" ""
+  StrCmp $0 "$INSTDIR\${APP_EXECUTABLE_FILENAME}" electron_kit_remove_app_paths electron_kit_preserve_app_paths
+  electron_kit_remove_app_paths:
+    DeleteRegKey SHELL_CONTEXT "{{&APP_PATHS_KEY}}"
+  electron_kit_preserve_app_paths:
+
+  ReadRegStr $0 SHELL_CONTEXT "{{&PROTOCOL_KEY}}\shell\open\command" ""
+  StrCpy $1 '"$INSTDIR\${APP_EXECUTABLE_FILENAME}"'
+  StrLen $2 $1
+  StrCpy $3 $0 $2
+  StrCmp $3 $1 electron_kit_remove_protocol electron_kit_preserve_protocol
+  electron_kit_remove_protocol:
+    DeleteRegKey SHELL_CONTEXT "{{&PROTOCOL_KEY}}"
+  electron_kit_preserve_protocol:
+!macroend

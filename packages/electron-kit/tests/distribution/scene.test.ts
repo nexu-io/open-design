@@ -31,6 +31,7 @@ describe("Electron scene", () => {
         schemaVersion: 1,
         appId: "io.example.electron",
         productName: "Example Electron",
+        publisher: "Example Company",
         executableName: "example-electron",
         version: "1.2.3",
         channel: "dev",
@@ -57,6 +58,7 @@ describe("Electron scene", () => {
 
     const receipt = await assembleElectronScene(paths);
     const scene = await readFile(receipt.sceneManifestPath, "utf8");
+    const packageManifest = JSON.parse(await readFile(join(paths.outputRoot, "package.json"), "utf8")) as Record<string, unknown>;
     expect(receipt.receiptPath).toBe(join(root, "build", "scene-receipt.json"));
     expect(scene).not.toContain(root);
     expect(scene).not.toMatch(/releaseVersion|publishedAt|artifactBaseUrl|distribution/u);
@@ -69,5 +71,6 @@ describe("Electron scene", () => {
       ]),
     });
     await expect(readFile(join(paths.outputRoot, "scene-receipt.json"), "utf8")).rejects.toThrow();
+    expect(packageManifest.author).toBe("Example Company");
   });
 });

@@ -29,6 +29,7 @@ export function createElectronWindowsRegistryProjection(input: Readonly<{
     { hive: input.identity.hive, key: input.identity.uninstallKey, name: "DisplayIcon", value: `${executablePath},0` },
     { hive: input.identity.hive, key: input.identity.uninstallKey, name: "UninstallString", value: quoteWindowsCommand(uninstallerPath, uninstallScopeArgument) },
     { hive: input.identity.hive, key: input.identity.uninstallKey, name: "QuietUninstallString", value: quoteWindowsCommand(uninstallerPath, uninstallScopeArgument, "/S") },
+    { hive: input.identity.hive, key: input.identity.installLocatorKey, name: "InstallLocation", value: input.installDirectory },
     { hive: input.identity.hive, key: input.identity.appPathsKey, name: "", value: executablePath },
     { hive: input.identity.hive, key: input.identity.protocolKey, name: "", value: `URL:${input.identity.displayName} Protocol` },
     { hive: input.identity.hive, key: input.identity.protocolKey, name: "URL Protocol", value: "" },

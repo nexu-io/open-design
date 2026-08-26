@@ -22,6 +22,7 @@ describe("Electron/Closure boundary", () => {
       schemaVersion: 1,
       appId: "io.nexu.electron-foundation",
       productName: "Electron Foundation",
+      publisher: "Example Company",
       executableName: "electron-foundation",
       version: "0.1.0",
       channel: "dev",

@@ -5,7 +5,10 @@
   "type": "module",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "resources"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -53,9 +56,11 @@
     "@open-design/sidecar": "workspace:*",
     "@open-design/standalone": "workspace:*",
     "electron-builder": "26.8.1",
-    "esbuild": "0.28.0"
+    "esbuild": "0.28.0",
+    "mustache": "4.2.0"
   },
   "devDependencies": {
+    "@types/mustache": "4.2.6",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
     "typescript": "6.0.3",
@@ -64,5 +69,7 @@
   "peerDependencies": {
     "electron": "41.3.0"
   },
-  "engines": {"node": "~24"}
+  "engines": {
+    "node": "~24"
+  }
 }
