@@ -57,6 +57,52 @@ describe("workflow scope planner", () => {
     }
   });
 
+  test("falls back to full validation when fork PR file resolution is unavailable", () => {
+    const temporaryRoot = mkdtempSync(path.join(tmpdir(), "scope-pr-resolution-"));
+    try {
+      const eventPath = path.join(temporaryRoot, "event.json");
+      const githubOutputPath = path.join(temporaryRoot, "github-output.txt");
+      const planPath = path.join(temporaryRoot, "scope-plan.json");
+      const ghPath = path.join(temporaryRoot, "gh.js");
+      writeFileSync(eventPath, JSON.stringify({ pull_request: { number: 6340 } }));
+      writeFileSync(githubOutputPath, "");
+      writeFileSync(ghPath, "process.exit(1);\n");
+
+      const result = spawnSync("python3", [script, "github-output", "--output", planPath], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: "pull_request",
+          GITHUB_EVENT_PATH: eventPath,
+          GITHUB_OUTPUT: githubOutputPath,
+          GITHUB_REPOSITORY: "nexu-io/open-design",
+          OPEN_DESIGN_GH_NODE_SCRIPT: ghPath,
+        },
+      });
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toContain("pull_request resolution failed; using full plan");
+      expect(JSON.parse(readFileSync(planPath, "utf8"))).toMatchObject({
+        source: "pull_request:resolution-error",
+        scopes: { workspace_validation_required: true },
+        enabled: {
+          daemon_unit_tests: true,
+          e2e_vitest: true,
+          playwright_visual: true,
+          preflight: true,
+          ui_p0: true,
+          web_workspace_tests: true,
+          windows_tools_pack_payload_tests: true,
+          workspace_unit_tests: true,
+        },
+        trace: { filesResolved: false },
+      });
+    } finally {
+      rmSync(temporaryRoot, { force: true, recursive: true });
+    }
+  });
+
   test("routes representative PR changes without importing the workspace", () => {
     expect(plan("pr", ["apps/web/src/App.tsx"])).toMatchObject({
       scopes: { web_tests_required: true, ui_p0_validation_required: true, visual_validation_required: true },

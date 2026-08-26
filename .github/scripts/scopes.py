@@ -268,8 +268,12 @@ def changed_files_for_environment():
         number = event.get("pull_request", {}).get("number")
         if number is None:
             raise ConfigError("pull_request.number is required")
-        output = run_gh(["api", "--paginate", f"repos/{repository}/pulls/{number}/files", "--jq", ".[] | .filename, (.previous_filename // empty)"])
-        return event_name, output.splitlines(), "medium", "hot", False, True, True
+        try:
+            output = run_gh(["api", "--paginate", f"repos/{repository}/pulls/{number}/files", "--jq", ".[] | .filename, (.previous_filename // empty)"])
+            return event_name, output.splitlines(), "medium", "hot", False, True, True
+        except subprocess.SubprocessError as error:
+            print(f"::warning::pull_request resolution failed; using full plan: {error}", file=sys.stderr)
+            return "pull_request:resolution-error", [], None, "full", True, True, False
     if event_name == "workflow_dispatch":
         mode = event.get("inputs", {}).get("ci_mode", "full")
         if mode not in {"hot", "full"}:

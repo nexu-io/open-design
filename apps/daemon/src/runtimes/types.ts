@@ -263,6 +263,10 @@ export type RuntimeAgentDef = {
   // `capturesSessionIdFromStream` because the capture + resume transport is the
   // ACP result, not a `--session-id` flag or a stream `status` event.
   resumesSessionViaAcpLoad?: boolean;
+  // Some ACP adapters use the standard `sessionId` itself as their durable
+  // upstream conversation handle. When enabled, the shared bridge persists
+  // that id if the adapter does not return a separate durable-handle field.
+  acpSessionIdIsDurable?: boolean;
   // Optional name of a daemon-process environment variable that overrides
   // the default model id when the chat run reaches the spawn layer with
   // null or the synthetic 'default'. Used by adapters whose CLI rejects
@@ -346,6 +350,7 @@ export type DetectedAgent = Omit<
   | 'inactivityTimeoutMs'
   | 'firstOutputTimeoutMs'
   | 'authProbe'
+  | 'acpSessionIdIsDurable'
 > & {
   models: RuntimeModelOption[];
   modelsSource: RuntimeModelSource;

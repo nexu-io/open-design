@@ -747,6 +747,7 @@ function stripFns(
     inactivityTimeoutMs,
     firstOutputTimeoutMs,
     authProbe,
+    acpSessionIdIsDurable,
     ...rest
   } = def;
   return rest;

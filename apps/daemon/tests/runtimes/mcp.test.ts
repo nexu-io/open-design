@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { createLiveArtifactsMcpTools, handleLiveArtifactsMcpRequest } from '../../src/mcp-live-artifacts-server.js';
-import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes, kimi } from './helpers/test-helpers.js';
+import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes, kimi, letta } from './helpers/test-helpers.js';
 
 test('live artifact MCP discovery is limited to mature ACP agents', () => {
   for (const agent of AGENT_DEFS) {
@@ -30,6 +30,18 @@ test('live artifact MCP discovery is limited to mature ACP agents', () => {
 
 test('live artifact MCP discovery is disabled when run-scoped tool auth is unavailable', () => {
   assert.deepEqual(buildLiveArtifactsMcpServersForAgent(hermes, { enabled: false }), []);
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(letta, { enabled: false }), []);
+});
+
+test('Letta receives run-scoped live artifact MCP servers through ACP', () => {
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(letta), [
+    {
+      name: 'open-design-live-artifacts',
+      command: 'od',
+      args: ['mcp', 'live-artifacts'],
+      env: [{ name: 'ELECTRON_RUN_AS_NODE', value: '1' }],
+    },
+  ]);
 });
 
 test('Kimi retains ACP live-artifacts and external MCP wiring', () => {

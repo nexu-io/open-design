@@ -3214,3 +3214,37 @@ test('createJsonLineStream still assembles a legitimate multiline JSON response'
 
   assert.deepEqual(received.map((message) => message.id), [5]);
 });
+
+test('attachAcpSession persists a durable ACP session id and resumes it', () => {
+  const createdChild = new FakeAcpChild();
+  const createdSession = attachAcpSession({
+    child: createdChild as never,
+    prompt: 'first turn',
+    cwd: '/tmp/od-project',
+    sessionIdIsDurable: true,
+    send: () => {},
+  });
+
+  writeAcpResult(createdChild, 1, {});
+  writeAcpResult(createdChild, 2, { sessionId: 'letta-conversation-1' });
+  assert.equal(createdSession.getDurableSessionId(), 'letta-conversation-1');
+
+  const resumedChild = new FakeAcpChild();
+  const writes: string[] = [];
+  resumedChild.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  attachAcpSession({
+    child: resumedChild as never,
+    prompt: 'follow-up turn',
+    cwd: '/tmp/od-project',
+    resumeSessionId: createdSession.getDurableSessionId(),
+    sessionIdIsDurable: true,
+    send: () => {},
+  });
+
+  writeAcpResult(resumedChild, 1, {});
+  const loadRequest = parseRpcWrites(writes).find((entry) => entry.method === 'session/load');
+  assert.deepEqual(loadRequest?.params, {
+    sessionId: 'letta-conversation-1',
+    cwd: path.resolve('/tmp/od-project'),
+  });
+});

@@ -5,6 +5,7 @@ import { devinAgentDef } from './defs/devin.js';
 import { opencodeAgentDef } from './defs/opencode.js';
 import { byokOpenCodeAgentDef } from './defs/byok-opencode.js';
 import { hermesAgentDef } from './defs/hermes.js';
+import { lettaAgentDef } from './defs/letta.js';
 import { traeCliAgentDef } from './defs/trae-cli.js';
 import { grokBuildAgentDef } from './defs/grok-build.js';
 import { kimiAgentDef } from './defs/kimi.js';
@@ -45,6 +46,7 @@ export const SHIPPED_AGENT_DEFS: RuntimeAgentDef[] = [
   opencodeAgentDef,
   byokOpenCodeAgentDef,
   hermesAgentDef,
+  lettaAgentDef,
   traeCliAgentDef,
   grokBuildAgentDef,
   kimiAgentDef,

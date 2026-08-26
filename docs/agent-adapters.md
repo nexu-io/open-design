@@ -142,7 +142,7 @@ definitions currently group by transport as follows:
 | `json-event-stream` | `codex`, `cursor-agent`, `opencode`, `mimo`, `byok-opencode` |
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
-| `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
+| `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `letta`, `reasonix`, `trae-cli`, `vibe` |
 | `pi-rpc` | `pi` |
 | `dsh-profile-jsonl` | `deepseek-harness` |
 | `plain` | `aider`, `antigravity`, `atomcode`, `deepseek`, `grok-build`, `qwen` |
@@ -435,6 +435,16 @@ At run completion, the daemon scans the captured plain stdout for `<artifact>` b
 | `text/markdown`, `text/x-markdown`, `markdown`, or `md` | `<identifier>.md` |
 
 The identifier is slugged before use, collisions receive `-2`, `-3`, etc., and outputs without a supported `<artifact>` block are left unchanged. This daemon-side extraction keeps headless runs and web-attached runs aligned: the project file exists even when no browser is present to parse the chat stream.
+
+### 5.13 Letta Code
+
+- Installation: install the standalone ACP adapter with `npm install -g @letta-ai/letta-acp`. Open Design detects the resulting `letta-acp` executable; it neither installs the adapter nor adds it as an application dependency.
+- Invocation and streaming: `letta-acp` speaks ACP JSON-RPC over stdio, so the daemon uses its shared ACP lifecycle for initialization, text and tool-status events, permission requests, cancellation, errors, and image attachments.
+- Models: Open Design deliberately exposes only its `Default` fallback and does not call the adapter's model-discovery path. This avoids a probe creating a local agent when `LETTA_AGENT_ID` is absent. The adapter chooses the model through `LETTA_ACP_MODEL` or its own backend configuration.
+- Configuration: use the existing Settings CLI-environment editor for `LETTA_ACP_BACKEND`, `LETTA_AGENT_ID`, `LETTA_API_KEY`, `LETTA_ACP_MODEL`, and `LETTA_ACP_PERMISSION_MODE`. The adapter supports its documented local default as well as Cloud, OAuth, and remote app-server backends. Credentials stay in Letta's environment/configuration; Open Design does not implement login flows or call Letta's API directly.
+- Persistence: Letta's ACP `sessionId` is its durable conversation id. Open Design persists it per conversation after a successful run and sends it back through `session/load` for the next compatible turn. If a resumed session is unavailable, the normal ACP reseed behavior starts one fresh turn with the rendered transcript.
+- MCP: configured Open Design MCP servers are forwarded in the ACP session descriptor for each run. Do not run `od mcp install letta`: there is no static Letta configuration mutation for this adapter path.
+- Security: local operation executes the installed adapter in the selected project directory under the adapter's own permission mode. Cloud, OAuth, and remote app-server modes can send prompts, files the agent reads, and tool-request metadata to the configured Letta backend; select and secure that endpoint according to your organization's policy.
 
 ## 6. Runtime metadata and UI
 
