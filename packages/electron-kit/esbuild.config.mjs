@@ -23,17 +23,10 @@ await build({
   target: "node24",
 });
 const publicEntries = {
-  "boundary/index": "boundary/index",
-  "bootstrap/index": "bootstrap/index",
-  "carrier/index": "carrier/index",
-  "installer/index": "installer/index",
-  "warmup/index": "warmup/index",
-  "preflight/index": "preflight/index",
-  "sidecar/index": "sidecar/index",
-  "shortcuts/index": "shortcuts/index",
-  "lifecycle/fixture-port": "lifecycle/fixture-port",
-  "updater/fixture-provider": "updater/fixture-provider",
-  "build/index": "build/index",
+  "contracts/index": "contracts/index",
+  "integrations/sidecar/index": "integrations/sidecar/index",
+  "integrations/shortcuts/index": "integrations/shortcuts/index",
+  "distribution/index": "distribution/index",
   "commands/dev": "commands/dev",
   "commands/pack": "commands/pack",
 };
@@ -50,9 +43,9 @@ for (const [entry, output] of Object.entries(publicEntries)) {
 }
 await build({
   bundle: true,
-  entryPoints: ["./src/lifecycle/fixture-sidecar.ts"],
+  entryPoints: ["./src/fixtures/lifecycle/sidecar.ts"],
   format: "cjs",
-  outfile: "./dist/lifecycle/fixture-sidecar.cjs",
+  outfile: "./dist/fixtures/lifecycle/sidecar.cjs",
   platform: "node",
   target: "node24",
 });

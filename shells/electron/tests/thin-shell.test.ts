@@ -13,11 +13,11 @@ describe("Electron product shell", () => {
       readFile(new URL("../scripts/pack.mjs", import.meta.url), "utf8"),
     ]);
     expect(dev).not.toContain("distribution.json");
-    expect(pack).toContain('new URL("../distribution.json"');
+    expect(pack).toContain('new URL("../config/distribution.json"');
   });
 
   it("owns finite macOS and Windows distribution policy", async () => {
-    const policy = JSON.parse(await readFile(new URL("../distribution.json", import.meta.url), "utf8")) as {
+    const policy = JSON.parse(await readFile(new URL("../config/distribution.json", import.meta.url), "utf8")) as {
       mac: { targets: string[] };
       windows: { targets: string[]; nsis: Record<string, unknown> };
     };
@@ -43,16 +43,17 @@ describe("Electron product shell", () => {
   });
 
   it("owns concrete preflight, warmup topology and placeholder readiness outside electron-kit", async () => {
-    const [preflightSource, topologySource, rendererSource, kitRuntimeSource, kitPreflightSource] = await Promise.all([
-      readFile(new URL("../preflight.json", import.meta.url), "utf8"),
-      readFile(new URL("../warmup.json", import.meta.url), "utf8"),
+    const [runtimeSource, rendererSource, kitRuntimeSource, kitPreflightSource] = await Promise.all([
+      readFile(new URL("../config/runtime.json", import.meta.url), "utf8"),
       readFile(new URL("../src/renderer/placeholder.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/index.ts", import.meta.url), "utf8"),
-      readFile(new URL("../../../packages/electron-kit/src/preflight/apply.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../../packages/electron-kit/src/runtime/startup/preflight/apply.ts", import.meta.url), "utf8"),
     ]);
-    const preflight = JSON.parse(preflightSource) as { atoms: Array<{ hosts?: string[] }> };
-    const topology = JSON.parse(topologySource) as { nodes: Array<{ executor: string }> };
-    expect(topology.nodes.map((node) => node.executor)).toEqual([
+    const runtime = JSON.parse(runtimeSource) as {
+      preflight: { atoms: Array<{ hosts?: string[] }> };
+      warmup: { nodes: Array<{ executor: string }> };
+    };
+    expect(runtime.warmup.nodes.map((node) => node.executor)).toEqual([
       "electron.ensure-carrier",
       "standalone.resolve",
       "standalone.await-ready",
@@ -60,7 +61,7 @@ describe("Electron product shell", () => {
     ]);
     expect(rendererSource).toContain("electronShellMounted");
     expect(kitRuntimeSource).not.toMatch(/Electron Shell Foundation|electronShellMounted|electronKitMounted/u);
-    expect(preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);
+    expect(runtime.preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);
     expect(kitPreflightSource).not.toMatch(/127\.0\.0\.1|localhost/u);
   });
 
@@ -68,15 +69,13 @@ describe("Electron product shell", () => {
     const [dev, pack, electronLock, terminalLock] = await Promise.all([
       readFile(new URL("../scripts/dev.mjs", import.meta.url), "utf8"),
       readFile(new URL("../scripts/pack.mjs", import.meta.url), "utf8"),
-      readFile(new URL("../node-lock.json", import.meta.url), "utf8"),
+      readFile(new URL("../config/carriers/node-lock.json", import.meta.url), "utf8"),
       readFile(new URL("../../terminal/node-lock.json", import.meta.url), "utf8"),
     ]);
-    expect(dev).toContain('new URL("../node-lock.json"');
-    expect(pack).toContain('new URL("../node-lock.json"');
-    expect(dev).toContain('new URL("../warmup.json"');
-    expect(pack).toContain('new URL("../warmup.json"');
-    expect(dev).toContain('new URL("../preflight.json"');
-    expect(pack).toContain('new URL("../preflight.json"');
+    expect(dev).toContain('new URL("../config/carriers/node-lock.json"');
+    expect(pack).toContain('new URL("../config/carriers/node-lock.json"');
+    expect(dev).toContain('new URL("../config/runtime.json"');
+    expect(pack).toContain('new URL("../config/runtime.json"');
     expect(dev).not.toMatch(/node-v\d/u);
     expect(pack).not.toMatch(/node-v\d/u);
     expect(JSON.parse(electronLock)).toEqual(JSON.parse(terminalLock));

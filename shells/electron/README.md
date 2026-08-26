@@ -2,11 +2,11 @@
 
 The product layer is deliberately thin. It declares identity, window policy,
 the `od://` handler, ready-before preflight policy, concrete warmup topology, and adapters supplied to
-`@open-design/electron-kit`. `warmup.json` owns the ordered product declaration;
-electron-kit owns only graph lifecycle and its public carrier/Standalone atoms.
-`preflight.json` selects the finite locale/connection atoms and owns concrete
-host exemptions; electron-kit validates and applies them before app readiness.
-`distribution.json` likewise owns the finite macOS/Windows artifact and installer
+`@open-design/electron-kit`. `config/runtime.json` owns both the ordered warmup
+declaration and finite locale/connection preflight selection; electron-kit owns
+only graph lifecycle, validation, and its public carrier/Standalone atoms.
+Concrete host exemptions remain in that Shell config and are applied before app
+readiness. `config/distribution.json` separately owns the finite macOS/Windows artifact and installer
 policy. It is consumed only by `pack`; the assembled scene remains independent
 of distribution and release policy.
 Desktop handlers will follow the same declaration pattern after the real
@@ -39,7 +39,7 @@ directory build and NSIS installer on a Windows host. The current lifecycle is
 the replaceable phase-one fixture; it does not import Closure implementation.
 The standard `prepack` lifecycle intentionally points at the same Shell-owned
 `scripts/pack.mjs` shim, because pnpm reserves `pack` as a built-in command.
-`node-lock.json` is Shell-local but byte-for-byte aligned with Terminal's
+`config/carriers/node-lock.json` is Shell-local but byte-for-byte aligned with Terminal's
 official Node lock; tests prevent the two supported carriers from drifting.
 The lock is consumed by the thin `dev.mjs`/`pack.mjs` shims and the packaged
 runtime. The verified carrier executes bootstrap/lifecycle helpers; electron-kit

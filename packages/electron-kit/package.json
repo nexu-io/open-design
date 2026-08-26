@@ -16,48 +16,20 @@
       "default": "./dist/runtime-api.mjs"
     },
     "./contracts": {
-      "types": "./dist/boundary/index.d.ts",
-      "default": "./dist/boundary/index.mjs"
-    },
-    "./bootstrap": {
-      "types": "./dist/bootstrap/index.d.ts",
-      "default": "./dist/bootstrap/index.mjs"
-    },
-    "./carrier": {
-      "types": "./dist/carrier/index.d.ts",
-      "default": "./dist/carrier/index.mjs"
-    },
-    "./installer": {
-      "types": "./dist/installer/index.d.ts",
-      "default": "./dist/installer/index.mjs"
-    },
-    "./warmup": {
-      "types": "./dist/warmup/index.d.ts",
-      "default": "./dist/warmup/index.mjs"
-    },
-    "./preflight": {
-      "types": "./dist/preflight/index.d.ts",
-      "default": "./dist/preflight/index.mjs"
+      "types": "./dist/contracts/index.d.ts",
+      "default": "./dist/contracts/index.mjs"
     },
     "./sidecar": {
-      "types": "./dist/sidecar/index.d.ts",
-      "default": "./dist/sidecar/index.mjs"
+      "types": "./dist/integrations/sidecar/index.d.ts",
+      "default": "./dist/integrations/sidecar/index.mjs"
     },
     "./shortcuts": {
-      "types": "./dist/shortcuts/index.d.ts",
-      "default": "./dist/shortcuts/index.mjs"
+      "types": "./dist/integrations/shortcuts/index.d.ts",
+      "default": "./dist/integrations/shortcuts/index.mjs"
     },
-    "./lifecycle": {
-      "types": "./dist/lifecycle/fixture-port.d.ts",
-      "default": "./dist/lifecycle/fixture-port.mjs"
-    },
-    "./updater": {
-      "types": "./dist/updater/fixture-provider.d.ts",
-      "default": "./dist/updater/fixture-provider.mjs"
-    },
-    "./build": {
-      "types": "./dist/build/index.d.ts",
-      "default": "./dist/build/index.mjs"
+    "./distribution": {
+      "types": "./dist/distribution/index.d.ts",
+      "default": "./dist/distribution/index.mjs"
     },
     "./dev": {
       "types": "./dist/commands/dev.d.ts",

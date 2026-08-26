@@ -5,11 +5,7 @@
   "type": "module",
   "files": [
     "README.md",
-    "distribution.json",
-    "electron-shell.json",
-    "preflight.json",
-    "warmup.json",
-    "node-lock.json",
+    "config",
     "scripts",
     "src",
     "tests",

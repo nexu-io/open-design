@@ -1,6 +1,5 @@
-import manifest from "../electron-shell.json" with { type: "json" };
-import preflight from "../preflight.json" with { type: "json" };
-import warmup from "../warmup.json" with { type: "json" };
+import runtime from "../config/runtime.json" with { type: "json" };
+import manifest from "../config/shell.json" with { type: "json" };
 
 import {
   ElectronFixtureLifecyclePort,
@@ -9,16 +8,15 @@ import {
   runElectronShell,
   scheduleElectronInstallerHandoff,
   type ElectronShellManifest,
-  type ElectronPreflightTopology,
-  type ElectronWarmupTopology,
+  type ElectronRuntimeConfig,
 } from "@open-design/electron-kit/runtime";
 
 import { placeholderRenderer } from "./renderer/placeholder.js";
 
 void runElectronShell({
   manifest: manifest as ElectronShellManifest,
-  preflight: preflight as ElectronPreflightTopology,
-  warmup: warmup as ElectronWarmupTopology,
+  preflight: (runtime as ElectronRuntimeConfig).preflight,
+  warmup: (runtime as ElectronRuntimeConfig).warmup,
   renderer: placeholderRenderer,
   actions: {
     openDeepLink(url) {

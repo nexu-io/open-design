@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import electronPath from "electron";
 
-import { assembleElectronScene } from "../build/index.js";
-import { validateElectronShellManifest, type ElectronShellManifest } from "../boundary/index.js";
+import { validateElectronShellManifest, type ElectronShellManifest } from "../contracts/index.js";
+import { assembleElectronScene } from "../distribution/index.js";
 
 export function normalizeElectronDevArgv(argv: readonly string[]): string[] {
   const normalized = [...argv];
@@ -18,19 +18,18 @@ export async function devElectronShell(input: Readonly<{
   manifestPath: string;
   fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
-  preflightPath: string;
-  warmupPath: string;
+  projectRoot: string;
+  runtimeConfigPath: string;
   argv?: readonly string[];
 }>): Promise<number> {
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
   const scene = await assembleElectronScene({
     entryPath: input.entryPath,
     manifestPath: input.manifestPath,
-    outputRoot: join(dirname(input.manifestPath), ".tmp", "electron-kit", manifest.namespace, "scene"),
+    outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
     fixtureSidecarPath: input.fixtureSidecarPath,
     nodeCarrierLockPath: input.nodeCarrierLockPath,
-    preflightPath: input.preflightPath,
-    warmupPath: input.warmupPath,
+    runtimeConfigPath: input.runtimeConfigPath,
   });
   const child = spawn(electronPath as unknown as string, [scene.sceneRoot, ...normalizeElectronDevArgv(input.argv ?? [])], { env: process.env, stdio: "inherit" });
   return await new Promise<number>((resolveCode, reject) => {

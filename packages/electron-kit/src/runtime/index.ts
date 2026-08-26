@@ -15,26 +15,26 @@ import {
   type ElectronClosurePorts,
   type ElectronRendererLease,
   type ElectronShellDefinition,
-} from "../boundary/index.js";
-import { ensureOfficialNodeCarrier, OfficialNodeCarrierError, type OfficialNodeCarrierReceipt } from "../carrier/index.js";
-import type { ElectronInstallerHandoff } from "../installer/contracts.js";
-import { focusElectronWindow, resolveElectronPresentationMode } from "./presentation.js";
-import { ELECTRON_BOOTSTRAP_SCHEMA_VERSION, validateElectronBootstrapResult } from "../bootstrap/contracts.js";
-import { ElectronActivationAttempt } from "./activation.js";
-import { claimElectronSingleInstanceLock, ElectronLaunchHandoffQueue } from "./single-instance.js";
-import { ElectronRuntimeLog } from "./logging.js";
-import { completeElectronShutdown } from "./shutdown.js";
+} from "../contracts/index.js";
+import type { ElectronInstallerHandoff } from "../update/installation/contracts.js";
+import { ElectronActivationAttempt } from "./session/activation.js";
+import { ElectronRuntimeLog } from "./session/logging.js";
+import { completeElectronShutdown } from "./session/shutdown.js";
+import { claimElectronSingleInstanceLock, ElectronLaunchHandoffQueue } from "./session/single-instance.js";
+import { ELECTRON_BOOTSTRAP_SCHEMA_VERSION, validateElectronBootstrapResult } from "./startup/bootstrap/contracts.js";
+import { ensureOfficialNodeCarrier, OfficialNodeCarrierError, type OfficialNodeCarrierReceipt } from "./startup/carrier/index.js";
 import {
   ELECTRON_WARMUP_ATOMS,
   runElectronWarmupTopology,
   validateElectronRuntimeWarmupTopology,
-} from "../warmup/index.js";
-import { applyElectronPreflight } from "../preflight/index.js";
+} from "./startup/warmup/index.js";
+import { applyElectronPreflight } from "./startup/preflight/index.js";
+import { focusElectronWindow, resolveElectronPresentationMode } from "./window/presentation.js";
 
-export * from "./presentation.js";
-export * from "./single-instance.js";
-export * from "./logging.js";
-export * from "./shutdown.js";
+export * from "./session/logging.js";
+export * from "./session/shutdown.js";
+export * from "./session/single-instance.js";
+export * from "./window/presentation.js";
 
 function splashHtml(title: string): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><style>html{font-family:ui-sans-serif,system-ui;background:#151515;color:#fff}body{margin:0;display:grid;min-height:100vh;place-items:center;text-align:center}p{color:#aaa}</style><body><main><h2>${title}</h2><p id="stage">Preparing Electron…</p></main></body></html>`)}`;

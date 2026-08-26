@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-import { assembleElectronScene, buildElectronDistribution, type ElectronDistributionReceipt } from "../build/index.js";
-import { validateElectronShellManifest, type ElectronShellManifest } from "../boundary/index.js";
-import { validateElectronDistributionPolicy, type ElectronDistributionPolicy } from "../build/distribution-policy.js";
+import { validateElectronShellManifest, type ElectronShellManifest } from "../contracts/index.js";
+import { assembleElectronScene, buildElectronDistribution, type ElectronDistributionReceipt } from "../distribution/index.js";
+import { validateElectronDistributionPolicy, type ElectronDistributionPolicy } from "../distribution/distribution-policy.js";
 
 export async function packElectronShell(input: Readonly<{
   entryPath: string;
@@ -11,9 +11,9 @@ export async function packElectronShell(input: Readonly<{
   fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
   distributionPath: string;
-  preflightPath: string;
-  warmupPath: string;
+  runtimeConfigPath: string;
   outputRoot: string;
+  projectRoot: string;
 }>): Promise<ElectronDistributionReceipt> {
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
   const policy = validateElectronDistributionPolicy(
@@ -22,11 +22,10 @@ export async function packElectronShell(input: Readonly<{
   const scene = await assembleElectronScene({
     entryPath: input.entryPath,
     manifestPath: input.manifestPath,
-    outputRoot: join(dirname(input.manifestPath), ".tmp", "electron-kit", manifest.namespace, "scene"),
+    outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
     fixtureSidecarPath: input.fixtureSidecarPath,
     nodeCarrierLockPath: input.nodeCarrierLockPath,
-    preflightPath: input.preflightPath,
-    warmupPath: input.warmupPath,
+    runtimeConfigPath: input.runtimeConfigPath,
   });
   return await buildElectronDistribution({ scene, manifest, policy, outputRoot: input.outputRoot });
 }
