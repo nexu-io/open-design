@@ -324,6 +324,49 @@ describe("kernel: creases keep chosen edges sharp under subdivision", () => {
   });
 });
 
+describe("kernel: soundness fixes (red-team)", () => {
+  it("a pinch/bowtie vertex is NOT called watertight (mirror with an apex on the plane)", () => {
+    // A valid square pyramid whose apex sits exactly on x=0; mirroring welds
+    // the apex to itself, making two shells meet at one point — edge-manifold
+    // but not a 2-manifold. The edge-only check used to call it watertight
+    // with genus -0.5.
+    const pyramid = meshOf(
+      [[1, -1, 0], [2, -1, 0], [2, 1, 0], [1, 1, 0], [0, 0, 1]],
+      [[0, 3, 2, 1], [0, 1, 4], [1, 2, 4], [2, 3, 4], [3, 0, 4]],
+    );
+    expect(predictCensus(pyramid).watertight).toBe(true); // the base is a valid solid
+    const c = predictCensus(mirror(pyramid, 0));
+    expect(c.nonManifoldVertices).toBeGreaterThan(0);
+    expect(c.watertight).toBe(false); // the pinch is caught
+    expect(c.genus).toBeNull(); // no fractional/negative genus
+  });
+
+  it("subdivision does not crash on an orphan vertex", () => {
+    // A point unreferenced by any face is legitimate (predictCensus counts it);
+    // the vertex-point rule used to call ratMean on an empty set and throw.
+    const m = meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [5, 5, 5]], [[0, 1, 2, 3]]);
+    expect(() => subdivideCatmullClark(m)).not.toThrow();
+    expect(predictCensus(subdivideCatmullClark(m)).components).toBe(2); // orphan survives as its own component
+  });
+
+  it("meshOf refuses a face with a repeated vertex index", () => {
+    expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 0, 1]])).toThrow(/repeats a vertex index/);
+  });
+
+  it("refuses a runaway subdivision before allocating (the loud ceiling)", () => {
+    // Catmull-Clark quadruples faces per level; an absurd level count is
+    // rejected loudly rather than hanging/OOMing the compiler.
+    const box = () =>
+      meshOf(
+        [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]],
+        [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]],
+      );
+    expect(() => subdivide(box(), 9)).toThrow(/ceiling/);
+    // A real recipe depth is fine.
+    expect(() => subdivide(box(), 3)).not.toThrow();
+  });
+});
+
 describe("kernel: boundaries are handled, not ignored", () => {
   it("an open grid stays open and refines its boundary as a B-spline", () => {
     // A single quad is an open patch: four boundary edges, not watertight.

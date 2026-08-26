@@ -25,6 +25,18 @@ import { Rational, rat, ratMean } from "./rational.js";
 
 export type RVec3 = [Rational, Rational, Rational];
 
+/**
+ * Loud ceiling on kernel mesh size — the backstop `MAX_REPEAT_COUNT` is for the
+ * solver. Catmull-Clark quadruples faces per level, so an unbounded
+ * `subdivide` is the one runaway multiplier that can hang the compiler's main
+ * thread and OOM it: it is O(1) to record but exponential to evaluate. The
+ * guard fires on the PROJECTED size before allocating, so an absurd recipe
+ * refuses loudly instead of running the machine out of memory. Far above any
+ * real recipe (a level-4 box is 1,536 faces); a single part at this ceiling is
+ * already the whole scene's triangle budget.
+ */
+export const MAX_KERNEL_FACES = 100_000;
+
 export function rvec(x: readonly [number, number, number] | RVec3): RVec3 {
   if (x[0] instanceof Rational) return [x[0], x[1] as Rational, x[2] as Rational];
   return [rat(x[0]), rat(x[1] as number), rat(x[2] as number)];
@@ -111,7 +123,16 @@ export function meshOf(
         throw new Error(`meshOf: face ${fi} references vertex index ${i}, outside 0..${points.length - 1}`);
       }
     }
+    // A repeated index in one face collapses two of its edges onto one key and
+    // corrupts the edge/boundary count for that face — a degenerate face, not
+    // a valid one.
+    if (new Set(f).size !== f.length) {
+      throw new Error(`meshOf: face ${fi} repeats a vertex index — a face's vertices must be distinct`);
+    }
     b.face(f.map((i) => remap[i]!));
+  }
+  if (b.faces.length > MAX_KERNEL_FACES) {
+    throw new Error(`kernel: a cage of ${b.faces.length} faces is over the ${MAX_KERNEL_FACES} ceiling`);
   }
   return b.build();
 }
@@ -181,6 +202,55 @@ export function orientationConsistent(mesh: KernelMesh): boolean {
   return true;
 }
 
+/**
+ * Vertices where the incident faces do NOT form a single fan — a pinch/bowtie:
+ * two otherwise-closed shells meeting at one shared point. Every edge there is
+ * still 2-face (edge-manifold), so an edge-only test misses it, yet it is not a
+ * valid 2-manifold. The test is the vertex LINK: each incident face contributes
+ * the edge between the vertex's two neighbours in that face; a manifold vertex's
+ * link is a single connected path or cycle, a pinch's link is two or more
+ * disjoint components. Reachable through `mirror` when a vertex sits on the
+ * plane (an apex/pole on the seam), so it must be caught before `watertight` is
+ * asserted.
+ */
+export function countNonManifoldVertices(mesh: KernelMesh): number {
+  const vertFaces: number[][] = mesh.verts.map(() => []);
+  mesh.faces.forEach((f, fi) => f.forEach((v) => vertFaces[v]!.push(fi)));
+  let count = 0;
+  for (let v = 0; v < mesh.verts.length; v++) {
+    const faces = vertFaces[v]!;
+    if (faces.length < 2) continue; // orphan or a single-face corner: no pinch
+    const adj = new Map<number, number[]>();
+    const nodes = new Set<number>();
+    for (const fi of faces) {
+      const f = mesh.faces[fi]!;
+      const k = f.length;
+      const pos = f.indexOf(v);
+      const a = f[(pos - 1 + k) % k]!;
+      const b = f[(pos + 1) % k]!;
+      nodes.add(a);
+      nodes.add(b);
+      (adj.get(a) ?? adj.set(a, []).get(a)!).push(b);
+      (adj.get(b) ?? adj.set(b, []).get(b)!).push(a);
+    }
+    // Count connected components of the link graph.
+    const seen = new Set<number>();
+    let comps = 0;
+    for (const n of nodes) {
+      if (seen.has(n)) continue;
+      comps++;
+      const stack = [n];
+      seen.add(n);
+      while (stack.length) {
+        const u = stack.pop()!;
+        for (const w of adj.get(u) ?? []) if (!seen.has(w)) { seen.add(w); stack.push(w); }
+      }
+    }
+    if (comps > 1) count++;
+  }
+  return count;
+}
+
 /** Connected components over the edge graph (union-find). A vertex in no face
  *  is its own component, so an isolated stray point is counted honestly. */
 export function componentCount(mesh: KernelMesh): number {
@@ -236,6 +306,14 @@ const R_6 = rat(6);
  */
 export function subdivideCatmullClark(mesh: KernelMesh): KernelMesh {
   const { verts, faces, vertId } = mesh;
+  // Refuse a runaway BEFORE allocating: each face of k sides becomes k quads,
+  // so the output face count is exactly the sum of sides.
+  const projected = faces.reduce((a, f) => a + f.length, 0);
+  if (projected > MAX_KERNEL_FACES) {
+    throw new Error(
+      `kernel: subdivision would produce ${projected} faces, over the ${MAX_KERNEL_FACES} ceiling — reduce the subdivide levels`,
+    );
+  }
   const creases = mesh.creases ?? EMPTY_CREASES;
   const edges = edgesOf(mesh);
   // An edge is SHARP when it is a boundary (one face) or an authored crease:
@@ -275,6 +353,10 @@ export function subdivideCatmullClark(mesh: KernelMesh): KernelMesh {
   // Vertex points.
   const vertexPoint = verts.map((P, vi): RVec3 => {
     const incident = vertEdges[vi]!;
+    // An orphan vertex (no incident edges/faces) has no rule to average — it
+    // simply carries through. predictCensus counts orphans as legitimate, so
+    // subdivision must not crash on one.
+    if (incident.length === 0) return P;
     const sharp = incident.filter(isSharp);
     // Three or more sharp edges pin a CORNER: it stays exactly where it is,
     // which is what gives a fully-creased box its hard corners.
@@ -453,12 +535,14 @@ export function fitToBox(
       if (v[i]! > max[i]!) max[i] = v[i]!;
     }
   }
+  // The floor only guards the DIVISION (a degenerate axis must not divide by
+  // zero); it never binds `s` because a near-zero extent gives a huge ratio.
   const dim = [0, 1, 2].map((i) => Math.max(max[i]! - min[i]!, 1e-9));
   const s = Math.min(size[0] / dim[0]!, size[1] / dim[1]!, size[2] / dim[2]!);
   const c = [0, 1, 2].map((i) => (min[i]! + max[i]!) / 2);
-  // Bottom-rest on z: after centring+scaling the bottom sits at −dim_z·s/2;
-  // shift it to −size_z/2. x/y stay centred at the origin.
-  const dz = -size[2] / 2 + (dim[2]! * s) / 2;
+  // Bottom-rest on z uses the REAL extent (not the floored one), so a flat
+  // panel lands exactly at −size_z/2 rather than a 1e-9·s epsilon above it.
+  const dz = -size[2] / 2 + ((max[2]! - min[2]!) * s) / 2;
   const xf = (v: readonly number[]): [number, number, number] => [
     (v[0]! - c[0]!) * s,
     (v[1]! - c[1]!) * s,
@@ -542,7 +626,10 @@ export function extrude(
     }
   }
 
-  return compact({ verts, faces, vertId, ...(mesh.creases ? { creases: mesh.creases } : {}) });
+  // Creases are dropped: extrude changes topology, so the old edge-key crease
+  // set is no longer well-defined (and was previously kept-or-dropped
+  // inconsistently depending on whether compaction ran). Re-crease afterward.
+  return compact({ verts, faces, vertId });
 }
 
 /**
@@ -630,7 +717,10 @@ export interface PredictedCensus {
   boundaryEdges: number;
   /** Edges touched by three or more faces — a non-manifold defect. */
   nonManifoldEdges: number;
-  /** Closed and manifold: no boundary, no non-manifold edge. */
+  /** Vertices whose incident faces do NOT form a single fan (a pinch/bowtie
+   *  where two shells meet at one point) — edge-manifold but not a 2-manifold. */
+  nonManifoldVertices: number;
+  /** Closed and manifold: no boundary, no non-manifold edge OR vertex. */
   watertight: boolean;
   /** Connected components over the edge graph. */
   components: number;
@@ -664,7 +754,10 @@ export function predictCensus(mesh: KernelMesh): PredictedCensus {
   const F = mesh.faces.length;
   const triangles = mesh.faces.reduce((acc, f) => acc + (f.length - 2), 0);
   const euler = V - E + F;
-  const watertight = boundaryEdges === 0 && nonManifoldEdges === 0;
+  const nonManifoldVertices = countNonManifoldVertices(mesh);
+  // Watertight = closed AND a true 2-manifold: no open boundary, no edge with
+  // 3+ faces, and no pinch vertex where two shells meet at a point.
+  const watertight = boundaryEdges === 0 && nonManifoldEdges === 0 && nonManifoldVertices === 0;
   const components = componentCount(mesh);
   const orientable = orientationConsistent(mesh);
   // Genus is well-defined only for a SINGLE closed ORIENTABLE surface. Two
@@ -690,6 +783,7 @@ export function predictCensus(mesh: KernelMesh): PredictedCensus {
     euler,
     boundaryEdges,
     nonManifoldEdges,
+    nonManifoldVertices,
     watertight,
     components,
     orientable,

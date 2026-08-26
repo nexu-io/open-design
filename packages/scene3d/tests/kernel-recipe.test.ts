@@ -141,6 +141,13 @@ describe.skipIf(!present)("kernel recipe: Python front-end produces the same IR 
     expect(census.min[2]).toBe(-1); // flat, crisp base
   });
 
+  it("rejects a runaway subdivide level (the loud ceiling)", () => {
+    const recipe = writeRecipe("def build(ctx):\n    ctx.box().subdivide(11)\n");
+    const r = runRecipe(recipe, { runnerScript: RUNNER, pythonBin: PYTHON });
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("more than 10 levels");
+  });
+
   it("surfaces a recipe's contract error as a sentence, not a traceback", () => {
     const missing = writeRecipe("x = 1\n");
     const r1 = runRecipe(missing, { runnerScript: RUNNER, pythonBin: PYTHON });

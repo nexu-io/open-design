@@ -97,7 +97,7 @@ function validateTraceShape(value: unknown): string | null {
           }
         }
         for (const p of op.points as unknown[]) {
-          if (!Array.isArray(p) || p.length !== 3 || p.some((c) => typeof c !== "string")) {
+          if (!Array.isArray(p) || p.length !== 3 || p.some((c) => !okRat(c))) {
             return `trace.ops[${i}] cage points must each be three rational strings`;
           }
         }
@@ -107,6 +107,12 @@ function validateTraceShape(value: unknown): string | null {
         if (!Number.isInteger(op.levels) || (op.levels as number) < 0) {
           return `trace.ops[${i}] subdivide.levels must be a non-negative integer`;
         }
+        // A loud first-line ceiling: Catmull-Clark quadruples faces per level,
+        // so a large level count is a runaway (the evaluator's face-count guard
+        // is the exact backstop; this rejects the obvious typo up front).
+        if ((op.levels as number) > 10) {
+          return `trace.ops[${i}] subdivide.levels is ${op.levels} — more than 10 levels is a runaway (each level quadruples the faces)`;
+        }
         break;
       case "mirror":
         if (op.axis !== 0 && op.axis !== 1 && op.axis !== 2) {
@@ -115,7 +121,7 @@ function validateTraceShape(value: unknown): string | null {
         break;
       case "move": {
         const off = op.offset;
-        if (!Array.isArray(off) || off.length !== 3 || off.some((c) => typeof c !== "string")) {
+        if (!Array.isArray(off) || off.length !== 3 || off.some((c) => !okRat(c))) {
           return `trace.ops[${i}] move.offset must be three rational strings`;
         }
         const bad = regionProblem(op.region, i, "move");
@@ -131,7 +137,7 @@ function validateTraceShape(value: unknown): string | null {
         const bad = regionProblem(op.region, i, "extrude");
         if (bad) return bad;
         const off = op.offset;
-        if (!Array.isArray(off) || off.length !== 3 || off.some((c) => typeof c !== "string")) {
+        if (!Array.isArray(off) || off.length !== 3 || off.some((c) => !okRat(c))) {
           return `trace.ops[${i}] extrude.offset must be three rational strings`;
         }
         break;
@@ -139,7 +145,7 @@ function validateTraceShape(value: unknown): string | null {
       case "inset": {
         const bad = regionProblem(op.region, i, "inset");
         if (bad) return bad;
-        if (typeof op.factor !== "string") return `trace.ops[${i}] inset.factor must be a rational string`;
+        if (!okRat(op.factor)) return `trace.ops[${i}] inset.factor must be a rational string`;
         break;
       }
       case "scale": {
@@ -147,7 +153,7 @@ function validateTraceShape(value: unknown): string | null {
         if (bad) return bad;
         for (const field of ["factor", "pivot"] as const) {
           const v = op[field];
-          if (!Array.isArray(v) || v.length !== 3 || v.some((c) => typeof c !== "string")) {
+          if (!Array.isArray(v) || v.length !== 3 || v.some((c) => !okRat(c))) {
             return `trace.ops[${i}] scale.${field} must be three rational strings`;
           }
         }
@@ -167,6 +173,16 @@ function validateTraceShape(value: unknown): string | null {
   return null;
 }
 
+/** A finite rational string — an integer or `n/d` with a non-zero denominator,
+ *  exactly what `Rational.parse` accepts. The validator, not just the
+ *  evaluator, rejects `"1/0"` / `"abc"` so a future (untrusted) front-end
+ *  cannot push a non-parseable coordinate past it with a named reason. */
+function okRat(s: unknown): boolean {
+  if (typeof s !== "string" || !/^-?\d+(\/-?\d+)?$/.test(s)) return false;
+  const slash = s.indexOf("/");
+  return slash < 0 || BigInt(s.slice(slash + 1)) !== 0n;
+}
+
 /** Validate a `region` (the axis-bound conjunction `move` and `crease` share).
  *  Returns a message when malformed, null when sound. */
 function regionProblem(region: unknown, i: number, op: string): string | null {
@@ -176,7 +192,7 @@ function regionProblem(region: unknown, i: number, op: string): string | null {
   for (const key of ["x", "y", "z"]) {
     const b = (region as Record<string, unknown>)[key];
     if (b === undefined) continue;
-    if (!Array.isArray(b) || b.length !== 2 || b.some((c) => typeof c !== "string")) {
+    if (!Array.isArray(b) || b.length !== 2 || b.some((c) => !okRat(c))) {
       return `trace.ops[${i}] ${op}.region.${key} must be [min, max] rational strings`;
     }
   }

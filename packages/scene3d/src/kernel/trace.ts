@@ -291,13 +291,36 @@ export function evalTraceShapes(trace: Trace): { base: KernelMesh; shapes: Shape
       }
       variant = applyOp(op, variant, i);
     } else {
+      // Once a shape exists, only `subdivide` may run globally: it is the ONE
+      // op whose topology is coordinate-INDEPENDENT, so it stays in lockstep
+      // with every shape. `mirror` (exact-coordinate weld), `extrude`/`inset`
+      // (region selection on coordinates), `move`/`scale`/`crease` (region
+      // selection) all decide something from geometry, so a deformed shape
+      // would diverge from the base — silently mismatching vertex counts or
+      // crease sets (both red-teams found this). Author them BEFORE the first
+      // shape, or inside the shape bracket.
+      if (shapes.length > 0 && op.op !== "subdivide") {
+        throw new Error(
+          `evalTraceShapes: op ${i} '${op.op}' cannot run globally once a shape exists — only 'subdivide' stays in lockstep with every morph target; do region/mirror/extrude/inset ops before the first shape`,
+        );
+      }
       base = applyOp(op, base, i);
       for (const s of shapes) s.mesh = applyOp(op, s.mesh, i);
     }
   });
   if (recording !== null) throw new Error(`evalTraceShapes: shape '${recording}' was never closed with endShape`);
-  if (!base) throw new Error("evalTraceShapes: empty trace produced no geometry");
-  return { base, shapes };
+  if (base === null) throw new Error("evalTraceShapes: empty trace produced no geometry");
+  const finalBase: KernelMesh = base;
+  // Defense in depth: every morph target MUST share the base's vertex count, or
+  // the shape-key write downstream would truncate or overrun.
+  for (const s of shapes) {
+    if (s.mesh.verts.length !== finalBase.verts.length) {
+      throw new Error(
+        `evalTraceShapes: shape '${s.name}' has ${s.mesh.verts.length} vertices but the base has ${finalBase.verts.length} — a morph target must stay in lockstep with the base`,
+      );
+    }
+  }
+  return { base: finalBase, shapes };
 }
 
 interface ParsedRegion {

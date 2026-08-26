@@ -255,6 +255,23 @@ describe("kernel trace: morph targets propagate through subdivision exactly", ()
   it("evalTrace refuses shape ops — those need evalTraceShapes", () => {
     expect(() => evalTrace(new Recorder().box().shape("a").endShape().trace())).toThrow(/evalTraceShapes/);
   });
+
+  it("forbids a geometry-dependent global op after a shape (the desync both red-teams found)", () => {
+    // A deformed shape would select a different face/edge set than the base for
+    // a region op, silently mismatching vertex counts. Only subdivide (which is
+    // coordinate-independent) may run globally after a shape.
+    const after = (add: (r: Recorder) => void) => {
+      const r = new Recorder().box().shape("s").move({ z: ["1", "1"] }, [0, 0, 1]).endShape();
+      add(r);
+      return () => evalTraceShapes(r.trace());
+    };
+    expect(after((r) => r.extrude({ z: ["1", "1"] }, [0, 0, 1]))).toThrow(/cannot run globally/);
+    expect(after((r) => r.inset({ z: ["1", "1"] }, "1/2"))).toThrow(/cannot run globally/);
+    expect(after((r) => r.mirror(0))).toThrow(/cannot run globally/);
+    expect(after((r) => r.crease({ z: ["1", "1"] }))).toThrow(/cannot run globally/);
+    // subdivide after a shape is fine — it stays in lockstep.
+    expect(after((r) => r.subdivide(1))).not.toThrow();
+  });
 });
 
 describe("kernel trace: malformed recipes fail loudly", () => {
