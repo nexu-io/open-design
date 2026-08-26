@@ -36,7 +36,8 @@ Shell-owned check/download path. Adding `ELECTRON_KIT_FIXTURE_INSTALL_UPDATE=1`
 exercises the shared lifecycle transition and orderly after-quit installer
 handoff; `ELECTRON_KIT_FIXTURE_INSTALLER_VERIFY_ONLY=1` keeps that proof safe by
 re-verifying the artifact and writing the detached-helper receipt without
-opening it.
+opening it. The Shell handler arms that helper before Electron requests quit;
+the helper still waits for the Electron parent to exit before acting.
 
 `pack` emits a macOS `.app` and `.dmg` under `dist/` on macOS. Windows emits a
 directory build and NSIS installer on a Windows host. Its ephemeral NSIS include

@@ -16,11 +16,11 @@ import {
   type ElectronRendererLease,
   type ElectronShellDefinition,
 } from "../contracts/index.js";
-import type { ElectronInstallerHandoff } from "../update/installation/contracts.js";
 import { ElectronActivationAttempt } from "./session/activation.js";
 import { ElectronRuntimeLog } from "./session/logging.js";
 import { completeElectronShutdown } from "./session/shutdown.js";
 import { claimElectronSingleInstanceLock, ElectronLaunchHandoffQueue } from "./session/single-instance.js";
+import { observeElectronInstallerHandoff } from "./session/update-handoff.js";
 import { ELECTRON_BOOTSTRAP_SCHEMA_VERSION, validateElectronBootstrapResult } from "./startup/bootstrap/contracts.js";
 import { ensureOfficialNodeCarrier, OfficialNodeCarrierError, type OfficialNodeCarrierReceipt } from "./startup/carrier/index.js";
 import {
@@ -34,6 +34,7 @@ import { focusElectronWindow, resolveElectronPresentationMode } from "./window/p
 export * from "./session/logging.js";
 export * from "./session/shutdown.js";
 export * from "./session/single-instance.js";
+export * from "./session/update-handoff.js";
 export * from "./window/presentation.js";
 
 function splashHtml(title: string): string {
@@ -265,7 +266,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   }, runtimeStatus.lease?.heartbeatIntervalMs ?? 1_000);
   heartbeat.unref();
   let closing = false;
-  let pendingInstaller: Readonly<{ handoff: ElectronInstallerHandoff; installAttemptId: string }> | null = null;
+  let installerArming = Promise.resolve();
   const close = async () => {
     if (closing) return;
     closing = true;
@@ -291,32 +292,33 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   app.on("before-quit", (event) => {
     if (closing) return;
     event.preventDefault();
-    void close().then(async () => {
-      if (pendingInstaller == null) return;
-      if (definition.actions?.installUpdate == null) throw new Error("Electron Shell installer action is unavailable");
-      await definition.actions.installUpdate({
-        handoff: pendingInstaller.handoff,
-        installAttemptId: pendingInstaller.installAttemptId,
-        nodeExecutablePath: runtimeCarrier.executablePath,
-        parentPid: process.pid,
-        runtimeRoot,
-      });
-    }).catch((error: unknown) => {
+    void installerArming.catch((error: unknown) => {
+      console.error("[electron-kit] installer arming failed", error);
+    }).then(close).catch((error: unknown) => {
       console.error("[electron-kit] shutdown or installer handoff failed", error);
     }).finally(() => app.quit());
   });
-  void (async () => {
-    let snapshot = await runtimePorts.updater.readSnapshot();
-    while (!closing) {
-      if (snapshot.revision > runtimeUpdaterRevisionAtStart && snapshot.state === "handed-off" && snapshot.handoff != null && snapshot.installAttemptId != null) {
-        pendingInstaller = { handoff: snapshot.handoff, installAttemptId: snapshot.installAttemptId };
-        app.quit();
-        return;
-      }
-      snapshot = await runtimePorts.updater.waitForChange(snapshot.revision, 1_000);
+  void observeElectronInstallerHandoff({
+    afterRevision: runtimeUpdaterRevisionAtStart,
+    isClosing: () => closing,
+    updater: runtimePorts.updater,
+    async onHandoff(request) {
+      if (definition.actions?.installUpdate == null) throw new Error("Electron Shell installer action is unavailable");
+      installerArming = Promise.resolve(definition.actions.installUpdate({
+        ...request,
+        nodeExecutablePath: runtimeCarrier.executablePath,
+        parentPid: process.pid,
+        runtimeRoot,
+      })).then(() => undefined);
+      await installerArming;
+      context.log?.write("installer.armed", { installAttemptId: request.installAttemptId });
+      app.quit();
+    },
+  }).catch((error: unknown) => {
+    if (!closing) {
+      context.log?.write("installer.observation.failed", { error });
+      console.error("[electron-kit] Shell updater observation failed", error);
     }
-  })().catch((error: unknown) => {
-    if (!closing) console.error("[electron-kit] Shell updater observation failed", error);
   });
   const smokeExitMs = Number(process.env.ELECTRON_KIT_SMOKE_EXIT_MS ?? "0");
   if (Number.isFinite(smokeExitMs) && smokeExitMs > 0) setTimeout(() => app.quit(), smokeExitMs).unref();
