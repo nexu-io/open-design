@@ -6,6 +6,9 @@ the `od://` handler, ready-before preflight policy, concrete warmup topology, an
 electron-kit owns only graph lifecycle and its public carrier/Standalone atoms.
 `preflight.json` selects the finite locale/connection atoms and owns concrete
 host exemptions; electron-kit validates and applies them before app readiness.
+`distribution.json` likewise owns the finite macOS/Windows artifact and installer
+policy. It is consumed only by `pack`; the assembled scene remains independent
+of distribution and release policy.
 Desktop handlers will follow the same declaration pattern after the real
 Sidecar readiness adapter lands: Shell JSON and Shell code own the finite
 message topology, normalizer, and executors, while electron-kit only owns the

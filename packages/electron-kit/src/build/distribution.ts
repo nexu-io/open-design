@@ -6,40 +6,41 @@ import { Arch, build as electronBuild, Platform } from "electron-builder";
 
 import type { ElectronShellManifest } from "../boundary/index.js";
 import type { ElectronDistributionReceipt, ElectronSceneReceipt } from "./contracts.js";
+import {
+  resolveElectronDistributionConfiguration,
+  resolveElectronDistributionPlatform,
+  validateElectronDistributionPolicy,
+  type ElectronDistributionPolicy,
+} from "./distribution-policy.js";
 
 export type BuildElectronDistributionInput = Readonly<{
   scene: ElectronSceneReceipt;
   manifest: ElectronShellManifest;
+  policy: ElectronDistributionPolicy;
   outputRoot: string;
 }>;
 
 export async function buildElectronDistribution(input: BuildElectronDistributionInput): Promise<ElectronDistributionReceipt> {
+  const policy = validateElectronDistributionPolicy(input.policy);
+  const platform: ElectronDistributionReceipt["platform"] = resolveElectronDistributionPlatform(process.platform);
   await rm(input.outputRoot, { force: true, recursive: true });
   await mkdir(input.outputRoot, { recursive: true });
-  const platform: ElectronDistributionReceipt["platform"] = process.platform === "win32" ? "win" : "mac";
   const targets = platform === "win"
-    ? Platform.WINDOWS.createTarget(["dir", "nsis"], Arch.x64)
-    : Platform.MAC.createTarget(["dir", "dmg"], process.arch === "arm64" ? Arch.arm64 : Arch.x64);
+    ? Platform.WINDOWS.createTarget([...policy.windows.targets], Arch.x64)
+    : Platform.MAC.createTarget([...policy.mac.targets], process.arch === "arm64" ? Arch.arm64 : Arch.x64);
   const require = createRequire(import.meta.url);
   const electronPackage = JSON.parse(await readFile(require.resolve("electron/package.json"), "utf8")) as { version: string };
   const built = await electronBuild({
     projectDir: input.scene.sceneRoot,
     targets,
     config: {
-      appId: input.manifest.appId,
-      productName: input.manifest.productName,
-      executableName: input.manifest.executableName,
-      electronVersion: electronPackage.version,
-      asar: true,
-      directories: { output: input.outputRoot },
-      files: ["main.cjs", "electron-shell.json", "preflight.json", "warmup.json", "node-lock.json", "package.json", "scene-receipt.json"],
+      ...resolveElectronDistributionConfiguration({
+        manifest: input.manifest,
+        policy,
+        electronVersion: electronPackage.version,
+        outputRoot: input.outputRoot,
+      }),
       extraResources: [{ from: input.scene.sidecarPath, to: "fixture-sidecar.cjs" }],
-      npmRebuild: false,
-      nodeGypRebuild: false,
-      mac: { category: "public.app-category.developer-tools", target: ["dir", "dmg"] },
-      dmg: { sign: false },
-      win: { target: ["dir", "nsis"] },
-      nsis: { oneClick: false, perMachine: false },
     },
   });
   const appPath = platform === "mac"

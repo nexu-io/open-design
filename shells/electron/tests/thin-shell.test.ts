@@ -8,6 +8,32 @@ describe("Electron product shell", () => {
     expect(packageJson.scripts.dev).toBe("node ./scripts/dev.mjs");
     expect(packageJson.scripts.pack).toBe("node ./scripts/pack.mjs");
     expect(packageJson.scripts.prepack).toBe(packageJson.scripts.pack);
+    const [dev, pack] = await Promise.all([
+      readFile(new URL("../scripts/dev.mjs", import.meta.url), "utf8"),
+      readFile(new URL("../scripts/pack.mjs", import.meta.url), "utf8"),
+    ]);
+    expect(dev).not.toContain("distribution.json");
+    expect(pack).toContain('new URL("../distribution.json"');
+  });
+
+  it("owns finite macOS and Windows distribution policy", async () => {
+    const policy = JSON.parse(await readFile(new URL("../distribution.json", import.meta.url), "utf8")) as {
+      mac: { targets: string[] };
+      windows: { targets: string[]; nsis: Record<string, unknown> };
+    };
+    expect(policy.mac.targets).toEqual(["dir", "dmg"]);
+    expect(policy.windows.targets).toEqual(["dir", "nsis"]);
+    expect(policy.windows.nsis).toMatchObject({
+      allowElevation: false,
+      allowToChangeInstallationDirectory: true,
+      createDesktopShortcut: true,
+      createStartMenuShortcut: true,
+      deleteAppDataOnUninstall: false,
+      multiLanguageInstaller: true,
+      oneClick: false,
+      perMachine: false,
+      warningsAsErrors: false,
+    });
   });
 
   it("does not import Closure or product app internals", async () => {
