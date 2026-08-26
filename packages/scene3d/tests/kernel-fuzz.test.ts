@@ -121,6 +121,27 @@ describe("kernel fuzz: Catmull-Clark obeys its exact count law", () => {
   });
 });
 
+describe("kernel fuzz: a single-face extrude stays a closed genus-0 solid", () => {
+  it("extruding any box face by any offset, then subdividing, keeps it closed", () => {
+    const rng = new Rng("kernel-fuzz-extrude-v1");
+    const faceRegions: Array<{ x?: [string, string]; y?: [string, string]; z?: [string, string] }> = [
+      { z: ["1", "1"] }, { z: ["-1", "-1"] },
+      { x: ["1", "1"] }, { x: ["-1", "-1"] },
+      { y: ["1", "1"] }, { y: ["-1", "-1"] },
+    ];
+    for (let i = 0; i < 80; i++) {
+      const r = rng.at(`x/${i}`);
+      const reg = faceRegions[Math.floor(r.uniform(0, faceRegions.length))]!;
+      const off: [string, string, string] = [intStr(r, -3, 3), intStr(r, -3, 3), intStr(r, -3, 3)];
+      assertClosedGenus0(evalTrace(new Recorder().box().extrude(reg, off).trace()), `extrude ${i}`);
+      assertClosedGenus0(
+        evalTrace(new Recorder().box().extrude(reg, off).subdivide(1).trace()),
+        `extrude+subdivide ${i}`,
+      );
+    }
+  });
+});
+
 describe("kernel fuzz: determinism", () => {
   it("random operator sequences are byte-identical on re-run", () => {
     const rng = new Rng("kernel-fuzz-det-v1");

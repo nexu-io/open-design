@@ -431,6 +431,102 @@ export function toEmitMesh(mesh: KernelMesh): EmitMesh {
 }
 
 /* ------------------------------------------------------------------ */
+/* Extrude — grow geometry from a face region                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Extrude the faces whose EVERY vertex satisfies `inRegion`, offsetting the
+ * new top by an exact rational vector and walling the region's boundary.
+ *
+ * The offset is a plain vector, not a distance along the face normal — a unit
+ * normal needs a square root, which would break the kernel's exactness. The
+ * author picks the direction and magnitude as a rational triple (extruding a
+ * z-face by [0,0,1] is the normal case, exactly). Winding is chosen so the
+ * result stays a consistently oriented, closed manifold for a well-formed
+ * region: each boundary edge's wall traverses the base edge opposite to its
+ * unselected neighbour, and the top faces keep the selected winding. Base
+ * vertices left unreferenced (the interior of a multi-face region) are
+ * compacted away, so no orphan verts survive.
+ */
+export function extrude(
+  mesh: KernelMesh,
+  inRegion: (v: RVec3) => boolean,
+  offset: RVec3,
+): KernelMesh {
+  const selected: number[] = [];
+  mesh.faces.forEach((f, fi) => {
+    if (f.every((i) => inRegion(mesh.verts[i]!))) selected.push(fi);
+  });
+  if (selected.length === 0) return mesh;
+  const selSet = new Set(selected);
+
+  // Duplicate every vertex the selected faces use, offset by the vector.
+  const selVerts: number[] = [];
+  const seen = new Set<number>();
+  for (const fi of selected) for (const v of mesh.faces[fi]!) if (!seen.has(v)) { seen.add(v); selVerts.push(v); }
+  const verts: RVec3[] = [...mesh.verts];
+  const vertId: string[] = [...mesh.vertId];
+  const dup = new Map<number, number>();
+  for (const v of selVerts) {
+    const p = mesh.verts[v]!;
+    dup.set(v, verts.length);
+    verts.push([p[0].add(offset[0]), p[1].add(offset[1]), p[2].add(offset[2])]);
+    vertId.push(`extrude(${mesh.vertId[v]})`);
+  }
+
+  // How many SELECTED faces each edge borders — 1 means it is on the region's
+  // boundary and needs a wall.
+  const selCount = new Map<string, number>();
+  for (const fi of selected) {
+    const f = mesh.faces[fi]!;
+    for (let k = 0; k < f.length; k++) {
+      const key = edgeKey(f[k]!, f[(k + 1) % f.length]!);
+      selCount.set(key, (selCount.get(key) ?? 0) + 1);
+    }
+  }
+
+  const faces: number[][] = [];
+  mesh.faces.forEach((f, fi) => {
+    if (!selSet.has(fi)) faces.push([...f]); // untouched faces
+  });
+  for (const fi of selected) faces.push(mesh.faces[fi]!.map((v) => dup.get(v)!)); // raised tops
+  for (const fi of selected) {
+    const f = mesh.faces[fi]!;
+    for (let k = 0; k < f.length; k++) {
+      const a = f[k]!;
+      const b = f[(k + 1) % f.length]!;
+      if (selCount.get(edgeKey(a, b)) === 1) {
+        // Wall: base edge a->b (opposite the unselected neighbour), up and over.
+        faces.push([a, b, dup.get(b)!, dup.get(a)!]);
+      }
+    }
+  }
+
+  return compact({ verts, faces, vertId, ...(mesh.creases ? { creases: mesh.creases } : {}) });
+}
+
+/** Drop vertices no face references and renumber, so an extrude (or any op
+ *  that can strand a vertex) never leaves an orphan behind. Creases are
+ *  dropped: their edge keys are indices into the pre-compaction mesh, and
+ *  extrude is not a crease-preserving operation. */
+function compact(mesh: KernelMesh): KernelMesh {
+  const used = new Set<number>();
+  for (const f of mesh.faces) for (const v of f) used.add(v);
+  if (used.size === mesh.verts.length) return mesh; // nothing stranded
+  const remap = new Map<number, number>();
+  const verts: RVec3[] = [];
+  const vertId: string[] = [];
+  mesh.verts.forEach((v, i) => {
+    if (used.has(i)) {
+      remap.set(i, verts.length);
+      verts.push(v);
+      vertId.push(mesh.vertId[i]!);
+    }
+  });
+  return { verts, faces: mesh.faces.map((f) => f.map((i) => remap.get(i)!)), vertId };
+}
+
+/* ------------------------------------------------------------------ */
 /* The predicted census — exact facts, no Blender                     */
 /* ------------------------------------------------------------------ */
 

@@ -2,6 +2,7 @@ import { Rational } from "./rational.js";
 import {
   edgeKey,
   edgesOf,
+  extrude,
   KernelMesh,
   meshOf,
   mirror,
@@ -97,6 +98,18 @@ export type TraceOp =
       region: Region;
       factor: [string, string, string];
       pivot: [string, string, string];
+    }
+  | {
+      /**
+       * Grow the faces whose every vertex is in `region` outward by `offset`
+       * (a rational vector — no normal, so it stays exact): the selected faces
+       * lift to a raised top and the region's boundary is walled. The first
+       * operator that adds topology (a bump, a boss, a socket) rather than
+       * refining or deforming it.
+       */
+      op: "extrude";
+      region: Region;
+      offset: [string, string, string];
     };
 
 export interface Trace {
@@ -166,6 +179,13 @@ export function evalTrace(trace: Trace): KernelMesh {
           }
         }
         mesh = { ...mesh, creases: marked };
+        break;
+      }
+      case "extrude": {
+        if (!mesh) throw new Error(`evalTrace: op ${i} 'extrude' before any geometry`);
+        const region = parseRegion(op.region);
+        const off: RVec3 = [Rational.parse(op.offset[0]), Rational.parse(op.offset[1]), Rational.parse(op.offset[2])];
+        mesh = extrude(mesh, (v) => inRegion(v, region), off);
         break;
       }
       case "scale": {
@@ -364,6 +384,29 @@ export class Recorder {
     if (y) r.y = y;
     if (z) r.z = z;
     this.ops.push({ op: "crease", region: r });
+    return this;
+  }
+
+  /** Grow the faces inside a region outward by an offset vector — a bump, a
+   *  boss, a socket. The first operator that adds topology. */
+  extrude(
+    region: { x?: [Coord, Coord]; y?: [Coord, Coord]; z?: [Coord, Coord] },
+    offset: [Coord, Coord, Coord],
+  ): this {
+    const bound = (b: [Coord, Coord] | undefined): [string, string] | undefined =>
+      b ? [coordStr(b[0]), coordStr(b[1])] : undefined;
+    const r: Region = {};
+    const x = bound(region.x);
+    const y = bound(region.y);
+    const z = bound(region.z);
+    if (x) r.x = x;
+    if (y) r.y = y;
+    if (z) r.z = z;
+    this.ops.push({
+      op: "extrude",
+      region: r,
+      offset: [coordStr(offset[0]), coordStr(offset[1]), coordStr(offset[2])],
+    });
     return this;
   }
 

@@ -320,11 +320,14 @@ Fill the box another way:
   Catmull-Clark), `ctx.mirror(axis)` (0=x/1=y/2=z), `ctx.move(region,
   offset)` (translate a coordinate region — taper/stretch/asymmetry), and
   `ctx.crease(region)` (mark the edges inside a region sharp so subdivision
-  keeps them crisp — a flat base, a hard rim), and `ctx.scale(region, factor,
-  pivot)` (taper/bulge a region about a pivot), chained fluently. A `region`
+  keeps them crisp — a flat base, a hard rim), `ctx.scale(region, factor,
+  pivot)` (taper/bulge a region about a pivot), and `ctx.extrude(region,
+  offset)` (grow the faces inside a region outward by an offset vector — a
+  bump, boss or socket; the offset is a rational vector, not a normal
+  distance, so it stays exact), chained fluently. A `region`
   is a dict of axis → `[min, max]` inclusive bounds (`{"z": ["1", "1"]}` is
-  exactly the plane z=1; `{}` is everything); `move`/`crease` are exact and
-  topology-preserving, so the predicted census is unchanged.
+  exactly the plane z=1; `{}` is everything); `move`/`scale`/`crease` are
+  topology-preserving, while `extrude` adds a boss and its walls — all exact.
   Coordinates are ints, rational strings (`"1/2"`) or `fractions.Fraction`
   — never floats. It runs in plain CPython (no `bpy`), so ordinary loops
   and helpers are fine; the compiler evaluates the trace in exact rationals,

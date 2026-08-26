@@ -710,8 +710,8 @@ It is a **language-neutral operator IR with one evaluator**: a front-end
 (the raw-path Python recorder today, a declarative shape later) produces a
 serialized *trace* of exact operators — `cage`, `subdivide` (Catmull-Clark),
 `mirror`, `move` (translate a coordinate region), `scale` (taper a region
-about a pivot), `crease` (keep chosen edges sharp under subdivision) — and the
-compiler alone evaluates it. Everything is exact
+about a pivot), `crease` (keep chosen edges sharp under subdivision), `extrude`
+(grow a boss from a face region) — and the compiler alone evaluates it. Everything is exact
 rational arithmetic on BigInt (no float, no trig), so a mesh is exact
 through any number of subdivision levels and identical on every machine;
 the one rounding is `toEmitMesh`, at emit, into `_kernel_part`'s

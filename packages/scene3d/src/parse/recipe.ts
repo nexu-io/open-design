@@ -127,6 +127,15 @@ function validateTraceShape(value: unknown): string | null {
         if (bad) return bad;
         break;
       }
+      case "extrude": {
+        const bad = regionProblem(op.region, i, "extrude");
+        if (bad) return bad;
+        const off = op.offset;
+        if (!Array.isArray(off) || off.length !== 3 || off.some((c) => typeof c !== "string")) {
+          return `trace.ops[${i}] extrude.offset must be three rational strings`;
+        }
+        break;
+      }
       case "scale": {
         const bad = regionProblem(op.region, i, "scale");
         if (bad) return bad;

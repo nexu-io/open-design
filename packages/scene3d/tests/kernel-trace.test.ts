@@ -146,6 +146,38 @@ describe("kernel trace: scale is an exact region deformation", () => {
   });
 });
 
+describe("kernel trace: extrude grows a closed, watertight bump", () => {
+  it("extruding the top face of a box adds a boss with exact counts", () => {
+    // Box (V8 E12 F6) with its +z face pulled up by 1: 4 new verts, the top
+    // face plus 4 walls replace the one face. Euler stays 2 (still a genus-0
+    // sphere), and watertight+orientable confirm the wall winding is correct.
+    const m = evalTrace(new Recorder().box().extrude({ z: ["1", "1"] }, [0, 0, 1]).trace());
+    const c = predictCensus(m);
+    expect([c.vertices, c.edges, c.faces]).toEqual([12, 20, 10]);
+    expect(c.euler).toBe(2);
+    expect(c.watertight).toBe(true);
+    expect(c.orientable).toBe(true);
+    expect(c.genus).toBe(0);
+    expect(c.max[2]).toBe(2); // the boss stands 1 above the box top
+    expect(c.min[2]).toBe(-1); // base untouched
+  });
+
+  it("an extruded boss subdivides to a smooth closed surface", () => {
+    const m = predictCensus(
+      evalTrace(new Recorder().box().extrude({ z: ["1", "1"] }, [0, 0, 1]).subdivide(2).trace()),
+    );
+    expect(m.watertight).toBe(true);
+    expect(m.genus).toBe(0);
+  });
+
+  it("a region matching no whole face is a no-op", () => {
+    // No face has all four vertices at z = 0 (there is no such face), so
+    // nothing extrudes and the box is unchanged.
+    const m = predictCensus(evalTrace(new Recorder().box().extrude({ z: ["0", "0"] }, [0, 0, 1]).trace()));
+    expect([m.vertices, m.faces]).toEqual([8, 6]);
+  });
+});
+
 describe("kernel trace: malformed recipes fail loudly", () => {
   it("a transform before any geometry is an error, not a guess", () => {
     expect(() => evalTrace({ version: 1, ops: [{ op: "subdivide", levels: 1 }] })).toThrow(

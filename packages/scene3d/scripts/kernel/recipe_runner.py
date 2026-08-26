@@ -127,6 +127,27 @@ class RecipeCtx:
         self._ops.append({"op": "crease", "region": r})
         return self
 
+    def extrude(self, region, offset):
+        """Grow the faces inside a region outward by an offset vector."""
+        if not isinstance(region, dict):
+            raise ValueError("extrude(region, offset): region must be a dict of axis -> [min, max]")
+        r = {}
+        for key in ("x", "y", "z"):
+            b = region.get(key)
+            if b is None:
+                continue
+            if len(b) != 2:
+                raise ValueError("extrude(...): region['%s'] must be [min, max]" % key)
+            r[key] = [_coord(b[0]), _coord(b[1])]
+        if len(offset) != 3:
+            raise ValueError("extrude(region, offset): offset must be [x, y, z]")
+        self._ops.append({
+            "op": "extrude",
+            "region": r,
+            "offset": [_coord(offset[0]), _coord(offset[1]), _coord(offset[2])],
+        })
+        return self
+
     def scale(self, region, factor, pivot=(0, 0, 0)):
         """Scale the vertices in a region about a pivot by a per-axis factor."""
         if not isinstance(region, dict):
