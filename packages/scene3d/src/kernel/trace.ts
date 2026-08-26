@@ -1,5 +1,7 @@
 import { Rational } from "./rational.js";
 import {
+  edgeKey,
+  edgesOf,
   KernelMesh,
   meshOf,
   mirror,
@@ -35,6 +37,20 @@ import {
  * architecture.
  */
 
+/**
+ * A coordinate region — a conjunction of per-axis inclusive rational bounds.
+ * A vertex is IN the region when, for every axis a bound is given, its
+ * coordinate lies within [min, max]. Exact rational comparison, so a vertex
+ * exactly on a bound is deterministically included and the selection is the
+ * same on every machine. An axis omitted is unconstrained, so `{}` is the
+ * whole mesh and `{ z: ["1", "1"] }` is exactly the plane z = 1.
+ */
+export interface Region {
+  x?: [string, string];
+  y?: [string, string];
+  z?: [string, string];
+}
+
 export type TraceOp =
   | {
       op: "cage";
@@ -44,7 +60,32 @@ export type TraceOp =
       ids?: string[];
     }
   | { op: "subdivide"; levels: number }
-  | { op: "mirror"; axis: 0 | 1 | 2 };
+  | { op: "mirror"; axis: 0 | 1 | 2 }
+  | {
+      /**
+       * Translate every vertex inside `region` by `offset` (three rational
+       * strings). A pure deformation: topology is untouched, so counts,
+       * watertightness and genus are invariant and the predicted census still
+       * adjudicates. Because subdivision is linear, a delta on a cage
+       * propagates to the limit surface EXACTLY (the KILN S·Δ property) — a
+       * localized move here composes with a later `subdivide` with no fitting
+       * and no residual.
+       */
+      op: "move";
+      region: Region;
+      offset: [string, string, string];
+    }
+  | {
+      /**
+       * Mark every edge whose BOTH endpoints lie in `region` as infinitely
+       * sharp. A later `subdivide` keeps those edges (and the corners where
+       * three meet) crisp instead of rounding them — the difference between a
+       * subdivided box that melts toward a sphere and one that keeps a flat
+       * base or hard rim. Creases propagate through subdivision.
+       */
+      op: "crease";
+      region: Region;
+    };
 
 export interface Trace {
   version: 1;
@@ -88,6 +129,33 @@ export function evalTrace(trace: Trace): KernelMesh {
         if (!mesh) throw new Error(`evalTrace: op ${i} 'mirror' before any geometry`);
         mesh = mirror(mesh, op.axis);
         break;
+      case "move": {
+        if (!mesh) throw new Error(`evalTrace: op ${i} 'move' before any geometry`);
+        const region = parseRegion(op.region);
+        const dx = Rational.parse(op.offset[0]);
+        const dy = Rational.parse(op.offset[1]);
+        const dz = Rational.parse(op.offset[2]);
+        // A pure translation of the selected vertices — topology and ids ride
+        // through untouched. Not re-welded: moving a vertex onto another is
+        // the author's deformation, not a merge, so identity is preserved.
+        const verts: RVec3[] = mesh.verts.map((v) =>
+          inRegion(v, region) ? [v[0].add(dx), v[1].add(dy), v[2].add(dz)] : v,
+        );
+        mesh = { ...mesh, verts };
+        break;
+      }
+      case "crease": {
+        if (!mesh) throw new Error(`evalTrace: op ${i} 'crease' before any geometry`);
+        const region = parseRegion(op.region);
+        const marked = new Set<string>(mesh.creases ?? []);
+        for (const e of edgesOf(mesh).values()) {
+          if (inRegion(mesh.verts[e.a]!, region) && inRegion(mesh.verts[e.b]!, region)) {
+            marked.add(edgeKey(e.a, e.b));
+          }
+        }
+        mesh = { ...mesh, creases: marked };
+        break;
+      }
       default: {
         const bad = op as { op: string };
         throw new Error(`evalTrace: unknown op '${bad.op}'`);
@@ -96,6 +164,37 @@ export function evalTrace(trace: Trace): KernelMesh {
   });
   if (!mesh) throw new Error("evalTrace: empty trace produced no geometry");
   return mesh;
+}
+
+interface ParsedRegion {
+  x?: [Rational, Rational];
+  y?: [Rational, Rational];
+  z?: [Rational, Rational];
+}
+
+function parseRegion(region: Region): ParsedRegion {
+  const axis = (b: [string, string] | undefined): [Rational, Rational] | undefined =>
+    b ? [Rational.parse(b[0]), Rational.parse(b[1])] : undefined;
+  const out: ParsedRegion = {};
+  const x = axis(region.x);
+  const y = axis(region.y);
+  const z = axis(region.z);
+  if (x) out.x = x;
+  if (y) out.y = y;
+  if (z) out.z = z;
+  return out;
+}
+
+/** A vertex is in the region when every present axis-bound contains it —
+ *  inclusive, exact rational comparison. */
+function inRegion(v: RVec3, region: ParsedRegion): boolean {
+  const bounds = [region.x, region.y, region.z] as const;
+  for (let i = 0; i < 3; i++) {
+    const b = bounds[i];
+    if (!b) continue;
+    if (v[i]!.cmp(b[0]) < 0 || v[i]!.cmp(b[1]) > 0) return false;
+  }
+  return true;
 }
 
 /** A trace's exact mesh AND the census predicted from it — the two projections
@@ -196,6 +295,46 @@ export class Recorder {
 
   mirror(axis: 0 | 1 | 2): this {
     this.ops.push({ op: "mirror", axis });
+    return this;
+  }
+
+  /** Translate the vertices in a coordinate region by an offset — an exact,
+   *  topology-preserving deformation. Bounds and offset are exact (ints,
+   *  rational strings, or Fractions). */
+  move(
+    region: { x?: [Coord, Coord]; y?: [Coord, Coord]; z?: [Coord, Coord] },
+    offset: [Coord, Coord, Coord],
+  ): this {
+    const bound = (b: [Coord, Coord] | undefined): [string, string] | undefined =>
+      b ? [coordStr(b[0]), coordStr(b[1])] : undefined;
+    const r: Region = {};
+    const x = bound(region.x);
+    const y = bound(region.y);
+    const z = bound(region.z);
+    if (x) r.x = x;
+    if (y) r.y = y;
+    if (z) r.z = z;
+    this.ops.push({
+      op: "move",
+      region: r,
+      offset: [coordStr(offset[0]), coordStr(offset[1]), coordStr(offset[2])],
+    });
+    return this;
+  }
+
+  /** Mark every edge with both endpoints in a coordinate region as sharp, so a
+   *  later subdivide keeps it crisp. */
+  crease(region: { x?: [Coord, Coord]; y?: [Coord, Coord]; z?: [Coord, Coord] }): this {
+    const bound = (b: [Coord, Coord] | undefined): [string, string] | undefined =>
+      b ? [coordStr(b[0]), coordStr(b[1])] : undefined;
+    const r: Region = {};
+    const x = bound(region.x);
+    const y = bound(region.y);
+    const z = bound(region.z);
+    if (x) r.x = x;
+    if (y) r.y = y;
+    if (z) r.z = z;
+    this.ops.push({ op: "crease", region: r });
     return this;
   }
 

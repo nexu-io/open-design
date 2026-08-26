@@ -8,4 +8,7 @@
 
 
 def build(ctx):
-    ctx.box().subdivide(2)
+    # A rounded hull with a flat, crisp base: the bottom edges are creased so
+    # the base stays sharp while the rest smooths. Crease is topology-preserving,
+    # so the census is still exactly V=98, F=96, 192 triangles.
+    ctx.box().crease({"z": ["-1", "-1"]}).subdivide(2)

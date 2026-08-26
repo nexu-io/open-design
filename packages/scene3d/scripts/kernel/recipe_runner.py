@@ -87,6 +87,46 @@ class RecipeCtx:
         self._ops.append({"op": "mirror", "axis": axis})
         return self
 
+    def move(self, region, offset):
+        """Translate the vertices in a coordinate region by an exact offset.
+
+        region is a dict of axis -> [min, max] (inclusive, exact); offset is
+        [x, y, z]. Coordinates are ints, rational strings or Fractions."""
+        if not isinstance(region, dict):
+            raise ValueError("move(region, offset): region must be a dict of axis -> [min, max]")
+        r = {}
+        for key in ("x", "y", "z"):
+            b = region.get(key)
+            if b is None:
+                continue
+            if len(b) != 2:
+                raise ValueError("move(region, offset): region['%s'] must be [min, max]" % key)
+            r[key] = [_coord(b[0]), _coord(b[1])]
+        if len(offset) != 3:
+            raise ValueError("move(region, offset): offset must be [x, y, z]")
+        self._ops.append({
+            "op": "move",
+            "region": r,
+            "offset": [_coord(offset[0]), _coord(offset[1]), _coord(offset[2])],
+        })
+        return self
+
+    def crease(self, region):
+        """Mark every edge with both endpoints in the region as sharp, so a
+        later subdivide keeps it crisp (a flat base, a hard rim)."""
+        if not isinstance(region, dict):
+            raise ValueError("crease(region): region must be a dict of axis -> [min, max]")
+        r = {}
+        for key in ("x", "y", "z"):
+            b = region.get(key)
+            if b is None:
+                continue
+            if len(b) != 2:
+                raise ValueError("crease(region): region['%s'] must be [min, max]" % key)
+            r[key] = [_coord(b[0]), _coord(b[1])]
+        self._ops.append({"op": "crease", "region": r})
+        return self
+
     def trace(self):
         return {"version": 1, "ops": self._ops}
 
@@ -105,9 +145,9 @@ def _line_in(path, exc):
 
 CONTRACT = (
     "the recipe contract: define build(ctx); ctx records exact operators -- "
-    "ctx.box()/ctx.cage(points, faces) seed geometry, ctx.subdivide(levels) and "
-    "ctx.mirror(axis) transform it; coordinates are ints, rational strings ('1/2') "
-    "or fractions.Fraction, never floats"
+    "ctx.box()/ctx.cage(points, faces) seed geometry, ctx.subdivide(levels), "
+    "ctx.mirror(axis), ctx.move(region, offset) and ctx.crease(region) transform it; "
+    "coordinates are ints, rational strings ('1/2') or fractions.Fraction, never floats"
 )
 
 

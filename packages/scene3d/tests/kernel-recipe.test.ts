@@ -79,6 +79,30 @@ describe.skipIf(!present)("kernel recipe: Python front-end produces the same IR 
     expect(traceHash(again.trace!)).toBe(traceHash(result.trace!));
   });
 
+  it("a recipe using move hashes identically to the TS recorder", () => {
+    const recipe = writeRecipe(
+      "def build(ctx):\n    ctx.box().move({'z': [1, 1]}, [0, '1/4', 2]).subdivide(1)\n",
+    );
+    const result = runRecipe(recipe, { runnerScript: RUNNER, pythonBin: PYTHON });
+    expect(result.ok).toBe(true);
+    const reference = new Recorder().box().move({ z: [1, 1] }, [0, "1/4", 2]).subdivide(1).trace();
+    expect(traceHash(result.trace!)).toBe(traceHash(reference));
+  });
+
+  it("a recipe using crease hashes identically to the TS recorder", () => {
+    const recipe = writeRecipe(
+      "def build(ctx):\n    ctx.box().crease({'z': ['-1', '-1']}).subdivide(2)\n",
+    );
+    const result = runRecipe(recipe, { runnerScript: RUNNER, pythonBin: PYTHON });
+    expect(result.ok).toBe(true);
+    const reference = new Recorder().box().crease({ z: ["-1", "-1"] }).subdivide(2).trace();
+    expect(traceHash(result.trace!)).toBe(traceHash(reference));
+    // And the crease is topology-preserving, so the census is unchanged.
+    const census = predictCensus(evalTrace(result.trace!));
+    expect([census.vertices, census.faces, census.triangles]).toEqual([98, 96, 192]);
+    expect(census.min[2]).toBe(-1); // flat, crisp base
+  });
+
   it("surfaces a recipe's contract error as a sentence, not a traceback", () => {
     const missing = writeRecipe("x = 1\n");
     const r1 = runRecipe(missing, { runnerScript: RUNNER, pythonBin: PYTHON });

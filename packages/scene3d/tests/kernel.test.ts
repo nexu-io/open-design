@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Rational, rat } from "../src/kernel/rational.js";
 import {
+  edgeKey,
   KernelMesh,
   meshOf,
   mirror,
@@ -10,6 +11,7 @@ import {
   subdivideCatmullClark,
 } from "../src/kernel/mesh.js";
 import { boundaryMatrices, homology, rankQ } from "../src/kernel/homology.js";
+import { evalTrace, Recorder, traceHash } from "../src/kernel/trace.js";
 
 /**
  * The deterministic geometry kernel, proved on exact known answers.
@@ -264,6 +266,61 @@ describe("kernel: orientation, connectivity and index guards (red-team)", () => 
     expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 1, 7]])).toThrow(/index 7/);
     expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 1, -1]])).toThrow(/index -1/);
     expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 1]])).toThrow(/at least 3/);
+  });
+});
+
+describe("kernel: creases keep chosen edges sharp under subdivision", () => {
+  const census = (recipe: (r: Recorder) => Recorder) =>
+    predictCensus(evalTrace(recipe(new Recorder().box()).trace()));
+
+  it("a fully-creased box stays an EXACT cube — every edge sharp, no rounding", () => {
+    // crease({}) marks every edge; all eight corners then have three sharp
+    // edges (the corner rule), so they stay put and the box does not shrink.
+    const creased = census((r) => r.crease({}).subdivide(2));
+    expect(creased.max).toEqual([1, 1, 1]);
+    expect(creased.min).toEqual([-1, -1, -1]);
+    expect(creased.watertight).toBe(true);
+    // The smooth box, by contrast, rounds inward off the corners.
+    const smooth = census((r) => r.subdivide(2));
+    expect(smooth.max[0]).toBeLessThan(1);
+    expect(smooth.max[0]).toBeGreaterThan(0);
+  });
+
+  it("creasing only the base edges keeps a flat sharp bottom while the top rounds", () => {
+    const m = census((r) => r.crease({ z: ["-1", "-1"] }).subdivide(2));
+    expect(m.min[2]).toBe(-1); // the base stayed crisp at z = -1
+    expect(m.max[2]).toBeLessThan(1); // the free top rounded inward
+    expect(m.watertight).toBe(true);
+  });
+
+  it("crease is topology-preserving — same counts as the smooth subdivision", () => {
+    // Only the rules that place points change, never how many there are, so
+    // the predicted census (and its claim) is unaffected.
+    const creased = census((r) => r.crease({}).subdivide(1));
+    const smooth = census((r) => r.subdivide(1));
+    expect([creased.vertices, creased.edges, creased.faces]).toEqual([
+      smooth.vertices,
+      smooth.edges,
+      smooth.faces,
+    ]);
+  });
+
+  it("a creased recipe is deterministic", () => {
+    const r = () => new Recorder().box().crease({ z: ["-1", "-1"] }).subdivide(2).trace();
+    expect(traceHash(r())).toBe(traceHash(r()));
+  });
+
+  it("mirror carries a crease to the reflected copy", () => {
+    // A quad with its far edge (verts 1-2) creased, mirrored across x = 0: the
+    // result keeps that crease on BOTH copies — the edge and its reflection.
+    const quad = meshOf([[1, 0, 0], [2, 0, 0], [2, 1, 0], [1, 1, 0]], [[0, 1, 2, 3]]);
+    const withCrease: KernelMesh = { ...quad, creases: new Set([edgeKey(1, 2)]) };
+    const m = mirror(withCrease, 0);
+    expect(m.creases?.size).toBe(2);
+    // The subdivide runs over the carried creases without error and is closed
+    // as a doubled shell only where topology allows; the point is the crease
+    // set survived the reflect+weld.
+    expect(() => subdivideCatmullClark(m)).not.toThrow();
   });
 });
 

@@ -317,7 +317,13 @@ Fill the box another way:
 - `"recipe": "hull.py"`: `def build(ctx):` that RECORDS a deterministic
   kernel trace instead of building geometry — `ctx.box(half=1)` or
   `ctx.cage(points, faces)` to seed, then `ctx.subdivide(levels)` (exact
-  Catmull-Clark) and `ctx.mirror(axis)` (0=x/1=y/2=z), chained fluently.
+  Catmull-Clark), `ctx.mirror(axis)` (0=x/1=y/2=z), `ctx.move(region,
+  offset)` (translate a coordinate region — taper/stretch/asymmetry), and
+  `ctx.crease(region)` (mark the edges inside a region sharp so subdivision
+  keeps them crisp — a flat base, a hard rim), chained fluently. A `region`
+  is a dict of axis → `[min, max]` inclusive bounds (`{"z": ["1", "1"]}` is
+  exactly the plane z=1; `{}` is everything); `move`/`crease` are exact and
+  topology-preserving, so the predicted census is unchanged.
   Coordinates are ints, rational strings (`"1/2"`) or `fractions.Fraction`
   — never floats. It runs in plain CPython (no `bpy`), so ordinary loops
   and helpers are fine; the compiler evaluates the trace in exact rationals,

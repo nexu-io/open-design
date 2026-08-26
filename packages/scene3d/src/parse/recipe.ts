@@ -113,8 +113,38 @@ function validateTraceShape(value: unknown): string | null {
           return `trace.ops[${i}] mirror.axis must be 0, 1 or 2`;
         }
         break;
+      case "move": {
+        const off = op.offset;
+        if (!Array.isArray(off) || off.length !== 3 || off.some((c) => typeof c !== "string")) {
+          return `trace.ops[${i}] move.offset must be three rational strings`;
+        }
+        const bad = regionProblem(op.region, i, "move");
+        if (bad) return bad;
+        break;
+      }
+      case "crease": {
+        const bad = regionProblem(op.region, i, "crease");
+        if (bad) return bad;
+        break;
+      }
       default:
         return `trace.ops[${i}] has unknown op '${String(op.op)}'`;
+    }
+  }
+  return null;
+}
+
+/** Validate a `region` (the axis-bound conjunction `move` and `crease` share).
+ *  Returns a message when malformed, null when sound. */
+function regionProblem(region: unknown, i: number, op: string): string | null {
+  if (region === null || typeof region !== "object" || Array.isArray(region)) {
+    return `trace.ops[${i}] ${op}.region must be an object of axis bounds`;
+  }
+  for (const key of ["x", "y", "z"]) {
+    const b = (region as Record<string, unknown>)[key];
+    if (b === undefined) continue;
+    if (!Array.isArray(b) || b.length !== 2 || b.some((c) => typeof c !== "string")) {
+      return `trace.ops[${i}] ${op}.region.${key} must be [min, max] rational strings`;
     }
   }
   return null;

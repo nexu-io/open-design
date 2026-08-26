@@ -46,6 +46,14 @@ export interface KernelMesh {
   faces: number[][];
   /** Provenance path per vertex — the operator ledger (never read by census). */
   vertId: string[];
+  /**
+   * Edges marked infinitely SHARP (by `edgeKey`), if any. Catmull-Clark keeps
+   * a creased edge crisp — its edge point is the midpoint and its endpoints
+   * follow the crease/corner rules — so a subdivided box can keep a flat base
+   * or hard corners instead of rounding everywhere. Creases propagate to
+   * child edges through subdivision. Absent = fully smooth.
+   */
+  creases?: ReadonlySet<string>;
 }
 
 /**
@@ -228,7 +236,12 @@ const R_6 = rat(6);
  */
 export function subdivideCatmullClark(mesh: KernelMesh): KernelMesh {
   const { verts, faces, vertId } = mesh;
+  const creases = mesh.creases ?? EMPTY_CREASES;
   const edges = edgesOf(mesh);
+  // An edge is SHARP when it is a boundary (one face) or an authored crease:
+  // both keep the edge crisp (its point is the midpoint, its endpoints follow
+  // the crease rule). One predicate, so boundary and crease behave identically.
+  const isSharp = (key: string): boolean => edges.get(key)!.faces.length === 1 || creases.has(key);
 
   // Face points.
   const facePoint = faces.map((f) => meanV(f.map((i) => verts[i]!)));
@@ -244,9 +257,9 @@ export function subdivideCatmullClark(mesh: KernelMesh): KernelMesh {
     edgeMid.set(key, mid);
     edgePoint.set(
       key,
-      e.faces.length === 2
+      e.faces.length === 2 && !creases.has(key)
         ? meanV([p1, p2, facePoint[e.faces[0]!]!, facePoint[e.faces[1]!]!])
-        : mid, // boundary
+        : mid, // boundary or crease → the sharp midpoint
     );
   }
 
@@ -262,24 +275,21 @@ export function subdivideCatmullClark(mesh: KernelMesh): KernelMesh {
   // Vertex points.
   const vertexPoint = verts.map((P, vi): RVec3 => {
     const incident = vertEdges[vi]!;
-    const boundary = incident.filter((k) => edges.get(k)!.faces.length === 1);
-    if (boundary.length > 0) {
-      // (6P + prev + next) / 8, using the boundary neighbours.
-      const neighbours = boundary.map((k) => {
+    const sharp = incident.filter(isSharp);
+    // Three or more sharp edges pin a CORNER: it stays exactly where it is,
+    // which is what gives a fully-creased box its hard corners.
+    if (sharp.length >= 3) return P;
+    // Exactly two: a crease/boundary vertex runs as a cubic B-spline along the
+    // sharp edges, independent of the smooth interior — (6P + n1 + n2) / 8.
+    if (sharp.length === 2) {
+      const neighbours = sharp.map((k) => {
         const e = edges.get(k)!;
         return verts[e.a === vi ? e.b : e.a]!;
       });
-      const sumN = neighbours.reduce((acc, v) => addV(acc, v), [
-        Rational.ZERO,
-        Rational.ZERO,
-        Rational.ZERO,
-      ] as RVec3);
-      // Exactly two boundary edges is the manifold case; average any excess
-      // rather than crash on a non-manifold boundary (reported elsewhere).
-      const neighbourTerm =
-        neighbours.length === 2 ? sumN : scaleV(sumN, rat(2, neighbours.length));
-      return scaleV(addV(scaleV(P, R_6), neighbourTerm), R_1_8);
+      const sumN = addV(neighbours[0]!, neighbours[1]!);
+      return scaleV(addV(scaleV(P, R_6), sumN), R_1_8);
     }
+    // Zero sharp edges (interior) or one (a dart): the smooth rule.
     const n = incident.length; // valence = interior edge count = face count
     const F = meanV(vertFaces[vi]!.map((fi) => facePoint[fi]!));
     const R = meanV(incident.map((k) => edgeMid.get(k)!));
@@ -312,8 +322,24 @@ export function subdivideCatmullClark(mesh: KernelMesh): KernelMesh {
       ]);
     }
   });
-  return b.build();
+  const out = b.build();
+  // Propagate creases: a sharp edge (a,b) splits at its edge point into two
+  // child edges, both sharp. Boundary sharpness needs no propagation — it is
+  // rediscovered from the new face counts — so only authored creases carry.
+  if (creases.size > 0) {
+    const childCreases = new Set<string>();
+    for (const key of creases) {
+      const e = edges.get(key)!;
+      const ep = epIdx.get(key)!;
+      childCreases.add(edgeKey(vpIdx[e.a]!, ep));
+      childCreases.add(edgeKey(vpIdx[e.b]!, ep));
+    }
+    return { ...out, creases: childCreases };
+  }
+  return out;
 }
+
+const EMPTY_CREASES: ReadonlySet<string> = new Set<string>();
 
 /** Apply `levels` Catmull-Clark steps. */
 export function subdivide(mesh: KernelMesh, levels: number): KernelMesh {
@@ -350,7 +376,20 @@ export function mirror(mesh: KernelMesh, axis: 0 | 1 | 2): KernelMesh {
     // Reversed winding on the reflected copy keeps normals outward.
     b.face([...f].reverse().map((i) => mirrored[i]!));
   }
-  return b.build();
+  const out = b.build();
+  // A creased edge stays creased on BOTH copies — the original and its
+  // reflection — so a mirror of a hard-edged half keeps its hard edges.
+  if (mesh.creases && mesh.creases.size > 0) {
+    const edges = edgesOf(mesh);
+    const carried = new Set<string>();
+    for (const key of mesh.creases) {
+      const e = edges.get(key)!;
+      carried.add(edgeKey(orig[e.a]!, orig[e.b]!));
+      carried.add(edgeKey(mirrored[e.a]!, mirrored[e.b]!));
+    }
+    return { ...out, creases: carried };
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */

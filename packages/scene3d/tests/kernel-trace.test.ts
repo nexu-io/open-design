@@ -78,6 +78,49 @@ describe("kernel trace: content hash is stable and sensitive", () => {
   });
 });
 
+describe("kernel trace: move is an exact, topology-preserving deformation", () => {
+  it("translates exactly the selected region, inclusive of the bound", () => {
+    // Lift the top face (z = 1) of the unit box by 1: the four top corners go
+    // to z = 2, the four bottom corners stay. Selection is exact, so the
+    // vertices exactly on z = 1 are the ones that move.
+    const m = evalTrace(new Recorder().box().move({ z: ["1", "1"] }, [0, 0, 1]).trace());
+    const c = predictCensus(m);
+    expect(c.max[2]).toBe(2);
+    expect(c.min[2]).toBe(-1);
+    expect(c.vertices).toBe(8); // topology untouched — a pure deformation
+  });
+
+  it("preserves topology through a later subdivide (counts, watertight)", () => {
+    // A moved cage subdivides to the SAME counts as the unmoved one — the
+    // deformation rode through the operator, the census is invariant, and the
+    // predicted-census claim still adjudicates.
+    const moved = predictCensus(
+      evalTrace(new Recorder().box().move({ z: ["1", "1"] }, [0, 0, 3]).subdivide(1).trace()),
+    );
+    const plain = predictCensus(evalTrace(new Recorder().box().subdivide(1).trace()));
+    expect([moved.vertices, moved.edges, moved.faces]).toEqual([
+      plain.vertices,
+      plain.edges,
+      plain.faces,
+    ]);
+    expect(moved.watertight).toBe(true);
+    expect(moved.genus).toBe(0);
+  });
+
+  it("an empty region moves the whole mesh (a translation)", () => {
+    const m = evalTrace(new Recorder().box().move({}, ["1/2", 0, 0]).trace());
+    const c = predictCensus(m);
+    // Everything shifted +1/2 in x: bounds move, extents unchanged.
+    expect(c.min[0]).toBe(-0.5);
+    expect(c.max[0]).toBe(1.5);
+  });
+
+  it("is deterministic — a moved recipe hashes identically twice", () => {
+    const r = () => new Recorder().box().move({ z: ["1", "1"] }, [0, "1/4", 2]).subdivide(1).trace();
+    expect(traceHash(r())).toBe(traceHash(r()));
+  });
+});
+
 describe("kernel trace: malformed recipes fail loudly", () => {
   it("a transform before any geometry is an error, not a guess", () => {
     expect(() => evalTrace({ version: 1, ops: [{ op: "subdivide", levels: 1 }] })).toThrow(
