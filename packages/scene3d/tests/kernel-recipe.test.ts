@@ -89,6 +89,16 @@ describe.skipIf(!present)("kernel recipe: Python front-end produces the same IR 
     expect(traceHash(result.trace!)).toBe(traceHash(reference));
   });
 
+  it("a recipe using scale hashes identically to the TS recorder", () => {
+    const recipe = writeRecipe(
+      "def build(ctx):\n    ctx.box().scale({'z': ['1', '1']}, [2, 2, 1], [0, 0, 0]).subdivide(1)\n",
+    );
+    const result = runRecipe(recipe, { runnerScript: RUNNER, pythonBin: PYTHON });
+    expect(result.ok).toBe(true);
+    const reference = new Recorder().box().scale({ z: ["1", "1"] }, [2, 2, 1], [0, 0, 0]).subdivide(1).trace();
+    expect(traceHash(result.trace!)).toBe(traceHash(reference));
+  });
+
   it("a recipe using crease hashes identically to the TS recorder", () => {
     const recipe = writeRecipe(
       "def build(ctx):\n    ctx.box().crease({'z': ['-1', '-1']}).subdivide(2)\n",

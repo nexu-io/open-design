@@ -127,6 +127,17 @@ function validateTraceShape(value: unknown): string | null {
         if (bad) return bad;
         break;
       }
+      case "scale": {
+        const bad = regionProblem(op.region, i, "scale");
+        if (bad) return bad;
+        for (const field of ["factor", "pivot"] as const) {
+          const v = op[field];
+          if (!Array.isArray(v) || v.length !== 3 || v.some((c) => typeof c !== "string")) {
+            return `trace.ops[${i}] scale.${field} must be three rational strings`;
+          }
+        }
+        break;
+      }
       default:
         return `trace.ops[${i}] has unknown op '${String(op.op)}'`;
     }

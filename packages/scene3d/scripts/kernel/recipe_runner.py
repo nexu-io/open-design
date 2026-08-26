@@ -127,6 +127,28 @@ class RecipeCtx:
         self._ops.append({"op": "crease", "region": r})
         return self
 
+    def scale(self, region, factor, pivot=(0, 0, 0)):
+        """Scale the vertices in a region about a pivot by a per-axis factor."""
+        if not isinstance(region, dict):
+            raise ValueError("scale(region, factor, pivot): region must be a dict of axis -> [min, max]")
+        r = {}
+        for key in ("x", "y", "z"):
+            b = region.get(key)
+            if b is None:
+                continue
+            if len(b) != 2:
+                raise ValueError("scale(...): region['%s'] must be [min, max]" % key)
+            r[key] = [_coord(b[0]), _coord(b[1])]
+        if len(factor) != 3 or len(pivot) != 3:
+            raise ValueError("scale(region, factor, pivot): factor and pivot must each be [x, y, z]")
+        self._ops.append({
+            "op": "scale",
+            "region": r,
+            "factor": [_coord(factor[0]), _coord(factor[1]), _coord(factor[2])],
+            "pivot": [_coord(pivot[0]), _coord(pivot[1]), _coord(pivot[2])],
+        })
+        return self
+
     def trace(self):
         return {"version": 1, "ops": self._ops}
 

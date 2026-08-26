@@ -121,6 +121,31 @@ describe("kernel trace: move is an exact, topology-preserving deformation", () =
   });
 });
 
+describe("kernel trace: scale is an exact region deformation", () => {
+  it("scales the whole mesh about a pivot, per axis", () => {
+    const c = predictCensus(evalTrace(new Recorder().box().scale({}, [2, 1, 1], [0, 0, 0]).trace()));
+    expect(c.min[0]).toBe(-2);
+    expect(c.max[0]).toBe(2);
+    expect(c.max[2]).toBe(1); // the y/z factors were 1 — unchanged
+  });
+
+  it("flares only a region and leaves the rest exact", () => {
+    // Scale the top ring (z = 1) outward in x and y: a flared top, a square
+    // base. Topology is untouched.
+    const c = predictCensus(
+      evalTrace(new Recorder().box().scale({ z: ["1", "1"] }, [2, 2, 1], [0, 0, 0]).trace()),
+    );
+    expect(c.max[0]).toBe(2); // top corners pushed to x = 2
+    expect(c.min[2]).toBe(-1); // base untouched
+    expect(c.vertices).toBe(8);
+  });
+
+  it("is deterministic", () => {
+    const r = () => new Recorder().box().scale({}, ["3/2", 1, "1/2"], [0, 0, "-1"]).trace();
+    expect(traceHash(r())).toBe(traceHash(r()));
+  });
+});
+
 describe("kernel trace: malformed recipes fail loudly", () => {
   it("a transform before any geometry is an error, not a guess", () => {
     expect(() => evalTrace({ version: 1, ops: [{ op: "subdivide", levels: 1 }] })).toThrow(

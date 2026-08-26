@@ -85,6 +85,18 @@ export type TraceOp =
        */
       op: "crease";
       region: Region;
+    }
+  | {
+      /**
+       * Scale the vertices in `region` about `pivot` by a per-axis `factor`:
+       * v -> pivot + factor .* (v - pivot). The multiplicative sibling of
+       * `move` — taper, bulge, or squash a region. Exact and topology-
+       * preserving, like every deformation here.
+       */
+      op: "scale";
+      region: Region;
+      factor: [string, string, string];
+      pivot: [string, string, string];
     };
 
 export interface Trace {
@@ -154,6 +166,23 @@ export function evalTrace(trace: Trace): KernelMesh {
           }
         }
         mesh = { ...mesh, creases: marked };
+        break;
+      }
+      case "scale": {
+        if (!mesh) throw new Error(`evalTrace: op ${i} 'scale' before any geometry`);
+        const region = parseRegion(op.region);
+        const f: RVec3 = [Rational.parse(op.factor[0]), Rational.parse(op.factor[1]), Rational.parse(op.factor[2])];
+        const p: RVec3 = [Rational.parse(op.pivot[0]), Rational.parse(op.pivot[1]), Rational.parse(op.pivot[2])];
+        const verts: RVec3[] = mesh.verts.map((v) =>
+          inRegion(v, region)
+            ? [
+                p[0].add(f[0].mul(v[0].sub(p[0]))),
+                p[1].add(f[1].mul(v[1].sub(p[1]))),
+                p[2].add(f[2].mul(v[2].sub(p[2]))),
+              ]
+            : v,
+        );
+        mesh = { ...mesh, verts };
         break;
       }
       default: {
@@ -335,6 +364,30 @@ export class Recorder {
     if (y) r.y = y;
     if (z) r.z = z;
     this.ops.push({ op: "crease", region: r });
+    return this;
+  }
+
+  /** Scale a region about a pivot by a per-axis factor — taper, bulge, squash. */
+  scale(
+    region: { x?: [Coord, Coord]; y?: [Coord, Coord]; z?: [Coord, Coord] },
+    factor: [Coord, Coord, Coord],
+    pivot: [Coord, Coord, Coord] = [0, 0, 0],
+  ): this {
+    const bound = (b: [Coord, Coord] | undefined): [string, string] | undefined =>
+      b ? [coordStr(b[0]), coordStr(b[1])] : undefined;
+    const r: Region = {};
+    const x = bound(region.x);
+    const y = bound(region.y);
+    const z = bound(region.z);
+    if (x) r.x = x;
+    if (y) r.y = y;
+    if (z) r.z = z;
+    this.ops.push({
+      op: "scale",
+      region: r,
+      factor: [coordStr(factor[0]), coordStr(factor[1]), coordStr(factor[2])],
+      pivot: [coordStr(pivot[0]), coordStr(pivot[1]), coordStr(pivot[2])],
+    });
     return this;
   }
 
