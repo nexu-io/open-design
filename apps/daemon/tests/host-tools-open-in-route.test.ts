@@ -22,6 +22,7 @@ import type { RegisterHostToolsRoutesDeps } from '../src/routes/host-tools.js';
 const spawnState = vi.hoisted(() => ({
   mode: 'spawn' as 'error' | 'exit-failure' | 'exit-success' | 'spawn',
   error: 'spawn cursor ENOENT',
+  options: undefined as { env?: NodeJS.ProcessEnv } | undefined,
 }));
 
 // Deterministic spawn: emits an OS refusal, a successful spawn followed by an
@@ -31,7 +32,8 @@ vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
   return {
     ...actual,
-    spawn: vi.fn(() => {
+    spawn: vi.fn((...args: unknown[]) => {
+      spawnState.options = args[2] as { env?: NodeJS.ProcessEnv } | undefined;
       const child = new EventEmitter() as EventEmitter & { unref: () => void };
       child.unref = () => {};
       setImmediate(() => {
@@ -62,6 +64,7 @@ const PROJECT_DIR = path.join(tmpdir(), 'od-3871-project');
 
 let server: http.Server;
 let baseUrl: string;
+const originalElectronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
 
 beforeAll(async () => {
   const app = express();
@@ -88,6 +91,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  if (originalElectronRunAsNode === undefined) {
+    delete process.env.ELECTRON_RUN_AS_NODE;
+  } else {
+    process.env.ELECTRON_RUN_AS_NODE = originalElectronRunAsNode;
+  }
 });
 
 function postOpenIn(projectId: string) {
@@ -121,6 +129,17 @@ describe('POST /api/projects/:id/open-in launch reporting (#3871, #6610)', () =>
     expect(body.error.code).toBe('EDITOR_LAUNCH_FAILED');
     expect(body.error.message).toContain('Failed to launch Cursor');
     expect(body.error.message).toContain('exited with code 1');
+  });
+
+  it('does not pass ELECTRON_RUN_AS_NODE to an editor launch', async () => {
+    process.env.ELECTRON_RUN_AS_NODE = '1';
+    spawnState.mode = 'exit-success';
+
+    const resp = await postOpenIn('p1');
+
+    expect(resp.status).toBe(200);
+    expect(spawnState.options?.env?.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    expect(process.env.ELECTRON_RUN_AS_NODE).toBe('1');
   });
 
   it('returns 200 ok:true when the launcher exits successfully after spawning', async () => {
