@@ -370,7 +370,19 @@ export function applyImportedPosture(
     // and material names share a namespace, so consulting the wrong set would
     // let an imported material named like an authored object relax that object.
     const scope = rule.subject === "material" ? provenance.materials : provenance.objects;
-    const named = subjectsOf(issue.target);
+    // A finding's SUBJECTS are everything it holds responsible: a relation names
+    // a pair ("A <-> B"), a duplicate-set names its whole group (detail.materials
+    // — the census's authoritative membership, not the name-sorted representative
+    // the target happens to be), and everything else names one thing. A finding
+    // relaxes only when EVERY subject is imported — a duplicate set is the
+    // import's fault only if every member is the import's, exactly as a z-fight
+    // pair relaxes only when both sides are. Reading the target alone let the
+    // group's verdict hinge on which member sorted first.
+    const group = issue.detail?.materials;
+    const named =
+      Array.isArray(group) && group.every((n): n is string => typeof n === "string") && group.length > 0
+        ? group
+        : subjectsOf(issue.target);
     if (named.length === 0) continue;
     if (!named.every((name) => scope.has(name))) continue;
     const subject = named.length > 1 ? named.join(" and ") : named[0]!;

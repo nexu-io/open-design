@@ -260,10 +260,18 @@ def apply_material_tweak(obj, mt):
             )
             if shared_elsewhere:
                 inst_name = ("%s__%s" % (target.name, obj.name))[:63]
+                # Provenance flows through the copy the way it flows through
+                # _import_part's join: a per-part instance of an IMPORTED
+                # material is still the third party's shading for every channel
+                # this tweak does not touch, so it stays imported. Captured
+                # before the copy in case Blender uniquifies the instance name.
+                base_imported = target.name in IMPORTED_MATERIALS
                 inst = bpy.data.materials.get(inst_name)
                 if inst is None:
                     inst = target.copy()
                     inst.name = inst_name
+                if base_imported:
+                    note_imported_materials([inst.name])
                 target = inst
         node = None
         if target.node_tree:
@@ -1044,8 +1052,11 @@ def note_imported_materials(names):
     exact key within a build, and — unlike a stored datablock reference, which
     can go stale (`StructRNA removed`) across the imports, joins and tweaks that
     run before the census — a name stays valid for the whole build. Imports do
-    not rename existing materials and tweaks copy under new names, so a recorded
-    name still identifies the same material when the census reads it."""
+    not rename existing materials, so a recorded name still identifies the same
+    material when the census reads it. A tweak that FORKS a shared imported
+    material into a per-part copy records that copy's name here too (see
+    apply_material_tweak), so provenance flows through the copy instead of
+    silently escaping it."""
     IMPORTED_MATERIALS.update(names)
 
 

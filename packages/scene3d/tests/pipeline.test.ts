@@ -383,6 +383,49 @@ expect(result.ok).toBe(false);
     fs.rmSync(path.join(dir, "tweaks.json"), { force: true });
   }, LONG);
 
+  it("keeps an imported material's provenance across a tweak's per-part instance copy", async () => {
+    // A bare-mesh kit whose two crates SHARE one material carrying a mid-range
+    // metallic the default contract forbids: the finding fires but RELAXES
+    // (the material is the import's), so the kit compiles clean. Tweaking one
+    // crate's colour mints a per-part instance copy `<mat>__<crate>` — and that
+    // copy is still the third party's shading for every channel the tweak did
+    // not touch. It must stay imported, or a colour edit flips the compile red
+    // over a metallic value the author never touched and cannot fix without
+    // editing somebody else's asset. (Provenance must flow through .copy() the
+    // way it flows through _import_part's join.)
+    const METALLIC = "S3D-E-341";
+    const dir = workDir("shared-mat-kit");
+    const before = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: LONG, noCache: true });
+    const shared = before.census!.materials.find((m) => m.name === "shared_metal")!;
+    expect(shared.imported).toBe(true);
+    expect(shared.usedByObjectCount).toBe(2); // both crates -> a shared material
+    // The mid-range metallic is measured, the finding fires, but it is relaxed.
+    const metalBefore = before.issues.find((i) => i.code === METALLIC && i.target === "shared_metal");
+    expect(metalBefore?.severity).toBe("info");
+    expect(before.summary.errors).toBe(0);
+
+    // Tweak ONE crate's base colour: the shared material forks to an instance.
+    fs.writeFileSync(
+      path.join(dir, "tweaks.json"),
+      JSON.stringify({ crate_a: { material: { baseColor: [0.8, 0.1, 0.1] } } }),
+    );
+    const tweaked = await compile({ projectDir: dir, proof: { turntable: false }, timeoutMs: LONG, noCache: true });
+    const inst = tweaked.census!.materials.find((m) => m.name.startsWith("shared_metal__"))!;
+    expect(inst).toBeTruthy(); // the per-part instance copy exists
+    expect(inst.principled.metallic).toBeCloseTo(0.5, 3); // the import's value, untouched
+    // The copy is still the import's shading -> provenance preserved, metallic relaxed.
+    expect(inst.imported).toBe(true);
+    // Relaxation is RECLASSIFICATION, never suppression: the metallic finding is
+    // still MEASURED and emitted on the instance, just downgraded to info with
+    // its value. Asserting it exists guards against a regression that hides it.
+    const metalAfter = tweaked.issues.find((i) => i.code === METALLIC && i.target === inst.name);
+    expect(metalAfter).toBeDefined();
+    expect(metalAfter!.severity).toBe("info");
+    expect(metalAfter!.detail?.metallic).toBeCloseTo(0.5, 3); // the measured value is still reported
+    expect(tweaked.summary.errors).toBe(0); // a colour edit did NOT flip the kit red
+    fs.rmSync(path.join(dir, "tweaks.json"), { force: true });
+  }, LONG);
+
   it("tints a textured material without losing its map", async () => {
     // A colour tweak on a textured material is a TINT: the runner injects
     // the same MULTIPLY-mix topology the glTF importer authors for

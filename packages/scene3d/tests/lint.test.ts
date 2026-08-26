@@ -886,6 +886,43 @@ describe("lint: pbr/topology/integrity over census", () => {
     expect(issues.some((i) => i.code === ISSUE_CODES.DUPLICATE_MATERIALS)).toBe(true);
   });
 
+  it("relaxes a duplicate SET only when EVERY member is imported, whatever the sort order", () => {
+    // The duplicate finding names a group but its target is the name-sorted
+    // first member. Relaxing on that one member alone made the whole set's
+    // verdict hinge on a naming accident. A duplicate set is the import's fault
+    // only if every material in it is the import's — mirroring the z-fight
+    // pair's "both sides imported" rule.
+    const same = {
+      present: true as const, metallic: 0, roughness: 0.5, ior: 1.45,
+      baseColor: [0.8, 0.8, 0.8] as [number, number, number], hasTexture: false, untouchedDefault: false,
+    };
+    // The IMPORTED member sorts FIRST — so group[0] is imported. If the posture
+    // read only group[0] it would wrongly relax this authored redundancy.
+    const mixed = runLint({
+      contract: contract(),
+      census: census({
+        materials: [
+          { name: "aaa_import", usedByObjectCount: 1, imported: true, principled: { ...same } },
+          { name: "zzz_author", usedByObjectCount: 1, principled: { ...same } },
+        ] as never,
+      }),
+    });
+    const mixedHit = mixed.find((i) => i.code === ISSUE_CODES.DUPLICATE_MATERIALS)!;
+    expect(mixedHit.severity).toBe("warning"); // an authored member is in the set
+
+    // Every member imported: the duplication is the import's, so it relaxes.
+    const allImported = runLint({
+      contract: contract(),
+      census: census({
+        materials: [
+          { name: "aaa_import", usedByObjectCount: 1, imported: true, principled: { ...same } },
+          { name: "zzz_import", usedByObjectCount: 1, imported: true, principled: { ...same } },
+        ] as never,
+      }),
+    });
+    expect(allImported.find((i) => i.code === ISSUE_CODES.DUPLICATE_MATERIALS)!.severity).toBe("info");
+  });
+
   it("flags textured objects without UVs and materials without binding", () => {
     const issues = runLint({
       contract: contract(),
