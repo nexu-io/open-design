@@ -337,6 +337,31 @@ export class Recorder {
     );
   }
 
+  /** An nx×ny flat quad grid in the z=0 plane, centred, spanning `size` — an
+   *  open patch for terrains, panels, or a mirror/crease base. Pure sugar over
+   *  `cage` (exact rational coordinates), so it needs no new opcode. */
+  grid(nx: number, ny: number, size: Coord = 1): this {
+    if (!Number.isInteger(nx) || !Number.isInteger(ny) || nx < 1 || ny < 1) {
+      throw new Error("grid(nx, ny): nx and ny must be positive integers");
+    }
+    const s = size instanceof Rational ? size : typeof size === "number" ? Rational.of(size) : Rational.parse(size);
+    const half = s.div(Rational.of(2));
+    const dx = s.div(Rational.of(nx));
+    const dy = s.div(Rational.of(ny));
+    const pts: Array<[Coord, Coord, Coord]> = [];
+    for (let j = 0; j <= ny; j++) {
+      for (let i = 0; i <= nx; i++) {
+        pts.push([dx.mul(Rational.of(i)).sub(half), dy.mul(Rational.of(j)).sub(half), Rational.ZERO]);
+      }
+    }
+    const idx = (i: number, j: number): number => j * (nx + 1) + i;
+    const faces: number[][] = [];
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) faces.push([idx(i, j), idx(i + 1, j), idx(i + 1, j + 1), idx(i, j + 1)]);
+    }
+    return this.cage(pts, faces);
+  }
+
   subdivide(levels = 1): this {
     this.ops.push({ op: "subdivide", levels });
     return this;

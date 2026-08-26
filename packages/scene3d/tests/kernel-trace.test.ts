@@ -58,6 +58,23 @@ describe("kernel trace: the recorder and the evaluator agree with the kernel", (
   });
 });
 
+describe("kernel trace: grid seeds a flat open patch", () => {
+  it("grid(2,2,2) is 9 verts, 4 quads, an 8-edge boundary, flat at z=0", () => {
+    const c = predictCensus(evalTrace(new Recorder().grid(2, 2, 2).trace()));
+    expect([c.vertices, c.faces]).toEqual([9, 4]);
+    expect(c.boundaryEdges).toBe(8);
+    expect(c.watertight).toBe(false);
+    expect(c.min).toEqual([-1, -1, 0]);
+    expect(c.max).toEqual([1, 1, 0]);
+  });
+
+  it("grid is pure sugar over cage — one op, exact rational points", () => {
+    const trace = new Recorder().grid(3, 2, "1/2").trace();
+    expect(trace.ops).toHaveLength(1);
+    expect(trace.ops[0]!.op).toBe("cage");
+  });
+});
+
 describe("kernel trace: content hash is stable and sensitive", () => {
   it("the same recipe hashes identically; a changed one does not", () => {
     const a = new Recorder().box().subdivide(2).trace();

@@ -75,6 +75,29 @@ class RecipeCtx:
         faces = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]]
         return self.cage(pts, faces)
 
+    def grid(self, nx, ny, size=1):
+        """An nx x ny flat quad grid in the z=0 plane, centred, spanning size --
+        an open patch for terrains, panels, or a mirror/crease base."""
+        if not (isinstance(nx, int) and isinstance(ny, int) and nx >= 1 and ny >= 1):
+            raise ValueError("grid(nx, ny): nx and ny must be positive integers")
+        s = size if isinstance(size, Fraction) else Fraction(size)
+        half = s / 2
+        dx = s / nx
+        dy = s / ny
+        pts = []
+        for j in range(ny + 1):
+            for i in range(nx + 1):
+                pts.append([dx * i - half, dy * j - half, Fraction(0)])
+
+        def idx(i, j):
+            return j * (nx + 1) + i
+
+        faces = []
+        for j in range(ny):
+            for i in range(nx):
+                faces.append([idx(i, j), idx(i + 1, j), idx(i + 1, j + 1), idx(i, j + 1)])
+        return self.cage(pts, faces)
+
     def subdivide(self, levels=1):
         if not isinstance(levels, int) or isinstance(levels, bool) or levels < 0:
             raise ValueError("subdivide(levels): levels must be a non-negative integer")

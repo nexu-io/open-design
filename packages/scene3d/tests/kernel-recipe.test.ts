@@ -89,6 +89,13 @@ describe.skipIf(!present)("kernel recipe: Python front-end produces the same IR 
     expect(traceHash(result.trace!)).toBe(traceHash(reference));
   });
 
+  it("a grid recipe hashes identically to the TS recorder", () => {
+    const recipe = writeRecipe("def build(ctx):\n    ctx.grid(3, 2, 4)\n");
+    const result = runRecipe(recipe, { runnerScript: RUNNER, pythonBin: PYTHON });
+    expect(result.ok).toBe(true);
+    expect(traceHash(result.trace!)).toBe(traceHash(new Recorder().grid(3, 2, 4).trace()));
+  });
+
   it("a recipe using extrude hashes identically and builds a closed boss", () => {
     const recipe = writeRecipe(
       "def build(ctx):\n    ctx.box().extrude({'z': ['1', '1']}, [0, 0, 1]).subdivide(1)\n",
