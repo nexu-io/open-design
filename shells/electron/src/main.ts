@@ -1,4 +1,5 @@
 import manifest from "../electron-shell.json" with { type: "json" };
+import preflight from "../preflight.json" with { type: "json" };
 import warmup from "../warmup.json" with { type: "json" };
 
 import {
@@ -8,6 +9,7 @@ import {
   runElectronShell,
   scheduleElectronInstallerHandoff,
   type ElectronShellManifest,
+  type ElectronPreflightTopology,
   type ElectronWarmupTopology,
 } from "@open-design/electron-kit/runtime";
 
@@ -15,6 +17,7 @@ import { placeholderRenderer } from "./renderer/placeholder.js";
 
 void runElectronShell({
   manifest: manifest as ElectronShellManifest,
+  preflight: preflight as ElectronPreflightTopology,
   warmup: warmup as ElectronWarmupTopology,
   renderer: placeholderRenderer,
   actions: {

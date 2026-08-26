@@ -4,6 +4,7 @@ export type ElectronSceneReceipt = Readonly<{
   mainPath: string;
   manifestPath: string;
   nodeCarrierLockPath: string;
+  preflightPath: string;
   sidecarPath: string;
   warmupPath: string;
 }>;

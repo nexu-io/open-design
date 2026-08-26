@@ -16,12 +16,15 @@ describe("Electron product shell", () => {
     expect(source).not.toMatch(/@open-design\/standalone/u);
   });
 
-  it("owns concrete warmup topology and placeholder readiness outside electron-kit", async () => {
-    const [topologySource, rendererSource, kitRuntimeSource] = await Promise.all([
+  it("owns concrete preflight, warmup topology and placeholder readiness outside electron-kit", async () => {
+    const [preflightSource, topologySource, rendererSource, kitRuntimeSource, kitPreflightSource] = await Promise.all([
+      readFile(new URL("../preflight.json", import.meta.url), "utf8"),
       readFile(new URL("../warmup.json", import.meta.url), "utf8"),
       readFile(new URL("../src/renderer/placeholder.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/index.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../../packages/electron-kit/src/preflight/apply.ts", import.meta.url), "utf8"),
     ]);
+    const preflight = JSON.parse(preflightSource) as { atoms: Array<{ hosts?: string[] }> };
     const topology = JSON.parse(topologySource) as { nodes: Array<{ executor: string }> };
     expect(topology.nodes.map((node) => node.executor)).toEqual([
       "electron.ensure-carrier",
@@ -31,6 +34,8 @@ describe("Electron product shell", () => {
     ]);
     expect(rendererSource).toContain("electronShellMounted");
     expect(kitRuntimeSource).not.toMatch(/Electron Shell Foundation|electronShellMounted|electronKitMounted/u);
+    expect(preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);
+    expect(kitPreflightSource).not.toMatch(/127\.0\.0\.1|localhost/u);
   });
 
   it("keeps a Shell-local copy of the same official Node lock", async () => {
@@ -44,6 +49,8 @@ describe("Electron product shell", () => {
     expect(pack).toContain('new URL("../node-lock.json"');
     expect(dev).toContain('new URL("../warmup.json"');
     expect(pack).toContain('new URL("../warmup.json"');
+    expect(dev).toContain('new URL("../preflight.json"');
+    expect(pack).toContain('new URL("../preflight.json"');
     expect(dev).not.toMatch(/node-v\d/u);
     expect(pack).not.toMatch(/node-v\d/u);
     expect(JSON.parse(electronLock)).toEqual(JSON.parse(terminalLock));

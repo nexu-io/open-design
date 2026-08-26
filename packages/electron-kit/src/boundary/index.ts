@@ -8,6 +8,7 @@ import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
 import type { ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest } from "../installer/contracts.js";
 import type { ElectronBootstrapPort } from "../bootstrap/contracts.js";
 import type { ElectronWarmupExecutor, ElectronWarmupTopology } from "../warmup/index.js";
+import type { ElectronPreflightResult, ElectronPreflightTopology } from "../preflight/index.js";
 
 export const ELECTRON_KIT_CONTRACT_VERSION = 1 as const;
 
@@ -64,10 +65,12 @@ export type ElectronRendererLease = Readonly<{
 export type ElectronShellRenderer = Readonly<{
   windowOptions?(input: Readonly<{
     manifest: ElectronShellManifest;
+    preflight: ElectronPreflightResult;
     presentation: "headless" | "interactive";
   }>): Readonly<BrowserWindowConstructorOptions>;
   mount(input: Readonly<{
     manifest: ElectronShellManifest;
+    preflight: ElectronPreflightResult;
     presentation: "headless" | "interactive";
     window: BrowserWindow;
   }>): Readonly<{ dispose(): void | Promise<void> }> | Promise<Readonly<{ dispose(): void | Promise<void> }>>;
@@ -82,6 +85,7 @@ export type ElectronClosurePorts = Readonly<{
 
 export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
+  preflight: ElectronPreflightTopology;
   warmup: ElectronWarmupTopology;
   headless?: boolean;
   actions?: ElectronShellActions;

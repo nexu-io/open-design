@@ -35,6 +35,10 @@
       "types": "./dist/warmup/index.d.ts",
       "default": "./dist/warmup/index.mjs"
     },
+    "./preflight": {
+      "types": "./dist/preflight/index.d.ts",
+      "default": "./dist/preflight/index.mjs"
+    },
     "./sidecar": {
       "types": "./dist/sidecar/index.d.ts",
       "default": "./dist/sidecar/index.mjs"

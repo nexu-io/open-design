@@ -29,6 +29,7 @@ import {
   runElectronWarmupTopology,
   validateElectronRuntimeWarmupTopology,
 } from "../warmup/index.js";
+import { applyElectronPreflight } from "../preflight/index.js";
 
 export * from "./presentation.js";
 export * from "./single-instance.js";
@@ -91,6 +92,7 @@ async function resolveCarrierWithRecovery(input: Readonly<{
 
 async function runElectronShellSession(definition: ElectronShellDefinition, context: ElectronRuntimeContext): Promise<void> {
   const manifest = validateElectronShellManifest(definition.manifest);
+  const preflight = applyElectronPreflight(app, definition.preflight);
   const warmupTopology = validateElectronRuntimeWarmupTopology(definition.warmup);
   const presentation = resolveElectronPresentationMode({ explicitHeadless: definition.headless });
   app.setName(manifest.productName);
@@ -104,6 +106,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
     platform: process.platform,
     presentation,
     runtimeRoot,
+    preflight,
   });
   context.activation = await ElectronActivationAttempt.begin(runtimeRoot);
 
@@ -197,14 +200,14 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
       },
       [ELECTRON_WARMUP_ATOMS.MOUNT_RENDERER]: async () => {
         const window = new BrowserWindow({
-          ...definition.renderer.windowOptions?.({ manifest, presentation }),
+          ...definition.renderer.windowOptions?.({ manifest, preflight, presentation }),
           width: manifest.window.width,
           height: manifest.window.height,
           title: manifest.window.title,
           show: false,
         });
         try {
-          const integration = await definition.renderer.mount({ manifest, presentation, window });
+          const integration = await definition.renderer.mount({ manifest, preflight, presentation, window });
           rendererLease = Object.freeze({
             window,
             releaseIntegration() {

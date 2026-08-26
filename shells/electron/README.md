@@ -1,9 +1,11 @@
 # Electron Shell foundation
 
 The product layer is deliberately thin. It declares identity, window policy,
-the `od://` handler, concrete warmup topology, and adapters supplied to
+the `od://` handler, ready-before preflight policy, concrete warmup topology, and adapters supplied to
 `@open-design/electron-kit`. `warmup.json` owns the ordered product declaration;
 electron-kit owns only graph lifecycle and its public carrier/Standalone atoms.
+`preflight.json` selects the finite locale/connection atoms and owns concrete
+host exemptions; electron-kit validates and applies them before app readiness.
 Desktop handlers will follow the same declaration pattern after the real
 Sidecar readiness adapter lands: Shell JSON and Shell code own the finite
 message topology, normalizer, and executors, while electron-kit only owns the

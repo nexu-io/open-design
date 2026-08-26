@@ -5,6 +5,7 @@ import { build as bundle } from "esbuild";
 
 import { validateElectronShellManifest, type ElectronShellManifest } from "../boundary/index.js";
 import { validateElectronRuntimeWarmupTopology, type ElectronWarmupTopology } from "../warmup/index.js";
+import { validateElectronPreflightTopology, type ElectronPreflightTopology } from "../preflight/index.js";
 import type { ElectronSceneReceipt } from "./contracts.js";
 
 export type AssembleElectronSceneInput = Readonly<{
@@ -13,6 +14,7 @@ export type AssembleElectronSceneInput = Readonly<{
   outputRoot: string;
   fixtureSidecarPath: string;
   nodeCarrierLockPath: string;
+  preflightPath: string;
   warmupPath: string;
 }>;
 
@@ -20,6 +22,9 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
   validateElectronRuntimeWarmupTopology(
     JSON.parse(await readFile(input.warmupPath, "utf8")) as ElectronWarmupTopology,
+  );
+  validateElectronPreflightTopology(
+    JSON.parse(await readFile(input.preflightPath, "utf8")) as ElectronPreflightTopology,
   );
   const nodeCarrierLock = JSON.parse(await readFile(input.nodeCarrierLockPath, "utf8")) as {
     schemaVersion?: number;
@@ -35,6 +40,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   const mainPath = join(input.outputRoot, "main.cjs");
   const sidecarPath = join(input.outputRoot, "fixture-sidecar.cjs");
   const nodeCarrierLockPath = join(input.outputRoot, "node-lock.json");
+  const preflightPath = join(input.outputRoot, "preflight.json");
   const warmupPath = join(input.outputRoot, "warmup.json");
   await bundle({
     bundle: true,
@@ -47,6 +53,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   });
   await copyFile(input.fixtureSidecarPath, sidecarPath);
   await copyFile(input.nodeCarrierLockPath, nodeCarrierLockPath);
+  await copyFile(input.preflightPath, preflightPath);
   await copyFile(input.warmupPath, warmupPath);
 
   const packagedManifestPath = join(input.outputRoot, "electron-shell.json");
@@ -66,6 +73,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     mainPath,
     manifestPath: packagedManifestPath,
     nodeCarrierLockPath,
+    preflightPath,
     sidecarPath,
     warmupPath,
   };

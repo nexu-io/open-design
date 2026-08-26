@@ -6,6 +6,7 @@
   "files": [
     "README.md",
     "electron-shell.json",
+    "preflight.json",
     "warmup.json",
     "node-lock.json",
     "scripts",
