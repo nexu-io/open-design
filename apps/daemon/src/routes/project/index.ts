@@ -1313,7 +1313,20 @@ function wantsUrlPreviewObservabilityBridge(value: unknown): boolean {
 
 function injectBeforeBodyClose(html: string, marker: string, injection: string): string {
   if (html.includes(marker)) return html;
-  const bodyCloseIndex = html.search(/<\/body\s*>/i);
+  // Find the real </body> (the last one before the real </html>), not the
+  // first literal match anywhere in the document. An artifact's own inline
+  // script commonly builds nested HTML strings with code like
+  // `html.replace('</body>', ...)`, which puts a literal `</body>` inside the
+  // artifact's <script> tag long before the document's real closing tag. The
+  // first-match version spliced this bridge into the middle of that script,
+  // and the bridge's own </script> then closed the artifact's <script> tag
+  // early — everything after it fell out of script-parsing mode and rendered
+  // as literal page text (nexu-io/open-design, "UX aChiral Carbon" report).
+  // Mirrors injectBeforeBodyEnd in apps/web/src/runtime/srcdoc.ts.
+  const lower = html.toLowerCase();
+  const htmlEnd = lower.lastIndexOf('</html>');
+  const limit = htmlEnd >= 0 ? htmlEnd : lower.length;
+  const bodyCloseIndex = lower.lastIndexOf('</body>', limit - 1);
   if (bodyCloseIndex >= 0) {
     return `${html.slice(0, bodyCloseIndex)}${injection}${html.slice(bodyCloseIndex)}`;
   }
@@ -1348,7 +1361,7 @@ function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | '
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
 }
 
-function applyUrlPreviewBridgesToHtml(
+export function applyUrlPreviewBridgesToHtml(
   transformed: string | Buffer,
   mime: string,
   requestedBridge: unknown,
