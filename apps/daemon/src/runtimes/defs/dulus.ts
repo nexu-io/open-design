@@ -1,47 +1,56 @@
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 
-// Dulus — AI coding agent CLI.
-// Site:    https://dulus.ai
-// Docs:    https://dulus.ai/docs
-// Install: `npm install -g dulus`
+// Dulus — provider-independent autonomous agent runtime for the terminal.
+// Repo:    https://github.com/KevRojo/Dulus
+// Docs:    https://kevrojo.github.io/Dulus/
+// Install: `pip install dulus` (PyPI console_script `dulus = dulus:main`)
 //
-// Headless mode: `dulus run --print` executes a single turn non-interactively
-// and streams the assistant reply on stdout. The composed prompt is piped over
-// stdin (`promptViaStdin`) rather than packed into argv, which is what keeps
-// large OD prompts clear of the Windows `CreateProcess` (~32 KB) and Linux
-// `MAX_ARG_STRLEN` limits — the same reason qwen pipes instead of passing
-// `--message`.
+// Headless mode: `dulus --print <prompt>` runs one turn non-interactively and
+// exits. The prompt is a POSITIONAL argv argument — Dulus rejects print mode
+// without one ("--print requires a prompt argument") and never reads it from
+// stdin — so this adapter is argv-based and declares `maxPromptArgBytes` to get
+// an actionable error before Windows' ~32 KB CreateProcess limit or Linux
+// MAX_ARG_STRLEN, the same guard aider uses for `--message`.
 //
-// Auth: Dulus owns its own credentials. Users run `dulus login` (or export the
-// documented API key) before OD detects the binary; the daemon never injects
-// credentials, exactly like AtomCode and Cursor Agent.
+// `--` terminates option parsing so a composed prompt that happens to start
+// with a dash reaches Dulus as the prompt instead of being read as a flag by
+// its argparse front end.
 //
-// Output: Dulus headless emits plain-text assistant replies with no structured
-// event stream yet, so `streamFormat: 'plain'` (single-turn text reply, no
-// tool_use streaming). Upgrading to `json-event-stream` is follow-up work once
-// Dulus ships a stable JSON event format.
+// Safety: `--accept-all` is Dulus's documented "never ask permission" flag. A
+// daemon-spawned run has no TTY to answer a permission prompt on, so without it
+// the child would block on a question OD cannot surface.
+//
+// `DULUS_NO_IPC=1` disables Dulus's client-side IPC dispatch. Without it, a
+// `--print` run probes for an already-running Dulus daemon and, if one answers,
+// executes the prompt in THAT process — with its own working directory and
+// config, not the OD project cwd the daemon just staged the skill into.
+//
+// Auth: Dulus owns its own credentials (`config.json` written by its first-run
+// wizard, or provider API keys in the environment). The daemon injects none.
+//
+// Output: `--print` emits plain text on stdout with no structured event stream,
+// so `streamFormat: 'plain'` (single-turn text reply, no tool_use streaming).
 export const dulusAgentDef = {
   id: 'dulus',
   name: 'Dulus',
   bin: 'dulus',
   versionArgs: ['--version'],
-  // Dulus routes to whichever upstream model the account is configured for, so
-  // the picker ships only the synthetic default and relies on the custom-model
-  // input for concrete ids.
+  // Dulus is provider-independent — the model comes from its own config and
+  // any upstream id is valid — so the picker ships the synthetic default and
+  // leaves concrete ids to the custom-model input.
   fallbackModels: [DEFAULT_MODEL_OPTION],
-  // `run --print` is the non-interactive single-turn mode; `--model <id>`
-  // selects the upstream model when the user picked something other than the
-  // synthetic default.
-  buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-    const args = ['run', '--print'];
+  buildArgs: (prompt, _imagePaths, _extra, options = {}) => {
+    const args = ['--print', '--accept-all'];
     if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
       args.push('--model', options.model);
     }
+    args.push('--', prompt);
     return args;
   },
-  promptViaStdin: true,
+  maxPromptArgBytes: 30_000,
   streamFormat: 'plain',
-  installUrl: 'https://dulus.ai',
-  docsUrl: 'https://dulus.ai/docs',
+  env: { DULUS_NO_IPC: '1' },
+  installUrl: 'https://kevrojo.github.io/Dulus/',
+  docsUrl: 'https://kevrojo.github.io/Dulus/',
 } satisfies RuntimeAgentDef;
