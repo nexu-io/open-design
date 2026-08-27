@@ -3280,6 +3280,10 @@ function manualEditPatchKindToTracking(patch: ManualEditPatch): TrackingArtifact
     case 'set-attributes': return 'attributes';
     case 'set-outer-html': return 'html';
     case 'set-full-source': return 'source';
+    // Canvas mutations (drag/resize/rotate/shapes) report as 'style' — the
+    // tracking union has no finer-grained kind for them.
+    case 'add-element':
+    case 'set-position': return 'style';
   }
 }
 
