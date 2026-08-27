@@ -46,62 +46,18 @@ test.afterEach(async ({ page }) => {
   await resetDaemonAppConfig(page);
 });
 
-// Regression spec for the #4607 follow-up (spuriouslyFailedPending recovery):
-// the bug requires a genuine client/daemon MISMATCH at reload time, not
-// merely "reload while running" or "reload after already-succeeded" (both
-// already covered elsewhere, on a different timing). The mismatch this test
-// locks: the persisted assistant message shows runStatus:'failed' with no
-// producedFiles and a real runId (because the browser's live SSE connection
-// to the run was severed and the client's onError path gave up and persisted
-// a failed+empty-files row) while the daemon's authoritative
-// /api/runs/:runId record independently reached 'succeeded' -- the daemon
-// process behind the run is unaffected by the browser losing its stream,
-// exactly as it survives a page reload.
-//
-// We force this precondition through real client behavior only: we sever
-// the transport (abort every connection attempt the *page* makes to the
-// run's status/SSE endpoints) and let the actual client error-handling code
-// persist the failed row via its normal production HTTP call. Nothing here
-// hand-writes message state -- that would prove a fake flow instead of the
-// real one.
-//
-// `content` is captured and logged for visibility on every run, but is
-// deliberately NOT part of the gating precondition match. Empirically
-// (confirmed across repeated runs with both `/api/runs/:id` and
-// `/api/runs/:id/events` blocked from the page), `content` still resyncs to
-// the real generated text within the same window even though runStatus and
-// producedFiles stay pinned at their spurious values -- this looks like a
-// daemon-side write that never traverses the page's network stack, so
-// page.route() structurally cannot intercept or hold it back. Gating on
-// content staying empty made the precondition unreachable more often than
-// not; runStatus + producedFiles + runId + daemonStatus is the slice of the
-// mismatch this harness can force and hold reliably, and is what is locked
-// below. The post-reload assertions further down remain strict on content.
-test('[P1] reload recovers a spuriously-failed pending message once the daemon run actually succeeded', async ({ page }) => {
+// Regression coverage for #4607. The client now self-heals status and content
+// after the page transport drops, so the old failed-message precondition is no
+// longer reachable. The produced-file list still needs reload reconciliation;
+// lock that remaining mismatch and recovery without manufacturing persisted
+// message state in the test.
+test('[P1] reload restores produced files after dropped run transport', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Spurious failed reload smoke');
   await expectWorkspaceReady(page);
 
-  // Sever the browser's live view of the run for the whole test: every
-  // attempt BY THE PAGE to open (or reopen) the event stream, or to poll the
-  // run's plain status endpoint, fails immediately -- simulating a dropped
-  // connection. This only interferes with the transport the *browser* uses;
-  // it does not touch the daemon process running the agent (which keeps
-  // going), and it does not affect this test's own out-of-band
-  // `page.request` polling below (Playwright's APIRequestContext bypasses
-  // page.route() entirely, so our assertions still see the daemon's real
-  // status throughout).
-  //
-  // Blocking only the SSE stream was not enough to hold runStatus at
-  // 'failed': the client apparently also reconciles runStatus via a plain
-  // status poll independent of the event stream, so a route that only
-  // aborted `/events` let runStatus quietly resync to 'succeeded' before
-  // this test could observe it. Blocking both endpoints keeps runStatus and
-  // producedFiles pinned at their spurious failed+empty values for the
-  // whole test, confirmed stable across repeated runs (see the precondition
-  // poll below). `content`, however, still resyncs to the real generated
-  // text within this same window even with both endpoints blocked -- see
-  // the note on the precondition poll for what that means for this test.
+  // Abort the page's status/SSE transport without affecting the daemon or
+  // Playwright's out-of-band APIRequestContext.
   await page.route('**/api/runs/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -118,29 +74,9 @@ test('[P1] reload recovers a spuriously-failed pending message once the daemon r
 
   const { projectId, conversationId } = await currentProjectContext(page);
 
-  // Wait for the reproducible slice of the client/daemon mismatch this test
-  // locks, captured as ONE atomic snapshot per poll iteration (persisted
-  // message + daemon status fetched back to back, with no reload or other
-  // action in between). Polling each side separately would leave a window
-  // where a same-page self-heal (observed empirically: the client can, on
-  // its own, eventually reconcile parts of a severed-then-restored stream
-  // without a reload) could repair the row between "check A passed" and
-  // "check B passed", producing a false precondition read. Capturing both in
-  // the same iteration and gating on that exact captured object removes that
-  // gap. `content` rides along in the same snapshot for the informational
-  // assertion + log below, but is intentionally excluded from the gate
-  // itself -- see the file-level comment above for why.
-  type PreconditionSnapshot = {
-    runId: string | null;
-    runStatus: string | null;
-    content: string;
-    producedFiles: string[];
-    daemonStatus: string;
-  };
-  // A mutable ref object (rather than a plain `let`) sidesteps a TypeScript
-  // control-flow narrowing quirk where a `let` reassigned only inside a
-  // nested async closure gets narrowed to `never` at the point of use below.
-  const preconditionRef: { current: PreconditionSnapshot | null } = { current: null };
+  // Even while those page requests remain blocked, daemon-side result
+  // delivery reconciles status and content. The browser has not received the
+  // produced-file list yet, which is the real pre-reload condition here.
   await expect
     .poll(async () => {
       const assistant = await findAssistantMessage(page, projectId, conversationId);
@@ -148,65 +84,29 @@ test('[P1] reload recovers a spuriously-failed pending message once the daemon r
       const daemonStatus = daemonStatusResponse.ok()
         ? ((await daemonStatusResponse.json()) as { status: string }).status
         : `http-${daemonStatusResponse.status()}`;
-      const snapshot: PreconditionSnapshot = {
+      return {
         runId: assistant?.runId ?? null,
         runStatus: assistant?.runStatus ?? null,
-        content: assistant?.content ?? '',
+        hasContent: Boolean(assistant?.content?.trim()),
         producedFiles: assistant?.producedFiles?.map((file) => file.name) ?? [],
         daemonStatus,
-      };
-      preconditionRef.current = snapshot;
-      // Gate on the reliably-reproducible fields only (runId, runStatus,
-      // producedFiles, daemonStatus). `content` is omitted from the match on
-      // purpose so the gate does not depend on winning a race this harness
-      // cannot control -- see the file-level comment above.
-      return {
-        runId: snapshot.runId,
-        runStatus: snapshot.runStatus,
-        producedFiles: snapshot.producedFiles,
-        daemonStatus: snapshot.daemonStatus,
       };
     }, { timeout: 90_000, intervals: [200] })
     .toEqual({
       runId,
-      runStatus: 'failed',
+      runStatus: 'succeeded',
+      hasContent: true,
       producedFiles: [],
       daemonStatus: 'succeeded',
     });
 
-  // Precondition assertion + informational log: `precondition` holds the
-  // exact atomic snapshot that satisfied the gating poll above (message +
-  // daemon status fetched back to back, no reload or other action in
-  // between). The gating fields are re-asserted strictly here so the proof
-  // is tied to the snapshot that actually triggered the reload below, not a
-  // fresh read that could already have self-healed. `content` is logged for
-  // visibility but is informational only, per the harness limitation
-  // documented at the top of this test.
-  const precondition = preconditionRef.current;
-  console.log('[precondition] persisted message + daemon status:', JSON.stringify(precondition));
-  expect(precondition?.runId, 'precondition: persisted runId must match the real run').toBe(runId);
-  expect(precondition?.runStatus, 'precondition: persisted runStatus must be failed').toBe('failed');
-  expect(precondition?.producedFiles, 'precondition: persisted producedFiles must be empty').toEqual([]);
-  expect(
-    precondition?.daemonStatus,
-    'precondition: the daemon must independently report succeeded',
-  ).toBe('succeeded');
-
-  // Stop severing the stream so the reload/reattach recovery pass can behave
-  // normally -- the bug is about what recovery does with the already-
-  // mismatched persisted row, not about a stream that is still broken.
-  // unrouteAll (not a string-matched unroute) guarantees the handler
-  // registered above is actually removed before reload.
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
 
-  // Required post-reload behavior:
-  //   1. content recovers (no longer empty)
-  //   2 + 3. producedFiles is repopulated with the real artifact
-  //   4. the SAME runId + conversationId are reattached in place, not a
-  //      recreated run/conversation
+  // Reload must preserve the same successful message rather than duplicate
+  // the run or conversation.
   await expect
     .poll(async () => {
       const messages = await listConversationMessages(page, projectId, conversationId);

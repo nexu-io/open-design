@@ -7,7 +7,7 @@ import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
-import { trackRunRequests } from '@/playwright/mock-factory';
+import { suppressWhatsNew, trackRunRequests } from '@/playwright/mock-factory';
 import type { FakeAgentId } from '@/playwright/fake-agents';
 import { T } from '@/timeouts';
 
@@ -59,6 +59,7 @@ test.beforeAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   test.setTimeout(T.xlong);
+  await suppressWhatsNew(page);
 
   await resetDaemonAppConfig(page);
 
@@ -406,7 +407,7 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
     }, { timeout: 15_000 })
     .toContainEqual({
       runStatus: 'succeeded',
-      producedFiles: [],
+      producedFiles: [GENERATED_FILE],
       traceObjectFiles: [GENERATED_FILE],
       resultDeliveryState: 'delivered',
     });

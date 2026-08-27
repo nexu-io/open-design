@@ -2302,7 +2302,6 @@ test('[P1] BYOK OpenCode project run sends provider config through the daemon co
       apiKey: 'sk-openai-e2e',
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o-mini',
-      apiVersion: '',
     },
     analyticsHints: {
       runtimeType: 'byok',
@@ -4181,10 +4180,8 @@ async function routeHandoffEditors(page: Page): Promise<void> {
 }
 
 async function openHandoffCliTab(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: 'Share', exact: true }).click();
-  const unifiedPopover = page.locator('.chrome-unified-popover:visible');
-  await unifiedPopover.getByRole('tab', { name: 'Send to...' }).click();
-  const menu = unifiedPopover.getByTestId('handoff-menu');
+  await page.getByTestId('handoff-caret').click();
+  const menu = page.getByTestId('handoff-menu');
   await expect(menu).toBeVisible();
   await menu.getByRole('tab', { name: /^Copy for CLI$/ }).click();
   return menu;

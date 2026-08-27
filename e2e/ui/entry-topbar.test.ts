@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import { settingsSurface } from '@/playwright/amr';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import type { Page } from '@playwright/test';
 
@@ -27,6 +27,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await suppressWhatsNew(page);
   await page.addInitScript((key) => {
     window.localStorage.clear();
     window.sessionStorage.clear();

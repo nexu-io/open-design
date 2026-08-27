@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 
@@ -9,6 +9,7 @@ const READ_KEY = 'open-design.message-center.anonymous-read-ids.v1';
 test.describe.configure({ timeout: 30_000 });
 
 async function seedEntryHome(page: Page, options?: { locale?: string }) {
+  await suppressWhatsNew(page);
   await page.addInitScript(({ key, locale }) => {
     window.localStorage.clear();
     window.sessionStorage.clear();

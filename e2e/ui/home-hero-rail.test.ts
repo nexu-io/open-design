@@ -1113,7 +1113,7 @@ test('[P1] home composer sends referenced workspace context into project creatio
 
 test('[P1] home staged workspace context auto-sends into the first project run', async ({ page }) => {
   const prompt = 'Create a project and immediately use the Home-staged context.';
-  const projectId = 'home-autosend-context-project';
+  let projectId = '';
   const conversationId = 'conv-home-autosend-context';
   const runBodies: Array<Record<string, unknown>> = [];
   let createdProjectMetadata: Record<string, unknown> = {};
@@ -1137,7 +1137,13 @@ test('[P1] home staged workspace context auto-sends into the first project run',
       return;
     }
     if (request.method() === 'POST') {
-      const body = request.postDataJSON() as { metadata?: Record<string, unknown>; name?: string; pendingPrompt?: string };
+      const body = request.postDataJSON() as {
+        id?: string;
+        metadata?: Record<string, unknown>;
+        name?: string;
+        pendingPrompt?: string;
+      };
+      projectId = body.id ?? 'home-autosend-context-project';
       createdProjectMetadata = body.metadata ?? {};
       await route.fulfill({
         json: {
@@ -1166,8 +1172,12 @@ test('[P1] home staged workspace context auto-sends into the first project run',
       },
     });
   });
-  await page.route(`**/api/projects/${projectId}`, async (route) => {
+  await page.route('**/api/projects/*', async (route) => {
     const request = route.request();
+    if (!projectId || new URL(request.url()).pathname !== `/api/projects/${projectId}`) {
+      await route.fallback();
+      return;
+    }
     if (request.method() === 'GET') {
       await route.fulfill({
         json: {
@@ -1204,7 +1214,14 @@ test('[P1] home staged workspace context auto-sends into the first project run',
     }
     await route.fallback();
   });
-  await page.route(`**/api/projects/${projectId}/conversations`, async (route) => {
+  await page.route('**/api/projects/*/conversations', async (route) => {
+    if (
+      !projectId
+      || new URL(route.request().url()).pathname !== `/api/projects/${projectId}/conversations`
+    ) {
+      await route.fallback();
+      return;
+    }
     if (route.request().method() !== 'GET') {
       await route.fallback();
       return;
@@ -1225,24 +1242,53 @@ test('[P1] home staged workspace context auto-sends into the first project run',
       },
     });
   });
-  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/messages`, async (route) => {
+  await page.route('**/api/projects/*/conversations/*/messages', async (route) => {
+    if (
+      !projectId
+      || new URL(route.request().url()).pathname
+        !== `/api/projects/${projectId}/conversations/${conversationId}/messages`
+    ) {
+      await route.fallback();
+      return;
+    }
     if (route.request().method() !== 'GET') {
       await route.fallback();
       return;
     }
     await route.fulfill({ json: { messages: [] } });
   });
-  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/messages/*`, async (route) => {
+  await page.route('**/api/projects/*/conversations/*/messages/*', async (route) => {
+    if (
+      !projectId
+      || !new URL(route.request().url()).pathname.startsWith(
+        `/api/projects/${projectId}/conversations/${conversationId}/messages/`,
+      )
+    ) {
+      await route.fallback();
+      return;
+    }
     if (route.request().method() !== 'PUT') {
       await route.fallback();
       return;
     }
     await route.fulfill({ json: { ok: true } });
   });
-  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments`, async (route) => {
+  await page.route('**/api/projects/*/conversations/*/comments', async (route) => {
+    if (
+      !projectId
+      || new URL(route.request().url()).pathname
+        !== `/api/projects/${projectId}/conversations/${conversationId}/comments`
+    ) {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({ json: { comments: [] } });
   });
-  await page.route(`**/api/projects/${projectId}/files`, async (route) => {
+  await page.route('**/api/projects/*/files', async (route) => {
+    if (!projectId || new URL(route.request().url()).pathname !== `/api/projects/${projectId}/files`) {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({ json: { files: [] } });
   });
   await page.route('**/api/live-artifacts**', async (route) => {
@@ -1525,7 +1571,7 @@ test('[P1] home suggestion entry remains retryable after create failures', async
   await expect.poll(projectCreateCount).toBe(1);
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
-  await expect(page.getByRole('alert').filter({ hasText: /Failed to start the run/i })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: /Could not create project/i })).toBeVisible();
   await runRequests.expectNone({ message: 'failed blank project create should not start a run' });
 
   await page.getByTestId('home-hero-submit').click();

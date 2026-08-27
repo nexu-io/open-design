@@ -31,7 +31,7 @@ test('[P1] MCP server snippet code stays transparent, not the inline-code chip (
   await page.goto('/', { waitUntil: 'domcontentloaded' });
 
   const settings = await openSettingsDialog(page);
-  await settings.getByRole('button', { name: /^MCP server\b/ }).click();
+  await settings.getByRole('button', { name: /^Open Design MCP\b/ }).click();
 
   const code = settings.locator('pre code').filter({ hasText: 'claude mcp add-json' });
   await expect(code).toBeVisible({ timeout: T.short });

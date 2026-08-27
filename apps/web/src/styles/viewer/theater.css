@@ -1047,14 +1047,16 @@
   -webkit-backdrop-filter: blur(16px);
   opacity: 0;
   transform: translate(-50%, 6px);
-  pointer-events: none;
+  /* Keep the pill's own hitbox active while visually hidden. An iframe does
+     not reliably propagate hover to its parent canvas, so disabling pointer
+     events here made the iframe permanently intercept the navigation. */
+  pointer-events: auto;
   transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .comment-preview-canvas:hover .deck-floating-nav,
 .deck-floating-nav:hover {
   opacity: 1;
   transform: translate(-50%, 0);
-  pointer-events: auto;
 }
 .deck-floating-button {
   width: 30px;
