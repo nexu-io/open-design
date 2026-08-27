@@ -2899,6 +2899,7 @@ export interface Dict {
   'chat.runError.title.signInRequired': string;
   'chat.runError.title.rateLimited': string;
   'chat.runError.title.modelWindowLimit': string;
+  'chat.runError.title.membershipConcurrencyLimit': string;
   'chat.runError.title.cliMissing': string;
   'chat.runError.title.promptTooLarge': string;
   'chat.runError.title.modelUnavailable': string;
@@ -2924,6 +2925,8 @@ export interface Dict {
   'chat.runError.rateLimitedMessage': string;
   'chat.runError.modelWindowLimitMessage': string;
   'chat.runError.modelWindowLimitMessageNoTime': string;
+  'chat.runError.membershipConcurrencyLimitMessage': string;
+  'chat.runError.membershipConcurrencyLimitMessageNoTime': string;
   'chat.runError.upstreamUnavailableMessage': string;
   'chat.runError.toolLoopMessage': string;
   'chat.runError.outputInvalidMessage': string;

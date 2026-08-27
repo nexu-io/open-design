@@ -6,7 +6,10 @@ import type {
   TrackingRunFailureUserAction,
   TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
-import { isModelWindowLimitFailure } from '@open-design/contracts';
+import {
+  isMembershipConcurrencyLimitFailure,
+  isModelWindowLimitFailure,
+} from '@open-design/contracts';
 
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
@@ -891,6 +894,20 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'login',
+    );
+  }
+
+  // Vela reports a full membership concurrency policy through an ACP fatal
+  // envelope. Claim the named policy limit before fatal close promotion. Even
+  // when the envelope says retryable, an immediate automatic replay only hits
+  // the same occupied slots, so leave retry to the user after the reset time.
+  if (input.agentId === 'amr' && isMembershipConcurrencyLimitFailure(text)) {
+    return classification(
+      'rate_limit',
+      'membership_concurrency_limit',
+      'session_init',
+      false,
+      'none',
     );
   }
 
