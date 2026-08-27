@@ -8,6 +8,7 @@ import { assertBlenderIfRequired, probeBlender } from '@open-design/scene3d';
 import {
   artifactRef,
   CompileGate,
+  parseDescribeQuery,
   parseProof,
   parseStages,
   registerScene3dRoutes,
@@ -232,6 +233,26 @@ describe('CompileGate', () => {
 
     release[0]!();
     await holding; // and dropping the queued one didn't strand the gate
+  });
+});
+
+describe('parseDescribeQuery', () => {
+  it('parses region/focus/budget and rejects malformed input', () => {
+    expect(parseDescribeQuery({})).toEqual({});
+    expect(parseDescribeQuery({ focus: 'prp_door' })).toEqual({ focus: 'prp_door' });
+    expect(parseDescribeQuery({ budget: '2000' })).toEqual({ budgetTokens: 2000 });
+    expect(parseDescribeQuery({ region: '-1,-1,-1,2,3,4' })).toEqual({
+      region: { min: [-1, -1, -1], max: [2, 3, 4] },
+    });
+    // An inverted box still selects its interior (normalised per axis).
+    expect(parseDescribeQuery({ region: '2,3,4,-1,-1,-1' })).toEqual({
+      region: { min: [-1, -1, -1], max: [2, 3, 4] },
+    });
+    // Malformed → null (not a silent default that would describe the whole scene).
+    expect(parseDescribeQuery({ region: '1,2,3' })).toBeNull();
+    expect(parseDescribeQuery({ region: '1,2,3,4,5,x' })).toBeNull();
+    expect(parseDescribeQuery({ budget: '0' })).toBeNull();
+    expect(parseDescribeQuery({ budget: '12.5' })).toBeNull();
   });
 });
 
@@ -654,6 +675,27 @@ describe.skipIf(!hasBlender)('scene3d compile over HTTP (real Blender)', () => {
     expect(manifest.status).toBe(200);
     expect(manifest.body.manifest.partTree).toHaveLength(3);
     expect(manifest.body.proofImages).toHaveLength(2);
+
+    // The describe query surface reads the same compile's census — no Blender.
+    const describe = await api.req('/api/projects/proj1/scene3d/describe?scenePath=scenes/crate');
+    expect(describe.status).toBe(200);
+    expect(typeof describe.body.describe).toBe('string');
+    expect(describe.body.describe).toContain('prp_crate_body');
+    // A focus is honoured (the query surface works, not just the default digest).
+    const focused = await api.req(
+      '/api/projects/proj1/scene3d/describe?scenePath=scenes/crate&focus=prp_crate_body',
+    );
+    expect(focused.status).toBe(200);
+    expect(focused.body.describe).toContain('prp_crate_body');
+    // A malformed region is a 400, not a silent whole-scene describe.
+    const bad = await api.req(
+      '/api/projects/proj1/scene3d/describe?scenePath=scenes/crate&region=1,2,3',
+    );
+    expect(bad.status).toBe(400);
+    // A never-compiled scene describes as a truthful null, not a 404.
+    const missing = await api.req('/api/projects/proj1/scene3d/describe?scenePath=scenes/nope');
+    expect(missing.status).toBe(200);
+    expect(missing.body.describe).toBeNull();
   }, LONG);
 
   it('returns 200 with the failing codes for a poisoned scene', async () => {

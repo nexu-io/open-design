@@ -735,12 +735,15 @@ const SCENE3D_STRING_FLAGS = new Set([
   // JSON inline, --set-file takes a path or `-` for stdin, matching the
   // --prompt-file convention the rest of the CLI uses for long input.
   'set', 'set-file',
+  // `od scene3d describe`: scope the re-describe. --region "x0,y0,z0,x1,y1,z1",
+  // --focus <part>, --budget <tokens>.
+  'region', 'focus', 'budget',
 ]);
 const SCENE3D_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'agent-message', 'no-turntable', 'no-cache',
   'merge', 'clear', 'fast', 'frames', 'respect-scene-camera',
 ]);
-const SCENE3D_ACTIONS = ['compile', 'manifest', 'tweaks'];
+const SCENE3D_ACTIONS = ['compile', 'manifest', 'tweaks', 'describe'];
 const SCENE3D_FAIL_ON_VALUES = ['error', 'warning', 'none'];
 const SCENE3D_STAGE_IDS = ['parse', 'build', 'lint', 'proof', 'export', 'manifest'];
 
@@ -873,6 +876,10 @@ learns the codes instead of re-reading prose.
 
 \`manifest\` reads the last compile's manifest without spending a Blender run.
 
+\`describe\` re-runs the LOD scene digest with a QUERY — --region, --focus,
+--budget — over the last compile's census (no Blender), so you can zoom into a
+big kit without recompiling.
+
 Exit codes: 0 clean at threshold · 1 issues at/above --fail-on ·
 2 usage · 3 daemon unreachable.
 
@@ -894,6 +901,9 @@ Options:
   --no-cache               Bypass the per-stage content-hash cache
   --work-budget <n>        Raise the recipe work-meter ceiling (kernel work units) for a
                            genuinely large asset — a wall you can raise, not a size cap
+  --region <box>           describe: only parts intersecting "x0,y0,z0,x1,y1,z1" (world metres)
+  --focus <part>           describe: expand the group containing this part in full
+  --budget <tokens>        describe: roughly how many tokens the digest may occupy
   --frames                 Show the proof frames as ASCII in the report even when clean (implies --agent-message)
   --fail-on <sev>          error | warning | none — exit 1 threshold (default error)
   --agent-message          Emit the <scene3d-report> block: per-issue fixes, measured
@@ -989,6 +999,44 @@ async function runScene3d(args) {
       return;
     }
     printScene3dManifest(result.manifest, scenePath);
+    return;
+  }
+
+  /*
+   * `od scene3d describe` — a scoped re-describe of an already-compiled scene.
+   * The compile ships one fixed 700-token digest; this exposes the LOD
+   * summarizer's region/focus/budget so an agent can zoom into a 50k-part kit
+   * ("describe just the region around the door") without recompiling. A pure
+   * read — no Blender — same shape of truth as the compile-time digest.
+   */
+  if (action === 'describe') {
+    const params = new URLSearchParams({ scenePath });
+    if (typeof flags.region === 'string') params.set('region', flags.region);
+    if (typeof flags.focus === 'string') params.set('focus', flags.focus);
+    if (flags.budget !== undefined) params.set('budget', String(flags.budget));
+    let resp;
+    try {
+      resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/scene3d/describe?${params.toString()}`,
+      );
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+    const result = await resp.json();
+    if (flags.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (!result.describe) {
+      console.log(`${scenePath}: never compiled`);
+      console.log(
+        `run: od scene3d compile --project ${projectId} --scene ${scenePath} --agent-message`,
+      );
+      return;
+    }
+    console.log(result.describe);
     return;
   }
 

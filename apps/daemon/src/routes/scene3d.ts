@@ -6,13 +6,14 @@ import type {
   Scene3dArtifactRef,
   Scene3dCompileRequest,
   Scene3dCompileResponse,
+  Scene3dDescribeResponse,
   Scene3dManifest,
   Scene3dManifestResponse,
   Scene3dProofOptions,
   Scene3dStageId,
 } from '@open-design/contracts';
 import { buildScene3dAssetUrl, scene3dIssueTitle } from '@open-design/contracts';
-import { compileInWorker, workerEvalAvailable, renderAgentReport, probeBlender, writeProjectKit } from '@open-design/scene3d';
+import { compileInWorker, workerEvalAvailable, renderAgentReport, probeBlender, writeProjectKit, describeScene } from '@open-design/scene3d';
 import type { RouteDeps } from '../server-context.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
@@ -532,6 +533,97 @@ export function registerScene3dRoutes(app: Express, ctx: RegisterScene3dRoutesDe
       return sendApiError(res, 500, 'INTERNAL_ERROR', redactedMessage(err));
     }
   });
+
+  /**
+   * `GET /api/projects/:id/scene3d/describe` — a scoped, on-demand re-describe of
+   * an already-compiled scene. The compile writes ONE fixed 700-token digest;
+   * this exposes the LOD summarizer's full query surface (region / focus /
+   * budget) so an agent on a 50k-part kit can zoom without recompiling. A pure
+   * READ of the persisted census — no Blender, same posture as `manifest`.
+   */
+  app.get('/api/projects/:id/scene3d/describe', async (req, res) => {
+    try {
+      if (!isSafeId(req.params.id)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!(await authorizeProjectRequest(req, res, project.id, { mode: 'read' }))) return;
+
+      let sceneDir: string;
+      let scenePath: string;
+      try {
+        const scenePathParam = typeof req.query.scenePath === 'string' ? req.query.scenePath : undefined;
+        const resolved = resolveSceneDir(PROJECTS_DIR, project, scenePathParam);
+        sceneDir = resolved.absolute;
+        scenePath = resolved.relative;
+      } catch (err: any) {
+        return sendApiError(res, 400, 'BAD_REQUEST', err?.message || 'invalid scenePath');
+      }
+
+      const options = parseDescribeQuery(req.query);
+      if (options === null) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid describe query (region/focus/budget)');
+      }
+
+      // A scene that never compiled has no census to describe — a truthful null,
+      // not a 404 on the project.
+      const readModelFile = path.join(sceneDir, 'out', 'read-model.json');
+      let describe: string | null = null;
+      try {
+        const model = JSON.parse(fs.readFileSync(readModelFile, 'utf8'));
+        if (model?.census) {
+          describe = describeScene(model.census, Array.isArray(model.issues) ? model.issues : [], options);
+        }
+      } catch {
+        describe = null;
+      }
+
+      const response: Scene3dDescribeResponse = { scenePath, describe };
+      res.json(response);
+    } catch (err: any) {
+      console.error('[scene3d]', err);
+      return sendApiError(res, 500, 'INTERNAL_ERROR', redactedMessage(err));
+    }
+  });
+}
+
+/** Parse the `describe` query params into DescribeOptions. `region` is
+ *  "x0,y0,z0,x1,y1,z1" (six finite numbers); `focus` a part/group name;
+ *  `budget` a positive integer token budget (no upper wall — output is bounded
+ *  by the scene itself). Returns `{}` when none are set (the default digest),
+ *  or null on a malformed query. */
+export function parseDescribeQuery(query: Record<string, unknown>): {
+  region?: { min: [number, number, number]; max: [number, number, number] };
+  focus?: string;
+  budgetTokens?: number;
+} | null {
+  const out: {
+    region?: { min: [number, number, number]; max: [number, number, number] };
+    focus?: string;
+    budgetTokens?: number;
+  } = {};
+  const region = query.region;
+  if (typeof region === 'string' && region.length > 0) {
+    const n = region.split(',').map((s) => Number(s.trim()));
+    if (n.length !== 6 || n.some((v) => !Number.isFinite(v))) return null;
+    // Normalise per-axis so an inverted box still selects its interior.
+    out.region = {
+      min: [Math.min(n[0]!, n[3]!), Math.min(n[1]!, n[4]!), Math.min(n[2]!, n[5]!)],
+      max: [Math.max(n[0]!, n[3]!), Math.max(n[1]!, n[4]!), Math.max(n[2]!, n[5]!)],
+    };
+  }
+  const focus = query.focus;
+  if (typeof focus === 'string' && focus.length > 0) out.focus = focus;
+  const budget = query.budget;
+  if (budget !== undefined) {
+    const b = Number(budget);
+    if (!Number.isInteger(b) || b <= 0) return null;
+    out.budgetTokens = b;
+  }
+  return out;
 }
 
 /**

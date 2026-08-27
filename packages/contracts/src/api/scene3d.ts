@@ -394,6 +394,18 @@ export interface Scene3dManifestResponse {
   contactSheet?: Scene3dArtifactRef;
 }
 
+/** A scoped, on-demand re-describe of an already-compiled scene — the LOD
+ *  digest the compile produced, but queryable by region/focus/budget so an
+ *  agent working a 50k-part kit can ask "describe just the region around the
+ *  door" or "expand the bracket group" without recompiling. A pure READ of the
+ *  persisted census, same posture as the manifest endpoint (no Blender). */
+export interface Scene3dDescribeResponse {
+  scenePath: string;
+  /** The scoped scene digest (plain text). Null when the scene has never been
+   *  compiled — there is no census to describe. */
+  describe: string | null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Viewer -> host selection protocol                                   */
 /* ------------------------------------------------------------------ */
