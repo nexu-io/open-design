@@ -20,6 +20,7 @@ import {
   buildRunCreatedV4Aliases,
   buildRunFinishedV4Aliases,
   deriveConfigureGlobals,
+  harnessAnalyticsFromRolloutDecision,
   modelIdForTracking,
   sessionModeToTracking,
   type TrackingDesignSystemSource,
@@ -1432,6 +1433,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       sourceRunId,
       taskRunIndex,
     };
+    // A continuation is a second physical Run of the same logical task, and the
+    // rollout is only evaluated on the branch that resolves a project — which
+    // this path skips. Without inheriting, every answered clarification would
+    // report no harness at all, quietly dropping the OD Next runs that asked a
+    // question from the comparison the dimension exists for.
+    //
+    // Inherited from the source Run rather than re-read from settings on
+    // purpose: the user may have flipped the switch while the question was on
+    // screen, and this Run belongs to the decision its task started under.
+    // `resolveClarificationContinuation` already verified that source against
+    // the locked task, so it is the trustworthy copy.
+    const sourceDecision = design.runs.get(sourceRunId)?.strategyRolloutDecision;
+    if (sourceDecision) meta.strategyRolloutDecision = sourceDecision;
   }
 
   /** Authorize every bound run mutation before plugin or snapshot resolution. */
@@ -2262,6 +2276,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       meta.odNextTaskInputSnapshot = design.runs.get(
         clarificationContinuation.sourceRunId,
       )?.odNextTaskInputSnapshot ?? null;
+    } else if (idempotentStrategyRetry?.strategyRolloutDecision) {
+      // Same skipped-evaluation shape as the continuation above. A retry is the
+      // same logical request, so it reports the decision that request already
+      // made rather than making a fresh one.
+      meta.strategyRolloutDecision = idempotentStrategyRetry.strategyRolloutDecision;
     }
     let runProject: ProjectRecord | null = null;
     if (typeof meta.projectId === 'string' && meta.projectId) {
@@ -3534,6 +3553,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             }
           : {}),
       };
+      // Read off the run rather than the local decision variable: the run is
+      // what `run_finished` and the crash-recovery replay both see, so stamping
+      // it here is the only place this dimension has to be added.
+      Object.assign(baseProps, harnessAnalyticsFromRolloutDecision(run.strategyRolloutDecision));
       Object.assign(baseProps, buildRunCreatedV4Aliases(baseProps, taskLineage));
       design.runs.setAnalyticsRecovery?.(run, {
         context: analyticsContext,

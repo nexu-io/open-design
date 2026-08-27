@@ -5466,4 +5466,23 @@ export interface Dict {
   'experienceSurvey.skip': string;
   'experienceSurvey.thanksTitle': string;
   'experienceSurvey.thanksBody': string;
+  'labs.title': string;
+  'labs.itemAbout': string;
+  'labs.navHint': string;
+  'labs.pageDesc': string;
+  'labs.harnessName': string;
+  'labs.harnessHint': string;
+  'labs.harnessTooltip': string;
+  'labs.harnessScope': string;
+  'labs.envOverrideNotice': string;
+  'labs.latchedNotice': string;
+  'labs.loadFailedNotice': string;
+  'labs.optOutPrompt': string;
+  'labs.optOutWorseOutput': string;
+  'labs.optOutTooSlow': string;
+  'labs.optOutNotWhatIWanted': string;
+  'labs.optOutOther': string;
+  'labs.optOutSkip': string;
+  'labs.optOutOtherPlaceholder': string;
+  'labs.optOutSubmit': string;
 }

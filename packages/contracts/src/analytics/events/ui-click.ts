@@ -1515,6 +1515,7 @@ export type TrackingSettingsArea =
   | 'design_systems'
   | 'project_locations'
   | 'privacy'
+  | 'labs'
   | 'about';
 
 export interface SettingsSidebarClickProps {

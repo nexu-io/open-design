@@ -152,7 +152,11 @@ describe('OPEND-2148 — Settings autosave feedback obscures Local CLI controls'
 
     expect(ruleValue(feedbackLayer, 'position')).toBe('fixed');
     expect(ruleValue(feedbackLayer, 'left')).toBe('50%');
-    expect(ruleValue(feedbackLayer, 'bottom')).toBe('24px');
+    // The layer moved from the bottom of the viewport onto the app's top
+    // chrome row. What this ticket guarantees is that passive status keeps
+    // clear of the Local CLI controls in the panel's upper band and stays
+    // under the model picker — not the specific edge it hangs from.
+    expect(ruleValue(feedbackLayer, 'top')).toBe('0');
     expect(ruleValue(feedbackLayer, 'transform')).toBe('translateX(-50%)');
     const feedbackZIndex = Number(ruleValue(feedbackLayer, 'z-index'));
     expect(feedbackZIndex).toBeGreaterThan(1700);
