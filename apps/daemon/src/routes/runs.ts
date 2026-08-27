@@ -892,11 +892,14 @@ async function validateChatRunDeliverable(input: {
 function runTouchedArtifactPaths(run: ChatRun): string[] | undefined {
   const diff = (
     run.artifactOutcome as
-      | { diff?: { touchedPaths?: unknown } }
+      | { diff?: { deliverableTouchedPaths?: unknown; touchedPaths?: unknown } }
       | undefined
   )?.diff;
-  return Array.isArray(diff?.touchedPaths)
-    ? diff.touchedPaths.filter(
+  const touchedPaths = Array.isArray(diff?.deliverableTouchedPaths)
+    ? diff.deliverableTouchedPaths
+    : diff?.touchedPaths;
+  return Array.isArray(touchedPaths)
+    ? touchedPaths.filter(
         (value): value is string => typeof value === 'string' && value.length > 0,
       )
     : undefined;
