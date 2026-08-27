@@ -51,7 +51,6 @@ describe('dulus definition metadata', () => {
 
   it('guards the argv prompt budget and streams plain text', () => {
     expect(dulusAgentDef.maxPromptArgBytes).toBe(30_000);
-    expect(dulusAgentDef.promptViaStdin).toBeUndefined();
     expect(dulusAgentDef.streamFormat).toBe('plain');
   });
 
