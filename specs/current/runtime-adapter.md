@@ -45,7 +45,7 @@ entries than the built-in list.
 | `pi-rpc` | `pi` | `pi` |
 | `qoder-stream-json` | `qoder` | `qodercli` |
 | `copilot-stream-json` | `copilot` | `copilot` |
-| `plain` | `grok-build`, `qwen`, `deepseek`, `aider`, `antigravity`, `atomcode`, `dulus` | `grok`, `qwen`, `deepseek`, `aider`, `agy`, `atomcode`, `dulus` |
+| `plain` | `grok-build`, `qwen`, `deepseek`, `aider`, `antigravity`, `atomcode` | `grok`, `qwen`, `deepseek`, `aider`, `agy`, `atomcode` |
 
 There is no registered `gemini` adapter. The standalone Gemini CLI runtime was
 retired when Kimi ACP was restored. The JSON event parser still understands a

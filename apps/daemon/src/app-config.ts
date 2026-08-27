@@ -217,7 +217,6 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],
   ['deepseek', new Set(['DEEPSEEK_BIN'])],
   ['devin', new Set(['DEVIN_BIN'])],
-  ['dulus', new Set(['DULUS_BIN'])],
   ['mimo', new Set(['MIMO_BIN'])],
   ['hermes', new Set(['HERMES_BIN'])],
   ['kimi', new Set(['KIMI_BIN'])],
