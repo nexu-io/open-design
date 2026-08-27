@@ -11,6 +11,7 @@ import {
   predictCensus,
   RVec3,
   subdivide,
+  triangulate,
 } from "./mesh.js";
 
 /**
@@ -63,6 +64,19 @@ export type TraceOp =
     }
   | { op: "subdivide"; levels: number }
   | { op: "mirror"; axis: 0 | 1 | 2 }
+  | {
+      /**
+       * Fan every face into triangles from its first vertex — the author's
+       * opt-in fix for a `volume` claim on a non-planar mesh. A curved surface's
+       * quads are non-planar, so its enclosed volume depends on which diagonal
+       * an exporter picks (the `volumeAmbiguity` band) and the claim stays
+       * UNCHECKED. Triangulating bakes ONE triangulation in: every face becomes
+       * a planar triangle, ambiguity is exactly 0, and the volume becomes a
+       * provable property of the shipped asset. Topology-only (no new vertices),
+       * so watertightness and genus are invariant; the trade is quad editability.
+       */
+      op: "triangulate";
+    }
   | {
       /**
        * Translate every vertex inside `region` by `offset` (three rational
@@ -190,6 +204,8 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number): KernelMesh {
     }
     case "mirror":
       return mirror(need(), op.axis);
+    case "triangulate":
+      return triangulate(need());
     case "move": {
       const m = need();
       const region = parseRegion(op.region);
@@ -291,17 +307,20 @@ export function evalTraceShapes(trace: Trace): { base: KernelMesh; shapes: Shape
       }
       variant = applyOp(op, variant, i);
     } else {
-      // Once a shape exists, only `subdivide` may run globally: it is the ONE
-      // op whose topology is coordinate-INDEPENDENT, so it stays in lockstep
-      // with every shape. `mirror` (exact-coordinate weld), `extrude`/`inset`
-      // (region selection on coordinates), `move`/`scale`/`crease` (region
-      // selection) all decide something from geometry, so a deformed shape
-      // would diverge from the base — silently mismatching vertex counts or
-      // crease sets (both red-teams found this). Author them BEFORE the first
-      // shape, or inside the shape bracket.
-      if (shapes.length > 0 && op.op !== "subdivide") {
+      // Once a shape exists, only ops whose topology is coordinate-INDEPENDENT
+      // may run globally, so they stay in lockstep with every shape: `subdivide`
+      // (Catmull-Clark connectivity depends on faces, not positions) and
+      // `triangulate` (a pure fan of the face list, positions untouched). Both
+      // give the base and every morph the SAME topology with the SAME vertex
+      // count. `mirror` (exact-coordinate weld), `extrude`/`inset` (region
+      // selection on coordinates), `move`/`scale`/`crease` (region selection)
+      // all decide something from geometry, so a deformed shape would diverge
+      // from the base — silently mismatching vertex counts or crease sets (both
+      // red-teams found this). Author them BEFORE the first shape, or inside the
+      // shape bracket.
+      if (shapes.length > 0 && op.op !== "subdivide" && op.op !== "triangulate") {
         throw new Error(
-          `evalTraceShapes: op ${i} '${op.op}' cannot run globally once a shape exists — only 'subdivide' stays in lockstep with every morph target; do region/mirror/extrude/inset ops before the first shape`,
+          `evalTraceShapes: op ${i} '${op.op}' cannot run globally once a shape exists — only 'subdivide' and 'triangulate' stay in lockstep with every morph target; do region/mirror/extrude/inset ops before the first shape`,
         );
       }
       base = applyOp(op, base, i);
@@ -477,6 +496,14 @@ export class Recorder {
 
   mirror(axis: 0 | 1 | 2): this {
     this.ops.push({ op: "mirror", axis });
+    return this;
+  }
+
+  /** Fan every face into triangles — the opt-in fix that makes a `volume` claim
+   *  provable on a non-planar (curved/subdivided) mesh by driving its
+   *  triangulation ambiguity to zero. Topology-only; trades quad editability. */
+  triangulate(): this {
+    this.ops.push({ op: "triangulate" });
     return this;
   }
 

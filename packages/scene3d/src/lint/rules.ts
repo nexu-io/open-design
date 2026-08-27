@@ -197,13 +197,18 @@ export function runLint(input: LintInput): Issue[] {
             ...(m.volumeFan != null ? { volumeFan: m.volumeFan } : {}),
           }
         : undefined;
-      issues.push(...adjudicateKernelPrediction(partId, census, measured, shapeNames));
+      const partIssues = adjudicateKernelPrediction(partId, census, measured, shapeNames);
+      issues.push(...partIssues);
       // A part's build VOLUME is confirmed iff it has an exact volume (a closed
-      // solid) AND the SAME predicate the E-703 check just ran classifies the
-      // build's fan volume as within bound. One predicate for both, so the claim
-      // and the self-check can never disagree about a part.
+      // solid), the build reproduced the predicted TOPOLOGY (no E-702 mismatch —
+      // otherwise the prediction, and its embedding verdict, describe a different
+      // mesh than the one that shipped), AND the SAME predicate the E-703 check
+      // just ran classifies the build's fan volume as within bound. One predicate
+      // for both, so the claim and the self-check can never disagree about a part.
+      const topologyDiverged = partIssues.some((i) => i.code === ISSUE_CODES.KERNEL_PREDICTION_MISMATCH);
       if (
         census.mass &&
+        !topologyDiverged &&
         classifyVolumeCheck(census.mass.volume, census.mass.volumeExact, census.mass.conditioning, measured?.volumeFan) ===
           "confirmed"
       ) {
@@ -231,6 +236,9 @@ export function runLint(input: LintInput): Issue[] {
               // claim is a theorem about the DELIVERABLE only when it is zero
               // (every face planar, so no exporter's diagonal changes the volume).
               ambiguityExact: p.census.mass ? p.census.mass.volumeAmbiguityExact : null,
+              // The embedding verdict: signed volume equals solid volume only if
+              // the surface embeds (does not self-intersect).
+              embed: p.census.mass ? p.census.mass.embed : null,
             })),
             volumeConfirmed,
           }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { lintClaims } from "../src/lint/claims.js";
 import { predictCensus, meshOf } from "../src/kernel/mesh.js";
 import type { KernelMesh } from "../src/kernel/mesh.js";
+import type { EmbedResult } from "../src/kernel/embed.js";
 import type { Census, Issue } from "../src/types.js";
 
 /**
@@ -34,12 +35,14 @@ const censusOf = (names: string[]): Census =>
 const run = (
   claimVolume: string,
   meshNames: string[],
-  kernelVolumes: Array<{ partId: string; volumeExact: string | null; ambiguityExact?: string | null }>,
+  kernelVolumes: Array<{ partId: string; volumeExact: string | null; ambiguityExact?: string | null; embed?: EmbedResult }>,
   confirmed: Set<string> = new Set(meshNames),
 ): Issue[] => {
   const issues: Issue[] = [];
   lintClaims({ volume: claimVolume }, censusOf(meshNames), issues, {
-    kernelVolumes: kernelVolumes.map((k) => ({ ambiguityExact: "0", ...k })),
+    // Planar and embedded by default (a box); a case overrides embed to model a
+    // non-planar or self-intersecting part.
+    kernelVolumes: kernelVolumes.map((k) => ({ ambiguityExact: "0", embed: { kind: "embedded" } as EmbedResult, ...k })),
     volumeConfirmed: confirmed,
   });
   return issues;
@@ -116,7 +119,7 @@ describe("volume claim (exact)", () => {
     expect(u).toBeDefined();
     expect(u!.message).toContain("triangulation-dependent");
     expect(u!.message).toContain("[7/10, 13/10]");
-    expect(u!.message).toContain("triangulate step");
+    expect(u!.message).toContain("ctx.triangulate()");
     expect(u!.detail).toMatchObject({ band: ["7/10", "13/10"], ambiguity: "3/10", claimInsideBand: true });
     // A claim OUTSIDE the band is reported as such (still unchecked, not failed).
     const outside = run("2", ["a"], [{ partId: "a", volumeExact: "1", ambiguityExact: "3/10" }]).find(
@@ -126,6 +129,44 @@ describe("volume claim (exact)", () => {
     expect(outside!.detail).toMatchObject({ claimInsideBand: false });
     // Never a fail: a non-planar mesh's volume claim cannot be refuted either.
     expect(run("2", ["a"], [{ partId: "a", volumeExact: "1", ambiguityExact: "3/10" }]).some((i) => i.code === "S3D-E-701")).toBe(false);
+  });
+
+  it("is UNCHECKED (never silently collapses) when a part has duplicate predictions", () => {
+    // Two predictions for 'a' would let a Map keep only the last, swapping the
+    // volume/embed witness. Part ids are unique, so this is malformed — refused.
+    const u = run("1", ["a"], [
+      { partId: "a", volumeExact: "1", ambiguityExact: "0" },
+      { partId: "a", volumeExact: "2", ambiguityExact: "0" },
+    ]).find((i) => i.code === "S3D-W-701");
+    expect(u).toBeDefined();
+    expect(u!.message).toContain("more than one");
+  });
+
+  it("REFUTES a self-intersecting mesh, naming the witness faces (signed ≠ solid volume)", () => {
+    // The mesh is planar (ambiguity 0) and its build volume confirmed, but it
+    // SELF-INTERSECTS: the signed volume double-counts the overlap, so it does
+    // not bound the claimed solid. Refuted (not merely unchecked), with the two
+    // crossing faces named — the witness is the feature.
+    const f = run("1", ["a"], [
+      { partId: "a", volumeExact: "1", ambiguityExact: "0", embed: { kind: "selfIntersects", faceA: 3, faceB: 7 } },
+    ]).find((i) => i.code === "S3D-E-701");
+    expect(f).toBeDefined();
+    expect(f!.message).toContain("self-intersects");
+    expect(f!.message).toContain("faces 3 and 7");
+    expect(f!.detail).toMatchObject({ selfIntersects: [3, 7] });
+  });
+
+  it("is UNCHECKED when the embedding could not be certified (over the face cap)", () => {
+    const u = run("1", ["a"], [
+      { partId: "a", volumeExact: "1", ambiguityExact: "0", embed: { kind: "unchecked", reason: "over the embedding-test cap" } },
+    ]).find((i) => i.code === "S3D-W-701");
+    expect(u).toBeDefined();
+    expect(u!.message).toContain("embedding");
+    expect(u!.message).toContain("'a'");
+    // Never a silent pass on an unproven immersion.
+    expect(run("1", ["a"], [
+      { partId: "a", volumeExact: "1", ambiguityExact: "0", embed: { kind: "unchecked", reason: "x" } },
+    ]).some((i) => i.code === "S3D-E-701")).toBe(false);
   });
 
   it("is UNCHECKED when the exact sum matches but the build volume was NOT CONFIRMED", () => {

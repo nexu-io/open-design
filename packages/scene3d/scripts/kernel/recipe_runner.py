@@ -110,6 +110,16 @@ class RecipeCtx:
         self._ops.append({"op": "mirror", "axis": axis})
         return self
 
+    def triangulate(self):
+        """Fan every face into triangles — the opt-in fix that makes a `volume`
+        claim provable on a non-planar (curved/subdivided) mesh. A curved
+        surface's quads are non-planar, so its volume depends on which diagonal
+        an exporter picks and the claim stays unchecked; triangulating bakes one
+        triangulation in, drives the ambiguity to zero, and the volume becomes a
+        provable property of the shipped asset. Topology-only; trades quads."""
+        self._ops.append({"op": "triangulate"})
+        return self
+
     def move(self, region, offset):
         """Translate the vertices in a coordinate region by an exact offset.
 
@@ -238,8 +248,12 @@ def _line_in(path, exc):
 
 CONTRACT = (
     "the recipe contract: define build(ctx); ctx records exact operators -- "
-    "ctx.box()/ctx.cage(points, faces) seed geometry, ctx.subdivide(levels), "
-    "ctx.mirror(axis), ctx.move(region, offset) and ctx.crease(region) transform it; "
+    "SEED geometry with ctx.box(half)/ctx.cage(points, faces)/ctx.grid(nx, ny, size); "
+    "REFINE with ctx.subdivide(levels) (Catmull-Clark) or ctx.triangulate() "
+    "(fan faces to triangles -- makes a volume claim provable on a curved mesh); "
+    "TRANSFORM with ctx.mirror(axis), ctx.move(region, offset), ctx.scale(region, factor, pivot), "
+    "ctx.crease(region), ctx.extrude(region, offset), ctx.inset(region, factor); "
+    "author a MORPH target with ctx.shape(name)...ctx.end_shape(); "
     "coordinates are ints, rational strings ('1/2') or fractions.Fraction, never floats"
 )
 

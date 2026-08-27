@@ -119,6 +119,9 @@ function validateTraceShape(value: unknown): string | null {
           return `trace.ops[${i}] mirror.axis must be 0, 1 or 2`;
         }
         break;
+      case "triangulate":
+        // No parameters: it fans every face into triangles. Nothing to validate.
+        break;
       case "move": {
         const off = op.offset;
         if (!Array.isArray(off) || off.length !== 3 || off.some((c) => !okRat(c))) {

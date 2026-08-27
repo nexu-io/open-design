@@ -1,6 +1,7 @@
 import { Census, Issue } from "../types.js";
 import { ISSUE_CODES } from "../errors.js";
 import { Rational } from "../kernel/rational.js";
+import type { EmbedResult } from "../kernel/embed.js";
 import type { ClaimsSpec, SolvedPart } from "../solve/types.js";
 import { isExempt } from "./exempt.js";
 import { groundVerdict, groundedSupport, nearestSupportBelow } from "../solve/contact.js";
@@ -87,7 +88,7 @@ export function lintClaims(
      * Blender-primitive or imported part has no exact volume, so the claim then
      * stays honestly unchecked.
      */
-    kernelVolumes?: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null }>;
+    kernelVolumes?: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null; embed: EmbedResult | null }>;
     /** Part ids whose build volume the kernel self-check CONFIRMED against the
      *  exact within E-703's float bound. The `volume` claim is a theorem about
      *  the shipped mesh only over these — a part measured but diverged (E-703
@@ -644,7 +645,7 @@ export function lintClaims(
 function adjudicateVolumeClaim(
   claimVolume: string,
   census: Census,
-  kernelVolumes: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null }>,
+  kernelVolumes: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null; embed: EmbedResult | null }>,
   volumeConfirmed: ReadonlySet<string>,
   unchecked: (reason: string, detail?: Record<string, unknown>) => void,
   fail: (message: string, detail: Record<string, unknown>) => void,
@@ -655,11 +656,21 @@ function adjudicateVolumeClaim(
   // count and total the wrong set. Exact only when the WHOLE scene is recipe
   // geometry — a Blender-primitive or imported mesh has no exact volume, so a
   // partial sum would be a confident wrong number.
+  // Two predictions for one part id would let `new Map` silently keep only the
+  // last — a stale or weaker volume/embedding witness quietly replacing the real
+  // one. Recipe part ids are unique by construction, so a duplicate is malformed
+  // input, not a scene: refuse to adjudicate against ambiguous geometry.
+  const ids = kernelVolumes.map((r) => r.partId);
+  if (new Set(ids).size !== ids.length) {
+    unchecked("the kernel produced more than one volume prediction for a part — ambiguous geometry, so the exact total cannot be trusted");
+    return;
+  }
   const byId = new Map(kernelVolumes.map((r) => [r.partId, r.volumeExact]));
   const ambById = new Map(kernelVolumes.map((r) => [r.partId, r.ambiguityExact]));
+  const embedById = new Map(kernelVolumes.map((r) => [r.partId, r.embed]));
   const uncovered = census.meshes.filter((m) => !byId.has(m.object));
   if (byId.size === 0) {
-    unchecked("no recipe parts — an exact volume needs geometry the kernel built");
+    unchecked("no recipe parts — an exact volume needs geometry the kernel built, so give the part a `recipe:` (a primitive box/cylinder/import has no exact rational volume)");
   } else if (uncovered.length > 0 || byId.size !== census.meshes.length) {
     const names = uncovered.map((m) => `'${m.object}'`).join(", ");
     unchecked(
@@ -706,16 +717,48 @@ function adjudicateVolumeClaim(
       const hi = sum.add(amb);
       const inside = claimed.cmp(lo) >= 0 && claimed.cmp(hi) <= 0;
       unchecked(
-        `the mesh has non-planar faces, so its volume is triangulation-dependent: the exact fan volume is ${sum.toString()}, but an exporter's diagonal choice moves it within [${lo.toString()}, ${hi.toString()}]. The claimed ${claimed.toString()} ${inside ? "lies within" : "is OUTSIDE"} that band. Add a triangulate step to the recipe to make the volume triangulation-independent and provable`,
+        `the mesh has non-planar faces, so its volume is triangulation-dependent: the exact fan volume is ${sum.toString()}, but an exporter's diagonal choice moves it within [${lo.toString()}, ${hi.toString()}]. The claimed ${claimed.toString()} ${inside ? "lies within" : "is OUTSIDE"} that band. Add \`ctx.triangulate()\` to the recipe (it fans every face into planar triangles) to make the volume triangulation-independent and provable`,
         { band: [lo.toString(), hi.toString()], ambiguity: amb.toString(), fanVolume: sum.toString(), claimInsideBand: inside },
       );
-    } else if (!sum.eq(claimed)) {
-      // Planar faces (ambiguity 0): the volume is universal, so exact equality
-      // is a theorem about the deliverable and every re-triangulation of it.
-      fail(`the exact total volume is ${sum.toString()}, not the claimed ${claimed.toString()}`, {
-        expected: claimVolume,
-        actual: sum.toString(),
-      });
+    } else {
+      // Planar faces (ambiguity 0): the volume is triangulation-independent. But
+      // the divergence-theorem SIGNED volume equals the geometric SOLID volume
+      // only when the surface EMBEDS (Jordan–Brouwer); a self-intersecting
+      // immersion double-counts its overlapped region. Watertight/orientable are
+      // connectivity facts an immersion also passes, so this is the one exact
+      // geometric gate. `embeds` runs on the FLOAT32-QUANTIZED mesh — the exact
+      // coordinates Blender stores (`ℚ(fround(emit))`) — so this is a theorem
+      // about the SHIPPED surface, not just the ℚ design: a rounding-induced
+      // crossing is caught here, and `from_pydata` stores those coordinates
+      // faithfully (E-702 adjudicates the topology is intact). No float oracle,
+      // no precision caveat.
+      const witness = census.meshes
+        .map((m) => embedById.get(m.object))
+        .find((e): e is Extract<EmbedResult, { kind: "selfIntersects" }> => e?.kind === "selfIntersects");
+      // Anything not EXPLICITLY embedded is uncertified — a null/absent result
+      // (a malformed or partial prediction) is missing evidence, never proof; it
+      // must not fall through to the equality branch. Self-intersection is
+      // reported first with its witness; the rest read unchecked.
+      const uncertified = census.meshes.filter((m) => embedById.get(m.object)?.kind !== "embedded");
+      if (witness) {
+        // The witness pair is the feature: name the two faces that cross.
+        fail(
+          `the shipped mesh self-intersects — faces ${witness.faceA} and ${witness.faceB} cross — so it does not bound a solid and cannot enclose the claimed volume ${claimed.toString()}`,
+          { selfIntersects: [witness.faceA, witness.faceB], expected: claimVolume },
+        );
+      } else if (uncertified.length > 0) {
+        const names = uncertified.map((m) => `'${m.object}'`).join(", ");
+        unchecked(
+          `the embedding of part(s) ${names} could not be certified (the mesh is over the embedding-test cap, or its prediction is missing), so the signed volume is not proven to be the solid volume`,
+        );
+      } else if (!sum.eq(claimed)) {
+        // Embedded and triangulation-independent: exact equality is now a theorem
+        // about the SOLID volume of the deliverable and every re-triangulation.
+        fail(`the exact total volume is ${sum.toString()}, not the claimed ${claimed.toString()}`, {
+          expected: claimVolume,
+          actual: sum.toString(),
+        });
+      }
     }
   }
 }

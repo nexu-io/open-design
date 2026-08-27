@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { meshOf, predictCensus } from "../src/kernel/mesh.js";
+import { meshOf, predictCensus, triangulate } from "../src/kernel/mesh.js";
 import type { KernelMesh } from "../src/kernel/mesh.js";
 import { massProperties } from "../src/kernel/mass.js";
 import { rat, Rational } from "../src/kernel/rational.js";
@@ -115,6 +115,42 @@ describe("kernel: exact mass properties", () => {
     eq(mp.volume, 4, 3);
     eq(mp.volumeAmbiguity, 1, 6);
     expect(mp.conditioning.cmp(rat(0)) > 0).toBe(true); // a positive error scale
+  });
+
+  it("triangulate() drives volumeAmbiguity to ZERO while preserving the exact volume and topology", () => {
+    // The author's escape hatch: the perturbed cube has a non-planar quad
+    // (ambiguity 1/6), so its volume is triangulation-dependent and a claim on
+    // it is unchecked. Triangulating fans that quad — the SAME fan the mass
+    // integral uses — so the volume is unchanged to the bit, but now every face
+    // is a triangle (planar) and the ambiguity is exactly 0: the volume is a
+    // theorem about the shipped mesh and every re-triangulation of it.
+    const perturbed = meshOf(
+      [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 2], [0, 1, 1]],
+      [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]],
+    );
+    const tri = triangulate(perturbed);
+    expect(tri.faces.every((f) => f.length === 3)).toBe(true); // all triangles now
+    expect(tri.verts.length).toBe(perturbed.verts.length); // topology-only: no new verts
+    const before = massProperties(perturbed)!;
+    const after = massProperties(tri)!;
+    expect(after.volume.eq(before.volume)).toBe(true); // 4/3, unchanged to the bit
+    expect(after.volumeAmbiguity.isZero()).toBe(true); // now triangulation-independent
+    // Watertightness and genus are invariant — the fan keeps a closed manifold closed.
+    const c = predictCensus(tri, { mass: true });
+    expect(c.watertight).toBe(true);
+    expect(c.genus).toBe(0);
+    expect(c.mass!.volumeExact).toBe("4/3");
+  });
+
+  it("triangulate() enforces the face-count ceiling (a quad becomes two triangles)", () => {
+    // 50,001 quads project to 100,002 triangles — one past MAX_KERNEL_FACES —
+    // so triangulate must refuse it, the same backstop meshOf and subdivide keep.
+    const quads = Array.from({ length: 50_001 }, () => [0, 1, 2, 3]);
+    const pt = (x: number, y: number): [Rational, Rational, Rational] => [rat(x), rat(y), rat(0)];
+    const overCeiling = { verts: [pt(0, 0), pt(1, 0), pt(1, 1), pt(0, 1)], faces: quads, vertId: ["v0", "v1", "v2", "v3"] };
+    expect(() => triangulate(overCeiling)).toThrow(/ceiling/);
+    // One fewer quad stays under the ceiling and triangulates fine.
+    expect(() => triangulate({ ...overCeiling, faces: quads.slice(1) })).not.toThrow();
   });
 
   it("predictCensus reports NO mass for a multi-component mesh — one sign cannot net two volumes", () => {

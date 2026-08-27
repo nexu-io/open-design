@@ -124,7 +124,7 @@ them.
 | **Scene** | Several props in conversation — `repeat`, `scatter`, stacking | Path-addressed scatter that does not reshuffle when you add a part; derived camera that always contains the subject |
 | **Downloaded asset** | A scene dir of `.glb`/`.gltf`/`.obj`/`.fbx`, *or* a `file:` part inside a declared box | Imports, frames, measures, repackages. `material:` on a `file` part reskins it wholesale |
 | **Freeform shape** | `"script": "hull.py"` with `def build(ctx)` creating exactly one mesh | First-class procedural authoring path; fits that mesh into the declared box like any other part, so relations still work |
-| **Kernel recipe** | `"recipe": "hull.py"` with `def build(ctx)` recording `ctx.box/cage/subdivide/mirror` | Deterministic exact-rational geometry (Catmull-Clark, mirror); the compiler predicts the built census and adjudicates it (`S3D-E-702`). Smooth, count-provable, cross-machine identical |
+| **Kernel recipe** | `"recipe": "hull.py"` with `def build(ctx)` recording `ctx.box/cage/subdivide/crease/extrude/inset/scale/mirror/triangulate` | Deterministic exact-rational geometry (Catmull-Clark and more); the compiler predicts the built census and adjudicates it (`S3D-E-702`), and can prove an exact `volume`. Smooth, count-provable, cross-machine identical |
 | **GPU material** | A `.glsl` kernel `vec4 kernel(vec2 uv)` plus a `shaders` block | Bakes textures (even a height field → normal map), wires them, shows them in the proof and the GLB |
 | **Motion (current subset)** | Per-part `spin` / `bob` / `screw` | Owns the keyframes, loops them, derives an animation asset, keeps clips on imported rigs; richer timelines and deformation systems are future language work |
 | **Sprite / flipbook / VFX / sky** | A sheet file, *or* a kernel with `"frames": 16` | Measures the atlas (grid, bleed, seams, motion). A frames kernel *is* a sheet, so materials do not bind it |
@@ -326,7 +326,10 @@ Fill the box another way:
   bump, boss or socket; the offset is a rational vector, not a normal
   distance, so it stays exact), and `ctx.inset(region, factor)` (shrink each
   face in a region to an inner panel ringed to its border — a frame, a recess;
-  factor in (0,1)), chained fluently. A `region`
+  factor in (0,1)), and `ctx.triangulate()` (fan every face into planar
+  triangles — the opt-in that makes a `volume` claim provable on a curved or
+  subdivided mesh, at the cost of quad editability; use it as the last step),
+  chained fluently. A `region`
   is a dict of axis → `[min, max]` inclusive bounds (`{"z": ["1", "1"]}` is
   exactly the plane z=1; `{}` is everything); `move`/`scale`/`crease` are
   topology-preserving, while `extrude`/`inset` add geometry — all exact.
@@ -415,7 +418,7 @@ the one mistake this knob invites — the default already fits.
 **Claims** are your signature on the work, checked against the *built*
 artifact: `parts`, `maxTriangles`, `grounded`, `maxHeight`, `minHeight`,
 `footprint` `[x,y]`, `minFootprint` `[x,y]`, `watertight`,
-`materialsUsed`. Numerics are upper bounds except `parts` (exact) and
+`materialsUsed`, `volume`. Numerics are upper bounds except `parts` (exact) and
 the two `min*` floors — the floors exist for scale honesty: a scene
 uniformly wrong by 100× has no internal outliers for any relative check
 to catch, so `minHeight`/`minFootprint` are your one-line signature of
@@ -446,6 +449,34 @@ closed-form swept envelope of compiler-owned motion proves failures
 that never land on 45° cannot save it) and proves passes (an envelope
 inside the bound suppresses the stride caveat), and a conservative
 bound over the claim is reported as UNPROVEN rather than either.
+
+**`volume`** is the exact physics claim: an EXACT RATIONAL string (`"4/3"`,
+`"297412448/475021263"` — never a float) asserting the total enclosed volume,
+and the compiler proves or refutes it in ℚ, no tolerance. It is deliberately
+narrow, because it is a theorem about the SHIPPED asset, not a guess:
+- **Recipe geometry only.** Every part must be a `recipe:` part (the kernel
+  built it, so its volume is exactly known). A primitive `box`/`cylinder`,
+  an imported `file:`, or a `script:` part has no exact rational volume, so
+  the claim stays honestly *unchecked* (the report names the offending part).
+- **The mesh must be a single closed solid** (watertight, one shell). An open
+  shell encloses no volume.
+- **A curved surface needs `ctx.triangulate()`.** A subdivided/curved mesh has
+  bent quads, so its volume shifts depending on how an exporter splits them and
+  the claim reads *unchecked* (with the range it could land in). Add
+  `ctx.triangulate()` as the last recipe step to lock it down — then the volume
+  is one fixed number and the claim holds. A flat-faced box needs nothing.
+- **Mind the fit.** A recipe fills its `size` box by UNIFORM scale (the cage is
+  scaled by `min(size/extent)`, not stretched per-axis), so a unit-cube cage in
+  `size:[2,1,1]` is a 1×1×1 cube resting in the box, volume `1`, not `2`. Build
+  the proportions into the cage; a wrong claim is refuted with the exact value.
+- **Don't hand-derive the value.** The exact volume is often an ugly rational;
+  claim the value the compiler reports (a wrong claim is refuted WITH the right
+  one, so one compile tells you what to write).
+
+Alongside the volume it reports the centre of mass and whether the shape is
+mass-symmetric, and it refuses a mesh that passes through itself, naming the two
+faces that cross — so a `volume` you claim is a real physical fact about the
+asset, not an approximation.
 
 ### GPU kernels
 

@@ -125,8 +125,33 @@ describe.skipIf(!hasBlender)("kernel recipe pipeline (real Blender)", () => {
     const u = result.issues.find((i) => i.code === "S3D-W-701" && /triangulation-dependent/.test(i.message));
     expect(u).toBeDefined();
     expect(u!.message).toContain(VOL); // the exact fan volume, at the band's centre
-    expect(u!.message).toContain("triangulate step");
+    expect(u!.message).toContain("ctx.triangulate()"); // names the real escape hatch
     expect(result.issues.some((i) => i.code === "S3D-E-701")).toBe(false); // never a fail
+  }, 300_000);
+
+  it.skipIf(!hasPython)("ctx.triangulate() makes an ORGANIC mesh's volume claim PROVABLE end to end", async () => {
+    // The escape hatch closing the creative loop: a subdivided (curved) surface
+    // would leave its volume claim unchecked (triangulation-dependent), but
+    // appending ctx.triangulate() bakes one triangulation in — every face planar,
+    // ambiguity 0 — so the exact volume becomes a theorem about the SHIPPED mesh
+    // and the claim PASSES. The volume is the compiler's own value (computed by
+    // the same kernel), and it is UNCHANGED by triangulating (the same fan).
+    const vol = predictCensus(
+      fitKernelMesh(evalTrace(new Recorder().box().subdivide(2).triangulate().trace()), [], [rat(1), rat(1), rat(1)]).base,
+      { mass: true },
+    ).mass!.volumeExact;
+    const dir = workDir("good/spec_recipe");
+    fs.writeFileSync(path.join(dir, "hull.py"), "def build(ctx):\n    ctx.box().subdivide(2).triangulate()\n", "utf8");
+    const scene = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
+    scene.claims = { ...scene.claims, volume: vol };
+    fs.writeFileSync(path.join(dir, "scene.json"), JSON.stringify(scene), "utf8");
+
+    const result = await compile({ projectDir: dir, proof: { turntable: false }, noCache: true });
+    // CHECKED and held: no failure, no divergence, and NOT unchecked (it is planar now).
+    expect(result.issues.some((i) => i.code === "S3D-E-701")).toBe(false);
+    expect(result.issues.some((i) => i.code === "S3D-E-703")).toBe(false);
+    expect(result.issues.some((i) => i.code === "S3D-W-701" && /volume/.test(i.message))).toBe(false);
+    expect(result.ok).toBe(true);
   }, 300_000);
 
   it.skipIf(!hasPython)("measures a FAR-PLACED part's volume translation-stably (no phantom E-703)", async () => {

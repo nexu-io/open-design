@@ -222,6 +222,26 @@ describe("kernel trace: morph targets propagate through subdivision exactly", ()
     expect(moved).toBe(true); // the stretch actually deformed geometry
   });
 
+  it("triangulate() composes with morph targets, keeping every shape in lockstep", () => {
+    // The documented order — author the morph, subdivide, then triangulate as
+    // the final step for a provable volume. triangulate is a pure fan of the
+    // face list (positions untouched), so the base and every shape get the SAME
+    // triangulated topology with the SAME vertex count: the morph survives it.
+    const trace = new Recorder()
+      .box()
+      .shape("stretch").move({ z: ["1", "1"] }, [0, 0, "1"]).endShape()
+      .subdivide(2)
+      .triangulate()
+      .trace();
+    const { base, shapes } = evalTraceShapes(trace);
+    expect(base.faces.every((f) => f.length === 3)).toBe(true); // fully triangulated
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]!.mesh.verts.length).toBe(base.verts.length); // still in lockstep
+    expect(shapes[0]!.mesh.faces).toEqual(base.faces); // identical (triangulated) topology
+    const moved = shapes[0]!.mesh.verts.some((v, i) => !v[2].eq(base.verts[i]![2]));
+    expect(moved).toBe(true); // the morph still deforms geometry
+  });
+
   it("a cage delta scales linearly to the limit surface — S·Δ, exact", () => {
     // Doubling the authored cage delta doubles the propagated limit-surface
     // delta to the last bit. That linearity is what lets a blendshape be

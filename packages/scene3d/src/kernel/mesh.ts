@@ -1,5 +1,6 @@
-import { Rational, rat, ratMean } from "./rational.js";
+import { Rational, rat, ratMean, ratFromFloat } from "./rational.js";
 import { massProperties } from "./mass.js";
+import { embeds, type EmbedResult } from "./embed.js";
 
 /**
  * The deterministic geometry kernel: exact meshes and the operators over them.
@@ -443,6 +444,59 @@ export function subdivide(mesh: KernelMesh, levels: number): KernelMesh {
   return m;
 }
 
+/**
+ * Fan every face into triangles from its first vertex — the SAME fan the mass
+ * integral and the enclosed volume use, so the volume is unchanged to the bit.
+ *
+ * This is the author's opt-in escape from a triangulation-DEPENDENT volume. A
+ * mesh of non-planar quads bounds a RANGE of volumes — one per triangulation,
+ * the `volumeAmbiguity` band — so its `volume` claim cannot be a theorem about
+ * the shipped asset (glTF/USD re-triangulate and may pick the other diagonal).
+ * Triangulating fixes ONE triangulation into the geometry itself: every face
+ * becomes a triangle, a triangle is planar, so `volumeAmbiguity` is exactly 0
+ * and the volume is a property of the deliverable AND every re-triangulation of
+ * it. Topology-only — vertices and their provenance are untouched, and the fan
+ * keeps a closed manifold closed (each original edge still borders two faces;
+ * each new diagonal borders the two fan triangles that share it), so
+ * watertightness and genus are invariant; only the face list changes. The trade
+ * is quad editability, which is why the AUTHOR reaches for it and the compiler
+ * never applies it to rescue a claim.
+ *
+ * The fan is taken from each face's FIRST vertex — the identical fan the mass
+ * integral and the runner's `fan_volume` already use, so the certified volume is
+ * exactly the SIGNED volume of the triangles that ship, and E-703 confirms it
+ * against Blender's own measurement (Blender fans the same way). For the convex
+ * faces every kernel operator generates — Catmull-Clark quads, box/grid,
+ * extrude, inset — that fan is a valid, non-self-intersecting triangulation. A
+ * concave face an author writes by hand with `cage()` is still fanned from its
+ * first vertex; its signed volume is what ships and stays E-703-confirmed, but a
+ * reflex first vertex can self-intersect the surface — a geometry defect the
+ * manifold/winding lints report on their own, not a wrong volume certificate.
+ */
+export function triangulate(mesh: KernelMesh): KernelMesh {
+  // The same face-count backstop meshOf and subdivide enforce: a quad becomes
+  // two triangles, so triangulating near the ceiling would otherwise slip a mesh
+  // of up to ~2× MAX_KERNEL_FACES past every downstream cost guard.
+  const projected = mesh.faces.reduce((n, f) => n + Math.max(f.length - 2, 0), 0);
+  if (projected > MAX_KERNEL_FACES) {
+    throw new Error(
+      `kernel: triangulation would produce ${projected} faces, over the ${MAX_KERNEL_FACES} ceiling — triangulate a coarser mesh, or subdivide less before it`,
+    );
+  }
+  const faces: number[][] = [];
+  for (const f of mesh.faces) {
+    for (let k = 1; k + 1 < f.length; k++) faces.push([f[0]!, f[k]!, f[k + 1]!]);
+  }
+  return {
+    verts: [...mesh.verts],
+    faces,
+    vertId: [...mesh.vertId],
+    // Original edges survive the fan (each is an edge of some fan triangle), so
+    // a crease on one is still a crease; the new diagonals are simply uncreased.
+    ...(mesh.creases ? { creases: mesh.creases } : {}),
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Structural mirror — bilateral symmetry as a permutation            */
 /* ------------------------------------------------------------------ */
@@ -822,7 +876,31 @@ export interface PredictedCensus {
     volumeAmbiguity: number;
     volumeAmbiguityExact: string;
     conditioning: number;
+    /** Whether the surface EMBEDS (bounds a solid) or self-intersects — the exact
+     *  hypothesis under which the signed volume equals the solid volume. The
+     *  `volume` claim requires `embedded`; a self-intersecting immersion double-
+     *  counts and is refused with the witness face pair. */
+    embed: EmbedResult;
   } | null;
+}
+
+/**
+ * The mesh with each coordinate rounded to the float32 value Blender stores —
+ * the EXACT shipped geometry. `toEmitMesh` lowers ℚ→float64 for `from_pydata`,
+ * and Blender keeps mesh coordinates as float32; `Math.fround` reproduces that
+ * IEEE-754 round-to-nearest-even bit-for-bit, and every float32 is a dyadic
+ * rational, so lifting back through `ratFromFloat` is exact and lossless. Faces
+ * and provenance are untouched (topology does not round). Used to prove the
+ * SHIPPED surface embeds, not merely the ℚ design.
+ */
+function quantizeToShippedFloat32(mesh: KernelMesh): KernelMesh {
+  const q = (c: Rational): Rational => ratFromFloat(Math.fround(c.toNumber()));
+  return {
+    verts: mesh.verts.map((v) => [q(v[0]), q(v[1]), q(v[2])] as RVec3),
+    faces: mesh.faces,
+    vertId: mesh.vertId,
+    ...(mesh.creases ? { creases: mesh.creases } : {}),
+  };
 }
 
 /**
@@ -881,7 +959,17 @@ export function predictCensus(mesh: KernelMesh, opts: { mass?: boolean } = {}): 
   // oppositely-wound closed components are each watertight yet would net to the
   // signed DIFFERENCE of their volumes, so they are (honestly) left null.
   const singleClosedOrientable = watertight && components === 1 && orientable;
-  const mp = opts.mass && singleClosedOrientable ? massProperties(mesh) : null;
+  // EVERY geometric certificate fact — volume, the triangulation-ambiguity band,
+  // and embedding — is measured on the FLOAT32-QUANTIZED mesh, the exact
+  // coordinates Blender stores (`ℚ(fround(emit))`), NOT the ℚ design. Float
+  // rounding is a DETERMINISTIC function (`Math.fround` is IEEE-754 round-to-
+  // nearest-even, and every float32 is a dyadic rational), so the shipped
+  // geometry is known exactly, and the theorem is about what SHIPS with no
+  // precision caveat: a rounding that makes a planar rational quad non-planar,
+  // moves the volume, or crosses two faces is caught here. Topology (watertight,
+  // genus) is quantization-invariant, so it stays on the design mesh above.
+  const shipped = opts.mass && singleClosedOrientable ? quantizeToShippedFloat32(mesh) : null;
+  const mp = shipped ? massProperties(shipped) : null;
   const mass = mp
     ? {
         volume: mp.volume.toNumber(),
@@ -891,6 +979,7 @@ export function predictCensus(mesh: KernelMesh, opts: { mass?: boolean } = {}): 
         volumeAmbiguity: mp.volumeAmbiguity.toNumber(),
         volumeAmbiguityExact: mp.volumeAmbiguity.toString(),
         conditioning: mp.conditioning.toNumber(),
+        embed: embeds(shipped!), // non-null wherever mp is (massProperties ran on it)
       }
     : null;
   return {
