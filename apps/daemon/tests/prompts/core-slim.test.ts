@@ -102,11 +102,6 @@ describe('renderSlimCoreCharter — frozen protocol markers', () => {
     expect(charter).toContain('framer-motion@11.11.13/dist/framer-motion.js');
   });
 
-  it('states the render and diagnostic budgets once', () => {
-    expect(charter.match(/Render at most once per task/g)).toHaveLength(1);
-    expect(charter).toContain('you may run at most one diagnostic');
-  });
-
   it('makes the tool-economy budget operational', () => {
     for (const marker of [
       'Combine independent reads and searches into a single call',
@@ -131,11 +126,23 @@ describe('renderSlimCoreCharter — frozen protocol markers', () => {
     expect(charter).toContain('place the text beside the image');
   });
 
-  it('separates the optional preview budget from final delivery exports', () => {
-    expect(charter).toContain('Render only when static code review cannot determine');
-    expect(charter).toContain('`"$OD_NODE_BIN" "$OD_BIN" export <file>');
-    expect(charter).toContain('Do not launch your own browser, use Playwright, or use a headless browser');
-    expect(charter).toContain('An export explicitly requested by the user is a delivery action');
+  it('keeps pre-delivery verification static and prohibits render-based validation or repair', () => {
+    expect(charter).toContain('perform one full static check');
+    expect(charter).toContain('Check code and content completeness');
+    expect(charter).toContain('Check skill requirements');
+    expect(charter).toContain('Check visual and interaction quality');
+    expect(charter).toContain('Never render or capture screenshots for validation or repair');
+    expect(charter).toContain('Complete the pre-delivery check through static code and content inspection only');
+    expect(charter).toContain('produce it only as a delivery action after the static check');
+    expect(charter).toContain('Do not inspect that export or use it to drive further fixes');
+    for (const removedRule of [
+      'Render only when static code review cannot determine',
+      'Render at most once per task',
+      'you may run at most one diagnostic',
+      '"$OD_BIN" export',
+    ]) {
+      expect(charter).not.toContain(removedRule);
+    }
   });
 
   it('switches the handoff rule by execution profile', () => {

@@ -945,9 +945,10 @@ export function composeSystemPrompt({
   // mode. Both blocks are static, so the swap is cache-neutral.
   // Plain-stream (BYOK/API) slim runs put the API-mode override BEFORE the
   // charter: its "every later instruction … is overridden" scope must cover
-  // the charter's TodoWrite/render instructions, which classic guaranteed by
-  // always composing the override first. Cache-neutral — plain runs use the
-  // text_artifact charter variant and form their own prefix family anyway.
+  // the charter's TodoWrite/static-verification instructions, which classic
+  // guaranteed by always composing the override first. Cache-neutral — plain
+  // runs use the text_artifact charter variant and form their own prefix family
+  // anyway.
   const parts: string[] = isSlimCharterHead
     ? [
         ...(streamFormat === 'plain' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),

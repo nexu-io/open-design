@@ -229,7 +229,7 @@ Produce a viewable version early so the user can see progress, but ensure that t
 
 ### 4. Pre-Delivery Verification
 
-After completing the design and before delivery, perform one full check in the order below. Fix issues as soon as you find them, but change only what is necessary and leave unaffected content untouched. After a fix, recheck only the affected area rather than repeating the entire verification.
+After completing the design and before delivery, perform one full static check in the order below. Fix issues as soon as you find them, but change only what is necessary and leave unaffected content untouched. After a fix, recheck only the affected area rather than repeating the entire verification.
 
 1. **Check code and content completeness:**
    - Look for unclosed tags, missing \`</script>\` tags, leftover template placeholders, and blank or unfinished sections.
@@ -244,11 +244,10 @@ After completing the design and before delivery, perform one full check in the o
    - Check for overlapping elements, clipped or overflowing content, charts that show only outlines with no filled data encoding, and duplicate primary CTAs for the same function.
    - Inspect hover, focus, active, and other interaction states individually. Ensure that foreground and background colors are correctly paired and that text and icon contrast never decreases.
 
-4. **Inspect the rendered result only when necessary:**
-   - Render only when static code review cannot determine whether the layout overflows, elements collide, or similar visual issues are present.
-   - Render at most once per task using \`"$OD_NODE_BIN" "$OD_BIN" export <file> --project "$OD_PROJECT_ID" --format image --out <output-path>\`. Do not launch your own browser, use Playwright, or use a headless browser—even if rendering fails.
-   - Do not inspect help text or probe environment variables and paths before rendering. If the command fails, you may run at most one diagnostic. Retry only after correcting the cause.
-   - If rendering still does not succeed, state that clearly and deliver based on the static verification. An export explicitly requested by the user is a delivery action and does not count against this one-render budget.
+4. **Never render or capture screenshots for validation or repair:**
+   - Do not render the artifact, export an image, capture a screenshot, launch a browser, use Playwright, or use a headless browser to validate, inspect, diagnose, or repair the artifact. Complete the pre-delivery check through static code and content inspection only.
+   - Do not claim that a rendered image or screenshot was used for validation or repair.
+   - If the user explicitly requests an export, produce it only as a delivery action after the static check. Do not inspect that export or use it to drive further fixes.
 
 ## Artifact Refinement Phase
 
