@@ -22,6 +22,7 @@ import { companionFiles } from "./parse/companions.js";
 import { lostShadingCapability } from "./read/gltf-capability.js";
 import { parseUsda, UsdaParseError } from "./parse/usda.js";
 import { authorStageModel } from "./usd/stage-model.js";
+import { renderUsdGraph } from "./usd/graph.js";
 import {
   BlenderProbe,
   hashFiles,
@@ -1368,6 +1369,17 @@ export async function compile(
                 file: asset,
               });
               fs.writeFileSync(abs, authored.usda);
+              /* A legible scene-GRAPH beside the .usda. The exported USD is
+                 text, but every prim is buried under kilobytes of vertex arrays;
+                 this is the prim tree, kinds, xforms, and material bindings an
+                 agent can actually read to reason about the shipped artifact.
+                 Best-effort: a graph that fails to render must never fail the
+                 export that produced the asset. */
+              try {
+                fs.writeFileSync(abs.replace(/\.usda$/i, ".tree.txt"), renderUsdGraph(authored.usda));
+              } catch {
+                /* the .usda is the deliverable; its graph is a convenience */
+              }
               /* USDZ packages the FINAL stage — semantics included — so it
                  can only be built after this authoring step. The runner
                  deliberately leaves it to us. */

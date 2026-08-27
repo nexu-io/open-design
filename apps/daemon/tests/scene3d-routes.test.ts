@@ -696,6 +696,15 @@ describe.skipIf(!hasBlender)('scene3d compile over HTTP (real Blender)', () => {
     const missing = await api.req('/api/projects/proj1/scene3d/describe?scenePath=scenes/nope');
     expect(missing.status).toBe(200);
     expect(missing.body.describe).toBeNull();
+
+    // The USD scene-graph dump ships beside the exported .usda: a legible prim
+    // tree, not the vertex-array black box the raw stage is.
+    const treeFile = path.join(root, 'proj1', 'scenes', 'crate', 'out', 'scene.tree.txt');
+    expect(fs.existsSync(treeFile)).toBe(true);
+    const graph = fs.readFileSync(treeFile, 'utf8');
+    expect(graph).toContain('stage:');
+    expect(graph).toContain('prp_crate_body');
+    expect(graph).not.toContain('faceVertexIndices');
   }, LONG);
 
   it('returns 200 with the failing codes for a poisoned scene', async () => {

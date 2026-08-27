@@ -456,6 +456,15 @@ export function renderAgentReport(result: CompileResult, options: ReportOptions 
     }
     lines.push("  out/digest.md — the census in prose, with the per-part dimensions table");
     lines.push("  out/read-model.json — the full census, machine-readable");
+    // The USD is the master format and technically text, but every prim is
+    // buried under kilobytes of vertex arrays — so name the GRAPH beside it, the
+    // one an agent can actually read to reason about the shipped stage.
+    const usda = (result.exportedAssets ?? []).find((p) => p.toLowerCase().endsWith(".usda"));
+    if (usda) {
+      lines.push(
+        `  ${usda.replace(/\.usda$/i, ".tree.txt")} — the exported USD as a legible scene GRAPH: prim tree, kinds, xforms, material bindings — without the vertex arrays that make the .usda itself unreadable`,
+      );
+    }
     if (result.manifest.textures.length > 0) {
       lines.push("  out/textures/ — the baked shader maps and atlases, as real pixels");
     }

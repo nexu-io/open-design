@@ -17,6 +17,7 @@ export { buildManifest, writeManifest, writeViewer, writeProjectKit } from "./ma
 export { renderKitHtml, type KitEntry, type KitPage } from "./viewer/kit.js";
 export { XRAY_MODES, XRAY_GHOST_MODES, type XrayModeEntry } from "./viewer/xray-modes.js";
 export { parseUsda, UsdaParseError, walkPrims, primByPath, primPath } from "./parse/usda.js";
+export { renderUsdGraph } from "./usd/graph.js";
 export { discoverSources } from "./parse/sources.js";
 export { probeBlender, clearProbeCache, scriptsDir, runnerPath, resolveScriptsDir } from "./build/blender.js";
 export { assertBlenderIfRequired, assertPxrIfRequired } from "./testing.js";
