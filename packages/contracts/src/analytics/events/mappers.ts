@@ -231,6 +231,8 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'mimo';
     case 'atomcode':
       return 'atomcode';
+    case 'dulus':
+      return 'dulus';
     case 'byok-opencode':
       return 'byok_opencode';
     case 'deepseek':
