@@ -89,8 +89,8 @@ describe("desktop updater host boundary", () => {
     expect(main).toContain("DEFAULT_DESKTOP_UPDATE_MENU_LABELS");
     expect(main).toContain('source: "mac-app-menu"');
     expect(main).toContain("updateMenuItem.visible");
-    const fileMenuStart = main.indexOf('label: "File"');
-    const editMenuStart = main.indexOf('label: "Edit"', fileMenuStart);
+    const fileMenuStart = main.indexOf("label: menuLabels.file");
+    const editMenuStart = main.indexOf("label: menuLabels.edit", fileMenuStart);
     expect(fileMenuStart).toBeGreaterThanOrEqual(0);
     expect(editMenuStart).toBeGreaterThan(fileMenuStart);
     const fileMenu = main.slice(fileMenuStart, editMenuStart);

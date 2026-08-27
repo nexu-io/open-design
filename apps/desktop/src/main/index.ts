@@ -56,6 +56,7 @@ import {
   desktopUpdateMenuItemKey,
   type DesktopUpdateMenuLabels,
 } from "./update-menu.js";
+import { resolveDesktopMenuLabels, type DesktopMenuLabels } from "./menu-i18n.js";
 import {
   createDesktopUpdater,
   createDesktopUpdaterScheduler,
@@ -414,6 +415,7 @@ type DesktopMenuController = {
 function installDesktopMenu(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl"> & {
+    menuLabels: DesktopMenuLabels;
     onOpenUpdateDialog?: () => void;
     updater: DesktopUpdater;
   },
@@ -489,6 +491,7 @@ function installDesktopMenu(
   };
   let lastUpdateMenuItemKey: string | null = null;
   const rebuild = () => {
+    const menuLabels = options.menuLabels;
     const updateMenuItem = deriveDesktopUpdateMenuItem({
       labels: updateMenuLabels,
       platform: process.platform,
@@ -523,14 +526,14 @@ function installDesktopMenu(
           ]
         : [
             {
-              label: "File",
+              label: menuLabels.file,
               submenu: [
                 { role: "quit" as const },
               ],
             },
           ]),
       {
-        label: "Edit",
+        label: menuLabels.edit,
         submenu: [
           { role: "undo" },
           { role: "redo" },
@@ -542,7 +545,7 @@ function installDesktopMenu(
         ],
       },
       {
-        label: "View",
+        label: menuLabels.view,
         submenu: [
           { role: "reload" },
           { role: "forceReload" },
@@ -550,7 +553,7 @@ function installDesktopMenu(
           { type: "separator" },
           {
             accelerator: developMenuAccelerator,
-            label: developMenuVisible ? "Hide Develop Menu" : "Show Develop Menu",
+            label: developMenuVisible ? menuLabels.hideDevelopMenu : menuLabels.showDevelopMenu,
             click: toggleDevelopMenu,
           },
           { type: "separator" },
@@ -564,13 +567,13 @@ function installDesktopMenu(
       ...(developMenuVisible
         ? [
             {
-              label: "Develop",
+              label: menuLabels.develop,
               submenu: createAmrEnvironmentProfileMenuItems(lastKnownAmrProfile, selectAmrProfile),
             },
           ]
         : []),
       {
-        label: "Window",
+        label: menuLabels.window,
         submenu: [
           { role: "minimize" },
           { role: "zoom" },
@@ -580,36 +583,36 @@ function installDesktopMenu(
         ],
       },
       {
-        label: "Help",
+        label: menuLabels.help,
         role: "help",
         submenu: [
           {
-            label: "Documentation",
+            label: menuLabels.documentation,
             click() {
               void shell.openExternal("https://github.com/nexu-io/open-design#readme");
             },
           },
           { type: "separator" },
           {
-            label: "Contact Us",
+            label: menuLabels.contactUs,
             click() {
               void shell.openExternal("https://x.com/OpenDesignHQ");
             },
           },
           {
-            label: "Report Issue",
+            label: menuLabels.reportIssue,
             click() {
               void shell.openExternal("https://github.com/nexu-io/open-design/issues/new");
             },
           },
           {
-            label: "Join Discord",
+            label: menuLabels.joinDiscord,
             click() {
               void shell.openExternal("https://discord.gg/mHAjSMV6gz");
             },
           },
           { type: "separator" },
-          { label: "Export Diagnostics…", click: exportDiagnostics },
+          { label: menuLabels.exportDiagnostics, click: exportDiagnostics },
         ],
       },
     ];
@@ -962,6 +965,7 @@ export async function runDesktopMain(
 
   const menuController = installDesktopMenu(runtime, {
     ...options,
+    menuLabels: resolveDesktopMenuLabels(osLocale),
     onOpenUpdateDialog: () => {
       if (desktop == null) {
         pendingUpdateDialogRequest = true;
