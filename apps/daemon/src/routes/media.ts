@@ -136,7 +136,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       : null;
   const { orbitService } = ctx.orbit;
   const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
-  const { findTeamWorkspaceIdForProject, getProject } = ctx.projectStore;
+  const { getWorkspaceProjectByProjectId, getProject } = ctx.projectStore;
   const { resolveProjectDir } = ctx.projectFiles;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
@@ -256,7 +256,12 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       });
       task.status = 'running';
       persistMediaTask(task);
-      const workspaceId = findTeamWorkspaceIdForProject(db, projectId) ?? undefined;
+      // Media billing follows the project's Workspace binding, not its sharing
+      // visibility. A private project inside a team Workspace must still spend
+      // that Workspace's balance; `findTeamWorkspaceIdForProject` deliberately
+      // answers the narrower collaboration question and excludes it.
+      const workspaceId =
+        getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim() || undefined;
       generateMedia({
         projectRoot: PROJECT_ROOT,
         projectsRoot: PROJECTS_DIR,
