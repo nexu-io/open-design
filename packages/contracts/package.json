@@ -77,6 +77,10 @@
     "./analytics": {
       "types": "./dist/analytics/index.d.ts",
       "default": "./dist/analytics/index.mjs"
+    },
+    "./runtime/html-injection-points": {
+      "types": "./dist/runtime/html-injection-points.d.ts",
+      "default": "./dist/runtime/html-injection-points.mjs"
     }
   },
   "scripts": {

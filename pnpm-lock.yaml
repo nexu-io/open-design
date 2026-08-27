@@ -193,6 +193,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@open-design/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@open-design/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics

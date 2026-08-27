@@ -1328,6 +1328,108 @@ async function checkStylePolicy(): Promise<boolean> {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// HTML structural boundary lookups
+//
+// Preview and export splice bridges into an artifact's own bytes, so they need
+// the offset of a real `<head>` / `</body>` / `<base>` / `<title>`. Finding one
+// with a plain text match is what broke nexu-io/open-design#7410: those tags
+// are also ordinary content, and any prototype that builds an HTML document
+// string writes them into a script or an attribute. The injected markup then
+// lands inside the author's string and silently truncates their page.
+//
+// That defect reappeared in six separate files because each one hand-rolled its
+// own lookup. `@open-design/contracts/runtime/html-injection-points` is now the
+// single implementation, and this check is what keeps the next one from being
+// written: a grep-driven sweep already missed an entire app once.
+// ---------------------------------------------------------------------------
+
+const htmlBoundaryOwnerPath = "packages/contracts/src/runtime/html-injection-points.ts";
+const htmlBoundarySkippedDirectories = new Set([".git", ".od", ".tmp", "dist", "node_modules", "out", "test-results"]);
+const htmlBoundaryCheckedPathPrefixes = [
+  "apps/daemon/src/",
+  "apps/desktop/src/",
+  "apps/packaged/src/",
+  "apps/web/src/",
+  "packages/",
+  "tools/",
+];
+const htmlBoundarySourceExtensions = new Set([".ts", ".tsx", ".mjs", ".cjs", ".js"]);
+/**
+ * A boundary tag reached by pattern-matching the raw text. These are always
+ * wrong: the match lands wherever the tag first appears, content or not.
+ */
+const htmlBoundaryPatternOpPattern = new RegExp(
+  [
+    // `html.replace(/<\/body>/i, …)` — operation first, literal second. The
+    // escaped slash matters: a close-tag regex is always written `<\/body`,
+    // and that backslash is what an earlier version of this check missed,
+    // leaving the exact shape of #7410 invisible to it.
+    String.raw`(?:replace|replaceAll|split|search|exec|match|test)\s*\(\s*(?:\/|['"\`])\s*<\s*\\?\/?\s*(?:body|head|html|base|title)\b`,
+    // `/<\/body>/i.test(html)` — literal first, operation second.
+    String.raw`(?:\/|['"\`])\s*<\s*\\?\/?\s*(?:body|head|html|base|title)\b[^/\n]*\/[gimsuy]*\s*\.\s*(?:test|exec)`,
+  ].join("|"),
+  "i",
+);
+/**
+ * A boundary tag reached by a plain index scan. Legitimate as a *continuation*
+ * — once the shared locator has found an element's start, walking forward to
+ * its close tag is correct — so this only fires in files that never import the
+ * locator at all.
+ */
+const htmlBoundaryIndexOpPattern =
+  /(?:indexOf|lastIndexOf)\s*\(\s*['"`]\s*<\s*\/?\s*(?:body|head|html|base|title)\b/i;
+const htmlBoundaryLocatorImport = "runtime/html-injection-points";
+/**
+ * An anchored pattern asks "does this text start/end with the tag", which is a
+ * shape assertion on a buffer, not a search for a boundary inside a document.
+ * It cannot find the wrong one, because the anchor pins the position.
+ */
+const htmlBoundaryAnchoredPattern = /\/\^|\$\s*\/[gimsuy]*/;
+
+async function checkHtmlBoundaryLookups(): Promise<boolean> {
+  const files = await collectRepositoryFiles(repoRoot, htmlBoundarySkippedDirectories);
+  const violations: { filePath: string; lineNumber: number; line: string }[] = [];
+
+  for (const filePath of files) {
+    if (filePath === htmlBoundaryOwnerPath) continue;
+    if (!htmlBoundaryCheckedPathPrefixes.some((prefix) => filePath.startsWith(prefix))) continue;
+    if (!htmlBoundarySourceExtensions.has(path.extname(filePath))) continue;
+    // Tests are where these shapes get *asserted against*, so they may say them.
+    if (isTestFile(path.basename(filePath)) || filePath.includes("/tests/")) continue;
+
+    const contents = await readFile(path.join(repoRoot, filePath), "utf8");
+    const usesLocator = contents.includes(htmlBoundaryLocatorImport);
+    contents.split("\n").forEach((line, index) => {
+      const offending =
+        !htmlBoundaryAnchoredPattern.test(line) &&
+        (htmlBoundaryPatternOpPattern.test(line) || (!usesLocator && htmlBoundaryIndexOpPattern.test(line)));
+      if (offending) {
+        violations.push({ filePath, lineNumber: index + 1, line: line.trim().slice(0, 120) });
+      }
+    });
+  }
+
+  if (violations.length > 0) {
+    console.error("HTML structural boundary check failed.");
+    console.error(
+      "These locate a `<head>`/`</body>`/`<base>`/`<title>` by text match. A tag an author",
+    );
+    console.error(
+      "wrote into a script string or an attribute would match first, and the injection would",
+    );
+    console.error("land inside their content (nexu-io/open-design#7410). Use findRealTagOffset /");
+    console.error(`findRealTagEnd from ${htmlBoundaryOwnerPath} instead.`);
+    for (const violation of violations) {
+      console.error(`- ${violation.filePath}:${violation.lineNumber}: ${violation.line}`);
+    }
+    return false;
+  }
+
+  console.log(`HTML structural boundary check passed: no hand-rolled boundary lookups outside ${htmlBoundaryOwnerPath}.`);
+  return true;
+}
+
 let crossAppImportsResult: Promise<boolean> | undefined;
 
 function checkCrossAppImportsOnce(): Promise<boolean> {
@@ -1340,6 +1442,7 @@ const checks: GuardCheck[] = [
   { name: "package dependency specs", run: checkPackageDependencySpecs },
   { name: "product neutrality", run: checkProductNeutrality },
   { name: "cross-app imports", run: checkCrossAppImportsOnce },
+  { name: "HTML structural boundaries", run: checkHtmlBoundaryLookups },
   { name: "@ts-nocheck import resolution", run: checkTsNocheckImports },
   { name: "test layout", run: checkTestLayout },
   { name: "scripts test-free", run: checkScriptsTestFree },

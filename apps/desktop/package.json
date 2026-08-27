@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/contracts": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
     "@open-design/download": "workspace:*",
     "@open-design/host": "workspace:*",
