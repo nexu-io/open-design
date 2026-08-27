@@ -70,6 +70,16 @@ describe("clip — exact half-space cut", () => {
     expect(() => evalTrace(new Recorder().box(1).clip([0, 0, 0], "1/2").trace())).toThrow(/non-zero normal/);
   });
 
+  it("the evaluator names a malformed clip payload (direct trace, bypassing parse validation)", () => {
+    // A directly-constructed trace (a test, a future front-end) with a bad clip
+    // op gets a NAMED error, never an opaque `undefined.split` out of the parser.
+    const boxOps = new Recorder().box(1).trace().ops;
+    const withBadClip = (clipOp: unknown) => ({ version: 1 as const, ops: [...boxOps, clipOp as never] });
+    expect(() => evalTrace(withBadClip({ op: "clip", d: "1/2" }))).toThrow(/rational strings/); // no normal
+    expect(() => evalTrace(withBadClip({ op: "clip", normal: [1, 2, 3], d: "1/2" }))).toThrow(/rational strings/); // numeric components
+    expect(() => evalTrace(withBadClip({ op: "clip", normal: ["0", "0", "1"] }))).toThrow(/rational strings/); // no d
+  });
+
   it("two opposed clips carve an exact slab (a box minus both ends)", () => {
     // Keep 1/4 ≤ z ≤ 3/4: clip z ≤ 3/4, then −z ≤ −1/4. A 1×1×1/2 slab, vol 1/2.
     const top = clip(box(1, 1, 1), plane(0, 0, 1, rat(3, 4)));

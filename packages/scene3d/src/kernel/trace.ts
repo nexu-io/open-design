@@ -10,7 +10,7 @@ import {
   PredictedCensus,
   predictCensus,
   RVec3,
-  subdivide,
+  subdivideCatmullClark,
   triangulate,
 } from "./mesh.js";
 import { clip, type Plane } from "./clip.js";
@@ -82,14 +82,15 @@ export type TraceOp =
     }
   | {
       /**
-       * Fan every face into triangles from its first vertex — the author's
-       * opt-in fix for a `volume` claim on a non-planar mesh. A curved surface's
-       * quads are non-planar, so its enclosed volume depends on which diagonal
-       * an exporter picks (the `volumeAmbiguity` band) and the claim stays
-       * UNCHECKED. Triangulating bakes ONE triangulation in: every face becomes
-       * a planar triangle, ambiguity is exactly 0, and the volume becomes a
-       * provable property of the shipped asset. Topology-only (no new vertices),
-       * so watertightness and genus are invariant; the trade is quad editability.
+       * Triangulate every face by exact ear-clipping — the author's opt-in fix
+       * for a `volume` claim on a non-planar mesh. A curved surface's quads are
+       * non-planar, so its enclosed volume depends on which diagonal an exporter
+       * picks and the claim stays UNCHECKED. Triangulating bakes ONE valid
+       * triangulation in: every face becomes a planar triangle, so the volume is
+       * triangulation-independent and becomes a provable property of the shipped
+       * asset. Topology-only (no new vertices), so watertightness and genus are
+       * invariant; the trade is quad editability. Ear-clipping (not a first-
+       * vertex fan) because a fan self-intersects on a concave face.
        */
       op: "triangulate";
     }
@@ -174,6 +175,86 @@ export interface Trace {
 }
 
 /* ------------------------------------------------------------------ */
+/* Work meter — the ONE runaway guard (no arbitrary count caps)        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The default evaluation work budget, in abstract WORK UNITS (one unit ≈ one
+ * vertex or face produced/processed — a memory-proportional measure). This is
+ * NOT a cap on how large an asset may be; it is a resource-denominated guard
+ * sized so only a genuine RUNAWAY trips it — an accidental `subdivide(1000000)`,
+ * an infinite `while` in a recipe — never a legitimately large model. A very
+ * detailed real asset is single-digit millions of units; this default clears
+ * ~10× that, at roughly the geometry that fills a few GB of RAM, so the meter
+ * fires (with a diagnostic) before the machine would OOM. Overridable per
+ * compile via `EvalOptions.workBudget` for a bigger machine and a bigger asset —
+ * a wall you can raise is a resource negotiation, not a refusal.
+ *
+ * Determinism holds in the strong form the kernel needs: the meter is a pure
+ * function of the trace and the budget (no clock, no machine state), so
+ * same recipe + same budget → same bytes, or the same failure at the same op
+ * with the same message, on every machine. A legitimate recipe never trips it,
+ * so its output is byte-identical regardless of the budget.
+ *
+ * The unit is calibrated for the EXACT kernel: a vertex carries three arbitrary-
+ * precision rationals (~hundreds of bytes), so a couple of million units is
+ * already ~a GB of live geometry. The default is generous for any real recipe (a
+ * richly subdivided hull is tens to low hundreds of thousands of faces — well
+ * under this), yet low enough that the meter fires with a diagnostic before a
+ * modest machine would OOM, and — because subdivide is metered BEFORE each level
+ * is built — the largest intermediate a runaway allocates before tripping stays
+ * small. Raise it for a bigger asset on a bigger machine.
+ */
+export const DEFAULT_WORK_BUDGET = 2_000_000;
+
+export interface EvalOptions {
+  /** Work-unit budget for this evaluation (default {@link DEFAULT_WORK_BUDGET}).
+   *  Raise it to build a larger asset on a machine with the memory for it. */
+  workBudget?: number;
+}
+
+/** Thrown when a trace's cumulative work exceeds the budget — a runaway, not a
+ *  size cap. Carries the op that tipped it over so the report can point at it. */
+export class WorkBudgetError extends Error {
+  constructor(
+    readonly opIndex: number,
+    readonly opKind: string,
+    readonly spent: number,
+    readonly budget: number,
+  ) {
+    super(
+      `evalTrace: op ${opIndex} '${opKind}' pushed the recipe's work to ${spent} units, past the ${budget} budget — this reads as a runaway (an accidental loop or an absurd subdivide/grid). If the asset is genuinely this large, raise the compile's workBudget; otherwise check the op that exploded.`,
+    );
+    this.name = "WorkBudgetError";
+  }
+}
+
+interface WorkMeter {
+  spent: number;
+  budget: number;
+}
+
+/** A caller's budget, sanitised: a finite POSITIVE number, else the default. A
+ *  NaN/Infinity/≤0 budget must NOT be honoured — it would silently disable the
+ *  one runaway guard (`spent > NaN` is always false; Infinity is never exceeded).
+ *  To build a genuinely larger asset, raise the budget to a big FINITE number. */
+function resolveBudget(workBudget: number | undefined): number {
+  return typeof workBudget === "number" && Number.isFinite(workBudget) && workBudget > 0
+    ? workBudget
+    : DEFAULT_WORK_BUDGET;
+}
+
+/** Charge `units` of work and throw if the running total passes the budget.
+ *  The single guard that replaces every domain-count cap. */
+function charge(meter: WorkMeter, units: number, opIndex: number, opKind: string): void {
+  meter.spent += units;
+  if (meter.spent > meter.budget) throw new WorkBudgetError(opIndex, opKind, meter.spent, meter.budget);
+}
+
+/** The size (verts + faces) a mesh contributes to the work total. */
+const meshWork = (m: KernelMesh): number => m.verts.length + m.faces.length;
+
+/* ------------------------------------------------------------------ */
 /* The one evaluator                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -183,31 +264,35 @@ export interface Trace {
  * `cage`); a transform before any geometry is a malformed recipe, reported
  * rather than guessed.
  */
-export function evalTrace(trace: Trace): KernelMesh {
+export function evalTrace(trace: Trace, opts: EvalOptions = {}): KernelMesh {
   if (trace.version !== 1) {
     throw new Error(`evalTrace: unsupported trace version ${trace.version}`);
   }
+  const meter: WorkMeter = { spent: 0, budget: resolveBudget(opts.workBudget) };
   let mesh: KernelMesh | null = null;
   trace.ops.forEach((op, i) => {
     if (op.op === "shape" || op.op === "endShape") {
       throw new Error(`evalTrace: op ${i} '${op.op}' — morph targets need evalTraceShapes`);
     }
-    mesh = applyOp(op, mesh, i);
+    mesh = applyOp(op, mesh, i, meter);
   });
   if (!mesh) throw new Error("evalTrace: empty trace produced no geometry");
   return mesh;
 }
 
 /** Apply one geometry op to the current mesh (null only before the seeding
- *  `cage`). The single place every op's exact semantics live, shared by
- *  `evalTrace` and `evalTraceShapes`. */
-function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number): KernelMesh {
+ *  `cage`), charging its work against the meter. The single place every op's
+ *  exact semantics live, shared by `evalTrace` and `evalTraceShapes`. */
+function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number, meter: WorkMeter): KernelMesh {
   const need = (): KernelMesh => {
     if (!mesh) throw new Error(`evalTrace: op ${i} '${op.op}' before any geometry`);
     return mesh;
   };
   switch (op.op) {
     case "cage": {
+      // Charge the cage's size BEFORE parsing a million rationals: a genuine
+      // runaway trips the meter here; a legitimately large cage passes.
+      charge(meter, op.points.length + op.faces.length, i, "cage");
       const points: RVec3[] = op.points.map((p) => [Rational.parse(p[0]), Rational.parse(p[1]), Rational.parse(p[2])]);
       return meshOf(points, op.faces, op.ids);
     }
@@ -216,23 +301,66 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number): KernelMesh {
       if (!Number.isInteger(op.levels) || op.levels < 0) {
         throw new Error(`evalTrace: op ${i} 'subdivide' levels must be a non-negative integer`);
       }
-      return subdivide(m, op.levels);
+      // Meter each level BEFORE building it: a Catmull-Clark level turns every
+      // k-sided face into k quads, so the next level's face count is exactly the
+      // current sum of sides — cheap to predict. Charging that up front means an
+      // accidental subdivide(1000000) trips the budget after a dozen cheap levels
+      // with a diagnostic, never allocating the explosive level (no OOM), while
+      // any realistic subdivision passes freely.
+      let sub = m;
+      for (let lvl = 0; lvl < op.levels; lvl++) {
+        const nextFaces = sub.faces.reduce((a, f) => a + f.length, 0);
+        charge(meter, nextFaces + sub.verts.length + nextFaces, i, "subdivide"); // ≈ verts_out + faces_out
+        sub = subdivideCatmullClark(sub);
+      }
+      return sub;
     }
-    case "mirror":
-      return mirror(need(), op.axis);
-    case "triangulate":
-      return triangulate(need());
+    case "mirror": {
+      const m = need();
+      // Mirror doubles the mesh — predictable, so charge 2× the input BEFORE
+      // building either copy: a runaway trips before the doubled arrays exist.
+      charge(meter, 2 * meshWork(m), i, "mirror");
+      return mirror(m, op.axis);
+    }
+    case "triangulate": {
+      const m = need();
+      // Charge the ear-clip's TRUE cost BEFORE running it: ear-clipping an n-gon
+      // is ~O(n²) exact-rational work, so a single pathological huge face would
+      // otherwise stall for O(n²) before any output-based charge caught it. Σ n²
+      // over faces is that work — a realistic face (hundreds of sides) is cheap,
+      // a 10k-sided monster trips the budget with a diagnostic instead of hanging.
+      // (The O(n log n) triangulation that would make even huge faces cheap is the
+      // documented next step; until then the meter makes the cost honest.)
+      const earClipWork = m.faces.reduce((a, f) => a + f.length * f.length, 0);
+      charge(meter, earClipWork, i, "triangulate");
+      return triangulate(m);
+    }
     case "clip": {
       const m = need();
-      const normal: RVec3 = [Rational.parse(op.normal[0]), Rational.parse(op.normal[1]), Rational.parse(op.normal[2])];
+      // Guard the payload shape at the evaluator too, not only in the parse-time
+      // validator: a directly-constructed trace (a test, a future front-end that
+      // does not flow through recipe.ts) gets a NAMED error, never an opaque
+      // `undefined.split` out of Rational.parse.
+      if (
+        !Array.isArray(op.normal) ||
+        op.normal.length !== 3 ||
+        !op.normal.every((c) => typeof c === "string") ||
+        typeof op.d !== "string"
+      ) {
+        throw new Error(`evalTrace: op ${i} 'clip' needs normal:[x,y,z] and d, all rational strings`);
+      }
+      const normal: RVec3 = [Rational.parse(op.normal[0]!), Rational.parse(op.normal[1]!), Rational.parse(op.normal[2]!)];
       if (normal[0].isZero() && normal[1].isZero() && normal[2].isZero()) {
         throw new Error(`evalTrace: op ${i} 'clip' needs a non-zero normal — a plane has a direction`);
       }
       const plane: Plane = { normal, d: Rational.parse(op.d) };
-      return clip(m, plane);
+      const out = clip(m, plane);
+      charge(meter, meshWork(out), i, "clip");
+      return out;
     }
     case "move": {
       const m = need();
+      charge(meter, meshWork(m), i, "move");
       const region = parseRegion(op.region);
       const dx = Rational.parse(op.offset[0]);
       const dy = Rational.parse(op.offset[1]);
@@ -244,6 +372,7 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number): KernelMesh {
     }
     case "crease": {
       const m = need();
+      charge(meter, meshWork(m), i, "crease");
       const region = parseRegion(op.region);
       const marked = new Set<string>(m.creases ?? []);
       for (const e of edgesOf(m).values()) {
@@ -255,17 +384,22 @@ function applyOp(op: TraceOp, mesh: KernelMesh | null, i: number): KernelMesh {
       const m = need();
       const region = parseRegion(op.region);
       const off: RVec3 = [Rational.parse(op.offset[0]), Rational.parse(op.offset[1]), Rational.parse(op.offset[2])];
-      return extrude(m, (v) => inRegion(v, region), off);
+      const out = extrude(m, (v) => inRegion(v, region), off);
+      charge(meter, meshWork(out), i, "extrude");
+      return out;
     }
     case "inset": {
       const m = need();
       const region = parseRegion(op.region);
       const factor = Rational.parse(op.factor);
       if (factor.cmp(Rational.ZERO) <= 0) throw new Error(`evalTrace: op ${i} 'inset' factor must be positive`);
-      return inset(m, (v) => inRegion(v, region), factor);
+      const out = inset(m, (v) => inRegion(v, region), factor);
+      charge(meter, meshWork(out), i, "inset");
+      return out;
     }
     case "scale": {
       const m = need();
+      charge(meter, meshWork(m), i, "scale");
       const region = parseRegion(op.region);
       const f: RVec3 = [Rational.parse(op.factor[0]), Rational.parse(op.factor[1]), Rational.parse(op.factor[2])];
       const p: RVec3 = [Rational.parse(op.pivot[0]), Rational.parse(op.pivot[1]), Rational.parse(op.pivot[2])];
@@ -299,10 +433,14 @@ export interface ShapeResult {
  * mesh therefore shares the base's vertex order, and the blendshape is the
  * per-vertex difference.
  */
-export function evalTraceShapes(trace: Trace): { base: KernelMesh; shapes: ShapeResult[] } {
+export function evalTraceShapes(
+  trace: Trace,
+  opts: EvalOptions = {},
+): { base: KernelMesh; shapes: ShapeResult[] } {
   if (trace.version !== 1) {
     throw new Error(`evalTraceShapes: unsupported trace version ${trace.version}`);
   }
+  const meter: WorkMeter = { spent: 0, budget: resolveBudget(opts.workBudget) };
   let base: KernelMesh | null = null;
   const shapes: ShapeResult[] = [];
   let recording: string | null = null;
@@ -330,26 +468,42 @@ export function evalTraceShapes(trace: Trace): { base: KernelMesh; shapes: Shape
           `evalTraceShapes: op ${i} only move/scale are allowed inside shape '${recording}' (got '${op.op}') — a morph target repositions vertices, it cannot change topology`,
         );
       }
-      variant = applyOp(op, variant, i);
+      variant = applyOp(op, variant, i, meter);
     } else {
-      // Once a shape exists, only ops whose topology is coordinate-INDEPENDENT
-      // may run globally, so they stay in lockstep with every shape: `subdivide`
-      // (Catmull-Clark connectivity depends on faces, not positions) and
-      // `triangulate` (a pure fan of the face list, positions untouched). Both
-      // give the base and every morph the SAME topology with the SAME vertex
-      // count. `mirror` (exact-coordinate weld), `extrude`/`inset` (region
-      // selection on coordinates), `move`/`scale`/`crease` (region selection)
-      // all decide something from geometry, so a deformed shape would diverge
-      // from the base — silently mismatching vertex counts or crease sets (both
-      // red-teams found this). Author them BEFORE the first shape, or inside the
-      // shape bracket.
+      // Once a shape exists, only ops that keep the base and every morph in
+      // LOCKSTEP may run globally: `subdivide` (Catmull-Clark connectivity is a
+      // pure function of the face list, not positions, so base and shapes get the
+      // same topology) and `triangulate`. `mirror` (exact-coordinate weld),
+      // `extrude`/`inset` (region selection on coordinates), `move`/`scale`/
+      // `crease` (region selection) all decide something from geometry, so a
+      // deformed shape would diverge from the base — silently mismatching vertex
+      // counts or crease sets (both red-teams found this). Author them BEFORE the
+      // first shape, or inside the shape bracket.
       if (shapes.length > 0 && op.op !== "subdivide" && op.op !== "triangulate") {
         throw new Error(
           `evalTraceShapes: op ${i} '${op.op}' cannot run globally once a shape exists — only 'subdivide' and 'triangulate' stay in lockstep with every morph target; do region/mirror/extrude/inset ops before the first shape`,
         );
       }
-      base = applyOp(op, base, i);
-      for (const s of shapes) s.mesh = applyOp(op, s.mesh, i);
+      base = applyOp(op, base, i, meter);
+      if (op.op === "triangulate") {
+        // Ear-clipping is coordinate-DEPENDENT (its diagonal choice reads vertex
+        // positions), so re-running it on each morph could pick a different
+        // diagonal and diverge the shapes' face lists from the base's. A
+        // blendshape set REQUIRES one shared topology (base mesh + per-vertex
+        // deltas), so the base's triangulation is applied verbatim to every shape
+        // — they share its vertex indexing, so its face list is a valid index
+        // partition of each. That shared triangulation is chosen for the base's
+        // geometry, not re-optimised per morph (an extreme morph could make a
+        // shared diagonal self-cross in that shape's positions — inherent to a
+        // fixed-topology blendshape, and moot here: shape faces carry only the
+        // topology, the morph itself is the vertex deltas, which stay untouched).
+        // Charge the per-shape face-list copies (shapes × base faces) — real work
+        // the meter must see, or many morph targets could allocate past the budget.
+        charge(meter, shapes.length * base.faces.length, i, "triangulate");
+        for (const s of shapes) s.mesh = { ...s.mesh, faces: base.faces.map((f) => [...f]) };
+      } else {
+        for (const s of shapes) s.mesh = applyOp(op, s.mesh, i, meter);
+      }
     }
   });
   if (recording !== null) throw new Error(`evalTraceShapes: shape '${recording}' was never closed with endShape`);
@@ -464,9 +618,13 @@ const coordStr = (c: Coord): string =>
 export class Recorder {
   private readonly ops: TraceOp[] = [];
 
+  private pushOp(op: TraceOp): void {
+    this.ops.push(op);
+  }
+
   /** Seed arbitrary geometry. Points are welded by exact coordinate. */
   cage(points: Array<[Coord, Coord, Coord]>, faces: number[][], ids?: string[]): this {
-    this.ops.push({
+    this.pushOp({
       op: "cage",
       points: points.map((p) => [coordStr(p[0]), coordStr(p[1]), coordStr(p[2])]),
       faces: faces.map((f) => [...f]),
@@ -515,12 +673,12 @@ export class Recorder {
   }
 
   subdivide(levels = 1): this {
-    this.ops.push({ op: "subdivide", levels });
+    this.pushOp({ op: "subdivide", levels });
     return this;
   }
 
   mirror(axis: 0 | 1 | 2): this {
-    this.ops.push({ op: "mirror", axis });
+    this.pushOp({ op: "mirror", axis });
     return this;
   }
 
@@ -529,7 +687,7 @@ export class Recorder {
    *  clips to intersect with a convex tool. `normal` is any non-zero exact
    *  direction; `d` the exact plane offset. */
   clip(normal: [Coord, Coord, Coord], d: Coord): this {
-    this.ops.push({
+    this.pushOp({
       op: "clip",
       normal: [coordStr(normal[0]), coordStr(normal[1]), coordStr(normal[2])],
       d: coordStr(d),
@@ -537,11 +695,12 @@ export class Recorder {
     return this;
   }
 
-  /** Fan every face into triangles — the opt-in fix that makes a `volume` claim
-   *  provable on a non-planar (curved/subdivided) mesh by driving its
-   *  triangulation ambiguity to zero. Topology-only; trades quad editability. */
+  /** Triangulate every face by exact ear-clipping — the opt-in fix that makes a
+   *  `volume` claim provable on a non-planar (curved/subdivided) mesh by making
+   *  every face planar, so the volume is triangulation-independent. Topology-only;
+   *  trades quad editability. */
   triangulate(): this {
-    this.ops.push({ op: "triangulate" });
+    this.pushOp({ op: "triangulate" });
     return this;
   }
 
@@ -561,7 +720,7 @@ export class Recorder {
     if (x) r.x = x;
     if (y) r.y = y;
     if (z) r.z = z;
-    this.ops.push({
+    this.pushOp({
       op: "move",
       region: r,
       offset: [coordStr(offset[0]), coordStr(offset[1]), coordStr(offset[2])],
@@ -581,7 +740,7 @@ export class Recorder {
     if (x) r.x = x;
     if (y) r.y = y;
     if (z) r.z = z;
-    this.ops.push({ op: "crease", region: r });
+    this.pushOp({ op: "crease", region: r });
     return this;
   }
 
@@ -600,7 +759,7 @@ export class Recorder {
     if (x) r.x = x;
     if (y) r.y = y;
     if (z) r.z = z;
-    this.ops.push({
+    this.pushOp({
       op: "extrude",
       region: r,
       offset: [coordStr(offset[0]), coordStr(offset[1]), coordStr(offset[2])],
@@ -620,7 +779,7 @@ export class Recorder {
     if (x) r.x = x;
     if (y) r.y = y;
     if (z) r.z = z;
-    this.ops.push({ op: "inset", region: r, factor: coordStr(factor) });
+    this.pushOp({ op: "inset", region: r, factor: coordStr(factor) });
     return this;
   }
 
@@ -639,7 +798,7 @@ export class Recorder {
     if (x) r.x = x;
     if (y) r.y = y;
     if (z) r.z = z;
-    this.ops.push({
+    this.pushOp({
       op: "scale",
       region: r,
       factor: [coordStr(factor[0]), coordStr(factor[1]), coordStr(factor[2])],
@@ -651,13 +810,13 @@ export class Recorder {
   /** Begin a named morph target — deform the base with move/scale, then
    *  `endShape()`. The delta propagates through a later subdivide exactly. */
   shape(name: string): this {
-    this.ops.push({ op: "shape", name });
+    this.pushOp({ op: "shape", name });
     return this;
   }
 
   /** Close the current morph target. */
   endShape(): this {
-    this.ops.push({ op: "endShape" });
+    this.pushOp({ op: "endShape" });
     return this;
   }
 

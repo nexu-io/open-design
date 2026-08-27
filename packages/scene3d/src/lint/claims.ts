@@ -88,7 +88,7 @@ export function lintClaims(
      * Blender-primitive or imported part has no exact volume, so the claim then
      * stays honestly unchecked.
      */
-    kernelVolumes?: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null; embed: EmbedResult | null }>;
+    kernelVolumes?: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null; facesPlanar: boolean | null; embed: EmbedResult | null }>;
     /** Part ids whose build volume the kernel self-check CONFIRMED against the
      *  exact within E-703's float bound. The `volume` claim is a theorem about
      *  the shipped mesh only over these — a part measured but diverged (E-703
@@ -645,7 +645,7 @@ export function lintClaims(
 function adjudicateVolumeClaim(
   claimVolume: string,
   census: Census,
-  kernelVolumes: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null; embed: EmbedResult | null }>,
+  kernelVolumes: ReadonlyArray<{ partId: string; volumeExact: string | null; ambiguityExact: string | null; facesPlanar: boolean | null; embed: EmbedResult | null }>,
   volumeConfirmed: ReadonlySet<string>,
   unchecked: (reason: string, detail?: Record<string, unknown>) => void,
   fail: (message: string, detail: Record<string, unknown>) => void,
@@ -667,6 +667,7 @@ function adjudicateVolumeClaim(
   }
   const byId = new Map(kernelVolumes.map((r) => [r.partId, r.volumeExact]));
   const ambById = new Map(kernelVolumes.map((r) => [r.partId, r.ambiguityExact]));
+  const planarById = new Map(kernelVolumes.map((r) => [r.partId, r.facesPlanar]));
   const embedById = new Map(kernelVolumes.map((r) => [r.partId, r.embed]));
   const uncovered = census.meshes.filter((m) => !byId.has(m.object));
   if (byId.size === 0) {
@@ -702,24 +703,44 @@ function adjudicateVolumeClaim(
       amb = amb.add(Rational.parse(ambById.get(m.object)!));
     }
     const claimed = Rational.parse(claimVolume);
-    if (!amb.isZero()) {
+    // Triangulation-independence is gated on EXACT planarity, never on the
+    // ambiguity band: the band walks only the v0-fan and can read 0 for a
+    // genuinely non-planar ≥5-gon (collinear fan-diagonal vertices), which would
+    // otherwise let a wrong claim pass the equality branch. A face's planarity
+    // certificate is missing (null) only for a mesh with no mass — treat that as
+    // not-independent too. `amb` stays the REPORTED band (exact for quads).
+    const allPlanar = census.meshes.every((m) => planarById.get(m.object) === true);
+    if (!allPlanar) {
       // Non-planar faces. glTF/USD store TRIANGLES, so every exporter
-      // re-triangulates, and for a non-planar quad it may take the other
-      // diagonal — moving the enclosed volume by up to `amb` (the exact sum of
-      // the corner tetrahedra). The exact fan volume is a theorem about ONE
-      // triangulation, not about what any consumer opens, so it is not a
-      // provable property of the deliverable. "Unchecked is not passed": report
-      // the exact ℚ band and whether the claim sits inside it, and NAME the
-      // structural exit — an author-declared triangulate step makes the volume
-      // triangulation-independent. The compiler never triangulates to rescue a
-      // claim (that would silently trade away the quad topology).
-      const lo = sum.sub(amb);
-      const hi = sum.add(amb);
-      const inside = claimed.cmp(lo) >= 0 && claimed.cmp(hi) <= 0;
-      unchecked(
-        `the mesh has non-planar faces, so its volume is triangulation-dependent: the exact fan volume is ${sum.toString()}, but an exporter's diagonal choice moves it within [${lo.toString()}, ${hi.toString()}]. The claimed ${claimed.toString()} ${inside ? "lies within" : "is OUTSIDE"} that band. Add \`ctx.triangulate()\` to the recipe (it fans every face into planar triangles) to make the volume triangulation-independent and provable`,
-        { band: [lo.toString(), hi.toString()], ambiguity: amb.toString(), fanVolume: sum.toString(), claimInsideBand: inside },
-      );
+      // re-triangulates, and for a non-planar face it may take another
+      // diagonal — moving the enclosed volume. The exact fan volume is a theorem
+      // about ONE triangulation, not about what any consumer opens, so it is not
+      // a provable property of the deliverable. "Unchecked is not passed": report
+      // the fan volume and NAME the structural exit — an author-declared
+      // triangulate step makes the volume triangulation-independent. The compiler
+      // never triangulates to rescue a claim (that would silently trade away the
+      // quad topology). The ℚ band `sum ± amb` is EXACT only when every face is a
+      // quad or triangle (ngons == 0): a quad's one diagonal is its only choice,
+      // so the two triangulations differ by exactly the corner tet. An ngon has
+      // triangulations whose diagonals the v0-fan sum never visits (and amb can
+      // even read 0 on a non-planar ngon), so its band would not bound the export
+      // — the precise band is shown ONLY for the all-quad/tri case with amb > 0;
+      // otherwise the message states the dependence without a bound it can't hold.
+      const bandExact = census.meshes.every((m) => m.ngons === 0);
+      if (amb.isZero() || !bandExact) {
+        unchecked(
+          `the mesh has non-planar faces, so its volume is triangulation-dependent: the exact fan volume is ${sum.toString()}, but an exporter's diagonal choice can move it. The claimed ${claimed.toString()} cannot be proven for the shipped mesh. Add \`ctx.triangulate()\` to the recipe (it fans every face into planar triangles) to make the volume triangulation-independent and provable`,
+          { fanVolume: sum.toString(), claimed: claimed.toString() },
+        );
+      } else {
+        const lo = sum.sub(amb);
+        const hi = sum.add(amb);
+        const inside = claimed.cmp(lo) >= 0 && claimed.cmp(hi) <= 0;
+        unchecked(
+          `the mesh has non-planar faces, so its volume is triangulation-dependent: the exact fan volume is ${sum.toString()}, but an exporter's diagonal choice moves it within [${lo.toString()}, ${hi.toString()}]. The claimed ${claimed.toString()} ${inside ? "lies within" : "is OUTSIDE"} that band. Add \`ctx.triangulate()\` to the recipe (it fans every face into planar triangles) to make the volume triangulation-independent and provable`,
+          { band: [lo.toString(), hi.toString()], ambiguity: amb.toString(), fanVolume: sum.toString(), claimInsideBand: inside },
+        );
+      }
     } else {
       // Planar faces (ambiguity 0): the volume is triangulation-independent. But
       // the divergence-theorem SIGNED volume equals the geometric SOLID volume

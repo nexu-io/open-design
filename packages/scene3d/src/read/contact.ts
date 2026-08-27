@@ -177,21 +177,32 @@ export function renderContactSheet(input: ContactSheetInput): ContactSheetResult
   const gridH = rows * cellH + (rows - 1) * GUTTER;
 
   // Decode first: the legend's height depends on how many parts actually
-  // showed up, and the canvas cannot be allocated before that is known. Each
-  // frame is bounded to the working resolution AS it decodes — the full-res
-  // decode of one frame is transient and released before the next, so the held
-  // set is O(frames × MAX_FRAME_WORK_PX²), never O(frames × proof-resolution²).
+  // showed up, and the canvas cannot be allocated before that is known.
+  //
+  // The BEAUTY frames persist to the end (drawn into cells), so each is bounded
+  // to the working resolution as it decodes — a cell is ≤1024 px anyway, so the
+  // downsample is lossless for display and the held set is
+  // O(frames × MAX_FRAME_WORK_PX²), never O(frames × proof-resolution²).
   const decoded = frames.map((frame) => {
     const img = safeDecode(frame.png);
     return img ? boundResolution(img) : null;
   });
-  const idMaps = frames.map((frame) => {
-    if (!frame.idPng) return null;
-    const img = safeDecode(frame.idPng);
-    return img ? boundResolution(img) : null;
-  });
   const names = input.idParts ?? [];
-  const placements = idMaps.map((map) => (map ? locateParts(map, names.length) : new Map()));
+  // The ID maps are counted at FULL resolution — deliberately NOT downsampled
+  // like the beauty frames. The badge floor (MIN_BADGE_PIXELS) is a correctness
+  // threshold, and a part's exact pixel count is the honest input to it; a
+  // downsampled count would be a nearest-sampling estimate with no bound in
+  // either direction (a 1-pixel speck could scale past the floor, a thin part
+  // could vanish). The cost is a full-resolution scan, which is a CONSCIOUS
+  // tradeoff: it is bounded (each map is decoded TRANSIENTLY here and only the
+  // small normalized placement survives the iteration, so at most one map is live
+  // at a time), and it is paid only by an unusual >1024px proof the author chose.
+  // Correctness of the threshold beats shrinking a transient the caller opted into.
+  const placements = frames.map((frame) => {
+    if (!frame.idPng) return new Map<number, Placement>();
+    const map = safeDecode(frame.idPng);
+    return map ? locateParts(map, names.length) : new Map<number, Placement>();
+  });
 
   /* Each part is badged ONCE, in the frame where it shows largest.
      Badging every part in every cell was the first thing tried and it
@@ -418,13 +429,20 @@ function assignBadges(
   return best;
 }
 
+/** The frame area the badge floor is stated against — parts are measured as
+ *  pixels-at-this-resolution (see locateParts), so the floor is resolution-
+ *  consistent: a threshold that means "visible in the sheet cell" whether the
+ *  proof rendered at 512 px or 4096. Chosen at 1024² so the historical 40-px
+ *  floor keeps its calibration. */
+const REFERENCE_FRAME_AREA = 1024 * 1024;
+
 /**
- * Pixels a part must occupy in a frame before it can be badged there.
- *
- * Measured on the id map, which renders at the proof's own resolution, so
- * this is an absolute floor rather than a fraction: below roughly this many
- * pixels a part is a speck the reader cannot resolve on the sheet either,
- * and a badge would point at nothing they can see.
+ * Pixels a part must occupy — AT THE REFERENCE RESOLUTION — before it can be
+ * badged in a frame. Below roughly this many, the part is a speck the reader
+ * cannot resolve in the sheet's downsampled cell, so a badge would point at
+ * nothing they can see. Resolution-consistent (locateParts rescales the exact
+ * count to REFERENCE_FRAME_AREA), so a high-res proof does not badge a part that
+ * is invisible once the cell is drawn.
  */
 const MIN_BADGE_PIXELS = 40;
 const BADGE_R = 9;
@@ -624,12 +642,20 @@ function locateParts(map: DecodedImage, partCount: number): Map<number, Placemen
     }
   }
 
+  const area = width * height;
   const out = new Map<number, Placement>();
   for (const [code, spot] of best) {
     out.set(code, {
       u: (spot.x + 0.5) / width,
       v: (spot.y + 0.5) / height,
-      pixels: sums.get(code)!.n,
+      // The part's size as pixels AT THE REFERENCE RESOLUTION — the EXACT count
+      // (the map is full-res) rescaled by the frame's own area to a fixed
+      // reference, so the badge floor means the same thing at any proof size. A
+      // part that is 40 px on a 1024² proof reads as 40 here; the same fraction
+      // on a 4096² proof also reads ~40 — matching what the reader sees in the
+      // downsampled sheet CELL, not the raw proof. Resolution-consistent, and
+      // still exact (only the threshold is normalised, never the count).
+      pixels: Math.round((sums.get(code)!.n * REFERENCE_FRAME_AREA) / area),
     });
   }
   return out;
@@ -908,11 +934,12 @@ function safeDecode(png: Uint8Array): DecodedImage | null {
 }
 
 /**
- * Downsample an image so its longer side is at most `maxDim`, returning it
+ * Downsample a BEAUTY frame so its longer side is at most `maxDim`, returning it
  * untouched when it already fits (the common case — proofs render near the grid
- * measure). NEAREST sampling on purpose: an id map encodes each part as an exact
- * colour code, and any blend would invent codes that name no part, so a code is
- * carried whole from the one source pixel a destination pixel lands on.
+ * measure). Nearest sampling, which is ample for a display tile drawn at ≤1024 px.
+ * Used ONLY for beauty frames — the id maps are counted at full resolution (their
+ * pixel counts feed the badge floor, a correctness threshold), so this never
+ * touches a part-code map, where a downsample would distort the count.
  */
 function boundResolution(img: DecodedImage, maxDim = MAX_FRAME_WORK_PX): DecodedImage {
   const big = Math.max(img.width, img.height);

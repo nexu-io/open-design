@@ -1,6 +1,6 @@
 import { Rational, rat, ratMean, ratFromFloat } from "./rational.js";
 import { massProperties } from "./mass.js";
-import { embeds, triangulateFace, firstMalformedFace, MAX_FACE_SIDES, type EmbedResult } from "./embed.js";
+import { embeds, triangulateFace, firstMalformedFace, type EmbedResult } from "./embed.js";
 
 /**
  * The deterministic geometry kernel: exact meshes and the operators over them.
@@ -26,18 +26,6 @@ import { embeds, triangulateFace, firstMalformedFace, MAX_FACE_SIDES, type Embed
  */
 
 export type RVec3 = [Rational, Rational, Rational];
-
-/**
- * Loud ceiling on kernel mesh size — the backstop `MAX_REPEAT_COUNT` is for the
- * solver. Catmull-Clark quadruples faces per level, so an unbounded
- * `subdivide` is the one runaway multiplier that can hang the compiler's main
- * thread and OOM it: it is O(1) to record but exponential to evaluate. The
- * guard fires on the PROJECTED size before allocating, so an absurd recipe
- * refuses loudly instead of running the machine out of memory. Far above any
- * real recipe (a level-4 box is 1,536 faces); a single part at this ceiling is
- * already the whole scene's triangle budget.
- */
-export const MAX_KERNEL_FACES = 100_000;
 
 export function rvec(x: readonly [number, number, number] | RVec3): RVec3 {
   if (x[0] instanceof Rational) return [x[0], x[1] as Rational, x[2] as Rational];
@@ -84,7 +72,7 @@ export class MeshBuilder {
   vertex(v: RVec3, id: string): number {
     const k = keyV(v);
     const existing = this.index.get(k);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) return existing; // a weld, not a new vertex
     const i = this.verts.length;
     this.verts.push(v);
     this.vertId.push(id);
@@ -120,11 +108,6 @@ export function meshOf(
     if (f.length < 3) {
       throw new Error(`meshOf: face ${fi} has ${f.length} vertices — a face needs at least 3`);
     }
-    if (f.length > MAX_FACE_SIDES) {
-      throw new Error(
-        `meshOf: face ${fi} has ${f.length} sides, over the ${MAX_FACE_SIDES} per-face ceiling — split it, or build the profile from the shape primitives`,
-      );
-    }
     for (const i of f) {
       if (!Number.isInteger(i) || i < 0 || i >= points.length) {
         throw new Error(`meshOf: face ${fi} references vertex index ${i}, outside 0..${points.length - 1}`);
@@ -143,10 +126,7 @@ export function meshOf(
     }
     b.face(remapped);
   }
-  if (b.faces.length > MAX_KERNEL_FACES) {
-    throw new Error(`kernel: a cage of ${b.faces.length} faces is over the ${MAX_KERNEL_FACES} ceiling`);
-  }
-  return b.build();
+  return b.build(); // build() enforces both ceilings as the construction invariant
 }
 
 /* ------------------------------------------------------------------ */
@@ -318,14 +298,6 @@ const R_6 = rat(6);
  */
 export function subdivideCatmullClark(mesh: KernelMesh): KernelMesh {
   const { verts, faces, vertId } = mesh;
-  // Refuse a runaway BEFORE allocating: each face of k sides becomes k quads,
-  // so the output face count is exactly the sum of sides.
-  const projected = faces.reduce((a, f) => a + f.length, 0);
-  if (projected > MAX_KERNEL_FACES) {
-    throw new Error(
-      `kernel: subdivision would produce ${projected} faces, over the ${MAX_KERNEL_FACES} ceiling — reduce the subdivide levels`,
-    );
-  }
   const creases = mesh.creases ?? EMPTY_CREASES;
   const edges = edgesOf(mesh);
   // An edge is SHARP when it is a boundary (one face) or an authored crease:
@@ -495,15 +467,6 @@ export function triangulate(mesh: KernelMesh): KernelMesh {
   // meshOf), this guards a directly-assembled KernelMesh.
   const malformed = firstMalformedFace(mesh);
   if (malformed) throw new Error(`kernel: triangulate on a malformed mesh — ${malformed}`);
-  // The same face-count backstop meshOf and subdivide enforce: an n-gon becomes
-  // n-2 triangles, so triangulating near the ceiling would otherwise slip a mesh
-  // of up to ~2× MAX_KERNEL_FACES past every downstream cost guard.
-  const projected = mesh.faces.reduce((n, f) => n + Math.max(f.length - 2, 0), 0);
-  if (projected > MAX_KERNEL_FACES) {
-    throw new Error(
-      `kernel: triangulation would produce ${projected} faces, over the ${MAX_KERNEL_FACES} ceiling — triangulate a coarser mesh, or subdivide less before it`,
-    );
-  }
   const faces: number[][] = [];
   for (const f of mesh.faces) for (const t of triangulateFace(f, mesh.verts)) faces.push(t);
   return {
@@ -883,10 +846,11 @@ export interface PredictedCensus {
    *  correct; null otherwise. `volumeExact`/`volumeAmbiguityExact` are exact
    *  rationals; the rest are float64 at the boundary. `symmetryAxis` is the
    *  EXACT verdict (a repeated principal moment: the char cubic's discriminant
-   *  is zero). `volumeAmbiguity` bounds how far any consumer's triangulation of
-   *  the shipped mesh can move the volume (zero iff every face is planar);
-   *  `conditioning` is the scale for the float error bound a Blender-measured
-   *  fan volume is adjudicated within. */
+   *  is zero). `volumeAmbiguity` is the reported twist band (exact for quads);
+   *  `allFacesPlanar` is the EXACT certificate that the volume is triangulation-
+   *  independent — the gate the claim uses, never the ambiguity. `conditioning`
+   *  is the scale for the float error bound a Blender-measured fan volume is
+   *  adjudicated within. */
   mass: {
     volume: number;
     volumeExact: string;
@@ -894,6 +858,9 @@ export interface PredictedCensus {
     symmetryAxis: boolean;
     volumeAmbiguity: number;
     volumeAmbiguityExact: string;
+    /** EXACT: the signed volume is triangulation-independent iff every face is
+     *  planar. The volume claim gates triangulation-independence on THIS. */
+    facesPlanar: boolean;
     conditioning: number;
     /** Whether the surface EMBEDS (bounds a solid) or self-intersects — the exact
      *  hypothesis under which the signed volume equals the solid volume. The
@@ -997,6 +964,7 @@ export function predictCensus(mesh: KernelMesh, opts: { mass?: boolean } = {}): 
         symmetryAxis: mp.symmetryAxis,
         volumeAmbiguity: mp.volumeAmbiguity.toNumber(),
         volumeAmbiguityExact: mp.volumeAmbiguity.toString(),
+        facesPlanar: mp.allFacesPlanar,
         conditioning: mp.conditioning.toNumber(),
         embed: embeds(shipped!), // non-null wherever mp is (massProperties ran on it)
       }

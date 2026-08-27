@@ -24,25 +24,29 @@ function box(a: number, b: number, c: number): KernelMesh {
 const vol = (a: number, b: number, c: number) => predictCensus(box(a, b, c), { mass: true }).mass!.volumeExact;
 // The census names each built object after its recipe part id, so the claim's
 // per-mesh lookup can match them by name.
-const censusOf = (names: string[]): Census =>
-  ({ meshes: names.map((n) => ({ object: n, nonManifoldEdges: 0 })) } as unknown as Census);
+// ngons: 0 by default (quad/tri meshes — the case where the ambiguity band is
+// EXACT); a case can override it to model a mesh with a ≥5-gon face.
+const censusOf = (names: string[], ngons = 0): Census =>
+  ({ meshes: names.map((n) => ({ object: n, nonManifoldEdges: 0, ngons })) } as unknown as Census);
 
-// Each part is planar (ambiguity "0") unless a case overrides it — a box has
-// flat faces, so its volume is triangulation-independent and the claim is
-// adjudicable; a non-planar part carries a positive ambiguity that gates it.
-// `confirmed` defaults to EVERY part (the build volume matched within E-703's
-// bound); pass a narrower set to model a part the self-check did not confirm.
+// Each part is planar (facesPlanar true, ambiguity "0") unless a case overrides
+// it — a box has flat faces, so its volume is triangulation-independent and the
+// claim is adjudicable; a non-planar part sets facesPlanar false (the exact
+// gate) and carries a positive ambiguity band. `confirmed` defaults to EVERY
+// part (the build volume matched within E-703's bound); pass a narrower set to
+// model a part the self-check did not confirm.
 const run = (
   claimVolume: string,
   meshNames: string[],
-  kernelVolumes: Array<{ partId: string; volumeExact: string | null; ambiguityExact?: string | null; embed?: EmbedResult }>,
+  kernelVolumes: Array<{ partId: string; volumeExact: string | null; ambiguityExact?: string | null; facesPlanar?: boolean; embed?: EmbedResult }>,
   confirmed: Set<string> = new Set(meshNames),
+  ngons = 0,
 ): Issue[] => {
   const issues: Issue[] = [];
-  lintClaims({ volume: claimVolume }, censusOf(meshNames), issues, {
-    // Planar and embedded by default (a box); a case overrides embed to model a
-    // non-planar or self-intersecting part.
-    kernelVolumes: kernelVolumes.map((k) => ({ ambiguityExact: "0", embed: { kind: "embedded" } as EmbedResult, ...k })),
+  lintClaims({ volume: claimVolume }, censusOf(meshNames, ngons), issues, {
+    // Planar and embedded by default (a box); a case overrides facesPlanar/embed
+    // to model a non-planar or self-intersecting part.
+    kernelVolumes: kernelVolumes.map((k) => ({ ambiguityExact: "0", facesPlanar: true, embed: { kind: "embedded" } as EmbedResult, ...k })),
     volumeConfirmed: confirmed,
   });
   return issues;
@@ -113,7 +117,7 @@ describe("volume claim (exact)", () => {
     // [7/10, 13/10]. The exact claim is not a theorem about the deliverable, so
     // it is unchecked — WITH the band, whether the claim sits inside it, and the
     // triangulate exit named. Even a claim that equals the fan volume is unchecked.
-    const u = run("1", ["a"], [{ partId: "a", volumeExact: "1", ambiguityExact: "3/10" }]).find(
+    const u = run("1", ["a"], [{ partId: "a", volumeExact: "1", ambiguityExact: "3/10", facesPlanar: false }]).find(
       (i) => i.code === "S3D-W-701",
     );
     expect(u).toBeDefined();
@@ -122,13 +126,28 @@ describe("volume claim (exact)", () => {
     expect(u!.message).toContain("ctx.triangulate()");
     expect(u!.detail).toMatchObject({ band: ["7/10", "13/10"], ambiguity: "3/10", claimInsideBand: true });
     // A claim OUTSIDE the band is reported as such (still unchecked, not failed).
-    const outside = run("2", ["a"], [{ partId: "a", volumeExact: "1", ambiguityExact: "3/10" }]).find(
+    const outside = run("2", ["a"], [{ partId: "a", volumeExact: "1", ambiguityExact: "3/10", facesPlanar: false }]).find(
       (i) => i.code === "S3D-W-701",
     );
     expect(outside!.message).toContain("is OUTSIDE");
     expect(outside!.detail).toMatchObject({ claimInsideBand: false });
     // Never a fail: a non-planar mesh's volume claim cannot be refuted either.
-    expect(run("2", ["a"], [{ partId: "a", volumeExact: "1", ambiguityExact: "3/10" }]).some((i) => i.code === "S3D-E-701")).toBe(false);
+    expect(run("2", ["a"], [{ partId: "a", volumeExact: "1", ambiguityExact: "3/10", facesPlanar: false }]).some((i) => i.code === "S3D-E-701")).toBe(false);
+  });
+
+  it("is UNCHECKED WITHOUT a precise band when a non-planar face is an NGON (v0-fan can't bound it)", () => {
+    // A non-planar mesh with a ≥5-gon face (ngons > 0): the corner-tet ambiguity
+    // walks only the v0-fan, so alternate triangulations use diagonals it never
+    // visits and `sum ± amb` is NOT a valid bound. The claim stays unchecked, but
+    // the message must state the dependence WITHOUT the untrustworthy band.
+    const issues = run("1", ["a"], [{ partId: "a", volumeExact: "1", ambiguityExact: "3/10", facesPlanar: false }], new Set(["a"]), 1);
+    const u = issues.find((i) => i.code === "S3D-W-701");
+    expect(u).toBeDefined();
+    expect(u!.message).toContain("triangulation-dependent");
+    expect(u!.message).not.toContain("["); // no numeric band claimed
+    expect(u!.detail).not.toHaveProperty("band");
+    expect(u!.detail).not.toHaveProperty("claimInsideBand");
+    expect(issues.some((i) => i.code === "S3D-E-701")).toBe(false); // still never a fail
   });
 
   it("is UNCHECKED (never silently collapses) when a part has duplicate predictions", () => {

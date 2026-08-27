@@ -98,7 +98,26 @@ describe("kernel: exact mass properties", () => {
   it("volumeAmbiguity is ZERO for a planar-faced solid — its volume is triangulation-universal", () => {
     for (const mp of [massProperties(box(1, 1, 1))!, massProperties(box(2, 3, 5))!]) {
       expect(mp.volumeAmbiguity.isZero()).toBe(true);
+      expect(mp.allFacesPlanar).toBe(true); // and the exact certificate agrees
     }
+  });
+
+  it("allFacesPlanar catches a NON-planar ≥5-gon that volumeAmbiguity misses (the collinear-diagonal hole)", () => {
+    // A pentagonal pyramid whose base is a NON-planar pentagon with three
+    // collinear vertices (v0,v2,v3 on the x-axis) exactly on the v0-fan
+    // diagonals. The corner-tet ambiguity walks only that fan, so both its terms
+    // vanish and it reads 0 — while the face is genuinely non-planar (v4 is off
+    // the z=10 plane) and its volume contribution is triangulation-dependent
+    // (fan-from-v0 gives 6V=−20, fan-from-v1 gives −23). allFacesPlanar is the
+    // EXACT gate and must report false, so the volume claim cannot falsely pass.
+    const pyramid = meshOf(
+      [[0, 0, 10], [1, 1, 10], [2, 0, 10], [3, 0, 10], [1, 0, 11], [1, 0, 0]],
+      [[0, 1, 2, 3, 4], [0, 1, 5], [1, 2, 5], [2, 3, 5], [3, 4, 5], [4, 0, 5]],
+    );
+    const mp = massProperties(pyramid)!;
+    expect(mp).not.toBeNull();
+    expect(mp.volumeAmbiguity.isZero()).toBe(true); // the heuristic is fooled…
+    expect(mp.allFacesPlanar).toBe(false); // …but the exact certificate is not
   });
 
   it("volumeAmbiguity is the exact corner-tet twist of a NON-planar quad (1/6)", () => {
@@ -114,6 +133,7 @@ describe("kernel: exact mass properties", () => {
     const mp = massProperties(perturbed)!;
     eq(mp.volume, 4, 3);
     eq(mp.volumeAmbiguity, 1, 6);
+    expect(mp.allFacesPlanar).toBe(false); // the lifted corner makes one quad non-planar
     expect(mp.conditioning.cmp(rat(0)) > 0).toBe(true); // a positive error scale
   });
 
@@ -135,6 +155,7 @@ describe("kernel: exact mass properties", () => {
     const before = massProperties(perturbed)!;
     const after = massProperties(tri)!;
     expect(after.volumeAmbiguity.isZero()).toBe(true); // now triangulation-independent
+    expect(after.allFacesPlanar).toBe(true); // every face a planar triangle — the exact gate holds
     // The shipped volume is a valid triangulation's, so within [V−a, V+a].
     expect(after.volume.cmp(before.volume.sub(before.volumeAmbiguity)) >= 0).toBe(true);
     expect(after.volume.cmp(before.volume.add(before.volumeAmbiguity)) <= 0).toBe(true);
@@ -144,17 +165,6 @@ describe("kernel: exact mass properties", () => {
     expect(c.watertight).toBe(true);
     expect(c.genus).toBe(0);
     expect(c.mass!.embed).toEqual({ kind: "embedded" });
-  });
-
-  it("triangulate() enforces the face-count ceiling (a quad becomes two triangles)", () => {
-    // 50,001 quads project to 100,002 triangles — one past MAX_KERNEL_FACES —
-    // so triangulate must refuse it, the same backstop meshOf and subdivide keep.
-    const quads = Array.from({ length: 50_001 }, () => [0, 1, 2, 3]);
-    const pt = (x: number, y: number): [Rational, Rational, Rational] => [rat(x), rat(y), rat(0)];
-    const overCeiling = { verts: [pt(0, 0), pt(1, 0), pt(1, 1), pt(0, 1)], faces: quads, vertId: ["v0", "v1", "v2", "v3"] };
-    expect(() => triangulate(overCeiling)).toThrow(/ceiling/);
-    // One fewer quad stays under the ceiling and triangulates fine.
-    expect(() => triangulate({ ...overCeiling, faces: quads.slice(1) })).not.toThrow();
   });
 
   it("predictCensus reports NO mass for a multi-component mesh — one sign cannot net two volumes", () => {

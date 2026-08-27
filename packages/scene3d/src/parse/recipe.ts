@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import type { Trace } from "../kernel/trace.js";
+import { type Trace } from "../kernel/trace.js";
 
 /**
  * Run a kernel RECIPE and recover its operator trace.
@@ -106,12 +106,6 @@ function validateTraceShape(value: unknown): string | null {
       case "subdivide":
         if (!Number.isInteger(op.levels) || (op.levels as number) < 0) {
           return `trace.ops[${i}] subdivide.levels must be a non-negative integer`;
-        }
-        // A loud first-line ceiling: Catmull-Clark quadruples faces per level,
-        // so a large level count is a runaway (the evaluator's face-count guard
-        // is the exact backstop; this rejects the obvious typo up front).
-        if ((op.levels as number) > 10) {
-          return `trace.ops[${i}] subdivide.levels is ${op.levels} — more than 10 levels is a runaway (each level quadruples the faces)`;
         }
         break;
       case "mirror":

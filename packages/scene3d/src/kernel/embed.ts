@@ -225,13 +225,6 @@ export function triangulateFace(face: readonly number[], verts: readonly RVec3[]
   const n = face.length;
   if (n < 3) return [];
   if (n === 3) return [[face[0]!, face[1]!, face[2]!]];
-  // The ear-clip is the choke point for its own cost, so the per-face ceiling is
-  // enforced HERE — not only in meshOf — and holds for any caller, however the
-  // mesh was assembled (a directly-built KernelMesh, a future front-end). meshOf
-  // rejects such a face earlier with a friendlier message; this is the backstop.
-  if (n > MAX_FACE_SIDES) {
-    throw new Error(`kernel: ear-clipping a ${n}-sided face is over the ${MAX_FACE_SIDES} per-face ceiling`);
-  }
   // Newell's normal — exact, and correct even when the polygon is non-planar.
   let nx = ZERO;
   let ny = ZERO;
@@ -304,18 +297,6 @@ export function triangulateFace(face: readonly number[], verts: readonly RVec3[]
   return tris;
 }
 
-/**
- * The most sides ONE face may have. Exact ear-clipping (`triangulateFace`) of an
- * n-gon costs up to ~O(n²) rational-arithmetic work, so an unbounded single face
- * would let one hand-authored `cage` polygon stall the compiler even though the
- * total FACE count stays under its ceiling. Far above any real hand-authored
- * face (a high-resolution profile is tens of sides); a 512-gon is already
- * absurd, and the round primitives that legitimately want hundreds of sides are
- * emitted by the shape backend, not caged here. Lives beside the ear-clip it
- * bounds; meshOf imports it to reject an over-cap face at authoring time.
- */
-export const MAX_FACE_SIDES = 512;
-
 /** The result of the embedding test. `unchecked` reports a bounded search that
  *  hit its cap — never a silent skip (a bounded search names what it left). */
 export type EmbedResult =
@@ -339,11 +320,26 @@ export const EMBED_FACE_CAP = 20_000;
 export const EMBED_PAIR_CAP = 4_000_000;
 
 /**
+ * Beyond this much ear-clip WORK (Σ n² over faces) the embedding test degrades to
+ * `unchecked` rather than spend it — a cost bound on the TEST, not a size limit
+ * on the asset (the mesh compiles either way). A dense normal mesh of triangles/
+ * quads is Σ 9 or 16 per face, nowhere near this, and a face of hundreds of sides
+ * is comfortably under it. HONEST caveat: naive ear-clipping is O(n²) typically
+ * but O(n³) in the adversarial non-convex worst case (each of O(n²) ear tests
+ * scans O(n) vertices), so Σ n² is the TYPICAL cost, not a hard worst-case bound;
+ * an adversarial huge non-convex single face could still be slow. Replacing the
+ * ear-clip with an O(n log n) monotone/sweep triangulation removes that corner
+ * entirely (work ≈ output for every polygon) and is the documented next step;
+ * this bound keeps the common path safe until then.
+ */
+export const EMBED_EARCLIP_WORK_CAP = 4_000_000;
+
+/**
  * The first STRUCTURAL defect in a mesh's face list — a face with fewer than
  * three vertices, or one referencing a vertex index outside `0..verts.length−1`
  * — as a human reason, or null when every face is well-formed. This is the
- * arity-and-index floor BELOW geometry: meshOf enforces it (plus welding and the
- * side cap) for authored meshes, and the two ear-clip consumers share it so a
+ * arity-and-index floor BELOW geometry: meshOf enforces it (plus welding) for
+ * authored meshes, and the two ear-clip consumers share it so a
  * directly-assembled KernelMesh is handled the same way at both — the query
  * (`embeds`) degrades to `unchecked`, the operator (`triangulate`) throws —
  * instead of one crashing while the other silently drops the face.
@@ -390,22 +386,25 @@ export function embeds(mesh: KernelMesh): EmbedResult {
   // silent embed of a mesh with a hole.
   const malformed = firstMalformedFace(mesh);
   if (malformed) return { kind: "unchecked", reason: `${malformed} — a malformed mesh, uncertified` };
-  // Bound the work BEFORE ear-clipping: a valid triangulation of the mesh is
-  // exactly Σ(sides − 2) triangles, so this is the same threshold `items.length`
-  // would hit — checked up front so an over-cap mesh never pays the ear-clip.
+  // The embedding TEST (not the asset) degrades gracefully when it would be
+  // expensive — the mesh still compiles, only the volume's embedding certificate
+  // is left unproven, never refused. Two cost signals, both degrade to
+  // `unchecked`: the triangle total (a valid triangulation is Σ(sides−2)), and
+  // the ear-clip WORK (Σ n² — ear-clipping an n-gon is ~O(n²)), so one
+  // pathologically large single face cannot stall the census/volume path. (The
+  // O(n log n) triangulation that would make even a huge face cheap is the
+  // documented next step; until then this keeps the test bounded, not the asset.)
   let projected = 0;
-  let maxSides = 0;
+  let earClipWork = 0;
   for (const f of mesh.faces) {
     projected += f.length - 2;
-    if (f.length > maxSides) maxSides = f.length;
+    earClipWork += f.length * f.length;
   }
   if (projected > EMBED_FACE_CAP) {
     return { kind: "unchecked", reason: `the mesh has ${projected} triangles, over the ${EMBED_FACE_CAP} embedding-test cap` };
   }
-  // A single face over the ear-clip ceiling would cost unbounded work; degrade to
-  // unchecked here rather than let triangulateFace throw from inside the sweep.
-  if (maxSides > MAX_FACE_SIDES) {
-    return { kind: "unchecked", reason: `a face has ${maxSides} sides, over the ${MAX_FACE_SIDES} per-face ear-clip ceiling` };
+  if (earClipWork > EMBED_EARCLIP_WORK_CAP) {
+    return { kind: "unchecked", reason: `a face is large enough that exact triangulation for the embedding test would cost ~${earClipWork} operations, over the ${EMBED_EARCLIP_WORK_CAP} bound — the volume's embedding is left unproven` };
   }
   // Ear-clip every face into a valid triangle tiling, remembering the source face.
   const items: Array<{ face: number; lo: RVec3; hi: RVec3; tri: Tri }> = [];

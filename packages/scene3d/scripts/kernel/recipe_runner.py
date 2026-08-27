@@ -56,8 +56,13 @@ class RecipeCtx:
     def __init__(self):
         self._ops = []
 
+    def _record(self, op):
+        """Append one recorded op. (A recipe is the author's own code; the
+        evaluator's work meter is the runaway guard, not a recording-side cap.)"""
+        self._ops.append(op)
+
     def cage(self, points, faces, ids=None):
-        self._ops.append({
+        self._record({
             "op": "cage",
             "points": [[_coord(p[0]), _coord(p[1]), _coord(p[2])] for p in points],
             "faces": [[int(i) for i in f] for f in faces],
@@ -101,23 +106,24 @@ class RecipeCtx:
     def subdivide(self, levels=1):
         if not isinstance(levels, int) or isinstance(levels, bool) or levels < 0:
             raise ValueError("subdivide(levels): levels must be a non-negative integer")
-        self._ops.append({"op": "subdivide", "levels": levels})
+        self._record({"op": "subdivide", "levels": levels})
         return self
 
     def mirror(self, axis):
         if axis not in (0, 1, 2):
             raise ValueError("mirror(axis): axis must be 0, 1 or 2")
-        self._ops.append({"op": "mirror", "axis": axis})
+        self._record({"op": "mirror", "axis": axis})
         return self
 
     def triangulate(self):
-        """Fan every face into triangles — the opt-in fix that makes a `volume`
-        claim provable on a non-planar (curved/subdivided) mesh. A curved
-        surface's quads are non-planar, so its volume depends on which diagonal
-        an exporter picks and the claim stays unchecked; triangulating bakes one
-        triangulation in, drives the ambiguity to zero, and the volume becomes a
-        provable property of the shipped asset. Topology-only; trades quads."""
-        self._ops.append({"op": "triangulate"})
+        """Triangulate every face by exact ear-clipping — the opt-in fix that
+        makes a `volume` claim provable on a non-planar (curved/subdivided) mesh.
+        A curved surface's quads are non-planar, so its volume depends on which
+        diagonal an exporter picks and the claim stays unchecked; triangulating
+        bakes one triangulation in, makes every face planar, and the volume
+        becomes a provable property of the shipped asset. Topology-only; trades
+        quads."""
+        self._record({"op": "triangulate"})
         return self
 
     def clip(self, normal, d):
@@ -131,7 +137,7 @@ class RecipeCtx:
         n = [_coord(normal[0]), _coord(normal[1]), _coord(normal[2])]
         if all(Fraction(c) == 0 for c in n):
             raise ValueError("clip(normal, d): normal must be non-zero -- a plane has a direction")
-        self._ops.append({"op": "clip", "normal": n, "d": _coord(d)})
+        self._record({"op": "clip", "normal": n, "d": _coord(d)})
         return self
 
     def move(self, region, offset):
@@ -151,7 +157,7 @@ class RecipeCtx:
             r[key] = [_coord(b[0]), _coord(b[1])]
         if len(offset) != 3:
             raise ValueError("move(region, offset): offset must be [x, y, z]")
-        self._ops.append({
+        self._record({
             "op": "move",
             "region": r,
             "offset": [_coord(offset[0]), _coord(offset[1]), _coord(offset[2])],
@@ -171,7 +177,7 @@ class RecipeCtx:
             if len(b) != 2:
                 raise ValueError("crease(region): region['%s'] must be [min, max]" % key)
             r[key] = [_coord(b[0]), _coord(b[1])]
-        self._ops.append({"op": "crease", "region": r})
+        self._record({"op": "crease", "region": r})
         return self
 
     def extrude(self, region, offset):
@@ -188,7 +194,7 @@ class RecipeCtx:
             r[key] = [_coord(b[0]), _coord(b[1])]
         if len(offset) != 3:
             raise ValueError("extrude(region, offset): offset must be [x, y, z]")
-        self._ops.append({
+        self._record({
             "op": "extrude",
             "region": r,
             "offset": [_coord(offset[0]), _coord(offset[1]), _coord(offset[2])],
@@ -208,7 +214,7 @@ class RecipeCtx:
             if len(b) != 2:
                 raise ValueError("inset(...): region['%s'] must be [min, max]" % key)
             r[key] = [_coord(b[0]), _coord(b[1])]
-        self._ops.append({"op": "inset", "region": r, "factor": _coord(factor)})
+        self._record({"op": "inset", "region": r, "factor": _coord(factor)})
         return self
 
     def scale(self, region, factor, pivot=(0, 0, 0)):
@@ -225,7 +231,7 @@ class RecipeCtx:
             r[key] = [_coord(b[0]), _coord(b[1])]
         if len(factor) != 3 or len(pivot) != 3:
             raise ValueError("scale(region, factor, pivot): factor and pivot must each be [x, y, z]")
-        self._ops.append({
+        self._record({
             "op": "scale",
             "region": r,
             "factor": [_coord(factor[0]), _coord(factor[1]), _coord(factor[2])],
@@ -236,12 +242,12 @@ class RecipeCtx:
     def shape(self, name):
         """Begin a named morph target: deform the base with move/scale, then
         end_shape(). The delta propagates through a later subdivide exactly."""
-        self._ops.append({"op": "shape", "name": str(name)})
+        self._record({"op": "shape", "name": str(name)})
         return self
 
     def end_shape(self):
         """Close the current morph target."""
-        self._ops.append({"op": "endShape"})
+        self._record({"op": "endShape"})
         return self
 
     def trace(self):
@@ -264,7 +270,7 @@ CONTRACT = (
     "the recipe contract: define build(ctx); ctx records exact operators -- "
     "SEED geometry with ctx.box(half)/ctx.cage(points, faces)/ctx.grid(nx, ny, size); "
     "REFINE with ctx.subdivide(levels) (Catmull-Clark) or ctx.triangulate() "
-    "(fan faces to triangles -- makes a volume claim provable on a curved mesh); "
+    "(ear-clip faces to planar triangles -- makes a volume claim provable on a curved mesh); "
     "TRANSFORM with ctx.mirror(axis), ctx.move(region, offset), ctx.scale(region, factor, pivot), "
     "ctx.crease(region), ctx.extrude(region, offset), ctx.inset(region, factor); "
     "CUT with ctx.clip(normal, d) (keep the half-space normal.x <= d, capped -- "

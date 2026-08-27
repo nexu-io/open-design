@@ -270,16 +270,11 @@ describe("kernel: orientation, connectivity and index guards (red-team)", () => 
     expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 1]])).toThrow(/at least 3/);
   });
 
-  it("refuses a single face over the per-face side ceiling (bounds exact ear-clipping)", () => {
-    // A ring polygon of 600 distinct verts is one face of 600 sides — under the
-    // FACE-count ceiling, but its exact triangulation would be unbounded work, so
-    // meshOf rejects it up front.
+  it("accepts a many-sided face — no per-face side cap (infinitely scalable)", () => {
+    // A 600-sided ring is a legitimate profile, not a runaway; meshOf builds it.
     const pts = Array.from({ length: 600 }, (_, i) => [i, i * i, 0] as [number, number, number]);
     const face = Array.from({ length: 600 }, (_, i) => i);
-    expect(() => meshOf(pts, [face])).toThrow(/over the 512 per-face ceiling/);
-    // 512 sides is still accepted — the ceiling is a bound, not a low cap.
-    const okPts = Array.from({ length: 512 }, (_, i) => [i, i * i, 0] as [number, number, number]);
-    expect(() => meshOf(okPts, [Array.from({ length: 512 }, (_, i) => i)])).not.toThrow();
+    expect(() => meshOf(pts, [face])).not.toThrow();
   });
 
   it("refuses a face whose vertices WELD to one (coincident points collapse an edge)", () => {
@@ -376,17 +371,16 @@ describe("kernel: soundness fixes (red-team)", () => {
     expect(() => meshOf([[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 0, 1]])).toThrow(/collapse to one/);
   });
 
-  it("refuses a runaway subdivision before allocating (the loud ceiling)", () => {
-    // Catmull-Clark quadruples faces per level; an absurd level count is
-    // rejected loudly rather than hanging/OOMing the compiler.
+  it("subdivides to a deep level with no arbitrary cap (infinitely scalable)", () => {
+    // No `levels`/face ceiling: subdivide runs however deep the author asks. A
+    // level-5 cube (~6k faces) is a legitimately smooth surface, not a runaway.
     const box = () =>
       meshOf(
         [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]],
         [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]],
       );
-    expect(() => subdivide(box(), 9)).toThrow(/ceiling/);
-    // A real recipe depth is fine.
-    expect(() => subdivide(box(), 3)).not.toThrow();
+    const deep = subdivide(box(), 5);
+    expect(deep.faces.length).toBe(6 * 4 ** 5); // every level all-quads, no refusal
   });
 });
 

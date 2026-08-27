@@ -52,14 +52,24 @@ export interface MassProperties {
    *  has an axis of rotational mass symmetry (or, if all three coincide, is a
    *  spherical top). Decided exactly over ℚ, no eigenvalue ever formed. */
   symmetryAxis: boolean;
-  /** Exact bound on how far the volume can move across DIFFERENT triangulations
-   *  of the mesh's non-planar faces: Σ over each face's fan diagonals of the
-   *  |corner-tetrahedron|. A non-planar quad bounds no unique solid until a
-   *  diagonal is chosen; two choices differ by exactly that corner tet, so any
-   *  consumer's triangulation (Blender's export, a physics engine's) reads a
-   *  volume within `volume ± volumeAmbiguity`. ZERO ⟺ every face is planar,
-   *  where the volume is triangulation-INDEPENDENT and universal. */
+  /** A heuristic scale for how far the volume can move across triangulations of
+   *  the mesh's non-planar faces: Σ over each face's v0-fan diagonals of the
+   *  |corner-tetrahedron|. EXACT for a quad (its one diagonal is the only choice,
+   *  and the two triangulations differ by exactly that corner tet), so it is the
+   *  reported band `volume ± volumeAmbiguity` for the common non-planar case. It
+   *  is NOT a planarity certificate: it walks only the v0-fan, so collinear
+   *  vertices on those diagonals can zero it for a genuinely non-planar ≥5-gon —
+   *  use {@link allFacesPlanar} to decide triangulation-independence, never this.
+   *  A valid lower bound on the twist, and the exact band for quads. */
   volumeAmbiguity: Rational;
+  /** True ⟺ EVERY face is exactly planar (its Newell normal is nonzero and every
+   *  vertex lies in that plane), decided over ℚ. This is the certificate that the
+   *  signed volume is triangulation-INDEPENDENT: a planar polygon's divergence
+   *  flux is the same for every triangulation, a non-planar one's is not. A face
+   *  whose Newell normal is zero (a fully-collinear, zero-area ring) is NOT
+   *  certified — conservative, and such a face is a degenerate shipped triangle
+   *  the embedding test already reports. The gate the volume claim must use. */
+  allFacesPlanar: boolean;
   /** Conditioning of the volume sum, Σ|origin-tet det|/6 — the exact scale for
    *  the float forward-error bound `K·ε·conditioning` within which a
    *  Blender-measured fan volume must reproduce this exact value. */
@@ -92,6 +102,7 @@ export function massProperties(mesh: KernelMesh): MassProperties | null {
   let sixVol = Rational.ZERO;
   let condSum6 = Rational.ZERO; // Σ|origin-tet det| — conditioning of the volume sum
   let ambig6 = Rational.ZERO; // Σ over fan diagonals of |corner-tet det| — the twist bound
+  let allFacesPlanar = true; // exact: cleared by the first non-planar (or degenerate) face
   const m1: [Rational, Rational, Rational] = [Rational.ZERO, Rational.ZERO, Rational.ZERO];
   const c120: RMat3 = [
     [Rational.ZERO, Rational.ZERO, Rational.ZERO],
@@ -123,11 +134,41 @@ export function massProperties(mesh: KernelMesh): MassProperties | null {
     // Triangulation ambiguity: each internal fan diagonal (v0–v_{k+1}) can flip,
     // moving the volume by the corner tet (v0, v_k, v_{k+1}, v_{k+2}). A triangle
     // has none (planar by definition); a planar quad's corner tet is exactly 0.
+    // (A heuristic band — NOT the planarity certificate; see allFacesPlanar.)
     for (let k = 1; k + 2 < face.length; k++) {
       const e1 = sub3(V[face[k]!]!, v0);
       const e2 = sub3(V[face[k + 1]!]!, v0);
       const e3 = sub3(V[face[k + 2]!]!, v0);
       ambig6 = ambig6.add(absR(dot(e1, cross(e2, e3))));
+    }
+    // Exact planarity — the real triangulation-independence certificate. The
+    // Newell normal is exact and robust for a non-planar ring; a face is planar
+    // iff it is nonzero AND every vertex lies in the plane it defines through v0.
+    // A zero Newell normal (a collinear, zero-area face) is NOT certified planar
+    // — conservative, and such a face is caught as a degenerate shipped triangle.
+    if (allFacesPlanar) {
+      const n = face.length;
+      let nx = Rational.ZERO;
+      let ny = Rational.ZERO;
+      let nz = Rational.ZERO;
+      for (let k = 0; k < n; k++) {
+        const a = V[face[k]!]!;
+        const b = V[face[(k + 1) % n]!]!;
+        nx = nx.add(a[1].sub(b[1]).mul(a[2].add(b[2])));
+        ny = ny.add(a[2].sub(b[2]).mul(a[0].add(b[0])));
+        nz = nz.add(a[0].sub(b[0]).mul(a[1].add(b[1])));
+      }
+      const N: RVec3 = [nx, ny, nz];
+      if (nx.isZero() && ny.isZero() && nz.isZero()) {
+        allFacesPlanar = false; // degenerate ring — not a certified plane
+      } else {
+        for (let k = 1; k < n; k++) {
+          if (!dot(sub3(V[face[k]!]!, v0), N).isZero()) {
+            allFacesPlanar = false;
+            break;
+          }
+        }
+      }
     }
   }
 
@@ -194,6 +235,7 @@ export function massProperties(mesh: KernelMesh): MassProperties | null {
     discriminant: disc,
     symmetryAxis: disc.isZero(),
     volumeAmbiguity: ambig6.div(rat(6)),
+    allFacesPlanar,
     conditioning: condSum6.div(rat(6)),
   };
 }

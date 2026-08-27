@@ -141,11 +141,13 @@ describe.skipIf(!present)("kernel recipe: Python front-end produces the same IR 
     expect(census.min[2]).toBe(-1); // flat, crisp base
   });
 
-  it("rejects a runaway subdivide level (the loud ceiling)", () => {
-    const recipe = writeRecipe("def build(ctx):\n    ctx.box().subdivide(11)\n");
+  it("allows a deep subdivide level — no arbitrary level cap (infinitely scalable)", () => {
+    // A high subdivision level (5 → ~6k faces) is a legitimate ambition, not a
+    // runaway; there is no `levels` ceiling. The evaluator's work meter is the
+    // only guard, and it only trips on a genuinely explosive count.
+    const recipe = writeRecipe("def build(ctx):\n    ctx.box().subdivide(5)\n");
     const r = runRecipe(recipe, { runnerScript: RUNNER, pythonBin: PYTHON });
-    expect(r.ok).toBe(false);
-    expect(r.error).toContain("more than 10 levels");
+    expect(r.ok).toBe(true);
   });
 
   it("surfaces a recipe's contract error as a sentence, not a traceback", () => {

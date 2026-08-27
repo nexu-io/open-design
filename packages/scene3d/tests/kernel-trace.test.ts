@@ -9,6 +9,7 @@ import {
   Recorder,
   Trace,
   traceHash,
+  WorkBudgetError,
 } from "../src/kernel/trace.js";
 
 /**
@@ -26,6 +27,63 @@ const cube = (): KernelMesh =>
   );
 const keys = (m: KernelMesh): string[] =>
   m.verts.map((v: RVec3) => `${v[0].key()},${v[1].key()},${v[2].key()}`).sort();
+
+describe("kernel trace: the work meter guards runaway, not scale", () => {
+  it("builds a large legitimate asset with no arbitrary cap (a level-5 cube)", () => {
+    // ~6k faces — a smooth surface, well under the default budget. No cap on
+    // verts, faces, sides, ops, or subdivide levels refuses it.
+    const mesh = evalTrace(new Recorder().box().subdivide(5).trace());
+    expect(mesh.faces.length).toBe(6 * 4 ** 5);
+  });
+
+  it("trips the work budget on a genuine runaway — DETERMINISTICALLY, same failure twice", () => {
+    // subdivide(30) is 4^30 faces — an accidental typo, not an asset. With a small
+    // explicit budget the meter fires after a handful of cheap levels (predicted
+    // BEFORE building the explosive one, so no OOM) with a diagnostic, and the
+    // SAME op with the SAME message on every run — determinism holds for the
+    // failure too, because the meter is a pure function of the trace + budget.
+    const trace = new Recorder().box().subdivide(30).trace();
+    const budget = 200_000;
+    let first: WorkBudgetError | undefined;
+    let second: WorkBudgetError | undefined;
+    try { evalTrace(trace, { workBudget: budget }); } catch (e) { first = e as WorkBudgetError; }
+    try { evalTrace(trace, { workBudget: budget }); } catch (e) { second = e as WorkBudgetError; }
+    expect(first).toBeInstanceOf(WorkBudgetError);
+    expect(first!.opKind).toBe("subdivide");
+    expect(first!.spent).toBe(second!.spent); // same tipping point, deterministic
+    expect(first!.message).toBe(second!.message);
+  });
+
+  it("an invalid budget (NaN/Infinity/≤0) falls back to the default — the guard can't be disabled", () => {
+    // A bad budget must NOT silently switch the runaway guard off: `spent > NaN`
+    // is always false, `> Infinity` never true. A ~1600-sided face costs ~2.6M
+    // ear-clip units (over the ~2M default) so triangulate trips at the default —
+    // cheap to set up (no huge mesh built), and it must still fire for each bad
+    // budget rather than passing through unmetered.
+    const n = 1600;
+    const ring: Array<[number, number, number]> = Array.from({ length: n }, (_, k) => {
+      const a = (2 * Math.PI * k) / n;
+      return [Math.round(1000 * Math.cos(a)), Math.round(1000 * Math.sin(a)), 0];
+    });
+    const trace = new Recorder()
+      .cage(ring, [Array.from({ length: n }, (_, k) => k)])
+      .triangulate()
+      .trace();
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, 0, -100] as number[]) {
+      expect(() => evalTrace(trace, { workBudget: bad })).toThrow(WorkBudgetError);
+    }
+    // And a generous explicit budget builds the same 1600-gon fine.
+    expect(() => evalTrace(trace, { workBudget: 50_000_000 })).not.toThrow();
+  });
+
+  it("a raised budget builds what the default would refuse — a wall you can raise", () => {
+    // The budget is an INPUT, not a constant: the same trace that trips the
+    // default succeeds with a bigger budget (on a machine with the memory).
+    const trace = new Recorder().box().subdivide(6).trace(); // 6·4^6 = 24,576 faces
+    expect(() => evalTrace(trace, { workBudget: 1_000 })).toThrow(WorkBudgetError); // tiny budget refuses
+    expect(() => evalTrace(trace, { workBudget: 10_000_000 })).not.toThrow(); // raised budget builds it
+  });
+});
 
 describe("kernel trace: the recorder and the evaluator agree with the kernel", () => {
   it("box().subdivide(2) evaluates to the same exact mesh as subdivide(cube, 2)", () => {
@@ -224,9 +282,11 @@ describe("kernel trace: morph targets propagate through subdivision exactly", ()
 
   it("triangulate() composes with morph targets, keeping every shape in lockstep", () => {
     // The documented order — author the morph, subdivide, then triangulate as
-    // the final step for a provable volume. triangulate is a pure fan of the
-    // face list (positions untouched), so the base and every shape get the SAME
-    // triangulated topology with the SAME vertex count: the morph survives it.
+    // the final step for a provable volume. Ear-clipping reads vertex positions,
+    // so re-running it per morph could pick a different diagonal; evalTraceShapes
+    // instead applies the BASE's triangulation to every shape (they share vertex
+    // indexing), so the base and each morph get byte-identical triangulated
+    // topology with the same vertex count — the morph deltas survive it exactly.
     const trace = new Recorder()
       .box()
       .shape("stretch").move({ z: ["1", "1"] }, [0, 0, "1"]).endShape()

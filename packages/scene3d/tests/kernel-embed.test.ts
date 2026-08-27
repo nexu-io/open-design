@@ -204,12 +204,19 @@ describe("embeds — the whole-mesh sweep", () => {
     if (r.kind === "unchecked") expect(r.reason).toContain("collapsed");
   });
 
-  it("reports UNCHECKED for a single face over the per-face ear-clip ceiling (no throw from the sweep)", () => {
-    const big = Array.from({ length: 700 }, (_, i) => i);
-    const verts = Array.from({ length: 700 }, (_, i) => v(i, i * i, 0));
-    const r = embeds({ verts, faces: [big], vertId: verts.map((_, i) => `v${i}`) });
-    expect(r.kind).toBe("unchecked");
-    if (r.kind === "unchecked") expect(r.reason).toContain("per-face");
+  it("ear-clips a large simple polygon without a size cap (infinitely scalable)", () => {
+    // No per-face ceiling: a 700-sided convex polygon triangulates into 698
+    // triangles and embeds as a valid tiling. Large faces are allowed, not
+    // refused — the work meter, not a face-count cap, is the runaway guard.
+    const n = 700;
+    const verts = Array.from({ length: n }, (_, i) => {
+      // A regular-ish convex ring on integer-ish coordinates (exact rationals).
+      const a = (2 * Math.PI * i) / n;
+      return v(Math.round(1000 * Math.cos(a)), Math.round(1000 * Math.sin(a)), 0);
+    });
+    const face = Array.from({ length: n }, (_, i) => i);
+    const tris = triangulateFace(face, verts);
+    expect(tris.length).toBe(n - 2);
   });
 
   it("is TOTAL: an out-of-range face index yields UNCHECKED, never a thrown TypeError", () => {

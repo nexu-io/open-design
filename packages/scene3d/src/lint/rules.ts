@@ -232,10 +232,15 @@ export function runLint(input: LintInput): Issue[] {
             kernelVolumes: input.kernelPredictions.map((p) => ({
               partId: p.partId,
               volumeExact: p.census.mass ? p.census.mass.volumeExact : null,
-              // The triangulation-ambiguity band travels with the volume: a
-              // claim is a theorem about the DELIVERABLE only when it is zero
-              // (every face planar, so no exporter's diagonal changes the volume).
+              // The triangulation-ambiguity band travels with the volume as the
+              // REPORTED range; the gate for triangulation-independence is the
+              // exact planarity certificate below, never this heuristic band.
               ambiguityExact: p.census.mass ? p.census.mass.volumeAmbiguityExact : null,
+              // The EXACT certificate: the signed volume is triangulation-
+              // independent iff every face is planar. A claim is a theorem about
+              // the DELIVERABLE only when this holds — no exporter's diagonal
+              // choice can then move the volume.
+              facesPlanar: p.census.mass ? p.census.mass.facesPlanar : null,
               // The embedding verdict: signed volume equals solid volume only if
               // the surface embeds (does not self-intersect).
               embed: p.census.mass ? p.census.mass.embed : null,
