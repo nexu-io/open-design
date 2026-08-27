@@ -22,10 +22,6 @@
       "types": "./dist/contracts/index.d.ts",
       "default": "./dist/contracts/index.mjs"
     },
-    "./sidecar": {
-      "types": "./dist/integrations/sidecar/index.d.ts",
-      "default": "./dist/integrations/sidecar/index.mjs"
-    },
     "./shortcuts": {
       "types": "./dist/integrations/shortcuts/index.d.ts",
       "default": "./dist/integrations/shortcuts/index.mjs"
@@ -53,7 +49,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/sidecar": "workspace:*",
     "@open-design/standalone": "workspace:*",
     "electron-builder": "26.8.1",
     "esbuild": "0.28.0",

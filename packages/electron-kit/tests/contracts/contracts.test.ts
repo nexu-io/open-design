@@ -1,20 +1,20 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
 import {
-  ELECTRON_CLOSURE_ENDPOINTS,
-  assertElectronClosureEndpoint,
+  ELECTRON_FIXTURE_ENDPOINTS,
+  assertElectronFixtureEndpoint,
   validateElectronShellManifest,
 } from "@/contracts/index.js";
 
 const hash = "a".repeat(64);
 
-describe("Electron/Closure boundary", () => {
-  it("is finite and rejects unknown endpoints", () => {
-    expect(ELECTRON_CLOSURE_ENDPOINTS).toHaveLength(13);
-    expect(assertElectronClosureEndpoint("lifecycle.awaitReady")).toBe("lifecycle.awaitReady");
-    expect(() => assertElectronClosureEndpoint("closure.invokeAnything")).toThrow(/unknown Electron\/Closure endpoint/u);
+describe("Electron integration boundary", () => {
+  it("labels the phase-one fixture surface and rejects unknown endpoints", () => {
+    expect(ELECTRON_FIXTURE_ENDPOINTS).toHaveLength(13);
+    expect(assertElectronFixtureEndpoint("lifecycle.awaitReady")).toBe("lifecycle.awaitReady");
+    expect(() => assertElectronFixtureEndpoint("closure.invokeAnything")).toThrow(/unknown Electron fixture endpoint/u);
   });
 
   it("requires Shell identity to match the manifest", () => {
@@ -33,12 +33,19 @@ describe("Electron/Closure boundary", () => {
     }).namespace).toBe("electron-foundation");
   });
 
-  it("keeps generic Sidecar control free of product messages", async () => {
-    const source = await Promise.all([
-      readFile(new URL("../../src/integrations/sidecar/contracts.ts", import.meta.url), "utf8"),
-      readFile(new URL("../../src/integrations/sidecar/control.ts", import.meta.url), "utf8"),
-    ]).then((parts) => parts.join("\n"));
-    expect(source).toContain('@open-design/sidecar"');
-    expect(source).not.toMatch(/sidecar-proto|SIDECAR_MESSAGES|apps\/web|apps\/daemon/u);
+  it("does not publish or implement the upstream Sidecar transport", async () => {
+    const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8")) as {
+      dependencies: Record<string, string>;
+      exports: Record<string, unknown>;
+    };
+    const sourceRoot = new URL("../../src/", import.meta.url);
+    const sourceNames = (await readdir(sourceRoot, { recursive: true }))
+      .filter((name) => name.endsWith(".ts"));
+    const sources = await Promise.all(sourceNames.map((name) => readFile(new URL(name, sourceRoot), "utf8")));
+    expect(packageJson.dependencies).not.toHaveProperty("@open-design/sidecar");
+    expect(packageJson.exports).not.toHaveProperty("./sidecar");
+    for (const source of sources) {
+      expect(source).not.toMatch(/from ["'](?:@open-design\/sidecar(?:-proto)?|[^"']*apps\/closure|[^"']*tools-)/u);
+    }
   });
 });

@@ -17,10 +17,11 @@ presentation policy. `shell.json` owns the single publisher/product identity; `c
 owns install scope and uninstall data retention. electron-kit derives registry endpoints from those declarations, while this Shell
 schedules post-ready registry reconciliation. These policies are consumed only by the relevant
 runtime or pack projection; the assembled scene remains independent of distribution and release policy.
-Desktop handlers will follow the same declaration pattern after the real
-Sidecar readiness adapter lands: Shell JSON and Shell code own the finite
-message topology, normalizer, and executors, while electron-kit only owns the
-bound Sidecar control-session lease. The phase-one fixture intentionally does
+Desktop handlers land only after the Standalone logical-handoff and Sidecar
+runtime-handle contracts freeze. Shell JSON and Shell code own product
+composition, while Sidecar owns private IPC, process identity, guarded physical
+lifetime, retirement, and terminal stop. electron-kit does not publish a
+transport or control-session wrapper. The phase-one fixture intentionally does
 not publish a temporary desktop handler protocol.
 
 ```sh
@@ -47,8 +48,10 @@ the helper still waits for the Electron parent to exit before acting.
 directory build and NSIS installer on a Windows host. Its ephemeral NSIS include
 projects the shared Shell identity into App Paths and protocol registration, with
 owner-checked cleanup; it is loaded from electron-kit's packaged resources and never
-enters the release-neutral scene. The current lifecycle is
-the replaceable phase-one fixture; it does not import Closure implementation.
+enters the release-neutral scene. The current lifecycle is the replaceable
+phase-one fixture. Its `createFixturePorts` adapter and low-level endpoint
+registry are explicitly not the production contract, and it does not import
+Closure implementation.
 The standard `prepack` lifecycle intentionally points at the same Shell-owned
 `scripts/pack.mjs` shim, because pnpm reserves `pack` as a built-in command.
 `config/carriers/node-lock.json` is Shell-local but byte-for-byte aligned with Terminal's

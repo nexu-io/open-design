@@ -12,7 +12,7 @@ import {
 
 import {
   validateElectronShellManifest,
-  type ElectronClosurePorts,
+  type ElectronFixturePorts,
   type ElectronRendererLease,
   type ElectronShellDefinition,
 } from "../contracts/index.js";
@@ -157,7 +157,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   const scope: LifecycleScope = { channel: manifest.channel, namespace: manifest.namespace };
   const attachment: LifecycleAttachment = { id: `electron-${process.pid}-${randomUUID()}`, shell: manifest.shell };
   let carrier: OfficialNodeCarrierReceipt | null = null;
-  let ports: ElectronClosurePorts | null = null;
+  let ports: ElectronFixturePorts | null = null;
   let feedback: StandaloneFeedbackEmitter | null = null;
   let generation: GenerationRecord | null = null;
   let status: LifecycleStatus | null = null;
@@ -177,7 +177,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
       },
       [ELECTRON_WARMUP_ATOMS.RESOLVE_STANDALONE]: async () => {
         if (carrier == null) throw new Error("official Node carrier is unavailable");
-        ports = definition.createPorts({ runtimeRoot, sidecarEntryPath, nodeExecutablePath: carrier.executablePath });
+        ports = definition.createFixturePorts({ runtimeRoot, sidecarEntryPath, nodeExecutablePath: carrier.executablePath });
         feedback = new StandaloneFeedbackEmitter(randomUUID(), scope, ports.observeFeedback);
         updaterRevisionAtStart = (await ports.updater.readSnapshot()).revision;
         const bootstrapRequest = {
@@ -245,7 +245,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   }
   context.log.write("warmup.ready", { nodes: warmup.snapshot() });
   const runtimeCarrier = requireWarmupState(carrier as OfficialNodeCarrierReceipt | null, "the official Node carrier");
-  const runtimePorts = requireWarmupState(ports as ElectronClosurePorts | null, "Standalone ports");
+  const runtimePorts = requireWarmupState(ports as ElectronFixturePorts | null, "fixture Standalone ports");
   const runtimeGeneration = requireWarmupState(generation as GenerationRecord | null, "a Standalone generation");
   const runtimeStatus = requireWarmupState(status as LifecycleStatus | null, "Standalone readiness");
   const runtimeUpdaterRevisionAtStart = requireWarmupState(updaterRevisionAtStart as number | null, "the updater revision");

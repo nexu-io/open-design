@@ -8,7 +8,7 @@ import {
 
 export function createFixtureClosurePortsAdapter(
   manifest: ElectronShellManifest,
-): ElectronShellDefinition["createPorts"] {
+): ElectronShellDefinition["createFixturePorts"] {
   return ({ runtimeRoot, sidecarEntryPath, nodeExecutablePath }) => {
     const lifecycle = new ElectronFixtureLifecyclePort(sidecarEntryPath, nodeExecutablePath);
     const updater = new ElectronFixtureShellUpdater({

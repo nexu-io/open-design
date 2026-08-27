@@ -35,6 +35,6 @@ export function createElectronShellDefinition(): ElectronShellDefinition {
       },
       installUpdate: createInstallerHandoffAdapter(),
     }),
-    createPorts: createFixtureClosurePortsAdapter(shellManifest),
+    createFixturePorts: createFixtureClosurePortsAdapter(shellManifest),
   });
 }
