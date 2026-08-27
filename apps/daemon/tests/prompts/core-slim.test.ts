@@ -131,11 +131,21 @@ describe('renderSlimCoreCharter — frozen protocol markers', () => {
     expect(charter).toContain('place the text beside the image');
   });
 
-  it('separates the optional preview budget from final delivery exports', () => {
-    expect(charter).toContain('Render only when static code review cannot determine');
+  it('requires rendered validation for first artifacts and entirely new pages', () => {
+    expect(charter).toContain('Render, inspect, and repair new design surfaces');
+    expect(charter).toContain('must render when generating the first design artifact');
+    expect(charter).toContain('adding an entirely new page to an existing artifact');
+    expect(charter).toContain('In all other cases, render only when static code review cannot determine');
     expect(charter).toContain('`"$OD_NODE_BIN" "$OD_BIN" export <file>');
     expect(charter).toContain('Do not launch your own browser, use Playwright, or use a headless browser');
+    expect(charter).toContain('Inspect the rendered image for overlapping elements');
+    expect(charter).toContain('Fix any issue you find directly in the current files');
+    expect(charter).toContain('recheck the affected area statically without rendering again');
+    expect(charter).toContain(
+      'When a refinement adds an entirely new page, follow Artifact Design Phase → Pre-Delivery Verification step 4',
+    );
     expect(charter).toContain('An export explicitly requested by the user is a delivery action');
+    expect(charter).not.toContain('Render only when static code review cannot determine');
   });
 
   it('switches the handoff rule by execution profile', () => {

@@ -244,15 +244,18 @@ After completing the design and before delivery, perform one full check in the o
    - Check for overlapping elements, clipped or overflowing content, charts that show only outlines with no filled data encoding, and duplicate primary CTAs for the same function.
    - Inspect hover, focus, active, and other interaction states individually. Ensure that foreground and background colors are correctly paired and that text and icon contrast never decreases.
 
-4. **Inspect the rendered result only when necessary:**
-   - Render only when static code review cannot determine whether the layout overflows, elements collide, or similar visual issues are present.
+4. **Render, inspect, and repair new design surfaces:**
+   - You must render when generating the first design artifact for a new design task or when adding an entirely new page to an existing artifact. In all other cases, render only when static code review cannot determine whether the layout overflows, elements collide, or similar visual issues are present.
    - Render at most once per task using \`"$OD_NODE_BIN" "$OD_BIN" export <file> --project "$OD_PROJECT_ID" --format image --out <output-path>\`. Do not launch your own browser, use Playwright, or use a headless browser—even if rendering fails.
+   - Inspect the rendered image for overlapping elements, clipping, overflow, missing content, broken hierarchy, and other visible defects. Fix any issue you find directly in the current files, then recheck the affected area statically without rendering again.
    - Do not inspect help text or probe environment variables and paths before rendering. If the command fails, you may run at most one diagnostic. Retry only after correcting the cause.
    - If rendering still does not succeed, state that clearly and deliver based on the static verification. An export explicitly requested by the user is a delivery action and does not count against this one-render budget.
 
 ## Artifact Refinement Phase
 
 This section applies to local changes made to an existing artifact. Continue to use the locked direction and constraints by default. Repeat the Artifact Design Phase only when the user explicitly requests a full redesign or a new artifact.
+
+When a refinement adds an entirely new page, follow Artifact Design Phase → Pre-Delivery Verification step 4 after implementing it. Keep the rest of the work in this refinement phase unless the user requested a full redesign or a new artifact.
 
 ### 1. Change Only What the User Named
 
