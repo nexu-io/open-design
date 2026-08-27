@@ -35,7 +35,7 @@ describe('subChipsForChip', () => {
     expect(subChipsForChip(null, records)).toEqual([]);
   });
 
-  it('always exposes the fixed eight prototype scenes in product order', () => {
+  it('always exposes the fixed prototype scenes in product order', () => {
     const records = [
       prototypePlugin('p-dash', ['dashboard']),
       prototypePlugin('p-land', ['landing-page']),
@@ -49,7 +49,6 @@ describe('subChipsForChip', () => {
       'app-prototypes',
       'developer-tools',
       'brand-design',
-      'docs-reports',
     ]);
     const dash = result.find((s) => s.slug === 'business-dashboards');
     expect(dash?.label).toBe('Dashboards');
@@ -69,7 +68,7 @@ describe('subChipsForChip', () => {
   });
 
   it('keeps the fixed prototype hierarchy visible without installed plugins', () => {
-    expect(subChipsForChip('prototype', [])).toHaveLength(8);
+    expect(subChipsForChip('prototype', [])).toHaveLength(7);
   });
 
   it('keeps the Home prototype hierarchy independent from the dynamic plugin catalog', () => {
@@ -91,9 +90,9 @@ describe('filterPluginsBySubChip', () => {
 });
 
 describe('isSubChipParent', () => {
-  it('matches only prototype and deck', () => {
+  it('matches only prototype', () => {
     expect(isSubChipParent('prototype')).toBe(true);
-    expect(isSubChipParent('deck')).toBe(true);
+    expect(isSubChipParent('deck')).toBe(false);
     expect(isSubChipParent('image')).toBe(false);
     expect(isSubChipParent(null)).toBe(false);
   });
@@ -174,7 +173,7 @@ describe('legacyPrototypeSceneForChipId', () => {
       .filter((chip) => automaticStrategyTaskProfileForRouteId(chip.id) !== null)
       .map((chip) => chip.id)
       .sort();
-    expect(routed).toEqual(['deck', 'hyperframes', 'prototype']);
+    expect(routed).toEqual(['prototype']);
     // And a second-level scene has no id of its own to route by, so it can
     // neither claim a route nor strand its parent's.
     for (const scene of subChipsForChip('prototype', [])) {

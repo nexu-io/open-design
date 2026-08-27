@@ -204,7 +204,7 @@ describe('CommunityView catalogue source', () => {
     // Prototype leads, followed by Slides; both come from the daemon-served
     // plugin catalogue rather than a bundled demo array.
     const facets = readFacets();
-    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Image']);
+    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Image']);
 
     // The card footer reads "<type> · <sub-facet>", both resolved from the
     // shared plugins-home taxonomy. Asserted before the tab walk below, which
@@ -212,12 +212,12 @@ describe('CommunityView catalogue source', () => {
     expect(renderedCards().map((card) => card.querySelector('.community-template-card__foot span')?.textContent))
       .toEqual(['Prototype · Landing / marketing']);
 
-    expect(readFacetCardCounts()).toEqual([1, 2, 1]);
+    expect(readFacetCardCounts()).toEqual([1, 1]);
   });
 
   it('falls back to the first available type when the catalogue has no Prototype templates', async () => {
     fetchMock.mockImplementation(async () => new Response(JSON.stringify({
-      plugins: [PITCH_DECK, SALES_DECK],
+      plugins: [IMAGE_TEMPLATE],
     }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -226,18 +226,19 @@ describe('CommunityView catalogue source', () => {
     await renderCommunity();
 
     const facets = readFacets();
-    expect(facets.map((facet) => facet.label)).toEqual(['Slides']);
+    expect(facets.map((facet) => facet.label)).toEqual(['Image']);
     expect(facets[0]!.tab.classList.contains('is-active')).toBe(true);
-    expect(renderedCards()).toHaveLength(2);
+    expect(renderedCards()).toHaveLength(1);
   });
 
   it('leaves hidden and design-system plugins out of the gallery', async () => {
     await renderCommunity();
 
     // Neither plugin has a home in the artifact taxonomy, so no tab may render
-    // them — the four eligible plugins are the whole gallery.
+    // them — slide plugins are also out of the gallery after the local product
+    // cut, leaving prototype + image.
     const total = readFacetCardCounts().reduce((sum, count) => sum + count, 0);
-    expect(total).toBe(4);
+    expect(total).toBe(2);
     expect(screen.queryByText(/Airbnb/)).toBeNull();
     expect(screen.queryByText(/Hidden Utility/)).toBeNull();
   });
@@ -250,64 +251,12 @@ describe('CommunityView catalogue source', () => {
     ).map((button) => button.textContent?.trim());
     expect(pills).toEqual(['All', 'Landing / marketing']);
 
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
-    fireEvent.click(screen.getByRole('button', { name: 'B2B sales' }));
+    fireEvent.click(readFacets().find((facet) => facet.label === 'Image')!.tab);
     expect(renderedCards()).toHaveLength(1);
   });
 });
 
 describe('CommunityView previews', () => {
-  it('centres deck media in the 16:9 preview crop while legacy bakes are being replaced', async () => {
-    await renderCommunity();
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
-
-    expect(renderedCards()[0]!.querySelector('.community-template-card__preview.is-deck'))
-      .not.toBeNull();
-  });
-
-  it('shows the plugin\'s own poster on the card and its live page in the full details modal', async () => {
-    await renderCommunity();
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
-
-    // Card thumbnail: the daemon-baked poster for that plugin.
-    const thumb = renderedCards()[0]!.querySelector('img.plugins-home__media-img');
-    expect(thumb?.getAttribute('src')).toBe('https://assets.test/fundraising/poster.jpg');
-
-    // Card body → the FULL plugin details modal (飞书 recvqxDuYM6Uxk): the
-    // Use split action + Share chrome, loading the plugin's real preview
-    // endpoint — not the lightweight footer-Remix preview, which now belongs
-    // to the creation page's template chip.
-    fireEvent.click(renderedCards()[0]!);
-    await waitFor(() => {
-      expect(screen.queryByTestId('plugin-details-use-example-fundraising-deck')).not.toBeNull();
-    });
-    expect(document.querySelector('.template-share-trigger')).not.toBeNull();
-    expect(document.querySelector('.community-template-preview')).toBeNull();
-    expect(fetchMock).toHaveBeenCalledWith('/api/plugins/example-fundraising-deck/preview');
-  });
-
-  it('plays the daemon-baked clip on the card instead of freezing it into a poster', async () => {
-    // Regression: the card kept only `poster` out of the baked media spec and
-    // rendered a bare <img>, so the gallery every tile went static — the short
-    // looping screen recording the shipped gallery plays was dropped on the
-    // floor even though the daemon still attached it and the classifier still
-    // resolved it.
-    await renderCommunity();
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
-
-    const card = renderedCards()[0]!;
-    expect(card.querySelector('img.community-template-thumb__image')).toBeNull();
-
-    const video = card.querySelector('video.plugins-home__media-video');
-    expect(video).not.toBeNull();
-    expect(video!.getAttribute('src')).toBe('https://assets.test/fundraising/preview.mp4');
-    // The poster stays the first paint, so the tile never flashes empty.
-    expect(video!.getAttribute('poster')).toBe('https://assets.test/fundraising/poster.jpg');
-    // A baked clip carries `holdMs`, which is what makes the tile loop its
-    // in-place span while idle rather than waiting for hover.
-    expect(video!.getAttribute('loop')).not.toBeNull();
-  });
-
   it('leaves a still-image template on its poster, with no clip to play', async () => {
     // Only baked previews ship a clip; an image-template plugin must not grow a
     // <video> just because the tile now routes through the shared surface.
@@ -318,17 +267,6 @@ describe('CommunityView previews', () => {
     expect(card.querySelector('img.plugins-home__media-img')?.getAttribute('src'))
       .toBe('https://assets.test/poster.jpg');
     expect(card.querySelector('video')).toBeNull();
-  });
-
-  it('keeps the typographic paper thumb for records with no poster at all', async () => {
-    // The B2B deck ships an html preview and no bake, so there is no media spec
-    // to mount — that card must still fall back to the stylized paper tile.
-    await renderCommunity();
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
-
-    const card = renderedCards()[1]!;
-    expect(card.querySelector('.community-template-thumb__paper')).not.toBeNull();
-    expect(card.querySelector('.community-template-thumb__media')).toBeNull();
   });
 
   it('carries a media template\'s poster into the full details modal stage', async () => {
@@ -431,35 +369,6 @@ describe('CommunityView remix', () => {
     expect(onRemix).toHaveBeenCalledTimes(1);
   });
 
-  it('drops repeat clicks on the details modal\'s Remix menu item under the same race', async () => {
-    // The full modal's Remix menu item routes through handleTemplateAction —
-    // the same synchronous lock as the grid card — not a second,
-    // independently-racy copy of the guard. The 5 raw dispatches all land in
-    // one tick, before React commits the popover-close state update, so every
-    // handler invocation really runs (see the rapid-click note above).
-    const onRemix = vi.fn();
-    await renderCommunity({ onRemixTemplate: onRemix });
-    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
-
-    fireEvent.click(renderedCards()[0]!);
-    await waitFor(() => {
-      expect(screen.queryByTestId('plugin-details-use-example-fundraising-deck-menu')).not.toBeNull();
-    });
-    fireEvent.click(screen.getByTestId('plugin-details-use-example-fundraising-deck-menu'));
-    const remixItem = await screen.findByTestId('plugin-details-duplicate-example-fundraising-deck');
-
-    for (let i = 0; i < 5; i += 1) {
-      remixItem.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    }
-
-    await waitFor(() => expect(onRemix).toHaveBeenCalled());
-    expect(onRemix).toHaveBeenCalledTimes(1);
-    expect(onRemix.mock.calls[0]![0]).toEqual({
-      templateId: 'example-fundraising-deck',
-      prompt: 'A decision-grade seed round narrative.',
-    });
-  });
-
   it('still fires on a single, ordinary click (the fix must not swallow real clicks)', async () => {
     const onRemix = vi.fn();
     await renderCommunity({ onRemixTemplate: onRemix });
@@ -539,6 +448,6 @@ describe('CommunityView facet counts', () => {
 
     const renderedTotal = readFacetCardCounts().reduce((sum, count) => sum + count, 0);
 
-    expect(renderedTotal).toBe(4);
+    expect(renderedTotal).toBe(2);
   });
 });

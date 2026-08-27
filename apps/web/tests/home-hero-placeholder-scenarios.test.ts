@@ -42,7 +42,7 @@ describe('PLACEHOLDER_SCENARIO_DEFS bindings', () => {
   it('only binds create templates that actually render a carousel', () => {
     // These are the templates with hand-curated carousel lines. Other templates
     // can still render a carousel through prompt-example or label fallbacks.
-    const SUPPORTED = new Set(['document', 'deck', 'prototype', 'hyperframes']);
+    const SUPPORTED = new Set(['prototype']);
     const used = new Set(PLACEHOLDER_SCENARIO_DEFS.map((d) => d.chipId));
     for (const chipId of used) {
       expect(SUPPORTED.has(chipId), `chipId "${chipId}" is not a carousel template`).toBe(true);
@@ -126,40 +126,40 @@ describe('buildPlaceholderScenarios', () => {
 
   it('uses prompt examples as selected-chip carousel scenarios when no curated scenario exists', () => {
     const scenarios = buildPlaceholderScenarios({
-      activeChipId: 'audio',
+      activeChipId: 'image',
       resolveTextKey: (key) => en[key],
       examplesForChip: (chipId) => (
-        chipId === 'audio'
-          ? ['Generate a product startup sound']
+        chipId === 'image'
+          ? ['Create a product poster']
           : []
       ),
     });
 
     expect(scenarios).toEqual([
       {
-        id: 'audio-prompt-example-1',
-        chipId: 'audio',
-        text: 'Generate a product startup sound',
+        id: 'image-prompt-example-1',
+        chipId: 'image',
+        text: 'Create a product poster',
       },
     ]);
   });
 
   it('creates a submittable selected-chip fallback when neither curated scenarios nor prompt examples exist', () => {
     const scenarios = buildPlaceholderScenarios({
-      activeChipId: 'live-artifact',
+      activeChipId: 'image',
       resolveTextKey: (key) => en[key],
       fallbackForChip: (chipId) => (
-        chipId === 'live-artifact'
-          ? 'Create a Live artifact: Data-backed live dashboards'
+        chipId === 'image'
+          ? 'Create an Image: Posters, graphics & art'
           : null
       ),
     });
 
     expect(scenarios).toEqual([
       {
-        id: 'live-artifact-fallback',
-        chipId: 'live-artifact',
-        text: 'Create a Live artifact: Data-backed live dashboards',
+        id: 'image-fallback',
+        chipId: 'image',
+        text: 'Create an Image: Posters, graphics & art',
       },
     ]);
   });

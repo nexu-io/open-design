@@ -1060,21 +1060,24 @@ const COMMUNITY_PAGE_PRESETS: ProjectPagePreset[] = [
   },
 ];
 
-const PROJECT_PAGE_PRESETS: ProjectPagePreset[] = [
-  ...BLANK_PAGE_PRESETS,
-  ...COMMUNITY_PAGE_PRESETS,
-];
-const PROJECT_PAGE_CATEGORY_ORDER: ProjectPageCategoryId[] = [
-  'prototype',
-  'liveArtifact',
+const PAGE_CREATOR_HIDDEN_CATEGORIES = new Set<ProjectPageKind>([
   'slides',
-  'wireframe',
-  'mobile',
   'document',
   'image',
   'video',
   'hyperframes',
   'audio',
+  'liveArtifact',
+]);
+const PROJECT_PAGE_PRESETS: ProjectPagePreset[] = [
+  ...BLANK_PAGE_PRESETS,
+  ...COMMUNITY_PAGE_PRESETS,
+].filter((preset) => !PAGE_CREATOR_HIDDEN_CATEGORIES.has(preset.category));
+const PROJECT_PAGE_CATEGORY_ORDER: ProjectPageCategoryId[] = [
+  'prototype',
+  'wireframe',
+  'mobile',
+  'image',
 ];
 const COMMUNITY_PLUGIN_CHIP_TO_PAGE_KIND: Record<string, ProjectPageKind> = {
   prototype: 'prototype',
@@ -1092,18 +1095,11 @@ const PROJECT_PAGE_CATEGORIES: Array<{
   icon: IconName;
   labelKey: keyof Dict;
 }> = [
-  { id: 'slides', icon: 'present', labelKey: 'homeHero.chip.deck' },
   { id: 'prototype', icon: 'layout', labelKey: 'homeHero.chip.prototype' },
   { id: 'wireframe', icon: 'grid', labelKey: 'homeHero.chip.wireframe' },
   { id: 'mobile', icon: 'smartphone', labelKey: 'homeHero.chip.mobile' },
-  { id: 'document', icon: 'file-text', labelKey: 'homeHero.chip.document' },
   { id: 'image', icon: 'image', labelKey: 'homeHero.chip.image' },
-  { id: 'video', icon: 'play', labelKey: 'homeHero.chip.video' },
-  { id: 'hyperframes', icon: 'sparkles', labelKey: 'homeHero.chip.hyperframes' },
-  { id: 'audio', icon: 'volume', labelKey: 'homeHero.chip.audio' },
-  { id: 'liveArtifact', icon: 'kanban', labelKey: 'homeHero.chip.liveArtifact' },
 ];
-const PAGE_CREATOR_HIDDEN_CATEGORIES = new Set<ProjectPageKind>(['image', 'video', 'audio']);
 const PAGE_CREATOR_CATEGORIES = PROJECT_PAGE_CATEGORIES.filter((item) =>
   pageCreatorCategoryVisible(item.id),
 );

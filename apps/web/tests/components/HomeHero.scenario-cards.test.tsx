@@ -88,24 +88,17 @@ describe('HomeHero scenario cards', () => {
       screen.getByTestId('home-hero-template-wedge-prototype').getAttribute('aria-label'),
     ).toContain('Prototype');
     expect(
-      screen.getByTestId('home-hero-template-wedge-deck').getAttribute('aria-label'),
-    ).toContain('Slide deck');
+      screen.getByTestId('home-hero-template-wedge-image').getAttribute('aria-label'),
+    ).toContain('Image');
   });
 
-  it('uses the fixed ten-item Home creation hierarchy in product order', () => {
+  it('uses the trimmed Home creation hierarchy in product order', () => {
     const ordered = orderedCreateChips();
     const ids = ordered.map((chip) => chip.id);
     expect(ids).toEqual([
       'prototype',
-      'deck',
       'image',
-      'document',
-      'hyperframes',
       'web-clone',
-      'video',
-      'audio',
-      'live-artifact',
-      'webgl',
     ]);
     expect(ids).not.toContain('wireframe');
     expect(ids).not.toContain('mobile');
@@ -116,7 +109,13 @@ describe('HomeHero scenario cards', () => {
     openTemplatePicker();
     expect(screen.queryByTestId('home-hero-template-wedge-wireframe')).toBeNull();
     expect(screen.queryByTestId('home-hero-template-wedge-mobile')).toBeNull();
-    expect(screen.getByTestId('home-hero-template-wedge-document')).toBeTruthy();
+    expect(screen.queryByTestId('home-hero-template-wedge-document')).toBeNull();
+    expect(screen.queryByTestId('home-hero-template-wedge-deck')).toBeNull();
+    expect(screen.queryByTestId('home-hero-template-wedge-video')).toBeNull();
+    expect(screen.queryByTestId('home-hero-template-wedge-audio')).toBeNull();
+    expect(screen.queryByTestId('home-hero-template-wedge-hyperframes')).toBeNull();
+    expect(screen.queryByTestId('home-hero-template-wedge-live-artifact')).toBeNull();
+    expect(screen.queryByTestId('home-hero-template-wedge-webgl')).toBeNull();
     // They are scenes, so they have no catalog entry at all — what makes them
     // executable is the Prototype chip's action plus their own refinement.
     expect(findChip('wireframe')).toBeUndefined();
@@ -131,10 +130,8 @@ describe('HomeHero scenario cards', () => {
     expect(
       prototypeSceneProjectMetadata(prototypeChip, prototypeSubChipForSlug('wireframe')),
     ).toEqual({ kind: 'prototype', fidelity: 'wireframe' });
-    expect(findChip('document')?.action).toMatchObject({
-      pluginId: 'od-new-generation',
-      projectKind: 'other',
-    });
+    expect(findChip('document')).toBeUndefined();
+    expect(findChip('deck')).toBeUndefined();
   });
 
   it('keeps empty carousel scenario submit disabled while plugins are loading', async () => {

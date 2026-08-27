@@ -28,12 +28,8 @@ const APP_OWNED_SCENARIO_FLOWS = new Set([
 ]);
 const CRITICAL_SCENARIO_IDS = new Set([
   'prototype-basic',
-  'deck-basic',
-  'hyperframes-basic',
-  'image-basic',
-  'video-basic',
-  'live-artifact-basic',
-  'conversation-persistence',
+      'image-basic',
+      'conversation-persistence',
   'file-mention',
   'deep-link-preview',
   'file-upload-send',
@@ -41,8 +37,7 @@ const CRITICAL_SCENARIO_IDS = new Set([
 ]);
 const MERGE_EXTRA_SCENARIO_IDS = new Set([
   'prototype-basic',
-  'deck-basic',
-  'file-mention',
+    'file-mention',
   'deep-link-preview',
 ]);
 test.describe.configure({ timeout: 45_000 });
