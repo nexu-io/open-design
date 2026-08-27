@@ -10,8 +10,8 @@ You are the fabricator. The shop floor is a compiler.
 Decide what the piece should **be** — silhouette, material story, true
 scale in metres, one light idea — and write that as source. The compiler
 builds it through headless Blender, photographs it, measures every part,
-and sends back a letter from the bench. Facts arrive; you refine against
-them. Treat the example below as **grammar, never vocabulary**: derive
+and sends back a letter from the shop floor. Facts arrive; you refine
+against them. Treat the example below as **grammar, never vocabulary**: derive
 every shape, name, and proportion from the brief.
 
 ## The loop
@@ -70,30 +70,30 @@ does the arithmetic; claims are re-checked against the *built* artifact
 on every compile. Ids: `[A-Za-z][A-Za-z0-9_]{2,63}` (`prp_`, `mtl_`);
 shader names are stricter — `shd_` then lower_snake (`shd_rust`, never
 camelCase). Shapes: `box`, `cylinder`, `sphere`, `cone` (+`tip`), `torus`,
-`wedge`, `tube`, `capsule` — or fill a box with `"file": "asset.glb"`
-or `"script": "hull.py"`. Relations: `at`, `sits_on`, `above`, `align`,
+`wedge`, `tube`, `capsule` — or fill a box with `"file": "asset.glb"`,
+`"script": "hull.py"`, or `"recipe": "hull.py"` for exact, provable
+kernel geometry. Relations: `at`, `sits_on`, `above`, `align`,
 `inset_from`, `span`, `repeat`, `scatter`, `around`, plus per-part
-`rotate`, `spin`, `bob`, `screw`. GPU materials are a `.glsl`
-`vec4 kernel(vec2 uv)` plus a `shaders` block (`baseColor` is `kernel`;
-any other output gets its own `kernel_<output>`); `"frames": 16` bakes a
-flipbook. Kernels use the integer-hash noise stdlib — `s3d_hash21`,
-`s3d_hash22`, `s3d_vnoise`, `s3d_fbm`, `s3d_voronoi`, plus seamless
-`_tiled` variants for anything that repeats — those take a second
-period argument matching your pre-scale, `s3d_fbm_tiled(uv * 6.0,
-vec2(6.0))`, same number both places — never hand-rolled
-`fract(sin(...))`, which renders
-differently per GPU driver; a `frames` kernel animates from
-`uS3dTime` ∈ [0, 1). A part that is *meant* to float or bed while the
-scene claims `grounded` goes in `conventions.grounding.exempt` — a
-contract key, in scene3d.json like all `conventions.*`. Keys beginning
-`//` are margin notes, ignored by every unknown-key check in both
-files. In
-**scene3d.json** (the contract, beside scene.json — never in
-scene.json itself): `"target": "voxel"` / `"minecraft"` moves the same
-language onto the pixel grid, and 2D sheets are declared like
-`"sheets": [{ "file": "flame.png", "kind": "flipbook", "grid": [4, 4] }]`
-— kinds are `sprite`, `flipbook`, `particle`, `beam`, and `sky`
-(a skybox is six `sky` faces, `ft bk up dn lf rt`).
+`rotate`, `spin`, `bob`, `screw`.
+
+GPU materials are a `.glsl` `vec4 kernel(vec2 uv)` plus a `shaders` block
+(`baseColor` is `kernel`; any other output gets its own `kernel_<output>`);
+`"frames": 16` bakes a flipbook, animating from `uS3dTime` ∈ [0, 1). Noise
+comes from the integer-hash stdlib — `s3d_hash21`, `s3d_hash22`,
+`s3d_vnoise`, `s3d_fbm`, `s3d_voronoi` — identical on every GPU (hand-rolled
+`fract(sin(...))` is not). Anything that repeats wants the seamless `_tiled`
+variants, which take a second period argument equal to your pre-scale:
+`s3d_fbm_tiled(uv * 6.0, vec2(6.0))` — same number both places.
+
+`scene3d.json` — the contract beside `scene.json`, never inside it — holds
+everything `conventions.*`. A part *meant* to float or bed while the scene
+claims `grounded` goes in `conventions.grounding.exempt`. `"target":
+"voxel"` / `"minecraft"` moves the same language onto the pixel grid. 2D
+sheets are declared like `"sheets": [{ "file": "flame.png", "kind":
+"flipbook", "grid": [4, 4] }]` — kinds `sprite`, `flipbook`, `particle`,
+`beam`, `sky` (a skybox is six `sky` faces, `ft bk up dn lf rt`). Keys
+beginning `//` are margin notes in both files, ignored by every unknown-key
+check.
 
 ## The compiler teaches you the rest
 
@@ -108,23 +108,47 @@ is measuring the current build:
   contract knob when the rule is tunable, and `data:` carries the
   measured numbers. You never need a rule catalogue.
 - **The report carries its own map** — a `read:` block naming every
-  diagnostic on disk (`out/ortho.svg` dimensioned drawings,
+  diagnostic on disk for THIS compile (`out/contact.png` the labelled
+  contact sheet, `out/ortho.svg` dimensioned drawings,
   `out/digest.md` census prose, `out/read-model.json`), and clean
   compiles close with a `next:`/`tip:` line matched to where the loop
-  stands, when one applies. Follow them; they are cheaper than
+  stands. Follow them; they are cheaper than
   re-deriving the state of the world.
-- **You are never actually blind to the shot.** Open the proof PNGs if
-  you can read images; pass `--frames` if you cannot and the frames
-  arrive as ASCII luminance ramps sampled around the orbit. Every proof
-  also writes per-material lit-sphere previews to `out/materials/` —
-  judge emission and alpha there before paying for a turntable.
+- **You are never actually blind to the shot.** In order: `out/contact.png`
+  — every proof frame on one labelled page, each cell carrying its compass
+  name and azimuth, an axis gnomon, and a numbered badge per part keyed to
+  a legend; then the loose frames at `out/proof/proof-<24 hex>-NNN.png`
+  (the hash changes every compile, so read the pattern off the report
+  rather than guessing); then `--frames` if you cannot read images at all,
+  which returns the orbit as ASCII luminance ramps. The report also prints
+  `orbit:` and `badges:` lines carrying the same facts as text. A **full**
+  compile's proof additionally writes per-material lit-sphere previews to
+  `out/materials/` — judge emission and alpha there. `--fast` photographs
+  nothing, so it writes none of them.
+
+## Orientation
+
+The frame every coordinate and every proof frame lives in:
+
+- **`scene.json` authors in a Z-UP world.** Height is Z, parts rest on
+  `z = 0`, `size` is `[width, depth, height]`.
+- **`conventions.units.upAxis` in `scene3d.json` is an export/target fact,
+  not the authoring frame** — it never changes what Z means in your
+  source. Same for `tweaks.json`, which is in the viewer's Y-up.
+- **Turntable frame `N` is shot from azimuth `N × 360/count`, elevated
+  30°.** Azimuth `0` is the front — camera on `-Y`, Blender's numpad-1 —
+  increasing toward `+X`. With the default 8 steps (16 when animated) the
+  orbit runs `0` front, `1` front-right, `2` right, `3` back-right, `4`
+  back, `5` back-left, `6` left, `7` front-left.
 
 ## Reading the letter
 
 1. `ok` and the counts — errors first; info is a hint, not a gate.
 2. `scale:` — catch unit slips before trusting any render.
 3. Solved boxes — placement you can read without a viewport.
-4. `out/ortho.svg` after every structural change — a 2-second look
+4. `out/contact.png` — the whole orbit on one labelled page, so you know
+   which frame is which side before you judge any of them.
+5. `out/ortho.svg` after every structural change — a 2-second look
    catches proportion and overlap mistakes the turntable hides.
 
 Fix the source, compile again; do not argue with the measurement. The

@@ -57,8 +57,8 @@ You are the fabricator. The shop floor is a compiler.
 Decide what the piece should **be**: its silhouette, its material story,
 its true scale, the one idea the light will carry. Write that as source.
 The compiler builds it through headless Blender, lights it, photographs
-it, measures every part, and sends back a letter from the bench. Nothing
-ships on eyeballs and hope. Facts arrive. You refine against them. The
+it, measures every part, and sends back a letter from the shop floor.
+Nothing ships on eyeballs and hope. Facts arrive. You refine against them. The
 piece gets better because you can see.
 
 That freedom is the point. The pipeline carries the physics so your
@@ -89,7 +89,7 @@ Inside Open Design:
 
 While the structure is still moving, stay on the fast gear: parse, build,
 lint, manifest. No photographs, no export — a full compile spends seconds
-of proof on findings these stages already produce, and the manifest rides
+photographing what these stages already told you, and the manifest rides
 along free so `scene3d manifest --json` never reads stale:
 
 ```bash
@@ -98,18 +98,14 @@ along free so `scene3d manifest --json` never reads stale:
   --fast --agent-message
 ```
 
-Choose requested deliverables in the contract's `export.formats` policy. You
-write geometry and materials; the compiler owns how each requested container
-is produced, validated, and lowered.
-
 A compile that finds errors is still a successful run. The report tells
 you what the bench saw; read it, change the source, go again.
 
 You start every run blind, and the harness is built for that: misspelled
 keys come back with `did you mean …?`, tunable warnings name their exact
 contract knob in the `fix:` line, and the report carries a `read:` block
-naming every diagnostic on disk — with clean compiles closing on a
-`next:` step matched to where the loop stands, when one applies. When any message and this
+naming every diagnostic on disk; a clean compile closes with a `next:` step
+matched to where the loop stands. When any message and this
 document disagree, trust the message — it is measuring the build in
 front of you; this page is memory.
 
@@ -124,14 +120,14 @@ them.
 | **Scene** | Several props in conversation — `repeat`, `scatter`, stacking | Path-addressed scatter that does not reshuffle when you add a part; derived camera that always contains the subject |
 | **Downloaded asset** | A scene dir of `.glb`/`.gltf`/`.obj`/`.fbx`, *or* a `file:` part inside a declared box | Imports, frames, measures, repackages. `material:` on a `file` part reskins it wholesale |
 | **Freeform shape** | `"script": "hull.py"` with `def build(ctx)` creating exactly one mesh | First-class procedural authoring path; fits that mesh into the declared box like any other part, so relations still work |
-| **Kernel recipe** | `"recipe": "hull.py"` with `def build(ctx)` recording `ctx.box/cage/subdivide/crease/extrude/inset/scale/mirror/triangulate` | Deterministic exact-rational geometry (Catmull-Clark and more); the compiler predicts the built census and adjudicates it (`S3D-E-702`), and can prove an exact `volume`. Smooth, count-provable, cross-machine identical |
+| **Kernel recipe** | `"recipe": "hull.py"` with `def build(ctx)` recording `ctx.box/cage/subdivide/mirror/move/crease/scale/extrude/inset/clip/triangulate` | Deterministic exact-rational geometry — Catmull-Clark for curved form, plane cuts (`clip`) that chamfer or carve; the compiler predicts the built census and adjudicates it (`S3D-E-702`), and can prove an exact `volume`. Smooth or knife-edged, count-provable, cross-machine identical |
 | **GPU material** | A `.glsl` kernel `vec4 kernel(vec2 uv)` plus a `shaders` block | Bakes textures (even a height field → normal map), wires them, shows them in the proof and the GLB |
-| **Motion (current subset)** | Per-part `spin` / `bob` / `screw` | Owns the keyframes, loops them, derives an animation asset, keeps clips on imported rigs; richer timelines and deformation systems are future language work |
+| **Motion** | Per-part `spin` / `bob` / `screw` | Owns the keyframes, loops them, derives an animation asset, keeps clips on imported rigs; richer timelines and deformation systems are future language work |
 | **Sprite / flipbook / VFX / sky** | A sheet file, *or* a kernel with `"frames": 16` | Measures the atlas (grid, bleed, seams, motion). A frames kernel *is* a sheet, so materials do not bind it |
 | **Voxel / Minecraft** | Same language, on the pixel grid; or drop a Blockbench `.bbmodel` / Java `model.json` | Snaps `repeat`/`scatter` to the grid, warns about format facts, emits the JSON the game loads |
 
 You are not limited to "a crate in Blender". If the brief is a flame
-atlas, a sky cube, a rusted helmet, or a golem the game can wear, that
+atlas, a sky cube, a rusted helmet, or a golem the game can animate, that
 is this shop.
 
 ## Design before fabrication
@@ -153,7 +149,7 @@ Then write.
 
 ## Two disciplines
 
-The compiler has two postures. Everything beyond them is the brief's
+The compiler holds two disciplines. Everything beyond them is the brief's
 taste alone.
 
 **Continuous (default).** Hard-surface, organic-enough primitives, real
@@ -201,10 +197,11 @@ scenes/<name>/
 └── out/             # the product, after a compile
 ```
 
-`scene.json` is the default structured source. In the current alpha, one
-authority per directory means `scene.json` and `build.py` together are two
-sources claiming the same geometry; this source-ownership rule does not make
-the freeform Python path second-class.
+`scene.json` is the default structured source, and each directory has one
+authority: `scene.json` and `build.py` side by side are two sources claiming
+the same geometry, so the compiler refuses the pair rather than silently
+picking a winner. Neither path outranks the other — the rule only asks that
+one of them own the scene.
 
 Other legal entry points, when they *are* the job:
 
@@ -215,6 +212,29 @@ Other legal entry points, when they *are* the job:
   topology, custom staging, or any construction that is clearest in Python.
   Factory-reset first; you build the whole scene, including
   camera and light.
+
+## Orientation
+
+Read this before you type a coordinate. It is the frame every `size`,
+`center`, `axis` and proof frame is expressed in.
+
+- **`scene.json` authors in a Z-UP world.** Height is Z. Parts rest on
+  `z = 0`. `size: [x, y, z]` is width, depth, height — a standing mast is
+  tall in its third component.
+- **`conventions.units.upAxis` in `scene3d.json` is an export/target fact,
+  not the authoring frame.** It says how the shipped file is written for a
+  downstream engine. It never changes what Z means in `scene.json`.
+- **Turntable frame `N` is photographed from azimuth `N × 360/count`,
+  elevated 30°.** Azimuth `0` is the **front** — camera on `-Y`, Blender's
+  numpad-1 view — and azimuth increases toward `+X`. Default steps is 8
+  (16 when the scene animates), so the orbit reads:
+
+| Frame | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| View | front | front-right | right | back-right | back | back-left | left | front-left |
+
+So the face you want met first points at `-Y`, and a part at `+X` appears
+on the right in frame 0.
 
 ## The language
 
@@ -315,30 +335,44 @@ Fill the box another way:
   reports its own line number with this contract restated, and a
   missing script file is a parse error before Blender ever runs.
 - `"recipe": "hull.py"`: `def build(ctx):` that RECORDS a deterministic
-  kernel trace instead of building geometry — `ctx.box(half=1)` or
-  `ctx.cage(points, faces)` to seed, then `ctx.subdivide(levels)` (exact
-  Catmull-Clark), `ctx.mirror(axis)` (0=x/1=y/2=z), `ctx.move(region,
-  offset)` (translate a coordinate region — taper/stretch/asymmetry), and
-  `ctx.crease(region)` (mark the edges inside a region sharp so subdivision
-  keeps them crisp — a flat base, a hard rim), `ctx.scale(region, factor,
-  pivot)` (taper/bulge a region about a pivot), and `ctx.extrude(region,
-  offset)` (grow the faces inside a region outward by an offset vector — a
-  bump, boss or socket; the offset is a rational vector, not a normal
-  distance, so it stays exact), and `ctx.inset(region, factor)` (shrink each
-  face in a region to an inner panel ringed to its border — a frame, a recess;
-  factor in (0,1)), and `ctx.triangulate()` (fan every face into planar
-  triangles — the opt-in that makes a `volume` claim provable on a curved or
-  subdivided mesh, at the cost of quad editability; use it as the last step),
-  chained fluently. A `region`
-  is a dict of axis → `[min, max]` inclusive bounds (`{"z": ["1", "1"]}` is
-  exactly the plane z=1; `{}` is everything); `move`/`scale`/`crease` are
-  topology-preserving, while `extrude`/`inset` add geometry — all exact.
-  MORPH TARGETS (blendshapes): `ctx.shape("name")` … `ctx.end_shape()` records
+  kernel trace instead of building geometry. Seed with `ctx.box(half=1)` or
+  `ctx.cage(points, faces)`, then chain fluently:
+    - `ctx.subdivide(levels)` — exact Catmull-Clark. Smooth form.
+    - `ctx.mirror(axis)` — 0=x/1=y/2=z. For OPEN half-shells (build half,
+      mirror to close), not a closed solid.
+    - `ctx.move(region, offset)` — translate a coordinate region: taper,
+      stretch, asymmetry.
+    - `ctx.crease(region)` — mark the edges inside a region sharp so
+      subdivision keeps them crisp: a flat base, a hard rim.
+    - `ctx.scale(region, factor, pivot)` — taper or bulge a region about a
+      pivot.
+    - `ctx.extrude(region, offset)` — grow the faces in a region outward by an
+      offset vector: a bump, a boss, a socket. The offset is a rational
+      vector, not a normal distance, so it stays exact.
+    - `ctx.inset(region, factor)` — shrink each face in a region to an inner
+      panel ringed to its border: a frame, a recess. Factor in (0, 1).
+    - `ctx.clip(normal, d)` — cut the mesh by a plane, keeping the half-space
+      `normal·x ≤ d` and capping the cut watertight: a chamfer, a bevel, a
+      flat facet, or a chain of clips carving the solid against a convex tool.
+      The cap welds with no seam — the crossing is exact — and because a plane
+      through a planar face leaves it planar, a clipped box keeps a provable
+      `volume` with no `triangulate`.
+    - `ctx.triangulate()` — fan every face into planar triangles, as the LAST
+      step: the opt-in that makes a `volume` claim provable on a curved or
+      subdivided mesh, at the cost of quad editability.
+
+  A `region` is a dict of axis → `[min, max]` inclusive bounds (`{"z": ["1",
+  "1"]}` is exactly the plane z=1; `{}` is everything). `move`/`scale`/`crease`
+  are topology-preserving, `extrude`/`inset` add geometry, and `clip` removes
+  it — all exact.
+
+  Morph targets (blendshapes): `ctx.shape("name")` … `ctx.end_shape()` records
   a named variant — deform the base with `move`/`scale` only inside the
   bracket, and it becomes a Blender shape key; because subdivision is linear a
   delta authored on the cage lands on the subdivided surface exactly. Author
   the shape BEFORE the `subdivide` to move tens of cage vertices instead of
   thousands.
+
   Coordinates are ints, rational strings (`"1/2"`) or `fractions.Fraction`
   — never floats. It runs in plain CPython (no `bpy`), so ordinary loops
   and helpers are fine; the compiler evaluates the trace in exact rationals,
@@ -347,8 +381,7 @@ Fill the box another way:
   Blender (`S3D-E-702` if they ever disagree). Reach for `recipe:` over
   `script:` when you want smooth/organic form that is deterministic across
   machines and count-provable (a rounded hull, a mirror-exact shell); reach
-  for `script:` when you need arbitrary `bpy`. `mirror` is for OPEN
-  half-shells (build half, mirror to close), not a closed solid.
+  for `script:` when you need arbitrary `bpy`.
 
 **Roles.** `role` on a part names its job — `hero`, `character`, `prop`,
 `background`, or `decor` — and the intent judge budgets triangle share
@@ -368,7 +401,7 @@ scene needs at least one `at`.
 | Relation | Meaning |
 |---|---|
 | `at` | absolute anchor |
-| `sits_on` (`embed`, `axis`) | rest on top, sunk so faces overlap; takes the support's x/y unless something else speaks. `axis` (default `z`) is the direction "on top of" means — any other axis is an ATTACHMENT (a pommel capping a Y-up grip): same face-to-face placement and the support's x/y still fill in as usual, but it says nothing about gravity, records no resting support, and leaves z open — give the part a z of its own (an `align` on z, or a real `sits_on`) |
+| `sits_on` (`embed`, `axis`) | rest on top, sunk so faces overlap; takes the support's x/y unless something else speaks |
 | `above` (`clearance`, `axis`) | float past a part with a measured gap, along `axis` (default z) |
 | `align` (`axes`) | centre on another part along named axes |
 | `inset_from` (`faces`, `by`) | pull named faces in from a reference; it only insets |
@@ -376,6 +409,12 @@ scene needs at least one `at`.
 | `repeat` (`count`, `along`, `every`) | array at a centre-to-centre pitch; two repeats compose a grid |
 | `scatter` (`on`, `count`, `seed`, `minGap`, `sizeJitter`) | owns the part's whole placement; deterministic; a region too small fails loudly |
 | `around` (`center`, `radius`, `count`, `axis`, `startDeg`, `orient`) | ring `count` instances evenly about another part's centre; `orient: true` turns each one to face its own angle |
+
+`sits_on` with a non-z `axis` is an ATTACHMENT, not a resting — a pommel
+capping a Y-up grip. The face-to-face placement is the same and the
+support's x/y still fill in, but it says nothing about gravity, records no
+resting support, and leaves z open: give the part a z of its own, an
+`align` on z or a real `sits_on`.
 
 `around` owns the part's placement in the circle's PLANE and nothing
 else — the coordinate along the circle's normal still comes from the
@@ -443,12 +482,13 @@ measured truth; the report echoes a ledger (`claims: 7/7 held`, with a
 margin line saying how close the tightest one ran), and the ledger only
 counts what was actually adjudicated — a compile whose build never ran
 reports `0/7 checked`, never "held". Spatial claims are judged across
-TIME with an interval calculus: sampled frames prove failures, the
-closed-form swept envelope of compiler-owned motion proves failures
-(a fast spin's corner sweep is exact for boxes — integer-frame samples
-that never land on 45° cannot save it) and proves passes (an envelope
-inside the bound suppresses the stride caveat), and a conservative
-bound over the claim is reported as UNPROVEN rather than either.
+TIME with an interval calculus: sampled frames can prove a failure; the
+closed-form swept envelope of compiler-owned motion can prove either
+verdict — failure (a fast spin's corner sweep is exact for boxes;
+integer-frame samples that never land on 45° cannot save it) or pass (an
+envelope inside the bound retires the stride caveat); and when the
+calculus can only bound the claim, it reports UNPROVEN rather than
+guessing either way.
 
 **`volume`** is the exact physics claim: an EXACT RATIONAL string (`"4/3"`,
 `"297412448/475021263"` — never a float) asserting the total enclosed volume,
@@ -504,9 +544,9 @@ vec4 kernel(vec2 uv) {
 
 The shader is declared with `kernel:` (a scene-relative `.glsl` path),
 never `file:` — `file:` is for real mesh assets on a part. Uniforms are
-`uCamelCase`, used bare — do not write your own `uniform` declaration,
-the compiler injects one from the `uniforms` block and a hand-written
-one either collides or silently does nothing. Floats need a decimal
+`uCamelCase`, used bare — the compiler injects the declaration from the
+`uniforms` block, so a hand-written one either collides or silently does
+nothing. Floats need a decimal
 point. Helper functions are legal if defined before use. Leave out
 `#version`, `main()`, and samplers too; the wrapper owns the scaffolding.
 
@@ -639,7 +679,13 @@ sections fall back to defaults. A working continuous contract:
 
 Iterate lighting cheap (`resolution: 256`, `turntableSteps: 1`), restore
 for the final pass. `proof.background` lives here, never in world-node
-graph code.
+graph code. The `turntableSteps: 6` above is this example narrowing the
+default, not the norm: the default is 8 (16 when the scene animates), the
+contract accepts 1–360, and the HTTP route rejects anything above 64.
+
+`conventions.units.upAxis` is the EXPORT target's frame — how the shipped
+file is written for a downstream engine. It does not change what Z means
+in `scene.json`, which is always Z-up (see Orientation).
 
 Knobs that get mistyped in the field — the exact nesting, not the
 flattened key you might guess: `conventions.grounding.exempt` (part
@@ -690,7 +736,9 @@ ask for `--agent-message` when you are the one reading the result.
 | `scene3d compile --no-cache --agent-message` | You changed compiler-adjacent things, or the cache is lying. |
 | `scene3d compile --fail-on warning` | Final pass: warnings count. |
 | `scene3d compile --json` | Scripting. Pipe `.issues[].code`. |
+| `scene3d compile --frames --agent-message` | You cannot read images: frames arrive as ASCII ramps. |
 | `scene3d compile --no-turntable` | One still instead of an orbit. |
+| `scene3d compile --respect-scene-camera` | One still through the camera the SCENE places. No compass name is claimed for it. |
 | `scene3d manifest --json` | Last compile, no Blender. |
 | `scene3d tweaks --json` | Read the user's bench. |
 | `scene3d tweaks --set '<json>' --merge` | Write or compose edits. |
@@ -762,11 +810,22 @@ How to read it. This is the whole method:
    sparse, blown, static), and always before you call the piece done. A
    structurally perfect scene can still photograph black. For a ~1 m
    prop, a key AREA light around 50–80 W gives visible falloff; if the
-   frames blow out, quarter the energy. If you can read images, open the
-   proof PNGs directly; if you cannot, pass `--frames` (or `"frames":
-   true` on the API) to get the frames rendered as ASCII luminance ramps
-   right inside the report, sampled around the orbit — you are never
-   actually blind to the shot.
+   frames blow out, quarter the energy. Read them in this order:
+   - **`out/contact.png` first** if you can read images. Every proof frame
+     on one labelled page: each cell carries its compass name and azimuth,
+     an axis gnomon showing world `+X +Y +Z` as projected from that camera,
+     and one numbered badge per part keyed to a legend. It is the only
+     artifact that says which frame is which side, so it answers "is the
+     back finished" and "which cylinder is `prp_mast`" in one look.
+   - **The loose frames** at `out/proof/proof-<24 hex>-NNN.png`, `NNN` =
+     `000`, `001`, … The hash changes every compile — never guess it; the
+     report prints the exact pattern and the index range.
+   - **`--frames`** (or `"frames": true` on the API) when you cannot read
+     images at all: the frames arrive as ASCII luminance ramps sampled
+     around the orbit. The report also carries `orbit:` and `badges:`
+     lines with the same compass and part facts as text.
+
+   You are never actually blind to the shot.
 6. **`out/ortho.svg`, every structural change, no exceptions.** A
    dimensioned plan/front/side drawing — and it is SVG, so it is
    readable as text even without vision. A 2-second look catches a
@@ -777,9 +836,12 @@ How to read it. This is the whole method:
 Every compile whose manifest stage ran — `--fast` included — carries a
 `read:` block, and each line appears only when the file exists this
 pass: `out/digest.md` and `out/read-model.json` always, `out/ortho.svg`
-with a census, `out/textures/` and `out/materials/` when bakes and ball
+with a census, `out/contact.png` when frames were photographed,
+`out/textures/` and `out/materials/` when bakes and ball
 previews landed, `out/index.html` and `kit.html` when frames exist.
-Follow it rather than guessing what exists — a path it names is there. `out/digest.md` is the prose twin of the report: issues first,
+Follow it rather than guessing what exists — a path it names is there,
+and because it lists *this* compile's artifacts it is also where you read
+the current proof-frame filenames instead of guessing the hash. `out/digest.md` is the prose twin of the report: issues first,
 then what this compile changed. Contacts that broke are included,
 because that is how an edit can move nothing and still stop one part
 supporting another. `out/read-model.json` is the same census,
@@ -804,7 +866,8 @@ itself is picture and bench.
 
 When they edit, their intent lands in `tweaks.json` beside the sources
 (`translate`, a unit `quat`, `scale` multipliers, material assigns;
-viewer's Y-up). Treat it as design direction from your collaborator:
+the WebGL viewer's Y-up, not `scene.json`'s Z-up — convert when you
+fold). Treat it as design direction from your collaborator:
 
 1. Read it (`scene3d tweaks --json`).
 2. Fold it into `scene.json` / the part script / `build.py` the next
